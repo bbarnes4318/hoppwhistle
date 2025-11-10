@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<!DOCTYPE scenario SYSTEM "sipp.dtd">
+<!--
+  Inbound IVR with DTMF Test Scenario
+  
+  Tests:
+  - Inbound call establishment
+  - IVR prompt playback
+  - DTMF digit collection (press 1)
+  - Call routing based on DTMF input
+-->
+<scenario name="Inbound IVR with DTMF">
+  <!-- Send INVITE to trigger inbound call -->
+  <send retrans="500">
+    <![CDATA[
+      INVITE sip:[service]@[remote_ip]:[remote_port] SIP/2.0
+      Via: SIP/2.0/[transport] [local_ip]:[local_port];branch=[branch]
+      From: TestCaller <sip:testcaller@[local_ip]:[local_port]>;tag=[call_number]
+      To: IVRTest <sip:[service]@[remote_ip]:[remote_port]>
+      Call-ID: [call_id]
+      CSeq: 1 INVITE
+      Contact: <sip:testcaller@[local_ip]:[local_port]>
+      Max-Forwards: 70
+      User-Agent: SIPp-Test-Client
+      Content-Type: application/sdp
+      Content-Length: [len]
+
+      v=0
+      o=user1 53655765 2353687637 IN IP[local_ip_type] [local_ip]
+      s=SIPp Test Call
+      c=IN IP[local_ip_type] [local_ip]
+      t=0 0
+      m=audio [media_port] RTP/AVP 0 8 18 101
+      a=rtpmap:0 PCMU/8000
+      a=rtpmap:8 PCMA/8000
+      a=rtpmap:18 G729/8000
+      a=rtpmap:101 telephone-event/8000
+      a=fmtp:101 0-15
+      a=sendrecv
+    ]]>
+  </send>
+
+  <!-- Wait for 100 Trying (optional) -->
+  <recv response="100" optional="true">
+  </recv>
+
+  <!-- Wait for 180 Ringing (optional) -->
+  <recv response="180" optional="true">
+  </recv>
+
+  <!-- Wait for 200 OK with SDP -->
+  <recv response="200" rtd="true">
+    <action>
+      <ereg regexp="Content-Type:.*" search_in="hdr" assign_to="2"/>
+      <ereg regexp="o=([^\s]+)" search_in="body" assign_to="3"/>
+    </action>
+  </recv>
+
+  <!-- Send ACK -->
+  <send>
+    <![CDATA[
+      ACK sip:[service]@[remote_ip]:[remote_port] SIP/2.0
+      Via: SIP/2.0/[transport] [local_ip]:[local_port];branch=[branch]
+      From: TestCaller <sip:testcaller@[local_ip]:[local_port]>;tag=[call_number]
+      To: IVRTest <sip:[service]@[remote_ip]:[remote_port]>;tag=[peer_tag]
+      Call-ID: [call_id]
+      CSeq: 1 ACK
+      Max-Forwards: 70
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <!-- Wait for IVR prompt to start (allow time for prompt playback) -->
+  <pause milliseconds="2000"/>
+
+  <!-- Send DTMF digit "1" via RFC 2833 -->
+  <send>
+    <![CDATA[
+      INFO sip:[service]@[remote_ip]:[remote_port] SIP/2.0
+      Via: SIP/2.0/[transport] [local_ip]:[local_port];branch=[branch]
+      From: TestCaller <sip:testcaller@[local_ip]:[local_port]>;tag=[call_number]
+      To: IVRTest <sip:[service]@[remote_ip]:[remote_port]>;tag=[peer_tag]
+      Call-ID: [call_id]
+      CSeq: 2 INFO
+      Content-Type: application/dtmf-relay
+      Content-Length: [len]
+
+      Signal=1
+      Duration=200
+    ]]>
+  </send>
+
+  <!-- Wait for 200 OK response to INFO -->
+  <recv response="200" optional="true">
+  </recv>
+
+  <!-- Wait for call routing/processing based on DTMF -->
+  <pause milliseconds="3000"/>
+
+  <!-- Send BYE to end call -->
+  <send retrans="500">
+    <![CDATA[
+      BYE sip:[service]@[remote_ip]:[remote_port] SIP/2.0
+      Via: SIP/2.0/[transport] [local_ip]:[local_port];branch=[branch]
+      From: TestCaller <sip:testcaller@[local_ip]:[local_port]>;tag=[call_number]
+      To: IVRTest <sip:[service]@[remote_ip]:[remote_port]>;tag=[peer_tag]
+      Call-ID: [call_id]
+      CSeq: 3 BYE
+      Max-Forwards: 70
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <!-- Wait for 200 OK to BYE -->
+  <recv response="200" rtd="true">
+  </recv>
+
+  <!-- Test completed successfully -->
+  <ResponseTimeRepartition value="10, 20, 30, 40, 50, 100, 150, 200"/>
+  <CallLengthRepartition value="10, 50, 100, 500, 1000, 5000, 10000"/>
+</scenario>
+

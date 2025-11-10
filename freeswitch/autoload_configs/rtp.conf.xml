@@ -1,0 +1,8 @@
+<configuration name="rtp.conf" description="RTP">
+  <settings>
+    <param name="rtp-start-port" value="${env:RTP_START}"/>
+    <param name="rtp-end-port" value="${env:RTP_END}"/>
+    <param name="rtp-ip" value="$${external_rtp_ip}"/>
+  </settings>
+</configuration>
+

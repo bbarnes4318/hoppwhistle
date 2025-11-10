@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <!-- Rings your SBC using SIP URI; SignalWire will INVITE your Kamailio -->
+  <!-- Replace sbc.yourdomain.com with your actual SBC domain -->
+  <Dial timeout="20">
+    <Sip>sip:inbound@sbc.yourdomain.com</Sip>
+  </Dial>
+</Response>
+

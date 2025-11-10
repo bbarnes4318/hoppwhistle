@@ -1,0 +1,16 @@
+<!-- FreeSWITCH Main Configuration -->
+<configuration name="freeswitch.xml" description="FreeSWITCH Configuration">
+  <global_settings>
+    <param name="log-level" value="info"/>
+    <param name="auto-create-sip-profiles" value="true"/>
+  </global_settings>
+  
+  <profiles>
+    <X-PRE-PROCESS cmd="include" data="sip_profiles/*.xml"/>
+  </profiles>
+  
+  <templates>
+    <X-PRE-PROCESS cmd="include" data="dialplan/*.xml"/>
+  </templates>
+</configuration>
+

@@ -1,0 +1,60 @@
+{
+  "dashboard": {
+    "title": "CallFabric Call Metrics",
+    "tags": ["callfabric", "calls"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 1,
+    "refresh": "10s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Call Volume by Status",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(calls_total[5m])",
+            "legendFormat": "{{status}} {{direction}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
+      },
+      {
+        "id": 2,
+        "title": "Active Calls",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "calls_active",
+            "legendFormat": "{{tenant_id}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
+      },
+      {
+        "id": 3,
+        "title": "Call Duration (p95)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(calls_duration_seconds_bucket[5m]))",
+            "legendFormat": "p95 {{status}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }
+      },
+      {
+        "id": 4,
+        "title": "ASR (Answer Seizure Ratio)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(calls_total{status=~\"ANSWERED|COMPLETED\"}[5m]) / rate(calls_total[5m])",
+            "legendFormat": "ASR"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }
+      }
+    ]
+  }
+}

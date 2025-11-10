@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Hopwhistle Brand Colors */
+    /* Deep Navy Blue (#1E3A5F) - Main Text/Primary */
+    /* Electric Lime Green (#00D084) - First Accent */
+    /* Bright Orange (#FF6B35) - Second Accent */
+
+    --background: 0 0% 100%;
+    --foreground: 214 52% 25%; /* Deep Navy Blue */
+    --card: 0 0% 100%;
+    --card-foreground: 214 52% 25%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 214 52% 25%;
+    --primary: 214 52% 25%; /* Deep Navy Blue */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 214 52% 95%; /* Light Navy tint */
+    --secondary-foreground: 214 52% 25%;
+    --muted: 214 20% 96%;
+    --muted-foreground: 214 15% 45%;
+    --accent: 160 100% 41%; /* Electric Lime Green */
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 25% 88%;
+    --input: 214 25% 88%;
+    --ring: 214 52% 25%; /* Deep Navy Blue */
+    --radius: 0.5rem;
+    /* Chart colors using brand palette */
+    --chart-1: 214 52% 25%; /* Deep Navy Blue */
+    --chart-2: 160 100% 41%; /* Electric Lime Green */
+    --chart-3: 14 100% 60%; /* Bright Orange */
+    --chart-4: 214 52% 40%; /* Medium Navy */
+    --chart-5: 160 80% 50%; /* Lighter Green */
+  }
+
+  .dark {
+    --background: 214 30% 8%;
+    --foreground: 214 20% 95%;
+    --card: 214 30% 10%;
+    --card-foreground: 214 20% 95%;
+    --popover: 214 30% 10%;
+    --popover-foreground: 214 20% 95%;
+    --primary: 214 52% 35%; /* Lighter Navy for dark mode */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 214 30% 20%;
+    --secondary-foreground: 214 20% 95%;
+    --muted: 214 30% 20%;
+    --muted-foreground: 214 15% 65%;
+    --accent: 160 100% 50%; /* Brighter Green for dark mode */
+    --accent-foreground: 214 30% 8%;
+    --destructive: 0 62.8% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 30% 25%;
+    --input: 214 30% 25%;
+    --ring: 214 52% 35%;
+    --chart-1: 214 52% 35%;
+    --chart-2: 160 100% 50%;
+    --chart-3: 14 100% 65%;
+    --chart-4: 214 52% 50%;
+    --chart-5: 160 80% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    @apply h-full overflow-hidden;
+  }
+  body {
+    @apply bg-background text-foreground h-full overflow-hidden;
+  }
+  #__next {
+    @apply h-full overflow-hidden;
+  }
+}

@@ -1,0 +1,4 @@
+number,provider,status,tenant_id,campaign_id,tags
++15551234567,signalwire,assigned,00000000-0000-0000-0000-000000000000,,"demo;inbound"
++15559876543,signalwire,available,00000000-0000-0000-0000-000000000000,,"spare;pool"
+

@@ -1,0 +1,61 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'callfabric'
+    environment: 'development'
+
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Node Exporter
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+
+  # API Service
+  - job_name: 'callfabric-api'
+    static_configs:
+      - targets: ['api:3001']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Worker Service
+  - job_name: 'callfabric-worker'
+    static_configs:
+      - targets: ['worker:9091']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # FreeSWITCH (if exposing metrics)
+  - job_name: 'freeswitch'
+    static_configs:
+      - targets: ['freeswitch:8021']
+    scrape_interval: 30s
+
+  # Kamailio (if exposing metrics)
+  - job_name: 'kamailio'
+    static_configs:
+      - targets: ['kamailio:5060']
+    scrape_interval: 30s
+
+  # RTPEngine (if exposing metrics)
+  - job_name: 'rtpengine'
+    static_configs:
+      - targets: ['rtpengine:22222']
+    scrape_interval: 30s
+
+  # PostgreSQL (via postgres_exporter if added)
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+    scrape_interval: 30s
+
+  # Redis (via redis_exporter if added)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+    scrape_interval: 30s

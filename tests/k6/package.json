@@ -1,0 +1,17 @@
+{
+  "name": "@hopwhistle/k6-tests",
+  "version": "0.1.0",
+  "private": true,
+  "description": "k6 load tests for Hopwhistle platform",
+  "scripts": {
+    "test:call-state": "k6 run call-state-updates.js",
+    "test:reporting": "k6 run reporting-endpoints.js",
+    "test:pubsub": "k6 run redis-pubsub.js",
+    "test:all": "k6 run call-state-updates.js && k6 run reporting-endpoints.js && k6 run redis-pubsub.js"
+  },
+  "keywords": [
+    "k6",
+    "load-testing",
+    "performance"
+  ]
+}

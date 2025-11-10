@@ -1,0 +1,2783 @@
+openapi: 3.0.3
+info:
+  title: CallFabric API
+  version: 1.0.0
+  description: >
+    Production-grade telephony platform API with multi-tenant support.
+
+
+    ## Authentication
+
+    - **Public API**: Uses API key authentication via `X-API-Key` header
+
+    - **Admin API**: Uses API key authentication via `X-API-Key` header with
+    admin privileges
+
+
+    ## Rate Limits
+
+    - Public API: 1000 requests per minute per API key
+
+    - Admin API: 5000 requests per minute per API key
+
+
+    ## Idempotency
+
+    All POST/PUT/PATCH requests support idempotency via `Idempotency-Key`
+    header.
+
+    Idempotency keys are valid for 24 hours.
+servers:
+  - url: http://localhost:3001
+    description: Development server
+  - url: https://api.callfabric.com
+    description: Production server
+tags:
+  - name: Public API - Numbers
+    description: Phone number management
+  - name: Public API - Campaigns
+    description: Campaign management
+  - name: Public API - Flows
+    description: Call flow routing
+  - name: Public API - Calls
+    description: Call tracking and management
+  - name: Public API - Recordings
+    description: Call recording management
+  - name: Public API - Webhooks
+    description: Webhook configuration
+  - name: Public API - Reporting
+    description: Analytics and reporting
+  - name: Public API - Billing
+    description: Billing and invoicing
+  - name: Admin API - Tenants
+    description: Tenant provisioning
+  - name: Admin API - Numbers
+    description: Number provisioning
+  - name: Admin API - Carriers
+    description: Carrier management
+  - name: Admin API - Trunks
+    description: Trunk management
+  - name: Admin API - Rate Cards
+    description: Rate card management
+paths:
+  /api/v1/numbers:
+    get:
+      tags:
+        - Public API - Numbers
+      summary: List phone numbers
+      description: Retrieve a paginated list of phone numbers for the tenant
+      operationId: listNumbers
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/FilterStatus'
+        - name: search
+          in: query
+          description: Search by phone number (partial match)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NumberListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+    post:
+      tags:
+        - Public API - Numbers
+      summary: Provision a phone number
+      description: Request provisioning of a new phone number
+      operationId: provisionNumber
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProvisionNumberRequest'
+      responses:
+        '201':
+          description: Number provisioned successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PhoneNumber'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+  /api/v1/numbers/{numberId}:
+    get:
+      tags:
+        - Public API - Numbers
+      summary: Get phone number
+      description: Retrieve details of a specific phone number
+      operationId: getNumber
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/NumberId'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PhoneNumber'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+    patch:
+      tags:
+        - Public API - Numbers
+      summary: Update phone number
+      description: Update phone number configuration
+      operationId: updateNumber
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/NumberId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateNumberRequest'
+      responses:
+        '200':
+          description: Number updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PhoneNumber'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+  /api/v1/campaigns:
+    get:
+      tags:
+        - Public API - Campaigns
+      summary: List campaigns
+      description: Retrieve a paginated list of campaigns
+      operationId: listCampaigns
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/FilterStatus'
+        - name: publisherId
+          in: query
+          description: Filter by publisher ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+    post:
+      tags:
+        - Public API - Campaigns
+      summary: Create campaign
+      description: Create a new campaign
+      operationId: createCampaign
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCampaignRequest'
+      responses:
+        '201':
+          description: Campaign created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Campaign'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+  /api/v1/campaigns/{campaignId}:
+    get:
+      tags:
+        - Public API - Campaigns
+      summary: Get campaign
+      description: Retrieve details of a specific campaign
+      operationId: getCampaign
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/CampaignId'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Campaign'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+    patch:
+      tags:
+        - Public API - Campaigns
+      summary: Update campaign
+      description: Update campaign configuration
+      operationId: updateCampaign
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/CampaignId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCampaignRequest'
+      responses:
+        '200':
+          description: Campaign updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Campaign'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+    delete:
+      tags:
+        - Public API - Campaigns
+      summary: Delete campaign
+      description: Archive a campaign
+      operationId: deleteCampaign
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/CampaignId'
+      responses:
+        '204':
+          description: Campaign archived successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+  /api/v1/flows:
+    get:
+      tags:
+        - Public API - Flows
+      summary: List flows
+      description: Retrieve a paginated list of call flows
+      operationId: listFlows
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/FilterStatus'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlowListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+    post:
+      tags:
+        - Public API - Flows
+      summary: Create flow
+      description: Create a new call flow
+      operationId: createFlow
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFlowRequest'
+      responses:
+        '201':
+          description: Flow created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Flow'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+  /api/v1/flows/{flowId}:
+    get:
+      tags:
+        - Public API - Flows
+      summary: Get flow
+      description: Retrieve details of a specific flow
+      operationId: getFlow
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/FlowId'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Flow'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+    patch:
+      tags:
+        - Public API - Flows
+      summary: Update flow
+      description: Update flow configuration
+      operationId: updateFlow
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/FlowId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateFlowRequest'
+      responses:
+        '200':
+          description: Flow updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Flow'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+  /api/v1/calls:
+    get:
+      tags:
+        - Public API - Calls
+      summary: List calls
+      description: Retrieve a paginated list of calls with filtering options
+      operationId: listCalls
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: status
+          in: query
+          description: Filter by call status
+          schema:
+            $ref: '#/components/schemas/CallStatus'
+        - name: direction
+          in: query
+          description: Filter by call direction
+          schema:
+            $ref: '#/components/schemas/CallDirection'
+        - name: campaignId
+          in: query
+          description: Filter by campaign ID
+          schema:
+            type: string
+            format: uuid
+        - name: fromNumber
+          in: query
+          description: Filter by source phone number
+          schema:
+            type: string
+        - name: toNumber
+          in: query
+          description: Filter by destination phone number
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          description: Filter calls from this date (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+        - name: endDate
+          in: query
+          description: Filter calls until this date (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CallListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+    post:
+      tags:
+        - Public API - Calls
+      summary: Initiate call
+      description: Initiate a new outbound call
+      operationId: initiateCall
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InitiateCallRequest'
+      responses:
+        '201':
+          description: Call initiated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Call'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+  /api/v1/calls/{callId}:
+    get:
+      tags:
+        - Public API - Calls
+      summary: Get call
+      description: Retrieve details of a specific call
+      operationId: getCall
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/CallId'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Call'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+  /api/v1/recordings:
+    get:
+      tags:
+        - Public API - Recordings
+      summary: List recordings
+      description: Retrieve a paginated list of call recordings
+      operationId: listRecordings
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: callId
+          in: query
+          description: Filter by call ID
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          description: Filter by recording status
+          schema:
+            $ref: '#/components/schemas/RecordingStatus'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordingListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+  /api/v1/recordings/{recordingId}:
+    get:
+      tags:
+        - Public API - Recordings
+      summary: Get recording
+      description: Retrieve details of a specific recording
+      operationId: getRecording
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/RecordingId'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recording'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+  /api/v1/webhooks:
+    get:
+      tags:
+        - Public API - Webhooks
+      summary: List webhooks
+      description: Retrieve a paginated list of webhook configurations
+      operationId: listWebhooks
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/FilterStatus'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+    post:
+      tags:
+        - Public API - Webhooks
+      summary: Create webhook
+      description: Create a new webhook configuration
+      operationId: createWebhook
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWebhookRequest'
+      responses:
+        '201':
+          description: Webhook created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Webhook'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+  /api/v1/webhooks/{webhookId}:
+    get:
+      tags:
+        - Public API - Webhooks
+      summary: Get webhook
+      description: Retrieve details of a specific webhook
+      operationId: getWebhook
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/WebhookId'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Webhook'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+    patch:
+      tags:
+        - Public API - Webhooks
+      summary: Update webhook
+      description: Update webhook configuration
+      operationId: updateWebhook
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/WebhookId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateWebhookRequest'
+      responses:
+        '200':
+          description: Webhook updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Webhook'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+    delete:
+      tags:
+        - Public API - Webhooks
+      summary: Delete webhook
+      description: Delete a webhook configuration
+      operationId: deleteWebhook
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/WebhookId'
+      responses:
+        '204':
+          description: Webhook deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+  /api/v1/reporting/calls:
+    get:
+      tags:
+        - Public API - Reporting
+      summary: Call analytics
+      description: Get aggregated call analytics and metrics
+      operationId: getCallAnalytics
+      security:
+        - apiKey: []
+      parameters:
+        - name: startDate
+          in: query
+          required: true
+          description: Start date for analytics (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+        - name: endDate
+          in: query
+          required: true
+          description: End date for analytics (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+        - name: groupBy
+          in: query
+          description: Group results by dimension
+          schema:
+            type: string
+            enum:
+              - day
+              - week
+              - month
+              - campaign
+              - status
+            default: day
+        - name: campaignId
+          in: query
+          description: Filter by campaign ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CallAnalyticsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+  /api/v1/reporting/campaigns/{campaignId}:
+    get:
+      tags:
+        - Public API - Reporting
+      summary: Campaign performance
+      description: Get performance metrics for a specific campaign
+      operationId: getCampaignPerformance
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/CampaignId'
+        - name: startDate
+          in: query
+          required: true
+          description: Start date for analytics (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+        - name: endDate
+          in: query
+          required: true
+          description: End date for analytics (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignPerformanceResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+  /api/v1/billing/invoices:
+    get:
+      tags:
+        - Public API - Billing
+      summary: List invoices
+      description: Retrieve a paginated list of invoices
+      operationId: listInvoices
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: status
+          in: query
+          description: Filter by invoice status
+          schema:
+            $ref: '#/components/schemas/InvoiceStatus'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+  /api/v1/billing/invoices/{invoiceId}:
+    get:
+      tags:
+        - Public API - Billing
+      summary: Get invoice
+      description: Retrieve details of a specific invoice
+      operationId: getInvoice
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/InvoiceId'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invoice'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+  /api/v1/billing/balance:
+    get:
+      tags:
+        - Public API - Billing
+      summary: Get account balance
+      description: Retrieve current account balance information
+      operationId: getAccountBalance
+      security:
+        - apiKey: []
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BalanceResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+  /admin/api/v1/tenants:
+    get:
+      tags:
+        - Admin API - Tenants
+      summary: List tenants
+      description: Retrieve a paginated list of tenants (admin only)
+      operationId: adminListTenants
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/FilterStatus'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+    post:
+      tags:
+        - Admin API - Tenants
+      summary: Create tenant
+      description: Provision a new tenant (admin only)
+      operationId: adminCreateTenant
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminCreateTenantRequest'
+      responses:
+        '201':
+          description: Tenant created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tenant'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+  /admin/api/v1/tenants/{tenantId}:
+    get:
+      tags:
+        - Admin API - Tenants
+      summary: Get tenant
+      description: Retrieve details of a specific tenant (admin only)
+      operationId: adminGetTenant
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tenant'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+    patch:
+      tags:
+        - Admin API - Tenants
+      summary: Update tenant
+      description: Update tenant configuration (admin only)
+      operationId: adminUpdateTenant
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUpdateTenantRequest'
+      responses:
+        '200':
+          description: Tenant updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tenant'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+  /admin/api/v1/numbers/provision:
+    post:
+      tags:
+        - Admin API - Numbers
+      summary: Provision number
+      description: Provision a phone number for a tenant (admin only)
+      operationId: adminProvisionNumber
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminProvisionNumberRequest'
+      responses:
+        '201':
+          description: Number provisioned successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PhoneNumber'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+  /admin/api/v1/carriers:
+    get:
+      tags:
+        - Admin API - Carriers
+      summary: List carriers
+      description: Retrieve a paginated list of carriers (admin only)
+      operationId: adminListCarriers
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/FilterStatus'
+        - name: tenantId
+          in: query
+          description: Filter by tenant ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CarrierListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+    post:
+      tags:
+        - Admin API - Carriers
+      summary: Create carrier
+      description: Create a new carrier (admin only)
+      operationId: adminCreateCarrier
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminCreateCarrierRequest'
+      responses:
+        '201':
+          description: Carrier created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Carrier'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+  /admin/api/v1/carriers/{carrierId}:
+    get:
+      tags:
+        - Admin API - Carriers
+      summary: Get carrier
+      description: Retrieve details of a specific carrier (admin only)
+      operationId: adminGetCarrier
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/CarrierId'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Carrier'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+    patch:
+      tags:
+        - Admin API - Carriers
+      summary: Update carrier
+      description: Update carrier configuration (admin only)
+      operationId: adminUpdateCarrier
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/CarrierId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUpdateCarrierRequest'
+      responses:
+        '200':
+          description: Carrier updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Carrier'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+  /admin/api/v1/trunks:
+    get:
+      tags:
+        - Admin API - Trunks
+      summary: List trunks
+      description: Retrieve a paginated list of trunks (admin only)
+      operationId: adminListTrunks
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/FilterStatus'
+        - name: tenantId
+          in: query
+          description: Filter by tenant ID
+          schema:
+            type: string
+            format: uuid
+        - name: carrierId
+          in: query
+          description: Filter by carrier ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrunkListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+    post:
+      tags:
+        - Admin API - Trunks
+      summary: Create trunk
+      description: Create a new trunk (admin only)
+      operationId: adminCreateTrunk
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminCreateTrunkRequest'
+      responses:
+        '201':
+          description: Trunk created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trunk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+  /admin/api/v1/trunks/{trunkId}:
+    get:
+      tags:
+        - Admin API - Trunks
+      summary: Get trunk
+      description: Retrieve details of a specific trunk (admin only)
+      operationId: adminGetTrunk
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/TrunkId'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trunk'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+    patch:
+      tags:
+        - Admin API - Trunks
+      summary: Update trunk
+      description: Update trunk configuration (admin only)
+      operationId: adminUpdateTrunk
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/TrunkId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUpdateTrunkRequest'
+      responses:
+        '200':
+          description: Trunk updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trunk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+  /admin/api/v1/rate-cards:
+    get:
+      tags:
+        - Admin API - Rate Cards
+      summary: List rate cards
+      description: Retrieve a paginated list of rate cards (admin only)
+      operationId: adminListRateCards
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/FilterStatus'
+        - name: billingAccountId
+          in: query
+          description: Filter by billing account ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateCardListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+    post:
+      tags:
+        - Admin API - Rate Cards
+      summary: Create rate card
+      description: Create a new rate card (admin only)
+      operationId: adminCreateRateCard
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminCreateRateCardRequest'
+      responses:
+        '201':
+          description: Rate card created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateCard'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+  /admin/api/v1/rate-cards/{rateCardId}:
+    get:
+      tags:
+        - Admin API - Rate Cards
+      summary: Get rate card
+      description: Retrieve details of a specific rate card (admin only)
+      operationId: adminGetRateCard
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/RateCardId'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateCard'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+    patch:
+      tags:
+        - Admin API - Rate Cards
+      summary: Update rate card
+      description: Update rate card configuration (admin only)
+      operationId: adminUpdateRateCard
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/RateCardId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUpdateRateCardRequest'
+      responses:
+        '200':
+          description: Rate card updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateCard'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key for public API access
+    adminApiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key with admin privileges
+  parameters:
+    Page:
+      name: page
+      in: query
+      description: Page number (1-indexed)
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    Limit:
+      name: limit
+      in: query
+      description: Number of items per page
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    FilterStatus:
+      name: status
+      in: query
+      description: Filter by status
+      schema:
+        type: string
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      description: Idempotency key for request (valid for 24 hours)
+      required: false
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+    NumberId:
+      name: numberId
+      in: path
+      required: true
+      description: Phone number ID
+      schema:
+        type: string
+        format: uuid
+    CampaignId:
+      name: campaignId
+      in: path
+      required: true
+      description: Campaign ID
+      schema:
+        type: string
+        format: uuid
+    FlowId:
+      name: flowId
+      in: path
+      required: true
+      description: Flow ID
+      schema:
+        type: string
+        format: uuid
+    CallId:
+      name: callId
+      in: path
+      required: true
+      description: Call ID
+      schema:
+        type: string
+        format: uuid
+    RecordingId:
+      name: recordingId
+      in: path
+      required: true
+      description: Recording ID
+      schema:
+        type: string
+        format: uuid
+    WebhookId:
+      name: webhookId
+      in: path
+      required: true
+      description: Webhook ID
+      schema:
+        type: string
+        format: uuid
+    InvoiceId:
+      name: invoiceId
+      in: path
+      required: true
+      description: Invoice ID
+      schema:
+        type: string
+        format: uuid
+    TenantId:
+      name: tenantId
+      in: path
+      required: true
+      description: Tenant ID
+      schema:
+        type: string
+        format: uuid
+    CarrierId:
+      name: carrierId
+      in: path
+      required: true
+      description: Carrier ID
+      schema:
+        type: string
+        format: uuid
+    TrunkId:
+      name: trunkId
+      in: path
+      required: true
+      description: Trunk ID
+      schema:
+        type: string
+        format: uuid
+    RateCardId:
+      name: rateCardId
+      in: path
+      required: true
+      description: Rate card ID
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    PaginationMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+          description: Current page number
+        limit:
+          type: integer
+          description: Items per page
+        total:
+          type: integer
+          description: Total number of items
+        totalPages:
+          type: integer
+          description: Total number of pages
+      required:
+        - page
+        - limit
+        - total
+        - totalPages
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              description: Error code
+            message:
+              type: string
+              description: Human-readable error message
+            details:
+              type: object
+              description: Additional error details
+            requestId:
+              type: string
+              description: Request ID for debugging
+          required:
+            - code
+            - message
+      required:
+        - error
+    PhoneNumber:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        number:
+          type: string
+          description: E.164 format phone number
+          example: '+15551234567'
+        carrierId:
+          type: string
+          format: uuid
+          nullable: true
+        trunkId:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          $ref: '#/components/schemas/PhoneNumberStatus'
+        capabilities:
+          type: object
+          description: Phone number capabilities (SMS, MMS, Voice, etc.)
+        metadata:
+          type: object
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - tenantId
+        - number
+        - status
+        - createdAt
+        - updatedAt
+    PhoneNumberStatus:
+      type: string
+      enum:
+        - ACTIVE
+        - INACTIVE
+        - PORTING
+        - SUSPENDED
+    ProvisionNumberRequest:
+      type: object
+      properties:
+        number:
+          type: string
+          description: E.164 format phone number
+          example: '+15551234567'
+        capabilities:
+          type: array
+          items:
+            type: string
+            enum:
+              - SMS
+              - MMS
+              - Voice
+          description: Required capabilities
+        metadata:
+          type: object
+      required:
+        - number
+    UpdateNumberRequest:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/PhoneNumberStatus'
+        metadata:
+          type: object
+    NumberListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PhoneNumber'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    Campaign:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        publisherId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        status:
+          $ref: '#/components/schemas/CampaignStatus'
+        callerIdPoolId:
+          type: string
+          format: uuid
+          nullable: true
+        flowId:
+          type: string
+          format: uuid
+          nullable: true
+        metadata:
+          type: object
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - tenantId
+        - publisherId
+        - name
+        - status
+        - createdAt
+        - updatedAt
+    CampaignStatus:
+      type: string
+      enum:
+        - ACTIVE
+        - PAUSED
+        - ARCHIVED
+    CreateCampaignRequest:
+      type: object
+      properties:
+        publisherId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        callerIdPoolId:
+          type: string
+          format: uuid
+        flowId:
+          type: string
+          format: uuid
+        metadata:
+          type: object
+      required:
+        - publisherId
+        - name
+    UpdateCampaignRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        status:
+          $ref: '#/components/schemas/CampaignStatus'
+        callerIdPoolId:
+          type: string
+          format: uuid
+        flowId:
+          type: string
+          format: uuid
+        metadata:
+          type: object
+    CampaignListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Campaign'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    Flow:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/FlowStatus'
+        metadata:
+          type: object
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - tenantId
+        - name
+        - status
+        - createdAt
+        - updatedAt
+    FlowStatus:
+      type: string
+      enum:
+        - DRAFT
+        - ACTIVE
+        - ARCHIVED
+    CreateFlowRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        metadata:
+          type: object
+      required:
+        - name
+    UpdateFlowRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        status:
+          $ref: '#/components/schemas/FlowStatus'
+        metadata:
+          type: object
+    FlowListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Flow'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    Call:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        campaignId:
+          type: string
+          format: uuid
+          nullable: true
+        fromNumberId:
+          type: string
+          format: uuid
+          nullable: true
+        toNumber:
+          type: string
+          description: E.164 format
+        callSid:
+          type: string
+          description: External call identifier
+        status:
+          $ref: '#/components/schemas/CallStatus'
+        direction:
+          $ref: '#/components/schemas/CallDirection'
+        duration:
+          type: integer
+          nullable: true
+          description: Duration in seconds
+        cost:
+          type: number
+          nullable: true
+        metadata:
+          type: object
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        answeredAt:
+          type: string
+          format: date-time
+          nullable: true
+        endedAt:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+        - id
+        - tenantId
+        - toNumber
+        - callSid
+        - status
+        - direction
+        - createdAt
+        - updatedAt
+    CallStatus:
+      type: string
+      enum:
+        - INITIATED
+        - RINGING
+        - ANSWERED
+        - COMPLETED
+        - FAILED
+        - BUSY
+        - NO_ANSWER
+        - CANCELLED
+    CallDirection:
+      type: string
+      enum:
+        - INBOUND
+        - OUTBOUND
+    InitiateCallRequest:
+      type: object
+      properties:
+        campaignId:
+          type: string
+          format: uuid
+        fromNumberId:
+          type: string
+          format: uuid
+        toNumber:
+          type: string
+          description: E.164 format
+        metadata:
+          type: object
+      required:
+        - toNumber
+    CallListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Call'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    Recording:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        callId:
+          type: string
+          format: uuid
+        legId:
+          type: string
+          format: uuid
+          nullable: true
+        url:
+          type: string
+          format: uri
+        storageKey:
+          type: string
+          nullable: true
+        duration:
+          type: integer
+          nullable: true
+          description: Duration in seconds
+        format:
+          type: string
+          default: wav
+        size:
+          type: integer
+          format: int64
+          nullable: true
+          description: Size in bytes
+        status:
+          $ref: '#/components/schemas/RecordingStatus'
+        metadata:
+          type: object
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - callId
+        - url
+        - format
+        - status
+        - createdAt
+        - updatedAt
+    RecordingStatus:
+      type: string
+      enum:
+        - PROCESSING
+        - COMPLETED
+        - FAILED
+    RecordingListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Recording'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    Webhook:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            type: string
+            enum:
+              - call.started
+              - call.answered
+              - call.completed
+              - recording.ready
+              - invoice.finalized
+        status:
+          $ref: '#/components/schemas/WebhookStatus'
+        lastTriggeredAt:
+          type: string
+          format: date-time
+          nullable: true
+        metadata:
+          type: object
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - tenantId
+        - url
+        - events
+        - status
+        - createdAt
+        - updatedAt
+    WebhookStatus:
+      type: string
+      enum:
+        - ACTIVE
+        - INACTIVE
+        - FAILED
+    CreateWebhookRequest:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            type: string
+            enum:
+              - call.started
+              - call.answered
+              - call.completed
+              - recording.ready
+              - invoice.finalized
+        metadata:
+          type: object
+      required:
+        - url
+        - events
+    UpdateWebhookRequest:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            type: string
+            enum:
+              - call.started
+              - call.answered
+              - call.completed
+              - recording.ready
+              - invoice.finalized
+        status:
+          $ref: '#/components/schemas/WebhookStatus'
+        metadata:
+          type: object
+    WebhookListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Webhook'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    CallAnalyticsResponse:
+      type: object
+      properties:
+        period:
+          type: object
+          properties:
+            start:
+              type: string
+              format: date-time
+            end:
+              type: string
+              format: date-time
+        metrics:
+          type: object
+          properties:
+            totalCalls:
+              type: integer
+            answeredCalls:
+              type: integer
+            completedCalls:
+              type: integer
+            failedCalls:
+              type: integer
+            totalDuration:
+              type: integer
+              description: Total duration in seconds
+            averageDuration:
+              type: number
+              description: Average duration in seconds
+            totalCost:
+              type: string
+          required:
+            - totalCalls
+        breakdown:
+          type: array
+          items:
+            type: object
+            properties:
+              dimension:
+                type: string
+              value:
+                type: string
+              metrics:
+                type: object
+      required:
+        - period
+        - metrics
+    CampaignPerformanceResponse:
+      type: object
+      properties:
+        campaignId:
+          type: string
+          format: uuid
+        period:
+          type: object
+          properties:
+            start:
+              type: string
+              format: date-time
+            end:
+              type: string
+              format: date-time
+        metrics:
+          type: object
+          properties:
+            totalCalls:
+              type: integer
+            answeredCalls:
+              type: integer
+            answerRate:
+              type: number
+              description: Answer rate as percentage
+            completedCalls:
+              type: integer
+            completionRate:
+              type: number
+              description: Completion rate as percentage
+            totalDuration:
+              type: integer
+            averageDuration:
+              type: number
+            totalCost:
+              type: string
+          required:
+            - totalCalls
+      required:
+        - campaignId
+        - period
+        - metrics
+    Invoice:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        billingAccountId:
+          type: string
+          format: uuid
+        invoiceNumber:
+          type: string
+        status:
+          $ref: '#/components/schemas/InvoiceStatus'
+        periodStart:
+          type: string
+          format: date-time
+        periodEnd:
+          type: string
+          format: date-time
+        subtotal:
+          type: string
+        tax:
+          type: string
+        total:
+          type: string
+        dueDate:
+          type: string
+          format: date-time
+        paidAt:
+          type: string
+          format: date-time
+          nullable: true
+        metadata:
+          type: object
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - billingAccountId
+        - invoiceNumber
+        - status
+        - periodStart
+        - periodEnd
+        - subtotal
+        - tax
+        - total
+        - dueDate
+        - createdAt
+        - updatedAt
+    InvoiceStatus:
+      type: string
+      enum:
+        - DRAFT
+        - SENT
+        - PAID
+        - OVERDUE
+        - CANCELLED
+    InvoiceListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Invoice'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    BalanceResponse:
+      type: object
+      properties:
+        billingAccountId:
+          type: string
+          format: uuid
+        currency:
+          type: string
+          default: USD
+        available:
+          type: string
+        pending:
+          type: string
+        held:
+          type: string
+        total:
+          type: string
+      required:
+        - billingAccountId
+        - currency
+        - available
+        - pending
+        - held
+        - total
+    Tenant:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        domain:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/TenantStatus'
+        metadata:
+          type: object
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - slug
+        - status
+        - createdAt
+        - updatedAt
+    TenantStatus:
+      type: string
+      enum:
+        - ACTIVE
+        - SUSPENDED
+        - INACTIVE
+    AdminCreateTenantRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        domain:
+          type: string
+        metadata:
+          type: object
+      required:
+        - name
+        - slug
+    AdminUpdateTenantRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        domain:
+          type: string
+        status:
+          $ref: '#/components/schemas/TenantStatus'
+        metadata:
+          type: object
+    TenantListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tenant'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    Carrier:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        code:
+          type: string
+        status:
+          $ref: '#/components/schemas/CarrierStatus'
+        metadata:
+          type: object
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - tenantId
+        - name
+        - code
+        - status
+        - createdAt
+        - updatedAt
+    CarrierStatus:
+      type: string
+      enum:
+        - ACTIVE
+        - INACTIVE
+    AdminCreateCarrierRequest:
+      type: object
+      properties:
+        tenantId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        code:
+          type: string
+        metadata:
+          type: object
+      required:
+        - tenantId
+        - name
+        - code
+    AdminUpdateCarrierRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        code:
+          type: string
+        status:
+          $ref: '#/components/schemas/CarrierStatus'
+        metadata:
+          type: object
+    CarrierListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Carrier'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    Trunk:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        carrierId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          $ref: '#/components/schemas/TrunkType'
+        host:
+          type: string
+        port:
+          type: integer
+        username:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/TrunkStatus'
+        metadata:
+          type: object
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - tenantId
+        - carrierId
+        - name
+        - type
+        - host
+        - port
+        - status
+        - createdAt
+        - updatedAt
+    TrunkType:
+      type: string
+      enum:
+        - SIP
+        - IAX2
+        - WEBRTC
+    TrunkStatus:
+      type: string
+      enum:
+        - ACTIVE
+        - INACTIVE
+        - MAINTENANCE
+    AdminCreateTrunkRequest:
+      type: object
+      properties:
+        tenantId:
+          type: string
+          format: uuid
+        carrierId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          $ref: '#/components/schemas/TrunkType'
+        host:
+          type: string
+        port:
+          type: integer
+        username:
+          type: string
+        password:
+          type: string
+        metadata:
+          type: object
+      required:
+        - tenantId
+        - carrierId
+        - name
+        - type
+        - host
+        - port
+    AdminUpdateTrunkRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          $ref: '#/components/schemas/TrunkType'
+        host:
+          type: string
+        port:
+          type: integer
+        username:
+          type: string
+        password:
+          type: string
+        status:
+          $ref: '#/components/schemas/TrunkStatus'
+        metadata:
+          type: object
+    TrunkListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Trunk'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    RateCard:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        billingAccountId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        effectiveFrom:
+          type: string
+          format: date-time
+        effectiveTo:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          $ref: '#/components/schemas/RateCardStatus'
+        rates:
+          type: object
+          description: Rate structure (JSON object)
+        metadata:
+          type: object
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - billingAccountId
+        - name
+        - effectiveFrom
+        - status
+        - rates
+        - createdAt
+        - updatedAt
+    RateCardStatus:
+      type: string
+      enum:
+        - ACTIVE
+        - INACTIVE
+    AdminCreateRateCardRequest:
+      type: object
+      properties:
+        billingAccountId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        effectiveFrom:
+          type: string
+          format: date-time
+        effectiveTo:
+          type: string
+          format: date-time
+        rates:
+          type: object
+          description: Rate structure (JSON object)
+        metadata:
+          type: object
+      required:
+        - billingAccountId
+        - name
+        - effectiveFrom
+        - rates
+    AdminUpdateRateCardRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        effectiveFrom:
+          type: string
+          format: date-time
+        effectiveTo:
+          type: string
+          format: date-time
+        status:
+          $ref: '#/components/schemas/RateCardStatus'
+        rates:
+          type: object
+        metadata:
+          type: object
+    RateCardListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/RateCard'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    AdminProvisionNumberRequest:
+      type: object
+      properties:
+        tenantId:
+          type: string
+          format: uuid
+        number:
+          type: string
+          description: E.164 format phone number
+        carrierId:
+          type: string
+          format: uuid
+        trunkId:
+          type: string
+          format: uuid
+        capabilities:
+          type: array
+          items:
+            type: string
+            enum:
+              - SMS
+              - MMS
+              - Voice
+        metadata:
+          type: object
+      required:
+        - tenantId
+        - number
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: BAD_REQUEST
+              message: Invalid request parameters
+              requestId: req_1234567890
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: UNAUTHORIZED
+              message: Invalid or missing API key
+              requestId: req_1234567890
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: FORBIDDEN
+              message: Insufficient permissions
+              requestId: req_1234567890
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: NOT_FOUND
+              message: Resource not found
+              requestId: req_1234567890
+    Conflict:
+      description: Conflict (e.g., duplicate resource or idempotency key already used)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: CONFLICT
+              message: Resource already exists
+              requestId: req_1234567890
+    RateLimitExceeded:
+      description: Rate limit exceeded
+      headers:
+        X-RateLimit-Limit:
+          schema:
+            type: integer
+          description: Request limit per window
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+          description: Remaining requests in current window
+        X-RateLimit-Reset:
+          schema:
+            type: integer
+            format: int64
+          description: Unix timestamp when rate limit resets
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: RATE_LIMIT_EXCEEDED
+              message: Rate limit exceeded. Please try again later.
+              requestId: req_1234567890

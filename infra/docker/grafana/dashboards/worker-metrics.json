@@ -1,0 +1,72 @@
+{
+  "dashboard": {
+    "title": "CallFabric Worker Metrics",
+    "tags": ["callfabric", "worker"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 1,
+    "refresh": "10s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Worker Jobs Processed",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(worker_jobs_total[5m])",
+            "legendFormat": "{{job_type}} {{status}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
+      },
+      {
+        "id": 2,
+        "title": "Worker Job Duration (p95)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(worker_job_duration_seconds_bucket[5m]))",
+            "legendFormat": "p95 {{job_type}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
+      },
+      {
+        "id": 3,
+        "title": "Active Worker Jobs",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "worker_jobs_active",
+            "legendFormat": "{{job_type}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }
+      },
+      {
+        "id": 4,
+        "title": "ETL Records Processed",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(etl_records_processed_total[5m])",
+            "legendFormat": "{{table}} {{status}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }
+      },
+      {
+        "id": 5,
+        "title": "ETL Processing Duration",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(etl_processing_duration_seconds_bucket[5m]))",
+            "legendFormat": "p95 {{table}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 }
+      }
+    ]
+  }
+}

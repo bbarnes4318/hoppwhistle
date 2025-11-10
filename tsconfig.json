@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "lib": ["ES2022"],
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "allowJs": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "composite": true,
+    "incremental": true,
+    "baseUrl": ".",
+    "paths": {
+      "@callfabric/shared": ["./packages/shared/src"],
+      "@callfabric/shared/*": ["./packages/shared/src/*"],
+      "@callfabric/routing-dsl": ["./packages/routing-dsl/src"],
+      "@callfabric/routing-dsl/*": ["./packages/routing-dsl/src/*"],
+      "@callfabric/sdk": ["./packages/sdk/src"],
+      "@callfabric/sdk/*": ["./packages/sdk/src/*"]
+    }
+  },
+  "exclude": ["node_modules", "dist", "build", ".next", "coverage"]
+}

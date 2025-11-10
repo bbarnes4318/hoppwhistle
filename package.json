@@ -1,0 +1,56 @@
+{
+  "name": "hopwhistle",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Production-grade monorepo for Hopwhistle telephony platform",
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "lint:fix": "pnpm -r lint:fix",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
+    "typecheck": "pnpm -r typecheck",
+    "clean": "pnpm -r clean && rm -rf node_modules",
+    "prepare": "husky install",
+    "db:migrate": "pnpm --filter @hopwhistle/api db:migrate",
+    "db:seed": "pnpm --filter @hopwhistle/api db:seed",
+    "db:seed:demo": "pnpm --filter @hopwhistle/api db:seed:demo",
+    "test:sip": "node tests/sip/run-tests.js",
+    "test:sip:ci": "node tests/sip/run-tests.js",
+    "test:perf": "k6 run tests/k6/call-state-updates.js && k6 run tests/k6/reporting-endpoints.js && k6 run tests/k6/redis-pubsub.js",
+    "test:perf:call-state": "k6 run tests/k6/call-state-updates.js",
+    "test:perf:reporting": "k6 run tests/k6/reporting-endpoints.js",
+    "test:perf:pubsub": "k6 run tests/k6/redis-pubsub.js"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^18.4.4",
+    "@commitlint/config-conventional": "^18.4.4",
+    "@types/node": "^20.10.5",
+    "@typescript-eslint/eslint-plugin": "^6.15.0",
+    "@typescript-eslint/parser": "^6.15.0",
+    "eslint": "^8.56.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-import": "^2.29.1",
+    "husky": "^8.0.3",
+    "lint-staged": "^15.2.0",
+    "prettier": "^3.1.1",
+    "prisma": "6.19.0",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@8.15.0",
+  "dependencies": {
+    "@prisma/client": "6.19.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "prisma": "6.19.0",
+      "@prisma/client": "6.19.0"
+    }
+  }
+}

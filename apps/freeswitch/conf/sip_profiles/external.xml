@@ -1,0 +1,65 @@
+<!-- External SIP Profile for Trunks -->
+<profile name="external">
+  <settings>
+    <!-- Basic Settings -->
+    <param name="name" value="external"/>
+    <param name="debug" value="0"/>
+    <param name="sip-trace" value="true"/>
+    <param name="sip-capture" value="false"/>
+    
+    <!-- Network Settings -->
+    <param name="listen-ip" value="0.0.0.0"/>
+    <param name="listen-port" value="5060"/>
+    <param name="rtp-ip" value="$${local_ip_v4}"/>
+    <param name="ext-rtp-ip" value="auto-nat"/>
+    <param name="sip-ip" value="$${local_ip_v4}"/>
+    <param name="ext-sip-ip" value="auto-nat"/>
+    
+    <!-- SIP Settings -->
+    <param name="dialplan" value="XML"/>
+    <param name="context" value="trunk"/>
+    <param name="rtp-timeout-sec" value="300"/>
+    <param name="rtp-hold-timeout-sec" value="1800"/>
+    
+    <!-- Codec Settings -->
+    <param name="codec-prefs" value="OPUS,G722,PCMU,PCMA,GSM"/>
+    <param name="disable-transcoding" value="false"/>
+    
+    <!-- Authentication -->
+    <param name="auth-calls" value="true"/>
+    <param name="auth-all-packets" value="true"/>
+    <param name="auth-ip" value="$${env(TRUNK_AUTH_IP)}"/>
+    
+    <!-- NAT Traversal -->
+    <param name="aggressive-nat-detection" value="true"/>
+    <param name="rtp-autoflush-during-bridge" value="true"/>
+    <param name="apply-nat-acl" value="nat.auto"/>
+    
+    <!-- TLS Settings (optional) -->
+    <param name="tls" value="$${env(ENABLE_TLS)}"/>
+    <param name="tls-bind-params" value="transport=tls"/>
+    <param name="tls-sip-port" value="5061"/>
+    <param name="tls-cert-dir" value="$${base_dir}/conf/tls"/>
+    <param name="tls-verify-date" value="true"/>
+    <param name="tls-verify-policy" value="none"/>
+    
+    <!-- SRTP Settings (optional) -->
+    <param name="rtp-secure-media" value="$${env(ENABLE_SRTP)}"/>
+    <param name="rtp-secure-media-prefer" value="true"/>
+    <param name="rtp-secure-media-required" value="false"/>
+    
+    <!-- Registration -->
+    <param name="accept-blind-reg" value="false"/>
+    <param name="accept-blind-auth" value="false"/>
+    <param name="register" value="false"/>
+    
+    <!-- Logging -->
+    <param name="log-auth-failures" value="true"/>
+    <param name="log-level" value="info"/>
+    
+    <!-- Call Limits -->
+    <param name="max-registrations-per-user" value="10"/>
+    <param name="max-sessions" value="1000"/>
+  </settings>
+</profile>
+

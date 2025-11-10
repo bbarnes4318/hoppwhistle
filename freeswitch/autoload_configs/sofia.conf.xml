@@ -1,0 +1,33 @@
+<configuration name="sofia.conf" description="sofia">
+  <profiles>
+    <profile name="external">
+      <gateways>
+        <gateway name="signalwire">
+          <param name="username" value="${env:SIGNALWIRE_SIP_USERNAME}"/>
+          <param name="password" value="${env:SIGNALWIRE_SIP_PASSWORD}"/>
+          <param name="from-user" value="${env:SIGNALWIRE_SIP_USERNAME}"/>
+          <param name="from-domain" value="${env:SIGNALWIRE_SIP_DOMAIN}"/>
+          <param name="proxy" value="${env:SIGNALWIRE_OUTBOUND_PROXY}"/>
+          <param name="register" value="true"/>
+          <param name="retry-seconds" value="30"/>
+          <param name="caller-id-in-from" value="true"/>
+          <param name="extension-in-contact" value="true"/>
+        </gateway>
+      </gateways>
+      <settings>
+        <param name="user-agent-string" value="YourPlatform-FS"/>
+        <param name="sip-ip" value="$${external_sip_ip}"/>
+        <param name="ext-sip-ip" value="$${external_sip_ip}"/>
+        <param name="rtp-ip" value="$${external_rtp_ip}"/>
+        <param name="ext-rtp-ip" value="$${external_rtp_ip}"/>
+        <param name="sip-port" value="5080"/>
+        <param name="tls-sip-port" value="5081"/>
+        <param name="tls" value="false"/>
+        <param name="inbound-codec-prefs" value="PCMU,PCMA,OPUS"/>
+        <param name="outbound-codec-prefs" value="PCMU,PCMA,OPUS"/>
+        <param name="disable-register" value="true"/>
+      </settings>
+    </profile>
+  </profiles>
+</configuration>
+

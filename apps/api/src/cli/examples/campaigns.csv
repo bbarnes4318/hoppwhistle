@@ -1,0 +1,6 @@
+campaign_id,name,tenant_id,description
+campaign-001,Summer Sale 2024,00000000-0000-0000-0000-000000000000,Promotional campaign for summer products
+campaign-002,Holiday Campaign,00000000-0000-0000-0000-000000000000,Year-end holiday promotion
+campaign-003,Lead Generation,00000000-0000-0000-0000-000000000000,General lead generation campaign
+campaign-004,Customer Retention,00000000-0000-0000-0000-000000000000,Retain existing customers
+

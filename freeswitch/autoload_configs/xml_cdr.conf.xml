@@ -1,0 +1,13 @@
+<configuration name="xml_cdr.conf" description="CDR">
+  <settings>
+    <param name="url" value="${env:API_BASE_URL}/voice/recording-ready"/>
+    <param name="log-http-and-disk" value="true"/>
+    <param name="force-post-disconnect" value="true"/>
+    <param name="encode" value="true"/>
+    <param name="delay" value="5"/>
+    <param name="retries" value="3"/>
+    <param name="timeout" value="5"/>
+    <param name="auth-scheme" value="Bearer ${env:API_ADMIN_TOKEN}"/>
+  </settings>
+</configuration>
+

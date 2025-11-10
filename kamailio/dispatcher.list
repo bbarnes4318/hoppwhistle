@@ -1,0 +1,4 @@
+1 sip:${PUBLIC_IP}:5080;transport=udp
+1 sip:${PUBLIC_IP}:5080;transport=tcp
+1 sip:${PUBLIC_IP}:5081;transport=tls
+

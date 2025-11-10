@@ -1,0 +1,64 @@
+version: '3.9'
+
+services:
+  kamailio:
+    build: ../../kamailio
+    container_name: sbc-kamailio
+    network_mode: host
+    environment:
+      - PUBLIC_IP=${PUBLIC_IP}
+      - SBC_DOMAIN=${SBC_DOMAIN}
+      - TLS_ENABLE=${TLS_ENABLE}
+      - TLS_CERT_FILE=${TLS_CERT_FILE}
+      - TLS_KEY_FILE=${TLS_KEY_FILE}
+      - SIGNALWIRE_SIP_DOMAIN=${SIGNALWIRE_SIP_DOMAIN}
+      - SIGNALWIRE_SIP_USERNAME=${SIGNALWIRE_SIP_USERNAME}
+      - SIGNALWIRE_SIP_PASSWORD=${SIGNALWIRE_SIP_PASSWORD}
+      - SIGNALWIRE_OUTBOUND_PROXY=${SIGNALWIRE_OUTBOUND_PROXY}
+    volumes:
+      # TLS certificates can be mounted if you want to update without rebuild
+      - ../../kamailio/tls:/etc/kamailio/tls:ro
+      # Config files are handled by entrypoint script (no mount needed)
+    restart: unless-stopped
+
+  rtpengine:
+    build: ../../rtpengine
+    container_name: rtpengine
+    network_mode: host
+    environment:
+      - PUBLIC_IP=${PUBLIC_IP}
+      - RTP_START=${RTP_START}
+      - RTP_END=${RTP_END}
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.core.rmem_max=33554432
+      - net.core.wmem_max=33554432
+    restart: unless-stopped
+
+  freeswitch:
+    build: ../../freeswitch
+    container_name: freeswitch
+    network_mode: host
+    environment:
+      - PUBLIC_IP=${PUBLIC_IP}
+      - MEDIA_DOMAIN=${MEDIA_DOMAIN}
+      - RECORDINGS_PATH=${RECORDINGS_PATH}
+      - API_BASE_URL=${API_BASE_URL}
+      - API_ADMIN_TOKEN=${API_ADMIN_TOKEN}
+      - FS_ESL_PASSWORD=${FS_ESL_PASSWORD}
+      - RTP_START=${RTP_START}
+      - RTP_END=${RTP_END}
+      - SIGNALWIRE_SIP_DOMAIN=${SIGNALWIRE_SIP_DOMAIN}
+      - SIGNALWIRE_SIP_USERNAME=${SIGNALWIRE_SIP_USERNAME}
+      - SIGNALWIRE_SIP_PASSWORD=${SIGNALWIRE_SIP_PASSWORD}
+      - SIGNALWIRE_OUTBOUND_PROXY=${SIGNALWIRE_OUTBOUND_PROXY}
+    volumes:
+      # vars.xml is handled by entrypoint script (no mount needed)
+      - ../../freeswitch/autoload_configs:/etc/freeswitch/autoload_configs:ro
+      - ../../freeswitch/dialplan:/etc/freeswitch/dialplan:ro
+      - ${RECORDINGS_PATH}:/var/recordings
+      - ../../freeswitch/scripts:/usr/local/bin/scripts:ro
+    depends_on:
+      - rtpengine
+    restart: unless-stopped

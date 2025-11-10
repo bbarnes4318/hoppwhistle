@@ -1,0 +1,74 @@
+# Default values for hopwhistle
+replicaCount: 1
+
+image:
+  registry: ghcr.io
+  repository: hopwhistle/hopwhistle
+  pullPolicy: IfNotPresent
+  tag: 'latest'
+
+api:
+  replicaCount: 3
+  image:
+    repository: api
+    tag: 'latest'
+  service:
+    type: ClusterIP
+    port: 3001
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 500m
+      memory: 512Mi
+  env:
+    NODE_ENV: production
+    PORT: '3001'
+
+web:
+  replicaCount: 2
+  image:
+    repository: web
+    tag: 'latest'
+  service:
+    type: ClusterIP
+    port: 3000
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+  env:
+    NODE_ENV: production
+
+worker:
+  replicaCount: 5
+  image:
+    repository: worker
+    tag: 'latest'
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 500m
+      memory: 512Mi
+  env:
+    NODE_ENV: production
+
+postgresql:
+  enabled: true
+  auth:
+    postgresPassword: ''
+    database: hopwhistle
+
+redis:
+  enabled: true
+  auth:
+    enabled: false
+
+serviceAccount:
+  create: true

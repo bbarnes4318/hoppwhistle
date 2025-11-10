@@ -1,0 +1,9 @@
+# FreeSWITCH Dispatcher List
+# Format: setid, destination, flags, priority, attrs, description
+# Flags: 0=active, 1=inactive, 2=probing
+# Priority: lower number = higher priority
+
+1 sip:freeswitch:5080 0 0 "" "FreeSWITCH Node 1"
+1 sip:freeswitch2:5080 0 0 "" "FreeSWITCH Node 2"
+1 sip:freeswitch3:5080 0 0 "" "FreeSWITCH Node 3"
+

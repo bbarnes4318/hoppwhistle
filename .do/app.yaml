@@ -1,0 +1,130 @@
+name: hopwhistle
+region: nyc
+services:
+  - name: api
+    github:
+      repo: bbarnes4318/hopwhistle
+      branch: main
+      deploy_on_push: true
+    run_command: pnpm --filter @hopwhistle/api start
+    environment_slug: node-js
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    http_port: 3001
+    health_check:
+      http_path: /health
+    routes:
+      - path: /api
+    envs:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: '3001'
+      - key: HOST
+        value: '0.0.0.0'
+      - key: DATABASE_URL
+        value: ${db.DATABASE_URL}
+        type: SECRET
+      - key: REDIS_URL
+        value: ${redis.REDIS_URL}
+        type: SECRET
+      - key: JWT_SECRET
+        scope: RUN_TIME
+        type: SECRET
+      - key: S3_ENDPOINT
+        scope: RUN_TIME
+        type: SECRET
+      - key: S3_BUCKET
+        scope: RUN_TIME
+        type: SECRET
+      - key: S3_ACCESS_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: S3_SECRET_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: S3_REGION
+        value: 'us-east-1'
+      - key: S3_FORCE_PATH_STYLE
+        value: 'false'
+    build_command: |
+      corepack enable
+      corepack prepare pnpm@8.15.0 --activate
+      pnpm install --frozen-lockfile
+      pnpm --filter @hopwhistle/api db:generate
+      pnpm --filter @hopwhistle/api build
+
+  - name: web
+    github:
+      repo: bbarnes4318/hopwhistle
+      branch: main
+      deploy_on_push: true
+    run_command: pnpm --filter @hopwhistle/web start
+    environment_slug: node-js
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    http_port: 3000
+    health_check:
+      http_path: /
+    routes:
+      - path: /
+    envs:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_API_URL
+        scope: RUN_TIME
+        type: SECRET
+      - key: NEXT_PUBLIC_WS_URL
+        scope: RUN_TIME
+        type: SECRET
+      - key: NEXT_PUBLIC_APP_NAME
+        value: 'Hopwhistle'
+    build_command: |
+      corepack enable
+      corepack prepare pnpm@8.15.0 --activate
+      pnpm install --frozen-lockfile
+      pnpm --filter @hopwhistle/web build
+
+  - name: worker
+    github:
+      repo: bbarnes4318/hopwhistle
+      branch: main
+      deploy_on_push: true
+    run_command: pnpm --filter @hopwhistle/worker start
+    environment_slug: node-js
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    http_port: 9091
+    health_check:
+      http_path: /health
+    envs:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        value: ${db.DATABASE_URL}
+        type: SECRET
+      - key: REDIS_URL
+        value: ${redis.REDIS_URL}
+        type: SECRET
+      - key: WORKER_CONCURRENCY
+        value: '5'
+    build_command: |
+      corepack enable
+      corepack prepare pnpm@8.15.0 --activate
+      pnpm install --frozen-lockfile
+      pnpm --filter @hopwhistle/worker build
+
+databases:
+  - name: db
+    engine: PG
+    version: '16'
+    production: false
+    cluster_name: hopwhistle-db
+    db_name: hopwhistle
+    db_user: hopwhistle
+
+  - name: redis
+    engine: REDIS
+    version: '7'
+    production: false
+    cluster_name: hopwhistle-redis

@@ -1,0 +1,1427 @@
+// Prisma Schema for Hopwhistle Multi-Tenant Call Tracking Platform
+generator client {
+  provider = "prisma-client-js"
+}
+
+
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// Multi-Tenant Core
+// ============================================================================
+
+model Tenant {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  domain      String?  @unique
+  status      TenantStatus @default(ACTIVE)
+  metadata    Json?    // Additional tenant-specific configuration
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Quota & Budget Controls
+  quota       TenantQuota?
+  budget      TenantBudget?
+  quotaOverrides QuotaOverride[]
+  budgetAlerts BudgetAlert[]
+
+  // Relations
+  users            User[]
+  apiKeys          ApiKey[]
+  rateLimitEntries RateLimitEntry[]
+  phoneNumbers     PhoneNumber[]
+  carriers         Carrier[]
+  trunks           Trunk[]
+  callerIdPools    CallerIdPool[]
+  campaigns        Campaign[]
+  publishers       Publisher[]
+  buyers           Buyer[]
+  flows            Flow[]
+  calls            Call[]
+  billingAccounts  BillingAccount[]
+  webhooks         Webhook[]
+  events           Event[]
+  auditLogs        AuditLog[]
+  featureFlags     FeatureFlag[]
+  dncLists         DncList[]
+  consentTokens    ConsentToken[]
+  compliancePolicies CompliancePolicy[]
+  complianceOverrides ComplianceOverride[]
+  stirShakenStatuses StirShakenStatus[]
+  cnamLookups        CnamLookup[]
+  carrierLookups     CarrierLookup[]
+  tags             Tag[]
+
+  @@index([slug])
+  @@index([status])
+  @@map("tenants")
+}
+
+model TenantQuota {
+  id                    String   @id @default(uuid())
+  tenantId              String   @unique
+  maxConcurrentCalls    Int?     // Maximum concurrent calls allowed
+  maxMinutesPerDay      Int?     // Maximum call minutes per day
+  maxRecordingRetentionDays Int? // Maximum days to retain recordings
+  maxPhoneNumbers       Int?     // Maximum phone numbers allowed
+  maxStorageGB          Decimal? @db.Decimal(10, 2) // Maximum storage in GB
+  enabled               Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_quotas")
+}
+
+model TenantBudget {
+  id                    String   @id @default(uuid())
+  tenantId              String   @unique
+  monthlyBudget         Decimal? @db.Decimal(10, 2) // Monthly budget in USD
+  dailyBudget           Decimal? @db.Decimal(10, 2) // Daily budget in USD
+  alertThreshold        Decimal  @default(80) // Alert at X% of budget
+  alertEmails           String[] // Email addresses for alerts
+  alertSlackWebhook     String?  // Slack webhook URL
+  hardStopEnabled       Boolean  @default(true) // Hard stop when budget exceeded
+  overrideToken         String?  @unique // Token to override hard stops
+  overrideTokenExpiresAt DateTime? // Token expiration
+  currentMonthSpend     Decimal  @default(0) @db.Decimal(10, 2)
+  currentDaySpend       Decimal  @default(0) @db.Decimal(10, 2)
+  lastAlertSentAt       DateTime? // Last time alert was sent
+  lastAlertType         BudgetAlertType?
+  enabled               Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  alerts BudgetAlert[]
+
+  @@map("tenant_budgets")
+}
+
+enum BudgetAlertType {
+  DAILY_THRESHOLD
+  DAILY_EXCEEDED
+  MONTHLY_THRESHOLD
+  MONTHLY_EXCEEDED
+}
+
+model BudgetAlert {
+  id          String   @id @default(uuid())
+  tenantId    String
+  budgetId    String
+  type        BudgetAlertType
+  threshold   Decimal  @db.Decimal(10, 2)
+  actual      Decimal  @db.Decimal(10, 2)
+  sentVia     String[] // email, slack, etc.
+  sentAt      DateTime @default(now())
+  metadata    Json?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  budget TenantBudget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([budgetId])
+  @@index([sentAt])
+  @@map("budget_alerts")
+}
+
+model QuotaOverride {
+  id          String   @id @default(uuid())
+  tenantId    String
+  quotaType   String   // concurrent_calls, minutes_per_day, etc.
+  overrideValue Int?   // Override value (null = unlimited)
+  reason      String
+  expiresAt   DateTime?
+  createdBy   String?  // User ID who created override
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([expiresAt])
+  @@map("quota_overrides")
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  INACTIVE
+}
+
+model User {
+  id          String   @id @default(uuid())
+  tenantId    String
+  email       String
+  passwordHash String
+  firstName   String?
+  lastName    String?
+  status      UserStatus @default(ACTIVE)
+  lastLoginAt DateTime?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  roles       UserRole[]
+  auditLogs   AuditLog[]
+  createdCalls Call[]  @relation("CallCreator")
+  stirShakenOverrides StirShakenStatus[] @relation("StirShakenOverrideUser")
+
+  @@unique([tenantId, email])
+  @@index([tenantId, email])
+  @@index([tenantId, status])
+  @@map("users")
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum RoleName {
+  OWNER
+  ADMIN
+  ANALYST
+  PUBLISHER
+  BUYER
+  READONLY
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  name        RoleName @unique
+  description String?
+  permissions Json     // Array of permission strings
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  userRoles   UserRole[]
+
+  @@map("roles")
+}
+
+model UserRole {
+  id        String   @id @default(uuid())
+  userId    String
+  roleId    String
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+  @@index([userId])
+  @@index([roleId])
+  @@map("user_roles")
+}
+
+model ApiKey {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  keyHash     String   @unique // Hashed API key
+  prefix      String   // First 8 chars for identification
+  status      ApiKeyStatus @default(ACTIVE)
+  scopes      Json     // Array of scope strings (e.g., ["calls:read", "calls:write"])
+  rateLimit   Int?     // Requests per minute (null = unlimited)
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  rateLimitEntries RateLimitEntry[]
+  auditLogs        AuditLog[]
+
+  @@index([tenantId])
+  @@index([keyHash])
+  @@index([status])
+  @@map("api_keys")
+}
+
+enum ApiKeyStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+// ============================================================================
+// Telephony Infrastructure
+// ============================================================================
+
+model PhoneNumber {
+  id            String   @id @default(uuid())
+  tenantId      String
+  number        String   // E.164 format
+  carrierId     String?
+  trunkId       String?
+  campaignId    String?  // Assigned campaign
+  provider      String?  // local | signalwire | telnyx | bandwidth | clec
+  status        PhoneNumberStatus @default(ACTIVE)
+  capabilities  Json?    // SMS, MMS, Voice, etc.
+  metadata      Json?
+  purchasedAt   DateTime?
+  releasedAt    DateTime?
+  importSource  String?  // Source of import (e.g., 'legacy', 'ringba', 'callrail')
+  importHash    String?  // Hash for deduplication
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  carrier       Carrier? @relation(fields: [carrierId], references: [id])
+  trunk         Trunk?   @relation(fields: [trunkId], references: [id])
+  campaign      Campaign? @relation(fields: [campaignId], references: [id])
+  callerIdPools CallerIdPoolPhoneNumber[]
+  buyerEndpoints BuyerEndpoint[]
+  calls         Call[]   @relation("CallFromNumber")
+  callLegs      CallLeg[]
+
+  @@unique([tenantId, number])
+  @@index([tenantId, number])
+  @@index([tenantId, status])
+  @@index([tenantId, campaignId])
+  @@index([carrierId])
+  @@index([trunkId])
+  @@index([provider])
+  @@map("phone_numbers")
+}
+
+enum PhoneNumberStatus {
+  ACTIVE
+  INACTIVE
+  PORTING
+  SUSPENDED
+}
+
+model Carrier {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  code        String   // Internal carrier code
+  status      CarrierStatus @default(ACTIVE)
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  phoneNumbers  PhoneNumber[]
+  trunks        Trunk[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@map("carriers")
+}
+
+enum CarrierStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model Trunk {
+  id          String   @id @default(uuid())
+  tenantId    String
+  carrierId   String
+  name        String
+  type        TrunkType
+  host        String
+  port        Int
+  username    String?
+  password    String?  // Encrypted
+  status      TrunkStatus @default(ACTIVE)
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  carrier       Carrier       @relation(fields: [carrierId], references: [id])
+  phoneNumbers  PhoneNumber[]
+
+  @@index([tenantId])
+  @@index([carrierId])
+  @@index([status])
+  @@map("trunks")
+}
+
+enum TrunkType {
+  SIP
+  IAX2
+  WEBRTC
+}
+
+enum TrunkStatus {
+  ACTIVE
+  INACTIVE
+  MAINTENANCE
+}
+
+model CallerIdPool {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  status      CallerIdPoolStatus @default(ACTIVE)
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  tenant        Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  phoneNumbers  CallerIdPoolPhoneNumber[]
+  campaigns     Campaign[]
+
+  @@index([tenantId])
+  @@map("caller_id_pools")
+}
+
+enum CallerIdPoolStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model CallerIdPoolPhoneNumber {
+  id              String   @id @default(uuid())
+  callerIdPoolId  String
+  phoneNumberId   String
+  priority        Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  // Relations
+  callerIdPool CallerIdPool @relation(fields: [callerIdPoolId], references: [id], onDelete: Cascade)
+  phoneNumber  PhoneNumber  @relation(fields: [phoneNumberId], references: [id], onDelete: Cascade)
+
+  @@unique([callerIdPoolId, phoneNumberId])
+  @@index([callerIdPoolId])
+  @@index([phoneNumberId])
+  @@map("caller_id_pool_phone_numbers")
+}
+
+// ============================================================================
+// Campaigns & Publishers/Buyers
+// ============================================================================
+
+model Campaign {
+  id            String   @id @default(uuid())
+  tenantId      String
+  publisherId   String
+  name          String
+  status        CampaignStatus @default(ACTIVE)
+  callerIdPoolId String?
+  flowId        String?  // Current active flow version
+  metadata      Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  publisher     Publisher     @relation(fields: [publisherId], references: [id])
+  callerIdPool  CallerIdPool? @relation(fields: [callerIdPoolId], references: [id])
+  flow          Flow?         @relation(fields: [flowId], references: [id])
+  phoneNumbers  PhoneNumber[]
+  calls         Call[]
+
+  @@index([tenantId])
+  @@index([publisherId])
+  @@index([status])
+  @@map("campaigns")
+}
+
+enum CampaignStatus {
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+model Publisher {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  code        String   // Internal publisher code
+  status      PublisherStatus @default(ACTIVE)
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  campaigns Campaign[]
+  buyers    Buyer[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@map("publishers")
+}
+
+enum PublisherStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model Buyer {
+  id          String   @id @default(uuid())
+  tenantId    String
+  publisherId String
+  name        String
+  code        String   // Internal buyer code
+  status      BuyerStatus @default(ACTIVE)
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  tenant    Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  publisher Publisher      @relation(fields: [publisherId], references: [id])
+  endpoints BuyerEndpoint[]
+
+  @@unique([tenantId, publisherId, code])
+  @@index([tenantId])
+  @@index([publisherId])
+  @@map("buyers")
+}
+
+enum BuyerStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model BuyerEndpoint {
+  id          String   @id @default(uuid())
+  buyerId     String
+  phoneNumberId String?
+  type        BuyerEndpointType
+  destination String   // SIP URI or PSTN number
+  priority    Int      @default(0)
+  status      BuyerEndpointStatus @default(ACTIVE)
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  buyer       Buyer        @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  phoneNumber PhoneNumber? @relation(fields: [phoneNumberId], references: [id])
+
+  @@index([buyerId])
+  @@index([phoneNumberId])
+  @@index([status])
+  @@map("buyer_endpoints")
+}
+
+enum BuyerEndpointType {
+  SIP
+  PSTN
+  WEBRTC
+}
+
+enum BuyerEndpointStatus {
+  ACTIVE
+  INACTIVE
+  FAILED
+}
+
+// ============================================================================
+// Flow Routing
+// ============================================================================
+
+model Flow {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  status      FlowStatus @default(DRAFT)
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  versions      FlowVersion[]
+  campaigns     Campaign[]
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("flows")
+}
+
+enum FlowStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+model FlowVersion {
+  id          String   @id @default(uuid())
+  flowId      String
+  version     Int
+  isActive    Boolean  @default(false)
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  flow  Flow   @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  nodes Node[]
+  edges Edge[]
+
+  @@unique([flowId, version])
+  @@index([flowId])
+  @@index([flowId, isActive])
+  @@map("flow_versions")
+}
+
+model Node {
+  id            String   @id @default(uuid())
+  flowVersionId String
+  type          NodeType
+  name          String
+  config        Json     // Node-specific configuration
+  position      Json?    // UI position {x, y}
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  flowVersion FlowVersion @relation(fields: [flowVersionId], references: [id], onDelete: Cascade)
+  edgesFrom   Edge[]      @relation("EdgeFrom")
+  edgesTo     Edge[]      @relation("EdgeTo")
+
+  @@index([flowVersionId])
+  @@index([flowVersionId, type])
+  @@map("nodes")
+}
+
+enum NodeType {
+  IVR
+  QUEUE
+  BUYER_FORWARD
+  VOICEMAIL
+  HANGUP
+  RECORDING
+  TRANSFER
+  CONDITIONAL
+}
+
+model Edge {
+  id          String   @id @default(uuid())
+  flowVersionId String
+  fromNodeId  String
+  toNodeId    String
+  condition   String?  // Optional condition expression
+  priority    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  flowVersion FlowVersion @relation(fields: [flowVersionId], references: [id], onDelete: Cascade)
+  fromNode    Node        @relation("EdgeFrom", fields: [fromNodeId], references: [id], onDelete: Cascade)
+  toNode      Node        @relation("EdgeTo", fields: [toNodeId], references: [id], onDelete: Cascade)
+
+  @@index([flowVersionId])
+  @@index([fromNodeId])
+  @@index([toNodeId])
+  @@map("edges")
+}
+
+// ============================================================================
+// Call Tracking
+// ============================================================================
+
+model Call {
+  id              String   @id @default(uuid())
+  tenantId        String
+  campaignId      String?
+  fromNumberId    String?
+  toNumber        String   // E.164 format
+  callSid         String   @unique // External call identifier
+  externalId      String?  @unique // External call ID from legacy system (for deduplication)
+  status          CallStatus
+  direction       CallDirection
+  duration        Int?     // Seconds
+  cost            Decimal? @db.Decimal(10, 4)
+  metadata        Json?
+  importHash      String?  // Hash for deduplication
+  createdById     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  startedAt       DateTime?
+  answeredAt      DateTime?
+  endedAt         DateTime?
+
+  // Relations
+  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  campaign    Campaign?     @relation(fields: [campaignId], references: [id])
+  fromNumber  PhoneNumber?  @relation("CallFromNumber", fields: [fromNumberId], references: [id])
+  createdBy   User?         @relation("CallCreator", fields: [createdById], references: [id])
+  legs        CallLeg[]
+  cdrs        Cdr[]
+  recordings  Recording[]
+  transcriptions Transcription[]
+  tags        CallTag[]
+  accruals    AccrualLedger[]
+
+  @@index([tenantId])
+  @@index([tenantId, createdAt])
+  @@index([campaignId])
+  @@index([callSid])
+  @@index([externalId])
+  @@index([status])
+  @@index([direction])
+  @@index([importHash])
+  @@map("calls")
+}
+
+enum CallStatus {
+  INITIATED
+  RINGING
+  ANSWERED
+  COMPLETED
+  FAILED
+  BUSY
+  NO_ANSWER
+  CANCELLED
+}
+
+enum CallDirection {
+  INBOUND
+  OUTBOUND
+}
+
+model CallLeg {
+  id          String   @id @default(uuid())
+  callId      String
+  phoneNumberId String?
+  legSid      String   @unique
+  status      CallLegStatus
+  direction   CallLegDirection
+  duration    Int?     // Seconds
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  startedAt   DateTime?
+  answeredAt  DateTime?
+  endedAt     DateTime?
+
+  // Relations
+  call        Call         @relation(fields: [callId], references: [id], onDelete: Cascade)
+  phoneNumber PhoneNumber? @relation(fields: [phoneNumberId], references: [id])
+
+  @@index([callId])
+  @@index([legSid])
+  @@index([status])
+  @@map("call_legs")
+}
+
+enum CallLegStatus {
+  INITIATED
+  RINGING
+  ANSWERED
+  COMPLETED
+  FAILED
+  BUSY
+  NO_ANSWER
+  CANCELLED
+}
+
+enum CallLegDirection {
+  INBOUND
+  OUTBOUND
+}
+
+model Cdr {
+  id          String   @id @default(uuid())
+  callId      String   @unique
+  tenantId    String
+  fromNumber  String
+  toNumber    String
+  duration    Int      // Seconds
+  billableDuration Int // Seconds
+  cost        Decimal  @db.Decimal(10, 4)
+  rate        Decimal? @db.Decimal(10, 6)
+  direction   CallDirection
+  status      CallStatus
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  // Relations
+  call Call @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, createdAt])
+  @@index([fromNumber])
+  @@index([toNumber])
+  @@index([status])
+  @@map("cdrs")
+}
+
+model Recording {
+  id          String   @id @default(uuid())
+  callId      String
+  legId       String?
+  url         String
+  storageKey  String?  // S3-compatible storage key
+  duration    Int?     // Seconds
+  format      String   @default("wav")
+  size        BigInt?  // Bytes
+  checksum    String?  // SHA256 checksum
+  storageTier RecordingStorageTier @default(HOT)
+  status      RecordingStatus @default(PROCESSING)
+  metadata    Json?
+  importHash  String?  // Hash for deduplication
+  lifecyclePolicyId String? // Reference to tenant lifecycle policy
+  movedToWarmAt DateTime? // When moved to warm storage
+  scheduledDeletionAt DateTime? // When scheduled for deletion
+  deletedAt   DateTime? // When actually deleted
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  call Call @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@index([callId])
+  @@index([status])
+  @@index([storageTier])
+  @@index([scheduledDeletionAt])
+  @@index([importHash])
+  @@map("recordings")
+}
+
+enum RecordingStatus {
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum RecordingStorageTier {
+  HOT   // Frequently accessed, fast storage
+  WARM  // Less frequently accessed, cheaper storage
+  COLD  // Rarely accessed, cheapest storage (archived)
+}
+
+model Transcription {
+  id          String   @id @default(uuid())
+  callId      String
+  recordingId String?
+  text        String
+  confidence  Decimal? @db.Decimal(5, 4)
+  language    String   @default("en")
+  metadata    Json?    // Speaker diarization, timestamps, etc.
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  call      Call       @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@index([callId])
+  @@index([recordingId])
+  @@map("transcriptions")
+}
+
+model Tag {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  color       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  tenant Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  calls   CallTag[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("tags")
+}
+
+model CallTag {
+  id        String   @id @default(uuid())
+  callId    String
+  tagId     String
+  createdAt DateTime @default(now())
+
+  // Relations
+  call Call @relation(fields: [callId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([callId, tagId])
+  @@index([callId])
+  @@index([tagId])
+  @@map("call_tags")
+}
+
+// ============================================================================
+// Billing
+// ============================================================================
+
+model BillingAccount {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  status      BillingAccountStatus @default(ACTIVE)
+  currency    String   @default("USD")
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  rateCards   RateCard[]
+  invoices    Invoice[]
+  balances    Balance[]
+  payouts     Payout[]
+  accruals    AccrualLedger[]
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("billing_accounts")
+}
+
+enum BillingAccountStatus {
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+model RateCard {
+  id                String   @id @default(uuid())
+  billingAccountId  String
+  name              String
+  effectiveFrom     DateTime
+  effectiveTo       DateTime?
+  status            RateCardStatus @default(ACTIVE)
+  rates             Json     // Rate structure
+  metadata          Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  billingAccount BillingAccount @relation(fields: [billingAccountId], references: [id], onDelete: Cascade)
+
+  @@index([billingAccountId])
+  @@index([effectiveFrom])
+  @@index([status])
+  @@map("rate_cards")
+}
+
+enum RateCardStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model Invoice {
+  id              String   @id @default(uuid())
+  billingAccountId String
+  invoiceNumber   String   @unique
+  status          InvoiceStatus @default(DRAFT)
+  periodStart     DateTime
+  periodEnd       DateTime
+  subtotal        Decimal  @db.Decimal(10, 2)
+  tax             Decimal  @db.Decimal(10, 2) @default(0)
+  total           Decimal  @db.Decimal(10, 2)
+  dueDate         DateTime
+  paidAt          DateTime?
+  metadata        Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  billingAccount BillingAccount @relation(fields: [billingAccountId], references: [id], onDelete: Cascade)
+  lines          InvoiceLine[]
+  accruals       AccrualLedger[]
+
+  @@index([billingAccountId])
+  @@index([invoiceNumber])
+  @@index([status])
+  @@index([dueDate])
+  @@map("invoices")
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+model InvoiceLine {
+  id          String   @id @default(uuid())
+  invoiceId   String
+  description String
+  quantity    Decimal  @db.Decimal(10, 2)
+  unitPrice   Decimal  @db.Decimal(10, 4)
+  total       Decimal  @db.Decimal(10, 2)
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  // Relations
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("invoice_lines")
+}
+
+model Balance {
+  id              String   @id @default(uuid())
+  billingAccountId String
+  amount          Decimal  @db.Decimal(10, 2)
+  currency        String   @default("USD")
+  type            BalanceType
+  metadata        Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  billingAccount BillingAccount @relation(fields: [billingAccountId], references: [id], onDelete: Cascade)
+
+  @@index([billingAccountId])
+  @@index([type])
+  @@map("balances")
+}
+
+enum BalanceType {
+  AVAILABLE
+  PENDING
+  HELD
+}
+
+model Payout {
+  id              String   @id @default(uuid())
+  billingAccountId String
+  amount          Decimal  @db.Decimal(10, 2)
+  currency        String   @default("USD")
+  status          PayoutStatus @default(PENDING)
+  method          String   // bank_transfer, paypal, etc.
+  reference       String?
+  processedAt     DateTime?
+  metadata        Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  billingAccount BillingAccount @relation(fields: [billingAccountId], references: [id], onDelete: Cascade)
+
+  @@index([billingAccountId])
+  @@index([status])
+  @@map("payouts")
+}
+
+enum PayoutStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model AccrualLedger {
+  id              String   @id @default(uuid())
+  tenantId        String
+  billingAccountId String
+  publisherId     String?
+  buyerId         String?
+  callId          String?
+  type            AccrualType
+  amount          Decimal  @db.Decimal(10, 4)
+  currency        String   @default("USD")
+  description     String
+  periodDate      DateTime // Date for daily close
+  closed          Boolean  @default(false)
+  closedAt        DateTime?
+  invoiceId       String?
+  metadata        Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  billingAccount BillingAccount @relation(fields: [billingAccountId], references: [id], onDelete: Cascade)
+  invoice       Invoice?        @relation(fields: [invoiceId], references: [id])
+  call          Call?           @relation(fields: [callId], references: [id])
+
+  @@index([tenantId])
+  @@index([billingAccountId])
+  @@index([periodDate])
+  @@index([closed])
+  @@index([publisherId])
+  @@index([buyerId])
+  @@index([callId])
+  @@map("accrual_ledger")
+}
+
+enum AccrualType {
+  CALL_MINUTE_INBOUND
+  CALL_MINUTE_OUTBOUND
+  CONNECTION_FEE
+  RECORDING_FEE
+  CPA_CONVERSION
+  TAX
+  ADJUSTMENT
+}
+
+// ============================================================================
+// System & Integration
+// ============================================================================
+
+model Webhook {
+  id          String   @id @default(uuid())
+  tenantId    String
+  url         String
+  events      String[] // Array of event types
+  secret      String   // Webhook signing secret
+  status      WebhookStatus @default(ACTIVE)
+  lastTriggeredAt DateTime?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("webhooks")
+}
+
+enum WebhookStatus {
+  ACTIVE
+  INACTIVE
+  FAILED
+}
+
+model Event {
+  id          String   @id @default(uuid())
+  tenantId    String
+  type        String
+  entityType  String?  // call, campaign, etc.
+  entityId    String?
+  payload     Json
+  processed   Boolean  @default(false)
+  processedAt DateTime?
+  createdAt   DateTime @default(now())
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, createdAt])
+  @@index([type])
+  @@index([entityType, entityId])
+  @@index([processed])
+  @@map("events")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  tenantId    String
+  userId      String?
+  apiKeyId    String?
+  action      String   // e.g., "user.create", "call.read", "api_key.revoke"
+  entityType  String   // e.g., "User", "Call", "ApiKey"
+  entityId    String?
+  resource    String?  // Resource path/identifier
+  method      String?  // HTTP method
+  changes     Json?    // Before/after values for mutations
+  ipAddress   String?
+  userAgent   String?
+  requestId   String?  // Request ID for correlation
+  success     Boolean  @default(true)
+  error       String?  // Error message if success=false
+  createdAt   DateTime @default(now())
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id])
+  apiKey ApiKey? @relation(fields: [apiKeyId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, createdAt])
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([apiKeyId])
+  @@index([action])
+  @@index([success])
+  @@map("audit_logs")
+}
+
+model RateLimitEntry {
+  id          String   @id @default(uuid())
+  tenantId    String?
+  identifier  String   // API key ID or IP address
+  type        String   // "api_key" or "ip"
+  count       Int      @default(1)
+  windowStart DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  // Relations
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  apiKeyId    String?
+  apiKey      ApiKey?  @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+
+  @@unique([identifier, type, windowStart])
+  @@index([identifier, type])
+  @@index([windowStart])
+  @@index([tenantId])
+  @@map("rate_limit_entries")
+}
+
+model FeatureFlag {
+  id          String   @id @default(uuid())
+  tenantId    String
+  key         String
+  value       Json
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+  @@map("feature_flags")
+}
+
+// ============================================================================
+// Compliance & Security
+// ============================================================================
+
+model DncList {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  type        DncListType
+  status      DncListStatus @default(ACTIVE)
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  entries DncListEntry[]
+
+  @@index([tenantId])
+  @@index([type])
+  @@map("dnc_lists")
+}
+
+enum DncListType {
+  GLOBAL
+  CAMPAIGN
+  CUSTOM
+}
+
+enum DncListStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model DncListEntry {
+  id          String   @id @default(uuid())
+  dncListId   String
+  phoneNumber String   // E.164 format
+  reason      String?
+  source      String?
+  createdAt   DateTime @default(now())
+
+  // Relations
+  dncList DncList @relation(fields: [dncListId], references: [id], onDelete: Cascade)
+
+  @@unique([dncListId, phoneNumber])
+  @@index([dncListId])
+  @@index([phoneNumber])
+  @@map("dnc_list_entries")
+}
+
+model ConsentToken {
+  id          String   @id @default(uuid())
+  tenantId    String
+  callId      String?
+  phoneNumber String
+  token       String   @unique // TrustedForm/Jornaya token
+  tokenHash   String   // SHA256 hash for fast lookup
+  provider    ConsentProvider
+  status      ConsentStatus @default(PENDING)
+  verifiedAt  DateTime?
+  expiresAt   DateTime?
+  ipAddress   String?
+  source      String?  // Source URL/page where consent was captured
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([phoneNumber])
+  @@index([token])
+  @@index([tokenHash])
+  @@index([status])
+  @@map("consent_tokens")
+}
+
+model CompliancePolicy {
+  id                  String   @id @default(uuid())
+  tenantId            String
+  name                String   @default("default")
+  enforceDnc          Boolean  @default(true)
+  enforceConsent      Boolean  @default(true)
+  allowOverride       Boolean  @default(false)
+  requireAdminApproval Boolean @default(true)
+  metadata            Json?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  overrides ComplianceOverride[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("compliance_policies")
+}
+
+model ComplianceOverride {
+  id          String   @id @default(uuid())
+  tenantId    String
+  policyId    String?
+  phoneNumber String   // E.164 format
+  reason      String
+  callId      String?
+  userId      String?
+  expiresAt   DateTime?
+  status      ComplianceOverrideStatus @default(ACTIVE)
+  approvedBy  String?
+  approvedAt  DateTime?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  policy CompliancePolicy? @relation(fields: [policyId], references: [id])
+
+  @@index([tenantId])
+  @@index([phoneNumber])
+  @@index([callId])
+  @@index([status])
+  @@index([expiresAt])
+  @@map("compliance_overrides")
+}
+
+enum ComplianceOverrideStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+  PENDING_APPROVAL
+}
+
+enum ConsentProvider {
+  TRUSTEDFORM
+  JORNAYA
+  CUSTOM
+}
+
+enum ConsentStatus {
+  PENDING
+  VERIFIED
+  INVALID
+  EXPIRED
+}
+
+model StirShakenStatus {
+  id              String   @id @default(uuid())
+  callId          String   @unique
+  tenantId        String
+  phoneNumber     String   // Calling party number
+  attestation     StirAttestationLevel
+  identity        String?  // Identity header value
+  origId          String?  // Originating Identity header
+  passthru        String?  // Passport header
+  verifiedAt      DateTime?
+  verifiedBy      String?  // External service that verified
+  override        Boolean  @default(false) // Admin override
+  overrideReason  String?
+  overrideUserId  String?
+  metadata        Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  overrideUser User? @relation("StirShakenOverrideUser", fields: [overrideUserId], references: [id])
+
+  @@index([tenantId])
+  @@index([phoneNumber])
+  @@index([callId])
+  @@map("stir_shaken_status")
+}
+
+enum StirAttestationLevel {
+  A      // Full attestation - known customer, authorized to use number
+  B      // Partial attestation - known customer, not authorized
+  C      // Gateway attestation - call passed through gateway
+  NONE   // No attestation
+}
+
+model CnamLookup {
+  id          String   @id @default(uuid())
+  tenantId    String
+  phoneNumber String
+  callerName  String?
+  provider    String   // Provider used for lookup
+  cached      Boolean  @default(false)
+  cachedUntil DateTime?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, phoneNumber])
+  @@index([tenantId])
+  @@index([phoneNumber])
+  @@map("cnam_lookups")
+}
+
+model CarrierLookup {
+  id          String   @id @default(uuid())
+  tenantId    String
+  phoneNumber String
+  carrier     String?  // Carrier name
+  lata        String?  // Local Access Transport Area
+  ocn         String?  // Operating Company Number
+  provider    String   // Provider used for lookup
+  cached      Boolean  @default(false)
+  cachedUntil DateTime?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, phoneNumber])
+  @@index([tenantId])
+  @@index([phoneNumber])
+  @@index([lata])
+  @@index([ocn])
+  @@map("carrier_lookups")
+}
+
+
+
+

@@ -1,0 +1,55 @@
+<!-- Internal SIP Profile -->
+<profile name="internal">
+  <settings>
+    <!-- Basic Settings -->
+    <param name="name" value="internal"/>
+    <param name="debug" value="0"/>
+    <param name="sip-trace" value="false"/>
+    <param name="sip-capture" value="false"/>
+    
+    <!-- Network Settings -->
+    <param name="listen-ip" value="0.0.0.0"/>
+    <param name="listen-port" value="5080"/>
+    <param name="rtp-ip" value="$${local_ip_v4}"/>
+    <param name="ext-rtp-ip" value="auto-nat"/>
+    <param name="sip-ip" value="$${local_ip_v4}"/>
+    <param name="ext-sip-ip" value="auto-nat"/>
+    
+    <!-- SIP Settings -->
+    <param name="dialplan" value="XML"/>
+    <param name="context" value="internal"/>
+    <param name="rtp-timeout-sec" value="300"/>
+    <param name="rtp-hold-timeout-sec" value="1800"/>
+    
+    <!-- Codec Settings -->
+    <param name="codec-prefs" value="OPUS,G722,PCMU,PCMA,GSM"/>
+    <param name="disable-transcoding" value="false"/>
+    
+    <!-- Authentication -->
+    <param name="auth-calls" value="true"/>
+    <param name="auth-all-packets" value="false"/>
+    
+    <!-- NAT Traversal -->
+    <param name="aggressive-nat-detection" value="true"/>
+    <param name="rtp-autoflush-during-bridge" value="true"/>
+    
+    <!-- TLS Settings (optional) -->
+    <param name="tls" value="false"/>
+    <param name="tls-bind-params" value="transport=tls"/>
+    <param name="tls-sip-port" value="5061"/>
+    <param name="tls-cert-dir" value="$${base_dir}/conf/tls"/>
+    
+    <!-- SRTP Settings (optional) -->
+    <param name="rtp-secure-media" value="optional"/>
+    <param name="rtp-secure-media-prefer" value="true"/>
+    
+    <!-- Registration -->
+    <param name="accept-blind-reg" value="true"/>
+    <param name="accept-blind-auth" value="true"/>
+    
+    <!-- Logging -->
+    <param name="log-auth-failures" value="true"/>
+    <param name="log-level" value="info"/>
+  </settings>
+</profile>
+

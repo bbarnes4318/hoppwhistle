@@ -1,0 +1,10 @@
+[
+  {
+    "number": "+15551234567",
+    "provider": "signalwire",
+    "status": "assigned",
+    "tenant_id": "t_demo",
+    "campaign_id": "c_demo",
+    "tags": ["demo", "inbound"]
+  }
+]

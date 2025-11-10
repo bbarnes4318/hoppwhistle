@@ -1,0 +1,10 @@
+<include>
+  <extension name="default">
+    <condition field="destination_number" expression="^(\d+)$">
+      <action application="log" data="INFO Default dialplan matched: ${destination_number}"/>
+      <action application="answer"/>
+      <action application="hangup"/>
+    </condition>
+  </extension>
+</include>
+

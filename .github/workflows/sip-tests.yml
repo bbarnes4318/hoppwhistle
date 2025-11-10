@@ -1,0 +1,67 @@
+name: SIP Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  sip-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Start docker-compose services
+        run: |
+          cd infra/docker
+          docker-compose -f docker-compose.dev.yml up -d postgres redis minio freeswitch kamailio rtpengine
+          docker-compose -f docker-compose.dev.yml ps
+
+      - name: Wait for services to be ready
+        run: |
+          echo "Waiting for services to start..."
+          sleep 30
+          docker-compose -f infra/docker/docker-compose.dev.yml ps
+
+      - name: Check service health
+        run: |
+          docker-compose -f infra/docker/docker-compose.dev.yml ps | grep -q "kamailio.*Up" || exit 1
+          docker-compose -f infra/docker/docker-compose.dev.yml ps | grep -q "freeswitch.*Up" || exit 1
+
+      - name: Install dependencies
+        run: |
+          corepack enable
+          pnpm install
+
+      - name: Run SIP tests
+        run: |
+          pnpm test:sip:ci
+        env:
+          KAMAILIO_HOST: localhost
+          KAMAILIO_PORT: 5060
+          BUYER_HOST: localhost
+          BUYER_PORT: 5061
+
+      - name: Collect test logs
+        if: failure()
+        run: |
+          echo "=== Docker Compose Logs ==="
+          docker-compose -f infra/docker/docker-compose.dev.yml logs --tail=100
+          echo "=== FreeSWITCH Logs ==="
+          docker-compose -f infra/docker/docker-compose.dev.yml logs freeswitch --tail=50
+          echo "=== Kamailio Logs ==="
+          docker-compose -f infra/docker/docker-compose.dev.yml logs kamailio --tail=50
+
+      - name: Cleanup
+        if: always()
+        run: |
+          cd infra/docker
+          docker-compose -f docker-compose.dev.yml down -v

@@ -1,0 +1,29 @@
+<!-- FreeSWITCH Variables Configuration -->
+<configuration name="vars.conf" description="Variables">
+  <!-- Domain Configuration -->
+  <X-PRE-PROCESS cmd="set" data="domain=$${local_ip_v4}"/>
+  <X-PRE-PROCESS cmd="set" data="domain_name=$${domain}"/>
+  
+  <!-- API Configuration -->
+  <X-PRE-PROCESS cmd="set" data="api_url=$${env(API_URL)}"/>
+  <X-PRE-PROCESS cmd="set" data="api_key=$${env(API_KEY)}"/>
+  
+  <!-- ESL Configuration -->
+  <X-PRE-PROCESS cmd="set" data="esl_password=$${env(FREESWITCH_ESL_PASSWORD)}"/>
+  
+  <!-- S3 Configuration -->
+  <X-PRE-PROCESS cmd="set" data="s3_endpoint=$${env(S3_ENDPOINT)}"/>
+  <X-PRE-PROCESS cmd="set" data="s3_bucket=$${env(S3_BUCKET)}"/>
+  <X-PRE-PROCESS cmd="set" data="s3_access_key=$${env(S3_ACCESS_KEY)}"/>
+  <X-PRE-PROCESS cmd="set" data="s3_secret_key=$${env(S3_SECRET_KEY)}"/>
+  <X-PRE-PROCESS cmd="set" data="s3_region=$${env(S3_REGION)}"/>
+  
+  <!-- Recording Configuration -->
+  <X-PRE-PROCESS cmd="set" data="recordings_path=/recordings"/>
+  <X-PRE-PROCESS cmd="set" data="recordings_format=$${env(RECORDINGS_FORMAT)}"/>
+  
+  <!-- Default values if env vars not set -->
+  <X-PRE-PROCESS cmd="set" data="api_url=$${api_url:http://api:3001}"/>
+  <X-PRE-PROCESS cmd="set" data="esl_password=$${esl_password:ClueCon}"/>
+  <X-PRE-PROCESS cmd="set" data="recordings_format=$${recordings_format:wav}"/>
+</configuration>
