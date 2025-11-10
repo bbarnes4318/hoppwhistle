@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
 import type { Node, Edge } from '@xyflow/react';
-import { Button } from '@/components/ui/button';
 import { X, Play, Pause, RotateCcw } from 'lucide-react';
+import { useState, useCallback, useMemo } from 'react';
+
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 
 interface FlowSimulatorProps {

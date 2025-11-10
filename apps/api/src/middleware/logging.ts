@@ -1,4 +1,5 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+
 import { createRequestLogger } from '../lib/logger.js';
 import { httpRequestDuration, httpRequestTotal, httpRequestErrors } from '../lib/metrics.js';
 

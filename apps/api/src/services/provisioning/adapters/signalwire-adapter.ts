@@ -1,3 +1,5 @@
+import { logger } from '../../lib/logger.js';
+import { secrets } from '../../secrets.js';
 import type {
   ProvisioningAdapter,
   ProvisionedNumber,
@@ -6,8 +8,6 @@ import type {
   NumberFeatures,
   NumberStatus,
 } from '../types.js';
-import { secrets } from '../../secrets.js';
-import { logger } from '../../lib/logger.js';
 
 /**
  * SignalWire Adapter

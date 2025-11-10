@@ -1,8 +1,5 @@
 'use client';
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import Image from 'next/image';
 import {
   LayoutDashboard,
   Phone,
@@ -16,6 +13,10 @@ import {
   GitBranch,
   DollarSign,
 } from 'lucide-react';
+import Image from 'next/image';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+
 import { cn } from '@/lib/utils';
 
 const navigation = [

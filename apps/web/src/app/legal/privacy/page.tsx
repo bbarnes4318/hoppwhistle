@@ -1,6 +1,8 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
+
 import ReactMarkdown from 'react-markdown';
+
 import { Card, CardContent } from '@/components/ui/card';
 
 export default function PrivacyPolicyPage() {

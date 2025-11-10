@@ -1,10 +1,11 @@
 'use client';
 
-import { use } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Play, Save, Eye } from 'lucide-react';
+import { use } from 'react';
+
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 // Mock flow builder - simplified visual representation
 export default function FlowBuilderPage({ params }: { params: Promise<{ id: string }> }) {

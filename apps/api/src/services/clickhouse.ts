@@ -1,4 +1,5 @@
 import { createClient, ClickHouseClient } from '@clickhouse/client';
+
 import { logger } from '../lib/logger.js';
 
 export class ClickHouseService {

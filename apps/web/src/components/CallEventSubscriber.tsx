@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+
 import { isBackendAvailable } from '@/lib/backend-check';
 
 interface CallEvent {

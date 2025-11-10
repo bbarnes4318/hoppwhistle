@@ -156,9 +156,9 @@ If issues occur:
 
 ## Sign-Off
 
-- [ ] Technical Lead: ********\_******** Date: **\_\_\_**
-- [ ] Operations Lead: ********\_******** Date: **\_\_\_**
-- [ ] Product Owner: ********\_******** Date: **\_\_\_**
+- [ ] Technical Lead: **\*\*\*\***\_**\*\*\*\*** Date: **\_\_\_**
+- [ ] Operations Lead: **\*\*\*\***\_**\*\*\*\*** Date: **\_\_\_**
+- [ ] Product Owner: **\*\*\*\***\_**\*\*\*\*** Date: **\_\_\_**
 
 ---
 

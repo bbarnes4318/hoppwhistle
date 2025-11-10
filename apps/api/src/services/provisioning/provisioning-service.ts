@@ -1,3 +1,11 @@
+import { auditLog, auditCreate, auditUpdate } from '../audit.js';
+import { logger } from '../lib/logger.js';
+import { getPrismaClient } from '../lib/prisma.js';
+
+import { BandwidthAdapter } from './adapters/bandwidth-adapter.js';
+import { LocalAdapter } from './adapters/local-adapter.js';
+import { SignalWireAdapter } from './adapters/signalwire-adapter.js';
+import { TelnyxAdapter } from './adapters/telnyx-adapter.js';
 import type {
   Provider,
   ProvisionedNumber,
@@ -6,15 +14,8 @@ import type {
   AssignNumberRequest,
   AuditResult,
   NumberFeatures,
-} from './types.js';
-import { LocalAdapter } from './adapters/local-adapter.js';
-import { SignalWireAdapter } from './adapters/signalwire-adapter.js';
-import { TelnyxAdapter } from './adapters/telnyx-adapter.js';
-import { BandwidthAdapter } from './adapters/bandwidth-adapter.js';
-import type { ProvisioningAdapter } from './types.js';
-import { getPrismaClient } from '../lib/prisma.js';
-import { logger } from '../lib/logger.js';
-import { auditLog, auditCreate, auditUpdate } from '../audit.js';
+ ProvisioningAdapter } from './types.js';
+
 
 /**
  * Provisioning Service

@@ -1,8 +1,9 @@
 import { FastifyInstance } from 'fastify';
-import { complianceService } from '../services/compliance-service.js';
-import { compliancePolicyService } from '../services/compliance-policy-service.js';
-import { consentProviderService } from '../services/consent-provider-service.js';
+
 import { getPrismaClient } from '../lib/prisma.js';
+import { compliancePolicyService } from '../services/compliance-policy-service.js';
+import { complianceService } from '../services/compliance-service.js';
+import { consentProviderService } from '../services/consent-provider-service.js';
 
 const prisma = getPrismaClient();
 

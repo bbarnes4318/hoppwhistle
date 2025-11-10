@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
-import { eventBus } from '../services/event-bus.js';
+
 import { callStateService } from '../services/call-state.js';
+import { eventBus } from '../services/event-bus.js';
 
 /**
  * Demo endpoint to broadcast mocked call events

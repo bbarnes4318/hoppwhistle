@@ -262,8 +262,8 @@ export class FlowSerializer {
 
     // Convert flow nodes to React Flow nodes
     const nodePositions = new Map<string, { x: number; y: number }>();
-    let xOffset = 250;
-    let yOffset = 200;
+    const xOffset = 250;
+    const yOffset = 200;
 
     flow.nodes.forEach((flowNode, index) => {
       // Calculate position (simple grid layout)

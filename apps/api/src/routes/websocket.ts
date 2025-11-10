@@ -1,4 +1,5 @@
 import { FastifyInstance } from 'fastify';
+
 import { eventBus } from '../services/event-bus.js';
 import type { EventPayload, EventChannel } from '../services/event-bus.js';
 

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+
 import { EventBus, type EventPayload } from '../event-bus.js';
 import { getRedisClient, closeRedisClient } from '../redis.js';
 

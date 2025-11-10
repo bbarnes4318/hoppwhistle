@@ -1,7 +1,8 @@
+import type { RoleName } from '@prisma/client';
 import { FastifyRequest, FastifyReply } from 'fastify';
+
 import { getPrismaClient } from '../lib/prisma.js';
 import { auditLog } from '../services/audit.js';
-import type { RoleName } from '@prisma/client';
 
 export type Permission = 
   // Users & Roles

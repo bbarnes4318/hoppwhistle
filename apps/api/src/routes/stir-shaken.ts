@@ -1,8 +1,9 @@
 import { FastifyInstance } from 'fastify';
-import { stirShakenService } from '../services/stir-shaken-service.js';
-import { cnamService } from '../services/cnam-service.js';
-import { carrierService } from '../services/carrier-service.js';
+
 import { getPrismaClient } from '../lib/prisma.js';
+import { carrierService } from '../services/carrier-service.js';
+import { cnamService } from '../services/cnam-service.js';
+import { stirShakenService } from '../services/stir-shaken-service.js';
 
 const prisma = getPrismaClient();
 

@@ -1,3 +1,5 @@
+import { logger } from '../../lib/logger.js';
+import { getPrismaClient } from '../../lib/prisma.js';
 import type {
   ProvisioningAdapter,
   ProvisionedNumber,
@@ -7,8 +9,6 @@ import type {
   NumberStatus,
   Provider,
 } from '../types.js';
-import { getPrismaClient } from '../../lib/prisma.js';
-import { logger } from '../../lib/logger.js';
 
 /**
  * Local Inventory Adapter

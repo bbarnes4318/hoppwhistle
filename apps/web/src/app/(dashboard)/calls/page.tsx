@@ -1,14 +1,16 @@
 'use client';
 
+import { Search, Play } from 'lucide-react';
+import Link from 'next/link';
 import { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Search, Play } from 'lucide-react';
 import { formatPhoneNumber, formatDate, formatDuration } from '@/lib/utils';
-import Link from 'next/link';
+
 
 // Mock data
 const mockCalls = [

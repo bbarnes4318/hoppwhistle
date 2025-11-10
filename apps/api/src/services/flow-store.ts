@@ -1,5 +1,6 @@
 import type { Flow, ExecutionPlan } from '@hopwhistle/routing-dsl';
 import { parseFlow, createExecutionPlan } from '@hopwhistle/routing-dsl';
+
 import { getPrismaClient } from '../lib/prisma.js';
 
 export interface FlowVersion {
@@ -450,7 +451,7 @@ class FlowStore {
 
     if (!nodes || nodes.length === 0) {
       // Fallback to metadata if nodes not loaded
-      const flowFromMetadata = (dbVersion.metadata as any)?.flow;
+      const flowFromMetadata = (dbVersion.metadata)?.flow;
       if (flowFromMetadata) {
         return flowFromMetadata;
       }
@@ -492,7 +493,7 @@ class FlowStore {
     const entryTarget = entryNode.config?.target || (entryEdges[0] ? entryEdges[0].toNodeId : null) || (flowNodes[0]?.id || '');
 
     // Get flow name from Flow table or metadata
-    const flowName = (dbVersion.metadata as any)?.flow?.name || dbVersion.flow?.name || 'Unnamed Flow';
+    const flowName = (dbVersion.metadata)?.flow?.name || dbVersion.flow?.name || 'Unnamed Flow';
 
     return {
       id: dbVersion.flowId,

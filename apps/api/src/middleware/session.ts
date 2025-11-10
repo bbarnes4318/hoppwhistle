@@ -1,5 +1,7 @@
-import { FastifyRequest, FastifyReply, FastifyInstance } from 'fastify';
 import { randomBytes } from 'crypto';
+
+import { FastifyRequest, FastifyReply, FastifyInstance } from 'fastify';
+
 import { getRedisClient } from '../services/redis.js';
 import { secrets } from '../services/secrets.js';
 

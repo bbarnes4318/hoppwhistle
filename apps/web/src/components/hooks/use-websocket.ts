@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
+
 import { isBackendAvailable } from '@/lib/backend-check';
 
 export interface WebSocketMessage {

@@ -1,6 +1,7 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { quotaService } from '../services/quota-service.js';
+
 import { logger } from '../lib/logger.js';
+import { quotaService } from '../services/quota-service.js';
 
 /**
  * Quota Middleware

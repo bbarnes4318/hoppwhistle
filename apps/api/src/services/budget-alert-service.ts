@@ -1,6 +1,7 @@
-import { getPrismaClient } from '../lib/prisma.js';
-import { logger } from '../lib/logger.js';
 import type { BudgetAlertType } from '@prisma/client';
+
+import { logger } from '../lib/logger.js';
+import { getPrismaClient } from '../lib/prisma.js';
 
 interface AlertData {
   threshold: number;

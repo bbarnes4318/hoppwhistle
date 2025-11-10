@@ -1,8 +1,8 @@
+import { Decimal } from 'decimal.js';
 import { FastifyInstance } from 'fastify';
 import { Pool } from 'pg';
 
 // Inline services to avoid path issues
-import { Decimal } from 'decimal.js';
 import puppeteer from 'puppeteer';
 
 // Simplified inline implementations

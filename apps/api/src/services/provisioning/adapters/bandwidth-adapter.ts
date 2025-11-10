@@ -1,3 +1,4 @@
+import { logger } from '../../lib/logger.js';
 import type {
   ProvisioningAdapter,
   ProvisionedNumber,
@@ -5,7 +6,6 @@ import type {
   ListNumbersOptions,
   NumberFeatures,
 } from '../types.js';
-import { logger } from '../../lib/logger.js';
 
 /**
  * Bandwidth Adapter (Placeholder)

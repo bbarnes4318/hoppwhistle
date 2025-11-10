@@ -1,5 +1,7 @@
-import { getPrismaClient } from '../lib/prisma.js';
 import { createHash } from 'crypto';
+
+import { getPrismaClient } from '../lib/prisma.js';
+
 import { logger } from './logger.js';
 
 export interface ComplianceCheckResult {

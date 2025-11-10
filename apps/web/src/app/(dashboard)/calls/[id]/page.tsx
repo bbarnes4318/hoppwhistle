@@ -1,11 +1,12 @@
 'use client';
 
-import { use } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { formatPhoneNumber, formatDate, formatDuration } from '@/lib/utils';
 import { Play, Pause } from 'lucide-react';
+import { use } from 'react';
+
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { formatPhoneNumber, formatDate, formatDuration } from '@/lib/utils';
 
 // Mock data
 const mockCall = {

@@ -1,8 +1,9 @@
 import { FastifyInstance } from 'fastify';
-import { getPrismaClient } from '../lib/prisma.js';
-import { getRedisClient } from '../services/redis.js';
-import { clickhouseService } from '../services/clickhouse.js';
+
 import { logger } from '../lib/logger.js';
+import { getPrismaClient } from '../lib/prisma.js';
+import { clickhouseService } from '../services/clickhouse.js';
+import { getRedisClient } from '../services/redis.js';
 
 interface HealthStatus {
   status: 'healthy' | 'degraded' | 'unhealthy';

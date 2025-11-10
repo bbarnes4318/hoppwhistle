@@ -134,13 +134,13 @@ Use this checklist to verify production readiness before launching to paying cus
 
 ## Sign-off
 
-**Engineering Lead**: ********\_******** Date: **\_\_\_**
+**Engineering Lead**: **\*\*\*\***\_**\*\*\*\*** Date: **\_\_\_**
 
-**Security Lead**: ********\_******** Date: **\_\_\_**
+**Security Lead**: **\*\*\*\***\_**\*\*\*\*** Date: **\_\_\_**
 
-**Operations Lead**: ********\_******** Date: **\_\_\_**
+**Operations Lead**: **\*\*\*\***\_**\*\*\*\*** Date: **\_\_\_**
 
-**Product Lead**: ********\_******** Date: **\_\_\_**
+**Product Lead**: **\*\*\*\***\_**\*\*\*\*** Date: **\_\_\_**
 
 ---
 

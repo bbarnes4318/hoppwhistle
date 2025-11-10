@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
 import { Send, RotateCcw, GitCompare } from 'lucide-react';
+import { useState, useEffect } from 'react';
+
+import { Button } from '@/components/ui/button';
 import { apiClient } from '@/lib/api';
 
 interface FlowVersion {

@@ -1,7 +1,9 @@
-import { FastifyRequest, FastifyReply } from 'fastify';
 import { randomBytes, createHmac } from 'crypto';
-import { secrets } from '../services/secrets.js';
+
+import { FastifyRequest, FastifyReply } from 'fastify';
+
 import { auditLog } from '../services/audit.js';
+import { secrets } from '../services/secrets.js';
 
 const CSRF_SECRET = secrets.get('CSRF_SECRET') || secrets.getRequired('JWT_SECRET');
 

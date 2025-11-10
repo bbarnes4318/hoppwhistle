@@ -1,4 +1,5 @@
 import { FastifyInstance } from 'fastify';
+
 import { getPrismaClient } from '../lib/prisma.js';
 
 /**

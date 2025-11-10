@@ -1,10 +1,11 @@
+import { compare, hash } from 'bcryptjs';
 import { FastifyInstance } from 'fastify';
+
+import { getPrismaClient } from '../lib/prisma.js';
 import { authenticate } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/rbac.js';
 import { createSession, setSessionCookie, generateCsrfToken } from '../middleware/session.js';
-import { getPrismaClient } from '../lib/prisma.js';
 import { auditLog, auditRead } from '../services/audit.js';
-import { compare, hash } from 'bcryptjs';
 import { secrets } from '../services/secrets.js';
 
 /**
@@ -161,8 +162,8 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     }
 
     await auditLog({
-      tenantId: request.user!.tenantId,
-      userId: request.user!.userId,
+      tenantId: request.user.tenantId,
+      userId: request.user.userId,
       action: 'auth.logout',
       entityType: 'User',
       resource: '/auth/logout',

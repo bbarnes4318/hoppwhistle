@@ -1,6 +1,8 @@
 import { PrismaClient } from '@prisma/client';
-import { clickhouseService } from './clickhouse.js';
+
 import { logger } from '../lib/logger.js';
+
+import { clickhouseService } from './clickhouse.js';
 
 export interface AnalyticsFilters {
   tenantId: string;
@@ -71,7 +73,7 @@ export class AnalyticsService {
     const viewName = granularity === 'hour' ? 'metrics_hourly' : 'metrics_daily';
     const timeColumn = granularity === 'hour' ? 'hour' : 'day';
 
-    let whereConditions = [`tenant_id = {tenantId:String}`, `${timeColumn} >= {startDate:DateTime}`, `${timeColumn} <= {endDate:DateTime}`];
+    const whereConditions = [`tenant_id = {tenantId:String}`, `${timeColumn} >= {startDate:DateTime}`, `${timeColumn} <= {endDate:DateTime}`];
     const params: Record<string, unknown> = {
       tenantId: filters.tenantId,
       startDate: filters.startDate.toISOString().slice(0, 19).replace('T', ' '),

@@ -1,7 +1,8 @@
 import { FastifyInstance } from 'fastify';
-import { RecordingService } from '../services/recording-service.js';
-import { authenticate } from '../middleware/auth.js';
+
 import { getPrismaClient } from '../lib/prisma.js';
+import { authenticate } from '../middleware/auth.js';
+import { RecordingService } from '../services/recording-service.js';
 import { getStorageService } from '../services/storage.js';
 
 const recordingService = new RecordingService();

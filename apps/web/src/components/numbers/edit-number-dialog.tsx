@@ -1,6 +1,10 @@
 'use client';
 
+import { Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
+
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -9,7 +13,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -18,9 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
 import { apiClient } from '@/lib/api';
-import { Loader2 } from 'lucide-react';
 
 interface EditNumberDialogProps {
   open: boolean;

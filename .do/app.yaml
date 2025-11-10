@@ -4,7 +4,7 @@ services:
   - name: api
     github:
       repo: bbarnes4318/hopwhistle
-      branch: main
+      branch: master
       deploy_on_push: true
     run_command: pnpm --filter @hopwhistle/api start
     environment_slug: node-js
@@ -47,6 +47,95 @@ services:
         value: 'us-east-1'
       - key: S3_FORCE_PATH_STYLE
         value: 'false'
+      # SignalWire Provisioning
+      - key: SIGNALWIRE_PROJECT_ID
+        scope: RUN_TIME
+        type: SECRET
+      - key: SIGNALWIRE_API_TOKEN
+        scope: RUN_TIME
+        type: SECRET
+      - key: SIGNALWIRE_SPACE_URL
+        scope: RUN_TIME
+        type: SECRET
+      # FreeSWITCH/Telephony (if using external services)
+      - key: RTPENGINE_URL
+        scope: RUN_TIME
+        type: SECRET
+      - key: FREESWITCH_ESL_HOST
+        scope: RUN_TIME
+        type: SECRET
+      - key: FREESWITCH_ESL_PORT
+        value: '8021'
+      - key: FREESWITCH_ESL_PASSWORD
+        scope: RUN_TIME
+        type: SECRET
+      # ClickHouse Analytics (Optional)
+      - key: CLICKHOUSE_URL
+        scope: RUN_TIME
+        type: SECRET
+      - key: CLICKHOUSE_USER
+        value: 'default'
+      - key: CLICKHOUSE_PASSWORD
+        scope: RUN_TIME
+        type: SECRET
+      - key: CLICKHOUSE_DATABASE
+        value: 'hopwhistle_analytics'
+      # Recording Lifecycle
+      - key: RECORDING_HOT_TO_WARM_DAYS
+        value: '30'
+      - key: RECORDING_WARM_TO_COLD_DAYS
+        value: '90'
+      - key: RECORDING_RETENTION_DAYS
+        value: '365'
+      - key: RECORDING_LIFECYCLE_ENABLED
+        value: 'true'
+      # Observability
+      - key: LOG_LEVEL
+        value: 'info'
+      - key: ENABLE_TRACING
+        value: 'false'
+      - key: JAEGER_ENDPOINT
+        scope: RUN_TIME
+        type: SECRET
+      # Third-Party Integrations (Optional)
+      - key: TWILIO_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: TWILIO_API_SECRET
+        scope: RUN_TIME
+        type: SECRET
+      - key: TRUSTEDFORM_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: JORNAYA_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      # Stripe (Optional)
+      - key: STRIPE_ENABLED
+        value: 'false'
+      - key: STRIPE_SECRET_KEY
+        scope: RUN_TIME
+        type: SECRET
+      # SMTP Email (Optional)
+      - key: SMTP_HOST
+        scope: RUN_TIME
+        type: SECRET
+      - key: SMTP_PORT
+        value: '587'
+      - key: SMTP_SECURE
+        value: 'false'
+      - key: SMTP_USER
+        scope: RUN_TIME
+        type: SECRET
+      - key: SMTP_PASSWORD
+        scope: RUN_TIME
+        type: SECRET
+      - key: SMTP_FROM
+        value: 'noreply@hopwhistle.com'
+      # Default Tenant
+      - key: DEFAULT_TENANT_ID
+        scope: RUN_TIME
+        type: SECRET
     build_command: |
       corepack enable
       corepack prepare pnpm@8.15.0 --activate
@@ -57,7 +146,7 @@ services:
   - name: web
     github:
       repo: bbarnes4318/hopwhistle
-      branch: main
+      branch: master
       deploy_on_push: true
     run_command: pnpm --filter @hopwhistle/web start
     environment_slug: node-js
@@ -79,6 +168,9 @@ services:
         type: SECRET
       - key: NEXT_PUBLIC_APP_NAME
         value: 'Hopwhistle'
+      - key: NEXT_PUBLIC_API_KEY
+        scope: RUN_TIME
+        type: SECRET
     build_command: |
       corepack enable
       corepack prepare pnpm@8.15.0 --activate
@@ -88,7 +180,7 @@ services:
   - name: worker
     github:
       repo: bbarnes4318/hopwhistle
-      branch: main
+      branch: master
       deploy_on_push: true
     run_command: pnpm --filter @hopwhistle/worker start
     environment_slug: node-js
@@ -108,6 +200,33 @@ services:
         type: SECRET
       - key: WORKER_CONCURRENCY
         value: '5'
+      - key: METRICS_PORT
+        value: '9091'
+      # ClickHouse Analytics (Optional)
+      - key: CLICKHOUSE_URL
+        scope: RUN_TIME
+        type: SECRET
+      - key: CLICKHOUSE_USER
+        value: 'default'
+      - key: CLICKHOUSE_PASSWORD
+        scope: RUN_TIME
+        type: SECRET
+      - key: CLICKHOUSE_DATABASE
+        value: 'hopwhistle_analytics'
+      # Observability
+      - key: LOG_LEVEL
+        value: 'info'
+      - key: ENABLE_TRACING
+        value: 'false'
+      - key: JAEGER_ENDPOINT
+        scope: RUN_TIME
+        type: SECRET
+      # Stripe (Optional)
+      - key: STRIPE_ENABLED
+        value: 'false'
+      - key: STRIPE_SECRET_KEY
+        scope: RUN_TIME
+        type: SECRET
     build_command: |
       corepack enable
       corepack prepare pnpm@8.15.0 --activate

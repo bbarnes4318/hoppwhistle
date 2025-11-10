@@ -1,9 +1,11 @@
 'use client';
 
-import { useState } from 'react';
 import type { Edge } from '@xyflow/react';
-import { Button } from '@/components/ui/button';
 import { Trash2 } from 'lucide-react';
+import { useState } from 'react';
+
+import { Button } from '@/components/ui/button';
+
 
 interface EdgeConfigPanelProps {
   edge: Edge;

@@ -1,9 +1,10 @@
 'use client';
 
-import { useWebSocket } from '@/components/hooks/use-websocket';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PhoneCall, TrendingUp, DollarSign, Target } from 'lucide-react';
 import { useEffect, useState } from 'react';
+
+import { useWebSocket } from '@/components/hooks/use-websocket';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { mockData } from '@/lib/api';
 import { formatDuration } from '@/lib/utils';
 
@@ -22,13 +23,13 @@ export function LiveStats() {
     enabled: true, // Hook will check backend availability internally
     onMessage: (message) => {
       // Update stats based on real-time events
-      if (message.type === 'event' && (message as any).payload?.event === 'call.completed') {
+      if (message.type === 'event' && (message).payload?.event === 'call.completed') {
         setStats((prev) => ({
           ...prev,
           activeCalls: Math.max(0, prev.activeCalls - 1),
           billableMinutes: prev.billableMinutes + Math.floor(Math.random() * 5) + 1,
         }));
-      } else if (message.type === 'event' && (message as any).payload?.event === 'call.started') {
+      } else if (message.type === 'event' && (message).payload?.event === 'call.started') {
         setStats((prev) => ({
           ...prev,
           activeCalls: prev.activeCalls + 1,

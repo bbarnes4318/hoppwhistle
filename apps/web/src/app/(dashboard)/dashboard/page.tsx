@@ -1,13 +1,14 @@
 'use client';
 
-import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Target, Filter } from 'lucide-react';
-import { LiveStats } from '@/components/dashboard/live-stats';
+import { useState } from 'react';
+
 import { AnalyticsCharts } from '@/components/dashboard/analytics-charts';
+import { LiveStats } from '@/components/dashboard/live-stats';
 import { DemoToggle } from '@/components/demo/demo-toggle';
 import { ScreenshotButton } from '@/components/demo/screenshot-button';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {

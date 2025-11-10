@@ -1,7 +1,8 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
+
 import { getPrismaClient } from '../lib/prisma.js';
-import { getRedisClient } from '../services/redis.js';
 import { auditLog } from '../services/audit.js';
+import { getRedisClient } from '../services/redis.js';
 
 interface RateLimitConfig {
   windowMs: number; // Time window in milliseconds

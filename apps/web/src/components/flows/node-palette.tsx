@@ -1,6 +1,5 @@
 'use client';
 
-import { useCallback } from 'react';
 import {
   Play,
   Phone,
@@ -14,6 +13,8 @@ import {
   RotateCcw,
   PhoneOff,
 } from 'lucide-react';
+import { useCallback } from 'react';
+
 import { cn } from '@/lib/utils';
 
 const nodeTypes = [

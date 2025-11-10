@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { apiClient } from '@/lib/api';
 import { Info } from 'lucide-react';
+import { useState, useEffect } from 'react';
+
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { apiClient } from '@/lib/api';
 
 export function DemoToggle() {
   const [demoMode, setDemoMode] = useState(false);
