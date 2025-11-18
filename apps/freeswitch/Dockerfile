@@ -1,8 +1,16 @@
-FROM signalwire/freeswitch:latest
+FROM debian:11-slim
 
-# Install additional dependencies
+# Install freeswitch and dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
+    freeswitch \
+    freeswitch-mod-sofia \
+    freeswitch-mod-conference \
+    freeswitch-mod-dptools \
+    freeswitch-mod-json-cdr \
+    freeswitch-mod-opus \
+    freeswitch-mod-png \
+    freeswitch-mod-shout \
     curl \
     awscli \
     ca-certificates \
