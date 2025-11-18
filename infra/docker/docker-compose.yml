@@ -34,11 +34,11 @@ services:
       context: ../../apps/freeswitch
       dockerfile: Dockerfile
     ports:
-      - '5060:5060/udp'
-      - '5060:5060/tcp'
+      - '5062:5060/udp'
+      - '5062:5060/tcp'
       - '5080:5080/udp'
       - '5080:5080/tcp'
-      - '5061:5061/tcp'
+      - '5063:5061/tcp'
       - '8021:8021/tcp'
     environment:
       - FREESWITCH_ESL_PASSWORD=${FREESWITCH_ESL_PASSWORD:-ClueCon}
@@ -77,7 +77,7 @@ services:
       - '5060:5060/tcp'
       - '5061:5061/tcp'
     environment:
-      - FREESWITCH_NODES=${FREESWITCH_NODES:-freeswitch:5080}
+      - FREESWITCH_NODES=${FREESWITCH_NODES:-freeswitch:506}
       - RTPENGINE_SOCK=${RTPENGINE_SOCK:-udp:rtpengine:22222}
       - DB_URL=${DB_URL:-}
     volumes:
