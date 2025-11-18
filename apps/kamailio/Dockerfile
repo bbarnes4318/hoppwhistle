@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     kamailio-outbound-modules \
     kamailio-tls-modules \
     kamailio-topoh-modules \
-    kamailio-pike-modules \
+    kamailio-python3-modules \
     curl \
     jq \
     gettext-base \
