@@ -1,16 +1,8 @@
-FROM debian:11-slim
+FROM praekeltfoundation/freeswitch:latest
 
-# Install freeswitch and dependencies
+# Install additional tools
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    freeswitch \
-    freeswitch-mod-sofia \
-    freeswitch-mod-conference \
-    freeswitch-mod-dptools \
-    freeswitch-mod-json-cdr \
-    freeswitch-mod-opus \
-    freeswitch-mod-png \
-    freeswitch-mod-shout \
     curl \
     awscli \
     ca-certificates \
