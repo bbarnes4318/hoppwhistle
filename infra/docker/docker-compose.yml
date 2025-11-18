@@ -70,7 +70,7 @@ services:
 
   kamailio:
     build:
-      context: ../../kamailio
+      context: ../../apps/kamailio
       dockerfile: Dockerfile
     ports:
       - '5060:5060/udp'
