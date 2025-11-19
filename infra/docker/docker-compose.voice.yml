@@ -1,12 +1,16 @@
-version: '3.9'
-
 services:
   kamailio:
-    build: ../../kamailio
-    container_name: sbc-kamailio
-    network_mode: host
+    build:
+      context: ../../
+      dockerfile: apps/kamailio/Dockerfile
+    container_name: hopwhistle-kamailio
+    restart: unless-stopped
+    env_file:
+      - .env.voice
     environment:
       - PUBLIC_IP=${PUBLIC_IP}
+      - DATABASE_URL=mysql://kamailio:kamailiorw@db:3306/kamailio
+      # Kept these from your original config for future use
       - SBC_DOMAIN=${SBC_DOMAIN}
       - TLS_ENABLE=${TLS_ENABLE}
       - TLS_CERT_FILE=${TLS_CERT_FILE}
@@ -15,50 +19,71 @@ services:
       - SIGNALWIRE_SIP_USERNAME=${SIGNALWIRE_SIP_USERNAME}
       - SIGNALWIRE_SIP_PASSWORD=${SIGNALWIRE_SIP_PASSWORD}
       - SIGNALWIRE_OUTBOUND_PROXY=${SIGNALWIRE_OUTBOUND_PROXY}
+    ports:
+      - '5060:5060/udp'
+      - '5060:5060/tcp'
+      - '5061:5061/tcp'
     volumes:
-      # TLS certificates can be mounted if you want to update without rebuild
+      # Mount TLS if you need it
       - ../../kamailio/tls:/etc/kamailio/tls:ro
-      # Config files are handled by entrypoint script (no mount needed)
-    restart: unless-stopped
+    networks:
+      - voice_net
+      - data_net
+    depends_on:
+      - db
+      - rtpengine
 
   rtpengine:
-    build: ../../rtpengine
-    container_name: rtpengine
-    network_mode: host
+    build:
+      context: ../../
+      dockerfile: apps/rtpengine/Dockerfile
+    container_name: hopwhistle-rtpengine
+    restart: unless-stopped
+    privileged: true
+    env_file:
+      - .env.voice
     environment:
       - PUBLIC_IP=${PUBLIC_IP}
-      - RTP_START=${RTP_START}
-      - RTP_END=${RTP_END}
-    cap_add:
-      - NET_ADMIN
-    sysctls:
-      - net.core.rmem_max=33554432
-      - net.core.wmem_max=33554432
-    restart: unless-stopped
+      - TABLE=0
+      - INTERFACE=eth0
+      - LISTEN_NG=22222
+      # Kept for compatibility
+      - RTP_START=${RTP_START:-10000}
+      - RTP_END=${RTP_END:-10100}
+    ports:
+      # Expose RTP range for Audio (Must match RTP_START/END)
+      - '10000-10100:10000-10100/udp'
+    networks:
+      - voice_net
 
   freeswitch:
-    build: ../../freeswitch
-    container_name: freeswitch
-    network_mode: host
+    build:
+      context: ../../
+      dockerfile: apps/freeswitch/Dockerfile
+    container_name: hopwhistle-freeswitch
+    restart: unless-stopped
+    env_file:
+      - .env.voice
     environment:
       - PUBLIC_IP=${PUBLIC_IP}
+      - SOUND_RATES=8000:16000
+      # Kept these from your original config
       - MEDIA_DOMAIN=${MEDIA_DOMAIN}
-      - RECORDINGS_PATH=${RECORDINGS_PATH}
       - API_BASE_URL=${API_BASE_URL}
       - API_ADMIN_TOKEN=${API_ADMIN_TOKEN}
       - FS_ESL_PASSWORD=${FS_ESL_PASSWORD}
-      - RTP_START=${RTP_START}
-      - RTP_END=${RTP_END}
-      - SIGNALWIRE_SIP_DOMAIN=${SIGNALWIRE_SIP_DOMAIN}
-      - SIGNALWIRE_SIP_USERNAME=${SIGNALWIRE_SIP_USERNAME}
-      - SIGNALWIRE_SIP_PASSWORD=${SIGNALWIRE_SIP_PASSWORD}
-      - SIGNALWIRE_OUTBOUND_PROXY=${SIGNALWIRE_OUTBOUND_PROXY}
     volumes:
-      # vars.xml is handled by entrypoint script (no mount needed)
-      - ../../freeswitch/autoload_configs:/etc/freeswitch/autoload_configs:ro
-      - ../../freeswitch/dialplan:/etc/freeswitch/dialplan:ro
-      - ${RECORDINGS_PATH}:/var/recordings
+      - ./fs_recordings:/usr/share/freeswitch/recordings
+      # Map your local scripts/configs if needed
       - ../../freeswitch/scripts:/usr/local/bin/scripts:ro
+    networks:
+      - voice_net
+      - data_net
     depends_on:
-      - rtpengine
-    restart: unless-stopped
+      - db
+
+networks:
+  voice_net:
+    driver: bridge
+  data_net:
+    external: true

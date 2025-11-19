@@ -1,17 +1,28 @@
 #!/bin/bash
-# Kamailio entrypoint script
-
 set -e
 
-# Ensure dispatcher.list exists
-if [ ! -f /etc/kamailio/dispatcher.list ]; then
-    echo "Creating default dispatcher.list..."
-    cat > /etc/kamailio/dispatcher.list <<EOF
-# FreeSWITCH Dispatcher List
-1 sip:freeswitch:5080 0 0 "" "FreeSWITCH Node 1"
-EOF
+# Configuration paths
+CFG_FILE="/etc/kamailio/kamailio.cfg"
+DISPATCHER_FILE="/etc/kamailio/dispatcher.list"
+
+# 1. Handle Public IP Substitution
+if [ -z "$PUBLIC_IP" ]; then
+    echo "PUBLIC_IP not set. Attempting detection..."
+    PUBLIC_IP=$(curl -s ifconfig.me || echo "127.0.0.1")
+    echo "Detected Public IP: $PUBLIC_IP"
 fi
 
-# Start Kamailio (dispatcher.list will be loaded automatically)
-exec kamailio -f /etc/kamailio/kamailio.cfg -DD -E
+# Replace placeholder in kamailio.cfg so 'advertise PUBLIC_IP' works
+sed -i "s/PUBLIC_IP/$PUBLIC_IP/g" "$CFG_FILE"
 
+# 2. Ensure dispatcher list exists for FreeSWITCH connection
+if [ ! -f "$DISPATCHER_FILE" ]; then
+    touch "$DISPATCHER_FILE"
+    # Set 1, destination sip:freeswitch:5060
+    echo "1 sip:freeswitch:5060" > "$DISPATCHER_FILE"
+fi
+
+echo "Starting Kamailio with Public IP: $PUBLIC_IP"
+
+# Execute Kamailio
+exec kamailio -DD -E -f "$CFG_FILE"

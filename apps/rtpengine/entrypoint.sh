@@ -1,38 +1,41 @@
 #!/bin/bash
-# RTPEngine entrypoint script
-
 set -e
 
-# Set kernel parameters for RTPEngine
-# These are required for proper RTP proxying
+# 1. Detect Public IP if not set
+if [ -z "$PUBLIC_IP" ]; then
+  echo "PUBLIC_IP env var not set. Attempting auto-detection..."
+  PUBLIC_IP=$(curl -s ifconfig.me)
+  echo "Detected Public IP: $PUBLIC_IP"
+fi
 
-# Increase UDP buffer sizes
-sysctl -w net.core.rmem_max=16777216 || true
-sysctl -w net.core.wmem_max=16777216 || true
-sysctl -w net.core.rmem_default=65536 || true
-sysctl -w net.core.wmem_default=65536 || true
+# 2. Detect Local Interface IP (eth0 inside Docker)
+# We need this to tell rtpengine which interface to listen on locally
+LOCAL_IP=$(ip -4 addr show eth0 | grep -oP '(?<=inet\s)\d+(\.\d+){3}')
 
-# Increase network buffer sizes
-sysctl -w net.ipv4.udp_mem="8388608 8388608 8388608" || true
+if [ -z "$LOCAL_IP" ]; then
+    echo "Could not detect local IP on eth0, defaulting to 0.0.0.0"
+    LOCAL_IP="0.0.0.0"
+fi
 
-# Enable IP forwarding (required for NAT traversal)
-sysctl -w net.ipv4.ip_forward=1 || true
+echo "Starting RTPEngine..."
+echo "Local IP: $LOCAL_IP"
+echo "Advertised Public IP: $PUBLIC_IP"
 
-# Disable ICMP redirects (security)
-sysctl -w net.ipv4.conf.all.send_redirects=0 || true
-sysctl -w net.ipv4.conf.default.send_redirects=0 || true
+# 3. Construct Interface Flag
+# Syntax: interface_name/local_ip!public_ip
+# This binds to local_ip but writes public_ip in SDP packets
+INTERFACE_FLAG="internal/$LOCAL_IP!$PUBLIC_IP"
 
-# Enable connection tracking (for NAT)
-sysctl -w net.netfilter.nf_conntrack_max=1000000 || true
-
-# Set interface (from environment or auto-detect)
-INTERFACE="${RTPENGINE_INTERFACE:-auto}"
-
-# Start RTPEngine with proper arguments
+# 4. Run RTPEngine
+# --interface: Defines the listening interface and advertised address
+# --listen-ng: The control port Kamailio connects to (22222)
+# --port-min/max: The UDP port range for audio (must match docker-compose ports)
 exec rtpengine \
-    --config-file=/etc/rtpengine/rtpengine.conf \
-    --interface=$INTERFACE \
-    --log-stderr \
-    --log-level=6 \
-    --pidfile=/var/run/rtpengine.pid
-
+    --table=0 \
+    --interface="$INTERFACE_FLAG" \
+    --listen-ng=22222 \
+    --pidfile=/run/rtpengine.pid \
+    --port-min=10000 \
+    --port-max=10100 \
+    --foreground \
+    --log-level=7
