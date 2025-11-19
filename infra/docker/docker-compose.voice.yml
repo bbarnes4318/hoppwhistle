@@ -9,12 +9,10 @@ services:
       - .env.voice
     environment:
       - PUBLIC_IP=${PUBLIC_IP}
-      - DATABASE_URL=mysql://kamailio:kamailiorw@db:3306/kamailio
-      # Kept these from your original config for future use
+      # Use the DATABASE_URL from .env.voice (Your Digital Ocean Connection String)
+      - DATABASE_URL=${DATABASE_URL}
       - SBC_DOMAIN=${SBC_DOMAIN}
       - TLS_ENABLE=${TLS_ENABLE}
-      - TLS_CERT_FILE=${TLS_CERT_FILE}
-      - TLS_KEY_FILE=${TLS_KEY_FILE}
       - SIGNALWIRE_SIP_DOMAIN=${SIGNALWIRE_SIP_DOMAIN}
       - SIGNALWIRE_SIP_USERNAME=${SIGNALWIRE_SIP_USERNAME}
       - SIGNALWIRE_SIP_PASSWORD=${SIGNALWIRE_SIP_PASSWORD}
@@ -24,13 +22,11 @@ services:
       - '5060:5060/tcp'
       - '5061:5061/tcp'
     volumes:
-      # Mount TLS if you need it
       - ../../kamailio/tls:/etc/kamailio/tls:ro
     networks:
       - voice_net
       - data_net
     depends_on:
-      - db
       - rtpengine
 
   rtpengine:
@@ -47,11 +43,9 @@ services:
       - TABLE=0
       - INTERFACE=eth0
       - LISTEN_NG=22222
-      # Kept for compatibility
       - RTP_START=${RTP_START:-10000}
       - RTP_END=${RTP_END:-10100}
     ports:
-      # Expose RTP range for Audio (Must match RTP_START/END)
       - '10000-10100:10000-10100/udp'
     networks:
       - voice_net
@@ -67,20 +61,18 @@ services:
     environment:
       - PUBLIC_IP=${PUBLIC_IP}
       - SOUND_RATES=8000:16000
-      # Kept these from your original config
       - MEDIA_DOMAIN=${MEDIA_DOMAIN}
       - API_BASE_URL=${API_BASE_URL}
       - API_ADMIN_TOKEN=${API_ADMIN_TOKEN}
       - FS_ESL_PASSWORD=${FS_ESL_PASSWORD}
     volumes:
       - ./fs_recordings:/usr/share/freeswitch/recordings
-      # Map your local scripts/configs if needed
       - ../../freeswitch/scripts:/usr/local/bin/scripts:ro
     networks:
       - voice_net
       - data_net
     depends_on:
-      - db
+      - kamailio
 
 networks:
   voice_net:

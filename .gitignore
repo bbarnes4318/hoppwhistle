@@ -54,3 +54,7 @@ next-env.d.ts
 # OS
 Thumbs.db
 
+
+infra/docker/.env
+
+infra/docker/.env.voice
