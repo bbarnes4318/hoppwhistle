@@ -4,8 +4,9 @@ FROM debian:bookworm
 RUN apt-get update && apt-get install -y     gnupg2     wget     lsb-release     curl     jq     && rm -rf /var/lib/apt/lists/*
 
 # Add SignalWire public repo key and source
-RUN wget --no-check-certificate -O - https://signalwire-freeswitch-public.s3.amazonaws.com/repo/deb/debian-release/signalwire-freeswitch-public.gpg | apt-key add -
-RUN echo "deb https://signalwire-freeswitch-public.s3.amazonaws.com/repo/deb/debian-release/ `lsb_release -sc` main" > /etc/apt/sources.list.d/freeswitch.list
+ARG SIGNALWIRE_TOKEN
+RUN wget --http-user=signalwire --http-password=$SIGNALWIRE_TOKEN -O - https://freeswitch.signalwire.com/repo/deb/debian-release/signalwire-freeswitch-public.gpg | apt-key add -
+RUN echo "deb https://signalwire:$SIGNALWIRE_TOKEN@freeswitch.signalwire.com/repo/deb/debian-release/ `lsb_release -sc` main" > /etc/apt/sources.list.d/freeswitch.list
 
 # Install FreeSWITCH
 RUN apt-get update && apt-get install -y     freeswitch     freeswitch-mod-console     freeswitch-mod-logfile     freeswitch-mod-sofia     freeswitch-mod-event-socket     freeswitch-mod-commands     freeswitch-mod-conference     freeswitch-mod-db     freeswitch-mod-dptools     freeswitch-mod-expr     freeswitch-mod-fifo     freeswitch-mod-hash     freeswitch-mod-httapi     freeswitch-mod-dialplan-xml     freeswitch-mod-loopback     freeswitch-mod-native-file     freeswitch-mod-png     freeswitch-mod-rtc     freeswitch-mod-rtmp     freeswitch-mod-sndfile     freeswitch-mod-spandsp     freeswitch-mod-syslog     freeswitch-mod-tone-stream     freeswitch-mod-valet-parking     freeswitch-mod-verto     freeswitch-mod-xml-curl     freeswitch-mod-xml-rpc     && rm -rf /var/lib/apt/lists/*
