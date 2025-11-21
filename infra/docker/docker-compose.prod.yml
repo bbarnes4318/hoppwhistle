@@ -1,323 +1,59 @@
 version: '3.8'
 
-# Production docker-compose configuration
-# Use with: docker-compose -f docker-compose.dev.yml -f docker-compose.prod.yml up
-
 services:
-  # ============================================================================
-  # Database & Cache (Production)
-  # ============================================================================
-  postgres:
-    deploy:
-      replicas: 1
-      resources:
-        limits:
-          cpus: '2'
-          memory: 4G
-        reservations:
-          cpus: '1'
-          memory: 2G
-    restart: unless-stopped
-    networks:
-      - backend-network
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./backups:/backups
-
-  redis:
-    deploy:
-      replicas: 1
-      resources:
-        limits:
-          cpus: '1'
-          memory: 2G
-        reservations:
-          cpus: '0.5'
-          memory: 1G
-    restart: unless-stopped
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
-    networks:
-      - backend-network
-
-  # ============================================================================
-  # Storage (Production)
-  # ============================================================================
-  minio:
-    deploy:
-      replicas: 1
-      resources:
-        limits:
-          cpus: '1'
-          memory: 2G
-        reservations:
-          cpus: '0.5'
-          memory: 1G
-    restart: unless-stopped
-    networks:
-      - backend-network
-    volumes:
-      - minio_data:/data
-      - ./minio-config:/root/.minio
-
-  clickhouse:
-    deploy:
-      replicas: 1
-      resources:
-        limits:
-          cpus: '4'
-          memory: 8G
-        reservations:
-          cpus: '2'
-          memory: 4G
-    restart: unless-stopped
-    networks:
-      - backend-network
-    volumes:
-      - clickhouse_data:/var/lib/clickhouse
-      - clickhouse_logs:/var/log/clickhouse-server
-
-  # ============================================================================
-  # Application Services (Scaled)
-  # ============================================================================
   api:
-    deploy:
-      replicas: 3
-      resources:
-        limits:
-          cpus: '1'
-          memory: 1G
-        reservations:
-          cpus: '0.5'
-          memory: 512M
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
-    restart: unless-stopped
+    build:
+      context: ../../
+      dockerfile: apps/api/Dockerfile
+    container_name: hopwhistle-api
+    restart: always
+    env_file:
+      - ../../.env
     environment:
-      NODE_ENV: production
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - CLICKHOUSE_URL=${CLICKHOUSE_URL}
+      - S3_ENDPOINT=${S3_ENDPOINT}
+      - S3_BUCKET=${S3_BUCKET}
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY}
+      - S3_SECRET_KEY=${S3_SECRET_KEY}
+      - S3_REGION=${S3_REGION}
+    ports:
+      - "${PORT:-3001}:3001"
     networks:
-      - frontend-network
-      - backend-network
-    healthcheck:
-      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:3001/health']
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
-  web:
-    deploy:
-      replicas: 2
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 512M
-        reservations:
-          cpus: '0.25'
-          memory: 256M
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
-    restart: unless-stopped
-    environment:
-      NODE_ENV: production
-    networks:
-      - frontend-network
-    healthcheck:
-      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:3000/api/health']
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      - data_net
+    # Removed depends_on to prevent "undefined service" errors during merged startup
 
   worker:
-    deploy:
-      replicas: 5
-      resources:
-        limits:
-          cpus: '1'
-          memory: 1G
-        reservations:
-          cpus: '0.5'
-          memory: 512M
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
-    restart: unless-stopped
+    build:
+      context: ../../
+      dockerfile: apps/worker/Dockerfile
+    container_name: hopwhistle-worker
+    restart: always
+    env_file:
+      - ../../.env
     environment:
-      NODE_ENV: production
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - CLICKHOUSE_URL=${CLICKHOUSE_URL}
     networks:
-      - backend-network
-    healthcheck:
-      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:9091/health']
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      - data_net
+    # Removed depends_on to prevent "undefined service" errors during merged startup
 
-  # ============================================================================
-  # Telephony Infrastructure (Scaled)
-  # ============================================================================
-  freeswitch:
-    deploy:
-      replicas: 2
-      resources:
-        limits:
-          cpus: '4'
-          memory: 4G
-        reservations:
-          cpus: '2'
-          memory: 2G
-      restart_policy:
-        condition: on-failure
-        delay: 10s
-        max_attempts: 3
-    restart: unless-stopped
+  web:
+    build:
+      context: ../../
+      dockerfile: apps/web/Dockerfile
+    container_name: hopwhistle-web
+    restart: always
+    env_file:
+      - ../../.env
+    ports:
+      - "3000:3000"
     networks:
-      - telephony-network
-      - backend-network
-    volumes:
-      - freeswitch_recordings:/recordings
-      - freeswitch_conf:/usr/local/freeswitch/conf
-      - ./freeswitch-logs:/usr/local/freeswitch/log
+      - data_net
+    # Removed depends_on to prevent "undefined service" errors during merged startup
 
-  kamailio:
-    deploy:
-      replicas: 2
-      resources:
-        limits:
-          cpus: '2'
-          memory: 2G
-        reservations:
-          cpus: '1'
-          memory: 1G
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
-    restart: unless-stopped
-    networks:
-      - telephony-network
-      - backend-network
-    volumes:
-      - kamailio_data:/var/run/kamailio
-      - ./kamailio-logs:/var/log/kamailio
-
-  rtpengine:
-    deploy:
-      replicas: 2
-      resources:
-        limits:
-          cpus: '4'
-          memory: 4G
-        reservations:
-          cpus: '2'
-          memory: 2G
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
-    restart: unless-stopped
-    networks:
-      - telephony-network
-    volumes:
-      - rtpengine_recordings:/recordings
-      - ./rtpengine-logs:/var/log/rtpengine
-
-  # ============================================================================
-  # Observability (Production)
-  # ============================================================================
-  prometheus:
-    deploy:
-      replicas: 1
-      resources:
-        limits:
-          cpus: '2'
-          memory: 4G
-        reservations:
-          cpus: '1'
-          memory: 2G
-    restart: unless-stopped
-    networks:
-      - observability-network
-      - backend-network
-    volumes:
-      - prometheus_data:/prometheus
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--storage.tsdb.retention.time=30d'
-      - '--storage.tsdb.retention.size=50GB'
-      - '--web.enable-lifecycle'
-
-  grafana:
-    deploy:
-      replicas: 1
-      resources:
-        limits:
-          cpus: '1'
-          memory: 1G
-        reservations:
-          cpus: '0.5'
-          memory: 512M
-    restart: unless-stopped
-    networks:
-      - observability-network
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning
-      - ./grafana/dashboards:/var/lib/grafana/dashboards
-
-# ============================================================================
-# Production Networks
-# ============================================================================
 networks:
-  frontend-network:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
-  backend-network:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.21.0.0/16
-  telephony-network:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.22.0.0/16
-  observability-network:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.23.0.0/16
-
-# ============================================================================
-# Production Volumes (with backup considerations)
-# ============================================================================
-volumes:
-  postgres_data:
-    driver: local
-  redis_data:
-    driver: local
-  minio_data:
-    driver: local
-  clickhouse_data:
-    driver: local
-  clickhouse_logs:
-    driver: local
-  freeswitch_recordings:
-    driver: local
-  freeswitch_conf:
-    driver: local
-  kamailio_data:
-    driver: local
-  rtpengine_recordings:
-    driver: local
-  prometheus_data:
-    driver: local
-  grafana_data:
-    driver: local
+  data_net:
+    external: true

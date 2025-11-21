@@ -1,34 +1,4 @@
 services:
-  kamailio:
-    build:
-      context: ../../
-      dockerfile: apps/kamailio/Dockerfile
-    container_name: hopwhistle-kamailio
-    restart: unless-stopped
-    env_file:
-      - .env.voice
-    environment:
-      - PUBLIC_IP=${PUBLIC_IP}
-      # Use the DATABASE_URL from .env.voice (Your Digital Ocean Connection String)
-      - DATABASE_URL=${DATABASE_URL}
-      - SBC_DOMAIN=${SBC_DOMAIN}
-      - TLS_ENABLE=${TLS_ENABLE}
-      - SIGNALWIRE_SIP_DOMAIN=${SIGNALWIRE_SIP_DOMAIN}
-      - SIGNALWIRE_SIP_USERNAME=${SIGNALWIRE_SIP_USERNAME}
-      - SIGNALWIRE_SIP_PASSWORD=${SIGNALWIRE_SIP_PASSWORD}
-      - SIGNALWIRE_OUTBOUND_PROXY=${SIGNALWIRE_OUTBOUND_PROXY}
-    ports:
-      - '5060:5060/udp'
-      - '5060:5060/tcp'
-      - '5061:5061/tcp'
-    volumes:
-      - ../../kamailio/tls:/etc/kamailio/tls:ro
-    networks:
-      - voice_net
-      - data_net
-    depends_on:
-      - rtpengine
-
   rtpengine:
     build:
       context: ../../
@@ -36,8 +6,6 @@ services:
     container_name: hopwhistle-rtpengine
     restart: unless-stopped
     privileged: true
-    env_file:
-      - .env.voice
     environment:
       - PUBLIC_IP=${PUBLIC_IP}
       - TABLE=0
@@ -46,7 +14,7 @@ services:
       - RTP_START=${RTP_START:-10000}
       - RTP_END=${RTP_END:-10100}
     ports:
-      - '10000-10100:10000-10100/udp'
+      - "10000-10100:10000-10100/udp"
     networks:
       - voice_net
 
@@ -56,8 +24,6 @@ services:
       dockerfile: apps/freeswitch/Dockerfile
     container_name: hopwhistle-freeswitch
     restart: unless-stopped
-    env_file:
-      - .env.voice
     environment:
       - PUBLIC_IP=${PUBLIC_IP}
       - SOUND_RATES=8000:16000
@@ -65,14 +31,43 @@ services:
       - API_BASE_URL=${API_BASE_URL}
       - API_ADMIN_TOKEN=${API_ADMIN_TOKEN}
       - FS_ESL_PASSWORD=${FS_ESL_PASSWORD}
+      - API_KEY=${API_KEY} 
     volumes:
       - ./fs_recordings:/usr/share/freeswitch/recordings
       - ../../freeswitch/scripts:/usr/local/bin/scripts:ro
     networks:
       - voice_net
       - data_net
+    # FreeSWITCH starts independently to avoid loops
+
+  kamailio:
+    build:
+      context: ../../
+      dockerfile: apps/kamailio/Dockerfile
+    container_name: hopwhistle-kamailio
+    restart: unless-stopped
+    environment:
+      - PUBLIC_IP=${PUBLIC_IP}
+      - DATABASE_URL=${DATABASE_URL}
+      - SBC_DOMAIN=${SBC_DOMAIN}
+      - TLS_ENABLE=${TLS_ENABLE}
+      - SIGNALWIRE_SIP_DOMAIN=${SIGNALWIRE_SIP_DOMAIN}
+      - SIGNALWIRE_SIP_USERNAME=${SIGNALWIRE_SIP_USERNAME}
+      - SIGNALWIRE_SIP_PASSWORD=${SIGNALWIRE_SIP_PASSWORD}
+      - SIGNALWIRE_OUTBOUND_PROXY=${SIGNALWIRE_OUTBOUND_PROXY}
+    ports:
+      - "5060:5060/udp"
+      - "5060:5060/tcp"
+      - "5061:5061/tcp"
+    volumes:
+      - ../../kamailio/tls:/etc/kamailio/tls:ro
+    networks:
+      - voice_net
+      - data_net
     depends_on:
-      - kamailio
+      - rtpengine
+      - freeswitch 
+      # Kamailio waits for both to be ready
 
 networks:
   voice_net:
