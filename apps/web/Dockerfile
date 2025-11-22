@@ -33,7 +33,7 @@ COPY . .
 WORKDIR /app/apps/web
 
 ENV NEXT_TELEMETRY_DISABLED=1
-
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 # Install dependencies
 RUN pnpm add next @xyflow/react next-themes html2canvas react-markdown @tailwindcss/typography
 
