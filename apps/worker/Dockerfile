@@ -18,10 +18,10 @@ FROM base AS builder
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
 
-COPY --from=deps /app/node_modules ./node_modules
-
 # --- FIX: Copy ALL source code ---
 COPY . .
+
+RUN pnpm install --no-frozen-lockfile
 
 # Build workspace dependencies
 RUN pnpm --filter @hopwhistle/shared build

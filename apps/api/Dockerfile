@@ -27,10 +27,10 @@ WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
 
 # Copy node_modules from deps
-COPY --from=deps /app/node_modules ./node_modules
-
 # Copy ALL source code
 COPY . .
+
+RUN pnpm install --no-frozen-lockfile
 
 # Build workspace dependencies
 RUN pnpm --filter @hopwhistle/shared build
