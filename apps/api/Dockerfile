@@ -32,6 +32,11 @@ COPY --from=deps /app/node_modules ./node_modules
 # Copy ALL source code
 COPY . .
 
+# Build workspace dependencies
+RUN pnpm --filter @hopwhistle/shared build
+RUN pnpm --filter @hopwhistle/routing-dsl build
+RUN pnpm --filter @hopwhistle/sdk build
+
 WORKDIR /app/apps/api
 
 # --- FIX: Aggressive Patching to Unblock Build ---

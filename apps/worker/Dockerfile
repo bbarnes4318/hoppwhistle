@@ -22,7 +22,11 @@ COPY --from=deps /app/node_modules ./node_modules
 
 # --- FIX: Copy ALL source code ---
 COPY . .
-# ---------------------------------
+
+# Build workspace dependencies
+RUN pnpm --filter @hopwhistle/shared build
+RUN pnpm --filter @hopwhistle/routing-dsl build
+RUN pnpm --filter @hopwhistle/sdk build
 
 WORKDIR /app/apps/worker
 
