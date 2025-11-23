@@ -33,6 +33,8 @@ services:
     build:
       context: ../../apps/freeswitch
       dockerfile: Dockerfile
+      args:
+        SIGNALWIRE_TOKEN: ${SIGNALWIRE_TOKEN}
     ports:
       - '5062:5060/udp'
       - '5062:5060/tcp'
