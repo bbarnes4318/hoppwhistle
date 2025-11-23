@@ -1,0 +1,682 @@
+root@hopwhistle-prod:~/hopwhistle# git pull origin master
+
+# Stop and Remove containers
+docker-compose --env-file .env \
+  -f infra/docker/docker-compose.yml \
+  -f infra/docker/docker-compose.prod.yml \
+  -f infra/docker/docker-compose.voice.yml \
+  stop kamailio api worker
+
+docker-compose --env-file .env \
+  -f infra/docker/docker-compose.yml \
+  -f infra/docker/docker-compose.prod.yml \
+  -f infra/docker/docker-compose.voice.yml \
+  rm -f kamailio api worker
+
+# Rebuild and Start
+docker-compose --env-file .env \
+  -f infra/docker/docker-compose.yml \
+  -f infra/docker/docker-compose.prod.yml \
+  -f infra/docker/docker-compose.voice.yml \
+  up -d --build kamailio api worker
+remote: Enumerating objects: 13, done.
+remote: Counting objects: 100% (13/13), done.
+remote: Compressing objects: 100% (1/1), done.
+remote: Total 7 (delta 6), reused 7 (delta 6), pack-reused 0 (from 0)
+Unpacking objects: 100% (7/7), 868 bytes | 217.00 KiB/s, done.
+From https://github.com/bbarnes4318/hopwhistle
+ * branch            master     -> FETCH_HEAD
+   f07a694..31f3852  master     -> origin/master
+Updating f07a694..31f3852
+Fast-forward
+ apps/api/Dockerfile    | 17 ++++++++++++++---
+ apps/worker/Dockerfile | 17 ++++++++++++++---
+ 2 files changed, 28 insertions(+), 6 deletions(-)
+No stopped containers
+Building worker
+DEPRECATED: The legacy builder is deprecated and will be removed in a future release.
+            Install the buildx component to build images with BuildKit:
+            https://docs.docker.com/go/buildx/
+
+Sending build context to Docker daemon  4.209MB
+Step 1/34 : FROM node:20-alpine AS base
+ ---> 2b56f2779663
+Step 2/34 : FROM base AS deps
+ ---> 2b56f2779663
+Step 3/34 : RUN apk add --no-cache libc6-compat
+ ---> Using cache
+ ---> d3ffaf8c60cf
+Step 4/34 : WORKDIR /app
+ ---> Using cache
+ ---> 7ce210898c40
+Step 5/34 : RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
+ ---> Using cache
+ ---> af0e1a5ba979
+Step 6/34 : COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml ./
+ ---> Using cache
+ ---> 4ea5ff5ed182
+Step 7/34 : COPY apps/worker/package.json ./apps/worker/
+ ---> Using cache
+ ---> 697464dad433
+Step 8/34 : COPY packages/shared/package.json ./packages/shared/
+ ---> Using cache
+ ---> 301778327fcb
+Step 9/34 : COPY packages/routing-dsl/package.json ./packages/routing-dsl/
+ ---> Using cache
+ ---> 4e896437b9f2
+Step 10/34 : COPY packages/sdk/package.json ./packages/sdk/
+ ---> Using cache
+ ---> c2b6a628cfbc
+Step 11/34 : RUN pnpm install --no-frozen-lockfile
+ ---> Using cache
+ ---> 28149e366247
+Step 12/34 : FROM base AS builder
+ ---> 2b56f2779663
+Step 13/34 : WORKDIR /app
+ ---> Using cache
+ ---> e80b0f90fc00
+Step 14/34 : RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
+ ---> Using cache
+ ---> 22d5b9e14d0b
+Step 15/34 : COPY . .
+ ---> 6eaae3207fa8
+Step 16/34 : RUN pnpm install --no-frozen-lockfile
+ ---> Running in 9ef2eaab7413
+Scope: all 8 workspace projects
+Progress: resolved 1, reused 0, downloaded 0, added 0
+apps/api                                 |  WARN  deprecated supertest@6.3.4
+
+   ╭───────────────────────────────────────────────────────────────────╮
+   │                                                                   │
+   │                Update available! 8.15.0 → 10.23.0.                │
+   │   Changelog: https://github.com/pnpm/pnpm/releases/tag/v10.23.0   │
+   │     Run "corepack prepare pnpm@10.23.0 --activate" to update.     │
+   │                                                                   │
+   │      Follow @pnpmjs for updates: https://twitter.com/pnpmjs       │
+   │                                                                   │
+   ╰───────────────────────────────────────────────────────────────────╯
+
+apps/web                                 |  WARN  deprecated eslint@8.57.1
+apps/api                                 |  WARN  deprecated @opentelemetry/exporter-jaeger@1.30.1
+Progress: resolved 38, reused 0, downloaded 26, added 0
+apps/api                                 |  WARN  deprecated puppeteer@21.11.0
+apps/media                               |  WARN  deprecated fluent-ffmpeg@2.1.3
+Progress: resolved 93, reused 0, downloaded 89, added 0
+Progress: resolved 95, reused 0, downloaded 94, added 0
+Progress: resolved 236, reused 0, downloaded 223, added 0
+Progress: resolved 383, reused 0, downloaded 371, added 0
+Progress: resolved 581, reused 0, downloaded 578, added 0
+Progress: resolved 726, reused 0, downloaded 717, added 0
+Progress: resolved 744, reused 0, downloaded 729, added 0
+Progress: resolved 831, reused 0, downloaded 803, added 0
+Progress: resolved 903, reused 0, downloaded 870, added 0
+Progress: resolved 955, reused 0, downloaded 913, added 0
+Progress: resolved 1054, reused 0, downloaded 999, added 0
+Progress: resolved 1135, reused 0, downloaded 1007, added 0
+Progress: resolved 1210, reused 0, downloaded 1090, added 0
+Progress: resolved 1289, reused 0, downloaded 1173, added 0
+Progress: resolved 1462, reused 0, downloaded 1365, added 0
+ WARN  9 deprecated subdependencies found: @humanwhocodes/config-array@0.13.0, @humanwhocodes/object-schema@2.0.3, @opentelemetry/otlp-proto-exporter-base@0.51.1, glob@7.2.3, inflight@1.0.6, puppeteer@19.11.1, rimraf@3.0.2, source-map@0.8.0-beta.0, superagent@8.1.2
+
+ WARN  Issues with peer dependencies found
+apps/api
+├─┬ @opentelemetry/exporter-prometheus 0.51.1
+│ ├─┬ @opentelemetry/core 1.24.1
+│ │ └── ✕ unmet peer @opentelemetry/api@">=1.0.0 <1.9.0": found 1.9.0
+│ ├─┬ @opentelemetry/resources 1.24.1
+│ │ └── ✕ unmet peer @opentelemetry/api@">=1.0.0 <1.9.0": found 1.9.0
+│ └─┬ @opentelemetry/sdk-metrics 1.24.1
+│   └── ✕ unmet peer @opentelemetry/api@">=1.3.0 <1.9.0": found 1.9.0
+└─┬ @opentelemetry/sdk-node 0.51.1
+  ├── ✕ unmet peer @opentelemetry/api@">=1.3.0 <1.9.0": found 1.9.0
+  ├─┬ @opentelemetry/exporter-trace-otlp-grpc 0.51.1
+  │ └─┬ @opentelemetry/otlp-transformer 0.51.1
+  │   ├── ✕ unmet peer @opentelemetry/api@">=1.3.0 <1.9.0": found 1.9.0
+  │   ├─┬ @opentelemetry/sdk-logs 0.51.1
+  │   │ └── ✕ unmet peer @opentelemetry/api@">=1.4.0 <1.9.0": found 1.9.0
+  │   └─┬ @opentelemetry/sdk-trace-base 1.24.1
+  │     └── ✕ unmet peer @opentelemetry/api@">=1.0.0 <1.9.0": found 1.9.0
+  └─┬ @opentelemetry/sdk-trace-node 1.24.1
+    ├── ✕ unmet peer @opentelemetry/api@">=1.0.0 <1.9.0": found 1.9.0
+    ├─┬ @opentelemetry/context-async-hooks 1.24.1
+    │ └── ✕ unmet peer @opentelemetry/api@">=1.0.0 <1.9.0": found 1.9.0
+    ├─┬ @opentelemetry/propagator-b3 1.24.1
+    │ └── ✕ unmet peer @opentelemetry/api@">=1.0.0 <1.9.0": found 1.9.0
+    └─┬ @opentelemetry/propagator-jaeger 1.24.1
+      └── ✕ unmet peer @opentelemetry/api@">=1.0.0 <1.9.0": found 1.9.0
+
+apps/worker
+├─┬ @opentelemetry/exporter-prometheus 0.51.1
+│ ├─┬ @opentelemetry/core 1.24.1
+│ │ └── ✕ unmet peer @opentelemetry/api@">=1.0.0 <1.9.0": found 1.9.0
+│ ├─┬ @opentelemetry/resources 1.24.1
+│ │ └── ✕ unmet peer @opentelemetry/api@">=1.0.0 <1.9.0": found 1.9.0
+│ └─┬ @opentelemetry/sdk-metrics 1.24.1
+│   └── ✕ unmet peer @opentelemetry/api@">=1.3.0 <1.9.0": found 1.9.0
+└─┬ @opentelemetry/sdk-node 0.51.1
+  ├── ✕ unmet peer @opentelemetry/api@">=1.3.0 <1.9.0": found 1.9.0
+  ├─┬ @opentelemetry/exporter-trace-otlp-grpc 0.51.1
+  │ └─┬ @opentelemetry/otlp-transformer 0.51.1
+  │   ├── ✕ unmet peer @opentelemetry/api@">=1.3.0 <1.9.0": found 1.9.0
+  │   ├─┬ @opentelemetry/sdk-logs 0.51.1
+  │   │ └── ✕ unmet peer @opentelemetry/api@">=1.4.0 <1.9.0": found 1.9.0
+  │   └─┬ @opentelemetry/sdk-trace-base 1.24.1
+  │     └── ✕ unmet peer @opentelemetry/api@">=1.0.0 <1.9.0": found 1.9.0
+  └─┬ @opentelemetry/sdk-trace-node 1.24.1
+    ├── ✕ unmet peer @opentelemetry/api@">=1.0.0 <1.9.0": found 1.9.0
+    ├─┬ @opentelemetry/context-async-hooks 1.24.1
+    │ └── ✕ unmet peer @opentelemetry/api@">=1.0.0 <1.9.0": found 1.9.0
+    ├─┬ @opentelemetry/propagator-b3 1.24.1
+    │ └── ✕ unmet peer @opentelemetry/api@">=1.0.0 <1.9.0": found 1.9.0
+    └─┬ @opentelemetry/propagator-jaeger 1.24.1
+      └── ✕ unmet peer @opentelemetry/api@">=1.0.0 <1.9.0": found 1.9.0
+
+Packages: +1465
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Progress: resolved 1478, reused 0, downloaded 1386, added 0
+Progress: resolved 1478, reused 0, downloaded 1386, added 1263
+Progress: resolved 1478, reused 0, downloaded 1386, added 1465, done
+node_modules/@prisma/engines postinstall$ node scripts/postinstall.js
+node_modules/protobufjs postinstall$ node scripts/postinstall
+node_modules/puppeteer postinstall$ node install.mjs
+node_modules/protobufjs postinstall: Done
+node_modules/puppeteer postinstall: **INFO** Skipping browser download as instructed.
+node_modules/puppeteer postinstall: Done
+node_modules/@prisma/engines postinstall: Done
+node_modules/unrs-resolver postinstall$ napi-postinstall unrs-resolver 1.11.1 check
+node_modules/esbuild postinstall$ node install.js
+node_modules/vite/node_modules/esbuild postinstall$ node install.js
+node_modules/prisma preinstall$ node scripts/preinstall-entry.js
+node_modules/unrs-resolver postinstall: Done
+node_modules/esbuild postinstall: Done
+node_modules/vite/node_modules/esbuild postinstall: Done
+node_modules/prisma preinstall: Done
+node_modules/@prisma/client postinstall$ node scripts/postinstall.js
+node_modules/@prisma/client postinstall: Environment variables loaded from .env
+node_modules/@prisma/client postinstall: prisma:warn We could not find your Prisma schema in the default locations (see: https://pris.ly/d/prisma-schema-location).
+node_modules/@prisma/client postinstall: If you have a Prisma schema file in a custom path, you will need to run
+node_modules/@prisma/client postinstall: `prisma generate --schema=./path/to/your/schema.prisma` to generate Prisma Client.
+node_modules/@prisma/client postinstall: If you do not have a Prisma schema file yet, you can ignore this message.
+node_modules/@prisma/client postinstall: Done
+.../mermaid-cli/node_modules/puppeteer postinstall$ node install.js
+.../mermaid-cli/node_modules/puppeteer postinstall: **INFO** Skipping browser download as instructed.
+.../mermaid-cli/node_modules/puppeteer postinstall: Done
+. prepare$ husky install
+. prepare: husky - git command not found, skipping install
+. prepare: Done
+Done in 31.7s
+ ---> Removed intermediate container 9ef2eaab7413
+ ---> daccca231f27
+Step 17/34 : RUN pnpm --filter @hopwhistle/shared exec tsup --no-dts
+ ---> Running in 8223ca577743
+CLI Building entry: src/index.ts
+CLI Using tsconfig: tsconfig.json
+CLI tsup v8.5.0
+CLI Using tsup config: /app/packages/shared/tsup.config.ts
+CLI Target: es2022
+CLI Cleaning output folder
+ESM Build start
+ESM dist/index.mjs     789.00 B
+ESM dist/index.mjs.map 1.65 KB
+ESM ⚡️ Build success in 24ms
+ ---> Removed intermediate container 8223ca577743
+ ---> 16d12e346bf2
+Step 18/34 : RUN pnpm --filter @hopwhistle/routing-dsl exec tsup --no-dts
+ ---> Running in 79dae9c39b61
+CLI Building entry: src/index.ts
+CLI Using tsconfig: tsconfig.json
+CLI tsup v8.5.0
+CLI Using tsup config: /app/packages/routing-dsl/tsup.config.ts
+CLI Target: es2022
+CLI Cleaning output folder
+ESM Build start
+
+ WARN  ▲ [WARNING] Using direct eval with a bundler is not recommended and may cause problems [direct-eval]
+
+    src/executor.ts:461:19:
+      461 │     return Boolean(eval(evaluated));
+          ╵                    ~~~~
+
+  You can read more about direct eval and bundling here: https://esbuild.github.io/link/direct-eval
+
+
+
+ESM dist/index.mjs     27.38 KB
+ESM dist/index.mjs.map 53.72 KB
+ESM ⚡️ Build success in 113ms
+ ---> Removed intermediate container 79dae9c39b61
+ ---> 30dcef00edf2
+Step 19/34 : RUN pnpm --filter @hopwhistle/sdk exec tsup --no-dts
+ ---> Running in d11ea0092182
+CLI Building entry: src/index.ts
+CLI Using tsconfig: tsconfig.json
+CLI tsup v8.5.0
+CLI Using tsup config: /app/packages/sdk/tsup.config.ts
+CLI Target: es2022
+CLI Cleaning output folder
+ESM Build start
+ESM dist/index.mjs     7.67 KB
+ESM dist/index.mjs.map 18.93 KB
+ESM ⚡️ Build success in 21ms
+ ---> Removed intermediate container d11ea0092182
+ ---> 0d11ec7a46f2
+Step 20/34 : RUN rm -rf node_modules/@hopwhistle/shared &&     mkdir -p node_modules/@hopwhistle/shared &&     cp -r packages/shared/dist node_modules/@hopwhistle/shared/ &&     cp packages/shared/package.json node_modules/@hopwhistle/shared/
+ ---> Running in e5187c59d6b2
+ ---> Removed intermediate container e5187c59d6b2
+ ---> d1a058dacf7e
+Step 21/34 : RUN rm -rf node_modules/@hopwhistle/routing-dsl &&     mkdir -p node_modules/@hopwhistle/routing-dsl &&     cp -r packages/routing-dsl/dist node_modules/@hopwhistle/routing-dsl/ &&     cp packages/routing-dsl/package.json node_modules/@hopwhistle/routing-dsl/
+ ---> Running in 48e4a727a082
+ ---> Removed intermediate container 48e4a727a082
+ ---> a72e3d29f400
+Step 22/34 : RUN rm -rf node_modules/@hopwhistle/sdk &&     mkdir -p node_modules/@hopwhistle/sdk &&     cp -r packages/sdk/dist node_modules/@hopwhistle/sdk/ &&     cp packages/sdk/package.json node_modules/@hopwhistle/sdk/
+ ---> Running in ff0acad32c4f
+ ---> Removed intermediate container ff0acad32c4f
+ ---> 4d6c5532ea4f
+Step 23/34 : WORKDIR /app/apps/worker
+ ---> Running in dbe9f3cf654f
+ ---> Removed intermediate container dbe9f3cf654f
+ ---> 493faf7bf35f
+Step 24/34 : RUN pnpm build
+ ---> Running in ef7f77449ac1
+
+> @hopwhistle/worker@0.1.0 build /app/apps/worker
+> tsup
+
+CLI Building entry: src/index.ts
+CLI Using tsconfig: tsconfig.json
+CLI tsup v8.5.0
+CLI Using tsup config: /app/apps/worker/tsup.config.ts
+CLI Target: es2022
+CLI Cleaning output folder
+ESM Build start
+ESM dist/index.js     30.34 KB
+ESM dist/index.js.map 57.30 KB
+ESM ⚡️ Build success in 42ms
+DTS Build start
+DTS ⚡️ Build success in 3881ms
+DTS dist/index.d.ts 13.00 B
+ ---> Removed intermediate container ef7f77449ac1
+ ---> f248b7103402
+Step 25/34 : FROM base AS runner
+ ---> 2b56f2779663
+Step 26/34 : WORKDIR /app
+ ---> Using cache
+ ---> e80b0f90fc00
+Step 27/34 : ENV NODE_ENV production
+ ---> Using cache
+ ---> aa11f0d4da22
+Step 28/34 : RUN addgroup --system --gid 1001 nodejs
+ ---> Using cache
+ ---> 2f21351ded32
+Step 29/34 : RUN adduser --system --uid 1001 nextjs
+ ---> Using cache
+ ---> e3d8bc858fa2
+Step 30/34 : COPY --from=builder /app/apps/worker/dist ./dist
+ ---> Using cache
+ ---> a5c0ab197763
+Step 31/34 : COPY --from=builder /app/node_modules ./node_modules
+ ---> 86e714daf63c
+Step 32/34 : COPY --from=builder /app/apps/worker/package.json ./package.json
+ ---> 02879c343db4
+Step 33/34 : USER nextjs
+ ---> Running in 02d65f9c763c
+ ---> Removed intermediate container 02d65f9c763c
+ ---> ec756ed8b474
+Step 34/34 : CMD ["node", "dist/index.js"]
+ ---> Running in 641f96f544dc
+ ---> Removed intermediate container 641f96f544dc
+ ---> 53c59acacd09
+Successfully built 53c59acacd09
+Successfully tagged docker_worker:latest
+Building api
+DEPRECATED: The legacy builder is deprecated and will be removed in a future release.
+            Install the buildx component to build images with BuildKit:
+            https://docs.docker.com/go/buildx/
+
+Sending build context to Docker daemon  4.209MB
+Step 1/44 : FROM node:20-alpine AS base
+ ---> 2b56f2779663
+Step 2/44 : ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ ---> Using cache
+ ---> 4f0156d86957
+Step 3/44 : ENV PUPPETEER_SKIP_DOWNLOAD=true
+ ---> Using cache
+ ---> 5243b3204759
+Step 4/44 : FROM base AS deps
+ ---> 5243b3204759
+Step 5/44 : RUN apk add --no-cache libc6-compat
+ ---> Using cache
+ ---> d42c0dcd2741
+Step 6/44 : WORKDIR /app
+ ---> Using cache
+ ---> e9eca69766fa
+Step 7/44 : RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
+ ---> Using cache
+ ---> b27338e0d523
+Step 8/44 : COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml .npmrc ./
+ ---> Using cache
+ ---> e8d4149e83d7
+Step 9/44 : COPY apps/api/package.json ./apps/api/
+ ---> Using cache
+ ---> 7b6222004fe1
+Step 10/44 : COPY packages/shared/package.json ./packages/shared/
+ ---> Using cache
+ ---> 366ed272a03a
+Step 11/44 : COPY packages/routing-dsl/package.json ./packages/routing-dsl/
+ ---> Using cache
+ ---> b125ec3dd210
+Step 12/44 : COPY packages/sdk/package.json ./packages/sdk/
+ ---> Using cache
+ ---> 748be5740ae2
+Step 13/44 : ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ ---> Using cache
+ ---> a27a6919cd21
+Step 14/44 : RUN pnpm install --no-frozen-lockfile
+ ---> Using cache
+ ---> f1f0d5c90fc5
+Step 15/44 : FROM base AS builder
+ ---> 5243b3204759
+Step 16/44 : WORKDIR /app
+ ---> Using cache
+ ---> 22a47f4daf57
+Step 17/44 : RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
+ ---> Using cache
+ ---> 0946dc0e9e25
+Step 18/44 : COPY . .
+ ---> 7d0187cd0998
+Step 19/44 : RUN pnpm install --no-frozen-lockfile
+ ---> Running in 46bca445c82c
+Scope: all 8 workspace projects
+Progress: resolved 1, reused 0, downloaded 0, added 0
+apps/api                                 |  WARN  deprecated supertest@6.3.4
+
+   ╭───────────────────────────────────────────────────────────────────╮
+   │                                                                   │
+   │                Update available! 8.15.0 → 10.23.0.                │
+   │   Changelog: https://github.com/pnpm/pnpm/releases/tag/v10.23.0   │
+   │     Run "corepack prepare pnpm@10.23.0 --activate" to update.     │
+   │                                                                   │
+   │      Follow @pnpmjs for updates: https://twitter.com/pnpmjs       │
+   │                                                                   │
+   ╰───────────────────────────────────────────────────────────────────╯
+
+apps/api                                 |  WARN  deprecated @opentelemetry/exporter-jaeger@1.30.1
+apps/web                                 |  WARN  deprecated eslint@8.57.1
+Progress: resolved 43, reused 0, downloaded 33, added 0
+apps/api                                 |  WARN  deprecated puppeteer@21.11.0
+apps/media                               |  WARN  deprecated fluent-ffmpeg@2.1.3
+Progress: resolved 91, reused 0, downloaded 87, added 0
+Progress: resolved 95, reused 0, downloaded 94, added 0
+Progress: resolved 244, reused 0, downloaded 231, added 0
+Progress: resolved 431, reused 0, downloaded 421, added 0
+Progress: resolved 566, reused 0, downloaded 562, added 0
+Progress: resolved 613, reused 0, downloaded 605, added 0
+Progress: resolved 649, reused 0, downloaded 630, added 0
+Progress: resolved 715, reused 0, downloaded 689, added 0
+Progress: resolved 775, reused 0, downloaded 747, added 0
+Progress: resolved 879, reused 0, downloaded 824, added 0
+Progress: resolved 969, reused 0, downloaded 907, added 0
+Progress: resolved 1074, reused 0, downloaded 954, added 0
+Progress: resolved 1208, reused 0, downloaded 1092, added 0
+Progress: resolved 1384, reused 0, downloaded 1290, added 0
+ WARN  9 deprecated subdependencies found: @humanwhocodes/config-array@0.13.0, @humanwhocodes/object-schema@2.0.3, @opentelemetry/otlp-proto-exporter-base@0.51.1, glob@7.2.3, inflight@1.0.6, puppeteer@19.11.1, rimraf@3.0.2, source-map@0.8.0-beta.0, superagent@8.1.2
+Progress: resolved 1478, reused 0, downloaded 1386, added 0
+
+ WARN  Issues with peer dependencies found
+apps/api
+├─┬ @opentelemetry/exporter-prometheus 0.51.1
+│ ├─┬ @opentelemetry/core 1.24.1
+│ │ └── ✕ unmet peer @opentelemetry/api@">=1.0.0 <1.9.0": found 1.9.0
+│ ├─┬ @opentelemetry/resources 1.24.1
+│ │ └── ✕ unmet peer @opentelemetry/api@">=1.0.0 <1.9.0": found 1.9.0
+│ └─┬ @opentelemetry/sdk-metrics 1.24.1
+│   └── ✕ unmet peer @opentelemetry/api@">=1.3.0 <1.9.0": found 1.9.0
+└─┬ @opentelemetry/sdk-node 0.51.1
+  ├── ✕ unmet peer @opentelemetry/api@">=1.3.0 <1.9.0": found 1.9.0
+  ├─┬ @opentelemetry/exporter-trace-otlp-grpc 0.51.1
+  │ └─┬ @opentelemetry/otlp-transformer 0.51.1
+  │   ├── ✕ unmet peer @opentelemetry/api@">=1.3.0 <1.9.0": found 1.9.0
+  │   ├─┬ @opentelemetry/sdk-logs 0.51.1
+  │   │ └── ✕ unmet peer @opentelemetry/api@">=1.4.0 <1.9.0": found 1.9.0
+  │   └─┬ @opentelemetry/sdk-trace-base 1.24.1
+  │     └── ✕ unmet peer @opentelemetry/api@">=1.0.0 <1.9.0": found 1.9.0
+  └─┬ @opentelemetry/sdk-trace-node 1.24.1
+    ├── ✕ unmet peer @opentelemetry/api@">=1.0.0 <1.9.0": found 1.9.0
+    ├─┬ @opentelemetry/context-async-hooks 1.24.1
+    │ └── ✕ unmet peer @opentelemetry/api@">=1.0.0 <1.9.0": found 1.9.0
+    ├─┬ @opentelemetry/propagator-b3 1.24.1
+    │ └── ✕ unmet peer @opentelemetry/api@">=1.0.0 <1.9.0": found 1.9.0
+    └─┬ @opentelemetry/propagator-jaeger 1.24.1
+      └── ✕ unmet peer @opentelemetry/api@">=1.0.0 <1.9.0": found 1.9.0
+
+apps/worker
+├─┬ @opentelemetry/exporter-prometheus 0.51.1
+│ ├─┬ @opentelemetry/core 1.24.1
+│ │ └── ✕ unmet peer @opentelemetry/api@">=1.0.0 <1.9.0": found 1.9.0
+│ ├─┬ @opentelemetry/resources 1.24.1
+│ │ └── ✕ unmet peer @opentelemetry/api@">=1.0.0 <1.9.0": found 1.9.0
+│ └─┬ @opentelemetry/sdk-metrics 1.24.1
+│   └── ✕ unmet peer @opentelemetry/api@">=1.3.0 <1.9.0": found 1.9.0
+└─┬ @opentelemetry/sdk-node 0.51.1
+  ├── ✕ unmet peer @opentelemetry/api@">=1.3.0 <1.9.0": found 1.9.0
+  ├─┬ @opentelemetry/exporter-trace-otlp-grpc 0.51.1
+  │ └─┬ @opentelemetry/otlp-transformer 0.51.1
+  │   ├── ✕ unmet peer @opentelemetry/api@">=1.3.0 <1.9.0": found 1.9.0
+  │   ├─┬ @opentelemetry/sdk-logs 0.51.1
+  │   │ └── ✕ unmet peer @opentelemetry/api@">=1.4.0 <1.9.0": found 1.9.0
+  │   └─┬ @opentelemetry/sdk-trace-base 1.24.1
+  │     └── ✕ unmet peer @opentelemetry/api@">=1.0.0 <1.9.0": found 1.9.0
+  └─┬ @opentelemetry/sdk-trace-node 1.24.1
+    ├── ✕ unmet peer @opentelemetry/api@">=1.0.0 <1.9.0": found 1.9.0
+    ├─┬ @opentelemetry/context-async-hooks 1.24.1
+    │ └── ✕ unmet peer @opentelemetry/api@">=1.0.0 <1.9.0": found 1.9.0
+    ├─┬ @opentelemetry/propagator-b3 1.24.1
+    │ └── ✕ unmet peer @opentelemetry/api@">=1.0.0 <1.9.0": found 1.9.0
+    └─┬ @opentelemetry/propagator-jaeger 1.24.1
+      └── ✕ unmet peer @opentelemetry/api@">=1.0.0 <1.9.0": found 1.9.0
+
+Packages: +1465
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Progress: resolved 1478, reused 0, downloaded 1386, added 630
+Progress: resolved 1478, reused 0, downloaded 1386, added 1465
+Progress: resolved 1478, reused 0, downloaded 1386, added 1465, done
+node_modules/@prisma/engines postinstall$ node scripts/postinstall.js
+node_modules/protobufjs postinstall$ node scripts/postinstall
+node_modules/puppeteer postinstall$ node install.mjs
+node_modules/protobufjs postinstall: Done
+node_modules/puppeteer postinstall: **INFO** Skipping browser download as instructed.
+node_modules/puppeteer postinstall: Done
+node_modules/@prisma/engines postinstall: Done
+node_modules/unrs-resolver postinstall$ napi-postinstall unrs-resolver 1.11.1 check
+node_modules/vite/node_modules/esbuild postinstall$ node install.js
+node_modules/esbuild postinstall$ node install.js
+node_modules/prisma preinstall$ node scripts/preinstall-entry.js
+node_modules/unrs-resolver postinstall: Done
+node_modules/esbuild postinstall: Done
+node_modules/vite/node_modules/esbuild postinstall: Done
+node_modules/prisma preinstall: Done
+node_modules/@prisma/client postinstall$ node scripts/postinstall.js
+node_modules/@prisma/client postinstall: Environment variables loaded from .env
+node_modules/@prisma/client postinstall: prisma:warn We could not find your Prisma schema in the default locations (see: https://pris.ly/d/prisma-schema-location).
+node_modules/@prisma/client postinstall: If you have a Prisma schema file in a custom path, you will need to run
+node_modules/@prisma/client postinstall: `prisma generate --schema=./path/to/your/schema.prisma` to generate Prisma Client.
+node_modules/@prisma/client postinstall: If you do not have a Prisma schema file yet, you can ignore this message.
+node_modules/@prisma/client postinstall: Done
+.../mermaid-cli/node_modules/puppeteer postinstall$ node install.js
+.../mermaid-cli/node_modules/puppeteer postinstall: **INFO** Skipping browser download as instructed.
+.../mermaid-cli/node_modules/puppeteer postinstall: Done
+. prepare$ husky install
+. prepare: husky - git command not found, skipping install
+. prepare: Done
+Done in 30s
+ ---> Removed intermediate container 46bca445c82c
+ ---> 5361d38f88a6
+Step 20/44 : RUN pnpm --filter @hopwhistle/shared exec tsup --no-dts
+ ---> Running in bf8ccc7a0be9
+CLI Building entry: src/index.ts
+CLI Using tsconfig: tsconfig.json
+CLI tsup v8.5.0
+CLI Using tsup config: /app/packages/shared/tsup.config.ts
+CLI Target: es2022
+CLI Cleaning output folder
+ESM Build start
+ESM dist/index.mjs     789.00 B
+ESM dist/index.mjs.map 1.65 KB
+ESM ⚡️ Build success in 23ms
+ ---> Removed intermediate container bf8ccc7a0be9
+ ---> 578b92507372
+Step 21/44 : RUN pnpm --filter @hopwhistle/routing-dsl exec tsup --no-dts
+ ---> Running in 137b004701d0
+CLI Building entry: src/index.ts
+CLI Using tsconfig: tsconfig.json
+CLI tsup v8.5.0
+CLI Using tsup config: /app/packages/routing-dsl/tsup.config.ts
+CLI Target: es2022
+CLI Cleaning output folder
+ESM Build start
+
+ WARN  ▲ [WARNING] Using direct eval with a bundler is not recommended and may cause problems [direct-eval]
+
+    src/executor.ts:461:19:
+      461 │     return Boolean(eval(evaluated));
+          ╵                    ~~~~
+
+  You can read more about direct eval and bundling here: https://esbuild.github.io/link/direct-eval
+
+
+
+ESM dist/index.mjs     27.38 KB
+ESM dist/index.mjs.map 53.72 KB
+ESM ⚡️ Build success in 96ms
+ ---> Removed intermediate container 137b004701d0
+ ---> 3d6c9e75a609
+Step 22/44 : RUN pnpm --filter @hopwhistle/sdk exec tsup --no-dts
+ ---> Running in 931526d6e9ad
+CLI Building entry: src/index.ts
+CLI Using tsconfig: tsconfig.json
+CLI tsup v8.5.0
+CLI Using tsup config: /app/packages/sdk/tsup.config.ts
+CLI Target: es2022
+CLI Cleaning output folder
+ESM Build start
+ESM dist/index.mjs     7.67 KB
+ESM dist/index.mjs.map 18.93 KB
+ESM ⚡️ Build success in 26ms
+ ---> Removed intermediate container 931526d6e9ad
+ ---> caa25cb537e3
+Step 23/44 : RUN rm -rf node_modules/@hopwhistle/shared &&     mkdir -p node_modules/@hopwhistle/shared &&     cp -r packages/shared/dist node_modules/@hopwhistle/shared/ &&     cp packages/shared/package.json node_modules/@hopwhistle/shared/
+ ---> Running in ac2f69aaee82
+ ---> Removed intermediate container ac2f69aaee82
+ ---> 2e1ea1c63ab1
+Step 24/44 : RUN rm -rf node_modules/@hopwhistle/routing-dsl &&     mkdir -p node_modules/@hopwhistle/routing-dsl &&     cp -r packages/routing-dsl/dist node_modules/@hopwhistle/routing-dsl/ &&     cp packages/routing-dsl/package.json node_modules/@hopwhistle/routing-dsl/
+ ---> Running in 780ee96aa757
+ ---> Removed intermediate container 780ee96aa757
+ ---> f2a49a7ef636
+Step 25/44 : RUN rm -rf node_modules/@hopwhistle/sdk &&     mkdir -p node_modules/@hopwhistle/sdk &&     cp -r packages/sdk/dist node_modules/@hopwhistle/sdk/ &&     cp packages/sdk/package.json node_modules/@hopwhistle/sdk/
+ ---> Running in 8c018485fa2a
+ ---> Removed intermediate container 8c018485fa2a
+ ---> c272c8a13408
+Step 26/44 : WORKDIR /app/apps/api
+ ---> Running in bcd4d40bfb35
+ ---> Removed intermediate container bcd4d40bfb35
+ ---> 7a11bef2db7a
+Step 27/44 : RUN echo "export const generateCsrfToken = () => 'mock-token';" >> src/middleware/session.ts
+ ---> Running in bae66c1f06dd
+ ---> Removed intermediate container bae66c1f06dd
+ ---> 3216479141dd
+Step 28/44 : RUN sed -i "s|'../audit.js'|'../services/audit.js'|g" src/routes/index.ts || true
+ ---> Running in 4712552cd1bf
+ ---> Removed intermediate container 4712552cd1bf
+ ---> 872eaa3213e0
+Step 29/44 : RUN sed -i "s|from '../lib/|from '../../lib/|g" src/services/provisioning/provisioning-service.ts || true
+ ---> Running in a8fc86873e4a
+ ---> Removed intermediate container a8fc86873e4a
+ ---> ff364d262a48
+Step 30/44 : RUN sed -i "s|from '../../lib/|from '../../../lib/|g" src/services/provisioning/adapters/*.ts || true
+ ---> Running in c533a417b3c8
+ ---> Removed intermediate container c533a417b3c8
+ ---> d168ad20bb60
+Step 31/44 : RUN pnpm exec prisma generate
+ ---> Running in 6956c1cca867
+warn The configuration property `package.json#prisma` is deprecated and will be removed in Prisma 7. Please migrate to a Prisma config file (e.g., `prisma.config.ts`).
+For more information, see: https://pris.ly/prisma-config
+
+Prisma schema loaded from prisma/schema.prisma
+
+✔ Generated Prisma Client (v6.19.0) to ./../../node_modules/@prisma/client in 1.06s
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Tip: Need your database queries to be 1000x faster? Accelerate offers you that and more: https://pris.ly/tip-2-accelerate
+
+ ---> Removed intermediate container 6956c1cca867
+ ---> daf4ce60dfe3
+Step 32/44 : RUN pnpm exec tsup --no-dts
+ ---> Running in 76fb7d0b1e1e
+CLI Building entry: src/index.ts
+CLI Using tsconfig: tsconfig.json
+CLI tsup v8.5.0
+CLI Using tsup config: /app/apps/api/tsup.config.ts
+CLI Target: es2022
+CLI Cleaning output folder
+ESM Build start
+✘ [ERROR] Could not resolve "@hopwhistle/routing-dsl"
+
+    src/routes/flows.ts:1:26:
+      1 │ import { parseFlow } from '@hopwhistle/routing-dsl';
+        ╵                           ~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  The module "./dist/index.js" was not found on the file system:
+
+    node_modules/@hopwhistle/routing-dsl/package.json:9:16:
+      9 │       "import": "./dist/index.js",
+        ╵                 ~~~~~~~~~~~~~~~~~
+
+  You can mark the path "@hopwhistle/routing-dsl" as external to exclude it from the bundle, which will remove this error and leave the unresolved path in the bundle.
+
+✘ [ERROR] Could not resolve "@hopwhistle/routing-dsl"
+
+    src/services/flow-store.ts:2:47:
+      2 │ ... { parseFlow, createExecutionPlan } from '@hopwhistle/routing-dsl';
+        ╵                                             ~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  The module "./dist/index.js" was not found on the file system:
+
+    node_modules/@hopwhistle/routing-dsl/package.json:9:16:
+      9 │       "import": "./dist/index.js",
+        ╵                 ~~~~~~~~~~~~~~~~~
+
+  You can mark the path "@hopwhistle/routing-dsl" as external to exclude it from the bundle, which will remove this error and leave the unresolved path in the bundle.
+
+✘ [ERROR] Could not resolve "@hopwhistle/routing-dsl"
+
+    src/services/flow-engine.ts:7:7:
+      7 │ } from '@hopwhistle/routing-dsl';
+        ╵        ~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  The module "./dist/index.js" was not found on the file system:
+
+    node_modules/@hopwhistle/routing-dsl/package.json:9:16:
+      9 │       "import": "./dist/index.js",
+        ╵                 ~~~~~~~~~~~~~~~~~
+
+  You can mark the path "@hopwhistle/routing-dsl" as external to exclude it from the bundle, which will remove this error and leave the unresolved path in the bundle.
+
+ESM Build failed
+Error: Build failed with 3 errors:
+src/routes/flows.ts:1:26: ERROR: Could not resolve "@hopwhistle/routing-dsl"
+src/services/flow-engine.ts:7:7: ERROR: Could not resolve "@hopwhistle/routing-dsl"
+src/services/flow-store.ts:2:47: ERROR: Could not resolve "@hopwhistle/routing-dsl"
+    at failureErrorWithLog (/app/node_modules/esbuild/lib/main.js:1467:15)
+    at /app/node_modules/esbuild/lib/main.js:926:25
+    at runOnEndCallbacks (/app/node_modules/esbuild/lib/main.js:1307:45)
+    at buildResponseToResult (/app/node_modules/esbuild/lib/main.js:924:7)
+    at /app/node_modules/esbuild/lib/main.js:951:16
+    at responseCallbacks.<computed> (/app/node_modules/esbuild/lib/main.js:603:9)
+    at handleIncomingPacket (/app/node_modules/esbuild/lib/main.js:658:12)
+    at Socket.readFromStdout (/app/node_modules/esbuild/lib/main.js:581:7)
+    at Socket.emit (node:events:524:28)
+    at addChunk (node:internal/streams/readable:561:12)
+The command '/bin/sh -c pnpm exec tsup --no-dts' returned a non-zero code: 1
+ERROR: Service 'api' failed to build : Build failed
+root@hopwhistle-prod:~/hopwhistle# 
