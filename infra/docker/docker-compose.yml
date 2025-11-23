@@ -31,8 +31,8 @@ services:
 
   freeswitch:
     build:
-      context: ../../apps/freeswitch
-      dockerfile: Dockerfile
+      context: ../../
+      dockerfile: apps/freeswitch/Dockerfile
       args:
         SIGNALWIRE_TOKEN: ${SIGNALWIRE_TOKEN}
     ports:

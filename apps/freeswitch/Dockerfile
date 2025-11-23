@@ -13,16 +13,16 @@ RUN apt-get update && apt-get install -y     freeswitch     freeswitch-mod-conso
 
 # Copy config
 # Copy config
-COPY conf/ /etc/freeswitch/
+COPY apps/freeswitch/conf/ /etc/freeswitch/
 
 # Copy scripts
-COPY scripts/ /usr/local/freeswitch/scripts/
+COPY apps/freeswitch/scripts/ /usr/local/freeswitch/scripts/
 
 # Copy vars.xml template
-COPY conf/vars.xml /etc/freeswitch/vars.xml.template
+COPY apps/freeswitch/conf/vars.xml /etc/freeswitch/vars.xml.template
 
 # Copy entrypoint
-COPY docker-entrypoint.sh /docker-entrypoint.sh
+COPY apps/freeswitch/docker-entrypoint.sh /docker-entrypoint.sh
 
 RUN chmod +x /docker-entrypoint.sh
 RUN mkdir -p /usr/local/freeswitch/scripts && chmod +x /usr/local/freeswitch/scripts/*.sh || true
