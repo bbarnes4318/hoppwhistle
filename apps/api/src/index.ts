@@ -17,7 +17,6 @@ import { registerHealthRoutes } from './routes/health.js';
 import {
   registerNumberRoutes,
   registerCampaignRoutes,
-  registerFlowRoutes,
   registerCallRoutes,
   registerWebhookRoutes,
   registerReportingRoutes,
@@ -127,7 +126,6 @@ async function buildServer() {
   // Register all routes
   await server.register(registerNumberRoutes);
   await server.register(registerCampaignRoutes);
-  await server.register(registerFlowRoutes);
   const { registerPublisherRoutes } = await import('./routes/index.js');
   await server.register(registerPublisherRoutes);
   await server.register(registerCallRoutes);
