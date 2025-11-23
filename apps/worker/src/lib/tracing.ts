@@ -16,6 +16,10 @@ export function initTracing(serviceName: string = 'hopwhistle-worker'): void {
   const jaegerEndpoint = process.env.JAEGER_ENDPOINT || 'http://localhost:14268/api/traces';
   const enableTracing = process.env.ENABLE_TRACING !== 'false';
 
+  // Temporarily disable tracing due to bundling issues with OpenTelemetry
+  // TODO: Fix external configuration in tsup to properly exclude @opentelemetry packages
+  return;
+
   if (!enableTracing) {
     return;
   }
