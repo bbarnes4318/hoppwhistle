@@ -136,7 +136,7 @@ async function buildServer() {
   // Register flow management routes (DSL flows)
   const { registerFlowManagementRoutes } = await import('./routes/flows.js');
   await server.register(registerFlowManagementRoutes);
-  await server.register(registerRecordingRoutes);
+  // await server.register(registerRecordingRoutes); // Legacy routes removed to avoid duplication with registerRecordingManagementRoutes
   await server.register(registerWebhookRoutes);
   const { registerUserRoutes } = await import('./routes/index.js');
   await server.register(registerUserRoutes);
