@@ -11,5 +11,12 @@ export default defineConfig({
   target: 'es2022',
   outDir: 'dist',
   noExternal: [/@hopwhistle\/.*/],
-  external: ['@opentelemetry/*'],
+  external: [
+    '@opentelemetry/api',
+    '@opentelemetry/resources',
+    '@opentelemetry/sdk-node',
+    '@opentelemetry/sdk-trace-node',
+    '@opentelemetry/exporter-jaeger',
+    '@opentelemetry/exporter-prometheus',
+  ],
 });
