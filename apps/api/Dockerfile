@@ -38,9 +38,20 @@ RUN pnpm --filter @hopwhistle/routing-dsl exec tsup --no-dts
 RUN pnpm --filter @hopwhistle/sdk exec tsup --no-dts
 
 # FIX: Ensure built artifacts are in node_modules
-RUN cp -r packages/shared/dist node_modules/@hopwhistle/shared/ || true
-RUN cp -r packages/routing-dsl/dist node_modules/@hopwhistle/routing-dsl/ || true
-RUN cp -r packages/sdk/dist node_modules/@hopwhistle/sdk/ || true
+RUN rm -rf node_modules/@hopwhistle/shared && \
+    mkdir -p node_modules/@hopwhistle/shared && \
+    cp -r packages/shared/dist node_modules/@hopwhistle/shared/ && \
+    cp packages/shared/package.json node_modules/@hopwhistle/shared/
+
+RUN rm -rf node_modules/@hopwhistle/routing-dsl && \
+    mkdir -p node_modules/@hopwhistle/routing-dsl && \
+    cp -r packages/routing-dsl/dist node_modules/@hopwhistle/routing-dsl/ && \
+    cp packages/routing-dsl/package.json node_modules/@hopwhistle/routing-dsl/
+
+RUN rm -rf node_modules/@hopwhistle/sdk && \
+    mkdir -p node_modules/@hopwhistle/sdk && \
+    cp -r packages/sdk/dist node_modules/@hopwhistle/sdk/ && \
+    cp packages/sdk/package.json node_modules/@hopwhistle/sdk/
 
 WORKDIR /app/apps/api
 
