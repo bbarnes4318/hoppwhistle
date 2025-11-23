@@ -19,7 +19,6 @@ import {
   registerCampaignRoutes,
   registerFlowRoutes,
   registerCallRoutes,
-  registerRecordingRoutes,
   registerWebhookRoutes,
   registerReportingRoutes,
   registerBillingRoutes,
