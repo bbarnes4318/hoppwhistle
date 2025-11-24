@@ -34,6 +34,10 @@ services:
       - API_ADMIN_TOKEN=${API_ADMIN_TOKEN}
       - FS_ESL_PASSWORD=${FS_ESL_PASSWORD}
       - API_KEY=${API_KEY}
+      - SIGNALWIRE_SIP_DOMAIN=${SIGNALWIRE_SIP_DOMAIN}
+      - SIGNALWIRE_SIP_USERNAME=${SIGNALWIRE_SIP_USERNAME}
+      - SIGNALWIRE_SIP_PASSWORD=${SIGNALWIRE_SIP_PASSWORD}
+      - SIGNALWIRE_OUTBOUND_PROXY=${SIGNALWIRE_OUTBOUND_PROXY}
     volumes:
       - ./fs_recordings:/usr/share/freeswitch/recordings
       - ../../freeswitch/scripts:/usr/local/bin/scripts:ro

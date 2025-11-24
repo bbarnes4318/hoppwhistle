@@ -57,6 +57,11 @@
     <param name="log-auth-failures" value="true"/>
     <param name="log-level" value="info"/>
 
+    <!-- Gateways -->
+    <gateways>
+      <X-PRE-PROCESS cmd="include" data="external/*.xml"/>
+    </gateways>
+
     <!-- Call Limits -->
     <param name="max-registrations-per-user" value="10"/>
     <param name="max-sessions" value="1000"/>
