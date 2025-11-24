@@ -57,23 +57,22 @@
     <param name="log-auth-failures" value="true"/>
     <param name="log-level" value="info"/>
 
-    <!-- Gateways -->
-    <!-- Gateways -->
-    <gateways>
-      <gateway name="signalwire">
-        <param name="username" value="$${env(SIGNALWIRE_SIP_USERNAME)}"/>
-        <param name="password" value="$${env(SIGNALWIRE_SIP_PASSWORD)}"/>
-        <param name="realm" value="$${env(SIGNALWIRE_SIP_DOMAIN)}"/>
-        <param name="proxy" value="$${env(SIGNALWIRE_SIP_DOMAIN)}"/>
-        <param name="register" value="true"/>
-        <param name="caller-id-in-from" value="true"/>
-        <param name="ping" value="25"/>
-      </gateway>
-    </gateways>
-
     <!-- Call Limits -->
     <param name="max-registrations-per-user" value="10"/>
     <param name="max-sessions" value="1000"/>
   </settings>
+
+  <!-- Gateways -->
+  <gateways>
+    <gateway name="signalwire">
+      <param name="username" value="$${env(SIGNALWIRE_SIP_USERNAME)}"/>
+      <param name="password" value="$${env(SIGNALWIRE_SIP_PASSWORD)}"/>
+      <param name="realm" value="$${env(SIGNALWIRE_SIP_DOMAIN)}"/>
+      <param name="proxy" value="$${env(SIGNALWIRE_SIP_DOMAIN)}"/>
+      <param name="register" value="true"/>
+      <param name="caller-id-in-from" value="true"/>
+      <param name="ping" value="25"/>
+    </gateway>
+  </gateways>
 </profile>
 
