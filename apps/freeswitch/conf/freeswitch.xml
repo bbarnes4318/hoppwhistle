@@ -1,16 +1,25 @@
-<!-- FreeSWITCH Main Configuration -->
-<configuration name="freeswitch.xml" description="FreeSWITCH Configuration">
-  <global_settings>
-    <param name="log-level" value="info"/>
-    <param name="auto-create-sip-profiles" value="true"/>
-  </global_settings>
-  
-  <profiles>
-    <X-PRE-PROCESS cmd="include" data="sip_profiles/*.xml"/>
-  </profiles>
-  
-  <templates>
+<?xml version="1.0"?>
+<document type="freeswitch/xml">
+  <X-PRE-PROCESS cmd="include" data="vars.xml"/>
+
+  <section name="configuration" description="Various Configuration">
+    <X-PRE-PROCESS cmd="include" data="autoload_configs/*.xml"/>
+  </section>
+
+  <section name="dialplan" description="Regex/XML Dialplan">
     <X-PRE-PROCESS cmd="include" data="dialplan/*.xml"/>
-  </templates>
-</configuration>
+  </section>
+
+  <section name="chatplan" description="Regex/XML Chatplan">
+    <X-PRE-PROCESS cmd="include" data="chatplan/*.xml"/>
+  </section>
+
+  <section name="directory" description="User Directory">
+    <X-PRE-PROCESS cmd="include" data="directory/*.xml"/>
+  </section>
+
+  <section name="languages" description="Language Management">
+    <X-PRE-PROCESS cmd="include" data="languages/*.xml"/>
+  </section>
+</document>
 
