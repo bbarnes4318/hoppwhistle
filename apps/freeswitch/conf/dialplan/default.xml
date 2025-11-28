@@ -30,8 +30,8 @@
     <extension name="external-outbound-calls">
       <condition field="destination_number" expression="^(\+.+|1?\d{10,})$">
         <action application="log" data="INFO Outbound call to ${destination_number} via SignalWire"/>
-        <action application="set" data="effective_caller_id_number=${caller_id_number}"/>
-        <action application="set" data="effective_caller_id_name=${caller_id_name}"/>
+        <action application="set" data="effective_caller_id_number=+17866929905"/>
+        <action application="set" data="effective_caller_id_name=+17866929905"/>
         <action application="bridge" data="sofia/gateway/signalwire/${destination_number}"/>
       </condition>
     </extension>
