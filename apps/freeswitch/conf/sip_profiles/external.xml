@@ -66,7 +66,7 @@
       <param name="realm" value="$${signalwire_sip_domain}"/>
       <param name="proxy" value="$${signalwire_sip_domain}"/>
       <param name="register" value="true"/>
-      <param name="caller-id-in-from" value="true"/>
+      <param name="caller-id-in-from" value="false"/>
       <param name="ping" value="25"/>
     </gateway>
   </gateways>
