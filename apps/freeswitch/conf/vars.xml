@@ -5,7 +5,7 @@
   <X-PRE-PROCESS cmd="set" data="domain_name=$${domain}"/>
 
   <!-- API Configuration -->
-  <X-PRE-PROCESS cmd="set" data="api_url=$${env(API_URL)}"/>
+  <X-PRE-PROCESS cmd="set" data="api_url=$${env(API_BASE_URL)}"/>
   <X-PRE-PROCESS cmd="set" data="api_key=$${env(API_KEY)}"/>
 
   <!-- ESL Configuration -->

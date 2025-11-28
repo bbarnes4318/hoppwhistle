@@ -7,7 +7,7 @@
         <action application="log" data="INFO Inbound call from ${caller_id_number} to ${destination_number}"/>
 
         <!-- Authenticate trunk via API -->
-        <action application="set" data="trunk_auth_url=http://${api_url}/api/v1/trunks/auth"/>
+        <action application="set" data="trunk_auth_url=${api_url}/api/v1/trunks/auth"/>
         <action application="set" data="trunk_auth_body={&quot;from&quot;:&quot;${caller_id_number}&quot;,&quot;to&quot;:&quot;${destination_number}&quot;,&quot;source_ip&quot;:&quot;${network_addr}&quot;}"/>
         <action application="set" data="trunk_auth_result=${curl(${trunk_auth_url} POST ${trunk_auth_body} X-API-Key:${api_key})}"/>
 
@@ -27,14 +27,35 @@
     </extension>
 
     <!-- External Outbound Calls via SignalWire -->
+    <!-- External Outbound Calls via SignalWire -->
     <extension name="external-outbound-calls">
-      <condition field="destination_number" expression="^(\+.+|1?\d{10,})$">
-        <action application="log" data="INFO Outbound call to ${destination_number} via SignalWire"/>
+      <!-- Normalize 10 digit to E.164 -->
+      <condition field="destination_number" expression="^(\d{10})$" break="on-true">
+        <action application="log" data="INFO Normalizing 10-digit number ${destination_number} to E.164"/>
+        <action application="set" data="e164_dest=+1${destination_number}"/>
+        <action application="execute_extension" data="send-to-signalwire"/>
+      </condition>
+      <!-- Normalize 11 digit (1+10) to E.164 -->
+      <condition field="destination_number" expression="^1(\d{10})$" break="on-true">
+        <action application="log" data="INFO Normalizing 11-digit number ${destination_number} to E.164"/>
+        <action application="set" data="e164_dest=+1$1"/>
+        <action application="execute_extension" data="send-to-signalwire"/>
+      </condition>
+      <!-- Already E.164 or other -->
+      <condition field="destination_number" expression="^(\+.+)$" break="on-true">
+        <action application="set" data="e164_dest=${destination_number}"/>
+        <action application="execute_extension" data="send-to-signalwire"/>
+      </condition>
+    </extension>
+
+    <extension name="send-to-signalwire">
+      <condition field="destination_number" expression="^.+$">
+        <action application="log" data="INFO Outbound call to ${e164_dest} via SignalWire"/>
         <action application="set" data="effective_caller_id_number=+17866929905"/>
         <action application="set" data="effective_caller_id_name=+17866929905"/>
         <!-- SignalWire often requires P-Asserted-Identity with the correct domain -->
         <action application="export" data="sip_h_P-Asserted-Identity=<sip:+17866929905@pvn-shanevici.sip.signalwire.com>"/>
-        <action application="bridge" data="sofia/gateway/signalwire/${destination_number}"/>
+        <action application="bridge" data="sofia/gateway/signalwire/${e164_dest}"/>
       </condition>
     </extension>
 
@@ -44,7 +65,7 @@
         <action application="log" data="INFO Looking up DID: ${destination_number}"/>
 
         <!-- Lookup DID via API -->
-        <action application="set" data="did_lookup_url=http://${api_url}/api/v1/numbers/lookup"/>
+        <action application="set" data="did_lookup_url=${api_url}/api/v1/numbers/lookup"/>
         <action application="set" data="did_lookup_body={&quot;number&quot;:&quot;${destination_number}&quot;}"/>
         <action application="set" data="did_lookup_result=${curl(${did_lookup_url} POST ${did_lookup_body} X-API-Key:${api_key})}"/>
 
@@ -78,7 +99,7 @@
         <action application="log" data="INFO Executing flow ${did_flow_id} for call ${call_id}"/>
 
         <!-- Get flow instructions from API -->
-        <action application="set" data="flow_exec_url=http://${api_url}/api/v1/flows/execute"/>
+        <action application="set" data="flow_exec_url=${api_url}/api/v1/flows/execute"/>
         <action application="set" data="flow_exec_body={&quot;callId&quot;:&quot;${call_id}&quot;,&quot;flowId&quot;:&quot;${did_flow_id}&quot;,&quot;tenantId&quot;:&quot;${did_tenant_id}&quot;}"/>
         <action application="set" data="flow_instructions=${curl(${flow_exec_url} POST ${flow_exec_body} X-API-Key:${api_key})}"/>
 
@@ -105,7 +126,7 @@
         <action application="log" data="INFO DTMF received: ${ivr_input}"/>
 
         <!-- Send DTMF event to API -->
-        <action application="set" data="dtmf_url=http://${api_url}/api/v1/flows/events"/>
+        <action application="set" data="dtmf_url=${api_url}/api/v1/flows/events"/>
         <action application="set" data="dtmf_body={&quot;callId&quot;:&quot;${call_id}&quot;,&quot;event&quot;:{&quot;type&quot;:&quot;dtmf.received&quot;,&quot;callId&quot;:&quot;${call_id}&quot;,&quot;digits&quot;:&quot;${ivr_input}&quot;}}"/>
         <action application="set" data="dtmf_result=${curl(${dtmf_url} POST ${dtmf_body} X-API-Key:${api_key})}"/>
 
@@ -146,7 +167,7 @@
         <action application="answer"/>
 
         <!-- Get buyer destination from API -->
-        <action application="set" data="buyer_url=http://${api_url}/api/v1/flows/events"/>
+        <action application="set" data="buyer_url=${api_url}/api/v1/flows/events"/>
         <action application="set" data="buyer_body={&quot;callId&quot;:&quot;${call_id}&quot;,&quot;event&quot;:{&quot;type&quot;:&quot;call.buyer.route&quot;,&quot;callId&quot;:&quot;${call_id}&quot;}}"/>
         <action application="set" data="buyer_result=${curl(${buyer_url} POST ${buyer_body} X-API-Key:${api_key})}"/>
 
@@ -163,7 +184,7 @@
         <action application="log" data="INFO Continuing flow execution"/>
 
         <!-- Get next instruction from API -->
-        <action application="set" data="next_url=http://${api_url}/api/v1/flows/events"/>
+        <action application="set" data="next_url=${api_url}/api/v1/flows/events"/>
         <action application="set" data="next_body={&quot;callId&quot;:&quot;${call_id}&quot;,&quot;event&quot;:{&quot;type&quot;:&quot;call.continued&quot;,&quot;callId&quot;:&quot;${call_id}&quot;}}"/>
         <action application="set" data="next_result=${curl(${next_url} POST ${next_body} X-API-Key:${api_key})}"/>
 
