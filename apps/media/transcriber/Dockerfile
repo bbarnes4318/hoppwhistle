@@ -26,7 +26,7 @@ COPY packages/shared ./packages/shared
 RUN pnpm --filter @hopwhistle/transcriber build
 
 # Create non-root user
-RUN useradd -m -u 1000 transcriber && \
+RUN useradd -m -u 1001 transcriber && \
     chown -R transcriber:transcriber /app
 
 USER transcriber
