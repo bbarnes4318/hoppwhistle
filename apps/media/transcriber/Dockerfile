@@ -5,17 +5,25 @@ RUN apt-get update && \
     apt-get install -y tini && \
     rm -rf /var/lib/apt/lists/*
 
+# Enable pnpm
+RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
+
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
-RUN npm ci --only=production
+# Copy workspace files
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY apps/media/transcriber/package.json ./apps/media/transcriber/
+COPY packages/shared/package.json ./packages/shared/
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile --filter @hopwhistle/transcriber...
 
 # Copy source
-COPY . .
+COPY apps/media/transcriber ./apps/media/transcriber
+COPY packages/shared ./packages/shared
 
 # Build
-RUN npm run build
+RUN pnpm --filter @hopwhistle/transcriber build
 
 # Create non-root user
 RUN useradd -m -u 1000 transcriber && \
@@ -23,6 +31,7 @@ RUN useradd -m -u 1000 transcriber && \
 
 USER transcriber
 
+WORKDIR /app/apps/media/transcriber
+
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["node", "dist/index.js"]
-
