@@ -1,22 +1,9 @@
 version: '3.8'
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: callfabric
-      POSTGRES_PASSWORD: callfabric_dev
-      POSTGRES_DB: callfabric
-    ports:
-      - '5432:5432'
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U callfabric']
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
+  # ===========================================
+  # REDIS - Message Queue & Caching
+  # ===========================================
   redis:
     image: redis:7-alpine
     ports:
@@ -28,7 +15,78 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
+  # ===========================================
+  # CLICKHOUSE - Analytics Database
+  # ===========================================
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    ports:
+      - '8123:8123'
+      - '9000:9000'
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    environment:
+      - CLICKHOUSE_DB=hopwhistle_analytics
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:8123/ping']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # ===========================================
+  # MINIO - S3-Compatible Storage for Recordings
+  # ===========================================
+  minio:
+    image: minio/minio:latest
+    ports:
+      - '9002:9000'
+      - '9001:9001'
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # ===========================================
+  # JAEGER - Distributed Tracing
+  # ===========================================
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - '16686:16686'
+      - '14268:14268'
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    restart: unless-stopped
+
+  # ===========================================
+  # RTPENGINE - Media Proxy for RTP
+  # ===========================================
+  rtpengine:
+    image: drachtio/rtpengine:latest
+    ports:
+      - '22222:22222/udp'
+      - '10000-10100:10000-10100/udp'
+    environment:
+      - PUBLIC_IP=${PUBLIC_IP}
+    network_mode: host
+    restart: unless-stopped
+
+  # ===========================================
+  # FREESWITCH - Telephony Server
+  # ===========================================
   freeswitch:
     build:
       context: ../../
@@ -44,32 +102,29 @@ services:
       - '8021:8021/tcp'
     environment:
       - FREESWITCH_ESL_PASSWORD=${FREESWITCH_ESL_PASSWORD:-ClueCon}
-      - API_URL=${API_URL:-http://api:3001}
+      - API_URL=http://api:3001
       - API_KEY=${API_KEY:-demo-key}
-      - S3_ENDPOINT=${S3_ENDPOINT:-}
-      - S3_BUCKET=${S3_BUCKET:-}
-      - S3_ACCESS_KEY=${S3_ACCESS_KEY:-}
-      - S3_SECRET_KEY=${S3_SECRET_KEY:-}
+      - S3_ENDPOINT=http://minio:9000
+      - S3_BUCKET=${S3_BUCKET:-hopwhistle-recordings}
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY:-minioadmin}
+      - S3_SECRET_KEY=${S3_SECRET_KEY:-minioadmin}
       - S3_REGION=${S3_REGION:-us-east-1}
       - RECORDINGS_FORMAT=${RECORDINGS_FORMAT:-wav}
       - ENABLE_TLS=${ENABLE_TLS:-false}
       - ENABLE_SRTP=${ENABLE_SRTP:-optional}
-      - TRUNK_AUTH_IP=${TRUNK_AUTH_IP:-}
     volumes:
       - freeswitch_recordings:/recordings
       - freeswitch_conf:/usr/local/freeswitch/conf
-    healthcheck:
-      test: ['CMD', 'fs_cli', '-x', 'status']
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
 
+  # ===========================================
+  # KAMAILIO - SIP Proxy
+  # ===========================================
   kamailio:
     build:
       context: ../../
@@ -80,47 +135,112 @@ services:
       - '5061:5061/tcp'
     environment:
       - PUBLIC_IP=${PUBLIC_IP}
-      - FREESWITCH_NODES=${FREESWITCH_NODES:-freeswitch:5062}
-      - RTPENGINE_SOCK=${RTPENGINE_SOCK:-udp:rtpengine:22222}
+      - FREESWITCH_NODES=freeswitch:5062
+      - RTPENGINE_SOCK=udp:rtpengine:22222
       - DB_URL=${KAMAILIO_DB_URL}
     volumes:
       - kamailio_data:/var/run/kamailio
-    healthcheck:
-      test: ['CMD', 'kamctl', 'ping']
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
     depends_on:
-      freeswitch:
-        condition: service_healthy
-    networks:
-      - default
+      - freeswitch
+    restart: unless-stopped
 
-  minio:
-    image: minio/minio:latest
+  # ===========================================
+  # API - Backend REST API
+  # ===========================================
+  api:
+    build:
+      context: ../../
+      dockerfile: apps/api/Dockerfile
     ports:
-      - '9000:9000'
-      - '9001:9001'
+      - '3001:3001'
+    env_file:
+      - ../../apps/api/.env
     environment:
-      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
-      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minioadmin}
-    volumes:
-      - minio_data:/data
-    command: server /data --console-address ":9001"
+      - NODE_ENV=production
+      - PORT=3001
+      - REDIS_URL=redis://redis:6379
+      - CLICKHOUSE_URL=http://clickhouse:8123
+      - S3_ENDPOINT=http://minio:9000
+      - JAEGER_ENDPOINT=http://jaeger:14268/api/traces
+    depends_on:
+      redis:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
     healthcheck:
-      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
+      test: ['CMD', 'curl', '-f', 'http://localhost:3001/health']
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
-    networks:
-      - default
+    restart: unless-stopped
+
+  # ===========================================
+  # WORKER - Background Job Processor
+  # ===========================================
+  worker:
+    build:
+      context: ../../
+      dockerfile: apps/worker/Dockerfile
+    env_file:
+      - ../../apps/worker/.env
+    environment:
+      - NODE_ENV=production
+      - REDIS_URL=redis://redis:6379
+      - CLICKHOUSE_URL=http://clickhouse:8123
+    depends_on:
+      redis:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ===========================================
+  # WEB - Next.js Frontend
+  # ===========================================
+  web:
+    build:
+      context: ../../
+      dockerfile: apps/web/Dockerfile
+    ports:
+      - '3000:3000'
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://${PUBLIC_IP}:3001
+      - NEXTAUTH_URL=http://${PUBLIC_IP}:3000
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-change-me}
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ===========================================
+  # TRANSCRIBER - Audio Transcription Service
+  # ===========================================
+  transcriber:
+    build:
+      context: ../../
+      dockerfile: apps/media/transcriber/Dockerfile
+    environment:
+      - NODE_ENV=production
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=${DATABASE_URL}
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
-  postgres_data:
   redis_data:
+  clickhouse_data:
+  minio_data:
   freeswitch_recordings:
   freeswitch_conf:
   kamailio_data:
-  minio_data:
+
+networks:
+  default:
+    driver: bridge
