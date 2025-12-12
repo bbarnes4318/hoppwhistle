@@ -6,34 +6,31 @@ import { FastifyInstance } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
 import { authenticate } from '../middleware/auth.js';
-import { requirePermission } from '../middleware/rbac.js';
-import { createSession, setSessionCookie, generateCsrfToken } from '../middleware/session.js';
-import { auditLog, auditRead } from '../services/audit.js';
-import { secrets } from '../services/secrets.js';
+import { createSession, generateCsrfToken } from '../middleware/session.js';
+import { auditLog } from '../services/audit.js';
 
 /**
  * Login endpoint
  */
-export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void> {
+export function registerAuthRoutes(fastify: FastifyInstance): void {
   // Login
   fastify.post('/auth/login', async (request, reply) => {
     const { email, password } = request.body as { email: string; password: string };
 
     if (!email || !password) {
-      reply.code(400).send({
+      return reply.code(400).send({
         error: {
           code: 'BAD_REQUEST',
           message: 'Email and password are required',
         },
       });
-      return;
     }
 
     const prisma = getPrismaClient();
     const user = await prisma.user.findUnique({
       where: {
         tenantId_email: {
-          tenantId: request.user?.tenantId || 'default', // In real app, get from request
+          tenantId: (request.user as { tenantId?: string })?.tenantId || 'default', // In real app, get from request
           email,
         },
       },
@@ -61,33 +58,30 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         error: 'Invalid credentials',
       });
 
-      reply.code(401).send({
+      return reply.code(401).send({
         error: {
           code: 'UNAUTHORIZED',
           message: 'Invalid email or password',
         },
       });
-      return;
     }
 
     if (user.status !== 'ACTIVE') {
-      reply.code(403).send({
+      return reply.code(403).send({
         error: {
           code: 'FORBIDDEN',
           message: 'User account is not active',
         },
       });
-      return;
     }
 
     if (user.tenant.status !== 'ACTIVE') {
-      reply.code(403).send({
+      return reply.code(403).send({
         error: {
           code: 'FORBIDDEN',
           message: 'Tenant is not active',
         },
       });
-      return;
     }
 
     // Create JWT token
@@ -121,7 +115,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       success: true,
     });
 
-    reply.send({
+    return reply.send({
       token,
       csrfToken,
       user: {
@@ -143,17 +137,16 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     async (request, reply) => {
       const sessionId = request.cookies.sessionId || (request.headers['x-session-id'] as string);
       if (!sessionId) {
-        reply.code(400).send({
+        return reply.code(400).send({
           error: {
             code: 'BAD_REQUEST',
             message: 'Session required',
           },
         });
-        return;
       }
 
       const csrfToken = generateCsrfToken(sessionId);
-      reply.send({ csrfToken });
+      return reply.send({ csrfToken });
     }
   );
 
@@ -168,12 +161,12 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       if (sessionId) {
         const { deleteSession } = await import('../middleware/session.js');
         await deleteSession(sessionId);
-        reply.clearCookie('sessionId');
+        void reply.clearCookie('sessionId');
       }
 
       await auditLog({
-        tenantId: request.user.tenantId,
-        userId: request.user.userId,
+        tenantId: (request.user as { tenantId: string }).tenantId,
+        userId: (request.user as { userId: string }).userId,
         action: 'auth.logout',
         entityType: 'User',
         resource: '/auth/logout',
@@ -184,7 +177,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         success: true,
       });
 
-      reply.send({ success: true });
+      return reply.send({ success: true });
     }
   );
 }

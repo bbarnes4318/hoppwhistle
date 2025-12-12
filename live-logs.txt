@@ -1,0 +1,1997 @@
+2025-11-28 06:47:45.010905 99.57% [DEBUG] mod_dptools.c:1671 SET sofia/external/8000@167.71.173.83 [trunk_auth_result]=[UNDEF]
+EXECUTE [depth=0] sofia/external/8000@167.71.173.83 log(INFO Trunk auth result: )
+2025-11-28 06:47:45.010905 99.57% [INFO] mod_dptools.c:1865 Trunk auth result:
+EXECUTE [depth=0] sofia/external/8000@167.71.173.83 log(INFO Outbound call to  via SignalWire)
+2025-11-28 06:47:45.010905 99.57% [INFO] mod_dptools.c:1865 Outbound call to  via SignalWire
+EXECUTE [depth=0] sofia/external/8000@167.71.173.83 set(effective_caller_id_number=+17866929905)
+2025-11-28 06:47:45.010905 99.57% [DEBUG] mod_dptools.c:1671 SET sofia/external/8000@167.71.173.83 [effective_caller_id_number]=[+17866929905]
+EXECUTE [depth=0] sofia/external/8000@167.71.173.83 set(effective_caller_id_name=+17866929905)
+2025-11-28 06:47:45.010905 99.57% [DEBUG] mod_dptools.c:1671 SET sofia/external/8000@167.71.173.83 [effective_caller_id_name]=[+17866929905]
+EXECUTE [depth=0] sofia/external/8000@167.71.173.83 export(sip_h_P-Asserted-Identity=<sip:+17866929905@pvn-shanevici.sip.signalwire.com>)
+2025-11-28 06:47:45.010905 99.57% [DEBUG] switch_channel.c:1334 EXPORT (export_vars) [sip_h_P-Asserted-Identity]=[<sip:+17866929905@pvn-shanevici.sip.signalwire.com>]
+EXECUTE [depth=0] sofia/external/8000@167.71.173.83 bridge(sofia/gateway/signalwire/)
+2025-11-28 06:47:45.010905 99.57% [DEBUG] switch_channel.c:1288 sofia/external/8000@167.71.173.83 EXPORTING[export_vars] [sip_h_P-Asserted-Identity]=[<sip:+17866929905@pvn-shanevici.sip.signalwire.com>] to event
+2025-11-28 06:47:45.010905 99.57% [DEBUG] switch_ivr_originate.c:2301 Parsing global variables
+2025-11-28 06:47:45.010905 99.57% [NOTICE] switch_channel.c:1142 New Channel sofia/external/ [c59d4e46-548d-4c75-b950-e1ed17de56de]
+2025-11-28 06:47:45.010905 99.57% [DEBUG] mod_sofia.c:5110 (sofia/external/) State Change CS_NEW -> CS_INIT
+2025-11-28 06:47:45.010905 99.57% [DEBUG] switch_core_state_machine.c:581 (sofia/external/) Running State Change CS_INIT (Cur 2 Tot 10)
+2025-11-28 06:47:45.010905 99.57% [DEBUG] switch_core_state_machine.c:624 (sofia/external/) State INIT
+2025-11-28 06:47:45.010905 99.57% [DEBUG] mod_sofia.c:97 sofia/external/ SOFIA INIT
+2025-11-28 06:47:45.010905 99.57% [INFO] sofia_glue.c:1659 sofia/external/ sending invite call-id: (null)
+2025-11-28 06:47:45.010905 99.57% [DEBUG] sofia_glue.c:1662 sofia/external/ sending invite version: 1.10.12 -release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit
+Local SDP:
+v=0
+o=FreeSWITCH 1764293517 1764293518 IN IP4 172.18.0.2
+s=FreeSWITCH
+c=IN IP4 172.18.0.2
+t=0 0
+m=audio 18948 RTP/AVP 0 101 13
+a=rtpmap:0 PCMU/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=rtpmap:13 CN/8000
+a=ptime:20
+a=sendrecv
+
+2025-11-28 06:47:45.010905 99.57% [DEBUG] switch_core_state_machine.c:40 sofia/external/ Standard INIT
+2025-11-28 06:47:45.010905 99.57% [DEBUG] switch_core_state_machine.c:48 (sofia/external/) State Change CS_INIT -> CS_ROUTING
+2025-11-28 06:47:45.010905 99.57% [DEBUG] switch_core_state_machine.c:624 (sofia/external/) State INIT going to sleep
+2025-11-28 06:47:45.010905 99.57% [DEBUG] switch_core_state_machine.c:581 (sofia/external/) Running State Change CS_ROUTING (Cur 2 Tot 10)
+2025-11-28 06:47:45.010905 99.57% [DEBUG] switch_core_state_machine.c:640 (sofia/external/) State ROUTING
+send 1255 bytes to udp/[159.65.244.171]:5060 at 06:47:45.019243:
+------------------------------------------------------------------------
+INVITE sip:@pvn-shanevici.sip.signalwire.com SIP/2.0
+Via: SIP/2.0/UDP 172.18.0.2;rport;branch=z9hG4bKeaDBXr8a3DHjB
+Max-Forwards: 68
+From: "+17866929905" <sip:hopwhistle@pvn-shanevici.sip.signalwire.com>;tag=vvFF35mcHgy6g
+To: <sip:@pvn-shanevici.sip.signalwire.com>
+Call-ID: fc602a4d-46c8-123f-ac9e-02f73aac2810
+CSeq: 107602440 INVITE
+Contact: <sip:gw+signalwire@172.18.0.2:5060;transport=udp;gw=signalwire>
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Supported: timer, path, replaces
+Allow-Events: talk, hold, conference, refer
+Content-Type: application/sdp
+Content-Disposition: session
+Content-Length: 240
+X-FS-Support: update_display,send_info
+Remote-Party-ID: "+17866929905" <sip:+17866929905@pvn-shanevici.sip.signalwire.com>;party=calling;screen=yes;privacy=off
+P-Asserted-Identity: <sip:+17866929905@pvn-shanevici.sip.signalwire.com>
+
+v=0
+o=FreeSWITCH 1764293517 1764293518 IN IP4 172.18.0.2
+s=FreeSWITCH
+c=IN IP4 172.18.0.2
+t=0 0
+m=audio 18948 RTP/AVP 0 101 13
+a=rtpmap:0 PCMU/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=rtpmap:13 CN/8000
+a=ptime:20
+
+2025-11-28 06:47:45.010905 99.57% [DEBUG] mod_sofia.c:158 sofia/external/ SOFIA ROUTING
+2025-11-28 06:47:45.010905 99.57% [DEBUG] switch_ivr_originate.c:67 (sofia/external/) State Change CS_ROUTING -> CS_CONSUME_MEDIA
+2025-11-28 06:47:45.010905 99.57% [DEBUG] switch_core_state_machine.c:640 (sofia/external/) State ROUTING going to sleep
+2025-11-28 06:47:45.010905 99.57% [DEBUG] switch_core_state_machine.c:581 (sofia/external/) Running State Change CS_CONSUME_MEDIA (Cur 2 Tot 10)
+2025-11-28 06:47:45.010905 99.57% [DEBUG] sofia.c:7493 Channel sofia/external/ entering state [calling][0]
+2025-11-28 06:47:45.010905 99.57% [DEBUG] switch_core_state_machine.c:659 (sofia/external/) State CONSUME_MEDIA
+2025-11-28 06:47:45.010905 99.57% [DEBUG] switch_core_state_machine.c:659 (sofia/external/) State CONSUME_MEDIA going to sleep
+recv 420 bytes from udp/[159.65.244.171]:5060 at 06:47:45.020832:
+------------------------------------------------------------------------
+SIP/2.0 400 Bad Request URI
+Via: SIP/2.0/UDP 172.18.0.2;rport=49213;branch=z9hG4bKeaDBXr8a3DHjB;received=167.71.173.83
+From: "+17866929905" <sip:hopwhistle@pvn-shanevici.sip.signalwire.com>;tag=vvFF35mcHgy6g
+To: <sip:@pvn-shanevici.sip.signalwire.com>;tag=b97296421094b542cf6521dfe803ae0e.5b290000
+Call-ID: fc602a4d-46c8-123f-ac9e-02f73aac2810
+CSeq: 107602440 INVITE
+Server: SignalWire Proxy
+Content-Length: 0
+
+
+send 402 bytes to udp/[159.65.244.171]:5060 at 06:47:45.020932:
+------------------------------------------------------------------------
+ACK sip:@pvn-shanevici.sip.signalwire.com SIP/2.0
+Via: SIP/2.0/UDP 172.18.0.2;rport;branch=z9hG4bKeaDBXr8a3DHjB
+Max-Forwards: 68
+From: "+17866929905" <sip:hopwhistle@pvn-shanevici.sip.signalwire.com>;tag=vvFF35mcHgy6g
+To: <sip:@pvn-shanevici.sip.signalwire.com>;tag=b97296421094b542cf6521dfe803ae0e.5b290000
+Call-ID: fc602a4d-46c8-123f-ac9e-02f73aac2810
+CSeq: 107602440 ACK
+Content-Length: 0
+
+
+2025-11-28 06:47:45.010905 99.57% [DEBUG] sofia.c:7493 Channel sofia/external/ entering state [terminated][400]
+2025-11-28 06:47:45.010905 99.57% [NOTICE] sofia.c:8736 Hangup sofia/external/ [CS_CONSUME_MEDIA] [NORMAL_TEMPORARY_FAILURE]
+2025-11-28 06:47:45.010905 99.57% [DEBUG] switch_core_state_machine.c:581 (sofia/external/) Running State Change CS_HANGUP (Cur 2 Tot 10)
+2025-11-28 06:47:45.010905 99.57% [DEBUG] switch_core_state_machine.c:844 (sofia/external/) Callstate Change DOWN -> HANGUP
+2025-11-28 06:47:45.010905 99.57% [DEBUG] switch_core_state_machine.c:846 (sofia/external/) State HANGUP
+2025-11-28 06:47:45.010905 99.57% [DEBUG] mod_sofia.c:469 Channel sofia/external/ hanging up, cause: NORMAL_TEMPORARY_FAILURE
+2025-11-28 06:47:45.010905 99.57% [DEBUG] switch_core_state_machine.c:59 sofia/external/ Standard HANGUP, cause: NORMAL_TEMPORARY_FAILURE
+2025-11-28 06:47:45.010905 99.57% [DEBUG] switch_core_state_machine.c:846 (sofia/external/) State HANGUP going to sleep
+2025-11-28 06:47:45.010905 99.57% [DEBUG] switch_core_state_machine.c:616 (sofia/external/) State Change CS_HANGUP -> CS_REPORTING
+2025-11-28 06:47:45.010905 99.57% [DEBUG] switch_core_state_machine.c:581 (sofia/external/) Running State Change CS_REPORTING (Cur 2 Tot 10)
+2025-11-28 06:47:45.010905 99.57% [DEBUG] switch_core_state_machine.c:932 (sofia/external/) State REPORTING
+2025-11-28 06:47:45.010905 99.57% [DEBUG] switch_core_state_machine.c:168 sofia/external/ Standard REPORTING, cause: NORMAL_TEMPORARY_FAILURE
+2025-11-28 06:47:45.010905 99.57% [DEBUG] switch_core_state_machine.c:932 (sofia/external/) State REPORTING going to sleep
+2025-11-28 06:47:45.010905 99.57% [DEBUG] switch_core_state_machine.c:607 (sofia/external/) State Change CS_REPORTING -> CS_DESTROY
+2025-11-28 06:47:45.010905 99.57% [DEBUG] switch_core_session.c:1744 Session 10 (sofia/external/) Locked, Waiting on external entities
+2025-11-28 06:47:45.033213 99.57% [DEBUG] switch_ivr_originate.c:4056 Originate Resulted in Error Cause: 41 [NORMAL_TEMPORARY_FAILURE]
+2025-11-28 06:47:45.033213 99.57% [NOTICE] switch_core_session.c:1762 Session 10 (sofia/external/) Ended
+2025-11-28 06:47:45.033213 99.57% [NOTICE] switch_core_session.c:1766 Close Channel sofia/external/ [CS_DESTROY]
+2025-11-28 06:47:45.033213 99.57% [INFO] mod_dptools.c:3635 Originate Failed.  Cause: NORMAL_TEMPORARY_FAILURE
+2025-11-28 06:47:45.033213 99.57% [NOTICE] switch_channel.c:5012 Hangup sofia/external/8000@167.71.173.83 [CS_EXECUTE] [NORMAL_TEMPORARY_FAILURE]
+2025-11-28 06:47:45.033213 99.57% [DEBUG] switch_core_state_machine.c:735 (sofia/external/) Running State Change CS_DESTROY (Cur 1 Tot 10)
+2025-11-28 06:47:45.033213 99.57% [DEBUG] switch_core_state_machine.c:745 (sofia/external/) State DESTROY
+2025-11-28 06:47:45.033213 99.57% [DEBUG] mod_sofia.c:380 sofia/external/ SOFIA DESTROY
+2025-11-28 06:47:45.033213 99.57% [DEBUG] switch_core_state_machine.c:175 sofia/external/ Standard DESTROY
+2025-11-28 06:47:45.033213 99.57% [DEBUG] switch_core_state_machine.c:745 (sofia/external/) State DESTROY going to sleep
+2025-11-28 06:47:45.033213 99.57% [DEBUG] switch_core_session.c:2979 sofia/external/8000@167.71.173.83 skip receive message [APPLICATION_EXEC_COMPLETE] (channel is hungup already)
+2025-11-28 06:47:45.033213 99.57% [DEBUG] switch_core_state_machine.c:647 (sofia/external/8000@167.71.173.83) State EXECUTE going to sleep
+2025-11-28 06:47:45.033213 99.57% [DEBUG] switch_core_state_machine.c:581 (sofia/external/8000@167.71.173.83) Running State Change CS_HANGUP (Cur 1 Tot 10)
+2025-11-28 06:47:45.033213 99.57% [DEBUG] switch_core_state_machine.c:844 (sofia/external/8000@167.71.173.83) Callstate Change RINGING -> HANGUP
+2025-11-28 06:47:45.033213 99.57% [DEBUG] switch_core_state_machine.c:846 (sofia/external/8000@167.71.173.83) State HANGUP
+2025-11-28 06:47:45.033213 99.57% [DEBUG] mod_sofia.c:463 sofia/external/8000@167.71.173.83 Overriding SIP cause 503 with 400 from the other leg
+2025-11-28 06:47:45.033213 99.57% [DEBUG] mod_sofia.c:469 Channel sofia/external/8000@167.71.173.83 hanging up, cause: NORMAL_TEMPORARY_FAILURE
+2025-11-28 06:47:45.033213 99.57% [DEBUG] mod_sofia.c:614 Responding to INVITE with: 400
+2025-11-28 06:47:45.033213 99.57% [DEBUG] switch_core_state_machine.c:59 sofia/external/8000@167.71.173.83 Standard HANGUP, cause: NORMAL_TEMPORARY_FAILURE
+2025-11-28 06:47:45.033213 99.57% [DEBUG] switch_core_state_machine.c:846 (sofia/external/8000@167.71.173.83) State HANGUP going to sleep
+2025-11-28 06:47:45.033213 99.57% [DEBUG] switch_core_state_machine.c:616 (sofia/external/8000@167.71.173.83) State Change CS_HANGUP -> CS_REPORTING
+2025-11-28 06:47:45.033213 99.57% [DEBUG] switch_core_state_machine.c:581 (sofia/external/8000@167.71.173.83) Running State Change CS_REPORTING (Cur 1 Tot 10)
+2025-11-28 06:47:45.033213 99.57% [DEBUG] switch_core_state_machine.c:932 (sofia/external/8000@167.71.173.83) State REPORTING
+2025-11-28 06:47:45.033213 99.57% [DEBUG] switch_core_state_machine.c:168 sofia/external/8000@167.71.173.83 Standard REPORTING, cause: NORMAL_TEMPORARY_FAILURE
+2025-11-28 06:47:45.033213 99.57% [DEBUG] switch_core_state_machine.c:932 (sofia/external/8000@167.71.173.83) State REPORTING going to sleep
+send 880 bytes to udp/[172.18.0.3]:5060 at 06:47:45.040582:
+------------------------------------------------------------------------
+SIP/2.0 400 Bad Request
+Via: SIP/2.0/UDP 167.71.173.83:5060;branch=z9hG4bKc9ad.6aabfa813064bbafc066676e674fa1dd.0;received=172.18.0.3
+Via: SIP/2.0/UDP 81.222.204.61:49416;rport=49416;branch=z9hG4bK1361247949
+Max-Forwards: 69
+From: <sip:8000@167.71.173.83>;tag=482870328
+To: <sip:01133756010575@167.71.173.83>;tag=UKpp1a48K77KN
+Call-ID: 1623149370-2050913506-1746826859
+CSeq: 1 INVITE
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Accept: application/sdp
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Supported: timer, path, replaces
+Allow-Events: talk, hold, conference, refer
+Reason: Q.850;cause=41;text="NORMAL_TEMPORARY_FAILURE"
+Content-Length: 0
+Remote-Party-ID: "01133756010575" <sip:01133756010575@167.71.173.83>;party=calling;privacy=off;screen=no
+
+
+2025-11-28 06:47:45.033213 99.57% [DEBUG] switch_core_state_machine.c:607 (sofia/external/8000@167.71.173.83) State Change CS_REPORTING -> CS_DESTROY
+2025-11-28 06:47:45.033213 99.57% [DEBUG] switch_core_session.c:1744 Session 9 (sofia/external/8000@167.71.173.83) Locked, Waiting on external entities
+2025-11-28 06:47:45.033213 99.57% [NOTICE] switch_core_session.c:1762 Session 9 (sofia/external/8000@167.71.173.83) Ended
+2025-11-28 06:47:45.033213 99.57% [NOTICE] switch_core_session.c:1766 Close Channel sofia/external/8000@167.71.173.83 [CS_DESTROY]
+2025-11-28 06:47:45.033213 99.57% [DEBUG] switch_core_state_machine.c:735 (sofia/external/8000@167.71.173.83) Running State Change CS_DESTROY (Cur 0 Tot 10)
+2025-11-28 06:47:45.033213 99.57% [DEBUG] switch_core_state_machine.c:745 (sofia/external/8000@167.71.173.83) State DESTROY
+2025-11-28 06:47:45.033213 99.57% [DEBUG] mod_sofia.c:380 sofia/external/8000@167.71.173.83 SOFIA DESTROY
+2025-11-28 06:47:45.033213 99.57% [DEBUG] switch_core_state_machine.c:175 sofia/external/8000@167.71.173.83 Standard DESTROY
+2025-11-28 06:47:45.033213 99.57% [DEBUG] switch_core_state_machine.c:745 (sofia/external/8000@167.71.173.83) State DESTROY going to sleep
+recv 336 bytes from udp/[172.18.0.3]:5060 at 06:47:45.040995:
+------------------------------------------------------------------------
+ACK sip:01133756010575@167.71.173.83 SIP/2.0
+Via: SIP/2.0/UDP 167.71.173.83:5060;branch=z9hG4bKc9ad.6aabfa813064bbafc066676e674fa1dd.0
+Max-Forwards: 69
+From: <sip:8000@167.71.173.83>;tag=482870328
+To: <sip:01133756010575@167.71.173.83>;tag=UKpp1a48K77KN
+Call-ID: 1623149370-2050913506-1746826859
+CSeq: 1 ACK
+Content-Length: 0
+
+
+send 630 bytes to udp/[159.65.244.171]:5060 at 06:47:51.386245:
+------------------------------------------------------------------------
+OPTIONS sip:pvn-shanevici.sip.signalwire.com;transport=udp SIP/2.0
+Via: SIP/2.0/UDP 172.18.0.2;rport;branch=z9hG4bKFK63yKSe0p74p
+Max-Forwards: 70
+From: <sip:pvn-shanevici.sip.signalwire.com>;tag=X587405FeSmSc
+To: <sip:pvn-shanevici.sip.signalwire.com>
+Call-ID: 002bb20e-46c9-123f-ac9e-02f73aac2810
+CSeq: 107602363 OPTIONS
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Supported: timer, path, replaces
+Allow-Events: talk, hold, conference, refer
+Content-Length: 0
+
+
+recv 388 bytes from udp/[159.65.244.171]:5060 at 06:47:51.387580:
+------------------------------------------------------------------------
+SIP/2.0 200 Keepalive
+Via: SIP/2.0/UDP 172.18.0.2;rport=49213;branch=z9hG4bKFK63yKSe0p74p;received=167.71.173.83
+From: <sip:pvn-shanevici.sip.signalwire.com>;tag=X587405FeSmSc
+To: <sip:pvn-shanevici.sip.signalwire.com>;tag=b97296421094b542cf6521dfe803ae0e.5b290000
+Call-ID: 002bb20e-46c9-123f-ac9e-02f73aac2810
+CSeq: 107602363 OPTIONS
+Server: SignalWire Proxy
+Content-Length: 0
+
+
+recv 1102 bytes from udp/[172.18.0.3]:5060 at 06:47:59.746618:
+------------------------------------------------------------------------
+INVITE sip:15513326220@167.71.173.83 SIP/2.0
+Via: SIP/2.0/UDP 167.71.173.83:5060;branch=z9hG4bK5a8f.aee2858235cef1082b5c34f784c3ef3f.0
+Via: SIP/2.0/UDP 99.38.204.249:55749;received=99.38.204.249;rport=55749;branch=z9hG4bKPj7faf4eb081c14cd192c38bb7e424ddda
+Max-Forwards: 69
+From: "James" <sip:testuser@167.71.173.83>;tag=43b6818e54a442828e7bf8583930a07a
+To: <sip:15513326220@167.71.173.83>
+Contact: "James" <sip:testuser@99.38.204.249:55749;ob>;+sip.ice
+Call-ID: 2e94f1086c394463952b8f5d4e9d2992
+CSeq: 10338 INVITE
+Route: <sip:167.71.173.83;lr>
+Allow: PRACK, INVITE, ACK, BYE, CANCEL, UPDATE, INFO, SUBSCRIBE, NOTIFY, REFER, MESSAGE, OPTIONS
+Supported: replaces, 100rel, norefersub
+User-Agent: MicroSIP/3.22.3
+Content-Type: application/sdp
+Content-Length:   324
+
+v=0
+o=- 3973283279 3973283279 IN IP4 167.71.173.83
+s=pjmedia
+b=AS:84
+t=0 0
+a=X-nat:0
+m=audio 10058 RTP/AVP 8 0 101
+c=IN IP4 167.71.173.83
+b=TIAS:64000
+a=ssrc:2128246365 cname:76f3456e26652e7d
+a=rtpmap:8 PCMA/8000
+a=rtpmap:0 PCMU/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-16
+a=sendrecv
+a=rtcp:10059
+
+2025-11-28 06:47:59.730971 99.47% [NOTICE] switch_channel.c:1142 New Channel sofia/external/testuser@167.71.173.83 [9e365b02-ae6f-49d5-8f10-47ebf916cbcc]
+2025-11-28 06:47:59.730971 99.47% [DEBUG] switch_core_state_machine.c:581 (sofia/external/testuser@167.71.173.83) Running State Change CS_NEW (Cur 1 Tot 11)
+2025-11-28 06:47:59.730971 99.47% [INFO] sofia.c:10460 sofia/external/testuser@167.71.173.83 receiving invite from 172.18.0.3:5060 version: 1.10.12 -release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit call-id: 2e94f1086c394463952b8f5d4e9d2992
+2025-11-28 06:47:59.730971 99.47% [DEBUG] sofia.c:10554 verifying acl "domains" for ip/port 172.18.0.3:0.
+2025-11-28 06:47:59.730971 99.47% [DEBUG] sofia.c:10583 IP 172.18.0.3 Approved by acl "domains[]". Access Granted.
+2025-11-28 06:47:59.730971 99.47% [DEBUG] sofia.c:11675 Setting NAT mode based on via received
+2025-11-28 06:47:59.730971 99.47% [DEBUG] sofia.c:7493 Channel sofia/external/testuser@167.71.173.83 entering state [received][100]
+2025-11-28 06:47:59.730971 99.47% [DEBUG] sofia.c:7503 Remote SDP:
+v=0
+o=- 3973283279 3973283279 IN IP4 167.71.173.83
+s=pjmedia
+b=AS:84
+t=0 0
+a=X-nat:0
+m=audio 10058 RTP/AVP 8 0 101
+c=IN IP4 167.71.173.83
+b=TIAS:64000
+a=rtpmap:8 PCMA/8000
+a=rtpmap:0 PCMU/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-16
+a=ssrc:2128246365 cname:76f3456e26652e7d
+a=rtcp:10059
+
+2025-11-28 06:47:59.730971 99.47% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[G722:9:8000:20:64000:1]
+2025-11-28 06:47:59.730971 99.47% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[PCMU:0:8000:20:64000:1]
+2025-11-28 06:47:59.730971 99.47% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-28 06:47:59.730971 99.47% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [PCMA:8:8000:20:64000:1] ++++ is saved as a match
+2025-11-28 06:47:59.730971 99.47% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[GSM:3:8000:20:13200:1]
+2025-11-28 06:47:59.730971 99.47% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[G722:9:8000:20:64000:1]
+2025-11-28 06:47:59.730971 99.47% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[PCMU:0:8000:20:64000:1]
+2025-11-28 06:47:59.730971 99.47% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [PCMU:0:8000:20:64000:1] ++++ is saved as a match
+2025-11-28 06:47:59.730971 99.47% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-28 06:47:59.730971 99.47% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[GSM:3:8000:20:13200:1]
+2025-11-28 06:47:59.730971 99.47% [DEBUG] switch_core_media.c:5438 Set telephone-event payload to 101@8000
+2025-11-28 06:47:59.730971 99.47% [DEBUG] switch_core_media.c:3731 Set Codec sofia/external/testuser@167.71.173.83 PCMA/8000 20 ms 160 samples 64000 bits 1 channels
+2025-11-28 06:47:59.730971 99.47% [DEBUG] switch_core_codec.c:111 sofia/external/testuser@167.71.173.83 Original read codec set to PCMA:8
+2025-11-28 06:47:59.730971 99.47% [DEBUG] switch_core_media.c:5798 Set telephone-event payload to 101@8000
+2025-11-28 06:47:59.730971 99.47% [DEBUG] switch_core_media.c:5856 sofia/external/testuser@167.71.173.83 Set 2833 dtmf send payload to 101 recv payload to 101
+2025-11-28 06:47:59.730971 99.47% [DEBUG] sofia.c:7927 (sofia/external/testuser@167.71.173.83) State Change CS_NEW -> CS_INIT
+2025-11-28 06:47:59.730971 99.47% [DEBUG] switch_core_state_machine.c:600 (sofia/external/testuser@167.71.173.83) State NEW
+2025-11-28 06:47:59.730971 99.47% [DEBUG] switch_core_state_machine.c:581 (sofia/external/testuser@167.71.173.83) Running State Change CS_INIT (Cur 1 Tot 11)
+2025-11-28 06:47:59.730971 99.47% [DEBUG] switch_core_state_machine.c:624 (sofia/external/testuser@167.71.173.83) State INIT
+2025-11-28 06:47:59.730971 99.47% [DEBUG] mod_sofia.c:97 sofia/external/testuser@167.71.173.83 SOFIA INIT
+2025-11-28 06:47:59.730971 99.47% [DEBUG] switch_core_state_machine.c:40 sofia/external/testuser@167.71.173.83 Standard INIT
+2025-11-28 06:47:59.730971 99.47% [DEBUG] switch_core_state_machine.c:48 (sofia/external/testuser@167.71.173.83) State Change CS_INIT -> CS_ROUTING
+2025-11-28 06:47:59.730971 99.47% [DEBUG] switch_core_state_machine.c:624 (sofia/external/testuser@167.71.173.83) State INIT going to sleep
+2025-11-28 06:47:59.730971 99.47% [DEBUG] switch_core_state_machine.c:581 (sofia/external/testuser@167.71.173.83) Running State Change CS_ROUTING (Cur 1 Tot 11)
+2025-11-28 06:47:59.730971 99.47% [DEBUG] switch_channel.c:2399 (sofia/external/testuser@167.71.173.83) Callstate Change DOWN -> RINGING
+2025-11-28 06:47:59.730971 99.47% [DEBUG] switch_core_state_machine.c:640 (sofia/external/testuser@167.71.173.83) State ROUTING
+2025-11-28 06:47:59.730971 99.47% [DEBUG] mod_sofia.c:158 sofia/external/testuser@167.71.173.83 SOFIA ROUTING
+2025-11-28 06:47:59.730971 99.47% [DEBUG] switch_core_state_machine.c:230 sofia/external/testuser@167.71.173.83 Standard ROUTING
+2025-11-28 06:47:59.730971 99.47% [INFO] mod_dialplan_xml.c:639 Processing James <testuser>->15513326220 in context trunk
+Dialplan: sofia/external/testuser@167.71.173.83 parsing [trunk->authenticate-trunk] continue=false
+send 444 bytes to udp/[172.18.0.3]:5060 at 06:47:59.748588:
+------------------------------------------------------------------------
+SIP/2.0 100 Trying
+Via: SIP/2.0/UDP 167.71.173.83:5060;branch=z9hG4bK5a8f.aee2858235cef1082b5c34f784c3ef3f.0;received=172.18.0.3
+From: "James" <sip:testuser@167.71.173.83>;tag=43b6818e54a442828e7bf8583930a07a
+To: <sip:15513326220@167.71.173.83>
+Call-ID: 2e94f1086c394463952b8f5d4e9d2992
+CSeq: 10338 INVITE
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Content-Length: 0
+
+
+Dialplan: sofia/external/testuser@167.71.173.83 Regex (PASS) [authenticate-trunk] destination_number(15513326220) =~ /^.+$/ break=never
+Dialplan: sofia/external/testuser@167.71.173.83 Action log(INFO Inbound call from ${caller_id_number} to ${destination_number})
+Dialplan: sofia/external/testuser@167.71.173.83 Action set(trunk_auth_url=${api_url}/api/v1/trunks/auth)
+Dialplan: sofia/external/testuser@167.71.173.83 Action set(trunk_auth_body={"from":"${caller_id_number}","to":"${destination_number}","source_ip":"${network_addr}"})
+Dialplan: sofia/external/testuser@167.71.173.83 Action set(trunk_auth_result=${curl(${trunk_auth_url} POST ${trunk_auth_body} X-API-Key:${api_key})})
+Dialplan: sofia/external/testuser@167.71.173.83 Action log(INFO Trunk auth result: ${trunk_auth_result})
+|--- Dialplan: Processing recursive conditions level:1 [authenticate-trunk_recur_1] require-nested=TRUE
+|--- Dialplan: sofia/external/testuser@167.71.173.83 Regex (FAIL) [authenticate-trunk_recur_1] ${trunk_auth_result}() =~ /authenticated/ break=on-false
+Dialplan: sofia/external/testuser@167.71.173.83 parsing [trunk->external-outbound-calls] continue=false
+Dialplan: sofia/external/testuser@167.71.173.83 Regex (FAIL) [external-outbound-calls] destination_number(15513326220) =~ /^(\d{10})$/ break=on-true
+Dialplan: sofia/external/testuser@167.71.173.83 Regex (PASS) [external-outbound-calls] destination_number(15513326220) =~ /^1(\d{10})$/ break=on-true
+Dialplan: sofia/external/testuser@167.71.173.83 Action log(INFO Normalizing 11-digit number ${destination_number} to E.164)
+Dialplan: sofia/external/testuser@167.71.173.83 Action set(e164_dest=+15513326220)
+Dialplan: sofia/external/testuser@167.71.173.83 Action execute_extension(send-to-signalwire)
+2025-11-28 06:47:59.730971 99.47% [DEBUG] switch_core_state_machine.c:281 (sofia/external/testuser@167.71.173.83) State Change CS_ROUTING -> CS_EXECUTE
+2025-11-28 06:47:59.730971 99.47% [DEBUG] switch_core_state_machine.c:640 (sofia/external/testuser@167.71.173.83) State ROUTING going to sleep
+2025-11-28 06:47:59.730971 99.47% [DEBUG] switch_core_state_machine.c:581 (sofia/external/testuser@167.71.173.83) Running State Change CS_EXECUTE (Cur 1 Tot 11)
+2025-11-28 06:47:59.730971 99.47% [DEBUG] switch_core_state_machine.c:647 (sofia/external/testuser@167.71.173.83) State EXECUTE
+2025-11-28 06:47:59.730971 99.47% [DEBUG] mod_sofia.c:213 sofia/external/testuser@167.71.173.83 SOFIA EXECUTE
+2025-11-28 06:47:59.730971 99.47% [DEBUG] switch_core_state_machine.c:323 sofia/external/testuser@167.71.173.83 Standard EXECUTE
+EXECUTE [depth=0] sofia/external/testuser@167.71.173.83 log(INFO Inbound call from testuser to 15513326220)
+2025-11-28 06:47:59.730971 99.47% [INFO] mod_dptools.c:1865 Inbound call from testuser to 15513326220
+EXECUTE [depth=0] sofia/external/testuser@167.71.173.83 set(trunk_auth_url=/api/v1/trunks/auth)
+2025-11-28 06:47:59.730971 99.47% [DEBUG] mod_dptools.c:1671 SET sofia/external/testuser@167.71.173.83 [trunk_auth_url]=[/api/v1/trunks/auth]
+EXECUTE [depth=0] sofia/external/testuser@167.71.173.83 set(trunk_auth_body={"from":"testuser","to":"15513326220","source_ip":"172.18.0.3"})
+2025-11-28 06:47:59.730971 99.47% [DEBUG] mod_dptools.c:1671 SET sofia/external/testuser@167.71.173.83 [trunk_auth_body]=[{"from":"testuser","to":"15513326220","source_ip":"172.18.0.3"}]
+EXECUTE [depth=0] sofia/external/testuser@167.71.173.83 set(trunk_auth_result=)
+2025-11-28 06:47:59.730971 99.47% [DEBUG] mod_dptools.c:1671 SET sofia/external/testuser@167.71.173.83 [trunk_auth_result]=[UNDEF]
+EXECUTE [depth=0] sofia/external/testuser@167.71.173.83 log(INFO Trunk auth result: )
+2025-11-28 06:47:59.730971 99.47% [INFO] mod_dptools.c:1865 Trunk auth result:
+EXECUTE [depth=0] sofia/external/testuser@167.71.173.83 log(INFO Normalizing 11-digit number 15513326220 to E.164)
+2025-11-28 06:47:59.730971 99.47% [INFO] mod_dptools.c:1865 Normalizing 11-digit number 15513326220 to E.164
+EXECUTE [depth=0] sofia/external/testuser@167.71.173.83 set(e164_dest=+15513326220)
+2025-11-28 06:47:59.730971 99.47% [DEBUG] mod_dptools.c:1671 SET sofia/external/testuser@167.71.173.83 [e164_dest]=[+15513326220]
+EXECUTE [depth=0] sofia/external/testuser@167.71.173.83 execute_extension(send-to-signalwire)
+2025-11-28 06:47:59.730971 99.47% [INFO] mod_dialplan_xml.c:639 Processing James <testuser>->send-to-signalwire in context trunk
+Dialplan: sofia/external/testuser@167.71.173.83 parsing [trunk->authenticate-trunk] continue=false
+Dialplan: sofia/external/testuser@167.71.173.83 Regex (PASS) [authenticate-trunk] destination_number(send-to-signalwire) =~ /^.+$/ break=never
+Dialplan: sofia/external/testuser@167.71.173.83 Action log(INFO Inbound call from ${caller_id_number} to ${destination_number})
+Dialplan: sofia/external/testuser@167.71.173.83 Action set(trunk_auth_url=${api_url}/api/v1/trunks/auth)
+Dialplan: sofia/external/testuser@167.71.173.83 Action set(trunk_auth_body={"from":"${caller_id_number}","to":"${destination_number}","source_ip":"${network_addr}"})
+Dialplan: sofia/external/testuser@167.71.173.83 Action set(trunk_auth_result=${curl(${trunk_auth_url} POST ${trunk_auth_body} X-API-Key:${api_key})})
+Dialplan: sofia/external/testuser@167.71.173.83 Action log(INFO Trunk auth result: ${trunk_auth_result})
+|--- Dialplan: Processing recursive conditions level:1 [authenticate-trunk_recur_1] require-nested=TRUE
+|--- Dialplan: sofia/external/testuser@167.71.173.83 Regex (FAIL) [authenticate-trunk_recur_1] ${trunk_auth_result}() =~ /authenticated/ break=on-false
+Dialplan: sofia/external/testuser@167.71.173.83 parsing [trunk->external-outbound-calls] continue=false
+Dialplan: sofia/external/testuser@167.71.173.83 Regex (FAIL) [external-outbound-calls] destination_number(send-to-signalwire) =~ /^(\d{10})$/ break=on-true
+Dialplan: sofia/external/testuser@167.71.173.83 Regex (FAIL) [external-outbound-calls] destination_number(send-to-signalwire) =~ /^1(\d{10})$/ break=on-true
+Dialplan: sofia/external/testuser@167.71.173.83 Regex (FAIL) [external-outbound-calls] destination_number(send-to-signalwire) =~ /^(\+.+)$/ break=on-true
+Dialplan: sofia/external/testuser@167.71.173.83 parsing [trunk->send-to-signalwire] continue=false
+Dialplan: sofia/external/testuser@167.71.173.83 Regex (PASS) [send-to-signalwire] destination_number(send-to-signalwire) =~ /^.+$/ break=on-false
+Dialplan: sofia/external/testuser@167.71.173.83 Action log(INFO Outbound call to ${e164_dest} via SignalWire)
+Dialplan: sofia/external/testuser@167.71.173.83 Action set(effective_caller_id_number=+17866929905)
+Dialplan: sofia/external/testuser@167.71.173.83 Action set(effective_caller_id_name=+17866929905)
+Dialplan: sofia/external/testuser@167.71.173.83 Action export(sip_h_P-Asserted-Identity=<sip:+17866929905@pvn-shanevici.sip.signalwire.com>)
+Dialplan: sofia/external/testuser@167.71.173.83 Action bridge(sofia/gateway/signalwire/${e164_dest})
+2025-11-28 06:47:59.750927 99.47% [NOTICE] switch_core_session.c:3089 Execute [depth=1] log(INFO Inbound call from ${caller_id_number} to ${destination_number})
+EXECUTE [depth=1] sofia/external/testuser@167.71.173.83 log(INFO Inbound call from testuser to send-to-signalwire)
+2025-11-28 06:47:59.750927 99.47% [INFO] mod_dptools.c:1865 Inbound call from testuser to send-to-signalwire
+2025-11-28 06:47:59.750927 99.47% [NOTICE] switch_core_session.c:3089 Execute [depth=1] set(trunk_auth_url=${api_url}/api/v1/trunks/auth)
+EXECUTE [depth=1] sofia/external/testuser@167.71.173.83 set(trunk_auth_url=/api/v1/trunks/auth)
+2025-11-28 06:47:59.750927 99.47% [DEBUG] mod_dptools.c:1671 SET sofia/external/testuser@167.71.173.83 [trunk_auth_url]=[/api/v1/trunks/auth]
+2025-11-28 06:47:59.750927 99.47% [NOTICE] switch_core_session.c:3089 Execute [depth=1] set(trunk_auth_body={"from":"${caller_id_number}","to":"${destination_number}","source_ip":"${network_addr}"})
+EXECUTE [depth=1] sofia/external/testuser@167.71.173.83 set(trunk_auth_body={"from":"testuser","to":"send-to-signalwire","source_ip":"172.18.0.3"})
+2025-11-28 06:47:59.750927 99.47% [DEBUG] mod_dptools.c:1671 SET sofia/external/testuser@167.71.173.83 [trunk_auth_body]=[{"from":"testuser","to":"send-to-signalwire","source_ip":"172.18.0.3"}]
+2025-11-28 06:47:59.750927 99.47% [NOTICE] switch_core_session.c:3089 Execute [depth=1] set(trunk_auth_result=${curl(${trunk_auth_url} POST ${trunk_auth_body} X-API-Key:${api_key})})
+EXECUTE [depth=1] sofia/external/testuser@167.71.173.83 set(trunk_auth_result=)
+2025-11-28 06:47:59.750927 99.47% [DEBUG] mod_dptools.c:1671 SET sofia/external/testuser@167.71.173.83 [trunk_auth_result]=[UNDEF]
+2025-11-28 06:47:59.750927 99.47% [NOTICE] switch_core_session.c:3089 Execute [depth=1] log(INFO Trunk auth result: ${trunk_auth_result})
+EXECUTE [depth=1] sofia/external/testuser@167.71.173.83 log(INFO Trunk auth result: )
+2025-11-28 06:47:59.750927 99.47% [INFO] mod_dptools.c:1865 Trunk auth result:
+2025-11-28 06:47:59.750927 99.47% [NOTICE] switch_core_session.c:3089 Execute [depth=1] log(INFO Outbound call to ${e164_dest} via SignalWire)
+EXECUTE [depth=1] sofia/external/testuser@167.71.173.83 log(INFO Outbound call to +15513326220 via SignalWire)
+2025-11-28 06:47:59.750927 99.47% [INFO] mod_dptools.c:1865 Outbound call to +15513326220 via SignalWire
+2025-11-28 06:47:59.750927 99.47% [NOTICE] switch_core_session.c:3089 Execute [depth=1] set(effective_caller_id_number=+17866929905)
+EXECUTE [depth=1] sofia/external/testuser@167.71.173.83 set(effective_caller_id_number=+17866929905)
+2025-11-28 06:47:59.750927 99.47% [DEBUG] mod_dptools.c:1671 SET sofia/external/testuser@167.71.173.83 [effective_caller_id_number]=[+17866929905]
+2025-11-28 06:47:59.750927 99.47% [NOTICE] switch_core_session.c:3089 Execute [depth=1] set(effective_caller_id_name=+17866929905)
+EXECUTE [depth=1] sofia/external/testuser@167.71.173.83 set(effective_caller_id_name=+17866929905)
+2025-11-28 06:47:59.750927 99.47% [DEBUG] mod_dptools.c:1671 SET sofia/external/testuser@167.71.173.83 [effective_caller_id_name]=[+17866929905]
+2025-11-28 06:47:59.750927 99.47% [NOTICE] switch_core_session.c:3089 Execute [depth=1] export(sip_h_P-Asserted-Identity=<sip:+17866929905@pvn-shanevici.sip.signalwire.com>)
+EXECUTE [depth=1] sofia/external/testuser@167.71.173.83 export(sip_h_P-Asserted-Identity=<sip:+17866929905@pvn-shanevici.sip.signalwire.com>)
+2025-11-28 06:47:59.750927 99.47% [DEBUG] switch_channel.c:1334 EXPORT (export_vars) [sip_h_P-Asserted-Identity]=[<sip:+17866929905@pvn-shanevici.sip.signalwire.com>]
+2025-11-28 06:47:59.750927 99.47% [NOTICE] switch_core_session.c:3089 Execute [depth=1] bridge(sofia/gateway/signalwire/${e164_dest})
+EXECUTE [depth=1] sofia/external/testuser@167.71.173.83 bridge(sofia/gateway/signalwire/+15513326220)
+2025-11-28 06:47:59.750927 99.47% [DEBUG] switch_channel.c:1288 sofia/external/testuser@167.71.173.83 EXPORTING[export_vars] [sip_h_P-Asserted-Identity]=[<sip:+17866929905@pvn-shanevici.sip.signalwire.com>] to event
+2025-11-28 06:47:59.750927 99.47% [DEBUG] switch_ivr_originate.c:2301 Parsing global variables
+2025-11-28 06:47:59.750927 99.47% [NOTICE] switch_channel.c:1142 New Channel sofia/external/+15513326220 [29335502-7eb7-4f14-ac25-c27b57e6f64e]
+2025-11-28 06:47:59.750927 99.47% [DEBUG] mod_sofia.c:5110 (sofia/external/+15513326220) State Change CS_NEW -> CS_INIT
+2025-11-28 06:47:59.750927 99.47% [DEBUG] switch_core_state_machine.c:581 (sofia/external/+15513326220) Running State Change CS_INIT (Cur 2 Tot 12)
+2025-11-28 06:47:59.750927 99.47% [DEBUG] switch_core_state_machine.c:624 (sofia/external/+15513326220) State INIT
+2025-11-28 06:47:59.750927 99.47% [DEBUG] mod_sofia.c:97 sofia/external/+15513326220 SOFIA INIT
+2025-11-28 06:47:59.750927 99.47% [INFO] sofia_glue.c:1659 sofia/external/+15513326220 sending invite call-id: (null)
+2025-11-28 06:47:59.750927 99.47% [DEBUG] sofia_glue.c:1662 sofia/external/+15513326220 sending invite version: 1.10.12 -release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit
+Local SDP:
+v=0
+o=FreeSWITCH 1764292107 1764292108 IN IP4 172.18.0.2
+s=FreeSWITCH
+c=IN IP4 172.18.0.2
+t=0 0
+m=audio 20372 RTP/AVP 8 101 13
+a=rtpmap:8 PCMA/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=rtpmap:13 CN/8000
+a=ptime:20
+a=sendrecv
+
+2025-11-28 06:47:59.750927 99.47% [DEBUG] switch_core_state_machine.c:40 sofia/external/+15513326220 Standard INIT
+2025-11-28 06:47:59.750927 99.47% [DEBUG] switch_core_state_machine.c:48 (sofia/external/+15513326220) State Change CS_INIT -> CS_ROUTING
+2025-11-28 06:47:59.750927 99.47% [DEBUG] switch_core_state_machine.c:624 (sofia/external/+15513326220) State INIT going to sleep
+2025-11-28 06:47:59.750927 99.47% [DEBUG] switch_core_state_machine.c:581 (sofia/external/+15513326220) Running State Change CS_ROUTING (Cur 2 Tot 12)
+2025-11-28 06:47:59.750927 99.47% [DEBUG] sofia.c:7493 Channel sofia/external/+15513326220 entering state [calling][0]
+2025-11-28 06:47:59.750927 99.47% [DEBUG] switch_core_state_machine.c:640 (sofia/external/+15513326220) State ROUTING
+2025-11-28 06:47:59.750927 99.47% [DEBUG] mod_sofia.c:158 sofia/external/+15513326220 SOFIA ROUTING
+2025-11-28 06:47:59.750927 99.47% [DEBUG] switch_ivr_originate.c:67 (sofia/external/+15513326220) State Change CS_ROUTING -> CS_CONSUME_MEDIA
+2025-11-28 06:47:59.750927 99.47% [DEBUG] switch_core_state_machine.c:640 (sofia/external/+15513326220) State ROUTING going to sleep
+2025-11-28 06:47:59.750927 99.47% [DEBUG] switch_core_state_machine.c:581 (sofia/external/+15513326220) Running State Change CS_CONSUME_MEDIA (Cur 2 Tot 12)
+2025-11-28 06:47:59.750927 99.47% [DEBUG] switch_core_state_machine.c:659 (sofia/external/+15513326220) State CONSUME_MEDIA
+2025-11-28 06:47:59.750927 99.47% [DEBUG] switch_core_state_machine.c:659 (sofia/external/+15513326220) State CONSUME_MEDIA going to sleep
+send 1279 bytes to udp/[152.42.144.114]:5060 at 06:47:59.760452:
+------------------------------------------------------------------------
+INVITE sip:+15513326220@pvn-shanevici.sip.signalwire.com SIP/2.0
+Via: SIP/2.0/UDP 172.18.0.2;rport;branch=z9hG4bKgvZv0eajXZXQj
+Max-Forwards: 68
+From: "+17866929905" <sip:hopwhistle@pvn-shanevici.sip.signalwire.com>;tag=ZQUS8p7p8a1yK
+To: <sip:+15513326220@pvn-shanevici.sip.signalwire.com>
+Call-ID: 0528c695-46c9-123f-ac9e-02f73aac2810
+CSeq: 107602447 INVITE
+Contact: <sip:gw+signalwire@172.18.0.2:5060;transport=udp;gw=signalwire>
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Supported: timer, path, replaces
+Allow-Events: talk, hold, conference, refer
+Content-Type: application/sdp
+Content-Disposition: session
+Content-Length: 240
+X-FS-Support: update_display,send_info
+Remote-Party-ID: "+17866929905" <sip:+17866929905@pvn-shanevici.sip.signalwire.com>;party=calling;screen=yes;privacy=off
+P-Asserted-Identity: <sip:+17866929905@pvn-shanevici.sip.signalwire.com>
+
+v=0
+o=FreeSWITCH 1764292107 1764292108 IN IP4 172.18.0.2
+s=FreeSWITCH
+c=IN IP4 172.18.0.2
+t=0 0
+m=audio 20372 RTP/AVP 8 101 13
+a=rtpmap:8 PCMA/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=rtpmap:13 CN/8000
+a=ptime:20
+
+recv 557 bytes from udp/[152.42.144.114]:5060 at 06:47:59.778024:
+------------------------------------------------------------------------
+SIP/2.0 407 Proxy Authentication Required
+Via: SIP/2.0/UDP 172.18.0.2;rport=49213;branch=z9hG4bKgvZv0eajXZXQj;received=167.71.173.83
+From: "+17866929905" <sip:hopwhistle@pvn-shanevici.sip.signalwire.com>;tag=ZQUS8p7p8a1yK
+To: <sip:+15513326220@pvn-shanevici.sip.signalwire.com>;tag=19914d7f353332cd059a81728abafb02.5b290000
+Call-ID: 0528c695-46c9-123f-ac9e-02f73aac2810
+CSeq: 107602447 INVITE
+Proxy-Authenticate: Digest realm="pvn-shanevici.sip.signalwire.com", nonce="aSlGy2kpRZ+aBm7CA1gLNOqZL7i5Ofjn"
+Server: SignalWire Proxy
+Content-Length: 0
+
+
+send 426 bytes to udp/[152.42.144.114]:5060 at 06:47:59.778174:
+------------------------------------------------------------------------
+ACK sip:+15513326220@pvn-shanevici.sip.signalwire.com SIP/2.0
+Via: SIP/2.0/UDP 172.18.0.2;rport;branch=z9hG4bKgvZv0eajXZXQj
+Max-Forwards: 68
+From: "+17866929905" <sip:hopwhistle@pvn-shanevici.sip.signalwire.com>;tag=ZQUS8p7p8a1yK
+To: <sip:+15513326220@pvn-shanevici.sip.signalwire.com>;tag=19914d7f353332cd059a81728abafb02.5b290000
+Call-ID: 0528c695-46c9-123f-ac9e-02f73aac2810
+CSeq: 107602447 ACK
+Content-Length: 0
+
+
+send 1531 bytes to udp/[159.65.244.171]:5060 at 06:47:59.781398:
+------------------------------------------------------------------------
+INVITE sip:+15513326220@pvn-shanevici.sip.signalwire.com SIP/2.0
+Via: SIP/2.0/UDP 172.18.0.2;rport;branch=z9hG4bKH5rN29tNt8Kae
+Max-Forwards: 68
+From: "+17866929905" <sip:hopwhistle@pvn-shanevici.sip.signalwire.com>;tag=ZQUS8p7p8a1yK
+To: <sip:+15513326220@pvn-shanevici.sip.signalwire.com>
+Call-ID: 0528c695-46c9-123f-ac9e-02f73aac2810
+CSeq: 107602448 INVITE
+Contact: <sip:gw+signalwire@172.18.0.2:5060;transport=udp;gw=signalwire>
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Supported: timer, path, replaces
+Allow-Events: talk, hold, conference, refer
+Proxy-Authorization: Digest username="hopwhistle", realm="pvn-shanevici.sip.signalwire.com", nonce="aSlGy2kpRZ+aBm7CA1gLNOqZL7i5Ofjn", algorithm=MD5, uri="sip:+15513326220@pvn-shanevici.sip.signalwire.com", response="937b643ce2e7f6dce0f658073ba2c326"
+Content-Type: application/sdp
+Content-Disposition: session
+Content-Length: 240
+X-FS-Support: update_display,send_info
+Remote-Party-ID: "+17866929905" <sip:+17866929905@pvn-shanevici.sip.signalwire.com>;party=calling;screen=yes;privacy=off
+P-Asserted-Identity: <sip:+17866929905@pvn-shanevici.sip.signalwire.com>
+
+v=0
+o=FreeSWITCH 1764292107 1764292108 IN IP4 172.18.0.2
+s=FreeSWITCH
+c=IN IP4 172.18.0.2
+t=0 0
+m=audio 20372 RTP/AVP 8 101 13
+a=rtpmap:8 PCMA/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=rtpmap:13 CN/8000
+a=ptime:20
+
+2025-11-28 06:47:59.770933 99.47% [DEBUG] sofia.c:7493 Channel sofia/external/+15513326220 entering state [calling][0]
+recv 405 bytes from udp/[159.65.244.171]:5060 at 06:47:59.861147:
+------------------------------------------------------------------------
+SIP/2.0 100 Trying -- welcome... to SignalWire
+Via: SIP/2.0/UDP 172.18.0.2;rport=49213;branch=z9hG4bKH5rN29tNt8Kae;received=167.71.173.83
+From: "+17866929905" <sip:hopwhistle@pvn-shanevici.sip.signalwire.com>;tag=ZQUS8p7p8a1yK
+To: <sip:+15513326220@pvn-shanevici.sip.signalwire.com>
+Call-ID: 0528c695-46c9-123f-ac9e-02f73aac2810
+CSeq: 107602448 INVITE
+Server: SignalWire Proxy
+Content-Length: 0
+
+
+recv 1233 bytes from udp/[159.65.244.171]:5060 at 06:48:02.605507:
+------------------------------------------------------------------------
+SIP/2.0 183 Session Progress
+Via: SIP/2.0/UDP 172.18.0.2;received=167.71.173.83;rport=49213;branch=z9hG4bKH5rN29tNt8Kae
+Record-Route: <sip:159.65.244.171:5061;transport=tls;r2=on;lr;ftag=ZQUS8p7p8a1yK;nat=yes>
+Record-Route: <sip:159.65.244.171;r2=on;lr;ftag=ZQUS8p7p8a1yK;nat=yes>
+From: "+17866929905" <sip:hopwhistle@pvn-shanevici.sip.signalwire.com>;tag=ZQUS8p7p8a1yK
+To: <sip:+15513326220@pvn-shanevici.sip.signalwire.com>;tag=6Sj1XrXN9189S
+Call-ID: 0528c695-46c9-123f-ac9e-02f73aac2810
+CSeq: 107602448 INVITE
+Contact: <sip:+15513326220@137.184.87.9:35181;transport=tls>
+User-Agent: SignalWire
+Accept: application/sdp
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Supported: timer, path, replaces
+Allow-Events: talk, hold, conference, refer
+Content-Type: application/sdp
+Content-Disposition: session
+Content-Length: 204
+X-Relay-Call-ID: 539489d6-00dd-46fd-89cf-8855ece729af
+P-Asserted-Identity: "+15513326220" <sip:+15513326220@pvn-shanevici.sip.signalwire.com>
+
+v=0
+o=SW 1764298594 1764298595 IN IP4 137.184.87.9
+s=SW
+c=IN IP4 137.184.87.9
+t=0 0
+m=audio 13888 RTP/AVP 8 101
+a=rtpmap:8 PCMA/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=ptime:20
+
+2025-11-28 06:48:02.590966 99.43% [INFO] sofia.c:1348 sofia/external/+15513326220 Update Callee ID to "+15513326220" <+15513326220>
+2025-11-28 06:48:02.590966 99.43% [DEBUG] sofia.c:7493 Channel sofia/external/+15513326220 entering state [proceeding][183]
+2025-11-28 06:48:02.590966 99.43% [DEBUG] sofia.c:7503 Remote SDP:
+v=0
+o=SW 1764298594 1764298595 IN IP4 137.184.87.9
+s=SW
+c=IN IP4 137.184.87.9
+t=0 0
+m=audio 13888 RTP/AVP 8 101
+a=rtpmap:8 PCMA/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=ptime:20
+
+2025-11-28 06:48:02.590966 99.43% [NOTICE] sofia.c:7506 Pre-Answer sofia/external/+15513326220!
+2025-11-28 06:48:02.590966 99.43% [DEBUG] switch_channel.c:3585 (sofia/external/+15513326220) Callstate Change DOWN -> EARLY
+2025-11-28 06:48:02.590966 99.43% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-28 06:48:02.590966 99.43% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [PCMA:8:8000:20:64000:1] ++++ is saved as a match
+2025-11-28 06:48:02.590966 99.43% [DEBUG] switch_core_media.c:5438 Set telephone-event payload to 101@8000
+2025-11-28 06:48:02.590966 99.43% [DEBUG] switch_core_media.c:3731 Set Codec sofia/external/+15513326220 PCMA/8000 20 ms 160 samples 64000 bits 1 channels
+2025-11-28 06:48:02.590966 99.43% [DEBUG] switch_core_codec.c:111 sofia/external/+15513326220 Original read codec set to PCMA:8
+2025-11-28 06:48:02.590966 99.43% [DEBUG] switch_core_media.c:5798 Set telephone-event payload to 101@8000
+2025-11-28 06:48:02.590966 99.43% [DEBUG] switch_core_media.c:5856 sofia/external/+15513326220 Set 2833 dtmf send payload to 101 recv payload to 101
+2025-11-28 06:48:02.590966 99.43% [DEBUG] switch_core_media.c:8660 AUDIO RTP [sofia/external/+15513326220] 172.18.0.2 port 20372 -> 137.184.87.9 port 13888 codec: 8 ms: 20
+2025-11-28 06:48:02.590966 99.43% [DEBUG] switch_rtp.c:4588 Not using a timer
+2025-11-28 06:48:02.590966 99.43% [INFO] switch_ivr_originate.c:3862 Sending early media
+2025-11-28 06:48:02.590966 99.43% [DEBUG] switch_core_media.c:8660 AUDIO RTP [sofia/external/testuser@167.71.173.83] 172.18.0.2 port 21648 -> 167.71.173.83 port 10058 codec: 8 ms: 20
+2025-11-28 06:48:02.590966 99.43% [DEBUG] switch_rtp.c:4588 Not using a timer
+2025-11-28 06:48:02.590966 99.43% [DEBUG] switch_core_media.c:8973 sofia/external/+15513326220 Set 2833 dtmf send payload to 101
+2025-11-28 06:48:02.590966 99.43% [DEBUG] switch_core_media.c:8980 sofia/external/+15513326220 Set 2833 dtmf receive payload to 101
+2025-11-28 06:48:02.590966 99.43% [DEBUG] switch_core_media.c:9003 sofia/external/+15513326220 Set rtp dtmf delay to 40
+2025-11-28 06:48:02.590966 99.43% [DEBUG] switch_core_media.c:8881 Activating RTCP PORT 10059
+2025-11-28 06:48:02.590966 99.43% [DEBUG] switch_rtp.c:4898 RTCP send rate is: 1000 and packet rate is: 20000 Remote Port: 10059
+2025-11-28 06:48:02.590966 99.43% [DEBUG] switch_rtp.c:2692 Setting RTCP remote addr to 167.71.173.83:10059 2
+2025-11-28 06:48:02.590966 99.43% [DEBUG] switch_core_media.c:8973 sofia/external/testuser@167.71.173.83 Set 2833 dtmf send payload to 101
+2025-11-28 06:48:02.590966 99.43% [DEBUG] switch_core_media.c:8980 sofia/external/testuser@167.71.173.83 Set 2833 dtmf receive payload to 101
+2025-11-28 06:48:02.590966 99.43% [DEBUG] switch_core_media.c:9003 sofia/external/testuser@167.71.173.83 Set rtp dtmf delay to 40
+2025-11-28 06:48:02.590966 99.43% [DEBUG] mod_sofia.c:2607 Ring SDP:
+v=0
+o=FreeSWITCH 1764290834 1764290835 IN IP4 172.18.0.2
+s=FreeSWITCH
+c=IN IP4 172.18.0.2
+t=0 0
+m=audio 21648 RTP/AVP 8 101
+a=rtpmap:8 PCMA/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=ptime:20
+a=sendrecv
+a=rtcp:21649 IN IP4 172.18.0.2
+
+2025-11-28 06:48:02.590966 99.43% [NOTICE] mod_sofia.c:2610 Pre-Answer sofia/external/testuser@167.71.173.83!
+2025-11-28 06:48:02.590966 99.43% [DEBUG] switch_channel.c:3585 (sofia/external/testuser@167.71.173.83) Callstate Change RINGING -> EARLY
+2025-11-28 06:48:02.590966 99.43% [DEBUG] switch_ivr_originate.c:3913 Originate Resulted in Success: [sofia/external/+15513326220] Peer UUID: 29335502-7eb7-4f14-ac25-c27b57e6f64e
+send 1312 bytes to udp/[172.18.0.3]:5060 at 06:48:02.610575:
+------------------------------------------------------------------------
+SIP/2.0 183 Session Progress
+Via: SIP/2.0/UDP 167.71.173.83:5060;branch=z9hG4bK5a8f.aee2858235cef1082b5c34f784c3ef3f.0;received=172.18.0.3
+Via: SIP/2.0/UDP 99.38.204.249:55749;received=99.38.204.249;rport=55749;branch=z9hG4bKPj7faf4eb081c14cd192c38bb7e424ddda
+From: "James" <sip:testuser@167.71.173.83>;tag=43b6818e54a442828e7bf8583930a07a
+To: <sip:15513326220@167.71.173.83>;tag=ye206UpKB2acr
+Call-ID: 2e94f1086c394463952b8f5d4e9d2992
+CSeq: 10338 INVITE
+Contact: <sip:15513326220@172.18.0.2:5060;transport=udp>
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Accept: application/sdp
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Supported: timer, path, replaces
+Allow-Events: talk, hold, conference, refer
+Content-Type: application/sdp
+Content-Disposition: session
+Content-Length: 248
+X-Relay-Call-ID: 539489d6-00dd-46fd-89cf-8855ece729af
+Remote-Party-ID: "15513326220" <sip:15513326220@167.71.173.83>;party=calling;privacy=off;screen=no
+
+v=0
+o=FreeSWITCH 1764290834 1764290835 IN IP4 172.18.0.2
+s=FreeSWITCH
+c=IN IP4 172.18.0.2
+t=0 0
+m=audio 21648 RTP/AVP 8 101
+a=rtpmap:8 PCMA/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=ptime:20
+a=rtcp:21649 IN IP4 172.18.0.2
+
+2025-11-28 06:48:02.590966 99.43% [DEBUG] sofia.c:7493 Channel sofia/external/testuser@167.71.173.83 entering state [early][183]
+2025-11-28 06:48:02.610899 99.43% [DEBUG] switch_ivr_bridge.c:1791 (sofia/external/+15513326220) State Change CS_CONSUME_MEDIA -> CS_EXCHANGE_MEDIA
+2025-11-28 06:48:02.610899 99.43% [DEBUG] switch_core_state_machine.c:581 (sofia/external/+15513326220) Running State Change CS_EXCHANGE_MEDIA (Cur 2 Tot 12)
+2025-11-28 06:48:02.610899 99.43% [DEBUG] switch_core_state_machine.c:650 (sofia/external/+15513326220) State EXCHANGE_MEDIA
+2025-11-28 06:48:02.610899 99.43% [DEBUG] mod_sofia.c:672 SOFIA EXCHANGE_MEDIA
+2025-11-28 06:48:02.630925 99.43% [INFO] switch_rtp.c:7107 Auto Changing audio RTCP port from 167.71.173.83:10059 to 172.18.0.2:21649
+2025-11-28 06:48:02.630925 99.43% [DEBUG] switch_rtp.c:2692 Setting RTCP remote addr to 172.18.0.2:21649 2
+recv 372 bytes from udp/[159.65.244.171]:5060 at 06:48:11.251831:
+------------------------------------------------------------------------
+OPTIONS sip:gw+signalwire@172.18.0.2:5060;transport=udp;gw=signalwire SIP/2.0
+Via: SIP/2.0/UDP 159.65.244.171:5060;branch=z9hG4bK5202454
+From: sip:pinger@signalwire.com;tag=uloc-69266f8f-c5-e5a22-e6d5273a-8ab6091
+To: sip:gw+signalwire@172.18.0.2:5060;transport=udp;gw=signalwire
+Call-ID: 4d4955a7-d39431b5-a2f5052@159.65.244.171
+CSeq: 1 OPTIONS
+Content-Length: 0
+
+
+send 708 bytes to udp/[159.65.244.171]:5060 at 06:48:11.252259:
+------------------------------------------------------------------------
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 159.65.244.171:5060;branch=z9hG4bK5202454
+From: sip:pinger@signalwire.com;tag=uloc-69266f8f-c5-e5a22-e6d5273a-8ab6091
+To: <sip:gw+signalwire@172.18.0.2:5060>;transport=udp;gw=signalwire;tag=00mjajrt5KQHF
+Call-ID: 4d4955a7-d39431b5-a2f5052@159.65.244.171
+CSeq: 1 OPTIONS
+Contact: <sip:gw+signalwire@172.18.0.2:5060;transport=udp;gw=signalwire>
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Accept: application/sdp
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Supported: timer, path, replaces
+Allow-Events: talk, hold, conference, refer
+Content-Length: 0
+
+
+recv 1247 bytes from udp/[159.65.244.171]:5060 at 06:48:12.963912:
+------------------------------------------------------------------------
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.18.0.2;received=167.71.173.83;rport=49213;branch=z9hG4bKH5rN29tNt8Kae
+Record-Route: <sip:159.65.244.171:5061;transport=tls;r2=on;lr;ftag=ZQUS8p7p8a1yK;nat=yes>
+Record-Route: <sip:159.65.244.171;r2=on;lr;ftag=ZQUS8p7p8a1yK;nat=yes>
+From: "+17866929905" <sip:hopwhistle@pvn-shanevici.sip.signalwire.com>;tag=ZQUS8p7p8a1yK
+To: <sip:+15513326220@pvn-shanevici.sip.signalwire.com>;tag=6Sj1XrXN9189S
+Call-ID: 0528c695-46c9-123f-ac9e-02f73aac2810
+CSeq: 107602448 INVITE
+Contact: <sip:+15513326220@137.184.87.9:35181;transport=tls>
+User-Agent: SignalWire
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Require: timer
+Supported: timer, path, replaces
+Allow-Events: talk, hold, conference, refer
+Session-Expires: 600;refresher=uac
+Content-Type: application/sdp
+Content-Disposition: session
+Content-Length: 204
+X-Relay-Call-ID: 539489d6-00dd-46fd-89cf-8855ece729af
+P-Asserted-Identity: "Outbound Call" <sip:+15513326220@pvn-shanevici.sip.signalwire.com>
+
+v=0
+o=SW 1764298594 1764298595 IN IP4 137.184.87.9
+s=SW
+c=IN IP4 137.184.87.9
+t=0 0
+m=audio 13888 RTP/AVP 8 101
+a=rtpmap:8 PCMA/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=ptime:20
+
+2025-11-28 06:48:12.950960 99.50% [INFO] sofia.c:1348 sofia/external/+15513326220 Update Callee ID to "Outbound Call" <+15513326220>
+2025-11-28 06:48:12.950960 99.50% [DEBUG] sofia.c:7493 Channel sofia/external/+15513326220 entering state [completing][200]
+2025-11-28 06:48:12.950960 99.50% [DEBUG] sofia.c:7500 Duplicate SDP
+v=0
+o=SW 1764298594 1764298595 IN IP4 137.184.87.9
+s=SW
+c=IN IP4 137.184.87.9
+t=0 0
+m=audio 13888 RTP/AVP 8 101
+a=rtpmap:8 PCMA/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=ptime:20
+
+send 873 bytes to udp/[159.65.244.171]:5060 at 06:48:12.965303:
+------------------------------------------------------------------------
+ACK sip:+15513326220@137.184.87.9:35181;transport=tls SIP/2.0
+Via: SIP/2.0/UDP 172.18.0.2;rport;branch=z9hG4bKjeje44BSQHaXS
+Route: <sip:159.65.244.171;r2=on;lr;ftag=ZQUS8p7p8a1yK;nat=yes>
+Route: <sip:159.65.244.171:5061;transport=tls;r2=on;lr;ftag=ZQUS8p7p8a1yK;nat=yes>
+Max-Forwards: 70
+From: "+17866929905" <sip:hopwhistle@pvn-shanevici.sip.signalwire.com>;tag=ZQUS8p7p8a1yK
+To: <sip:+15513326220@pvn-shanevici.sip.signalwire.com>;tag=6Sj1XrXN9189S
+Call-ID: 0528c695-46c9-123f-ac9e-02f73aac2810
+CSeq: 107602448 ACK
+Contact: <sip:gw+signalwire@172.18.0.2:5060;transport=udp;gw=signalwire>
+Proxy-Authorization: Digest username="hopwhistle", realm="pvn-shanevici.sip.signalwire.com", nonce="aSlGy2kpRZ+aBm7CA1gLNOqZL7i5Ofjn", algorithm=MD5, uri="sip:+15513326220@pvn-shanevici.sip.signalwire.com", response="937b643ce2e7f6dce0f658073ba2c326"
+Content-Length: 0
+
+
+2025-11-28 06:48:12.950960 99.50% [DEBUG] sofia.c:7493 Channel sofia/external/+15513326220 entering state [ready][200]
+2025-11-28 06:48:12.950960 99.50% [NOTICE] sofia.c:8623 Channel [sofia/external/+15513326220] has been answered
+2025-11-28 06:48:12.950960 99.50% [DEBUG] switch_channel.c:3912 (sofia/external/+15513326220) Callstate Change EARLY -> ACTIVE
+2025-11-28 06:48:12.970942 99.50% [DEBUG] switch_core_media.c:8642 Audio params are unchanged for sofia/external/testuser@167.71.173.83.
+2025-11-28 06:48:12.970942 99.50% [DEBUG] mod_sofia.c:914 Local SDP sofia/external/testuser@167.71.173.83:
+v=0
+o=FreeSWITCH 1764290834 1764290836 IN IP4 172.18.0.2
+s=FreeSWITCH
+c=IN IP4 172.18.0.2
+t=0 0
+m=audio 21648 RTP/AVP 8 101
+a=rtpmap:8 PCMA/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=ptime:20
+a=sendrecv
+a=rtcp:21649 IN IP4 172.18.0.2
+
+2025-11-28 06:48:12.970942 99.50% [NOTICE] switch_ivr_bridge.c:730 Channel [sofia/external/testuser@167.71.173.83] has been answered
+send 1311 bytes to udp/[172.18.0.3]:5060 at 06:48:12.986521:
+------------------------------------------------------------------------
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 167.71.173.83:5060;branch=z9hG4bK5a8f.aee2858235cef1082b5c34f784c3ef3f.0;received=172.18.0.3
+Via: SIP/2.0/UDP 99.38.204.249:55749;received=99.38.204.249;rport=55749;branch=z9hG4bKPj7faf4eb081c14cd192c38bb7e424ddda
+From: "James" <sip:testuser@167.71.173.83>;tag=43b6818e54a442828e7bf8583930a07a
+To: <sip:15513326220@167.71.173.83>;tag=ye206UpKB2acr
+Call-ID: 2e94f1086c394463952b8f5d4e9d2992
+CSeq: 10338 INVITE
+Contact: <sip:15513326220@172.18.0.2:5060;transport=udp>
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Supported: timer, path, replaces
+Allow-Events: talk, hold, conference, refer
+Session-Expires: 120;refresher=uas
+Content-Type: application/sdp
+Content-Disposition: session
+Content-Length: 248
+X-Relay-Call-ID: 539489d6-00dd-46fd-89cf-8855ece729af
+Remote-Party-ID: "+15513326220" <sip:+15513326220@167.71.173.83>;party=calling;privacy=off;screen=no
+
+v=0
+o=FreeSWITCH 1764290834 1764290835 IN IP4 172.18.0.2
+s=FreeSWITCH
+c=IN IP4 172.18.0.2
+t=0 0
+m=audio 21648 RTP/AVP 8 101
+a=rtpmap:8 PCMA/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=ptime:20
+a=rtcp:21649 IN IP4 172.18.0.2
+
+2025-11-28 06:48:12.970942 99.50% [DEBUG] switch_channel.c:3912 (sofia/external/testuser@167.71.173.83) Callstate Change EARLY -> ACTIVE
+2025-11-28 06:48:12.970942 99.50% [DEBUG] sofia.c:7493 Channel sofia/external/testuser@167.71.173.83 entering state [completed][200]
+2025-11-28 06:48:12.990932 99.50% [DEBUG] switch_rtp.c:7128 Correct audio RTCP ip/port confirmed.
+send 1311 bytes to udp/[172.18.0.3]:5060 at 06:48:13.486830:
+------------------------------------------------------------------------
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 167.71.173.83:5060;branch=z9hG4bK5a8f.aee2858235cef1082b5c34f784c3ef3f.0;received=172.18.0.3
+Via: SIP/2.0/UDP 99.38.204.249:55749;received=99.38.204.249;rport=55749;branch=z9hG4bKPj7faf4eb081c14cd192c38bb7e424ddda
+From: "James" <sip:testuser@167.71.173.83>;tag=43b6818e54a442828e7bf8583930a07a
+To: <sip:15513326220@167.71.173.83>;tag=ye206UpKB2acr
+Call-ID: 2e94f1086c394463952b8f5d4e9d2992
+CSeq: 10338 INVITE
+Contact: <sip:15513326220@172.18.0.2:5060;transport=udp>
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Supported: timer, path, replaces
+Allow-Events: talk, hold, conference, refer
+Session-Expires: 120;refresher=uas
+Content-Type: application/sdp
+Content-Disposition: session
+Content-Length: 248
+X-Relay-Call-ID: 539489d6-00dd-46fd-89cf-8855ece729af
+Remote-Party-ID: "+15513326220" <sip:+15513326220@167.71.173.83>;party=calling;privacy=off;screen=no
+
+v=0
+o=FreeSWITCH 1764290834 1764290835 IN IP4 172.18.0.2
+s=FreeSWITCH
+c=IN IP4 172.18.0.2
+t=0 0
+m=audio 21648 RTP/AVP 8 101
+a=rtpmap:8 PCMA/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=ptime:20
+a=rtcp:21649 IN IP4 172.18.0.2
+
+send 1311 bytes to udp/[172.18.0.3]:5060 at 06:48:14.487731:
+------------------------------------------------------------------------
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 167.71.173.83:5060;branch=z9hG4bK5a8f.aee2858235cef1082b5c34f784c3ef3f.0;received=172.18.0.3
+Via: SIP/2.0/UDP 99.38.204.249:55749;received=99.38.204.249;rport=55749;branch=z9hG4bKPj7faf4eb081c14cd192c38bb7e424ddda
+From: "James" <sip:testuser@167.71.173.83>;tag=43b6818e54a442828e7bf8583930a07a
+To: <sip:15513326220@167.71.173.83>;tag=ye206UpKB2acr
+Call-ID: 2e94f1086c394463952b8f5d4e9d2992
+CSeq: 10338 INVITE
+Contact: <sip:15513326220@172.18.0.2:5060;transport=udp>
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Supported: timer, path, replaces
+Allow-Events: talk, hold, conference, refer
+Session-Expires: 120;refresher=uas
+Content-Type: application/sdp
+Content-Disposition: session
+Content-Length: 248
+X-Relay-Call-ID: 539489d6-00dd-46fd-89cf-8855ece729af
+Remote-Party-ID: "+15513326220" <sip:+15513326220@167.71.173.83>;party=calling;privacy=off;screen=no
+
+v=0
+o=FreeSWITCH 1764290834 1764290835 IN IP4 172.18.0.2
+s=FreeSWITCH
+c=IN IP4 172.18.0.2
+t=0 0
+m=audio 21648 RTP/AVP 8 101
+a=rtpmap:8 PCMA/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=ptime:20
+a=rtcp:21649 IN IP4 172.18.0.2
+
+send 630 bytes to udp/[159.65.244.171]:5060 at 06:48:16.430324:
+------------------------------------------------------------------------
+OPTIONS sip:pvn-shanevici.sip.signalwire.com;transport=udp SIP/2.0
+Via: SIP/2.0/UDP 172.18.0.2;rport;branch=z9hG4bKKQB75Zvvmt0FN
+Max-Forwards: 70
+From: <sip:pvn-shanevici.sip.signalwire.com>;tag=19DBcD9X2vD4a
+To: <sip:pvn-shanevici.sip.signalwire.com>
+Call-ID: 0f191f2d-46c9-123f-ac9e-02f73aac2810
+CSeq: 107602364 OPTIONS
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Supported: timer, path, replaces
+Allow-Events: talk, hold, conference, refer
+Content-Length: 0
+
+
+recv 388 bytes from udp/[159.65.244.171]:5060 at 06:48:16.431665:
+------------------------------------------------------------------------
+SIP/2.0 200 Keepalive
+Via: SIP/2.0/UDP 172.18.0.2;rport=49213;branch=z9hG4bKKQB75Zvvmt0FN;received=167.71.173.83
+From: <sip:pvn-shanevici.sip.signalwire.com>;tag=19DBcD9X2vD4a
+To: <sip:pvn-shanevici.sip.signalwire.com>;tag=b97296421094b542cf6521dfe803ae0e.5b290000
+Call-ID: 0f191f2d-46c9-123f-ac9e-02f73aac2810
+CSeq: 107602364 OPTIONS
+Server: SignalWire Proxy
+Content-Length: 0
+
+
+send 1311 bytes to udp/[172.18.0.3]:5060 at 06:48:16.487730:
+------------------------------------------------------------------------
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 167.71.173.83:5060;branch=z9hG4bK5a8f.aee2858235cef1082b5c34f784c3ef3f.0;received=172.18.0.3
+Via: SIP/2.0/UDP 99.38.204.249:55749;received=99.38.204.249;rport=55749;branch=z9hG4bKPj7faf4eb081c14cd192c38bb7e424ddda
+From: "James" <sip:testuser@167.71.173.83>;tag=43b6818e54a442828e7bf8583930a07a
+To: <sip:15513326220@167.71.173.83>;tag=ye206UpKB2acr
+Call-ID: 2e94f1086c394463952b8f5d4e9d2992
+CSeq: 10338 INVITE
+Contact: <sip:15513326220@172.18.0.2:5060;transport=udp>
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Supported: timer, path, replaces
+Allow-Events: talk, hold, conference, refer
+Session-Expires: 120;refresher=uas
+Content-Type: application/sdp
+Content-Disposition: session
+Content-Length: 248
+X-Relay-Call-ID: 539489d6-00dd-46fd-89cf-8855ece729af
+Remote-Party-ID: "+15513326220" <sip:+15513326220@167.71.173.83>;party=calling;privacy=off;screen=no
+
+v=0
+o=FreeSWITCH 1764290834 1764290835 IN IP4 172.18.0.2
+s=FreeSWITCH
+c=IN IP4 172.18.0.2
+t=0 0
+m=audio 21648 RTP/AVP 8 101
+a=rtpmap:8 PCMA/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=ptime:20
+a=rtcp:21649 IN IP4 172.18.0.2
+
+send 1311 bytes to udp/[172.18.0.3]:5060 at 06:48:20.488343:
+------------------------------------------------------------------------
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 167.71.173.83:5060;branch=z9hG4bK5a8f.aee2858235cef1082b5c34f784c3ef3f.0;received=172.18.0.3
+Via: SIP/2.0/UDP 99.38.204.249:55749;received=99.38.204.249;rport=55749;branch=z9hG4bKPj7faf4eb081c14cd192c38bb7e424ddda
+From: "James" <sip:testuser@167.71.173.83>;tag=43b6818e54a442828e7bf8583930a07a
+To: <sip:15513326220@167.71.173.83>;tag=ye206UpKB2acr
+Call-ID: 2e94f1086c394463952b8f5d4e9d2992
+CSeq: 10338 INVITE
+Contact: <sip:15513326220@172.18.0.2:5060;transport=udp>
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Supported: timer, path, replaces
+Allow-Events: talk, hold, conference, refer
+Session-Expires: 120;refresher=uas
+Content-Type: application/sdp
+Content-Disposition: session
+Content-Length: 248
+X-Relay-Call-ID: 539489d6-00dd-46fd-89cf-8855ece729af
+Remote-Party-ID: "+15513326220" <sip:+15513326220@167.71.173.83>;party=calling;privacy=off;screen=no
+
+v=0
+o=FreeSWITCH 1764290834 1764290835 IN IP4 172.18.0.2
+s=FreeSWITCH
+c=IN IP4 172.18.0.2
+t=0 0
+m=audio 21648 RTP/AVP 8 101
+a=rtpmap:8 PCMA/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=ptime:20
+a=rtcp:21649 IN IP4 172.18.0.2
+
+recv 817 bytes from udp/[172.18.0.3]:5060 at 06:48:23.124324:
+------------------------------------------------------------------------
+INVITE sip:81033756010575@167.71.173.83 SIP/2.0
+Via: SIP/2.0/UDP 167.71.173.83:5060;branch=z9hG4bKd3ee.0f76522dbb0829b4ea0ffb15d7976f54.0
+Via: SIP/2.0/UDP 81.222.204.61:55261;rport=55261;branch=z9hG4bK816142642
+Max-Forwards: 69
+From: <sip:8000@167.71.173.83>;tag=610781200
+To: <sip:81033756010575@167.71.173.83>
+Call-ID: 283582747-530660538-900380312
+CSeq: 1 INVITE
+Contact: <sip:8000@81.222.204.61:55261>
+Content-Type: application/sdp
+Content-Length: 214
+Allow: ACK, BYE, CANCEL, INFO, INVITE, MESSAGE, NOTIFY, OPTIONS, PRACK, REFER, REGISTER, SUBSCRIBE, UPDATE, PUBLISH
+User-Agent: ims
+
+v=0
+o=8000 16264 18299 IN IP4 167.71.173.83
+s=call
+c=IN IP4 167.71.173.83
+t=0 0
+m=audio 10092 RTP/AVP 0 101
+a=rtpmap:0 pcmu/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-11
+a=sendrecv
+a=rtcp:10093
+
+2025-11-28 06:48:23.110957 99.43% [NOTICE] switch_channel.c:1142 New Channel sofia/external/8000@167.71.173.83 [915e7fd4-30dd-41ab-b21d-1f2baf6d915f]
+2025-11-28 06:48:23.110957 99.43% [DEBUG] switch_core_state_machine.c:581 (sofia/external/8000@167.71.173.83) Running State Change CS_NEW (Cur 3 Tot 13)
+2025-11-28 06:48:23.110957 99.43% [INFO] sofia.c:10460 sofia/external/8000@167.71.173.83 receiving invite from 172.18.0.3:5060 version: 1.10.12 -release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit call-id: 283582747-530660538-900380312
+2025-11-28 06:48:23.110957 99.43% [DEBUG] sofia.c:10554 verifying acl "domains" for ip/port 172.18.0.3:0.
+2025-11-28 06:48:23.110957 99.43% [DEBUG] sofia.c:10583 IP 172.18.0.3 Approved by acl "domains[]". Access Granted.
+2025-11-28 06:48:23.110957 99.43% [DEBUG] sofia.c:11675 Setting NAT mode based on via received
+2025-11-28 06:48:23.110957 99.43% [DEBUG] sofia.c:7493 Channel sofia/external/8000@167.71.173.83 entering state [received][100]
+2025-11-28 06:48:23.110957 99.43% [DEBUG] sofia.c:7503 Remote SDP:
+v=0
+o=8000 16264 18299 IN IP4 167.71.173.83
+s=call
+c=IN IP4 167.71.173.83
+t=0 0
+m=audio 10092 RTP/AVP 0 101
+a=rtpmap:0 pcmu/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-11
+a=rtcp:10093
+
+2025-11-28 06:48:23.110957 99.43% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [pcmu:0:8000:20:64000:1]/[G722:9:8000:20:64000:1]
+2025-11-28 06:48:23.110957 99.43% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [pcmu:0:8000:20:64000:1]/[PCMU:0:8000:20:64000:1]
+2025-11-28 06:48:23.110957 99.43% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [PCMU:0:8000:20:64000:1] ++++ is saved as a match
+2025-11-28 06:48:23.110957 99.43% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [pcmu:0:8000:20:64000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-28 06:48:23.110957 99.43% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [pcmu:0:8000:20:64000:1]/[GSM:3:8000:20:13200:1]
+2025-11-28 06:48:23.110957 99.43% [DEBUG] switch_core_media.c:5438 Set telephone-event payload to 101@8000
+2025-11-28 06:48:23.110957 99.43% [DEBUG] switch_core_media.c:3731 Set Codec sofia/external/8000@167.71.173.83 PCMU/8000 20 ms 160 samples 64000 bits 1 channels
+2025-11-28 06:48:23.110957 99.43% [DEBUG] switch_core_codec.c:111 sofia/external/8000@167.71.173.83 Original read codec set to PCMU:0
+2025-11-28 06:48:23.110957 99.43% [DEBUG] switch_core_media.c:5798 Set telephone-event payload to 101@8000
+2025-11-28 06:48:23.110957 99.43% [DEBUG] switch_core_media.c:5856 sofia/external/8000@167.71.173.83 Set 2833 dtmf send payload to 101 recv payload to 101
+2025-11-28 06:48:23.110957 99.43% [DEBUG] sofia.c:7927 (sofia/external/8000@167.71.173.83) State Change CS_NEW -> CS_INIT
+2025-11-28 06:48:23.110957 99.43% [DEBUG] switch_core_state_machine.c:600 (sofia/external/8000@167.71.173.83) State NEW
+2025-11-28 06:48:23.110957 99.43% [DEBUG] switch_core_state_machine.c:581 (sofia/external/8000@167.71.173.83) Running State Change CS_INIT (Cur 3 Tot 13)
+2025-11-28 06:48:23.110957 99.43% [DEBUG] switch_core_state_machine.c:624 (sofia/external/8000@167.71.173.83) State INIT
+2025-11-28 06:48:23.110957 99.43% [DEBUG] mod_sofia.c:97 sofia/external/8000@167.71.173.83 SOFIA INIT
+2025-11-28 06:48:23.110957 99.43% [DEBUG] switch_core_state_machine.c:40 sofia/external/8000@167.71.173.83 Standard INIT
+2025-11-28 06:48:23.110957 99.43% [DEBUG] switch_core_state_machine.c:48 (sofia/external/8000@167.71.173.83) State Change CS_INIT -> CS_ROUTING
+2025-11-28 06:48:23.110957 99.43% [DEBUG] switch_core_state_machine.c:624 (sofia/external/8000@167.71.173.83) State INIT going to sleep
+2025-11-28 06:48:23.110957 99.43% [DEBUG] switch_core_state_machine.c:581 (sofia/external/8000@167.71.173.83) Running State Change CS_ROUTING (Cur 3 Tot 13)
+2025-11-28 06:48:23.110957 99.43% [DEBUG] switch_channel.c:2399 (sofia/external/8000@167.71.173.83) Callstate Change DOWN -> RINGING
+2025-11-28 06:48:23.110957 99.43% [DEBUG] switch_core_state_machine.c:640 (sofia/external/8000@167.71.173.83) State ROUTING
+2025-11-28 06:48:23.110957 99.43% [DEBUG] mod_sofia.c:158 sofia/external/8000@167.71.173.83 SOFIA ROUTING
+2025-11-28 06:48:23.110957 99.43% [DEBUG] switch_core_state_machine.c:230 sofia/external/8000@167.71.173.83 Standard ROUTING
+2025-11-28 06:48:23.110957 99.43% [INFO] mod_dialplan_xml.c:639 Processing 8000 <8000>->81033756010575 in context trunk
+Dialplan: sofia/external/8000@167.71.173.83 parsing [trunk->authenticate-trunk] continue=false
+send 405 bytes to udp/[172.18.0.3]:5060 at 06:48:23.126740:
+------------------------------------------------------------------------
+SIP/2.0 100 Trying
+Via: SIP/2.0/UDP 167.71.173.83:5060;branch=z9hG4bKd3ee.0f76522dbb0829b4ea0ffb15d7976f54.0;received=172.18.0.3
+From: <sip:8000@167.71.173.83>;tag=610781200
+To: <sip:81033756010575@167.71.173.83>
+Call-ID: 283582747-530660538-900380312
+CSeq: 1 INVITE
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Content-Length: 0
+
+
+Dialplan: sofia/external/8000@167.71.173.83 Regex (PASS) [authenticate-trunk] destination_number(81033756010575) =~ /^.+$/ break=never
+Dialplan: sofia/external/8000@167.71.173.83 Action log(INFO Inbound call from ${caller_id_number} to ${destination_number})
+Dialplan: sofia/external/8000@167.71.173.83 Action set(trunk_auth_url=${api_url}/api/v1/trunks/auth)
+Dialplan: sofia/external/8000@167.71.173.83 Action set(trunk_auth_body={"from":"${caller_id_number}","to":"${destination_number}","source_ip":"${network_addr}"})
+Dialplan: sofia/external/8000@167.71.173.83 Action set(trunk_auth_result=${curl(${trunk_auth_url} POST ${trunk_auth_body} X-API-Key:${api_key})})
+Dialplan: sofia/external/8000@167.71.173.83 Action log(INFO Trunk auth result: ${trunk_auth_result})
+|--- Dialplan: Processing recursive conditions level:1 [authenticate-trunk_recur_1] require-nested=TRUE
+|--- Dialplan: sofia/external/8000@167.71.173.83 Regex (FAIL) [authenticate-trunk_recur_1] ${trunk_auth_result}() =~ /authenticated/ break=on-false
+Dialplan: sofia/external/8000@167.71.173.83 parsing [trunk->external-outbound-calls] continue=false
+Dialplan: sofia/external/8000@167.71.173.83 Regex (FAIL) [external-outbound-calls] destination_number(81033756010575) =~ /^(\d{10})$/ break=on-true
+Dialplan: sofia/external/8000@167.71.173.83 Regex (FAIL) [external-outbound-calls] destination_number(81033756010575) =~ /^1(\d{10})$/ break=on-true
+Dialplan: sofia/external/8000@167.71.173.83 Regex (FAIL) [external-outbound-calls] destination_number(81033756010575) =~ /^(\+.+)$/ break=on-true
+Dialplan: sofia/external/8000@167.71.173.83 parsing [trunk->send-to-signalwire] continue=false
+Dialplan: sofia/external/8000@167.71.173.83 Regex (PASS) [send-to-signalwire] destination_number(81033756010575) =~ /^.+$/ break=on-false
+Dialplan: sofia/external/8000@167.71.173.83 Action log(INFO Outbound call to ${e164_dest} via SignalWire)
+Dialplan: sofia/external/8000@167.71.173.83 Action set(effective_caller_id_number=+17866929905)
+Dialplan: sofia/external/8000@167.71.173.83 Action set(effective_caller_id_name=+17866929905)
+Dialplan: sofia/external/8000@167.71.173.83 Action export(sip_h_P-Asserted-Identity=<sip:+17866929905@pvn-shanevici.sip.signalwire.com>)
+Dialplan: sofia/external/8000@167.71.173.83 Action bridge(sofia/gateway/signalwire/${e164_dest})
+2025-11-28 06:48:23.110957 99.43% [DEBUG] switch_core_state_machine.c:281 (sofia/external/8000@167.71.173.83) State Change CS_ROUTING -> CS_EXECUTE
+2025-11-28 06:48:23.110957 99.43% [DEBUG] switch_core_state_machine.c:640 (sofia/external/8000@167.71.173.83) State ROUTING going to sleep
+2025-11-28 06:48:23.110957 99.43% [DEBUG] switch_core_state_machine.c:581 (sofia/external/8000@167.71.173.83) Running State Change CS_EXECUTE (Cur 3 Tot 13)
+2025-11-28 06:48:23.110957 99.43% [DEBUG] switch_core_state_machine.c:647 (sofia/external/8000@167.71.173.83) State EXECUTE
+2025-11-28 06:48:23.110957 99.43% [DEBUG] mod_sofia.c:213 sofia/external/8000@167.71.173.83 SOFIA EXECUTE
+2025-11-28 06:48:23.110957 99.43% [DEBUG] switch_core_state_machine.c:323 sofia/external/8000@167.71.173.83 Standard EXECUTE
+EXECUTE [depth=0] sofia/external/8000@167.71.173.83 log(INFO Inbound call from 8000 to 81033756010575)
+2025-11-28 06:48:23.110957 99.43% [INFO] mod_dptools.c:1865 Inbound call from 8000 to 81033756010575
+EXECUTE [depth=0] sofia/external/8000@167.71.173.83 set(trunk_auth_url=/api/v1/trunks/auth)
+2025-11-28 06:48:23.110957 99.43% [DEBUG] mod_dptools.c:1671 SET sofia/external/8000@167.71.173.83 [trunk_auth_url]=[/api/v1/trunks/auth]
+EXECUTE [depth=0] sofia/external/8000@167.71.173.83 set(trunk_auth_body={"from":"8000","to":"81033756010575","source_ip":"172.18.0.3"})
+2025-11-28 06:48:23.110957 99.43% [DEBUG] mod_dptools.c:1671 SET sofia/external/8000@167.71.173.83 [trunk_auth_body]=[{"from":"8000","to":"81033756010575","source_ip":"172.18.0.3"}]
+EXECUTE [depth=0] sofia/external/8000@167.71.173.83 set(trunk_auth_result=)
+2025-11-28 06:48:23.110957 99.43% [DEBUG] mod_dptools.c:1671 SET sofia/external/8000@167.71.173.83 [trunk_auth_result]=[UNDEF]
+EXECUTE [depth=0] sofia/external/8000@167.71.173.83 log(INFO Trunk auth result: )
+2025-11-28 06:48:23.110957 99.43% [INFO] mod_dptools.c:1865 Trunk auth result:
+EXECUTE [depth=0] sofia/external/8000@167.71.173.83 log(INFO Outbound call to  via SignalWire)
+2025-11-28 06:48:23.110957 99.43% [INFO] mod_dptools.c:1865 Outbound call to  via SignalWire
+EXECUTE [depth=0] sofia/external/8000@167.71.173.83 set(effective_caller_id_number=+17866929905)
+2025-11-28 06:48:23.110957 99.43% [DEBUG] mod_dptools.c:1671 SET sofia/external/8000@167.71.173.83 [effective_caller_id_number]=[+17866929905]
+EXECUTE [depth=0] sofia/external/8000@167.71.173.83 set(effective_caller_id_name=+17866929905)
+2025-11-28 06:48:23.110957 99.43% [DEBUG] mod_dptools.c:1671 SET sofia/external/8000@167.71.173.83 [effective_caller_id_name]=[+17866929905]
+EXECUTE [depth=0] sofia/external/8000@167.71.173.83 export(sip_h_P-Asserted-Identity=<sip:+17866929905@pvn-shanevici.sip.signalwire.com>)
+2025-11-28 06:48:23.110957 99.43% [DEBUG] switch_channel.c:1334 EXPORT (export_vars) [sip_h_P-Asserted-Identity]=[<sip:+17866929905@pvn-shanevici.sip.signalwire.com>]
+EXECUTE [depth=0] sofia/external/8000@167.71.173.83 bridge(sofia/gateway/signalwire/)
+2025-11-28 06:48:23.110957 99.43% [DEBUG] switch_channel.c:1288 sofia/external/8000@167.71.173.83 EXPORTING[export_vars] [sip_h_P-Asserted-Identity]=[<sip:+17866929905@pvn-shanevici.sip.signalwire.com>] to event
+2025-11-28 06:48:23.110957 99.43% [DEBUG] switch_ivr_originate.c:2301 Parsing global variables
+2025-11-28 06:48:23.110957 99.43% [NOTICE] switch_channel.c:1142 New Channel sofia/external/ [9e41b158-7077-4251-b1cb-e40de43a4584]
+2025-11-28 06:48:23.110957 99.43% [DEBUG] mod_sofia.c:5110 (sofia/external/) State Change CS_NEW -> CS_INIT
+2025-11-28 06:48:23.110957 99.43% [DEBUG] switch_core_state_machine.c:581 (sofia/external/) Running State Change CS_INIT (Cur 4 Tot 14)
+2025-11-28 06:48:23.110957 99.43% [DEBUG] switch_core_state_machine.c:624 (sofia/external/) State INIT
+2025-11-28 06:48:23.110957 99.43% [DEBUG] mod_sofia.c:97 sofia/external/ SOFIA INIT
+2025-11-28 06:48:23.130895 99.43% [INFO] sofia_glue.c:1659 sofia/external/ sending invite call-id: (null)
+2025-11-28 06:48:23.130895 99.43% [DEBUG] sofia_glue.c:1662 sofia/external/ sending invite version: 1.10.12 -release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit
+Local SDP:
+v=0
+o=FreeSWITCH 1764283371 1764283372 IN IP4 172.18.0.2
+s=FreeSWITCH
+c=IN IP4 172.18.0.2
+t=0 0
+m=audio 29132 RTP/AVP 0 101 13
+a=rtpmap:0 PCMU/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=rtpmap:13 CN/8000
+a=ptime:20
+a=sendrecv
+
+2025-11-28 06:48:23.130895 99.43% [DEBUG] switch_core_state_machine.c:40 sofia/external/ Standard INIT
+2025-11-28 06:48:23.130895 99.43% [DEBUG] switch_core_state_machine.c:48 (sofia/external/) State Change CS_INIT -> CS_ROUTING
+2025-11-28 06:48:23.130895 99.43% [DEBUG] switch_core_state_machine.c:624 (sofia/external/) State INIT going to sleep
+2025-11-28 06:48:23.130895 99.43% [DEBUG] switch_core_state_machine.c:581 (sofia/external/) Running State Change CS_ROUTING (Cur 4 Tot 14)
+2025-11-28 06:48:23.130895 99.43% [DEBUG] switch_core_state_machine.c:640 (sofia/external/) State ROUTING
+2025-11-28 06:48:23.130895 99.43% [DEBUG] mod_sofia.c:158 sofia/external/ SOFIA ROUTING
+2025-11-28 06:48:23.130895 99.43% [DEBUG] switch_ivr_originate.c:67 (sofia/external/) State Change CS_ROUTING -> CS_CONSUME_MEDIA
+2025-11-28 06:48:23.130895 99.43% [DEBUG] switch_core_state_machine.c:640 (sofia/external/) State ROUTING going to sleep
+2025-11-28 06:48:23.130895 99.43% [DEBUG] switch_core_state_machine.c:581 (sofia/external/) Running State Change CS_CONSUME_MEDIA (Cur 4 Tot 14)
+2025-11-28 06:48:23.130895 99.43% [DEBUG] switch_core_state_machine.c:659 (sofia/external/) State CONSUME_MEDIA
+2025-11-28 06:48:23.130895 99.43% [DEBUG] switch_core_state_machine.c:659 (sofia/external/) State CONSUME_MEDIA going to sleep
+send 1255 bytes to udp/[159.65.244.171]:5060 at 06:48:23.131595:
+------------------------------------------------------------------------
+INVITE sip:@pvn-shanevici.sip.signalwire.com SIP/2.0
+Via: SIP/2.0/UDP 172.18.0.2;rport;branch=z9hG4bKm04Z7tD0H3p2g
+Max-Forwards: 68
+From: "+17866929905" <sip:hopwhistle@pvn-shanevici.sip.signalwire.com>;tag=3U0vF3a5vet9H
+To: <sip:@pvn-shanevici.sip.signalwire.com>
+Call-ID: 1317a495-46c9-123f-ac9e-02f73aac2810
+CSeq: 107602459 INVITE
+Contact: <sip:gw+signalwire@172.18.0.2:5060;transport=udp;gw=signalwire>
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Supported: timer, path, replaces
+Allow-Events: talk, hold, conference, refer
+Content-Type: application/sdp
+Content-Disposition: session
+Content-Length: 240
+X-FS-Support: update_display,send_info
+Remote-Party-ID: "+17866929905" <sip:+17866929905@pvn-shanevici.sip.signalwire.com>;party=calling;screen=yes;privacy=off
+P-Asserted-Identity: <sip:+17866929905@pvn-shanevici.sip.signalwire.com>
+
+v=0
+o=FreeSWITCH 1764283371 1764283372 IN IP4 172.18.0.2
+s=FreeSWITCH
+c=IN IP4 172.18.0.2
+t=0 0
+m=audio 29132 RTP/AVP 0 101 13
+a=rtpmap:0 PCMU/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=rtpmap:13 CN/8000
+a=ptime:20
+
+2025-11-28 06:48:23.130895 99.43% [DEBUG] sofia.c:7493 Channel sofia/external/ entering state [calling][0]
+recv 420 bytes from udp/[159.65.244.171]:5060 at 06:48:23.133074:
+------------------------------------------------------------------------
+SIP/2.0 400 Bad Request URI
+Via: SIP/2.0/UDP 172.18.0.2;rport=49213;branch=z9hG4bKm04Z7tD0H3p2g;received=167.71.173.83
+From: "+17866929905" <sip:hopwhistle@pvn-shanevici.sip.signalwire.com>;tag=3U0vF3a5vet9H
+To: <sip:@pvn-shanevici.sip.signalwire.com>;tag=b97296421094b542cf6521dfe803ae0e.5b290000
+Call-ID: 1317a495-46c9-123f-ac9e-02f73aac2810
+CSeq: 107602459 INVITE
+Server: SignalWire Proxy
+Content-Length: 0
+
+
+send 402 bytes to udp/[159.65.244.171]:5060 at 06:48:23.133186:
+------------------------------------------------------------------------
+ACK sip:@pvn-shanevici.sip.signalwire.com SIP/2.0
+Via: SIP/2.0/UDP 172.18.0.2;rport;branch=z9hG4bKm04Z7tD0H3p2g
+Max-Forwards: 68
+From: "+17866929905" <sip:hopwhistle@pvn-shanevici.sip.signalwire.com>;tag=3U0vF3a5vet9H
+To: <sip:@pvn-shanevici.sip.signalwire.com>;tag=b97296421094b542cf6521dfe803ae0e.5b290000
+Call-ID: 1317a495-46c9-123f-ac9e-02f73aac2810
+CSeq: 107602459 ACK
+Content-Length: 0
+
+
+2025-11-28 06:48:23.130895 99.43% [DEBUG] sofia.c:7493 Channel sofia/external/ entering state [terminated][400]
+2025-11-28 06:48:23.130895 99.43% [NOTICE] sofia.c:8736 Hangup sofia/external/ [CS_CONSUME_MEDIA] [NORMAL_TEMPORARY_FAILURE]
+2025-11-28 06:48:23.130895 99.43% [DEBUG] switch_core_state_machine.c:581 (sofia/external/) Running State Change CS_HANGUP (Cur 4 Tot 14)
+2025-11-28 06:48:23.130895 99.43% [DEBUG] switch_core_state_machine.c:844 (sofia/external/) Callstate Change DOWN -> HANGUP
+2025-11-28 06:48:23.130895 99.43% [DEBUG] switch_core_state_machine.c:846 (sofia/external/) State HANGUP
+2025-11-28 06:48:23.130895 99.43% [DEBUG] mod_sofia.c:469 Channel sofia/external/ hanging up, cause: NORMAL_TEMPORARY_FAILURE
+2025-11-28 06:48:23.130895 99.43% [DEBUG] switch_core_state_machine.c:59 sofia/external/ Standard HANGUP, cause: NORMAL_TEMPORARY_FAILURE
+2025-11-28 06:48:23.130895 99.43% [DEBUG] switch_core_state_machine.c:846 (sofia/external/) State HANGUP going to sleep
+2025-11-28 06:48:23.130895 99.43% [DEBUG] switch_core_state_machine.c:616 (sofia/external/) State Change CS_HANGUP -> CS_REPORTING
+2025-11-28 06:48:23.130895 99.43% [DEBUG] switch_core_state_machine.c:581 (sofia/external/) Running State Change CS_REPORTING (Cur 4 Tot 14)
+2025-11-28 06:48:23.130895 99.43% [DEBUG] switch_core_state_machine.c:932 (sofia/external/) State REPORTING
+2025-11-28 06:48:23.130895 99.43% [DEBUG] switch_core_state_machine.c:168 sofia/external/ Standard REPORTING, cause: NORMAL_TEMPORARY_FAILURE
+2025-11-28 06:48:23.130895 99.43% [DEBUG] switch_core_state_machine.c:932 (sofia/external/) State REPORTING going to sleep
+2025-11-28 06:48:23.130895 99.43% [DEBUG] switch_core_state_machine.c:607 (sofia/external/) State Change CS_REPORTING -> CS_DESTROY
+2025-11-28 06:48:23.130895 99.43% [DEBUG] switch_core_session.c:1744 Session 14 (sofia/external/) Locked, Waiting on external entities
+2025-11-28 06:48:23.150919 99.43% [DEBUG] switch_ivr_originate.c:4056 Originate Resulted in Error Cause: 41 [NORMAL_TEMPORARY_FAILURE]
+2025-11-28 06:48:23.150919 99.43% [NOTICE] switch_core_session.c:1762 Session 14 (sofia/external/) Ended
+2025-11-28 06:48:23.150919 99.43% [NOTICE] switch_core_session.c:1766 Close Channel sofia/external/ [CS_DESTROY]
+2025-11-28 06:48:23.150919 99.43% [DEBUG] switch_core_state_machine.c:735 (sofia/external/) Running State Change CS_DESTROY (Cur 3 Tot 14)
+2025-11-28 06:48:23.150919 99.43% [INFO] mod_dptools.c:3635 Originate Failed.  Cause: NORMAL_TEMPORARY_FAILURE
+2025-11-28 06:48:23.150919 99.43% [NOTICE] switch_channel.c:5012 Hangup sofia/external/8000@167.71.173.83 [CS_EXECUTE] [NORMAL_TEMPORARY_FAILURE]
+2025-11-28 06:48:23.150919 99.43% [DEBUG] switch_core_state_machine.c:745 (sofia/external/) State DESTROY
+2025-11-28 06:48:23.150919 99.43% [DEBUG] mod_sofia.c:380 sofia/external/ SOFIA DESTROY
+2025-11-28 06:48:23.150919 99.43% [DEBUG] switch_core_state_machine.c:175 sofia/external/ Standard DESTROY
+2025-11-28 06:48:23.150919 99.43% [DEBUG] switch_core_state_machine.c:745 (sofia/external/) State DESTROY going to sleep
+2025-11-28 06:48:23.150919 99.43% [DEBUG] switch_core_session.c:2979 sofia/external/8000@167.71.173.83 skip receive message [APPLICATION_EXEC_COMPLETE] (channel is hungup already)
+2025-11-28 06:48:23.150919 99.43% [DEBUG] switch_core_state_machine.c:647 (sofia/external/8000@167.71.173.83) State EXECUTE going to sleep
+2025-11-28 06:48:23.150919 99.43% [DEBUG] switch_core_state_machine.c:581 (sofia/external/8000@167.71.173.83) Running State Change CS_HANGUP (Cur 3 Tot 14)
+2025-11-28 06:48:23.150919 99.43% [DEBUG] switch_core_state_machine.c:844 (sofia/external/8000@167.71.173.83) Callstate Change RINGING -> HANGUP
+2025-11-28 06:48:23.150919 99.43% [DEBUG] switch_core_state_machine.c:846 (sofia/external/8000@167.71.173.83) State HANGUP
+2025-11-28 06:48:23.150919 99.43% [DEBUG] mod_sofia.c:463 sofia/external/8000@167.71.173.83 Overriding SIP cause 503 with 400 from the other leg
+2025-11-28 06:48:23.150919 99.43% [DEBUG] mod_sofia.c:469 Channel sofia/external/8000@167.71.173.83 hanging up, cause: NORMAL_TEMPORARY_FAILURE
+2025-11-28 06:48:23.150919 99.43% [DEBUG] mod_sofia.c:614 Responding to INVITE with: 400
+2025-11-28 06:48:23.150919 99.43% [DEBUG] switch_core_state_machine.c:59 sofia/external/8000@167.71.173.83 Standard HANGUP, cause: NORMAL_TEMPORARY_FAILURE
+2025-11-28 06:48:23.150919 99.43% [DEBUG] switch_core_state_machine.c:846 (sofia/external/8000@167.71.173.83) State HANGUP going to sleep
+2025-11-28 06:48:23.150919 99.43% [DEBUG] switch_core_state_machine.c:616 (sofia/external/8000@167.71.173.83) State Change CS_HANGUP -> CS_REPORTING
+2025-11-28 06:48:23.150919 99.43% [DEBUG] switch_core_state_machine.c:581 (sofia/external/8000@167.71.173.83) Running State Change CS_REPORTING (Cur 3 Tot 14)
+2025-11-28 06:48:23.150919 99.43% [DEBUG] switch_core_state_machine.c:932 (sofia/external/8000@167.71.173.83) State REPORTING
+2025-11-28 06:48:23.150919 99.43% [DEBUG] switch_core_state_machine.c:168 sofia/external/8000@167.71.173.83 Standard REPORTING, cause: NORMAL_TEMPORARY_FAILURE
+2025-11-28 06:48:23.150919 99.43% [DEBUG] switch_core_state_machine.c:932 (sofia/external/8000@167.71.173.83) State REPORTING going to sleep
+send 876 bytes to udp/[172.18.0.3]:5060 at 06:48:23.152998:
+------------------------------------------------------------------------
+SIP/2.0 400 Bad Request
+Via: SIP/2.0/UDP 167.71.173.83:5060;branch=z9hG4bKd3ee.0f76522dbb0829b4ea0ffb15d7976f54.0;received=172.18.0.3
+Via: SIP/2.0/UDP 81.222.204.61:55261;rport=55261;branch=z9hG4bK816142642
+Max-Forwards: 69
+From: <sip:8000@167.71.173.83>;tag=610781200
+To: <sip:81033756010575@167.71.173.83>;tag=2j73D8S1Z53pp
+Call-ID: 283582747-530660538-900380312
+CSeq: 1 INVITE
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Accept: application/sdp
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Supported: timer, path, replaces
+Allow-Events: talk, hold, conference, refer
+Reason: Q.850;cause=41;text="NORMAL_TEMPORARY_FAILURE"
+Content-Length: 0
+Remote-Party-ID: "81033756010575" <sip:81033756010575@167.71.173.83>;party=calling;privacy=off;screen=no
+
+
+2025-11-28 06:48:23.150919 99.43% [DEBUG] switch_core_state_machine.c:607 (sofia/external/8000@167.71.173.83) State Change CS_REPORTING -> CS_DESTROY
+2025-11-28 06:48:23.150919 99.43% [DEBUG] switch_core_session.c:1744 Session 13 (sofia/external/8000@167.71.173.83) Locked, Waiting on external entities
+2025-11-28 06:48:23.150919 99.43% [NOTICE] switch_core_session.c:1762 Session 13 (sofia/external/8000@167.71.173.83) Ended
+2025-11-28 06:48:23.150919 99.43% [NOTICE] switch_core_session.c:1766 Close Channel sofia/external/8000@167.71.173.83 [CS_DESTROY]
+2025-11-28 06:48:23.150919 99.43% [DEBUG] switch_core_state_machine.c:735 (sofia/external/8000@167.71.173.83) Running State Change CS_DESTROY (Cur 2 Tot 14)
+2025-11-28 06:48:23.150919 99.43% [DEBUG] switch_core_state_machine.c:745 (sofia/external/8000@167.71.173.83) State DESTROY
+2025-11-28 06:48:23.150919 99.43% [DEBUG] mod_sofia.c:380 sofia/external/8000@167.71.173.83 SOFIA DESTROY
+2025-11-28 06:48:23.150919 99.43% [DEBUG] switch_core_state_machine.c:175 sofia/external/8000@167.71.173.83 Standard DESTROY
+2025-11-28 06:48:23.150919 99.43% [DEBUG] switch_core_state_machine.c:745 (sofia/external/8000@167.71.173.83) State DESTROY going to sleep
+recv 333 bytes from udp/[172.18.0.3]:5060 at 06:48:23.153726:
+------------------------------------------------------------------------
+ACK sip:81033756010575@167.71.173.83 SIP/2.0
+Via: SIP/2.0/UDP 167.71.173.83:5060;branch=z9hG4bKd3ee.0f76522dbb0829b4ea0ffb15d7976f54.0
+Max-Forwards: 69
+From: <sip:8000@167.71.173.83>;tag=610781200
+To: <sip:81033756010575@167.71.173.83>;tag=2j73D8S1Z53pp
+Call-ID: 283582747-530660538-900380312
+CSeq: 1 ACK
+Content-Length: 0
+
+
+send 1311 bytes to udp/[172.18.0.3]:5060 at 06:48:24.489449:
+------------------------------------------------------------------------
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 167.71.173.83:5060;branch=z9hG4bK5a8f.aee2858235cef1082b5c34f784c3ef3f.0;received=172.18.0.3
+Via: SIP/2.0/UDP 99.38.204.249:55749;received=99.38.204.249;rport=55749;branch=z9hG4bKPj7faf4eb081c14cd192c38bb7e424ddda
+From: "James" <sip:testuser@167.71.173.83>;tag=43b6818e54a442828e7bf8583930a07a
+To: <sip:15513326220@167.71.173.83>;tag=ye206UpKB2acr
+Call-ID: 2e94f1086c394463952b8f5d4e9d2992
+CSeq: 10338 INVITE
+Contact: <sip:15513326220@172.18.0.2:5060;transport=udp>
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Supported: timer, path, replaces
+Allow-Events: talk, hold, conference, refer
+Session-Expires: 120;refresher=uas
+Content-Type: application/sdp
+Content-Disposition: session
+Content-Length: 248
+X-Relay-Call-ID: 539489d6-00dd-46fd-89cf-8855ece729af
+Remote-Party-ID: "+15513326220" <sip:+15513326220@167.71.173.83>;party=calling;privacy=off;screen=no
+
+v=0
+o=FreeSWITCH 1764290834 1764290835 IN IP4 172.18.0.2
+s=FreeSWITCH
+c=IN IP4 172.18.0.2
+t=0 0
+m=audio 21648 RTP/AVP 8 101
+a=rtpmap:8 PCMA/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=ptime:20
+a=rtcp:21649 IN IP4 172.18.0.2
+
+send 1311 bytes to udp/[172.18.0.3]:5060 at 06:48:28.489783:
+------------------------------------------------------------------------
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 167.71.173.83:5060;branch=z9hG4bK5a8f.aee2858235cef1082b5c34f784c3ef3f.0;received=172.18.0.3
+Via: SIP/2.0/UDP 99.38.204.249:55749;received=99.38.204.249;rport=55749;branch=z9hG4bKPj7faf4eb081c14cd192c38bb7e424ddda
+From: "James" <sip:testuser@167.71.173.83>;tag=43b6818e54a442828e7bf8583930a07a
+To: <sip:15513326220@167.71.173.83>;tag=ye206UpKB2acr
+Call-ID: 2e94f1086c394463952b8f5d4e9d2992
+CSeq: 10338 INVITE
+Contact: <sip:15513326220@172.18.0.2:5060;transport=udp>
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Supported: timer, path, replaces
+Allow-Events: talk, hold, conference, refer
+Session-Expires: 120;refresher=uas
+Content-Type: application/sdp
+Content-Disposition: session
+Content-Length: 248
+X-Relay-Call-ID: 539489d6-00dd-46fd-89cf-8855ece729af
+Remote-Party-ID: "+15513326220" <sip:+15513326220@167.71.173.83>;party=calling;privacy=off;screen=no
+
+v=0
+o=FreeSWITCH 1764290834 1764290835 IN IP4 172.18.0.2
+s=FreeSWITCH
+c=IN IP4 172.18.0.2
+t=0 0
+m=audio 21648 RTP/AVP 8 101
+a=rtpmap:8 PCMA/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=ptime:20
+a=rtcp:21649 IN IP4 172.18.0.2
+
+send 1311 bytes to udp/[172.18.0.3]:5060 at 06:48:32.490879:
+------------------------------------------------------------------------
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 167.71.173.83:5060;branch=z9hG4bK5a8f.aee2858235cef1082b5c34f784c3ef3f.0;received=172.18.0.3
+Via: SIP/2.0/UDP 99.38.204.249:55749;received=99.38.204.249;rport=55749;branch=z9hG4bKPj7faf4eb081c14cd192c38bb7e424ddda
+From: "James" <sip:testuser@167.71.173.83>;tag=43b6818e54a442828e7bf8583930a07a
+To: <sip:15513326220@167.71.173.83>;tag=ye206UpKB2acr
+Call-ID: 2e94f1086c394463952b8f5d4e9d2992
+CSeq: 10338 INVITE
+Contact: <sip:15513326220@172.18.0.2:5060;transport=udp>
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Supported: timer, path, replaces
+Allow-Events: talk, hold, conference, refer
+Session-Expires: 120;refresher=uas
+Content-Type: application/sdp
+Content-Disposition: session
+Content-Length: 248
+X-Relay-Call-ID: 539489d6-00dd-46fd-89cf-8855ece729af
+Remote-Party-ID: "+15513326220" <sip:+15513326220@167.71.173.83>;party=calling;privacy=off;screen=no
+
+v=0
+o=FreeSWITCH 1764290834 1764290835 IN IP4 172.18.0.2
+s=FreeSWITCH
+c=IN IP4 172.18.0.2
+t=0 0
+m=audio 21648 RTP/AVP 8 101
+a=rtpmap:8 PCMA/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=ptime:20
+a=rtcp:21649 IN IP4 172.18.0.2
+
+send 1311 bytes to udp/[172.18.0.3]:5060 at 06:48:36.491101:
+------------------------------------------------------------------------
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 167.71.173.83:5060;branch=z9hG4bK5a8f.aee2858235cef1082b5c34f784c3ef3f.0;received=172.18.0.3
+Via: SIP/2.0/UDP 99.38.204.249:55749;received=99.38.204.249;rport=55749;branch=z9hG4bKPj7faf4eb081c14cd192c38bb7e424ddda
+From: "James" <sip:testuser@167.71.173.83>;tag=43b6818e54a442828e7bf8583930a07a
+To: <sip:15513326220@167.71.173.83>;tag=ye206UpKB2acr
+Call-ID: 2e94f1086c394463952b8f5d4e9d2992
+CSeq: 10338 INVITE
+Contact: <sip:15513326220@172.18.0.2:5060;transport=udp>
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Supported: timer, path, replaces
+Allow-Events: talk, hold, conference, refer
+Session-Expires: 120;refresher=uas
+Content-Type: application/sdp
+Content-Disposition: session
+Content-Length: 248
+X-Relay-Call-ID: 539489d6-00dd-46fd-89cf-8855ece729af
+Remote-Party-ID: "+15513326220" <sip:+15513326220@167.71.173.83>;party=calling;privacy=off;screen=no
+
+v=0
+o=FreeSWITCH 1764290834 1764290835 IN IP4 172.18.0.2
+s=FreeSWITCH
+c=IN IP4 172.18.0.2
+t=0 0
+m=audio 21648 RTP/AVP 8 101
+a=rtpmap:8 PCMA/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=ptime:20
+a=rtcp:21649 IN IP4 172.18.0.2
+
+send 1311 bytes to udp/[172.18.0.3]:5060 at 06:48:40.491392:
+------------------------------------------------------------------------
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 167.71.173.83:5060;branch=z9hG4bK5a8f.aee2858235cef1082b5c34f784c3ef3f.0;received=172.18.0.3
+Via: SIP/2.0/UDP 99.38.204.249:55749;received=99.38.204.249;rport=55749;branch=z9hG4bKPj7faf4eb081c14cd192c38bb7e424ddda
+From: "James" <sip:testuser@167.71.173.83>;tag=43b6818e54a442828e7bf8583930a07a
+To: <sip:15513326220@167.71.173.83>;tag=ye206UpKB2acr
+Call-ID: 2e94f1086c394463952b8f5d4e9d2992
+CSeq: 10338 INVITE
+Contact: <sip:15513326220@172.18.0.2:5060;transport=udp>
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Supported: timer, path, replaces
+Allow-Events: talk, hold, conference, refer
+Session-Expires: 120;refresher=uas
+Content-Type: application/sdp
+Content-Disposition: session
+Content-Length: 248
+X-Relay-Call-ID: 539489d6-00dd-46fd-89cf-8855ece729af
+Remote-Party-ID: "+15513326220" <sip:+15513326220@167.71.173.83>;party=calling;privacy=off;screen=no
+
+v=0
+o=FreeSWITCH 1764290834 1764290835 IN IP4 172.18.0.2
+s=FreeSWITCH
+c=IN IP4 172.18.0.2
+t=0 0
+m=audio 21648 RTP/AVP 8 101
+a=rtpmap:8 PCMA/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=ptime:20
+a=rtcp:21649 IN IP4 172.18.0.2
+
+recv 372 bytes from udp/[159.65.244.171]:5060 at 06:48:41.263673:
+------------------------------------------------------------------------
+OPTIONS sip:gw+signalwire@172.18.0.2:5060;transport=udp;gw=signalwire SIP/2.0
+Via: SIP/2.0/UDP 159.65.244.171:5060;branch=z9hG4bK7865940
+From: sip:pinger@signalwire.com;tag=uloc-69266f8f-c5-e5a22-e6d5273a-5fc6091
+To: sip:gw+signalwire@172.18.0.2:5060;transport=udp;gw=signalwire
+Call-ID: 4d4955a7-a8a431b5-84f5052@159.65.244.171
+CSeq: 1 OPTIONS
+Content-Length: 0
+
+
+send 708 bytes to udp/[159.65.244.171]:5060 at 06:48:41.263999:
+------------------------------------------------------------------------
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 159.65.244.171:5060;branch=z9hG4bK7865940
+From: sip:pinger@signalwire.com;tag=uloc-69266f8f-c5-e5a22-e6d5273a-5fc6091
+To: <sip:gw+signalwire@172.18.0.2:5060>;transport=udp;gw=signalwire;tag=44SNHyU8SQgvD
+Call-ID: 4d4955a7-a8a431b5-84f5052@159.65.244.171
+CSeq: 1 OPTIONS
+Contact: <sip:gw+signalwire@172.18.0.2:5060;transport=udp;gw=signalwire>
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Accept: application/sdp
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Supported: timer, path, replaces
+Allow-Events: talk, hold, conference, refer
+Content-Length: 0
+
+
+send 630 bytes to udp/[159.65.244.171]:5060 at 06:48:41.473835:
+------------------------------------------------------------------------
+OPTIONS sip:pvn-shanevici.sip.signalwire.com;transport=udp SIP/2.0
+Via: SIP/2.0/UDP 172.18.0.2;rport;branch=z9hG4bKN9Xr9Ny3ecDNc
+Max-Forwards: 70
+From: <sip:pvn-shanevici.sip.signalwire.com>;tag=5DKeKSccQ06eS
+To: <sip:pvn-shanevici.sip.signalwire.com>
+Call-ID: 1e0674ed-46c9-123f-ac9e-02f73aac2810
+CSeq: 107602365 OPTIONS
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Supported: timer, path, replaces
+Allow-Events: talk, hold, conference, refer
+Content-Length: 0
+
+
+recv 388 bytes from udp/[159.65.244.171]:5060 at 06:48:41.476322:
+------------------------------------------------------------------------
+SIP/2.0 200 Keepalive
+Via: SIP/2.0/UDP 172.18.0.2;rport=49213;branch=z9hG4bKN9Xr9Ny3ecDNc;received=167.71.173.83
+From: <sip:pvn-shanevici.sip.signalwire.com>;tag=5DKeKSccQ06eS
+To: <sip:pvn-shanevici.sip.signalwire.com>;tag=b97296421094b542cf6521dfe803ae0e.5b290000
+Call-ID: 1e0674ed-46c9-123f-ac9e-02f73aac2810
+CSeq: 107602365 OPTIONS
+Server: SignalWire Proxy
+Content-Length: 0
+
+
+send 1311 bytes to udp/[172.18.0.3]:5060 at 06:48:44.493399:
+------------------------------------------------------------------------
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 167.71.173.83:5060;branch=z9hG4bK5a8f.aee2858235cef1082b5c34f784c3ef3f.0;received=172.18.0.3
+Via: SIP/2.0/UDP 99.38.204.249:55749;received=99.38.204.249;rport=55749;branch=z9hG4bKPj7faf4eb081c14cd192c38bb7e424ddda
+From: "James" <sip:testuser@167.71.173.83>;tag=43b6818e54a442828e7bf8583930a07a
+To: <sip:15513326220@167.71.173.83>;tag=ye206UpKB2acr
+Call-ID: 2e94f1086c394463952b8f5d4e9d2992
+CSeq: 10338 INVITE
+Contact: <sip:15513326220@172.18.0.2:5060;transport=udp>
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Supported: timer, path, replaces
+Allow-Events: talk, hold, conference, refer
+Session-Expires: 120;refresher=uas
+Content-Type: application/sdp
+Content-Disposition: session
+Content-Length: 248
+X-Relay-Call-ID: 539489d6-00dd-46fd-89cf-8855ece729af
+Remote-Party-ID: "+15513326220" <sip:+15513326220@167.71.173.83>;party=calling;privacy=off;screen=no
+
+v=0
+o=FreeSWITCH 1764290834 1764290835 IN IP4 172.18.0.2
+s=FreeSWITCH
+c=IN IP4 172.18.0.2
+t=0 0
+m=audio 21648 RTP/AVP 8 101
+a=rtpmap:8 PCMA/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=ptime:20
+a=rtcp:21649 IN IP4 172.18.0.2
+
+send 686 bytes to udp/[172.18.0.3]:5060 at 06:48:44.986868:
+------------------------------------------------------------------------
+BYE sip:testuser@99.38.204.249:55749;ob SIP/2.0
+Via: SIP/2.0/UDP 172.18.0.2;rport;branch=z9hG4bKpjQHBHF7BN37Q
+Max-Forwards: 70
+From: <sip:15513326220@167.71.173.83>;tag=ye206UpKB2acr
+To: "James" <sip:testuser@167.71.173.83>;tag=43b6818e54a442828e7bf8583930a07a
+Call-ID: 2e94f1086c394463952b8f5d4e9d2992
+CSeq: 107602470 BYE
+Contact: <sip:15513326220@172.18.0.2:5060;transport=udp>
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Supported: timer, path, replaces
+Reason: SIP;cause=408;text="ACK Timeout"
+Content-Length: 0
+
+
+2025-11-28 06:48:44.970923 99.43% [DEBUG] sofia.c:7493 Channel sofia/external/testuser@167.71.173.83 entering state [terminating][0]
+2025-11-28 06:48:44.970923 99.43% [NOTICE] sofia.c:8736 Hangup sofia/external/testuser@167.71.173.83 [CS_EXECUTE] [NORMAL_UNSPECIFIED]
+2025-11-28 06:48:44.970923 99.43% [DEBUG] switch_ivr_bridge.c:911 BRIDGE THREAD DONE [sofia/external/testuser@167.71.173.83]
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_ivr_bridge.c:911 BRIDGE THREAD DONE [sofia/external/+15513326220]
+2025-11-28 06:48:44.990918 99.43% [NOTICE] switch_ivr_bridge.c:1027 Hangup sofia/external/+15513326220 [CS_EXCHANGE_MEDIA] [NORMAL_CLEARING]
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_state_machine.c:650 (sofia/external/+15513326220) State EXCHANGE_MEDIA going to sleep
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_state_machine.c:581 (sofia/external/+15513326220) Running State Change CS_HANGUP (Cur 2 Tot 14)
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_state_machine.c:844 (sofia/external/+15513326220) Callstate Change ACTIVE -> HANGUP
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_state_machine.c:846 (sofia/external/+15513326220) State HANGUP
+2025-11-28 06:48:44.990918 99.43% [DEBUG] mod_sofia.c:469 Channel sofia/external/+15513326220 hanging up, cause: NORMAL_CLEARING
+2025-11-28 06:48:44.990918 99.43% [DEBUG] mod_sofia.c:523 Sending BYE to sofia/external/+15513326220
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_state_machine.c:59 sofia/external/+15513326220 Standard HANGUP, cause: NORMAL_CLEARING
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_state_machine.c:846 (sofia/external/+15513326220) State HANGUP going to sleep
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_ivr_bridge.c:1890 sofia/external/+15513326220 skip receive message [UNBRIDGE] (channel is hungup already)
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_ivr_bridge.c:1893 sofia/external/testuser@167.71.173.83 skip receive message [UNBRIDGE] (channel is hungup already)
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_state_machine.c:616 (sofia/external/+15513326220) State Change CS_HANGUP -> CS_REPORTING
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_state_machine.c:581 (sofia/external/+15513326220) Running State Change CS_REPORTING (Cur 2 Tot 14)
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_state_machine.c:932 (sofia/external/+15513326220) State REPORTING
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_state_machine.c:168 sofia/external/+15513326220 Standard REPORTING, cause: NORMAL_CLEARING
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_state_machine.c:932 (sofia/external/+15513326220) State REPORTING going to sleep
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_session.c:2979 sofia/external/testuser@167.71.173.83 skip receive message [APPLICATION_EXEC_COMPLETE] (channel is hungup already)
+send 1081 bytes to udp/[159.65.244.171]:5060 at 06:48:45.008918:
+------------------------------------------------------------------------
+BYE sip:+15513326220@137.184.87.9:35181;transport=tls SIP/2.0
+Via: SIP/2.0/UDP 172.18.0.2;rport;branch=z9hG4bKQUgaDc0a9XStK
+Route: <sip:159.65.244.171;r2=on;lr;ftag=ZQUS8p7p8a1yK;nat=yes>
+Route: <sip:159.65.244.171:5061;transport=tls;r2=on;lr;ftag=ZQUS8p7p8a1yK;nat=yes>
+Max-Forwards: 70
+From: "+17866929905" <sip:hopwhistle@pvn-shanevici.sip.signalwire.com>;tag=ZQUS8p7p8a1yK
+To: <sip:+15513326220@pvn-shanevici.sip.signalwire.com>;tag=6Sj1XrXN9189S
+Call-ID: 0528c695-46c9-123f-ac9e-02f73aac2810
+CSeq: 107602449 BYE
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Supported: timer, path, replaces
+Proxy-Authorization: Digest username="hopwhistle", realm="pvn-shanevici.sip.signalwire.com", nonce="aSlGy2kpRZ+aBm7CA1gLNOqZL7i5Ofjn", algorithm=MD5, uri="sip:+15513326220@137.184.87.9:35181;transport=tls", response="cc7a95ea003df880115b67dde7e14e97"
+Reason: Q.850;cause=16;text="NORMAL_CLEARING"
+Content-Length: 0
+
+
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_session.c:2979 sofia/external/testuser@167.71.173.83 skip receive message [APPLICATION_EXEC_COMPLETE] (channel is hungup already)
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_state_machine.c:607 (sofia/external/+15513326220) State Change CS_REPORTING -> CS_DESTROY
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_state_machine.c:647 (sofia/external/testuser@167.71.173.83) State EXECUTE going to sleep
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_state_machine.c:581 (sofia/external/testuser@167.71.173.83) Running State Change CS_HANGUP (Cur 2 Tot 14)
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_session.c:1744 Session 12 (sofia/external/+15513326220) Locked, Waiting on external entities
+2025-11-28 06:48:44.990918 99.43% [NOTICE] switch_core_session.c:1762 Session 12 (sofia/external/+15513326220) Ended
+2025-11-28 06:48:44.990918 99.43% [NOTICE] switch_core_session.c:1766 Close Channel sofia/external/+15513326220 [CS_DESTROY]
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_state_machine.c:844 (sofia/external/testuser@167.71.173.83) Callstate Change ACTIVE -> HANGUP
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_state_machine.c:735 (sofia/external/+15513326220) Running State Change CS_DESTROY (Cur 1 Tot 14)
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_state_machine.c:846 (sofia/external/testuser@167.71.173.83) State HANGUP
+2025-11-28 06:48:44.990918 99.43% [DEBUG] mod_sofia.c:469 Channel sofia/external/testuser@167.71.173.83 hanging up, cause: NORMAL_UNSPECIFIED
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_state_machine.c:59 sofia/external/testuser@167.71.173.83 Standard HANGUP, cause: NORMAL_UNSPECIFIED
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_state_machine.c:846 (sofia/external/testuser@167.71.173.83) State HANGUP going to sleep
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_state_machine.c:616 (sofia/external/testuser@167.71.173.83) State Change CS_HANGUP -> CS_REPORTING
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_state_machine.c:581 (sofia/external/testuser@167.71.173.83) Running State Change CS_REPORTING (Cur 1 Tot 14)
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_state_machine.c:745 (sofia/external/+15513326220) State DESTROY
+2025-11-28 06:48:44.990918 99.43% [DEBUG] mod_sofia.c:380 sofia/external/+15513326220 SOFIA DESTROY
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_state_machine.c:932 (sofia/external/testuser@167.71.173.83) State REPORTING
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_state_machine.c:168 sofia/external/testuser@167.71.173.83 Standard REPORTING, cause: NORMAL_UNSPECIFIED
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_state_machine.c:175 sofia/external/+15513326220 Standard DESTROY
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_state_machine.c:932 (sofia/external/testuser@167.71.173.83) State REPORTING going to sleep
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_state_machine.c:745 (sofia/external/+15513326220) State DESTROY going to sleep
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_state_machine.c:607 (sofia/external/testuser@167.71.173.83) State Change CS_REPORTING -> CS_DESTROY
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_session.c:1744 Session 11 (sofia/external/testuser@167.71.173.83) Locked, Waiting on external entities
+2025-11-28 06:48:44.990918 99.43% [NOTICE] switch_core_session.c:1762 Session 11 (sofia/external/testuser@167.71.173.83) Ended
+2025-11-28 06:48:44.990918 99.43% [NOTICE] switch_core_session.c:1766 Close Channel sofia/external/testuser@167.71.173.83 [CS_DESTROY]
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_state_machine.c:735 (sofia/external/testuser@167.71.173.83) Running State Change CS_DESTROY (Cur 0 Tot 14)
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_state_machine.c:745 (sofia/external/testuser@167.71.173.83) State DESTROY
+2025-11-28 06:48:44.990918 99.43% [DEBUG] mod_sofia.c:380 sofia/external/testuser@167.71.173.83 SOFIA DESTROY
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_state_machine.c:175 sofia/external/testuser@167.71.173.83 Standard DESTROY
+2025-11-28 06:48:44.990918 99.43% [DEBUG] switch_core_state_machine.c:745 (sofia/external/testuser@167.71.173.83) State DESTROY going to sleep
+recv 326 bytes from udp/[172.18.0.3]:5060 at 06:48:45.019680:
+------------------------------------------------------------------------
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.18.0.2;rport=5060;received=172.18.0.2;branch=z9hG4bKpjQHBHF7BN37Q
+Call-ID: 2e94f1086c394463952b8f5d4e9d2992
+From: <sip:15513326220@167.71.173.83>;tag=ye206UpKB2acr
+To: "James" <sip:testuser@167.71.173.83>;tag=43b6818e54a442828e7bf8583930a07a
+CSeq: 107602470 BYE
+Content-Length:  0
+
+
+recv 565 bytes from udp/[159.65.244.171]:5060 at 06:48:45.104420:
+------------------------------------------------------------------------
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.18.0.2;received=167.71.173.83;rport=49213;branch=z9hG4bKQUgaDc0a9XStK
+From: "+17866929905" <sip:hopwhistle@pvn-shanevici.sip.signalwire.com>;tag=ZQUS8p7p8a1yK
+To: <sip:+15513326220@pvn-shanevici.sip.signalwire.com>;tag=6Sj1XrXN9189S
+Call-ID: 0528c695-46c9-123f-ac9e-02f73aac2810
+CSeq: 107602449 BYE
+User-Agent: SignalWire
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Supported: timer, path, replaces
+Content-Length: 0
+X-Relay-Call-ID: 539489d6-00dd-46fd-89cf-8855ece729af
+
+
+recv 822 bytes from udp/[172.18.0.3]:5060 at 06:49:02.093039:
+------------------------------------------------------------------------
+INVITE sip:00033756010575@167.71.173.83 SIP/2.0
+Via: SIP/2.0/UDP 167.71.173.83:5060;branch=z9hG4bKd7f9.1721eaf46559aa4f8ae9b731dd54a40b.0
+Via: SIP/2.0/UDP 81.222.204.61:65394;rport=65394;branch=z9hG4bK1760498263
+Max-Forwards: 69
+From: <sip:8000@167.71.173.83>;tag=1925807654
+To: <sip:00033756010575@167.71.173.83>
+Call-ID: 1592217205-1305971567-1418670957
+CSeq: 1 INVITE
+Contact: <sip:8000@81.222.204.61:65394>
+Content-Type: application/sdp
+Content-Length: 214
+Allow: ACK, BYE, CANCEL, INFO, INVITE, MESSAGE, NOTIFY, OPTIONS, PRACK, REFER, REGISTER, SUBSCRIBE, UPDATE, PUBLISH
+User-Agent: ims
+
+v=0
+o=8000 16264 18299 IN IP4 167.71.173.83
+s=call
+c=IN IP4 167.71.173.83
+t=0 0
+m=audio 10010 RTP/AVP 0 101
+a=rtpmap:0 pcmu/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-11
+a=sendrecv
+a=rtcp:10011
+
+2025-11-28 06:49:02.090965 99.57% [NOTICE] switch_channel.c:1142 New Channel sofia/external/8000@167.71.173.83 [0cfda20b-c22e-47d2-a7f3-14944eec39fa]
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_state_machine.c:581 (sofia/external/8000@167.71.173.83) Running State Change CS_NEW (Cur 1 Tot 15)
+2025-11-28 06:49:02.090965 99.57% [INFO] sofia.c:10460 sofia/external/8000@167.71.173.83 receiving invite from 172.18.0.3:5060 version: 1.10.12 -release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit call-id: 1592217205-1305971567-1418670957
+2025-11-28 06:49:02.090965 99.57% [DEBUG] sofia.c:10554 verifying acl "domains" for ip/port 172.18.0.3:0.
+2025-11-28 06:49:02.090965 99.57% [DEBUG] sofia.c:10583 IP 172.18.0.3 Approved by acl "domains[]". Access Granted.
+2025-11-28 06:49:02.090965 99.57% [DEBUG] sofia.c:11675 Setting NAT mode based on via received
+2025-11-28 06:49:02.090965 99.57% [DEBUG] sofia.c:7493 Channel sofia/external/8000@167.71.173.83 entering state [received][100]
+2025-11-28 06:49:02.090965 99.57% [DEBUG] sofia.c:7503 Remote SDP:
+v=0
+o=8000 16264 18299 IN IP4 167.71.173.83
+s=call
+c=IN IP4 167.71.173.83
+t=0 0
+m=audio 10010 RTP/AVP 0 101
+a=rtpmap:0 pcmu/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-11
+a=rtcp:10011
+
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [pcmu:0:8000:20:64000:1]/[G722:9:8000:20:64000:1]
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [pcmu:0:8000:20:64000:1]/[PCMU:0:8000:20:64000:1]
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [PCMU:0:8000:20:64000:1] ++++ is saved as a match
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [pcmu:0:8000:20:64000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [pcmu:0:8000:20:64000:1]/[GSM:3:8000:20:13200:1]
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_media.c:5438 Set telephone-event payload to 101@8000
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_media.c:3731 Set Codec sofia/external/8000@167.71.173.83 PCMU/8000 20 ms 160 samples 64000 bits 1 channels
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_codec.c:111 sofia/external/8000@167.71.173.83 Original read codec set to PCMU:0
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_media.c:5798 Set telephone-event payload to 101@8000
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_media.c:5856 sofia/external/8000@167.71.173.83 Set 2833 dtmf send payload to 101 recv payload to 101
+2025-11-28 06:49:02.090965 99.57% [DEBUG] sofia.c:7927 (sofia/external/8000@167.71.173.83) State Change CS_NEW -> CS_INIT
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_state_machine.c:600 (sofia/external/8000@167.71.173.83) State NEW
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_state_machine.c:581 (sofia/external/8000@167.71.173.83) Running State Change CS_INIT (Cur 1 Tot 15)
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_state_machine.c:624 (sofia/external/8000@167.71.173.83) State INIT
+2025-11-28 06:49:02.090965 99.57% [DEBUG] mod_sofia.c:97 sofia/external/8000@167.71.173.83 SOFIA INIT
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_state_machine.c:40 sofia/external/8000@167.71.173.83 Standard INIT
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_state_machine.c:48 (sofia/external/8000@167.71.173.83) State Change CS_INIT -> CS_ROUTING
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_state_machine.c:624 (sofia/external/8000@167.71.173.83) State INIT going to sleep
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_state_machine.c:581 (sofia/external/8000@167.71.173.83) Running State Change CS_ROUTING (Cur 1 Tot 15)
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_channel.c:2399 (sofia/external/8000@167.71.173.83) Callstate Change DOWN -> RINGING
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_state_machine.c:640 (sofia/external/8000@167.71.173.83) State ROUTING
+2025-11-28 06:49:02.090965 99.57% [DEBUG] mod_sofia.c:158 sofia/external/8000@167.71.173.83 SOFIA ROUTING
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_state_machine.c:230 sofia/external/8000@167.71.173.83 Standard ROUTING
+2025-11-28 06:49:02.090965 99.57% [INFO] mod_dialplan_xml.c:639 Processing 8000 <8000>->00033756010575 in context trunk
+send 409 bytes to udp/[172.18.0.3]:5060 at 06:49:02.095052:
+------------------------------------------------------------------------
+SIP/2.0 100 Trying
+Via: SIP/2.0/UDP 167.71.173.83:5060;branch=z9hG4bKd7f9.1721eaf46559aa4f8ae9b731dd54a40b.0;received=172.18.0.3
+From: <sip:8000@167.71.173.83>;tag=1925807654
+To: <sip:00033756010575@167.71.173.83>
+Call-ID: 1592217205-1305971567-1418670957
+CSeq: 1 INVITE
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Content-Length: 0
+
+
+Dialplan: sofia/external/8000@167.71.173.83 parsing [trunk->authenticate-trunk] continue=false
+Dialplan: sofia/external/8000@167.71.173.83 Regex (PASS) [authenticate-trunk] destination_number(00033756010575) =~ /^.+$/ break=never
+Dialplan: sofia/external/8000@167.71.173.83 Action log(INFO Inbound call from ${caller_id_number} to ${destination_number})
+Dialplan: sofia/external/8000@167.71.173.83 Action set(trunk_auth_url=${api_url}/api/v1/trunks/auth)
+Dialplan: sofia/external/8000@167.71.173.83 Action set(trunk_auth_body={"from":"${caller_id_number}","to":"${destination_number}","source_ip":"${network_addr}"})
+Dialplan: sofia/external/8000@167.71.173.83 Action set(trunk_auth_result=${curl(${trunk_auth_url} POST ${trunk_auth_body} X-API-Key:${api_key})})
+Dialplan: sofia/external/8000@167.71.173.83 Action log(INFO Trunk auth result: ${trunk_auth_result})
+|--- Dialplan: Processing recursive conditions level:1 [authenticate-trunk_recur_1] require-nested=TRUE
+|--- Dialplan: sofia/external/8000@167.71.173.83 Regex (FAIL) [authenticate-trunk_recur_1] ${trunk_auth_result}() =~ /authenticated/ break=on-false
+Dialplan: sofia/external/8000@167.71.173.83 parsing [trunk->external-outbound-calls] continue=false
+Dialplan: sofia/external/8000@167.71.173.83 Regex (FAIL) [external-outbound-calls] destination_number(00033756010575) =~ /^(\d{10})$/ break=on-true
+Dialplan: sofia/external/8000@167.71.173.83 Regex (FAIL) [external-outbound-calls] destination_number(00033756010575) =~ /^1(\d{10})$/ break=on-true
+Dialplan: sofia/external/8000@167.71.173.83 Regex (FAIL) [external-outbound-calls] destination_number(00033756010575) =~ /^(\+.+)$/ break=on-true
+Dialplan: sofia/external/8000@167.71.173.83 parsing [trunk->send-to-signalwire] continue=false
+Dialplan: sofia/external/8000@167.71.173.83 Regex (PASS) [send-to-signalwire] destination_number(00033756010575) =~ /^.+$/ break=on-false
+Dialplan: sofia/external/8000@167.71.173.83 Action log(INFO Outbound call to ${e164_dest} via SignalWire)
+Dialplan: sofia/external/8000@167.71.173.83 Action set(effective_caller_id_number=+17866929905)
+Dialplan: sofia/external/8000@167.71.173.83 Action set(effective_caller_id_name=+17866929905)
+Dialplan: sofia/external/8000@167.71.173.83 Action export(sip_h_P-Asserted-Identity=<sip:+17866929905@pvn-shanevici.sip.signalwire.com>)
+Dialplan: sofia/external/8000@167.71.173.83 Action bridge(sofia/gateway/signalwire/${e164_dest})
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_state_machine.c:281 (sofia/external/8000@167.71.173.83) State Change CS_ROUTING -> CS_EXECUTE
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_state_machine.c:640 (sofia/external/8000@167.71.173.83) State ROUTING going to sleep
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_state_machine.c:581 (sofia/external/8000@167.71.173.83) Running State Change CS_EXECUTE (Cur 1 Tot 15)
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_state_machine.c:647 (sofia/external/8000@167.71.173.83) State EXECUTE
+2025-11-28 06:49:02.090965 99.57% [DEBUG] mod_sofia.c:213 sofia/external/8000@167.71.173.83 SOFIA EXECUTE
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_state_machine.c:323 sofia/external/8000@167.71.173.83 Standard EXECUTE
+EXECUTE [depth=0] sofia/external/8000@167.71.173.83 log(INFO Inbound call from 8000 to 00033756010575)
+2025-11-28 06:49:02.090965 99.57% [INFO] mod_dptools.c:1865 Inbound call from 8000 to 00033756010575
+EXECUTE [depth=0] sofia/external/8000@167.71.173.83 set(trunk_auth_url=/api/v1/trunks/auth)
+2025-11-28 06:49:02.090965 99.57% [DEBUG] mod_dptools.c:1671 SET sofia/external/8000@167.71.173.83 [trunk_auth_url]=[/api/v1/trunks/auth]
+EXECUTE [depth=0] sofia/external/8000@167.71.173.83 set(trunk_auth_body={"from":"8000","to":"00033756010575","source_ip":"172.18.0.3"})
+2025-11-28 06:49:02.090965 99.57% [DEBUG] mod_dptools.c:1671 SET sofia/external/8000@167.71.173.83 [trunk_auth_body]=[{"from":"8000","to":"00033756010575","source_ip":"172.18.0.3"}]
+EXECUTE [depth=0] sofia/external/8000@167.71.173.83 set(trunk_auth_result=)
+2025-11-28 06:49:02.090965 99.57% [DEBUG] mod_dptools.c:1671 SET sofia/external/8000@167.71.173.83 [trunk_auth_result]=[UNDEF]
+EXECUTE [depth=0] sofia/external/8000@167.71.173.83 log(INFO Trunk auth result: )
+2025-11-28 06:49:02.090965 99.57% [INFO] mod_dptools.c:1865 Trunk auth result:
+EXECUTE [depth=0] sofia/external/8000@167.71.173.83 log(INFO Outbound call to  via SignalWire)
+2025-11-28 06:49:02.090965 99.57% [INFO] mod_dptools.c:1865 Outbound call to  via SignalWire
+EXECUTE [depth=0] sofia/external/8000@167.71.173.83 set(effective_caller_id_number=+17866929905)
+2025-11-28 06:49:02.090965 99.57% [DEBUG] mod_dptools.c:1671 SET sofia/external/8000@167.71.173.83 [effective_caller_id_number]=[+17866929905]
+EXECUTE [depth=0] sofia/external/8000@167.71.173.83 set(effective_caller_id_name=+17866929905)
+2025-11-28 06:49:02.090965 99.57% [DEBUG] mod_dptools.c:1671 SET sofia/external/8000@167.71.173.83 [effective_caller_id_name]=[+17866929905]
+EXECUTE [depth=0] sofia/external/8000@167.71.173.83 export(sip_h_P-Asserted-Identity=<sip:+17866929905@pvn-shanevici.sip.signalwire.com>)
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_channel.c:1334 EXPORT (export_vars) [sip_h_P-Asserted-Identity]=[<sip:+17866929905@pvn-shanevici.sip.signalwire.com>]
+EXECUTE [depth=0] sofia/external/8000@167.71.173.83 bridge(sofia/gateway/signalwire/)
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_channel.c:1288 sofia/external/8000@167.71.173.83 EXPORTING[export_vars] [sip_h_P-Asserted-Identity]=[<sip:+17866929905@pvn-shanevici.sip.signalwire.com>] to event
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_ivr_originate.c:2301 Parsing global variables
+2025-11-28 06:49:02.090965 99.57% [NOTICE] switch_channel.c:1142 New Channel sofia/external/ [ae37d004-9b98-4b6a-a0e7-f754998d75c5]
+2025-11-28 06:49:02.090965 99.57% [DEBUG] mod_sofia.c:5110 (sofia/external/) State Change CS_NEW -> CS_INIT
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_state_machine.c:581 (sofia/external/) Running State Change CS_INIT (Cur 2 Tot 16)
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_state_machine.c:624 (sofia/external/) State INIT
+2025-11-28 06:49:02.090965 99.57% [DEBUG] mod_sofia.c:97 sofia/external/ SOFIA INIT
+2025-11-28 06:49:02.090965 99.57% [INFO] sofia_glue.c:1659 sofia/external/ sending invite call-id: (null)
+2025-11-28 06:49:02.090965 99.57% [DEBUG] sofia_glue.c:1662 sofia/external/ sending invite version: 1.10.12 -release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit
+Local SDP:
+v=0
+o=FreeSWITCH 1764280556 1764280557 IN IP4 172.18.0.2
+s=FreeSWITCH
+c=IN IP4 172.18.0.2
+t=0 0
+m=audio 31986 RTP/AVP 0 101 13
+a=rtpmap:0 PCMU/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=rtpmap:13 CN/8000
+a=ptime:20
+a=sendrecv
+
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_state_machine.c:40 sofia/external/ Standard INIT
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_state_machine.c:48 (sofia/external/) State Change CS_INIT -> CS_ROUTING
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_state_machine.c:624 (sofia/external/) State INIT going to sleep
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_state_machine.c:581 (sofia/external/) Running State Change CS_ROUTING (Cur 2 Tot 16)
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_state_machine.c:640 (sofia/external/) State ROUTING
+2025-11-28 06:49:02.090965 99.57% [DEBUG] mod_sofia.c:158 sofia/external/ SOFIA ROUTING
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_ivr_originate.c:67 (sofia/external/) State Change CS_ROUTING -> CS_CONSUME_MEDIA
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_state_machine.c:640 (sofia/external/) State ROUTING going to sleep
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_state_machine.c:581 (sofia/external/) Running State Change CS_CONSUME_MEDIA (Cur 2 Tot 16)
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_state_machine.c:659 (sofia/external/) State CONSUME_MEDIA
+2025-11-28 06:49:02.090965 99.57% [DEBUG] switch_core_state_machine.c:659 (sofia/external/) State CONSUME_MEDIA going to sleep
+2025-11-28 06:49:02.090965 99.57% [DEBUG] sofia.c:7493 Channel sofia/external/ entering state [calling][0]
+send 1255 bytes to udp/[152.42.144.114]:5060 at 06:49:02.106119:
+------------------------------------------------------------------------
+INVITE sip:@pvn-shanevici.sip.signalwire.com SIP/2.0
+Via: SIP/2.0/UDP 172.18.0.2;rport;branch=z9hG4bKr492e7ge66FDF
+Max-Forwards: 68
+From: "+17866929905" <sip:hopwhistle@pvn-shanevici.sip.signalwire.com>;tag=7Z5ZpFeKHjKmg
+To: <sip:@pvn-shanevici.sip.signalwire.com>
+Call-ID: 2a51cff9-46c9-123f-ac9e-02f73aac2810
+CSeq: 107602479 INVITE
+Contact: <sip:gw+signalwire@172.18.0.2:5060;transport=udp;gw=signalwire>
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Supported: timer, path, replaces
+Allow-Events: talk, hold, conference, refer
+Content-Type: application/sdp
+Content-Disposition: session
+Content-Length: 240
+X-FS-Support: update_display,send_info
+Remote-Party-ID: "+17866929905" <sip:+17866929905@pvn-shanevici.sip.signalwire.com>;party=calling;screen=yes;privacy=off
+P-Asserted-Identity: <sip:+17866929905@pvn-shanevici.sip.signalwire.com>
+
+v=0
+o=FreeSWITCH 1764280556 1764280557 IN IP4 172.18.0.2
+s=FreeSWITCH
+c=IN IP4 172.18.0.2
+t=0 0
+m=audio 31986 RTP/AVP 0 101 13
+a=rtpmap:0 PCMU/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=rtpmap:13 CN/8000
+a=ptime:20
+
+recv 420 bytes from udp/[152.42.144.114]:5060 at 06:49:02.124515:
+------------------------------------------------------------------------
+SIP/2.0 400 Bad Request URI
+Via: SIP/2.0/UDP 172.18.0.2;rport=49213;branch=z9hG4bKr492e7ge66FDF;received=167.71.173.83
+From: "+17866929905" <sip:hopwhistle@pvn-shanevici.sip.signalwire.com>;tag=7Z5ZpFeKHjKmg
+To: <sip:@pvn-shanevici.sip.signalwire.com>;tag=19914d7f353332cd059a81728abafb02.5b290000
+Call-ID: 2a51cff9-46c9-123f-ac9e-02f73aac2810
+CSeq: 107602479 INVITE
+Server: SignalWire Proxy
+Content-Length: 0
+
+
+send 402 bytes to udp/[152.42.144.114]:5060 at 06:49:02.124664:
+------------------------------------------------------------------------
+ACK sip:@pvn-shanevici.sip.signalwire.com SIP/2.0
+Via: SIP/2.0/UDP 172.18.0.2;rport;branch=z9hG4bKr492e7ge66FDF
+Max-Forwards: 68
+From: "+17866929905" <sip:hopwhistle@pvn-shanevici.sip.signalwire.com>;tag=7Z5ZpFeKHjKmg
+To: <sip:@pvn-shanevici.sip.signalwire.com>;tag=19914d7f353332cd059a81728abafb02.5b290000
+Call-ID: 2a51cff9-46c9-123f-ac9e-02f73aac2810
+CSeq: 107602479 ACK
+Content-Length: 0
+
+
+2025-11-28 06:49:02.113480 99.57% [DEBUG] sofia.c:7493 Channel sofia/external/ entering state [terminated][400]
+2025-11-28 06:49:02.113480 99.57% [NOTICE] sofia.c:8736 Hangup sofia/external/ [CS_CONSUME_MEDIA] [NORMAL_TEMPORARY_FAILURE]
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_core_state_machine.c:581 (sofia/external/) Running State Change CS_HANGUP (Cur 2 Tot 16)
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_core_state_machine.c:844 (sofia/external/) Callstate Change DOWN -> HANGUP
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_core_state_machine.c:846 (sofia/external/) State HANGUP
+2025-11-28 06:49:02.113480 99.57% [DEBUG] mod_sofia.c:469 Channel sofia/external/ hanging up, cause: NORMAL_TEMPORARY_FAILURE
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_core_state_machine.c:59 sofia/external/ Standard HANGUP, cause: NORMAL_TEMPORARY_FAILURE
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_core_state_machine.c:846 (sofia/external/) State HANGUP going to sleep
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_core_state_machine.c:616 (sofia/external/) State Change CS_HANGUP -> CS_REPORTING
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_core_state_machine.c:581 (sofia/external/) Running State Change CS_REPORTING (Cur 2 Tot 16)
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_core_state_machine.c:932 (sofia/external/) State REPORTING
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_core_state_machine.c:168 sofia/external/ Standard REPORTING, cause: NORMAL_TEMPORARY_FAILURE
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_core_state_machine.c:932 (sofia/external/) State REPORTING going to sleep
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_core_state_machine.c:607 (sofia/external/) State Change CS_REPORTING -> CS_DESTROY
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_core_session.c:1744 Session 16 (sofia/external/) Locked, Waiting on external entities
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_ivr_originate.c:4056 Originate Resulted in Error Cause: 41 [NORMAL_TEMPORARY_FAILURE]
+2025-11-28 06:49:02.113480 99.57% [NOTICE] switch_core_session.c:1762 Session 16 (sofia/external/) Ended
+2025-11-28 06:49:02.113480 99.57% [NOTICE] switch_core_session.c:1766 Close Channel sofia/external/ [CS_DESTROY]
+2025-11-28 06:49:02.113480 99.57% [INFO] mod_dptools.c:3635 Originate Failed.  Cause: NORMAL_TEMPORARY_FAILURE
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_core_state_machine.c:735 (sofia/external/) Running State Change CS_DESTROY (Cur 1 Tot 16)
+2025-11-28 06:49:02.113480 99.57% [NOTICE] switch_channel.c:5012 Hangup sofia/external/8000@167.71.173.83 [CS_EXECUTE] [NORMAL_TEMPORARY_FAILURE]
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_core_state_machine.c:745 (sofia/external/) State DESTROY
+2025-11-28 06:49:02.113480 99.57% [DEBUG] mod_sofia.c:380 sofia/external/ SOFIA DESTROY
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_core_state_machine.c:175 sofia/external/ Standard DESTROY
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_core_state_machine.c:745 (sofia/external/) State DESTROY going to sleep
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_core_session.c:2979 sofia/external/8000@167.71.173.83 skip receive message [APPLICATION_EXEC_COMPLETE] (channel is hungup already)
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_core_state_machine.c:647 (sofia/external/8000@167.71.173.83) State EXECUTE going to sleep
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_core_state_machine.c:581 (sofia/external/8000@167.71.173.83) Running State Change CS_HANGUP (Cur 1 Tot 16)
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_core_state_machine.c:844 (sofia/external/8000@167.71.173.83) Callstate Change RINGING -> HANGUP
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_core_state_machine.c:846 (sofia/external/8000@167.71.173.83) State HANGUP
+2025-11-28 06:49:02.113480 99.57% [DEBUG] mod_sofia.c:463 sofia/external/8000@167.71.173.83 Overriding SIP cause 503 with 400 from the other leg
+2025-11-28 06:49:02.113480 99.57% [DEBUG] mod_sofia.c:469 Channel sofia/external/8000@167.71.173.83 hanging up, cause: NORMAL_TEMPORARY_FAILURE
+2025-11-28 06:49:02.113480 99.57% [DEBUG] mod_sofia.c:614 Responding to INVITE with: 400
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_core_state_machine.c:59 sofia/external/8000@167.71.173.83 Standard HANGUP, cause: NORMAL_TEMPORARY_FAILURE
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_core_state_machine.c:846 (sofia/external/8000@167.71.173.83) State HANGUP going to sleep
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_core_state_machine.c:616 (sofia/external/8000@167.71.173.83) State Change CS_HANGUP -> CS_REPORTING
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_core_state_machine.c:581 (sofia/external/8000@167.71.173.83) Running State Change CS_REPORTING (Cur 1 Tot 16)
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_core_state_machine.c:932 (sofia/external/8000@167.71.173.83) State REPORTING
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_core_state_machine.c:168 sofia/external/8000@167.71.173.83 Standard REPORTING, cause: NORMAL_TEMPORARY_FAILURE
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_core_state_machine.c:932 (sofia/external/8000@167.71.173.83) State REPORTING going to sleep
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_core_state_machine.c:607 (sofia/external/8000@167.71.173.83) State Change CS_REPORTING -> CS_DESTROY
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_core_session.c:1744 Session 15 (sofia/external/8000@167.71.173.83) Locked, Waiting on external entities
+2025-11-28 06:49:02.113480 99.57% [NOTICE] switch_core_session.c:1762 Session 15 (sofia/external/8000@167.71.173.83) Ended
+2025-11-28 06:49:02.113480 99.57% [NOTICE] switch_core_session.c:1766 Close Channel sofia/external/8000@167.71.173.83 [CS_DESTROY]
+send 881 bytes to udp/[172.18.0.3]:5060 at 06:49:02.142030:
+------------------------------------------------------------------------
+SIP/2.0 400 Bad Request
+Via: SIP/2.0/UDP 167.71.173.83:5060;branch=z9hG4bKd7f9.1721eaf46559aa4f8ae9b731dd54a40b.0;received=172.18.0.3
+Via: SIP/2.0/UDP 81.222.204.61:65394;rport=65394;branch=z9hG4bK1760498263
+Max-Forwards: 69
+From: <sip:8000@167.71.173.83>;tag=1925807654
+To: <sip:00033756010575@167.71.173.83>;tag=6pc7mmXFm9v1m
+Call-ID: 1592217205-1305971567-1418670957
+CSeq: 1 INVITE
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Accept: application/sdp
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Supported: timer, path, replaces
+Allow-Events: talk, hold, conference, refer
+Reason: Q.850;cause=41;text="NORMAL_TEMPORARY_FAILURE"
+Content-Length: 0
+Remote-Party-ID: "00033756010575" <sip:00033756010575@167.71.173.83>;party=calling;privacy=off;screen=no
+
+
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_core_state_machine.c:735 (sofia/external/8000@167.71.173.83) Running State Change CS_DESTROY (Cur 0 Tot 16)
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_core_state_machine.c:745 (sofia/external/8000@167.71.173.83) State DESTROY
+2025-11-28 06:49:02.113480 99.57% [DEBUG] mod_sofia.c:380 sofia/external/8000@167.71.173.83 SOFIA DESTROY
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_core_state_machine.c:175 sofia/external/8000@167.71.173.83 Standard DESTROY
+2025-11-28 06:49:02.113480 99.57% [DEBUG] switch_core_state_machine.c:745 (sofia/external/8000@167.71.173.83) State DESTROY going to sleep
+recv 337 bytes from udp/[172.18.0.3]:5060 at 06:49:02.142505:
+------------------------------------------------------------------------
+ACK sip:00033756010575@167.71.173.83 SIP/2.0
+Via: SIP/2.0/UDP 167.71.173.83:5060;branch=z9hG4bKd7f9.1721eaf46559aa4f8ae9b731dd54a40b.0
+Max-Forwards: 69
+From: <sip:8000@167.71.173.83>;tag=1925807654
+To: <sip:00033756010575@167.71.173.83>;tag=6pc7mmXFm9v1m
+Call-ID: 1592217205-1305971567-1418670957
+CSeq: 1 ACK
+Content-Length: 0
+
+
+send 630 bytes to udp/[159.65.244.171]:5060 at 06:49:06.516491:
+------------------------------------------------------------------------
+OPTIONS sip:pvn-shanevici.sip.signalwire.com;transport=udp SIP/2.0
+Via: SIP/2.0/UDP 172.18.0.2;rport;branch=z9hG4bKSD3Ug21H3F6Za
+Max-Forwards: 70
+From: <sip:pvn-shanevici.sip.signalwire.com>;tag=88yrraZpeU96B
+To: <sip:pvn-shanevici.sip.signalwire.com>
+Call-ID: 2cf3a9fe-46c9-123f-ac9e-02f73aac2810
+CSeq: 107602366 OPTIONS
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Supported: timer, path, replaces
+Allow-Events: talk, hold, conference, refer
+Content-Length: 0
+
+
+recv 388 bytes from udp/[159.65.244.171]:5060 at 06:49:06.519803:
+------------------------------------------------------------------------
+SIP/2.0 200 Keepalive
+Via: SIP/2.0/UDP 172.18.0.2;rport=49213;branch=z9hG4bKSD3Ug21H3F6Za;received=167.71.173.83
+From: <sip:pvn-shanevici.sip.signalwire.com>;tag=88yrraZpeU96B
+To: <sip:pvn-shanevici.sip.signalwire.com>;tag=b97296421094b542cf6521dfe803ae0e.5b290000
+Call-ID: 2cf3a9fe-46c9-123f-ac9e-02f73aac2810
+CSeq: 107602366 OPTIONS
+Server: SignalWire Proxy
+Content-Length: 0
+
+
+recv 372 bytes from udp/[159.65.244.171]:5060 at 06:49:11.273062:
+------------------------------------------------------------------------
+OPTIONS sip:gw+signalwire@172.18.0.2:5060;transport=udp;gw=signalwire SIP/2.0
+Via: SIP/2.0/UDP 159.65.244.171:5060;branch=z9hG4bK5101947
+From: sip:pinger@signalwire.com;tag=uloc-69266f8f-c5-e5a22-e6d5273a-74e6091
+To: sip:gw+signalwire@172.18.0.2:5060;transport=udp;gw=signalwire
+Call-ID: 4d4955a7-cdb431b5-66f5052@159.65.244.171
+CSeq: 1 OPTIONS
+Content-Length: 0
+
+
+send 708 bytes to udp/[159.65.244.171]:5060 at 06:49:11.273396:
+------------------------------------------------------------------------
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 159.65.244.171:5060;branch=z9hG4bK5101947
+From: sip:pinger@signalwire.com;tag=uloc-69266f8f-c5-e5a22-e6d5273a-74e6091
+To: <sip:gw+signalwire@172.18.0.2:5060>;transport=udp;gw=signalwire;tag=9HrHt5FtB4ZSQ
+Call-ID: 4d4955a7-cdb431b5-66f5052@159.65.244.171
+CSeq: 1 OPTIONS
+Contact: <sip:gw+signalwire@172.18.0.2:5060;transport=udp;gw=signalwire>
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Accept: application/sdp
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Supported: timer, path, replaces
+Allow-Events: talk, hold, conference, refer
+Content-Length: 0

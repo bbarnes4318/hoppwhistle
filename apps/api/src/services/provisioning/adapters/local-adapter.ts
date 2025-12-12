@@ -1,5 +1,5 @@
-import { logger } from '../../lib/logger.js';
-import { getPrismaClient } from '../../lib/prisma.js';
+import { logger } from '../../../lib/logger.js';
+import { getPrismaClient } from '../../../lib/prisma.js';
 import type {
   ProvisioningAdapter,
   ProvisionedNumber,
@@ -12,7 +12,7 @@ import type {
 
 /**
  * Local Inventory Adapter
- * 
+ *
  * Manages numbers from local database/CSV for development and staging.
  * Simulates provisioning operations without hitting external APIs.
  */
@@ -26,7 +26,7 @@ export class LocalAdapter implements ProvisioningAdapter {
 
   async listNumbers(options?: ListNumbersOptions): Promise<ProvisionedNumber[]> {
     const prisma = getPrismaClient();
-    
+
     const where: any = {
       provider: 'local',
     };
@@ -34,11 +34,11 @@ export class LocalAdapter implements ProvisioningAdapter {
     if (options?.status) {
       // Map provisioning status to Prisma status
       const statusMap: Record<string, string> = {
-        'available': 'ACTIVE',
-        'assigned': 'ACTIVE',
-        'released': 'INACTIVE',
-        'pending': 'ACTIVE',
-        'failed': 'SUSPENDED',
+        available: 'ACTIVE',
+        assigned: 'ACTIVE',
+        released: 'INACTIVE',
+        pending: 'ACTIVE',
+        failed: 'SUSPENDED',
       };
       where.status = statusMap[options.status] || 'ACTIVE';
     }
@@ -65,7 +65,7 @@ export class LocalAdapter implements ProvisioningAdapter {
     // In local mode, we generate a mock number or use a test number
     // For real implementation, you'd read from a CSV or test number pool
     const mockNumber = this.generateMockNumber(request.areaCode);
-    
+
     // Check if number already exists (but don't create it - provisioning service will)
     const prisma = getPrismaClient();
     const existing = await prisma.phoneNumber.findFirst({
@@ -80,7 +80,7 @@ export class LocalAdapter implements ProvisioningAdapter {
     }
 
     logger.info({ msg: 'Provisioned local number', number: mockNumber });
-    
+
     // Return provisioned number data - provisioning service will save to DB
     return {
       id: `local-${mockNumber}`, // Temporary ID, will be replaced by DB ID
@@ -99,7 +99,7 @@ export class LocalAdapter implements ProvisioningAdapter {
 
   async releaseNumber(providerId: string): Promise<void> {
     const prisma = getPrismaClient();
-    
+
     const number = await prisma.phoneNumber.findUnique({
       where: { id: providerId },
     });
@@ -122,7 +122,7 @@ export class LocalAdapter implements ProvisioningAdapter {
 
   async getNumber(providerId: string): Promise<ProvisionedNumber | null> {
     const prisma = getPrismaClient();
-    
+
     const number = await prisma.phoneNumber.findUnique({
       where: { id: providerId },
     });
@@ -136,7 +136,7 @@ export class LocalAdapter implements ProvisioningAdapter {
 
   async configureNumber(providerId: string, features: NumberFeatures): Promise<void> {
     const prisma = getPrismaClient();
-    
+
     await prisma.phoneNumber.update({
       where: { id: providerId },
       data: {
@@ -153,7 +153,9 @@ export class LocalAdapter implements ProvisioningAdapter {
   private generateMockNumber(areaCode?: string): string {
     const ac = areaCode || '555';
     const exchange = Math.floor(Math.random() * 800) + 200; // 200-999
-    const number = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+    const number = Math.floor(Math.random() * 10000)
+      .toString()
+      .padStart(4, '0');
     return `+1${ac}${exchange}${number}`;
   }
 
@@ -162,7 +164,7 @@ export class LocalAdapter implements ProvisioningAdapter {
    */
   private mapToProvisionedNumber(dbNumber: any): ProvisionedNumber {
     const metadata = (dbNumber.metadata || {}) as Record<string, unknown>;
-    
+
     return {
       id: dbNumber.id,
       number: dbNumber.number,
@@ -192,4 +194,3 @@ export class LocalAdapter implements ProvisioningAdapter {
     }
   }
 }
-

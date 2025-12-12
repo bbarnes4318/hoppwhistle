@@ -1,4 +1,4 @@
-import { logger } from '../../lib/logger.js';
+import { logger } from '../../../lib/logger.js';
 import { secrets } from '../../secrets.js';
 import type {
   ProvisioningAdapter,
@@ -11,13 +11,13 @@ import type {
 
 /**
  * SignalWire Adapter
- * 
+ *
  * Implements real SignalWire REST API integration for number provisioning.
  * Documentation: https://developer.signalwire.com/apis/docs/overview
  */
 export class SignalWireAdapter implements ProvisioningAdapter {
   readonly provider = 'signalwire' as const;
-  
+
   private projectId: string;
   private apiToken: string;
   private spaceUrl: string;
@@ -28,7 +28,7 @@ export class SignalWireAdapter implements ProvisioningAdapter {
     this.projectId = secrets.getRequired('SIGNALWIRE_PROJECT_ID');
     this.apiToken = secrets.getRequired('SIGNALWIRE_API_TOKEN');
     this.spaceUrl = secrets.getRequired('SIGNALWIRE_SPACE_URL');
-    
+
     // Remove protocol if present, ensure it's just the domain
     const cleanUrl = this.spaceUrl.replace(/^https?:\/\//, '');
     this.baseUrl = `https://${cleanUrl}`;
@@ -50,17 +50,13 @@ export class SignalWireAdapter implements ProvisioningAdapter {
   /**
    * Make authenticated request to SignalWire API
    */
-  private async request<T>(
-    method: string,
-    endpoint: string,
-    body?: unknown
-  ): Promise<T> {
+  private async request<T>(method: string, endpoint: string, body?: unknown): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
-    
+
     const options: RequestInit = {
       method,
       headers: {
-        'Authorization': this.getAuthHeader(),
+        Authorization: this.getAuthHeader(),
         'Content-Type': 'application/json',
       },
     };
@@ -71,7 +67,7 @@ export class SignalWireAdapter implements ProvisioningAdapter {
 
     try {
       const response = await fetch(url, options);
-      
+
       if (!response.ok) {
         const errorText = await response.text();
         let errorData;
@@ -110,7 +106,7 @@ export class SignalWireAdapter implements ProvisioningAdapter {
 
   async listNumbers(options?: ListNumbersOptions): Promise<ProvisionedNumber[]> {
     const params = new URLSearchParams();
-    
+
     if (options?.areaCode) {
       params.append('area_code', options.areaCode);
     }
@@ -125,7 +121,7 @@ export class SignalWireAdapter implements ProvisioningAdapter {
 
     const queryString = params.toString();
     const endpoint = `/api/relay/rest/phone_numbers${queryString ? `?${queryString}` : ''}`;
-    
+
     const response = await this.request<{
       data: Array<{
         id: string;
@@ -267,4 +263,3 @@ export class SignalWireAdapter implements ProvisioningAdapter {
     logger.info({ msg: 'Configured SignalWire number', providerId, features });
   }
 }
-

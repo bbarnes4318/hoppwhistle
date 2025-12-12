@@ -1,6 +1,4 @@
-import { z } from 'zod';
-
-import { FlowSchema, ExecutionPlanSchema, type Flow, type ExecutionPlan, type Node } from './types.js';
+import { FlowSchema, type Flow, type ExecutionPlan, type Node } from './types.js';
 
 /**
  * Parse and validate a flow from JSON or YAML
@@ -19,7 +17,7 @@ export function parseFlow(data: unknown): Flow {
   const flow = FlowSchema.parse(data);
 
   // Additional validation: ensure entry.target exists in nodes
-  const nodeIds = new Set(flow.nodes.map((n) => n.id));
+  const nodeIds = new Set(flow.nodes.map(n => n.id));
   if (!nodeIds.has(flow.entry.target)) {
     throw new Error(`Entry target node "${flow.entry.target}" not found in nodes`);
   }
@@ -44,7 +42,7 @@ function validateNodeReferences(nodes: Node[], validNodeIds: Set<string>): void 
         if (node.next) references.push(node.next);
         break;
       case 'ivr':
-        node.choices.forEach((c) => references.push(c.target));
+        node.choices.forEach(c => references.push(c.target));
         if (node.default) references.push(node.default);
         if (node.next) references.push(node.next);
         break;

@@ -1,6 +1,6 @@
-import { auditLog, auditCreate, auditUpdate } from '../audit.js';
-import { logger } from '../lib/logger.js';
-import { getPrismaClient } from '../lib/prisma.js';
+import { logger } from '../../lib/logger.js';
+import { getPrismaClient } from '../../lib/prisma.js';
+import { auditCreate, auditUpdate } from '../audit.js';
 
 import { BandwidthAdapter } from './adapters/bandwidth-adapter.js';
 import { LocalAdapter } from './adapters/local-adapter.js';
@@ -14,12 +14,20 @@ import type {
   AssignNumberRequest,
   AuditResult,
   NumberFeatures,
- ProvisioningAdapter } from './types.js';
+  ProvisioningAdapter,
+} from './types.js';
 
+// Default priority order for provider selection
+const DEFAULT_PROVIDER_ORDER: Provider[] = ['signalwire', 'telnyx', 'bandwidth'];
+
+interface TenantMetadata {
+  defaultProvider?: Provider;
+  [key: string]: unknown;
+}
 
 /**
  * Provisioning Service
- * 
+ *
  * Unified service for managing phone number provisioning across multiple providers.
  * Handles adapter selection, database synchronization, and audit logging.
  */
@@ -28,10 +36,10 @@ export class ProvisioningService {
 
   constructor() {
     this.adapters = new Map();
-    
+
     // Initialize adapters
     this.adapters.set('local', new LocalAdapter());
-    
+
     // Only initialize configured adapters
     try {
       const signalwire = new SignalWireAdapter();
@@ -42,9 +50,24 @@ export class ProvisioningService {
       logger.warn('SignalWire adapter not configured, skipping');
     }
 
-    // Placeholder adapters (not configured yet)
-    this.adapters.set('telnyx', new TelnyxAdapter());
-    this.adapters.set('bandwidth', new BandwidthAdapter());
+    // Initialize new adapters
+    try {
+      const telnyx = new TelnyxAdapter();
+      if (telnyx.isConfigured()) {
+        this.adapters.set('telnyx', telnyx);
+      }
+    } catch (error) {
+      logger.warn('Telnyx adapter not configured, skipping');
+    }
+
+    try {
+      const bandwidth = new BandwidthAdapter();
+      if (bandwidth.isConfigured()) {
+        this.adapters.set('bandwidth', bandwidth);
+      }
+    } catch (error) {
+      logger.warn('Bandwidth adapter not configured, skipping');
+    }
   }
 
   /**
@@ -53,10 +76,7 @@ export class ProvisioningService {
   private getAdapter(provider: Provider): ProvisioningAdapter {
     const adapter = this.adapters.get(provider);
     if (!adapter) {
-      throw new Error(`Provider ${provider} not supported`);
-    }
-    if (!adapter.isConfigured()) {
-      throw new Error(`Provider ${provider} is not configured`);
+      throw new Error(`Provider ${provider} not supported or not configured`);
     }
     return adapter;
   }
@@ -64,7 +84,10 @@ export class ProvisioningService {
   /**
    * List numbers from a provider
    */
-  async listNumbers(provider: Provider, options?: ListNumbersOptions): Promise<ProvisionedNumber[]> {
+  async listNumbers(
+    provider: Provider,
+    options?: ListNumbersOptions
+  ): Promise<ProvisionedNumber[]> {
     const adapter = this.getAdapter(provider);
     return adapter.listNumbers(options);
   }
@@ -73,7 +96,7 @@ export class ProvisioningService {
    * Purchase a number from a provider
    */
   async purchaseNumber(
-    provider: Provider,
+    provider: Provider | undefined | null,
     request: PurchaseNumberRequest,
     context: {
       userId?: string;
@@ -82,18 +105,23 @@ export class ProvisioningService {
       requestId?: string;
     }
   ): Promise<ProvisionedNumber> {
-    const adapter = this.getAdapter(provider);
+    // 1. Use passed provider, or resolve based on tenant/config
+    const selectedProvider = provider || (await this.getProviderForTenant(context.tenantId));
+    const adapter = this.getAdapter(selectedProvider);
+
+    // 2. Purchase from provider
     const provisioned = await adapter.purchaseNumber(request);
 
-    // Sync to database
+    // 3. Sync to database
     const prisma = getPrismaClient();
     const dbNumber = await prisma.phoneNumber.create({
       data: {
         tenantId: context.tenantId,
         number: provisioned.number,
-        provider: provider,
+        provider: selectedProvider,
         status: 'ACTIVE',
-        capabilities: provisioned.features,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment
+        capabilities: provisioned.features as any,
         purchasedAt: provisioned.purchasedAt || new Date(),
         metadata: {
           providerId: provisioned.providerId,
@@ -102,14 +130,14 @@ export class ProvisioningService {
       },
     });
 
-    // Audit log
+    // 4. Audit log
     await auditCreate(
       context.tenantId,
       'PhoneNumber',
       dbNumber.id,
       {
         number: provisioned.number,
-        provider,
+        provider: selectedProvider,
         providerId: provisioned.providerId,
         features: provisioned.features,
       },
@@ -118,7 +146,7 @@ export class ProvisioningService {
 
     logger.info({
       msg: 'Purchased number',
-      provider,
+      provider: selectedProvider,
       number: provisioned.number,
       tenantId: context.tenantId,
     });
@@ -127,6 +155,52 @@ export class ProvisioningService {
       ...provisioned,
       id: dbNumber.id,
     };
+  }
+
+  /**
+   * Get preferred provider for tenant
+   *
+   * Selection logic:
+   * 1. Tenant preference (metadata.defaultProvider)
+   * 2. Environment variable (DEFAULT_PROVIDER)
+   * 3. Development fallback (local)
+   * 4. Configured adapter order (SignalWire -> Telnyx -> Bandwidth)
+   */
+  async getProviderForTenant(tenantId: string): Promise<Provider> {
+    const prisma = getPrismaClient();
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { metadata: true },
+    });
+
+    // 1. Check tenant preference
+    if (tenant?.metadata) {
+      const metadata = tenant.metadata as TenantMetadata;
+      if (metadata.defaultProvider && this.adapters.has(metadata.defaultProvider)) {
+        return metadata.defaultProvider;
+      }
+    }
+
+    // 2. Check environment variable
+    const defaultProvider = process.env.DEFAULT_PROVIDER as Provider;
+    if (defaultProvider && this.adapters.has(defaultProvider)) {
+      return defaultProvider;
+    }
+
+    // 3. Development fallback
+    if (process.env.NODE_ENV === 'development') {
+      return 'local';
+    }
+
+    // 4. Check configured adapters in priority order
+    for (const provider of DEFAULT_PROVIDER_ORDER) {
+      if (this.adapters.has(provider)) {
+        return provider;
+      }
+    }
+
+    // Fallback if nothing configured (shouldn't happen in prod if properly set up)
+    return 'local';
   }
 
   /**
@@ -159,8 +233,16 @@ export class ProvisioningService {
     const providerId = (metadata.providerId as string) || numberId;
 
     // Release from provider
-    const adapter = this.getAdapter(provider);
-    await adapter.releaseNumber(providerId);
+    try {
+      const adapter = this.getAdapter(provider);
+      await adapter.releaseNumber(providerId);
+    } catch (error) {
+      logger.error({ msg: 'Failed to release number from provider', error, provider, providerId });
+      // Continue to release in DB even if provider fails?
+      // Usually yes, to avoid zombie records, but maybe flag it.
+      // For now, we'll throw to let user know.
+      throw error;
+    }
 
     // Update database
     await prisma.phoneNumber.update({
@@ -247,14 +329,7 @@ export class ProvisioningService {
     });
 
     // Audit log
-    await auditUpdate(
-      request.tenantId,
-      'PhoneNumber',
-      dbNumber.id,
-      before,
-      after,
-      context
-    );
+    await auditUpdate(request.tenantId, 'PhoneNumber', dbNumber.id, before, after, context);
 
     logger.info({
       msg: 'Assigned number to campaign',
@@ -281,15 +356,12 @@ export class ProvisioningService {
   /**
    * Audit inventory - compare local DB with provider inventory
    */
-  async auditInventory(
-    provider: Provider,
-    tenantId?: string
-  ): Promise<AuditResult> {
+  async auditInventory(provider: Provider, tenantId?: string): Promise<AuditResult> {
     const prisma = getPrismaClient();
     const adapter = this.getAdapter(provider);
 
     // Get local numbers
-    const localWhere: any = {
+    const localWhere: { provider: Provider; tenantId?: string } = {
       provider: provider,
     };
 
@@ -313,9 +385,7 @@ export class ProvisioningService {
       })
     );
 
-    const providerMap = new Map(
-      providerNumbers.map(n => [n.providerId || n.id, n])
-    );
+    const providerMap = new Map(providerNumbers.map(n => [n.providerId || n.id, n]));
 
     // Find discrepancies
     const missingInProvider: ProvisionedNumber[] = [];
@@ -325,8 +395,8 @@ export class ProvisioningService {
     // Check local numbers
     for (const [providerId, localNumber] of Array.from(localMap.entries())) {
       const providerNumber = providerMap.get(providerId);
-      const dbNumber = localNumber as any;
-      
+      const dbNumber = localNumber;
+
       if (!providerNumber) {
         const metadata = (dbNumber.metadata || {}) as Record<string, unknown>;
         missingInProvider.push({
@@ -343,12 +413,12 @@ export class ProvisioningService {
     // Check provider numbers
     for (const [providerId, providerNumber] of Array.from(providerMap.entries())) {
       const localNumber = localMap.get(providerId);
-      
+
       if (!localNumber) {
         missingInLocal.push(providerNumber);
       } else {
         // Check status mismatch
-        const dbNumber = localNumber as any;
+        const dbNumber = localNumber;
         const localStatus = dbNumber.status === 'ACTIVE' ? 'assigned' : 'released';
         if (localStatus !== providerNumber.status) {
           const metadata = (dbNumber.metadata || {}) as Record<string, unknown>;
@@ -401,4 +471,3 @@ export class ProvisioningService {
 }
 
 export const provisioningService = new ProvisioningService();
-

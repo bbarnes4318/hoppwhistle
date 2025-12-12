@@ -420,6 +420,7 @@ model Campaign {
   publisherId   String
   name          String
   status        CampaignStatus @default(ACTIVE)
+  routingMode   RoutingMode    @default(STATIC)
   callerIdPoolId String?
   flowId        String?  // Current active flow version
   metadata      Json?
@@ -444,6 +445,12 @@ enum CampaignStatus {
   ACTIVE
   PAUSED
   ARCHIVED
+}
+
+enum RoutingMode {
+  STATIC
+  PERFORMANCE
+  HYBRID
 }
 
 model Publisher {
@@ -1422,6 +1429,35 @@ model CarrierLookup {
   @@map("carrier_lookups")
 }
 
+// ============================================================================
+// Recording Analysis (Recording Analyzer Tool)
+// ============================================================================
 
+model RecordingAnalysis {
+  id             String   @id @default(uuid())
+  tenantId       String
+  userId         String
 
+  batchId        String
+  vertical       String   // ACA | FINAL_EXPENSE | MEDICARE
 
+  sourceType     String   // url | upload
+  sourceUrl      String?
+  storageKey     String?
+  filename       String?
+
+  selectedFields Json     // JSON array of strings
+
+  status         String   // queued | transcribing | analyzing | done | failed
+  transcript     String?
+  extracted      Json?
+  error          String?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([tenantId, batchId])
+  @@index([tenantId, createdAt])
+  @@index([status])
+  @@map("recording_analysis")
+}

@@ -180,6 +180,14 @@ async function buildServer() {
   const { registerStirShakenRoutes } = await import('./routes/stir-shaken.js');
   await server.register(registerStirShakenRoutes);
 
+  // Register Recording Analysis routes (Recording Analyzer tool)
+  const { registerRecordingAnalysisRoutes } = await import('./routes/recording-analysis.js');
+  await server.register(registerRecordingAnalysisRoutes);
+  const { registerRecordingAnalysisUploadRoutes } = await import(
+    './routes/recording-analysis-upload.js'
+  );
+  await server.register(registerRecordingAnalysisUploadRoutes);
+
   // Error handler
   server.setErrorHandler((error, request, reply) => {
     server.log.error(error);

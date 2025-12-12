@@ -15,18 +15,15 @@ async function main() {
   }
 
   // Graceful shutdown
-  process.on('SIGTERM', async () => {
+  process.on('SIGTERM', () => {
     logger.info('SIGTERM received, shutting down...');
-    await worker.stop();
-    process.exit(0);
+    void worker.stop().then(() => process.exit(0));
   });
 
-  process.on('SIGINT', async () => {
+  process.on('SIGINT', () => {
     logger.info('SIGINT received, shutting down...');
-    await worker.stop();
-    process.exit(0);
+    void worker.stop().then(() => process.exit(0));
   });
 }
 
-main();
-
+void main();

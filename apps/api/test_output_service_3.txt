@@ -1,0 +1,216 @@
+
+[7m[1m[36m RUN [39m[22m[27m [36mv1.6.1[39m [90mC:/Users/jimbo/Downloads/hopwhistle/apps/api[39m
+
+[90mstdout[2m | src/services/provisioning/__tests__/provisioning-service.test.ts[2m > [22m[2mProvisioningService[2m > [22m[2mpurchaseNumber[2m > [22m[2mshould use specified provider[22m[39m
+prisma:error 
+Invalid `prisma.phoneNumber.create()` invocation in
+C:\Users\jimbo\Downloads\hopwhistle\apps\api\src\services\provisioning\provisioning-service.ts:106:47
+
+  103 
+  104 // Sync to database
+  105 const prisma = getPrismaClient();
+→ 106 const dbNumber = await prisma.phoneNumber.create(
+Can't reach database server at `hoppy-do-user-23063858-0.e.db.ondigitalocean.com:25060`
+
+Please make sure your database server is running at `hoppy-do-user-23063858-0.e.db.ondigitalocean.com:25060`.
+
+[90mstdout[2m | src/services/provisioning/__tests__/provisioning-service.test.ts[2m > [22m[2mProvisioningService[2m > [22m[2mpurchaseNumber[2m > [22m[2mshould default to signalwire if provider not specified (and not dev)[22m[39m
+prisma:error 
+Invalid `prisma.phoneNumber.create()` invocation:
+
+
+Can't reach database server at `hoppy-do-user-23063858-0.e.db.ondigitalocean.com:25060`
+
+Please make sure your database server is running at `hoppy-do-user-23063858-0.e.db.ondigitalocean.com:25060`.
+
+[90mstdout[2m | src/services/provisioning/__tests__/provisioning-service.test.ts[2m > [22m[2mProvisioningService[2m > [22m[2mpurchaseNumber[2m > [22m[2mshould default to local in development[22m[39m
+prisma:error 
+Invalid `prisma.phoneNumber.create()` invocation in
+C:\Users\jimbo\Downloads\hopwhistle\apps\api\src\services\provisioning\provisioning-service.ts:106:47
+
+  103 
+  104 // Sync to database
+  105 const prisma = getPrismaClient();
+→ 106 const dbNumber = await prisma.phoneNumber.create(
+Can't reach database server at `hoppy-do-user-23063858-0.e.db.ondigitalocean.com:25060`
+
+Please make sure your database server is running at `hoppy-do-user-23063858-0.e.db.ondigitalocean.com:25060`.
+
+[90mstdout[2m | src/services/provisioning/__tests__/provisioning-service.test.ts[2m > [22m[2mProvisioningService[2m > [22m[2mpurchaseNumber[2m > [22m[2mshould use DEFAULT_PROVIDER env var[22m[39m
+prisma:error 
+Invalid `prisma.phoneNumber.create()` invocation in
+C:\Users\jimbo\Downloads\hopwhistle\apps\api\src\services\provisioning\provisioning-service.ts:106:47
+
+  103 
+  104 // Sync to database
+  105 const prisma = getPrismaClient();
+→ 106 const dbNumber = await prisma.phoneNumber.create(
+Can't reach database server at `hoppy-do-user-23063858-0.e.db.ondigitalocean.com:25060`
+
+Please make sure your database server is running at `hoppy-do-user-23063858-0.e.db.ondigitalocean.com:25060`.
+
+ [33m❯[39m src/services/provisioning/__tests__/provisioning-service.test.ts [2m ([22m[2m6 tests[22m [2m|[22m [31m4 failed[39m[2m)[22m[33m 439[2mms[22m[39m
+[31m   [33m❯[31m src/services/provisioning/__tests__/provisioning-service.test.ts[2m > [22mProvisioningService[2m > [22mpurchaseNumber[2m > [22mshould use specified provider[39m
+[31m     → 
+Invalid `prisma.phoneNumber.create()` invocation in
+C:\Users\jimbo\Downloads\hopwhistle\apps\api\src\services\provisioning\provisioning-service.ts:106:47
+
+  103 
+  104 // Sync to database
+  105 const prisma = getPrismaClient();
+→ 106 const dbNumber = await prisma.phoneNumber.create(
+Can't reach database server at `hoppy-do-user-23063858-0.e.db.ondigitalocean.com:25060`
+
+Please make sure your database server is running at `hoppy-do-user-23063858-0.e.db.ondigitalocean.com:25060`.[39m
+[31m   [33m❯[31m src/services/provisioning/__tests__/provisioning-service.test.ts[2m > [22mProvisioningService[2m > [22mpurchaseNumber[2m > [22mshould default to signalwire if provider not specified (and not dev)[39m
+[31m     → 
+Invalid `prisma.phoneNumber.create()` invocation:
+
+
+Can't reach database server at `hoppy-do-user-23063858-0.e.db.ondigitalocean.com:25060`
+
+Please make sure your database server is running at `hoppy-do-user-23063858-0.e.db.ondigitalocean.com:25060`.[39m
+[31m   [33m❯[31m src/services/provisioning/__tests__/provisioning-service.test.ts[2m > [22mProvisioningService[2m > [22mpurchaseNumber[2m > [22mshould default to local in development[39m
+[31m     → 
+Invalid `prisma.phoneNumber.create()` invocation in
+C:\Users\jimbo\Downloads\hopwhistle\apps\api\src\services\provisioning\provisioning-service.ts:106:47
+
+  103 
+  104 // Sync to database
+  105 const prisma = getPrismaClient();
+→ 106 const dbNumber = await prisma.phoneNumber.create(
+Can't reach database server at `hoppy-do-user-23063858-0.e.db.ondigitalocean.com:25060`
+
+Please make sure your database server is running at `hoppy-do-user-23063858-0.e.db.ondigitalocean.com:25060`.[39m
+[31m   [33m❯[31m src/services/provisioning/__tests__/provisioning-service.test.ts[2m > [22mProvisioningService[2m > [22mpurchaseNumber[2m > [22mshould use DEFAULT_PROVIDER env var[39m
+[31m     → 
+Invalid `prisma.phoneNumber.create()` invocation in
+C:\Users\jimbo\Downloads\hopwhistle\apps\api\src\services\provisioning\provisioning-service.ts:106:47
+
+  103 
+  104 // Sync to database
+  105 const prisma = getPrismaClient();
+→ 106 const dbNumber = await prisma.phoneNumber.create(
+Can't reach database server at `hoppy-do-user-23063858-0.e.db.ondigitalocean.com:25060`
+
+Please make sure your database server is running at `hoppy-do-user-23063858-0.e.db.ondigitalocean.com:25060`.[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[1m[7m Failed Tests 4 [27m[22m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[31m[1m[7m FAIL [27m[22m[39m src/services/provisioning/__tests__/provisioning-service.test.ts[2m > [22mProvisioningService[2m > [22mpurchaseNumber[2m > [22mshould use specified provider
+[31m[1mPrismaClientInitializationError[22m: 
+Invalid `prisma.phoneNumber.create()` invocation in
+C:\Users\jimbo\Downloads\hopwhistle\apps\api\src\services\provisioning\provisioning-service.ts:106:47
+
+  103 
+  104 // Sync to database
+  105 const prisma = getPrismaClient();
+→ 106 const dbNumber = await prisma.phoneNumber.create(
+Can't reach database server at `hoppy-do-user-23063858-0.e.db.ondigitalocean.com:25060`
+
+Please make sure your database server is running at `hoppy-do-user-23063858-0.e.db.ondigitalocean.com:25060`.[39m
+[90m [2m❯[22m ei.handleRequestError ../../node_modules/.pnpm/@prisma+client@6.19.0_prisma@6.19.0_typescript@5.9.3/node_modules/@prisma/client/src/runtime/RequestHandler.ts:[2m242:13[22m[39m
+[90m [2m❯[22m ei.handleAndLogRequestError ../../node_modules/.pnpm/@prisma+client@6.19.0_prisma@6.19.0_typescript@5.9.3/node_modules/@prisma/client/src/runtime/RequestHandler.ts:[2m174:12[22m[39m
+[90m [2m❯[22m ei.request ../../node_modules/.pnpm/@prisma+client@6.19.0_prisma@6.19.0_typescript@5.9.3/node_modules/@prisma/client/src/runtime/RequestHandler.ts:[2m143:12[22m[39m
+[90m [2m❯[22m a ../../node_modules/.pnpm/@prisma+client@6.19.0_prisma@6.19.0_typescript@5.9.3/node_modules/@prisma/client/src/runtime/getPrismaClient.ts:[2m833:24[22m[39m
+[36m [2m❯[22m ProvisioningService.purchaseNumber src/services/provisioning/provisioning-service.ts:[2m106:22[22m[39m
+    [90m104| [39m    [90m// Sync to database[39m
+    [90m105| [39m    [35mconst[39m prisma [33m=[39m [34mgetPrismaClient[39m()[33m;[39m
+    [90m106| [39m    [35mconst[39m dbNumber [33m=[39m [35mawait[39m prisma[33m.[39mphoneNumber[33m.[39m[34mcreate[39m({
+    [90m   | [39m                     [31m^[39m
+    [90m107| [39m      data[33m:[39m {
+    [90m108| [39m        tenantId[33m:[39m context[33m.[39mtenantId[33m,[39m
+[90m [2m❯[22m src/services/provisioning/__tests__/provisioning-service.test.ts:[2m138:22[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22m[39m
+[31m[1mSerialized Error:[22m[39m [90m{ clientVersion: '6.19.0', errorCode: undefined, retryable: undefined }[39m
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯[22m[39m
+
+[31m[1m[7m FAIL [27m[22m[39m src/services/provisioning/__tests__/provisioning-service.test.ts[2m > [22mProvisioningService[2m > [22mpurchaseNumber[2m > [22mshould default to signalwire if provider not specified (and not dev)
+[31m[1mPrismaClientInitializationError[22m: 
+Invalid `prisma.phoneNumber.create()` invocation:
+
+
+Can't reach database server at `hoppy-do-user-23063858-0.e.db.ondigitalocean.com:25060`
+
+Please make sure your database server is running at `hoppy-do-user-23063858-0.e.db.ondigitalocean.com:25060`.[39m
+[90m [2m❯[22m ei.handleRequestError ../../node_modules/.pnpm/@prisma+client@6.19.0_prisma@6.19.0_typescript@5.9.3/node_modules/@prisma/client/src/runtime/RequestHandler.ts:[2m242:13[22m[39m
+[90m [2m❯[22m ei.handleAndLogRequestError ../../node_modules/.pnpm/@prisma+client@6.19.0_prisma@6.19.0_typescript@5.9.3/node_modules/@prisma/client/src/runtime/RequestHandler.ts:[2m174:12[22m[39m
+[90m [2m❯[22m ei.request ../../node_modules/.pnpm/@prisma+client@6.19.0_prisma@6.19.0_typescript@5.9.3/node_modules/@prisma/client/src/runtime/RequestHandler.ts:[2m143:12[22m[39m
+[90m [2m❯[22m a ../../node_modules/.pnpm/@prisma+client@6.19.0_prisma@6.19.0_typescript@5.9.3/node_modules/@prisma/client/src/runtime/getPrismaClient.ts:[2m833:24[22m[39m
+[36m [2m❯[22m ProvisioningService.purchaseNumber src/services/provisioning/provisioning-service.ts:[2m106:22[22m[39m
+    [90m104| [39m    [90m// Sync to database[39m
+    [90m105| [39m    [35mconst[39m prisma [33m=[39m [34mgetPrismaClient[39m()[33m;[39m
+    [90m106| [39m    [35mconst[39m dbNumber [33m=[39m [35mawait[39m prisma[33m.[39mphoneNumber[33m.[39m[34mcreate[39m({
+    [90m   | [39m                     [31m^[39m
+    [90m107| [39m      data[33m:[39m {
+    [90m108| [39m        tenantId[33m:[39m context[33m.[39mtenantId[33m,[39m
+[90m [2m❯[22m src/services/provisioning/__tests__/provisioning-service.test.ts:[2m159:22[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22m[39m
+[31m[1mSerialized Error:[22m[39m [90m{ clientVersion: '6.19.0', errorCode: undefined, retryable: undefined }[39m
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯[22m[39m
+
+[31m[1m[7m FAIL [27m[22m[39m src/services/provisioning/__tests__/provisioning-service.test.ts[2m > [22mProvisioningService[2m > [22mpurchaseNumber[2m > [22mshould default to local in development
+[31m[1mPrismaClientInitializationError[22m: 
+Invalid `prisma.phoneNumber.create()` invocation in
+C:\Users\jimbo\Downloads\hopwhistle\apps\api\src\services\provisioning\provisioning-service.ts:106:47
+
+  103 
+  104 // Sync to database
+  105 const prisma = getPrismaClient();
+→ 106 const dbNumber = await prisma.phoneNumber.create(
+Can't reach database server at `hoppy-do-user-23063858-0.e.db.ondigitalocean.com:25060`
+
+Please make sure your database server is running at `hoppy-do-user-23063858-0.e.db.ondigitalocean.com:25060`.[39m
+[90m [2m❯[22m ei.handleRequestError ../../node_modules/.pnpm/@prisma+client@6.19.0_prisma@6.19.0_typescript@5.9.3/node_modules/@prisma/client/src/runtime/RequestHandler.ts:[2m242:13[22m[39m
+[90m [2m❯[22m ei.handleAndLogRequestError ../../node_modules/.pnpm/@prisma+client@6.19.0_prisma@6.19.0_typescript@5.9.3/node_modules/@prisma/client/src/runtime/RequestHandler.ts:[2m174:12[22m[39m
+[90m [2m❯[22m ei.request ../../node_modules/.pnpm/@prisma+client@6.19.0_prisma@6.19.0_typescript@5.9.3/node_modules/@prisma/client/src/runtime/RequestHandler.ts:[2m143:12[22m[39m
+[90m [2m❯[22m a ../../node_modules/.pnpm/@prisma+client@6.19.0_prisma@6.19.0_typescript@5.9.3/node_modules/@prisma/client/src/runtime/getPrismaClient.ts:[2m833:24[22m[39m
+[36m [2m❯[22m ProvisioningService.purchaseNumber src/services/provisioning/provisioning-service.ts:[2m106:22[22m[39m
+    [90m104| [39m    [90m// Sync to database[39m
+    [90m105| [39m    [35mconst[39m prisma [33m=[39m [34mgetPrismaClient[39m()[33m;[39m
+    [90m106| [39m    [35mconst[39m dbNumber [33m=[39m [35mawait[39m prisma[33m.[39mphoneNumber[33m.[39m[34mcreate[39m({
+    [90m   | [39m                     [31m^[39m
+    [90m107| [39m      data[33m:[39m {
+    [90m108| [39m        tenantId[33m:[39m context[33m.[39mtenantId[33m,[39m
+[90m [2m❯[22m src/services/provisioning/__tests__/provisioning-service.test.ts:[2m172:22[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22m[39m
+[31m[1mSerialized Error:[22m[39m [90m{ clientVersion: '6.19.0', errorCode: undefined, retryable: undefined }[39m
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯[22m[39m
+
+[31m[1m[7m FAIL [27m[22m[39m src/services/provisioning/__tests__/provisioning-service.test.ts[2m > [22mProvisioningService[2m > [22mpurchaseNumber[2m > [22mshould use DEFAULT_PROVIDER env var
+[31m[1mPrismaClientInitializationError[22m: 
+Invalid `prisma.phoneNumber.create()` invocation in
+C:\Users\jimbo\Downloads\hopwhistle\apps\api\src\services\provisioning\provisioning-service.ts:106:47
+
+  103 
+  104 // Sync to database
+  105 const prisma = getPrismaClient();
+→ 106 const dbNumber = await prisma.phoneNumber.create(
+Can't reach database server at `hoppy-do-user-23063858-0.e.db.ondigitalocean.com:25060`
+
+Please make sure your database server is running at `hoppy-do-user-23063858-0.e.db.ondigitalocean.com:25060`.[39m
+[90m [2m❯[22m ei.handleRequestError ../../node_modules/.pnpm/@prisma+client@6.19.0_prisma@6.19.0_typescript@5.9.3/node_modules/@prisma/client/src/runtime/RequestHandler.ts:[2m242:13[22m[39m
+[90m [2m❯[22m ei.handleAndLogRequestError ../../node_modules/.pnpm/@prisma+client@6.19.0_prisma@6.19.0_typescript@5.9.3/node_modules/@prisma/client/src/runtime/RequestHandler.ts:[2m174:12[22m[39m
+[90m [2m❯[22m ei.request ../../node_modules/.pnpm/@prisma+client@6.19.0_prisma@6.19.0_typescript@5.9.3/node_modules/@prisma/client/src/runtime/RequestHandler.ts:[2m143:12[22m[39m
+[90m [2m❯[22m a ../../node_modules/.pnpm/@prisma+client@6.19.0_prisma@6.19.0_typescript@5.9.3/node_modules/@prisma/client/src/runtime/getPrismaClient.ts:[2m833:24[22m[39m
+[36m [2m❯[22m ProvisioningService.purchaseNumber src/services/provisioning/provisioning-service.ts:[2m106:22[22m[39m
+    [90m104| [39m    [90m// Sync to database[39m
+    [90m105| [39m    [35mconst[39m prisma [33m=[39m [34mgetPrismaClient[39m()[33m;[39m
+    [90m106| [39m    [35mconst[39m dbNumber [33m=[39m [35mawait[39m prisma[33m.[39mphoneNumber[33m.[39m[34mcreate[39m({
+    [90m   | [39m                     [31m^[39m
+    [90m107| [39m      data[33m:[39m {
+    [90m108| [39m        tenantId[33m:[39m context[33m.[39mtenantId[33m,[39m
+[90m [2m❯[22m src/services/provisioning/__tests__/provisioning-service.test.ts:[2m185:22[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22m[39m
+[31m[1mSerialized Error:[22m[39m [90m{ clientVersion: '6.19.0', errorCode: undefined, retryable: undefined }[39m
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯[22m[39m
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m4 failed[39m[22m[2m | [22m[1m[32m2 passed[39m[22m[90m (6)[39m
+[2m   Start at [22m 02:37:57
+[2m   Duration [22m 2.65s[2m (transform 810ms, setup 1ms, collect 1.07s, tests 439ms, environment 1ms, prepare 617ms)[22m
+

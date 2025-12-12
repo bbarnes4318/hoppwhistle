@@ -1,6 +1,6 @@
-import { randomBytes } from 'crypto';
+import { createHmac, randomBytes } from 'crypto';
 
-import { FastifyRequest, FastifyReply, FastifyInstance } from 'fastify';
+import { FastifyReply, FastifyInstance } from 'fastify';
 
 import { getRedisClient } from '../services/redis.js';
 import { secrets } from '../services/secrets.js';
@@ -28,8 +28,8 @@ export function setSessionCookie(
   } = {}
 ): void {
   const isProduction = process.env.NODE_ENV === 'production';
-  
-  reply.setCookie('sessionId', sessionId, {
+
+  void reply.setCookie('sessionId', sessionId, {
     httpOnly: options.httpOnly ?? true,
     secure: options.secure ?? isProduction,
     sameSite: options.sameSite ?? 'strict',
@@ -48,7 +48,7 @@ export async function getSession(sessionId: string): Promise<Record<string, unkn
     if (!data) {
       return null;
     }
-    return JSON.parse(data);
+    return JSON.parse(data) as Record<string, unknown>;
   } catch (error) {
     console.error('Failed to get session:', error);
     return null;
@@ -97,6 +97,14 @@ export async function createSession(
 }
 
 /**
+ * Generate CSRF token from session ID
+ */
+export function generateCsrfToken(sessionId: string): string {
+  const secret = secrets.getRequired('JWT_SECRET');
+  return createHmac('sha256', secret).update(sessionId).digest('hex');
+}
+
+/**
  * Register session plugin
  */
 export async function registerSession(fastify: FastifyInstance): Promise<void> {
@@ -104,4 +112,3 @@ export async function registerSession(fastify: FastifyInstance): Promise<void> {
     secret: secrets.getRequired('JWT_SECRET'),
   });
 }
-

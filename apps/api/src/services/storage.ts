@@ -1,7 +1,13 @@
 import { createHash } from 'crypto';
 import { Readable } from 'stream';
 
-import { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+  DeleteObjectCommand,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 export interface StorageConfig {
@@ -57,14 +63,22 @@ export class StorageService {
     // Storage key: recordings/YYYY/MM/DD/call_id.format
     const storageKey = `recordings/${year}/${month}/${day}/${callId}.${format}`;
 
-    // Calculate checksum
-    const checksum = await this.calculateChecksum(file);
+    // Convert to buffer if needed
+    let body: Buffer;
+    if (file instanceof Buffer) {
+      body = file;
+    } else {
+      body = await this.streamToBuffer(file as Readable);
+    }
+
+    // Calculate checksum (from buffer)
+    const checksum = this.calculateBufferChecksum(body);
 
     // Upload to S3
     const command = new PutObjectCommand({
       Bucket: this.bucket,
       Key: storageKey,
-      Body: file instanceof Buffer ? file : await this.streamToBuffer(file),
+      Body: body,
       ContentType: this.getContentType(format),
       Metadata: metadata || {},
       ChecksumSHA256: checksum,
@@ -106,6 +120,28 @@ export class StorageService {
   }
 
   /**
+   * Generate a presigned PUT URL (for browser direct uploads)
+   */
+  async createPresignedPutUrl(args: {
+    storageKey: string;
+    contentType: string;
+    metadata?: Record<string, string>;
+    expiresInSec?: number;
+  }): Promise<string> {
+    const { storageKey, contentType, metadata, expiresInSec } = args;
+
+    const command = new PutObjectCommand({
+      Bucket: this.bucket,
+      Key: storageKey,
+      ContentType: contentType || 'application/octet-stream',
+      Metadata: metadata || {},
+    });
+
+    const url = await getSignedUrl(this.s3Client, command, { expiresIn: expiresInSec ?? 900 });
+    return url;
+  }
+
+  /**
    * Get a streaming URL for playback
    */
   async getStreamUrl(storageKey: string): Promise<string> {
@@ -124,8 +160,9 @@ export class StorageService {
       });
       await this.s3Client.send(command);
       return true;
-    } catch (error: any) {
-      if (error.name === 'NotFound' || error.$metadata?.httpStatusCode === 404) {
+    } catch (error: unknown) {
+      const err = error as { name?: string; $metadata?: { httpStatusCode?: number } };
+      if (err.name === 'NotFound' || err.$metadata?.httpStatusCode === 404) {
         return false;
       }
       throw error;
@@ -169,8 +206,8 @@ export class StorageService {
       Key: storageKey,
     });
 
-    const headResult = await this.s3Client.send(command);
-    
+    await this.s3Client.send(command);
+
     // Update metadata to mark as warm
     // In production, use S3 copy with storage class change
     // For now, we'll track this in the database
@@ -189,19 +226,10 @@ export class StorageService {
   }
 
   /**
-   * Calculate SHA256 checksum of a file
+   * Calculate SHA256 checksum of a buffer
    */
-  private async calculateChecksum(file: Buffer | Readable): Promise<string> {
-    if (file instanceof Buffer) {
-      return createHash('sha256').update(file).digest('base64');
-    }
-
-    return new Promise((resolve, reject) => {
-      const hash = createHash('sha256');
-      file.on('data', (chunk) => hash.update(chunk));
-      file.on('end', () => resolve(hash.digest('base64')));
-      file.on('error', reject);
-    });
+  private calculateBufferChecksum(buffer: Buffer): string {
+    return createHash('sha256').update(buffer).digest('base64');
   }
 
   /**
@@ -210,7 +238,7 @@ export class StorageService {
   private async streamToBuffer(stream: Readable): Promise<Buffer> {
     const chunks: Buffer[] = [];
     for await (const chunk of stream) {
-      chunks.push(chunk);
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array));
     }
     return Buffer.concat(chunks);
   }
@@ -264,4 +292,3 @@ export function getStorageService(): StorageService {
 
   return storageService;
 }
-

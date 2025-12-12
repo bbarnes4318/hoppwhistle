@@ -1,15 +1,13 @@
-import { spawn } from 'child_process';
+import crypto from 'crypto';
 
 import { Redis } from 'ioredis';
 
 import { logger } from './logger.js';
 import { TranscriptRepository } from './repository.js';
-import { TranscriberService } from './transcriber-service.js';
 import { RecordingReadyEvent, TranscriptionReadyEvent } from './types.js';
 
 export class TranscriberWorker {
   private redis: Redis;
-  private transcriber: TranscriberService;
   private repository: TranscriptRepository;
   private isRunning = false;
   private activeJobs = new Map<string, Promise<void>>();
@@ -19,55 +17,58 @@ export class TranscriberWorker {
   constructor() {
     const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
     this.redis = new Redis(redisUrl);
-    
-    this.transcriber = new TranscriberService();
+
     this.repository = new TranscriptRepository();
-    
+
     this.maxConcurrency = parseInt(process.env.TRANSCRIBE_MAX_CONCURRENCY || '2', 10);
     this.maxDurationSec = parseInt(process.env.TRANSCRIBE_MAX_DURATION_SEC || '7200', 10);
   }
 
   async start(): Promise<void> {
     this.isRunning = true;
-    
-    // Initialize consumer group
+
+    // Initialize consumer groups
     try {
       await this.redis.xgroup('CREATE', 'events:stream', 'transcriber-group', '0', 'MKSTREAM');
     } catch (err: any) {
-      if (!err.message.includes('BUSYGROUP')) {
-        throw err;
-      }
+      if (!err.message.includes('BUSYGROUP')) throw err;
     }
 
-    // Start consuming events
+    try {
+      await this.redis.xgroup(
+        'CREATE',
+        'jobs:transcription:results',
+        'result-group',
+        '0',
+        'MKSTREAM'
+      );
+    } catch (err: any) {
+      if (!err.message.includes('BUSYGROUP')) throw err;
+    }
+
+    // Start consuming events and results
     this.consumeEvents();
+    this.consumeResults();
   }
 
   async stop(): Promise<void> {
     this.isRunning = false;
-    
+
     // Wait for active jobs to complete (with timeout)
     const timeout = 30000; // 30 seconds
     const startTime = Date.now();
-    
+
     while (this.activeJobs.size > 0 && Date.now() - startTime < timeout) {
       await Promise.race(Array.from(this.activeJobs.values()));
       await new Promise(resolve => setTimeout(resolve, 100));
     }
-    
+
     await this.redis.quit();
   }
 
   private async consumeEvents(): Promise<void> {
     while (this.isRunning) {
       try {
-        // Check concurrency limit
-        if (this.activeJobs.size >= this.maxConcurrency) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          continue;
-        }
-
-        // Read from stream
         const messages = await this.redis.xreadgroup(
           'GROUP',
           'transcriber-group',
@@ -86,7 +87,7 @@ export class TranscriberWorker {
         }
 
         const [, streamMessages] = messages[0] as [string, Array<[string, string[]]>];
-        
+
         for (const [messageId, fields] of streamMessages) {
           const fieldMap: Record<string, string> = {};
           for (let i = 0; i < fields.length; i += 2) {
@@ -94,11 +95,10 @@ export class TranscriberWorker {
           }
 
           const payload = JSON.parse(fieldMap.payload || '{}');
-          
-          // Check if this is a recording.ready event
+
           if (payload.event === 'recording.ready') {
             const event = payload as RecordingReadyEvent;
-            
+
             // Check idempotency
             const idempotencyKey = `transcribe:${event.data.callId}`;
             const existing = await this.redis.get(idempotencyKey);
@@ -108,15 +108,9 @@ export class TranscriberWorker {
               continue;
             }
 
-            // Process in background
-            const jobPromise = this.processRecording(event, messageId);
-            this.activeJobs.set(event.data.callId, jobPromise);
-            
-            jobPromise.finally(() => {
-              this.activeJobs.delete(event.data.callId);
-            });
+            // Enqueue job
+            await this.enqueueTranscriptionJob(event, messageId);
           } else {
-            // Not our event, acknowledge and skip
             await this.redis.xack('events:stream', 'transcriber-group', messageId);
           }
         }
@@ -127,13 +121,12 @@ export class TranscriberWorker {
     }
   }
 
-  private async processRecording(
+  private async enqueueTranscriptionJob(
     event: RecordingReadyEvent,
     messageId: string
   ): Promise<void> {
-    const startTime = Date.now();
     const idempotencyKey = `transcribe:${event.data.callId}`;
-    
+
     try {
       // Set idempotency key (expires in 24 hours)
       await this.redis.setex(idempotencyKey, 86400, '1');
@@ -146,56 +139,111 @@ export class TranscriberWorker {
         return;
       }
 
-      logger.info(`Processing transcription for call ${event.data.callId}`);
+      logger.info(`Enqueuing transcription job for call ${event.data.callId}`);
 
-      // Transcribe
-      const result = await this.transcriber.transcribe({
+      const jobPayload = {
+        jobId: crypto.randomUUID(),
+        callId: event.data.callId,
+        tenantId: event.tenantId,
         recordingUrl: event.data.recordingUrl,
-        format: event.data.format,
-        options: {
+        settings: {
           prefer: process.env.TRANSCRIBE_ENGINE_PREF || 'whisperx',
           fallback: 'whispercpp',
           diarize: true,
           model: 'tiny',
+          language: 'en',
         },
-      });
+        originalMessageId: messageId,
+      };
+
+      await this.redis.xadd('jobs:transcription', '*', 'payload', JSON.stringify(jobPayload));
+
+      // Acknowledge the recording.ready event
+      await this.redis.xack('events:stream', 'transcriber-group', messageId);
+    } catch (error) {
+      logger.error(`Error enqueuing transcription for call ${event.data.callId}:`, error);
+    }
+  }
+
+  private async consumeResults(): Promise<void> {
+    while (this.isRunning) {
+      try {
+        const messages = await this.redis.xreadgroup(
+          'GROUP',
+          'result-group',
+          'result-worker',
+          'COUNT',
+          '1',
+          'BLOCK',
+          '1000',
+          'STREAMS',
+          'jobs:transcription:results',
+          '>'
+        );
+
+        if (!messages || messages.length === 0) continue;
+
+        const [, streamMessages] = messages[0] as [string, Array<[string, string[]]>];
+
+        for (const [messageId, fields] of streamMessages) {
+          const fieldMap: Record<string, string> = {};
+          for (let i = 0; i < fields.length; i += 2) {
+            fieldMap[fields[i]] = fields[i + 1];
+          }
+
+          const result = JSON.parse(fieldMap.payload || '{}');
+          await this.processResult(result, messageId);
+        }
+      } catch (error) {
+        logger.error('Error consuming results:', error);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+  }
+
+  private async processResult(result: any, messageId: string): Promise<void> {
+    try {
+      logger.info(`Processing transcription result for call ${result.callId}`);
 
       if (!result.ok) {
-        throw new Error(`Transcription failed: ${result.error} (stage: ${result.stage})`);
+        logger.error(`Transcription failed for call ${result.callId}: ${result.error}`);
+        // Handle failure
+        await this.redis.xack('jobs:transcription:results', 'result-group', messageId);
+        return;
       }
 
       // Store in database
-      const transcriptId = await this.repository.upsertTranscript(
-        event.tenantId,
-        event.data.callId,
-        {
-          engine: result.engine,
-          language: result.language || 'en',
-          durationSec: result.durationSec,
-          fullText: result.fullText,
-          segments: result.segments,
-          speakerLabels: result.segments.some((s: any) => s.speaker),
-          analysis: result.analysis,
-        }
-      );
+      const transcriptId = await this.repository.upsertTranscript(result.tenantId, result.callId, {
+        engine: result.engine,
+        language: result.language || 'en',
+        durationSec: result.durationSec,
+        fullText: result.fullText,
+        segments: result.segments,
+        speakerLabels: result.segments.some((s: any) => s.speaker),
+        analysis: result.analysis,
+      });
 
       // Calculate stats
-      const latencyMs = Date.now() - startTime;
       const stats = {
         segments: result.stats.numSegments,
-        words: result.stats.numWords || result.fullText.split(/\s+/).length,
+        words: result.stats.numWords || (result.fullText ? result.fullText.split(/\s+/).length : 0),
         speakerLabels: result.segments.some((s: any) => s.speaker),
-        latencyMs,
+        latencyMs: result.latencyMs || 0,
       };
 
       // Emit transcription.ready event
-      const transcriptionEvent: TranscriptionReadyEvent = {
+      const transcriptionEvent: any = {
         event: 'transcription.ready',
-        tenantId: event.tenantId,
+        tenantId: result.tenantId,
         data: {
-          callId: event.data.callId,
+          callId: result.callId,
           transcriptId,
           stats,
+          fullText: result.fullText || '',
+          segments: result.segments || [],
+          language: result.language || 'en',
+          durationSec: result.durationSec || 0,
+          engine: result.engine || null,
         },
       };
 
@@ -208,28 +256,13 @@ export class TranscriberWorker {
         JSON.stringify(transcriptionEvent)
       );
 
-      // Also publish to pub/sub
       await this.redis.publish('transcription.ready', JSON.stringify(transcriptionEvent));
 
-      logger.info(`Transcription completed for call ${event.data.callId} (${latencyMs}ms)`);
+      logger.info(`Transcription completed and saved for call ${result.callId}`);
 
-      // Acknowledge message
-      await this.redis.xack('events:stream', 'transcriber-group', messageId);
+      await this.redis.xack('jobs:transcription:results', 'result-group', messageId);
     } catch (error) {
-      logger.error(`Error processing transcription for call ${event.data.callId}:`, error);
-      
-      // Retry logic (simple exponential backoff)
-      const retryCount = await this.redis.incr(`${idempotencyKey}:retries`);
-      if (retryCount < 3) {
-        const backoffMs = Math.pow(2, retryCount) * 1000; // 2s, 4s, 8s
-        logger.info(`Retrying transcription (attempt ${retryCount}/3) after ${backoffMs}ms`);
-        await new Promise(resolve => setTimeout(resolve, backoffMs));
-        // Re-queue by not acknowledging
-      } else {
-        logger.error(`Max retries exceeded for call ${event.data.callId}`);
-        await this.redis.xack('events:stream', 'transcriber-group', messageId);
-      }
+      logger.error(`Error processing result for call ${result.callId}:`, error);
     }
   }
 }
-

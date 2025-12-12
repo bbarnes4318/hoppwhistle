@@ -10,7 +10,7 @@ export class SecretsManager {
   private secrets: Map<string, string> = new Map();
 
   private constructor() {
-    this.loadSecrets();
+    void this.loadSecrets();
   }
 
   static getInstance(): SecretsManager {
@@ -52,8 +52,9 @@ export class SecretsManager {
       });
     }
     */
-    
+
     // For now, fall back to environment variables
+    await Promise.resolve();
     this.loadFromEnvironment();
   }
 
@@ -70,6 +71,15 @@ export class SecretsManager {
       'STRIPE_SECRET_KEY',
       'JORNAYA_API_KEY',
       'TRUSTEDFORM_API_KEY',
+      'TELNYX_API_KEY',
+      'TELNYX_CONNECTION_ID',
+      'BANDWIDTH_ACCOUNT_ID',
+      'BANDWIDTH_USERNAME',
+      'BANDWIDTH_PASSWORD',
+      'BANDWIDTH_SITE_ID',
+      'SIGNALWIRE_PROJECT_ID',
+      'SIGNALWIRE_API_TOKEN',
+      'SIGNALWIRE_SPACE_URL',
     ];
 
     secretKeys.forEach(key => {
@@ -107,4 +117,3 @@ export class SecretsManager {
 }
 
 export const secrets = SecretsManager.getInstance();
-

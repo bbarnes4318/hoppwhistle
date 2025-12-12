@@ -1,0 +1,72 @@
+
+[7m[1m[36m RUN [39m[22m[27m [36mv1.6.1[39m [90mC:/Users/jimbo/Downloads/hopwhistle/apps/api[39m
+
+ [33m❯[39m src/services/provisioning/__tests__/provisioning-service.test.ts [2m ([22m[2m6 tests[22m [2m|[22m [31m4 failed[39m[2m)[22m[90m 14[2mms[22m[39m
+[31m   [33m❯[31m src/services/provisioning/__tests__/provisioning-service.test.ts[2m > [22mProvisioningService[2m > [22mpurchaseNumber[2m > [22mshould use specified provider[39m
+[31m     → Cannot read properties of undefined (reading 'id')[39m
+[31m   [33m❯[31m src/services/provisioning/__tests__/provisioning-service.test.ts[2m > [22mProvisioningService[2m > [22mpurchaseNumber[2m > [22mshould default to signalwire if provider not specified (and not dev)[39m
+[31m     → Cannot read properties of undefined (reading 'id')[39m
+[31m   [33m❯[31m src/services/provisioning/__tests__/provisioning-service.test.ts[2m > [22mProvisioningService[2m > [22mpurchaseNumber[2m > [22mshould default to local in development[39m
+[31m     → Cannot read properties of undefined (reading 'id')[39m
+[31m   [33m❯[31m src/services/provisioning/__tests__/provisioning-service.test.ts[2m > [22mProvisioningService[2m > [22mpurchaseNumber[2m > [22mshould use DEFAULT_PROVIDER env var[39m
+[31m     → Cannot read properties of undefined (reading 'id')[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[1m[7m Failed Tests 4 [27m[22m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[31m[1m[7m FAIL [27m[22m[39m src/services/provisioning/__tests__/provisioning-service.test.ts[2m > [22mProvisioningService[2m > [22mpurchaseNumber[2m > [22mshould use specified provider
+[31m[1mTypeError[22m: Cannot read properties of undefined (reading 'id')[39m
+[36m [2m❯[22m ProvisioningService.purchaseNumber src/services/provisioning/provisioning-service.ts:[2m125:16[22m[39m
+    [90m123| [39m      context[33m.[39mtenantId[33m,[39m
+    [90m124| [39m      [32m'PhoneNumber'[39m[33m,[39m
+    [90m125| [39m      dbNumber[33m.[39mid[33m,[39m
+    [90m   | [39m               [31m^[39m
+    [90m126| [39m      {
+    [90m127| [39m        number[33m:[39m provisioned[33m.[39mnumber[33m,[39m
+[90m [2m❯[22m src/services/provisioning/__tests__/provisioning-service.test.ts:[2m138:22[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯[22m[39m
+
+[31m[1m[7m FAIL [27m[22m[39m src/services/provisioning/__tests__/provisioning-service.test.ts[2m > [22mProvisioningService[2m > [22mpurchaseNumber[2m > [22mshould default to signalwire if provider not specified (and not dev)
+[31m[1mTypeError[22m: Cannot read properties of undefined (reading 'id')[39m
+[36m [2m❯[22m ProvisioningService.purchaseNumber src/services/provisioning/provisioning-service.ts:[2m125:16[22m[39m
+    [90m123| [39m      context[33m.[39mtenantId[33m,[39m
+    [90m124| [39m      [32m'PhoneNumber'[39m[33m,[39m
+    [90m125| [39m      dbNumber[33m.[39mid[33m,[39m
+    [90m   | [39m               [31m^[39m
+    [90m126| [39m      {
+    [90m127| [39m        number[33m:[39m provisioned[33m.[39mnumber[33m,[39m
+[90m [2m❯[22m src/services/provisioning/__tests__/provisioning-service.test.ts:[2m159:22[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯[22m[39m
+
+[31m[1m[7m FAIL [27m[22m[39m src/services/provisioning/__tests__/provisioning-service.test.ts[2m > [22mProvisioningService[2m > [22mpurchaseNumber[2m > [22mshould default to local in development
+[31m[1mTypeError[22m: Cannot read properties of undefined (reading 'id')[39m
+[36m [2m❯[22m ProvisioningService.purchaseNumber src/services/provisioning/provisioning-service.ts:[2m125:16[22m[39m
+    [90m123| [39m      context[33m.[39mtenantId[33m,[39m
+    [90m124| [39m      [32m'PhoneNumber'[39m[33m,[39m
+    [90m125| [39m      dbNumber[33m.[39mid[33m,[39m
+    [90m   | [39m               [31m^[39m
+    [90m126| [39m      {
+    [90m127| [39m        number[33m:[39m provisioned[33m.[39mnumber[33m,[39m
+[90m [2m❯[22m src/services/provisioning/__tests__/provisioning-service.test.ts:[2m172:22[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯[22m[39m
+
+[31m[1m[7m FAIL [27m[22m[39m src/services/provisioning/__tests__/provisioning-service.test.ts[2m > [22mProvisioningService[2m > [22mpurchaseNumber[2m > [22mshould use DEFAULT_PROVIDER env var
+[31m[1mTypeError[22m: Cannot read properties of undefined (reading 'id')[39m
+[36m [2m❯[22m ProvisioningService.purchaseNumber src/services/provisioning/provisioning-service.ts:[2m125:16[22m[39m
+    [90m123| [39m      context[33m.[39mtenantId[33m,[39m
+    [90m124| [39m      [32m'PhoneNumber'[39m[33m,[39m
+    [90m125| [39m      dbNumber[33m.[39mid[33m,[39m
+    [90m   | [39m               [31m^[39m
+    [90m126| [39m      {
+    [90m127| [39m        number[33m:[39m provisioned[33m.[39mnumber[33m,[39m
+[90m [2m❯[22m src/services/provisioning/__tests__/provisioning-service.test.ts:[2m185:22[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯[22m[39m
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m4 failed[39m[22m[2m | [22m[1m[32m2 passed[39m[22m[90m (6)[39m
+[2m   Start at [22m 02:43:10
+[2m   Duration [22m 768ms[2m (transform 137ms, setup 0ms, collect 192ms, tests 14ms, environment 0ms, prepare 161ms)[22m
+

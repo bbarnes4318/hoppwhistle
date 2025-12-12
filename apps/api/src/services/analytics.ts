@@ -73,7 +73,11 @@ export class AnalyticsService {
     const viewName = granularity === 'hour' ? 'metrics_hourly' : 'metrics_daily';
     const timeColumn = granularity === 'hour' ? 'hour' : 'day';
 
-    const whereConditions = [`tenant_id = {tenantId:String}`, `${timeColumn} >= {startDate:DateTime}`, `${timeColumn} <= {endDate:DateTime}`];
+    const whereConditions = [
+      `tenant_id = {tenantId:String}`,
+      `${timeColumn} >= {startDate:DateTime}`,
+      `${timeColumn} <= {endDate:DateTime}`,
+    ];
     const params: Record<string, unknown> = {
       tenantId: filters.tenantId,
       startDate: filters.startDate.toISOString().slice(0, 19).replace('T', ' '),
@@ -182,7 +186,7 @@ export class AnalyticsService {
         asr: metrics.asr || 0,
         aht: Math.floor(metrics.aht || 0),
       },
-      breakdown: breakdownResult.map((row) => ({
+      breakdown: breakdownResult.map(row => ({
         timestamp: row.timestamp,
         totalCalls: row.total_calls || 0,
         answeredCalls: row.answered_calls || 0,
@@ -221,9 +225,11 @@ export class AnalyticsService {
     });
 
     const totalCalls = cdrs.length;
-    const answeredCalls = cdrs.filter((c) => c.status === 'ANSWERED' || c.status === 'COMPLETED').length;
-    const completedCalls = cdrs.filter((c) => c.status === 'COMPLETED').length;
-    const failedCalls = cdrs.filter((c) => ['FAILED', 'BUSY', 'NO_ANSWER'].includes(c.status)).length;
+    const answeredCalls = cdrs.filter(
+      c => c.status === 'ANSWERED' || c.status === 'COMPLETED'
+    ).length;
+    const completedCalls = cdrs.filter(c => c.status === 'COMPLETED').length;
+    const failedCalls = cdrs.filter(c => ['FAILED', 'BUSY', 'NO_ANSWER'].includes(c.status)).length;
     const totalDuration = cdrs.reduce((sum, c) => sum + c.duration, 0);
     const totalBillableDuration = cdrs.reduce((sum, c) => sum + c.billableDuration, 0);
     const totalCost = cdrs.reduce((sum, c) => sum + Number(c.cost), 0);
@@ -231,7 +237,7 @@ export class AnalyticsService {
     const asr = totalCalls > 0 ? answeredCalls / totalCalls : 0;
 
     // Calculate AHT from answered calls
-    const answeredCdrs = cdrs.filter((c) => c.call.answeredAt && c.call.endedAt);
+    const answeredCdrs = cdrs.filter(c => c.call.answeredAt && c.call.endedAt);
     const aht =
       answeredCdrs.length > 0
         ? Math.floor(
@@ -246,7 +252,7 @@ export class AnalyticsService {
     const granularity = filters.granularity || 'hour';
     const breakdownMap = new Map<string, typeof cdrs>();
 
-    cdrs.forEach((cdr) => {
+    cdrs.forEach(cdr => {
       const date = new Date(cdr.createdAt);
       const pad = (n: number) => String(n).padStart(2, '0');
       const key =
@@ -262,13 +268,16 @@ export class AnalyticsService {
 
     const breakdown = Array.from(breakdownMap.entries())
       .map(([timestamp, groupCdrs]) => {
-        const groupAnswered = groupCdrs.filter((c) => c.status === 'ANSWERED' || c.status === 'COMPLETED').length;
-        const groupAnsweredCdrs = groupCdrs.filter((c) => c.call.answeredAt && c.call.endedAt);
+        const groupAnswered = groupCdrs.filter(
+          c => c.status === 'ANSWERED' || c.status === 'COMPLETED'
+        ).length;
+        const groupAnsweredCdrs = groupCdrs.filter(c => c.call.answeredAt && c.call.endedAt);
         const groupAht =
           groupAnsweredCdrs.length > 0
             ? Math.floor(
                 groupAnsweredCdrs.reduce(
-                  (sum, c) => sum + (c.call.endedAt!.getTime() - c.call.answeredAt!.getTime()) / 1000,
+                  (sum, c) =>
+                    sum + (c.call.endedAt!.getTime() - c.call.answeredAt!.getTime()) / 1000,
                   0
                 ) / groupAnsweredCdrs.length
               )
@@ -280,7 +289,9 @@ export class AnalyticsService {
           answeredCalls: groupAnswered,
           asr: groupCdrs.length > 0 ? groupAnswered / groupCdrs.length : 0,
           aht: groupAht,
-          billableMinutes: Math.floor(groupCdrs.reduce((sum, c) => sum + c.billableDuration, 0) / 60),
+          billableMinutes: Math.floor(
+            groupCdrs.reduce((sum, c) => sum + c.billableDuration, 0) / 60
+          ),
           cost: groupCdrs.reduce((sum, c) => sum + Number(c.cost), 0),
         };
       })
@@ -306,7 +317,73 @@ export class AnalyticsService {
       breakdown,
     };
   }
+
+  async getBuyerScores(
+    tenantId: string,
+    campaignId?: string,
+    lookbackHours = 3
+  ): Promise<Map<string, number>> {
+    if (!clickhouseService.isEnabled()) {
+      return new Map();
+    }
+
+    try {
+      const query = `
+        SELECT
+          buyer_id,
+          sum(total_calls) as calls,
+          sum(answered_calls) / sum(total_calls) as asr,
+          sum(conversions) / sum(total_calls) as conversion_rate
+        FROM metrics_hourly
+        WHERE
+          tenant_id = {tenantId:String}
+          AND hour >= now() - INTERVAL {lookbackHours:UInt32} HOUR
+          ${campaignId ? 'AND campaign_id = {campaignId:String}' : ''}
+        GROUP BY buyer_id
+        HAVING calls > 0
+      `;
+
+      const params: Record<string, unknown> = {
+        tenantId,
+        lookbackHours,
+      };
+
+      if (campaignId) {
+        params.campaignId = campaignId;
+      }
+
+      const results = await clickhouseService.query<{
+        buyer_id: string;
+        calls: number;
+        asr: number;
+        conversion_rate: number;
+      }>(query, params);
+
+      const scores = new Map<string, number>();
+
+      // Weights
+      const W_ASR = 0.4;
+      const W_CR = 0.6;
+
+      for (const row of results) {
+        // Simple linear scoring
+        // If conversion data is missing (NaN/0), rely on ASR
+        let score = 0;
+        if (row.conversion_rate > 0) {
+          score = row.asr * W_ASR + row.conversion_rate * W_CR;
+        } else {
+          score = row.asr;
+        }
+
+        scores.set(row.buyer_id, score);
+      }
+
+      return scores;
+    } catch (error) {
+      logger.error('Error fetching buyer scores:', error);
+      return new Map();
+    }
+  }
 }
 
 export const analyticsService = new AnalyticsService();
-

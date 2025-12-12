@@ -1,0 +1,1246 @@
+freeswitch@004e1a318220> console loglevel debug
+
+2025-11-24 16:58:14.031414 98.80% [NOTICE] switch_channel.c:1142 New Channel sofia/internal/2000@167.71.173.83 [ee2df86c-834c-44f3-af23-7fd68cb7df24]
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/2000@167.71.173.83) Running State Change CS_NEW (Cur 1 Tot 4)
+2025-11-24 16:58:14.031414 98.80% [INFO] sofia.c:10460 sofia/internal/2000@167.71.173.83 receiving invite from 172.18.0.3:5060 version: 1.10.12 -release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit call-id: 24508467-1439630337-1689129744
++OK log level debug [7]
++OK console log level set to DEBUG
+
+2025-11-24 16:58:14.031414 98.80% [DEBUG] sofia.c:10554 verifying acl "domains" for ip/port 172.18.0.3:0.
+2025-11-24 16:58:14.031414 98.80% [DEBUG] sofia.c:10583 IP 172.18.0.3 Approved by acl "domains[]". Access Granted.
+2025-11-24 16:58:14.031414 98.80% [DEBUG] sofia.c:11675 Setting NAT mode based on via received
+2025-11-24 16:58:14.031414 98.80% [DEBUG] sofia.c:7493 Channel sofia/internal/2000@167.71.173.83 entering state [received][100]
+2025-11-24 16:58:14.031414 98.80% [DEBUG] sofia.c:7503 Remote SDP:
+v=0
+o=2000 16264 18299 IN IP4 192.168.1.83
+s=call
+c=IN IP4 192.168.1.83
+t=0 0
+m=audio 25282 RTP/AVP 0 101
+a=rtpmap:0 pcmu/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-11
+
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [pcmu:0:8000:20:64000:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [pcmu:0:8000:20:64000:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [PCMU:0:8000:20:64000:1] ++++ is saved as a match
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [pcmu:0:8000:20:64000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [pcmu:0:8000:20:64000:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_media.c:5438 Set telephone-event payload to 101@8000
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_media.c:3731 Set Codec sofia/internal/2000@167.71.173.83 PCMU/8000 20 ms 160 samples 64000 bits 1 channels
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_codec.c:111 sofia/internal/2000@167.71.173.83 Original read codec set to PCMU:0
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_media.c:5798 Set telephone-event payload to 101@8000
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_media.c:5856 sofia/internal/2000@167.71.173.83 Set 2833 dtmf send payload to 101 recv payload to 101
+2025-11-24 16:58:14.031414 98.80% [DEBUG] sofia.c:7927 (sofia/internal/2000@167.71.173.83) State Change CS_NEW -> CS_INIT
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_state_machine.c:600 (sofia/internal/2000@167.71.173.83) State NEW
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/2000@167.71.173.83) Running State Change CS_INIT (Cur 1 Tot 4)
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_state_machine.c:624 (sofia/internal/2000@167.71.173.83) State INIT
+2025-11-24 16:58:14.031414 98.80% [DEBUG] mod_sofia.c:97 sofia/internal/2000@167.71.173.83 SOFIA INIT
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_state_machine.c:40 sofia/internal/2000@167.71.173.83 Standard INIT
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_state_machine.c:48 (sofia/internal/2000@167.71.173.83) State Change CS_INIT -> CS_ROUTING
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_state_machine.c:624 (sofia/internal/2000@167.71.173.83) State INIT going to sleep
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/2000@167.71.173.83) Running State Change CS_ROUTING (Cur 1 Tot 4)
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_channel.c:2399 (sofia/internal/2000@167.71.173.83) Callstate Change DOWN -> RINGING
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_state_machine.c:640 (sofia/internal/2000@167.71.173.83) State ROUTING
+2025-11-24 16:58:14.031414 98.80% [DEBUG] mod_sofia.c:158 sofia/internal/2000@167.71.173.83 SOFIA ROUTING
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_state_machine.c:230 sofia/internal/2000@167.71.173.83 Standard ROUTING
+2025-11-24 16:58:14.031414 98.80% [INFO] mod_dialplan_xml.c:639 Processing 2000 <2000>->4048818273636 in context internal
+Dialplan: sofia/internal/2000@167.71.173.83 parsing [internal->internal-calls] continue=false
+Dialplan: sofia/internal/2000@167.71.173.83 Regex (PASS) [internal-calls] destination_number(4048818273636) =~ /^(\d+)$/ break=on-false
+Dialplan: sofia/internal/2000@167.71.173.83 Action log(INFO Internal call to ${destination_number}) 
+Dialplan: sofia/internal/2000@167.71.173.83 Action answer() 
+Dialplan: sofia/internal/2000@167.71.173.83 Action bridge(user/${destination_number}@${domain_name}) 
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_state_machine.c:281 (sofia/internal/2000@167.71.173.83) State Change CS_ROUTING -> CS_EXECUTE
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_state_machine.c:640 (sofia/internal/2000@167.71.173.83) State ROUTING going to sleep
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/2000@167.71.173.83) Running State Change CS_EXECUTE (Cur 1 Tot 4)
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_state_machine.c:647 (sofia/internal/2000@167.71.173.83) State EXECUTE
+freeswitch@004e1a318220> sofia profile external restart
+2025-11-24 16:58:14.031414 98.80% [DEBUG] mod_sofia.c:213 sofia/internal/2000@167.71.173.83 SOFIA EXECUTE
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_state_machine.c:323 sofia/internal/2000@167.71.173.83 Standard EXECUTE
+Invalid Profile [external]
+EXECUTE [depth=0] sofia/internal/2000@167.71.173.83 log(INFO Internal call to 4048818273636)
+2025-11-24 16:58:14.031414 98.80% [INFO] mod_dptools.c:1865 Internal call to 4048818273636
+EXECUTE [depth=0] sofia/internal/2000@167.71.173.83 answer()
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_media.c:8660 AUDIO RTP [sofia/internal/2000@167.71.173.83] 172.18.0.2 port 28730 -> 192.168.1.83 port 25282 codec: 0 ms: 20
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_rtp.c:4588 Not using a timer
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_media.c:8973 sofia/internal/2000@167.71.173.83 Set 2833 dtmf send payload to 101
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_media.c:8980 sofia/internal/2000@167.71.173.83 Set 2833 dtmf receive payload to 101
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_media.c:9003 sofia/internal/2000@167.71.173.83 Set rtp dtmf delay to 40
+2025-11-24 16:58:14.031414 98.80% [DEBUG] mod_sofia.c:914 Local SDP sofia/internal/2000@167.71.173.83:
+v=0
+o=FreeSWITCH 1763974764 1763974765 IN IP4 172.18.0.2
+s=FreeSWITCH
+c=IN IP4 172.18.0.2
+t=0 0
+m=audio 28730 RTP/AVP 0 101
+a=rtpmap:0 pcmu/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=ptime:20
+a=sendrecv
+
+2025-11-24 16:58:14.031414 98.80% [NOTICE] mod_dptools.c:1406 Channel [sofia/internal/2000@167.71.173.83] has been answered
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_channel.c:3912 (sofia/internal/2000@167.71.173.83) Callstate Change RINGING -> ACTIVE
+2025-11-24 16:58:14.031414 98.80% [DEBUG] sofia.c:7493 Channel sofia/internal/2000@167.71.173.83 entering state [completed][200]
+EXECUTE [depth=0] sofia/internal/2000@167.71.173.83 bridge(user/4048818273636@172.18.0.2)
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_channel.c:1973 (sofia/internal/2000@167.71.173.83) Callstate Change ACTIVE -> RING_WAIT
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_ivr_originate.c:2301 Parsing global variables
+2025-11-24 16:58:14.031414 98.80% [WARNING] mod_dptools.c:4383 Can't find user [4048818273636@172.18.0.2]
+2025-11-24 16:58:14.031414 98.80% [NOTICE] switch_ivr_originate.c:3059 Cannot create outgoing channel of type [user] cause: [SUBSCRIBER_ABSENT]
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_ivr_originate.c:4056 Originate Resulted in Error Cause: 20 [SUBSCRIBER_ABSENT]
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_channel.c:2197 (sofia/internal/2000@167.71.173.83) Callstate Change RING_WAIT -> ACTIVE
+2025-11-24 16:58:14.031414 98.80% [INFO] mod_dptools.c:3635 Originate Failed.  Cause: SUBSCRIBER_ABSENT
+2025-11-24 16:58:14.031414 98.80% [NOTICE] switch_channel.c:5012 Hangup sofia/internal/2000@167.71.173.83 [CS_EXECUTE] [SUBSCRIBER_ABSENT]
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_session.c:2979 sofia/internal/2000@167.71.173.83 skip receive message [APPLICATION_EXEC_COMPLETE] (channel is hungup already)
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_state_machine.c:647 (sofia/internal/2000@167.71.173.83) State EXECUTE going to sleep
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/2000@167.71.173.83) Running State Change CS_HANGUP (Cur 1 Tot 4)
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_state_machine.c:844 (sofia/internal/2000@167.71.173.83) Callstate Change ACTIVE -> HANGUP
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_state_machine.c:846 (sofia/internal/2000@167.71.173.83) State HANGUP
+2025-11-24 16:58:14.031414 98.80% [DEBUG] mod_sofia.c:469 Channel sofia/internal/2000@167.71.173.83 hanging up, cause: SUBSCRIBER_ABSENT
+2025-11-24 16:58:14.031414 98.80% [DEBUG] mod_sofia.c:523 Sending BYE to sofia/internal/2000@167.71.173.83
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_state_machine.c:59 sofia/internal/2000@167.71.173.83 Standard HANGUP, cause: SUBSCRIBER_ABSENT
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_state_machine.c:846 (sofia/internal/2000@167.71.173.83) State HANGUP going to sleep
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_state_machine.c:616 (sofia/internal/2000@167.71.173.83) State Change CS_HANGUP -> CS_REPORTING
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/2000@167.71.173.83) Running State Change CS_REPORTING (Cur 1 Tot 4)
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_state_machine.c:932 (sofia/internal/2000@167.71.173.83) State REPORTING
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_state_machine.c:168 sofia/internal/2000@167.71.173.83 Standard REPORTING, cause: SUBSCRIBER_ABSENT
+025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_state_machine.c:932 (sofia/internal/2000@167.71.173.83) State REPORTING going to sleep
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_state_machine.c:607 (sofia/internal/2000@167.71.173.83) State Change CS_REPORTING -> CS_DESTROY
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_session.c:1744 Session 4 (sofia/internal/2000@167.71.173.83) Locked, Waiting on external entities
+2025-11-24 16:58:14.031414 98.80% [NOTICE] switch_core_session.c:1762 Session 4 (sofia/internal/2000@167.71.173.83) Ended
+2025-11-24 16:58:14.031414 98.80% [NOTICE] switch_core_session.c:1766 Close Channel sofia/internal/2000@167.71.173.83 [CS_DESTROY]
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_state_machine.c:735 (sofia/internal/2000@167.71.173.83) Running State Change CS_DESTROY (Cur 0 Tot 4)
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_state_machine.c:745 (sofia/internal/2000@167.71.173.83) State DESTROY
+2025-11-24 16:58:14.031414 98.80% [DEBUG] mod_sofia.c:380 sofia/internal/2000@167.71.173.83 SOFIA DESTROY
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_state_machine.c:175 sofia/internal/2000@167.71.173.83 Standard DESTROY
+2025-11-24 16:58:14.031414 98.80% [DEBUG] switch_core_state_machine.c:745 (sofia/internal/2000@167.71.173.83) State DESTROY going to sleep
+2025-11-24 16:58:21.751403 98.80% [NOTICE] switch_channel.c:1142 New Channel sofia/internal/5100000000@167.71.173.83 [c19e99ff-90e4-4fc8-b694-c17db7d4b232]
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/5100000000@167.71.173.83) Running State Change CS_NEW (Cur 1 Tot 5)
+2025-11-24 16:58:21.751403 98.80% [INFO] sofia.c:10460 sofia/internal/5100000000@167.71.173.83 receiving invite from 172.18.0.3:5060 version: 1.10.12 -release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit call-id: gDWrYVh2358eHoCTYzUQHm..
+2025-11-24 16:58:21.751403 98.80% [DEBUG] sofia.c:10554 verifying acl "domains" for ip/port 172.18.0.3:0.
+2025-11-24 16:58:21.751403 98.80% [DEBUG] sofia.c:10583 IP 172.18.0.3 Approved by acl "domains[]". Access Granted.
+2025-11-24 16:58:21.751403 98.80% [DEBUG] sofia.c:11675 Setting NAT mode based on via received
+2025-11-24 16:58:21.751403 98.80% [DEBUG] sofia.c:7493 Channel sofia/internal/5100000000@167.71.173.83 entering state [received][100]
+2025-11-24 16:58:21.751403 98.80% [DEBUG] sofia.c:7503 Remote SDP:
+v=0
+o=Z 0 0 IN IP4 170.8.233.117
+s=Z
+c=IN IP4 170.8.233.117
+t=0 0
+m=audio 8000 RTP/AVP 18 3 110 8 0 97 101
+a=rtpmap:18 G729/8000
+a=fmtp:18 annexb=no
+a=rtpmap:110 speex/8000
+a=rtpmap:97 iLBC/8000
+a=fmtp:97 mode=30
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-16
+
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [GSM:3:8000:20:13200:1] ++++ is saved as a match
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [speex:110:8000:20:0:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [speex:110:8000:20:0:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [speex:110:8000:20:0:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [speex:110:8000:20:0:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [PCMA:8:8000:20:64000:1] ++++ is saved as a match
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [PCMU:0:8000:20:64000:1] ++++ is saved as a match
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [iLBC:97:8000:30:0:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [iLBC:97:8000:30:0:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [iLBC:97:8000:30:0:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [iLBC:97:8000:30:0:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:5438 Set telephone-event payload to 101@8000
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:3731 Set Codec sofia/internal/5100000000@167.71.173.83 GSM/8000 20 ms 160 samples 13200 bits 1 channels
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_codec.c:111 sofia/internal/5100000000@167.71.173.83 Original read codec set to GSM:3
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:5798 Set telephone-event payload to 101@8000
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:5856 sofia/internal/5100000000@167.71.173.83 Set 2833 dtmf send payload to 101 recv payload to 101
+2025-11-24 16:58:21.751403 98.80% [DEBUG] sofia.c:7927 (sofia/internal/5100000000@167.71.173.83) State Change CS_NEW -> CS_INIT
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_state_machine.c:600 (sofia/internal/5100000000@167.71.173.83) State NEW
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/5100000000@167.71.173.83) Running State Change CS_INIT (Cur 1 Tot 5)
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_state_machine.c:624 (sofia/internal/5100000000@167.71.173.83) State INIT
+2025-11-24 16:58:21.751403 98.80% [DEBUG] mod_sofia.c:97 sofia/internal/5100000000@167.71.173.83 SOFIA INIT
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_state_machine.c:40 sofia/internal/5100000000@167.71.173.83 Standard INIT
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_state_machine.c:48 (sofia/internal/5100000000@167.71.173.83) State Change CS_INIT -> CS_ROUTING
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_state_machine.c:624 (sofia/internal/5100000000@167.71.173.83) State INIT going to sleep
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/5100000000@167.71.173.83) Running State Change CS_ROUTING (Cur 1 Tot 5)
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_channel.c:2399 (sofia/internal/5100000000@167.71.173.83) Callstate Change DOWN -> RINGING
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_state_machine.c:640 (sofia/internal/5100000000@167.71.173.83) State ROUTING
+2025-11-24 16:58:21.751403 98.80% [DEBUG] mod_sofia.c:158 sofia/internal/5100000000@167.71.173.83 SOFIA ROUTING
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_state_machine.c:230 sofia/internal/5100000000@167.71.173.83 Standard ROUTING
+2025-11-24 16:58:21.751403 98.80% [INFO] mod_dialplan_xml.c:639 Processing 5100000000 <5100000000>->56500447400701418 in context internal
+Dialplan: sofia/internal/5100000000@167.71.173.83 parsing [internal->internal-calls] continue=false
+Dialplan: sofia/internal/5100000000@167.71.173.83 Regex (PASS) [internal-calls] destination_number(56500447400701418) =~ /^(\d+)$/ break=on-false
+Dialplan: sofia/internal/5100000000@167.71.173.83 Action log(INFO Internal call to ${destination_number}) 
+Dialplan: sofia/internal/5100000000@167.71.173.83 Action answer() 
+Dialplan: sofia/internal/5100000000@167.71.173.83 Action bridge(user/${destination_number}@${domain_name}) 
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_state_machine.c:281 (sofia/internal/5100000000@167.71.173.83) State Change CS_ROUTING -> CS_EXECUTE
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_state_machine.c:640 (sofia/internal/5100000000@167.71.173.83) State ROUTING going to sleep
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/5100000000@167.71.173.83) Running State Change CS_EXECUTE (Cur 1 Tot 5)
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_state_machine.c:647 (sofia/internal/5100000000@167.71.173.83) State EXECUTE
+2025-11-24 16:58:21.751403 98.80% [DEBUG] mod_sofia.c:213 sofia/internal/5100000000@167.71.173.83 SOFIA EXECUTE
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_state_machine.c:323 sofia/internal/5100000000@167.71.173.83 Standard EXECUTE
+EXECUTE [depth=0] sofia/internal/5100000000@167.71.173.83 log(INFO Internal call to 56500447400701418)
+2025-11-24 16:58:21.751403 98.80% [INFO] mod_dptools.c:1865 Internal call to 56500447400701418
+EXECUTE [depth=0] sofia/internal/5100000000@167.71.173.83 answer()
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:8660 AUDIO RTP [sofia/internal/5100000000@167.71.173.83] 172.18.0.2 port 24598 -> 170.8.233.117 port 8000 codec: 3 ms: 20
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_rtp.c:4588 Not using a timer
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:8973 sofia/internal/5100000000@167.71.173.83 Set 2833 dtmf send payload to 101
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:8980 sofia/internal/5100000000@167.71.173.83 Set 2833 dtmf receive payload to 101
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_media.c:9003 sofia/internal/5100000000@167.71.173.83 Set rtp dtmf delay to 40
+2025-11-24 16:58:21.751403 98.80% [DEBUG] mod_sofia.c:914 Local SDP sofia/internal/5100000000@167.71.173.83:
+v=0
+o=FreeSWITCH 1763978903 1763978904 IN IP4 172.18.0.2
+s=FreeSWITCH
+c=IN IP4 172.18.0.2
+t=0 0
+m=audio 24598 RTP/AVP 3 101
+a=rtpmap:3 GSM/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=ptime:20
+a=sendrecv
+
+2025-11-24 16:58:21.751403 98.80% [NOTICE] mod_dptools.c:1406 Channel [sofia/internal/5100000000@167.71.173.83] has been answered
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_channel.c:3912 (sofia/internal/5100000000@167.71.173.83) Callstate Change RINGING -> ACTIVE
+EXECUTE [depth=0] sofia/internal/5100000000@167.71.173.83 bridge(user/56500447400701418@172.18.0.2)
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_channel.c:1973 (sofia/internal/5100000000@167.71.173.83) Callstate Change ACTIVE -> RING_WAIT
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_ivr_originate.c:2301 Parsing global variables
+2025-11-24 16:58:21.751403 98.80% [WARNING] mod_dptools.c:4383 Can't find user [56500447400701418@172.18.0.2]
+2025-11-24 16:58:21.751403 98.80% [NOTICE] switch_ivr_originate.c:3059 Cannot create outgoing channel of type [user] cause: [SUBSCRIBER_ABSENT]
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_ivr_originate.c:4056 Originate Resulted in Error Cause: 20 [SUBSCRIBER_ABSENT]
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_channel.c:2197 (sofia/internal/5100000000@167.71.173.83) Callstate Change RING_WAIT -> ACTIVE
+2025-11-24 16:58:21.751403 98.80% [INFO] mod_dptools.c:3635 Originate Failed.  Cause: SUBSCRIBER_ABSENT
+2025-11-24 16:58:21.751403 98.80% [NOTICE] switch_channel.c:5012 Hangup sofia/internal/5100000000@167.71.173.83 [CS_EXECUTE] [SUBSCRIBER_ABSENT]
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_session.c:2979 sofia/internal/5100000000@167.71.173.83 skip receive message [APPLICATION_EXEC_COMPLETE] (channel is hungup already)
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_state_machine.c:647 (sofia/internal/5100000000@167.71.173.83) State EXECUTE going to sleep
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/5100000000@167.71.173.83) Running State Change CS_HANGUP (Cur 1 Tot 5)
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_state_machine.c:844 (sofia/internal/5100000000@167.71.173.83) Callstate Change ACTIVE -> HANGUP
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_state_machine.c:846 (sofia/internal/5100000000@167.71.173.83) State HANGUP
+2025-11-24 16:58:21.751403 98.80% [DEBUG] mod_sofia.c:469 Channel sofia/internal/5100000000@167.71.173.83 hanging up, cause: SUBSCRIBER_ABSENT
+2025-11-24 16:58:21.751403 98.80% [DEBUG] mod_sofia.c:523 Sending BYE to sofia/internal/5100000000@167.71.173.83
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_state_machine.c:59 sofia/internal/5100000000@167.71.173.83 Standard HANGUP, cause: SUBSCRIBER_ABSENT
+2025-11-24 16:58:21.751403 98.80% [DEBUG] switch_core_state_machine.c:846 (sofia/internal/5100000000@167.71.173.83) State HANGUP going to sleep
+2025-11-24 16:58:21.771371 98.80% [DEBUG] switch_core_state_machine.c:616 (sofia/internal/5100000000@167.71.173.83) State Change CS_HANGUP -> CS_REPORTING
+2025-11-24 16:58:21.771371 98.80% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/5100000000@167.71.173.83) Running State Change CS_REPORTING (Cur 1 Tot 5)
+2025-11-24 16:58:21.771371 98.80% [DEBUG] switch_core_state_machine.c:932 (sofia/internal/5100000000@167.71.173.83) State REPORTING
+2025-11-24 16:58:21.771371 98.80% [DEBUG] switch_core_state_machine.c:168 sofia/internal/5100000000@167.71.173.83 Standard REPORTING, cause: SUBSCRIBER_ABSENT
+2025-11-24 16:58:21.771371 98.80% [DEBUG] switch_core_state_machine.c:932 (sofia/internal/5100000000@167.71.173.83) State REPORTING going to sleep
+2025-11-24 16:58:21.771371 98.80% [DEBUG] switch_core_state_machine.c:607 (sofia/internal/5100000000@167.71.173.83) State Change CS_REPORTING -> CS_DESTROY
+2025-11-24 16:58:21.771371 98.80% [DEBUG] switch_core_session.c:1744 Session 5 (sofia/internal/5100000000@167.71.173.83) Locked, Waiting on external entities
+2025-11-24 16:58:21.771371 98.80% [NOTICE] switch_core_session.c:1762 Session 5 (sofia/internal/5100000000@167.71.173.83) Ended
+2025-11-24 16:58:21.771371 98.80% [NOTICE] switch_core_session.c:1766 Close Channel sofia/internal/5100000000@167.71.173.83 [CS_DESTROY]
+2025-11-24 16:58:21.771371 98.80% [DEBUG] switch_core_state_machine.c:735 (sofia/internal/5100000000@167.71.173.83) Running State Change CS_DESTROY (Cur 0 Tot 5)
+2025-11-24 16:58:21.771371 98.80% [DEBUG] switch_core_state_machine.c:745 (sofia/internal/5100000000@167.71.173.83) State DESTROY
+2025-11-24 16:58:21.771371 98.80% [DEBUG] mod_sofia.c:380 sofia/internal/5100000000@167.71.173.83 SOFIA DESTROY
+2025-11-24 16:58:21.771371 98.80% [DEBUG] switch_core_state_machine.c:175 sofia/internal/5100000000@167.71.173.83 Standard DESTROY
+2025-11-24 16:58:21.771371 98.80% [DEBUG] switch_core_state_machine.c:745 (sofia/internal/5100000000@167.71.173.83) State DESTROY going to sleep
+2025-11-24 16:58:27.051412 98.80% [NOTICE] switch_channel.c:1142 New Channel sofia/internal/100@167.71.173.83 [0687dc23-c3ca-4399-a92c-faf6a9758ca0]
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/100@167.71.173.83) Running State Change CS_NEW (Cur 1 Tot 6)
+2025-11-24 16:58:27.051412 98.80% [INFO] sofia.c:10460 sofia/internal/100@167.71.173.83 receiving invite from 172.18.0.3:5060 version: 1.10.12 -release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit call-id: 1102757833-309505058-1000781504
+2025-11-24 16:58:27.051412 98.80% [DEBUG] sofia.c:10554 verifying acl "domains" for ip/port 172.18.0.3:0.
+2025-11-24 16:58:27.051412 98.80% [DEBUG] sofia.c:10583 IP 172.18.0.3 Approved by acl "domains[]". Access Granted.
+2025-11-24 16:58:27.051412 98.80% [DEBUG] sofia.c:11675 Setting NAT mode based on via received
+2025-11-24 16:58:27.051412 98.80% [DEBUG] sofia.c:7493 Channel sofia/internal/100@167.71.173.83 entering state [received][100]
+2025-11-24 16:58:27.051412 98.80% [DEBUG] sofia.c:7503 Remote SDP:
+v=0
+o=100 16264 18299 IN IP4 192.168.1.83
+s=call
+c=IN IP4 192.168.1.83
+t=0 0
+m=audio 25282 RTP/AVP 0 101
+a=rtpmap:0 pcmu/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-11
+
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [pcmu:0:8000:20:64000:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [pcmu:0:8000:20:64000:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [PCMU:0:8000:20:64000:1] ++++ is saved as a match
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [pcmu:0:8000:20:64000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [pcmu:0:8000:20:64000:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_media.c:5438 Set telephone-event payload to 101@8000
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_media.c:3731 Set Codec sofia/internal/100@167.71.173.83 PCMU/8000 20 ms 160 samples 64000 bits 1 channels
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_codec.c:111 sofia/internal/100@167.71.173.83 Original read codec set to PCMU:0
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_media.c:5798 Set telephone-event payload to 101@8000
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_media.c:5856 sofia/internal/100@167.71.173.83 Set 2833 dtmf send payload to 101 recv payload to 101
+2025-11-24 16:58:27.051412 98.80% [DEBUG] sofia.c:7927 (sofia/internal/100@167.71.173.83) State Change CS_NEW -> CS_INIT
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_state_machine.c:600 (sofia/internal/100@167.71.173.83) State NEW
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/100@167.71.173.83) Running State Change CS_INIT (Cur 1 Tot 6)
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_state_machine.c:624 (sofia/internal/100@167.71.173.83) State INIT
+2025-11-24 16:58:27.051412 98.80% [DEBUG] mod_sofia.c:97 sofia/internal/100@167.71.173.83 SOFIA INIT
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_state_machine.c:40 sofia/internal/100@167.71.173.83 Standard INIT
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_state_machine.c:48 (sofia/internal/100@167.71.173.83) State Change CS_INIT -> CS_ROUTING
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_state_machine.c:624 (sofia/internal/100@167.71.173.83) State INIT going to sleep
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/100@167.71.173.83) Running State Change CS_ROUTING (Cur 1 Tot 6)
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_channel.c:2399 (sofia/internal/100@167.71.173.83) Callstate Change DOWN -> RINGING
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_state_machine.c:640 (sofia/internal/100@167.71.173.83) State ROUTING
+2025-11-24 16:58:27.051412 98.80% [DEBUG] mod_sofia.c:158 sofia/internal/100@167.71.173.83 SOFIA ROUTING
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_state_machine.c:230 sofia/internal/100@167.71.173.83 Standard ROUTING
+2025-11-24 16:58:27.051412 98.80% [INFO] mod_dialplan_xml.c:639 Processing 100 <100>->6100442038075255 in context internal
+Dialplan: sofia/internal/100@167.71.173.83 parsing [internal->internal-calls] continue=false
+Dialplan: sofia/internal/100@167.71.173.83 Regex (PASS) [internal-calls] destination_number(6100442038075255) =~ /^(\d+)$/ break=on-false
+Dialplan: sofia/internal/100@167.71.173.83 Action log(INFO Internal call to ${destination_number}) 
+Dialplan: sofia/internal/100@167.71.173.83 Action answer() 
+Dialplan: sofia/internal/100@167.71.173.83 Action bridge(user/${destination_number}@${domain_name}) 
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_state_machine.c:281 (sofia/internal/100@167.71.173.83) State Change CS_ROUTING -> CS_EXECUTE
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_state_machine.c:640 (sofia/internal/100@167.71.173.83) State ROUTING going to sleep
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/100@167.71.173.83) Running State Change CS_EXECUTE (Cur 1 Tot 6)
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_state_machine.c:647 (sofia/internal/100@167.71.173.83) State EXECUTE
+2025-11-24 16:58:27.051412 98.80% [DEBUG] mod_sofia.c:213 sofia/internal/100@167.71.173.83 SOFIA EXECUTE
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_state_machine.c:323 sofia/internal/100@167.71.173.83 Standard EXECUTE
+EXECUTE [depth=0] sofia/internal/100@167.71.173.83 log(INFO Internal call to 6100442038075255)
+2025-11-24 16:58:27.051412 98.80% [INFO] mod_dptools.c:1865 Internal call to 6100442038075255
+EXECUTE [depth=0] sofia/internal/100@167.71.173.83 answer()
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_media.c:8660 AUDIO RTP [sofia/internal/100@167.71.173.83] 172.18.0.2 port 30106 -> 192.168.1.83 port 25282 codec: 0 ms: 20
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_rtp.c:4588 Not using a timer
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_media.c:8973 sofia/internal/100@167.71.173.83 Set 2833 dtmf send payload to 101
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_media.c:8980 sofia/internal/100@167.71.173.83 Set 2833 dtmf receive payload to 101
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_media.c:9003 sofia/internal/100@167.71.173.83 Set rtp dtmf delay to 40
+2025-11-24 16:58:27.051412 98.80% [DEBUG] mod_sofia.c:914 Local SDP sofia/internal/100@167.71.173.83:
+v=0
+o=FreeSWITCH 1763973401 1763973402 IN IP4 172.18.0.2
+s=FreeSWITCH
+c=IN IP4 172.18.0.2
+t=0 0
+m=audio 30106 RTP/AVP 0 101
+a=rtpmap:0 pcmu/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=ptime:20
+a=sendrecv
+
+2025-11-24 16:58:27.051412 98.80% [NOTICE] mod_dptools.c:1406 Channel [sofia/internal/100@167.71.173.83] has been answered
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_channel.c:3912 (sofia/internal/100@167.71.173.83) Callstate Change RINGING -> ACTIVE
+2025-11-24 16:58:27.051412 98.80% [DEBUG] sofia.c:7493 Channel sofia/internal/100@167.71.173.83 entering state [completed][200]
+EXECUTE [depth=0] sofia/internal/100@167.71.173.83 bridge(user/6100442038075255@172.18.0.2)
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_channel.c:1973 (sofia/internal/100@167.71.173.83) Callstate Change ACTIVE -> RING_WAIT
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_ivr_originate.c:2301 Parsing global variables
+2025-11-24 16:58:27.051412 98.80% [WARNING] mod_dptools.c:4383 Can't find user [6100442038075255@172.18.0.2]
+2025-11-24 16:58:27.051412 98.80% [NOTICE] switch_ivr_originate.c:3059 Cannot create outgoing channel of type [user] cause: [SUBSCRIBER_ABSENT]
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_ivr_originate.c:4056 Originate Resulted in Error Cause: 20 [SUBSCRIBER_ABSENT]
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_channel.c:2197 (sofia/internal/100@167.71.173.83) Callstate Change RING_WAIT -> ACTIVE
+2025-11-24 16:58:27.051412 98.80% [INFO] mod_dptools.c:3635 Originate Failed.  Cause: SUBSCRIBER_ABSENT
+2025-11-24 16:58:27.051412 98.80% [NOTICE] switch_channel.c:5012 Hangup sofia/internal/100@167.71.173.83 [CS_EXECUTE] [SUBSCRIBER_ABSENT]
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_session.c:2979 sofia/internal/100@167.71.173.83 skip receive message [APPLICATION_EXEC_COMPLETE] (channel is hungup already)
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_state_machine.c:647 (sofia/internal/100@167.71.173.83) State EXECUTE going to sleep
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/100@167.71.173.83) Running State Change CS_HANGUP (Cur 1 Tot 6)
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_state_machine.c:844 (sofia/internal/100@167.71.173.83) Callstate Change ACTIVE -> HANGUP
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_state_machine.c:846 (sofia/internal/100@167.71.173.83) State HANGUP
+2025-11-24 16:58:27.051412 98.80% [DEBUG] mod_sofia.c:469 Channel sofia/internal/100@167.71.173.83 hanging up, cause: SUBSCRIBER_ABSENT
+2025-11-24 16:58:27.051412 98.80% [DEBUG] mod_sofia.c:523 Sending BYE to sofia/internal/100@167.71.173.83
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_state_machine.c:59 sofia/internal/100@167.71.173.83 Standard HANGUP, cause: SUBSCRIBER_ABSENT
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_state_machine.c:846 (sofia/internal/100@167.71.173.83) State HANGUP going to sleep
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_state_machine.c:616 (sofia/internal/100@167.71.173.83) State Change CS_HANGUP -> CS_REPORTING
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/100@167.71.173.83) Running State Change CS_REPORTING (Cur 1 Tot 6)
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_state_machine.c:932 (sofia/internal/100@167.71.173.83) State REPORTING
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_state_machine.c:168 sofia/internal/100@167.71.173.83 Standard REPORTING, cause: SUBSCRIBER_ABSENT
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_state_machine.c:932 (sofia/internal/100@167.71.173.83) State REPORTING going to sleep
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_state_machine.c:607 (sofia/internal/100@167.71.173.83) State Change CS_REPORTING -> CS_DESTROY
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_session.c:1744 Session 6 (sofia/internal/100@167.71.173.83) Locked, Waiting on external entities
+2025-11-24 16:58:27.051412 98.80% [NOTICE] switch_core_session.c:1762 Session 6 (sofia/internal/100@167.71.173.83) Ended
+2025-11-24 16:58:27.051412 98.80% [NOTICE] switch_core_session.c:1766 Close Channel sofia/internal/100@167.71.173.83 [CS_DESTROY]
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_state_machine.c:735 (sofia/internal/100@167.71.173.83) Running State Change CS_DESTROY (Cur 0 Tot 6)
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_state_machine.c:745 (sofia/internal/100@167.71.173.83) State DESTROY
+2025-11-24 16:58:27.051412 98.80% [DEBUG] mod_sofia.c:380 sofia/internal/100@167.71.173.83 SOFIA DESTROY
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_state_machine.c:175 sofia/internal/100@167.71.173.83 Standard DESTROY
+2025-11-24 16:58:27.051412 98.80% [DEBUG] switch_core_state_machine.c:745 (sofia/internal/100@167.71.173.83) State DESTROY going to sleep
+2025-11-24 16:58:39.111424 98.87% [NOTICE] switch_channel.c:1142 New Channel sofia/internal/401@172.29.18.3 [ac80b945-5146-4d53-b86b-c2d610ca1e4f]
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/401@172.29.18.3) Running State Change CS_NEW (Cur 1 Tot 7)
+2025-11-24 16:58:39.111424 98.87% [INFO] sofia.c:10460 sofia/internal/401@172.29.18.3 receiving invite from 172.18.0.3:5060 version: 1.10.12 -release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit call-id: 99adf4150ccfe8eb2a0c30a16bbf1c32
+2025-11-24 16:58:39.111424 98.87% [DEBUG] sofia.c:10554 verifying acl "domains" for ip/port 172.18.0.3:0.
+2025-11-24 16:58:39.111424 98.87% [DEBUG] sofia.c:10583 IP 172.18.0.3 Approved by acl "domains[]". Access Granted.
+2025-11-24 16:58:39.111424 98.87% [DEBUG] sofia.c:11675 Setting NAT mode based on via received
+2025-11-24 16:58:39.111424 98.87% [DEBUG] sofia.c:7493 Channel sofia/internal/401@172.29.18.3 entering state [received][100]
+2025-11-24 16:58:39.111424 98.87% [DEBUG] sofia.c:7503 Remote SDP:
+v=0
+o=root 16264 18299 IN IP4 172.29.18.3
+s=session
+c=IN IP4 172.29.18.3
+t=0 0
+m=audio 8234 RTP/AVP 0 6 8 3 18 5 101
+a=rtpmap:0 PCMU/8000
+a=rtpmap:6 PCMA/8000
+a=rtpmap:8 PCMA/8000
+a=rtpmap:3 GSM/8000
+a=rtpmap:18 G729/8000
+a=rtpmap:5 G723/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-11
+a=ptime:20
+
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [PCMU:0:8000:20:64000:1] ++++ is saved as a match
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:6:8000:20:0:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:6:8000:20:0:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:6:8000:20:0:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [PCMA:8:8000:20:64000:1] ++++ is saved as a match
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:6:8000:20:0:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [PCMA:8:8000:20:64000:1] ++++ is saved as a match
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [GSM:3:8000:20:13200:1] ++++ is saved as a match
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G723:5:8000:20:0:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G723:5:8000:20:0:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G723:5:8000:20:0:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G723:5:8000:20:0:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_media.c:5438 Set telephone-event payload to 101@8000
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_media.c:3731 Set Codec sofia/internal/401@172.29.18.3 PCMU/8000 20 ms 160 samples 64000 bits 1 channels
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_codec.c:111 sofia/internal/401@172.29.18.3 Original read codec set to PCMU:0
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_media.c:5798 Set telephone-event payload to 101@8000
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_media.c:5856 sofia/internal/401@172.29.18.3 Set 2833 dtmf send payload to 101 recv payload to 101
+2025-11-24 16:58:39.111424 98.87% [DEBUG] sofia.c:7927 (sofia/internal/401@172.29.18.3) State Change CS_NEW -> CS_INIT
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_state_machine.c:600 (sofia/internal/401@172.29.18.3) State NEW
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/401@172.29.18.3) Running State Change CS_INIT (Cur 1 Tot 7)
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_state_machine.c:624 (sofia/internal/401@172.29.18.3) State INIT
+2025-11-24 16:58:39.111424 98.87% [DEBUG] mod_sofia.c:97 sofia/internal/401@172.29.18.3 SOFIA INIT
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_state_machine.c:40 sofia/internal/401@172.29.18.3 Standard INIT
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_state_machine.c:48 (sofia/internal/401@172.29.18.3) State Change CS_INIT -> CS_ROUTING
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_state_machine.c:624 (sofia/internal/401@172.29.18.3) State INIT going to sleep
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/401@172.29.18.3) Running State Change CS_ROUTING (Cur 1 Tot 7)
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_channel.c:2399 (sofia/internal/401@172.29.18.3) Callstate Change DOWN -> RINGING
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_state_machine.c:640 (sofia/internal/401@172.29.18.3) State ROUTING
+2025-11-24 16:58:39.111424 98.87% [DEBUG] mod_sofia.c:158 sofia/internal/401@172.29.18.3 SOFIA ROUTING
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_state_machine.c:230 sofia/internal/401@172.29.18.3 Standard ROUTING
+2025-11-24 16:58:39.111424 98.87% [INFO] mod_dialplan_xml.c:639 Processing 401 <401>->+46850780296 in context internal
+Dialplan: sofia/internal/401@172.29.18.3 parsing [internal->internal-calls] continue=false
+Dialplan: sofia/internal/401@172.29.18.3 Regex (FAIL) [internal-calls] destination_number(+46850780296) =~ /^(\d+)$/ break=on-false
+2025-11-24 16:58:39.111424 98.87% [INFO] switch_core_state_machine.c:306 No Route, Aborting
+2025-11-24 16:58:39.111424 98.87% [NOTICE] switch_core_state_machine.c:307 Hangup sofia/internal/401@172.29.18.3 [CS_ROUTING] [NO_ROUTE_DESTINATION]
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_state_machine.c:640 (sofia/internal/401@172.29.18.3) State ROUTING going to sleep
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/401@172.29.18.3) Running State Change CS_HANGUP (Cur 1 Tot 7)
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_state_machine.c:844 (sofia/internal/401@172.29.18.3) Callstate Change RINGING -> HANGUP
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_state_machine.c:846 (sofia/internal/401@172.29.18.3) State HANGUP
+2025-11-24 16:58:39.111424 98.87% [DEBUG] mod_sofia.c:469 Channel sofia/internal/401@172.29.18.3 hanging up, cause: NO_ROUTE_DESTINATION
+2025-11-24 16:58:39.111424 98.87% [DEBUG] mod_sofia.c:614 Responding to INVITE with: 404
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_state_machine.c:59 sofia/internal/401@172.29.18.3 Standard HANGUP, cause: NO_ROUTE_DESTINATION
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_state_machine.c:846 (sofia/internal/401@172.29.18.3) State HANGUP going to sleep
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_state_machine.c:616 (sofia/internal/401@172.29.18.3) State Change CS_HANGUP -> CS_REPORTING
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/401@172.29.18.3) Running State Change CS_REPORTING (Cur 1 Tot 7)
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_state_machine.c:932 (sofia/internal/401@172.29.18.3) State REPORTING
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_state_machine.c:168 sofia/internal/401@172.29.18.3 Standard REPORTING, cause: NO_ROUTE_DESTINATION
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_state_machine.c:932 (sofia/internal/401@172.29.18.3) State REPORTING going to sleep
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_state_machine.c:607 (sofia/internal/401@172.29.18.3) State Change CS_REPORTING -> CS_DESTROY
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_session.c:1744 Session 7 (sofia/internal/401@172.29.18.3) Locked, Waiting on external entities
+2025-11-24 16:58:39.111424 98.87% [NOTICE] switch_core_session.c:1762 Session 7 (sofia/internal/401@172.29.18.3) Ended
+2025-11-24 16:58:39.111424 98.87% [NOTICE] switch_core_session.c:1766 Close Channel sofia/internal/401@172.29.18.3 [CS_DESTROY]
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_state_machine.c:735 (sofia/internal/401@172.29.18.3) Running State Change CS_DESTROY (Cur 0 Tot 7)
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_state_machine.c:745 (sofia/internal/401@172.29.18.3) State DESTROY
+2025-11-24 16:58:39.111424 98.87% [DEBUG] mod_sofia.c:380 sofia/internal/401@172.29.18.3 SOFIA DESTROY
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_state_machine.c:175 sofia/internal/401@172.29.18.3 Standard DESTROY
+2025-11-24 16:58:39.111424 98.87% [DEBUG] switch_core_state_machine.c:745 (sofia/internal/401@172.29.18.3) State DESTROY going to sleep
+2025-11-24 16:58:42.771383 98.83% [NOTICE] switch_channel.c:1142 New Channel sofia/internal/6001@172.29.18.3 [a8d00005-88e9-4666-8d14-44c6eab1c620]
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/6001@172.29.18.3) Running State Change CS_NEW (Cur 1 Tot 8)
+2025-11-24 16:58:42.771383 98.83% [INFO] sofia.c:10460 sofia/internal/6001@172.29.18.3 receiving invite from 172.18.0.3:5060 version: 1.10.12 -release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit call-id: faeb44bacbf1e99c6deece714553deea
+2025-11-24 16:58:42.771383 98.83% [DEBUG] sofia.c:10554 verifying acl "domains" for ip/port 172.18.0.3:0.
+2025-11-24 16:58:42.771383 98.83% [DEBUG] sofia.c:10583 IP 172.18.0.3 Approved by acl "domains[]". Access Granted.
+2025-11-24 16:58:42.771383 98.83% [DEBUG] sofia.c:11675 Setting NAT mode based on via received
+2025-11-24 16:58:42.771383 98.83% [DEBUG] sofia.c:7493 Channel sofia/internal/6001@172.29.18.3 entering state [received][100]
+2025-11-24 16:58:42.771383 98.83% [DEBUG] sofia.c:7503 Remote SDP:
+v=0
+o=root 16264 18299 IN IP4 172.29.18.3
+s=session
+c=IN IP4 172.29.18.3
+t=0 0
+m=audio 8234 RTP/AVP 0 6 8 3 18 5 101
+a=rtpmap:0 PCMU/8000
+a=rtpmap:6 PCMA/8000
+a=rtpmap:8 PCMA/8000
+a=rtpmap:3 GSM/8000
+a=rtpmap:18 G729/8000
+a=rtpmap:5 G723/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-11
+a=ptime:20
+
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [PCMU:0:8000:20:64000:1] ++++ is saved as a match
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:6:8000:20:0:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:6:8000:20:0:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:6:8000:20:0:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [PCMA:8:8000:20:64000:1] ++++ is saved as a match
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:6:8000:20:0:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [PCMA:8:8000:20:64000:1] ++++ is saved as a match
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [GSM:3:8000:20:13200:1] ++++ is saved as a match
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G723:5:8000:20:0:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G723:5:8000:20:0:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G723:5:8000:20:0:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G723:5:8000:20:0:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_media.c:5438 Set telephone-event payload to 101@8000
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_media.c:3731 Set Codec sofia/internal/6001@172.29.18.3 PCMU/8000 20 ms 160 samples 64000 bits 1 channels
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_codec.c:111 sofia/internal/6001@172.29.18.3 Original read codec set to PCMU:0
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_media.c:5798 Set telephone-event payload to 101@8000
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_media.c:5856 sofia/internal/6001@172.29.18.3 Set 2833 dtmf send payload to 101 recv payload to 101
+2025-11-24 16:58:42.771383 98.83% [DEBUG] sofia.c:7927 (sofia/internal/6001@172.29.18.3) State Change CS_NEW -> CS_INIT
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_state_machine.c:600 (sofia/internal/6001@172.29.18.3) State NEW
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/6001@172.29.18.3) Running State Change CS_INIT (Cur 1 Tot 8)
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_state_machine.c:624 (sofia/internal/6001@172.29.18.3) State INIT
+2025-11-24 16:58:42.771383 98.83% [DEBUG] mod_sofia.c:97 sofia/internal/6001@172.29.18.3 SOFIA INIT
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_state_machine.c:40 sofia/internal/6001@172.29.18.3 Standard INIT
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_state_machine.c:48 (sofia/internal/6001@172.29.18.3) State Change CS_INIT -> CS_ROUTING
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_state_machine.c:624 (sofia/internal/6001@172.29.18.3) State INIT going to sleep
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/6001@172.29.18.3) Running State Change CS_ROUTING (Cur 1 Tot 8)
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_channel.c:2399 (sofia/internal/6001@172.29.18.3) Callstate Change DOWN -> RINGING
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_state_machine.c:640 (sofia/internal/6001@172.29.18.3) State ROUTING
+2025-11-24 16:58:42.771383 98.83% [DEBUG] mod_sofia.c:158 sofia/internal/6001@172.29.18.3 SOFIA ROUTING
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_state_machine.c:230 sofia/internal/6001@172.29.18.3 Standard ROUTING
+2025-11-24 16:58:42.771383 98.83% [INFO] mod_dialplan_xml.c:639 Processing 6001 <6001>->+46850780302 in context internal
+Dialplan: sofia/internal/6001@172.29.18.3 parsing [internal->internal-calls] continue=false
+Dialplan: sofia/internal/6001@172.29.18.3 Regex (FAIL) [internal-calls] destination_number(+46850780302) =~ /^(\d+)$/ break=on-false
+2025-11-24 16:58:42.771383 98.83% [INFO] switch_core_state_machine.c:306 No Route, Aborting
+2025-11-24 16:58:42.771383 98.83% [NOTICE] switch_core_state_machine.c:307 Hangup sofia/internal/6001@172.29.18.3 [CS_ROUTING] [NO_ROUTE_DESTINATION]
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_state_machine.c:640 (sofia/internal/6001@172.29.18.3) State ROUTING going to sleep
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/6001@172.29.18.3) Running State Change CS_HANGUP (Cur 1 Tot 8)
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_state_machine.c:844 (sofia/internal/6001@172.29.18.3) Callstate Change RINGING -> HANGUP
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_state_machine.c:846 (sofia/internal/6001@172.29.18.3) State HANGUP
+2025-11-24 16:58:42.771383 98.83% [DEBUG] mod_sofia.c:469 Channel sofia/internal/6001@172.29.18.3 hanging up, cause: NO_ROUTE_DESTINATION
+2025-11-24 16:58:42.771383 98.83% [DEBUG] mod_sofia.c:614 Responding to INVITE with: 404
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_state_machine.c:59 sofia/internal/6001@172.29.18.3 Standard HANGUP, cause: NO_ROUTE_DESTINATION
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_state_machine.c:846 (sofia/internal/6001@172.29.18.3) State HANGUP going to sleep
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_state_machine.c:616 (sofia/internal/6001@172.29.18.3) State Change CS_HANGUP -> CS_REPORTING
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/6001@172.29.18.3) Running State Change CS_REPORTING (Cur 1 Tot 8)
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_state_machine.c:932 (sofia/internal/6001@172.29.18.3) State REPORTING
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_state_machine.c:168 sofia/internal/6001@172.29.18.3 Standard REPORTING, cause: NO_ROUTE_DESTINATION
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_state_machine.c:932 (sofia/internal/6001@172.29.18.3) State REPORTING going to sleep
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_state_machine.c:607 (sofia/internal/6001@172.29.18.3) State Change CS_REPORTING -> CS_DESTROY
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_session.c:1744 Session 8 (sofia/internal/6001@172.29.18.3) Locked, Waiting on external entities
+2025-11-24 16:58:42.771383 98.83% [NOTICE] switch_core_session.c:1762 Session 8 (sofia/internal/6001@172.29.18.3) Ended
+2025-11-24 16:58:42.771383 98.83% [NOTICE] switch_core_session.c:1766 Close Channel sofia/internal/6001@172.29.18.3 [CS_DESTROY]
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_state_machine.c:735 (sofia/internal/6001@172.29.18.3) Running State Change CS_DESTROY (Cur 0 Tot 8)
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_state_machine.c:745 (sofia/internal/6001@172.29.18.3) State DESTROY
+2025-11-24 16:58:42.771383 98.83% [DEBUG] mod_sofia.c:380 sofia/internal/6001@172.29.18.3 SOFIA DESTROY
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_state_machine.c:175 sofia/internal/6001@172.29.18.3 Standard DESTROY
+2025-11-24 16:58:42.771383 98.83% [DEBUG] switch_core_state_machine.c:745 (sofia/internal/6001@172.29.18.3) State DESTROY going to sleep
+
+2025-11-24 16:58:46.871489 98.80% [NOTICE] switch_channel.c:1142 New Channel sofia/internal/501@172.29.18.3 [aa603519-9002-4ff9-bcb8-3b2cf7ad7fba]
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/501@172.29.18.3) Running State Change CS_NEW (Cur 1 Tot 9)
+2025-11-24 16:58:46.871489 98.80% [INFO] sofia.c:10460 sofia/internal/501@172.29.18.3 receiving invite from 172.18.0.3:5060 version: 1.10.12 -release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit call-id: ef90af29391f72421c1dd3c4f0c4b51c
+2025-11-24 16:58:46.871489 98.80% [DEBUG] sofia.c:10554 verifying acl "domains" for ip/port 172.18.0.3:0.
+2025-11-24 16:58:46.871489 98.80% [DEBUG] sofia.c:10583 IP 172.18.0.3 Approved by acl "domains[]". Access Granted.
+2025-11-24 16:58:46.871489 98.80% [DEBUG] sofia.c:11675 Setting NAT mode based on via received
+2025-11-24 16:58:46.871489 98.80% [DEBUG] sofia.c:7493 Channel sofia/internal/501@172.29.18.3 entering state [received][100]
+2025-11-24 16:58:46.871489 98.80% [DEBUG] sofia.c:7503 Remote SDP:
+v=0
+o=root 16264 18299 IN IP4 172.29.18.3
+s=session
+c=IN IP4 172.29.18.3
+t=0 0
+m=audio 8234 RTP/AVP 0 6 8 3 18 5 101
+a=rtpmap:0 PCMU/8000
+a=rtpmap:6 PCMA/8000
+a=rtpmap:8 PCMA/8000
+a=rtpmap:3 GSM/8000
+a=rtpmap:18 G729/8000
+a=rtpmap:5 G723/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-11
+a=ptime:20
+
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [PCMU:0:8000:20:64000:1] ++++ is saved as a match
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:6:8000:20:0:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:6:8000:20:0:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:6:8000:20:0:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [PCMA:8:8000:20:64000:1] ++++ is saved as a match
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:6:8000:20:0:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [PCMA:8:8000:20:64000:1] ++++ is saved as a match
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [GSM:3:8000:20:13200:1] ++++ is saved as a match
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G723:5:8000:20:0:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G723:5:8000:20:0:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G723:5:8000:20:0:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G723:5:8000:20:0:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_media.c:5438 Set telephone-event payload to 101@8000
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_media.c:3731 Set Codec sofia/internal/501@172.29.18.3 PCMU/8000 20 ms 160 samples 64000 bits 1 channels
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_codec.c:111 sofia/internal/501@172.29.18.3 Original read codec set to PCMU:0
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_media.c:5798 Set telephone-event payload to 101@8000
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_media.c:5856 sofia/internal/501@172.29.18.3 Set 2833 dtmf send payload to 101 recv payload to 101
+2025-11-24 16:58:46.871489 98.80% [DEBUG] sofia.c:7927 (sofia/internal/501@172.29.18.3) State Change CS_NEW -> CS_INIT
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_state_machine.c:600 (sofia/internal/501@172.29.18.3) State NEW
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/501@172.29.18.3) Running State Change CS_INIT (Cur 1 Tot 9)
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_state_machine.c:624 (sofia/internal/501@172.29.18.3) State INIT
+2025-11-24 16:58:46.871489 98.80% [DEBUG] mod_sofia.c:97 sofia/internal/501@172.29.18.3 SOFIA INIT
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_state_machine.c:40 sofia/internal/501@172.29.18.3 Standard INIT
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_state_machine.c:48 (sofia/internal/501@172.29.18.3) State Change CS_INIT -> CS_ROUTING
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_state_machine.c:624 (sofia/internal/501@172.29.18.3) State INIT going to sleep
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/501@172.29.18.3) Running State Change CS_ROUTING (Cur 1 Tot 9)
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_channel.c:2399 (sofia/internal/501@172.29.18.3) Callstate Change DOWN -> RINGING
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_state_machine.c:640 (sofia/internal/501@172.29.18.3) State ROUTING
+2025-11-24 16:58:46.871489 98.80% [DEBUG] mod_sofia.c:158 sofia/internal/501@172.29.18.3 SOFIA ROUTING
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_state_machine.c:230 sofia/internal/501@172.29.18.3 Standard ROUTING
+2025-11-24 16:58:46.871489 98.80% [INFO] mod_dialplan_xml.c:639 Processing 501 <501>->+46850780298 in context internal
+Dialplan: sofia/internal/501@172.29.18.3 parsing [internal->internal-calls] continue=false
+Dialplan: sofia/internal/501@172.29.18.3 Regex (FAIL) [internal-calls] destination_number(+46850780298) =~ /^(\d+)$/ break=on-false
+2025-11-24 16:58:46.871489 98.80% [INFO] switch_core_state_machine.c:306 No Route, Aborting
+2025-11-24 16:58:46.871489 98.80% [NOTICE] switch_core_state_machine.c:307 Hangup sofia/internal/501@172.29.18.3 [CS_ROUTING] [NO_ROUTE_DESTINATION]
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_state_machine.c:640 (sofia/internal/501@172.29.18.3) State ROUTING going to sleep
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/501@172.29.18.3) Running State Change CS_HANGUP (Cur 1 Tot 9)
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_state_machine.c:844 (sofia/internal/501@172.29.18.3) Callstate Change RINGING -> HANGUP
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_state_machine.c:846 (sofia/internal/501@172.29.18.3) State HANGUP
+2025-11-24 16:58:46.871489 98.80% [DEBUG] mod_sofia.c:469 Channel sofia/internal/501@172.29.18.3 hanging up, cause: NO_ROUTE_DESTINATION
+2025-11-24 16:58:46.871489 98.80% [DEBUG] mod_sofia.c:614 Responding to INVITE with: 404
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_state_machine.c:59 sofia/internal/501@172.29.18.3 Standard HANGUP, cause: NO_ROUTE_DESTINATION
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_state_machine.c:846 (sofia/internal/501@172.29.18.3) State HANGUP going to sleep
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_state_machine.c:616 (sofia/internal/501@172.29.18.3) State Change CS_HANGUP -> CS_REPORTING
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/501@172.29.18.3) Running State Change CS_REPORTING (Cur 1 Tot 9)
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_state_machine.c:932 (sofia/internal/501@172.29.18.3) State REPORTING
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_state_machine.c:168 sofia/internal/501@172.29.18.3 Standard REPORTING, cause: NO_ROUTE_DESTINATION
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_state_machine.c:932 (sofia/internal/501@172.29.18.3) State REPORTING going to sleep
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_state_machine.c:607 (sofia/internal/501@172.29.18.3) State Change CS_REPORTING -> CS_DESTROY
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_session.c:1744 Session 9 (sofia/internal/501@172.29.18.3) Locked, Waiting on external entities
+2025-11-24 16:58:46.871489 98.80% [NOTICE] switch_core_session.c:1762 Session 9 (sofia/internal/501@172.29.18.3) Ended
+2025-11-24 16:58:46.871489 98.80% [NOTICE] switch_core_session.c:1766 Close Channel sofia/internal/501@172.29.18.3 [CS_DESTROY]
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_state_machine.c:735 (sofia/internal/501@172.29.18.3) Running State Change CS_DESTROY (Cur 0 Tot 9)
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_state_machine.c:745 (sofia/internal/501@172.29.18.3) State DESTROY
+2025-11-24 16:58:46.871489 98.80% [DEBUG] mod_sofia.c:380 sofia/internal/501@172.29.18.3 SOFIA DESTROY
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_state_machine.c:175 sofia/internal/501@172.29.18.3 Standard DESTROY
+2025-11-24 16:58:46.871489 98.80% [DEBUG] switch_core_state_machine.c:745 (sofia/internal/501@172.29.18.3) State DESTROY going to sleep
+2025-11-24 16:58:48.411399 98.80% [NOTICE] switch_channel.c:1142 New Channel sofia/internal/2001@172.29.18.3 [15f649d9-4189-4cc0-8880-d592475a74b5]
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/2001@172.29.18.3) Running State Change CS_NEW (Cur 1 Tot 10)
+2025-11-24 16:58:48.411399 98.80% [INFO] sofia.c:10460 sofia/internal/2001@172.29.18.3 receiving invite from 172.18.0.3:5060 version: 1.10.12 -release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit call-id: efbd9edbeac9abb48c2a3fc4cbd2aa2f
+2025-11-24 16:58:48.411399 98.80% [DEBUG] sofia.c:10554 verifying acl "domains" for ip/port 172.18.0.3:0.
+2025-11-24 16:58:48.411399 98.80% [DEBUG] sofia.c:10583 IP 172.18.0.3 Approved by acl "domains[]". Access Granted.
+2025-11-24 16:58:48.411399 98.80% [DEBUG] sofia.c:11675 Setting NAT mode based on via received
+2025-11-24 16:58:48.411399 98.80% [DEBUG] sofia.c:7493 Channel sofia/internal/2001@172.29.18.3 entering state [received][100]
+2025-11-24 16:58:48.411399 98.80% [DEBUG] sofia.c:7503 Remote SDP:
+v=0
+o=root 16264 18299 IN IP4 172.29.18.3
+s=session
+c=IN IP4 172.29.18.3
+t=0 0
+m=audio 8234 RTP/AVP 0 6 8 3 18 5 101
+a=rtpmap:0 PCMU/8000
+a=rtpmap:6 PCMA/8000
+a=rtpmap:8 PCMA/8000
+a=rtpmap:3 GSM/8000
+a=rtpmap:18 G729/8000
+a=rtpmap:5 G723/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-11
+a=ptime:20
+
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [PCMU:0:8000:20:64000:1] ++++ is saved as a match
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:6:8000:20:0:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:6:8000:20:0:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:6:8000:20:0:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [PCMA:8:8000:20:64000:1] ++++ is saved as a match
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:6:8000:20:0:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [PCMA:8:8000:20:64000:1] ++++ is saved as a match
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [GSM:3:8000:20:13200:1] ++++ is saved as a match
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G723:5:8000:20:0:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G723:5:8000:20:0:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G723:5:8000:20:0:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G723:5:8000:20:0:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_media.c:5438 Set telephone-event payload to 101@8000
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_media.c:3731 Set Codec sofia/internal/2001@172.29.18.3 PCMU/8000 20 ms 160 samples 64000 bits 1 channels
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_codec.c:111 sofia/internal/2001@172.29.18.3 Original read codec set to PCMU:0
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_media.c:5798 Set telephone-event payload to 101@8000
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_media.c:5856 sofia/internal/2001@172.29.18.3 Set 2833 dtmf send payload to 101 recv payload to 101
+2025-11-24 16:58:48.411399 98.80% [DEBUG] sofia.c:7927 (sofia/internal/2001@172.29.18.3) State Change CS_NEW -> CS_INIT
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_state_machine.c:600 (sofia/internal/2001@172.29.18.3) State NEW
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/2001@172.29.18.3) Running State Change CS_INIT (Cur 1 Tot 10)
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_state_machine.c:624 (sofia/internal/2001@172.29.18.3) State INIT
+2025-11-24 16:58:48.411399 98.80% [DEBUG] mod_sofia.c:97 sofia/internal/2001@172.29.18.3 SOFIA INIT
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_state_machine.c:40 sofia/internal/2001@172.29.18.3 Standard INIT
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_state_machine.c:48 (sofia/internal/2001@172.29.18.3) State Change CS_INIT -> CS_ROUTING
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_state_machine.c:624 (sofia/internal/2001@172.29.18.3) State INIT going to sleep
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/2001@172.29.18.3) Running State Change CS_ROUTING (Cur 1 Tot 10)
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_channel.c:2399 (sofia/internal/2001@172.29.18.3) Callstate Change DOWN -> RINGING
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_state_machine.c:640 (sofia/internal/2001@172.29.18.3) State ROUTING
+2025-11-24 16:58:48.411399 98.80% [DEBUG] mod_sofia.c:158 sofia/internal/2001@172.29.18.3 SOFIA ROUTING
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_state_machine.c:230 sofia/internal/2001@172.29.18.3 Standard ROUTING
+2025-11-24 16:58:48.411399 98.80% [INFO] mod_dialplan_xml.c:639 Processing 2001 <2001>->+46850780293 in context internal
+Dialplan: sofia/internal/2001@172.29.18.3 parsing [internal->internal-calls] continue=false
+Dialplan: sofia/internal/2001@172.29.18.3 Regex (FAIL) [internal-calls] destination_number(+46850780293) =~ /^(\d+)$/ break=on-false
+2025-11-24 16:58:48.411399 98.80% [INFO] switch_core_state_machine.c:306 No Route, Aborting
+2025-11-24 16:58:48.411399 98.80% [NOTICE] switch_core_state_machine.c:307 Hangup sofia/internal/2001@172.29.18.3 [CS_ROUTING] [NO_ROUTE_DESTINATION]
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_state_machine.c:640 (sofia/internal/2001@172.29.18.3) State ROUTING going to sleep
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/2001@172.29.18.3) Running State Change CS_HANGUP (Cur 1 Tot 10)
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_state_machine.c:844 (sofia/internal/2001@172.29.18.3) Callstate Change RINGING -> HANGUP
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_state_machine.c:846 (sofia/internal/2001@172.29.18.3) State HANGUP
+2025-11-24 16:58:48.411399 98.80% [DEBUG] mod_sofia.c:469 Channel sofia/internal/2001@172.29.18.3 hanging up, cause: NO_ROUTE_DESTINATION
+2025-11-24 16:58:48.411399 98.80% [DEBUG] mod_sofia.c:614 Responding to INVITE with: 404
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_state_machine.c:59 sofia/internal/2001@172.29.18.3 Standard HANGUP, cause: NO_ROUTE_DESTINATION
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_state_machine.c:846 (sofia/internal/2001@172.29.18.3) State HANGUP going to sleep
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_state_machine.c:616 (sofia/internal/2001@172.29.18.3) State Change CS_HANGUP -> CS_REPORTING
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/2001@172.29.18.3) Running State Change CS_REPORTING (Cur 1 Tot 10)
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_state_machine.c:932 (sofia/internal/2001@172.29.18.3) State REPORTING
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_state_machine.c:168 sofia/internal/2001@172.29.18.3 Standard REPORTING, cause: NO_ROUTE_DESTINATION
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_state_machine.c:932 (sofia/internal/2001@172.29.18.3) State REPORTING going to sleep
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_state_machine.c:607 (sofia/internal/2001@172.29.18.3) State Change CS_REPORTING -> CS_DESTROY
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_session.c:1744 Session 10 (sofia/internal/2001@172.29.18.3) Locked, Waiting on external entities
+2025-11-24 16:58:48.411399 98.80% [NOTICE] switch_core_session.c:1762 Session 10 (sofia/internal/2001@172.29.18.3) Ended
+2025-11-24 16:58:48.411399 98.80% [NOTICE] switch_core_session.c:1766 Close Channel sofia/internal/2001@172.29.18.3 [CS_DESTROY]
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_state_machine.c:735 (sofia/internal/2001@172.29.18.3) Running State Change CS_DESTROY (Cur 0 Tot 10)
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_state_machine.c:745 (sofia/internal/2001@172.29.18.3) State DESTROY
+2025-11-24 16:58:48.411399 98.80% [DEBUG] mod_sofia.c:380 sofia/internal/2001@172.29.18.3 SOFIA DESTROY
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_state_machine.c:175 sofia/internal/2001@172.29.18.3 Standard DESTROY
+2025-11-24 16:58:48.411399 98.80% [DEBUG] switch_core_state_machine.c:745 (sofia/internal/2001@172.29.18.3) State DESTROY going to sleep
+2025-11-24 16:58:49.391461 98.77% [NOTICE] switch_channel.c:1142 New Channel sofia/internal/2002@172.29.18.3 [09042269-e7f3-48ce-95a6-125fd1331ba4]
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/2002@172.29.18.3) Running State Change CS_NEW (Cur 1 Tot 11)
+2025-11-24 16:58:49.391461 98.77% [INFO] sofia.c:10460 sofia/internal/2002@172.29.18.3 receiving invite from 172.18.0.3:5060 version: 1.10.12 -release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit call-id: aa06bf65044e68dc4fedef8ed92dcacc
+2025-11-24 16:58:49.391461 98.77% [DEBUG] sofia.c:10554 verifying acl "domains" for ip/port 172.18.0.3:0.
+2025-11-24 16:58:49.391461 98.77% [DEBUG] sofia.c:10583 IP 172.18.0.3 Approved by acl "domains[]". Access Granted.
+2025-11-24 16:58:49.391461 98.77% [DEBUG] sofia.c:11675 Setting NAT mode based on via received
+2025-11-24 16:58:49.391461 98.77% [DEBUG] sofia.c:7493 Channel sofia/internal/2002@172.29.18.3 entering state [received][100]
+2025-11-24 16:58:49.391461 98.77% [DEBUG] sofia.c:7503 Remote SDP:
+v=0
+o=root 16264 18299 IN IP4 172.29.18.3
+s=session
+c=IN IP4 172.29.18.3
+t=0 0
+m=audio 8234 RTP/AVP 0 6 8 3 18 5 101
+a=rtpmap:0 PCMU/8000
+a=rtpmap:6 PCMA/8000
+a=rtpmap:8 PCMA/8000
+a=rtpmap:3 GSM/8000
+a=rtpmap:18 G729/8000
+a=rtpmap:5 G723/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-11
+a=ptime:20
+
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [PCMU:0:8000:20:64000:1] ++++ is saved as a match
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:6:8000:20:0:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:6:8000:20:0:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:6:8000:20:0:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [PCMA:8:8000:20:64000:1] ++++ is saved as a match
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:6:8000:20:0:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [PCMA:8:8000:20:64000:1] ++++ is saved as a match
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [GSM:3:8000:20:13200:1] ++++ is saved as a match
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G723:5:8000:20:0:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G723:5:8000:20:0:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G723:5:8000:20:0:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G723:5:8000:20:0:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_media.c:5438 Set telephone-event payload to 101@8000
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_media.c:3731 Set Codec sofia/internal/2002@172.29.18.3 PCMU/8000 20 ms 160 samples 64000 bits 1 channels
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_codec.c:111 sofia/internal/2002@172.29.18.3 Original read codec set to PCMU:0
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_media.c:5798 Set telephone-event payload to 101@8000
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_media.c:5856 sofia/internal/2002@172.29.18.3 Set 2833 dtmf send payload to 101 recv payload to 101
+2025-11-24 16:58:49.391461 98.77% [DEBUG] sofia.c:7927 (sofia/internal/2002@172.29.18.3) State Change CS_NEW -> CS_INIT
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_state_machine.c:600 (sofia/internal/2002@172.29.18.3) State NEW
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/2002@172.29.18.3) Running State Change CS_INIT (Cur 1 Tot 11)
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_state_machine.c:624 (sofia/internal/2002@172.29.18.3) State INIT
+2025-11-24 16:58:49.391461 98.77% [DEBUG] mod_sofia.c:97 sofia/internal/2002@172.29.18.3 SOFIA INIT
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_state_machine.c:40 sofia/internal/2002@172.29.18.3 Standard INIT
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_state_machine.c:48 (sofia/internal/2002@172.29.18.3) State Change CS_INIT -> CS_ROUTING
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_state_machine.c:624 (sofia/internal/2002@172.29.18.3) State INIT going to sleep
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/2002@172.29.18.3) Running State Change CS_ROUTING (Cur 1 Tot 11)
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_channel.c:2399 (sofia/internal/2002@172.29.18.3) Callstate Change DOWN -> RINGING
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_state_machine.c:640 (sofia/internal/2002@172.29.18.3) State ROUTING
+2025-11-24 16:58:49.391461 98.77% [DEBUG] mod_sofia.c:158 sofia/internal/2002@172.29.18.3 SOFIA ROUTING
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_state_machine.c:230 sofia/internal/2002@172.29.18.3 Standard ROUTING
+2025-11-24 16:58:49.391461 98.77% [INFO] mod_dialplan_xml.c:639 Processing 2002 <2002>->+46812112960 in context internal
+Dialplan: sofia/internal/2002@172.29.18.3 parsing [internal->internal-calls] continue=false
+Dialplan: sofia/internal/2002@172.29.18.3 Regex (FAIL) [internal-calls] destination_number(+46812112960) =~ /^(\d+)$/ break=on-false
+2025-11-24 16:58:49.391461 98.77% [INFO] switch_core_state_machine.c:306 No Route, Aborting
+2025-11-24 16:58:49.391461 98.77% [NOTICE] switch_core_state_machine.c:307 Hangup sofia/internal/2002@172.29.18.3 [CS_ROUTING] [NO_ROUTE_DESTINATION]
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_state_machine.c:640 (sofia/internal/2002@172.29.18.3) State ROUTING going to sleep
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/2002@172.29.18.3) Running State Change CS_HANGUP (Cur 1 Tot 11)
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_state_machine.c:844 (sofia/internal/2002@172.29.18.3) Callstate Change RINGING -> HANGUP
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_state_machine.c:846 (sofia/internal/2002@172.29.18.3) State HANGUP
+2025-11-24 16:58:49.391461 98.77% [DEBUG] mod_sofia.c:469 Channel sofia/internal/2002@172.29.18.3 hanging up, cause: NO_ROUTE_DESTINATION
+2025-11-24 16:58:49.391461 98.77% [DEBUG] mod_sofia.c:614 Responding to INVITE with: 404
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_state_machine.c:59 sofia/internal/2002@172.29.18.3 Standard HANGUP, cause: NO_ROUTE_DESTINATION
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_state_machine.c:846 (sofia/internal/2002@172.29.18.3) State HANGUP going to sleep
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_state_machine.c:616 (sofia/internal/2002@172.29.18.3) State Change CS_HANGUP -> CS_REPORTING
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/2002@172.29.18.3) Running State Change CS_REPORTING (Cur 1 Tot 11)
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_state_machine.c:932 (sofia/internal/2002@172.29.18.3) State REPORTING
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_state_machine.c:168 sofia/internal/2002@172.29.18.3 Standard REPORTING, cause: NO_ROUTE_DESTINATION
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_state_machine.c:932 (sofia/internal/2002@172.29.18.3) State REPORTING going to sleep
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_state_machine.c:607 (sofia/internal/2002@172.29.18.3) State Change CS_REPORTING -> CS_DESTROY
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_session.c:1744 Session 11 (sofia/internal/2002@172.29.18.3) Locked, Waiting on external entities
+2025-11-24 16:58:49.391461 98.77% [NOTICE] switch_core_session.c:1762 Session 11 (sofia/internal/2002@172.29.18.3) Ended
+2025-11-24 16:58:49.391461 98.77% [NOTICE] switch_core_session.c:1766 Close Channel sofia/internal/2002@172.29.18.3 [CS_DESTROY]
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_state_machine.c:735 (sofia/internal/2002@172.29.18.3) Running State Change CS_DESTROY (Cur 0 Tot 11)
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_state_machine.c:745 (sofia/internal/2002@172.29.18.3) State DESTROY
+2025-11-24 16:58:49.391461 98.77% [DEBUG] mod_sofia.c:380 sofia/internal/2002@172.29.18.3 SOFIA DESTROY
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_state_machine.c:175 sofia/internal/2002@172.29.18.3 Standard DESTROY
+2025-11-24 16:58:49.391461 98.77% [DEBUG] switch_core_state_machine.c:745 (sofia/internal/2002@172.29.18.3) State DESTROY going to sleep
+2025-11-24 16:58:49.451388 98.77% [NOTICE] switch_channel.c:1142 New Channel sofia/internal/901@172.29.18.3 [f3e41c05-89c6-4692-a955-b2bfc184f309]
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/901@172.29.18.3) Running State Change CS_NEW (Cur 1 Tot 12)
+2025-11-24 16:58:49.451388 98.77% [INFO] sofia.c:10460 sofia/internal/901@172.29.18.3 receiving invite from 172.18.0.3:5060 version: 1.10.12 -release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit call-id: f9ccf47adf534d94cbdcf4d5fb8a764c
+2025-11-24 16:58:49.451388 98.77% [DEBUG] sofia.c:10554 verifying acl "domains" for ip/port 172.18.0.3:0.
+2025-11-24 16:58:49.451388 98.77% [DEBUG] sofia.c:10583 IP 172.18.0.3 Approved by acl "domains[]". Access Granted.
+2025-11-24 16:58:49.451388 98.77% [DEBUG] sofia.c:11675 Setting NAT mode based on via received
+2025-11-24 16:58:49.451388 98.77% [DEBUG] sofia.c:7493 Channel sofia/internal/901@172.29.18.3 entering state [received][100]
+2025-11-24 16:58:49.451388 98.77% [DEBUG] sofia.c:7503 Remote SDP:
+v=0
+o=root 16264 18299 IN IP4 172.29.18.3
+s=session
+c=IN IP4 172.29.18.3
+t=0 0
+m=audio 8234 RTP/AVP 0 6 8 3 18 5 101
+a=rtpmap:0 PCMU/8000
+a=rtpmap:6 PCMA/8000
+a=rtpmap:8 PCMA/8000
+a=rtpmap:3 GSM/8000
+a=rtpmap:18 G729/8000
+a=rtpmap:5 G723/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-11
+a=ptime:20
+
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [PCMU:0:8000:20:64000:1] ++++ is saved as a match
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:6:8000:20:0:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:6:8000:20:0:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:6:8000:20:0:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [PCMA:8:8000:20:64000:1] ++++ is saved as a match
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:6:8000:20:0:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [PCMA:8:8000:20:64000:1] ++++ is saved as a match
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [GSM:3:8000:20:13200:1] ++++ is saved as a match
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G723:5:8000:20:0:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G723:5:8000:20:0:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G723:5:8000:20:0:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G723:5:8000:20:0:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_media.c:5438 Set telephone-event payload to 101@8000
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_media.c:3731 Set Codec sofia/internal/901@172.29.18.3 PCMU/8000 20 ms 160 samples 64000 bits 1 channels
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_codec.c:111 sofia/internal/901@172.29.18.3 Original read codec set to PCMU:0
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_media.c:5798 Set telephone-event payload to 101@8000
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_media.c:5856 sofia/internal/901@172.29.18.3 Set 2833 dtmf send payload to 101 recv payload to 101
+2025-11-24 16:58:49.451388 98.77% [DEBUG] sofia.c:7927 (sofia/internal/901@172.29.18.3) State Change CS_NEW -> CS_INIT
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_state_machine.c:600 (sofia/internal/901@172.29.18.3) State NEW
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/901@172.29.18.3) Running State Change CS_INIT (Cur 1 Tot 12)
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_state_machine.c:624 (sofia/internal/901@172.29.18.3) State INIT
+2025-11-24 16:58:49.451388 98.77% [DEBUG] mod_sofia.c:97 sofia/internal/901@172.29.18.3 SOFIA INIT
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_state_machine.c:40 sofia/internal/901@172.29.18.3 Standard INIT
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_state_machine.c:48 (sofia/internal/901@172.29.18.3) State Change CS_INIT -> CS_ROUTING
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_state_machine.c:624 (sofia/internal/901@172.29.18.3) State INIT going to sleep
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/901@172.29.18.3) Running State Change CS_ROUTING (Cur 1 Tot 12)
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_channel.c:2399 (sofia/internal/901@172.29.18.3) Callstate Change DOWN -> RINGING
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_state_machine.c:640 (sofia/internal/901@172.29.18.3) State ROUTING
+2025-11-24 16:58:49.451388 98.77% [DEBUG] mod_sofia.c:158 sofia/internal/901@172.29.18.3 SOFIA ROUTING
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_state_machine.c:230 sofia/internal/901@172.29.18.3 Standard ROUTING
+2025-11-24 16:58:49.451388 98.77% [INFO] mod_dialplan_xml.c:639 Processing 901 <901>->+46850780337 in context internal
+Dialplan: sofia/internal/901@172.29.18.3 parsing [internal->internal-calls] continue=false
+Dialplan: sofia/internal/901@172.29.18.3 Regex (FAIL) [internal-calls] destination_number(+46850780337) =~ /^(\d+)$/ break=on-false
+2025-11-24 16:58:49.451388 98.77% [INFO] switch_core_state_machine.c:306 No Route, Aborting
+2025-11-24 16:58:49.451388 98.77% [NOTICE] switch_core_state_machine.c:307 Hangup sofia/internal/901@172.29.18.3 [CS_ROUTING] [NO_ROUTE_DESTINATION]
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_state_machine.c:640 (sofia/internal/901@172.29.18.3) State ROUTING going to sleep
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/901@172.29.18.3) Running State Change CS_HANGUP (Cur 1 Tot 12)
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_state_machine.c:844 (sofia/internal/901@172.29.18.3) Callstate Change RINGING -> HANGUP
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_state_machine.c:846 (sofia/internal/901@172.29.18.3) State HANGUP
+2025-11-24 16:58:49.451388 98.77% [DEBUG] mod_sofia.c:469 Channel sofia/internal/901@172.29.18.3 hanging up, cause: NO_ROUTE_DESTINATION
+2025-11-24 16:58:49.451388 98.77% [DEBUG] mod_sofia.c:614 Responding to INVITE with: 404
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_state_machine.c:59 sofia/internal/901@172.29.18.3 Standard HANGUP, cause: NO_ROUTE_DESTINATION
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_state_machine.c:846 (sofia/internal/901@172.29.18.3) State HANGUP going to sleep
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_state_machine.c:616 (sofia/internal/901@172.29.18.3) State Change CS_HANGUP -> CS_REPORTING
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/901@172.29.18.3) Running State Change CS_REPORTING (Cur 1 Tot 12)
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_state_machine.c:932 (sofia/internal/901@172.29.18.3) State REPORTING
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_state_machine.c:168 sofia/internal/901@172.29.18.3 Standard REPORTING, cause: NO_ROUTE_DESTINATION
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_state_machine.c:932 (sofia/internal/901@172.29.18.3) State REPORTING going to sleep
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_state_machine.c:607 (sofia/internal/901@172.29.18.3) State Change CS_REPORTING -> CS_DESTROY
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_session.c:1744 Session 12 (sofia/internal/901@172.29.18.3) Locked, Waiting on external entities
+2025-11-24 16:58:49.451388 98.77% [NOTICE] switch_core_session.c:1762 Session 12 (sofia/internal/901@172.29.18.3) Ended
+2025-11-24 16:58:49.451388 98.77% [NOTICE] switch_core_session.c:1766 Close Channel sofia/internal/901@172.29.18.3 [CS_DESTROY]
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_state_machine.c:735 (sofia/internal/901@172.29.18.3) Running State Change CS_DESTROY (Cur 0 Tot 12)
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_state_machine.c:745 (sofia/internal/901@172.29.18.3) State DESTROY
+2025-11-24 16:58:49.451388 98.77% [DEBUG] mod_sofia.c:380 sofia/internal/901@172.29.18.3 SOFIA DESTROY
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_state_machine.c:175 sofia/internal/901@172.29.18.3 Standard DESTROY
+2025-11-24 16:58:49.451388 98.77% [DEBUG] switch_core_state_machine.c:745 (sofia/internal/901@172.29.18.3) State DESTROY going to sleep
+2025-11-24 16:58:50.651400 98.73% [NOTICE] switch_channel.c:1142 New Channel sofia/internal/102@172.29.18.3 [b8e2b560-0d5a-45f5-917a-68e0f76a4dae]
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/102@172.29.18.3) Running State Change CS_NEW (Cur 1 Tot 13)
+2025-11-24 16:58:50.651400 98.73% [INFO] sofia.c:10460 sofia/internal/102@172.29.18.3 receiving invite from 172.18.0.3:5060 version: 1.10.12 -release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit call-id: c05be6acbfdd60e053a61f23d2fc9fd9
+2025-11-24 16:58:50.651400 98.73% [DEBUG] sofia.c:10554 verifying acl "domains" for ip/port 172.18.0.3:0.
+2025-11-24 16:58:50.651400 98.73% [DEBUG] sofia.c:10583 IP 172.18.0.3 Approved by acl "domains[]". Access Granted.
+2025-11-24 16:58:50.651400 98.73% [DEBUG] sofia.c:11675 Setting NAT mode based on via received
+2025-11-24 16:58:50.651400 98.73% [DEBUG] sofia.c:7493 Channel sofia/internal/102@172.29.18.3 entering state [received][100]
+2025-11-24 16:58:50.651400 98.73% [DEBUG] sofia.c:7503 Remote SDP:
+v=0
+o=root 16264 18299 IN IP4 172.29.18.3
+s=session
+c=IN IP4 172.29.18.3
+t=0 0
+m=audio 8234 RTP/AVP 0 6 8 3 18 5 101
+a=rtpmap:0 PCMU/8000
+a=rtpmap:6 PCMA/8000
+a=rtpmap:8 PCMA/8000
+a=rtpmap:3 GSM/8000
+a=rtpmap:18 G729/8000
+a=rtpmap:5 G723/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-11
+a=ptime:20
+
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [PCMU:0:8000:20:64000:1] ++++ is saved as a match
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:6:8000:20:0:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:6:8000:20:0:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:6:8000:20:0:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [PCMA:8:8000:20:64000:1] ++++ is saved as a match
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:6:8000:20:0:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [PCMA:8:8000:20:64000:1] ++++ is saved as a match
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [GSM:3:8000:20:13200:1] ++++ is saved as a match
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G723:5:8000:20:0:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G723:5:8000:20:0:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G723:5:8000:20:0:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G723:5:8000:20:0:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_media.c:5438 Set telephone-event payload to 101@8000
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_media.c:3731 Set Codec sofia/internal/102@172.29.18.3 PCMU/8000 20 ms 160 samples 64000 bits 1 channels
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_codec.c:111 sofia/internal/102@172.29.18.3 Original read codec set to PCMU:0
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_media.c:5798 Set telephone-event payload to 101@8000
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_media.c:5856 sofia/internal/102@172.29.18.3 Set 2833 dtmf send payload to 101 recv payload to 101
+2025-11-24 16:58:50.651400 98.73% [DEBUG] sofia.c:7927 (sofia/internal/102@172.29.18.3) State Change CS_NEW -> CS_INIT
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_state_machine.c:600 (sofia/internal/102@172.29.18.3) State NEW
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/102@172.29.18.3) Running State Change CS_INIT (Cur 1 Tot 13)
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_state_machine.c:624 (sofia/internal/102@172.29.18.3) State INIT
+2025-11-24 16:58:50.651400 98.73% [DEBUG] mod_sofia.c:97 sofia/internal/102@172.29.18.3 SOFIA INIT
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_state_machine.c:40 sofia/internal/102@172.29.18.3 Standard INIT
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_state_machine.c:48 (sofia/internal/102@172.29.18.3) State Change CS_INIT -> CS_ROUTING
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_state_machine.c:624 (sofia/internal/102@172.29.18.3) State INIT going to sleep
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/102@172.29.18.3) Running State Change CS_ROUTING (Cur 1 Tot 13)
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_channel.c:2399 (sofia/internal/102@172.29.18.3) Callstate Change DOWN -> RINGING
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_state_machine.c:640 (sofia/internal/102@172.29.18.3) State ROUTING
+2025-11-24 16:58:50.651400 98.73% [DEBUG] mod_sofia.c:158 sofia/internal/102@172.29.18.3 SOFIA ROUTING
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_state_machine.c:230 sofia/internal/102@172.29.18.3 Standard ROUTING
+2025-11-24 16:58:50.651400 98.73% [INFO] mod_dialplan_xml.c:639 Processing 102 <102>->+46850780339 in context internal
+Dialplan: sofia/internal/102@172.29.18.3 parsing [internal->internal-calls] continue=false
+Dialplan: sofia/internal/102@172.29.18.3 Regex (FAIL) [internal-calls] destination_number(+46850780339) =~ /^(\d+)$/ break=on-false
+2025-11-24 16:58:50.651400 98.73% [INFO] switch_core_state_machine.c:306 No Route, Aborting
+2025-11-24 16:58:50.651400 98.73% [NOTICE] switch_core_state_machine.c:307 Hangup sofia/internal/102@172.29.18.3 [CS_ROUTING] [NO_ROUTE_DESTINATION]
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_state_machine.c:640 (sofia/internal/102@172.29.18.3) State ROUTING going to sleep
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/102@172.29.18.3) Running State Change CS_HANGUP (Cur 1 Tot 13)
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_state_machine.c:844 (sofia/internal/102@172.29.18.3) Callstate Change RINGING -> HANGUP
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_state_machine.c:846 (sofia/internal/102@172.29.18.3) State HANGUP
+2025-11-24 16:58:50.651400 98.73% [DEBUG] mod_sofia.c:469 Channel sofia/internal/102@172.29.18.3 hanging up, cause: NO_ROUTE_DESTINATION
+2025-11-24 16:58:50.651400 98.73% [DEBUG] mod_sofia.c:614 Responding to INVITE with: 404
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_state_machine.c:59 sofia/internal/102@172.29.18.3 Standard HANGUP, cause: NO_ROUTE_DESTINATION
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_state_machine.c:846 (sofia/internal/102@172.29.18.3) State HANGUP going to sleep
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_state_machine.c:616 (sofia/internal/102@172.29.18.3) State Change CS_HANGUP -> CS_REPORTING
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/102@172.29.18.3) Running State Change CS_REPORTING (Cur 1 Tot 13)
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_state_machine.c:932 (sofia/internal/102@172.29.18.3) State REPORTING
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_state_machine.c:168 sofia/internal/102@172.29.18.3 Standard REPORTING, cause: NO_ROUTE_DESTINATION
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_state_machine.c:932 (sofia/internal/102@172.29.18.3) State REPORTING going to sleep
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_state_machine.c:607 (sofia/internal/102@172.29.18.3) State Change CS_REPORTING -> CS_DESTROY
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_session.c:1744 Session 13 (sofia/internal/102@172.29.18.3) Locked, Waiting on external entities
+2025-11-24 16:58:50.651400 98.73% [NOTICE] switch_core_session.c:1762 Session 13 (sofia/internal/102@172.29.18.3) Ended
+2025-11-24 16:58:50.651400 98.73% [NOTICE] switch_core_session.c:1766 Close Channel sofia/internal/102@172.29.18.3 [CS_DESTROY]
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_state_machine.c:735 (sofia/internal/102@172.29.18.3) Running State Change CS_DESTROY (Cur 0 Tot 13)
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_state_machine.c:745 (sofia/internal/102@172.29.18.3) State DESTROY
+2025-11-24 16:58:50.651400 98.73% [DEBUG] mod_sofia.c:380 sofia/internal/102@172.29.18.3 SOFIA DESTROY
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_state_machine.c:175 sofia/internal/102@172.29.18.3 Standard DESTROY
+2025-11-24 16:58:50.651400 98.73% [DEBUG] switch_core_state_machine.c:745 (sofia/internal/102@172.29.18.3) State DESTROY going to sleep
+2025-11-24 16:58:53.191417 98.77% [NOTICE] switch_channel.c:1142 New Channel sofia/internal/2000@167.71.173.83 [f0765f45-7c46-452e-a72f-21cc7ed4063b]
+2025-11-24 16:58:53.191417 98.77% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/2000@167.71.173.83) Running State Change CS_NEW (Cur 1 Tot 14)
+2025-11-24 16:58:53.191417 98.77% [INFO] sofia.c:10460 sofia/internal/2000@167.71.173.83 receiving invite from 172.18.0.3:5060 version: 1.10.12 -release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit call-id: 1068341839-25020698-1493463842
+2025-11-24 16:58:53.191417 98.77% [DEBUG] sofia.c:10554 verifying acl "domains" for ip/port 172.18.0.3:0.
+2025-11-24 16:58:53.191417 98.77% [DEBUG] sofia.c:10583 IP 172.18.0.3 Approved by acl "domains[]". Access Granted.
+2025-11-24 16:58:53.191417 98.77% [DEBUG] sofia.c:11675 Setting NAT mode based on via received
+2025-11-24 16:58:53.191417 98.77% [DEBUG] sofia.c:7493 Channel sofia/internal/2000@167.71.173.83 entering state [received][100]
+2025-11-24 16:58:53.191417 98.77% [DEBUG] sofia.c:7503 Remote SDP:
+v=0
+o=2000 16264 18299 IN IP4 192.168.1.83
+s=call
+c=IN IP4 192.168.1.83
+t=0 0
+m=audio 25282 RTP/AVP 0 101
+a=rtpmap:0 pcmu/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-11
+
+2025-11-24 16:58:53.191417 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [pcmu:0:8000:20:64000:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:53.191417 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [pcmu:0:8000:20:64000:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:53.191417 98.77% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [PCMU:0:8000:20:64000:1] ++++ is saved as a match
+2025-11-24 16:58:53.191417 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [pcmu:0:8000:20:64000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:53.191417 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [pcmu:0:8000:20:64000:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:53.191417 98.77% [DEBUG] switch_core_media.c:5438 Set telephone-event payload to 101@8000
+2025-11-24 16:58:53.191417 98.77% [DEBUG] switch_core_media.c:3731 Set Codec sofia/internal/2000@167.71.173.83 PCMU/8000 20 ms 160 samples 64000 bits 1 channels
+2025-11-24 16:58:53.191417 98.77% [DEBUG] switch_core_codec.c:111 sofia/internal/2000@167.71.173.83 Original read codec set to PCMU:0
+2025-11-24 16:58:53.191417 98.77% [DEBUG] switch_core_media.c:5798 Set telephone-event payload to 101@8000
+2025-11-24 16:58:53.191417 98.77% [DEBUG] switch_core_media.c:5856 sofia/internal/2000@167.71.173.83 Set 2833 dtmf send payload to 101 recv payload to 101
+2025-11-24 16:58:53.191417 98.77% [DEBUG] sofia.c:7927 (sofia/internal/2000@167.71.173.83) State Change CS_NEW -> CS_INIT
+2025-11-24 16:58:53.191417 98.77% [DEBUG] switch_core_state_machine.c:600 (sofia/internal/2000@167.71.173.83) State NEW
+2025-11-24 16:58:53.191417 98.77% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/2000@167.71.173.83) Running State Change CS_INIT (Cur 1 Tot 14)
+2025-11-24 16:58:53.191417 98.77% [DEBUG] switch_core_state_machine.c:624 (sofia/internal/2000@167.71.173.83) State INIT
+2025-11-24 16:58:53.191417 98.77% [DEBUG] mod_sofia.c:97 sofia/internal/2000@167.71.173.83 SOFIA INIT
+2025-11-24 16:58:53.191417 98.77% [DEBUG] switch_core_state_machine.c:40 sofia/internal/2000@167.71.173.83 Standard INIT
+2025-11-24 16:58:53.191417 98.77% [DEBUG] switch_core_state_machine.c:48 (sofia/internal/2000@167.71.173.83) State Change CS_INIT -> CS_ROUTING
+2025-11-24 16:58:53.191417 98.77% [DEBUG] switch_core_state_machine.c:624 (sofia/internal/2000@167.71.173.83) State INIT going to sleep
+2025-11-24 16:58:53.191417 98.77% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/2000@167.71.173.83) Running State Change CS_ROUTING (Cur 1 Tot 14)
+2025-11-24 16:58:53.191417 98.77% [DEBUG] switch_channel.c:2399 (sofia/internal/2000@167.71.173.83) Callstate Change DOWN -> RINGING
+2025-11-24 16:58:53.191417 98.77% [DEBUG] switch_core_state_machine.c:640 (sofia/internal/2000@167.71.173.83) State ROUTING
+2025-11-24 16:58:53.191417 98.77% [DEBUG] mod_sofia.c:158 sofia/internal/2000@167.71.173.83 SOFIA ROUTING
+2025-11-24 16:58:53.191417 98.77% [DEBUG] switch_core_state_machine.c:230 sofia/internal/2000@167.71.173.83 Standard ROUTING
+2025-11-24 16:58:53.191417 98.77% [INFO] mod_dialplan_xml.c:639 Processing 2000 <2000>->548818273636 in context internal
+Dialplan: sofia/internal/2000@167.71.173.83 parsing [internal->internal-calls] continue=false
+Dialplan: sofia/internal/2000@167.71.173.83 Regex (PASS) [internal-calls] destination_number(548818273636) =~ /^(\d+)$/ break=on-false
+Dialplan: sofia/internal/2000@167.71.173.83 Action log(INFO Internal call to ${destination_number}) 
+Dialplan: sofia/internal/2000@167.71.173.83 Action answer() 
+Dialplan: sofia/internal/2000@167.71.173.83 Action bridge(user/${destination_number}@${domain_name}) 
+2025-11-24 16:58:53.191417 98.77% [DEBUG] switch_core_state_machine.c:281 (sofia/internal/2000@167.71.173.83) State Change CS_ROUTING -> CS_EXECUTE
+2025-11-24 16:58:53.191417 98.77% [DEBUG] switch_core_state_machine.c:640 (sofia/internal/2000@167.71.173.83) State ROUTING going to sleep
+2025-11-24 16:58:53.191417 98.77% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/2000@167.71.173.83) Running State Change CS_EXECUTE (Cur 1 Tot 14)
+2025-11-24 16:58:53.191417 98.77% [DEBUG] switch_core_state_machine.c:647 (sofia/internal/2000@167.71.173.83) State EXECUTE
+2025-11-24 16:58:53.191417 98.77% [DEBUG] mod_sofia.c:213 sofia/internal/2000@167.71.173.83 SOFIA EXECUTE
+2025-11-24 16:58:53.191417 98.77% [DEBUG] switch_core_state_machine.c:323 sofia/internal/2000@167.71.173.83 Standard EXECUTE
+EXECUTE [depth=0] sofia/internal/2000@167.71.173.83 log(INFO Internal call to 548818273636)
+2025-11-24 16:58:53.191417 98.77% [INFO] mod_dptools.c:1865 Internal call to 548818273636
+EXECUTE [depth=0] sofia/internal/2000@167.71.173.83 answer()
+2025-11-24 16:58:53.191417 98.77% [DEBUG] switch_core_media.c:8660 AUDIO RTP [sofia/internal/2000@167.71.173.83] 172.18.0.2 port 24892 -> 192.168.1.83 port 25282 codec: 0 ms: 20
+2025-11-24 16:58:53.191417 98.77% [DEBUG] switch_rtp.c:4588 Not using a timer
+2025-11-24 16:58:53.191417 98.77% [DEBUG] switch_core_media.c:8973 sofia/internal/2000@167.71.173.83 Set 2833 dtmf send payload to 101
+2025-11-24 16:58:53.191417 98.77% [DEBUG] switch_core_media.c:8980 sofia/internal/2000@167.71.173.83 Set 2833 dtmf receive payload to 101
+2025-11-24 16:58:53.191417 98.77% [DEBUG] switch_core_media.c:9003 sofia/internal/2000@167.71.173.83 Set rtp dtmf delay to 40
+2025-11-24 16:58:53.191417 98.77% [DEBUG] mod_sofia.c:914 Local SDP sofia/internal/2000@167.71.173.83:
+v=0
+o=FreeSWITCH 1763978641 1763978642 IN IP4 172.18.0.2
+s=FreeSWITCH
+c=IN IP4 172.18.0.2
+t=0 0
+m=audio 24892 RTP/AVP 0 101
+a=rtpmap:0 pcmu/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=ptime:20
+a=sendrecv
+
+2025-11-24 16:58:53.191417 98.77% [NOTICE] mod_dptools.c:1406 Channel [sofia/internal/2000@167.71.173.83] has been answered
+2025-11-24 16:58:53.191417 98.77% [DEBUG] switch_channel.c:3912 (sofia/internal/2000@167.71.173.83) Callstate Change RINGING -> ACTIVE
+2025-11-24 16:58:53.191417 98.77% [DEBUG] sofia.c:7493 Channel sofia/internal/2000@167.71.173.83 entering state [completed][200]
+EXECUTE [depth=0] sofia/internal/2000@167.71.173.83 bridge(user/548818273636@172.18.0.2)
+2025-11-24 16:58:53.191417 98.77% [DEBUG] switch_channel.c:1973 (sofia/internal/2000@167.71.173.83) Callstate Change ACTIVE -> RING_WAIT
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_ivr_originate.c:2301 Parsing global variables
+2025-11-24 16:58:53.211450 98.77% [WARNING] mod_dptools.c:4383 Can't find user [548818273636@172.18.0.2]
+2025-11-24 16:58:53.211450 98.77% [NOTICE] switch_ivr_originate.c:3059 Cannot create outgoing channel of type [user] cause: [SUBSCRIBER_ABSENT]
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_ivr_originate.c:4056 Originate Resulted in Error Cause: 20 [SUBSCRIBER_ABSENT]
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_channel.c:2197 (sofia/internal/2000@167.71.173.83) Callstate Change RING_WAIT -> ACTIVE
+2025-11-24 16:58:53.211450 98.77% [INFO] mod_dptools.c:3635 Originate Failed.  Cause: SUBSCRIBER_ABSENT
+2025-11-24 16:58:53.211450 98.77% [NOTICE] switch_channel.c:5012 Hangup sofia/internal/2000@167.71.173.83 [CS_EXECUTE] [SUBSCRIBER_ABSENT]
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_session.c:2979 sofia/internal/2000@167.71.173.83 skip receive message [APPLICATION_EXEC_COMPLETE] (channel is hungup already)
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:647 (sofia/internal/2000@167.71.173.83) State EXECUTE going to sleep
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/2000@167.71.173.83) Running State Change CS_HANGUP (Cur 1 Tot 14)
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:844 (sofia/internal/2000@167.71.173.83) Callstate Change ACTIVE -> HANGUP
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:846 (sofia/internal/2000@167.71.173.83) State HANGUP
+2025-11-24 16:58:53.211450 98.77% [DEBUG] mod_sofia.c:469 Channel sofia/internal/2000@167.71.173.83 hanging up, cause: SUBSCRIBER_ABSENT
+2025-11-24 16:58:53.211450 98.77% [DEBUG] mod_sofia.c:523 Sending BYE to sofia/internal/2000@167.71.173.83
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:59 sofia/internal/2000@167.71.173.83 Standard HANGUP, cause: SUBSCRIBER_ABSENT
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:846 (sofia/internal/2000@167.71.173.83) State HANGUP going to sleep
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:616 (sofia/internal/2000@167.71.173.83) State Change CS_HANGUP -> CS_REPORTING
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/2000@167.71.173.83) Running State Change CS_REPORTING (Cur 1 Tot 14)
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:932 (sofia/internal/2000@167.71.173.83) State REPORTING
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:168 sofia/internal/2000@167.71.173.83 Standard REPORTING, cause: SUBSCRIBER_ABSENT
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:932 (sofia/internal/2000@167.71.173.83) State REPORTING going to sleep
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:607 (sofia/internal/2000@167.71.173.83) State Change CS_REPORTING -> CS_DESTROY
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_session.c:1744 Session 14 (sofia/internal/2000@167.71.173.83) Locked, Waiting on external entities
+2025-11-24 16:58:53.211450 98.77% [NOTICE] switch_core_session.c:1762 Session 14 (sofia/internal/2000@167.71.173.83) Ended
+2025-11-24 16:58:53.211450 98.77% [NOTICE] switch_core_session.c:1766 Close Channel sofia/internal/2000@167.71.173.83 [CS_DESTROY]
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:735 (sofia/internal/2000@167.71.173.83) Running State Change CS_DESTROY (Cur 0 Tot 14)
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:745 (sofia/internal/2000@167.71.173.83) State DESTROY
+2025-11-24 16:58:53.211450 98.77% [DEBUG] mod_sofia.c:380 sofia/internal/2000@167.71.173.83 SOFIA DESTROY
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:175 sofia/internal/2000@167.71.173.83 Standard DESTROY
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:745 (sofia/internal/2000@167.71.173.83) State DESTROY going to sleep
+2025-11-24 16:58:53.211450 98.77% [NOTICE] switch_channel.c:1142 New Channel sofia/internal/5001@172.29.18.3 [e8cf8774-2001-48cd-b6bd-3a09fa66a9d2]
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/5001@172.29.18.3) Running State Change CS_NEW (Cur 1 Tot 15)
+2025-11-24 16:58:53.211450 98.77% [INFO] sofia.c:10460 sofia/internal/5001@172.29.18.3 receiving invite from 172.18.0.3:5060 version: 1.10.12 -release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit call-id: dcabad4b9d6360efb6e2bf68adfc55b9
+2025-11-24 16:58:53.211450 98.77% [DEBUG] sofia.c:10554 verifying acl "domains" for ip/port 172.18.0.3:0.
+2025-11-24 16:58:53.211450 98.77% [DEBUG] sofia.c:10583 IP 172.18.0.3 Approved by acl "domains[]". Access Granted.
+2025-11-24 16:58:53.211450 98.77% [DEBUG] sofia.c:11675 Setting NAT mode based on via received
+2025-11-24 16:58:53.211450 98.77% [DEBUG] sofia.c:7493 Channel sofia/internal/5001@172.29.18.3 entering state [received][100]
+2025-11-24 16:58:53.211450 98.77% [DEBUG] sofia.c:7503 Remote SDP:
+v=0
+o=root 16264 18299 IN IP4 172.29.18.3
+s=session
+c=IN IP4 172.29.18.3
+t=0 0
+m=audio 8234 RTP/AVP 0 6 8 3 18 5 101
+a=rtpmap:0 PCMU/8000
+a=rtpmap:6 PCMA/8000
+a=rtpmap:8 PCMA/8000
+a=rtpmap:3 GSM/8000
+a=rtpmap:18 G729/8000
+a=rtpmap:5 G723/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-11
+a=ptime:20
+
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [PCMU:0:8000:20:64000:1] ++++ is saved as a match
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMU:0:8000:20:64000:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:6:8000:20:0:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:6:8000:20:0:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:6:8000:20:0:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [PCMA:8:8000:20:64000:1] ++++ is saved as a match
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:6:8000:20:0:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [PCMA:8:8000:20:64000:1] ++++ is saved as a match
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [PCMA:8:8000:20:64000:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [GSM:3:8000:20:13200:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_media.c:5588 Audio Codec Compare [GSM:3:8000:20:13200:1] ++++ is saved as a match
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G729:18:8000:20:8000:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G723:5:8000:20:0:1]/[G722:9:8000:20:64000:1]
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G723:5:8000:20:0:1]/[PCMU:0:8000:20:64000:1]
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G723:5:8000:20:0:1]/[PCMA:8:8000:20:64000:1]
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_media.c:5526 Audio Codec Compare [G723:5:8000:20:0:1]/[GSM:3:8000:20:13200:1]
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_media.c:5438 Set telephone-event payload to 101@8000
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_media.c:3731 Set Codec sofia/internal/5001@172.29.18.3 PCMU/8000 20 ms 160 samples 64000 bits 1 channels
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_codec.c:111 sofia/internal/5001@172.29.18.3 Original read codec set to PCMU:0
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_media.c:5798 Set telephone-event payload to 101@8000
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_media.c:5856 sofia/internal/5001@172.29.18.3 Set 2833 dtmf send payload to 101 recv payload to 101
+2025-11-24 16:58:53.211450 98.77% [DEBUG] sofia.c:7927 (sofia/internal/5001@172.29.18.3) State Change CS_NEW -> CS_INIT
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:600 (sofia/internal/5001@172.29.18.3) State NEW
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/5001@172.29.18.3) Running State Change CS_INIT (Cur 1 Tot 15)
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:624 (sofia/internal/5001@172.29.18.3) State INIT
+2025-11-24 16:58:53.211450 98.77% [DEBUG] mod_sofia.c:97 sofia/internal/5001@172.29.18.3 SOFIA INIT
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:40 sofia/internal/5001@172.29.18.3 Standard INIT
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:48 (sofia/internal/5001@172.29.18.3) State Change CS_INIT -> CS_ROUTING
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:624 (sofia/internal/5001@172.29.18.3) State INIT going to sleep
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/5001@172.29.18.3) Running State Change CS_ROUTING (Cur 1 Tot 15)
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_channel.c:2399 (sofia/internal/5001@172.29.18.3) Callstate Change DOWN -> RINGING
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:640 (sofia/internal/5001@172.29.18.3) State ROUTING
+2025-11-24 16:58:53.211450 98.77% [DEBUG] mod_sofia.c:158 sofia/internal/5001@172.29.18.3 SOFIA ROUTING
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:230 sofia/internal/5001@172.29.18.3 Standard ROUTING
+2025-11-24 16:58:53.211450 98.77% [INFO] mod_dialplan_xml.c:639 Processing 5001 <5001>->+46850780300 in context internal
+Dialplan: sofia/internal/5001@172.29.18.3 parsing [internal->internal-calls] continue=false
+Dialplan: sofia/internal/5001@172.29.18.3 Regex (FAIL) [internal-calls] destination_number(+46850780300) =~ /^(\d+)$/ break=on-false
+2025-11-24 16:58:53.211450 98.77% [INFO] switch_core_state_machine.c:306 No Route, Aborting
+2025-11-24 16:58:53.211450 98.77% [NOTICE] switch_core_state_machine.c:307 Hangup sofia/internal/5001@172.29.18.3 [CS_ROUTING] [NO_ROUTE_DESTINATION]
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:640 (sofia/internal/5001@172.29.18.3) State ROUTING going to sleep
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/5001@172.29.18.3) Running State Change CS_HANGUP (Cur 1 Tot 15)
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:844 (sofia/internal/5001@172.29.18.3) Callstate Change RINGING -> HANGUP
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:846 (sofia/internal/5001@172.29.18.3) State HANGUP
+2025-11-24 16:58:53.211450 98.77% [DEBUG] mod_sofia.c:469 Channel sofia/internal/5001@172.29.18.3 hanging up, cause: NO_ROUTE_DESTINATION
+2025-11-24 16:58:53.211450 98.77% [DEBUG] mod_sofia.c:614 Responding to INVITE with: 404
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:59 sofia/internal/5001@172.29.18.3 Standard HANGUP, cause: NO_ROUTE_DESTINATION
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:846 (sofia/internal/5001@172.29.18.3) State HANGUP going to sleep
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:616 (sofia/internal/5001@172.29.18.3) State Change CS_HANGUP -> CS_REPORTING
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:581 (sofia/internal/5001@172.29.18.3) Running State Change CS_REPORTING (Cur 1 Tot 15)
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:932 (sofia/internal/5001@172.29.18.3) State REPORTING
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:168 sofia/internal/5001@172.29.18.3 Standard REPORTING, cause: NO_ROUTE_DESTINATION
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:932 (sofia/internal/5001@172.29.18.3) State REPORTING going to sleep
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:607 (sofia/internal/5001@172.29.18.3) State Change CS_REPORTING -> CS_DESTROY
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_session.c:1744 Session 15 (sofia/internal/5001@172.29.18.3) Locked, Waiting on external entities
+2025-11-24 16:58:53.211450 98.77% [NOTICE] switch_core_session.c:1762 Session 15 (sofia/internal/5001@172.29.18.3) Ended
+2025-11-24 16:58:53.211450 98.77% [NOTICE] switch_core_session.c:1766 Close Channel sofia/internal/5001@172.29.18.3 [CS_DESTROY]
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:735 (sofia/internal/5001@172.29.18.3) Running State Change CS_DESTROY (Cur 0 Tot 15)
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:745 (sofia/internal/5001@172.29.18.3) State DESTROY
+2025-11-24 16:58:53.211450 98.77% [DEBUG] mod_sofia.c:380 sofia/internal/5001@172.29.18.3 SOFIA DESTROY
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:175 sofia/internal/5001@172.29.18.3 Standard DESTROY
+2025-11-24 16:58:53.211450 98.77% [DEBUG] switch_core_state_machine.c:745 (sofia/internal/5001@172.29.18.3) State DESTROY going to sleep
+freeswitch@004e1a318220> 

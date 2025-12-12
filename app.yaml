@@ -225,6 +225,54 @@ services:
       pnpm install --frozen-lockfile
       pnpm --filter @hopwhistle/worker build
 
+  - name: transcriber
+    github:
+      repo: bbarnes4318/hopwhistle
+      branch: master
+      deploy_on_push: true
+    source_dir: apps/media/transcriber/python
+    dockerfile_path: Dockerfile
+    environment_slug: python
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    envs:
+      - key: REDIS_URL
+        value: ${redis.REDIS_URL}
+        type: SECRET
+      - key: WHISPER_MODEL
+        value: 'base'
+      - key: WHISPER_DEVICE
+        value: 'cpu'
+      - key: WHISPER_COMPUTE
+        value: 'int8'
+      - key: DEEPSEEK_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: DEEPSEEK_MODEL
+        value: 'deepseek-chat'
+      - key: LARGE_FILE_THRESHOLD_MB
+        value: '20'
+
+  - name: monitor
+    github:
+      repo: bbarnes4318/hopwhistle
+      branch: master
+      deploy_on_push: true
+    source_dir: /
+    run_command: pnpm --filter @hopwhistle/monitor start
+    environment_slug: node-js
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    envs:
+      - key: FREESWITCH_ESL_HOST
+        scope: RUN_TIME
+        type: SECRET
+      - key: FREESWITCH_ESL_PORT
+        value: '8021'
+      - key: FREESWITCH_ESL_PASSWORD
+        scope: RUN_TIME
+        type: SECRET
+
 databases:
   - name: db
     engine: PG

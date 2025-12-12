@@ -234,7 +234,7 @@ function executeQueueNode(
 
 function executeBuyerNode(node: BuyerNode, context: ExecutionContext): ExecutionResult {
   // Filter enabled buyers
-  const availableBuyers = node.buyers.filter((b) => b.enabled);
+  const availableBuyers = node.buyers.filter(b => b.enabled);
 
   if (availableBuyers.length === 0) {
     return {
@@ -470,7 +470,7 @@ function evaluateCondition(condition: string, context: ExecutionContext): boolea
 function selectBuyer(
   buyers: BuyerNode['buyers'],
   strategy: BuyerNode['strategy'],
-  context: ExecutionContext
+  _context: ExecutionContext
 ): BuyerNode['buyers'][0] | null {
   if (buyers.length === 0) return null;
 

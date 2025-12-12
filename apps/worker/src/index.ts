@@ -6,7 +6,7 @@ import { register } from './lib/metrics.js';
 import { initTracing, shutdownTracing } from './lib/tracing.js';
 import { BillingWorker } from './services/billing-worker.js';
 import { ClickHouseETL } from './services/clickhouse-etl.js';
-
+import { startRecordingAnalysisWorker } from './services/recording-analysis-worker.js';
 
 const billingWorker = new BillingWorker();
 const clickhouseETL = new ClickHouseETL();
@@ -36,7 +36,7 @@ async function main() {
     });
 
     logger.info({ msg: 'Workers starting' });
-    
+
     // Start billing worker
     await billingWorker.start();
     logger.info({ msg: 'Billing worker started' });
@@ -44,6 +44,10 @@ async function main() {
     // Start ClickHouse ETL worker
     await clickhouseETL.start();
     logger.info({ msg: 'ClickHouse ETL worker started' });
+
+    // Start Recording Analysis worker
+    void startRecordingAnalysisWorker();
+    logger.info({ msg: 'Recording Analysis worker started' });
   } catch (error) {
     logger.error({ msg: 'Failed to start workers', err: error });
     process.exit(1);
@@ -62,4 +66,3 @@ async function main() {
 }
 
 main();
-

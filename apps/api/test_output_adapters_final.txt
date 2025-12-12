@@ -1,0 +1,12 @@
+
+[7m[1m[36m RUN [39m[22m[27m [36mv1.6.1[39m [90mC:/Users/jimbo/Downloads/hopwhistle/apps/api[39m
+
+{"level":"info","time":"2025-11-28T07:49:09.839Z","service":"hopwhistle-api","version":"1.0.0","msg":"Purchased Telnyx number","number":"+15559998888"}
+{"level":"info","time":"2025-11-28T07:49:09.843Z","service":"hopwhistle-api","version":"1.0.0","msg":"Purchased Bandwidth number","number":"5553334444","orderId":"order-1"}
+ [32m✓[39m src/services/provisioning/__tests__/adapters.test.ts [2m ([22m[2m6 tests[22m[2m)[22m[90m 10[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m6 passed[39m[22m[90m (6)[39m
+[2m   Start at [22m 02:49:09
+[2m   Duration [22m 668ms[2m (transform 111ms, setup 1ms, collect 203ms, tests 10ms, environment 0ms, prepare 166ms)[22m
+

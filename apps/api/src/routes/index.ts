@@ -1,61 +1,69 @@
 // Route handlers - placeholder implementations
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyRequest } from 'fastify';
+
+import { AuthenticatedUser } from '../middleware/auth.js';
+
+type AuthRequest = FastifyRequest & { user?: AuthenticatedUser };
 
 // Public API - Numbers
 export async function registerNumberRoutes(fastify: FastifyInstance) {
-  fastify.get('/api/v1/numbers', async (request, reply) => {
-    const user = (request as any).user;
-    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
-    
-    if (!tenantId) {
-      reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
-    }
+  await Promise.resolve();
+  fastify.get<{ Querystring: { page?: string; limit?: string } }>(
+    '/api/v1/numbers',
+    async (request, reply) => {
+      const user = (request as AuthRequest).user;
+      const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+      const tenantId = demoTenantId || user?.tenantId;
 
-    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
-    const page = parseInt((request.query as any)?.page || '1');
-    const limit = parseInt((request.query as any)?.limit || '20');
-    const skip = (page - 1) * limit;
+      if (!tenantId) {
+        void reply.code(401);
+        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      }
 
-    const [numbers, total] = await Promise.all([
-      prisma.phoneNumber.findMany({
-        where: { tenantId },
-        take: limit,
-        skip,
-        orderBy: { createdAt: 'desc' },
-        include: {
-          campaign: {
-            select: {
-              id: true,
-              name: true,
+      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+      const page = parseInt(request.query.page || '1');
+      const limit = parseInt(request.query.limit || '20');
+      const skip = (page - 1) * limit;
+
+      const [numbers, total] = await Promise.all([
+        prisma.phoneNumber.findMany({
+          where: { tenantId },
+          take: limit,
+          skip,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            campaign: {
+              select: {
+                id: true,
+                name: true,
+              },
             },
           },
-        },
-      }),
-      prisma.phoneNumber.count({ where: { tenantId } }),
-    ]);
+        }),
+        prisma.phoneNumber.count({ where: { tenantId } }),
+      ]);
 
-    return {
-      data: numbers.map((n) => ({
-        id: n.id,
-        number: n.number,
-        status: n.status,
-        provider: n.provider,
-        capabilities: n.capabilities,
-        campaign: n.campaign ? { id: n.campaign.id, name: n.campaign.name } : null,
-        purchasedAt: n.purchasedAt?.toISOString(),
-        createdAt: n.createdAt.toISOString(),
-        updatedAt: n.updatedAt.toISOString(),
-      })),
-      meta: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
-  });
+      return {
+        data: numbers.map(n => ({
+          id: n.id,
+          number: n.number,
+          status: n.status,
+          provider: n.provider,
+          capabilities: n.capabilities,
+          campaign: n.campaign ? { id: n.campaign.id, name: n.campaign.name } : null,
+          purchasedAt: n.purchasedAt?.toISOString(),
+          createdAt: n.createdAt.toISOString(),
+          updatedAt: n.updatedAt.toISOString(),
+        })),
+        meta: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
+    }
+  );
 
   fastify.post<{
     Body: {
@@ -68,28 +76,30 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
         sms?: boolean;
         mms?: boolean;
         fax?: boolean;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        [key: string]: any;
       };
     };
   }>('/api/v1/numbers', async (request, reply) => {
     try {
-      const user = (request as any).user;
+      const user = (request as AuthRequest).user;
       const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
       const tenantId = demoTenantId || user?.tenantId;
-      
+
       if (!tenantId) {
-        reply.code(401);
+        void reply.code(401);
         return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
       }
 
       const body = request.body;
-      const provider = (body.provider || 'local') as 'local' | 'signalwire' | 'telnyx' | 'bandwidth';
+      const provider = body.provider;
 
       // Check quota if not demo mode
       if (!demoTenantId) {
         const { quotaService } = await import('../services/quota-service.js');
         const quotaCheck = await quotaService.checkPhoneNumberQuota(tenantId);
         if (!quotaCheck.allowed) {
-          reply.code(403);
+          void reply.code(403);
           return {
             error: {
               code: 'QUOTA_EXCEEDED',
@@ -102,7 +112,9 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
       }
 
       // Purchase number using provisioning service
-      const { provisioningService } = await import('../services/provisioning/provisioning-service.js');
+      const { provisioningService } = await import(
+        '../services/provisioning/provisioning-service.js'
+      );
       const provisioned = await provisioningService.purchaseNumber(
         provider,
         {
@@ -113,9 +125,9 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
         },
         {
           tenantId,
-          userId: user?.id,
+          userId: user?.userId,
           ipAddress: request.ip,
-          requestId: (request as any).id,
+          requestId: request.id,
         }
       );
 
@@ -126,11 +138,13 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
       });
 
       if (!dbNumber) {
-        reply.code(500);
-        return { error: { code: 'NOT_FOUND', message: 'Number was purchased but not found in database' } };
+        void reply.code(500);
+        return {
+          error: { code: 'NOT_FOUND', message: 'Number was purchased but not found in database' },
+        };
       }
 
-      reply.code(201);
+      void reply.code(201);
       return {
         id: dbNumber.id,
         tenantId: dbNumber.tenantId,
@@ -142,26 +156,29 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
         updatedAt: dbNumber.updatedAt.toISOString(),
       };
     } catch (error: any) {
-      reply.code(400);
+      void reply.code(400);
       return {
         error: {
           code: 'PURCHASE_FAILED',
-          message: error.message || 'Failed to purchase number',
+          message: (error as Error).message || 'Failed to purchase number',
         },
       };
     }
   });
 
-  fastify.get<{ Params: { numberId: string } }>('/api/v1/numbers/:numberId', async (request, reply) => {
-    return {
-      id: request.params.numberId,
-      tenantId: '00000000-0000-0000-0000-000000000000',
-      number: '+15551234567',
-      status: 'ACTIVE',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-  });
+  fastify.get<{ Params: { numberId: string } }>(
+    '/api/v1/numbers/:numberId',
+    async (request, _reply) => {
+      return {
+        id: request.params.numberId,
+        tenantId: '00000000-0000-0000-0000-000000000000',
+        number: '+15551234567',
+        status: 'ACTIVE',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+  );
 
   fastify.patch<{
     Params: { numberId: string };
@@ -177,20 +194,20 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
     };
   }>('/api/v1/numbers/:numberId', async (request, reply) => {
     try {
-      const user = (request as any).user;
+      const user = (request as AuthRequest).user;
       const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
       const tenantId = demoTenantId || user?.tenantId;
-      
+
       if (!tenantId) {
-        reply.code(401);
+        void reply.code(401);
         return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
       }
 
-      const { numberId } = request.params;
+      const { numberId } = request.params as { numberId: string };
       const body = request.body;
 
       const prisma = (await import('../lib/prisma.js')).getPrismaClient();
-      
+
       // Verify number exists and belongs to tenant
       const existingNumber = await prisma.phoneNumber.findFirst({
         where: {
@@ -200,7 +217,7 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
       });
 
       if (!existingNumber) {
-        reply.code(404);
+        void reply.code(404);
         return { error: { code: 'NOT_FOUND', message: 'Phone number not found' } };
       }
 
@@ -214,7 +231,7 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
         });
 
         if (!campaign) {
-          reply.code(404);
+          void reply.code(404);
           return { error: { code: 'NOT_FOUND', message: 'Campaign not found' } };
         }
       }
@@ -228,7 +245,8 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
         updateData.campaignId = body.campaignId;
       }
       if (body.capabilities !== undefined) {
-        updateData.capabilities = { ...existingNumber.capabilities, ...body.capabilities };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        updateData.capabilities = { ...(existingNumber.capabilities as any), ...body.capabilities };
       }
 
       const updatedNumber = await prisma.phoneNumber.update({
@@ -245,20 +263,12 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
       });
 
       // Audit log
-      const { auditUpdate } = await import('../audit.js');
-      await auditUpdate(
-        tenantId,
-        'PhoneNumber',
-        numberId,
-        existingNumber,
-        updatedNumber,
-        {
-          tenantId,
-          userId: user?.id,
-          ipAddress: request.ip,
-          requestId: (request as any).id,
-        }
-      );
+      const { auditUpdate } = await import('../services/audit.js');
+      await auditUpdate(tenantId, 'PhoneNumber', numberId, existingNumber, updatedNumber, {
+        userId: (user as AuthenticatedUser)?.userId,
+        ipAddress: request.ip,
+        requestId: request.id,
+      });
 
       return {
         id: updatedNumber.id,
@@ -267,17 +277,19 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
         status: updatedNumber.status,
         provider: updatedNumber.provider,
         capabilities: updatedNumber.capabilities,
-        campaign: updatedNumber.campaign ? { id: updatedNumber.campaign.id, name: updatedNumber.campaign.name } : null,
+        campaign: updatedNumber.campaign
+          ? { id: updatedNumber.campaign.id, name: updatedNumber.campaign.name }
+          : null,
         purchasedAt: updatedNumber.purchasedAt?.toISOString(),
         createdAt: updatedNumber.createdAt.toISOString(),
         updatedAt: updatedNumber.updatedAt.toISOString(),
       };
     } catch (error: any) {
-      reply.code(400);
+      void reply.code(400);
       return {
         error: {
           code: 'UPDATE_FAILED',
-          message: error.message || 'Failed to update phone number',
+          message: (error as Error).message || 'Failed to update phone number',
         },
       };
     }
@@ -286,76 +298,80 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
 
 // Public API - Campaigns
 export async function registerCampaignRoutes(fastify: FastifyInstance) {
-  fastify.get('/api/v1/campaigns', async (request, reply) => {
-    const user = (request as any).user;
-    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
-    
-    if (!tenantId) {
-      reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
-    }
+  await Promise.resolve();
+  fastify.get<{ Querystring: { page?: string; limit?: string } }>(
+    '/api/v1/campaigns',
+    async (request, reply) => {
+      const user = (request as AuthRequest).user;
+      const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+      const tenantId = demoTenantId || user?.tenantId;
 
-    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
-    const page = parseInt((request.query as any)?.page || '1');
-    const limit = parseInt((request.query as any)?.limit || '20');
-    const skip = (page - 1) * limit;
+      if (!tenantId) {
+        void reply.code(401);
+        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      }
 
-    const [campaigns, total] = await Promise.all([
-      prisma.campaign.findMany({
-        where: { tenantId },
-        take: limit,
-        skip,
-        orderBy: { createdAt: 'desc' },
-        include: {
-          publisher: {
-            select: {
-              id: true,
-              name: true,
-              code: true,
+      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+      const page = parseInt(request.query.page || '1');
+      const limit = parseInt(request.query.limit || '20');
+      const skip = (page - 1) * limit;
+
+      const [campaigns, total] = await Promise.all([
+        prisma.campaign.findMany({
+          where: { tenantId },
+          take: limit,
+          skip,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            publisher: {
+              select: {
+                id: true,
+                name: true,
+                code: true,
+              },
+            },
+            flow: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            _count: {
+              select: {
+                calls: true,
+                phoneNumbers: true,
+              },
             },
           },
-          flow: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-          _count: {
-            select: {
-              calls: true,
-              phoneNumbers: true,
-            },
-          },
+        }),
+        prisma.campaign.count({ where: { tenantId } }),
+      ]);
+
+      return {
+        data: campaigns.map(c => ({
+          id: c.id,
+          name: c.name,
+          status: c.status,
+          publisherId: c.publisherId,
+          publisher: c.publisher,
+          flowId: c.flowId,
+          flow: c.flow,
+          callerIdPoolId: c.callerIdPoolId,
+          metadata: c.metadata,
+          calls: c._count.calls,
+          phoneNumbers: c._count.phoneNumbers,
+          createdAt: c.createdAt.toISOString(),
+          updatedAt: c.updatedAt.toISOString(),
+        })),
+        meta: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
         },
-      }),
-      prisma.campaign.count({ where: { tenantId } }),
-    ]);
-
-    return {
-      data: campaigns.map((c) => ({
-        id: c.id,
-        name: c.name,
-        status: c.status,
-        publisherId: c.publisherId,
-        publisher: c.publisher,
-        flowId: c.flowId,
-        flow: c.flow,
-        callerIdPoolId: c.callerIdPoolId,
-        metadata: c.metadata,
-        calls: c._count.calls,
-        phoneNumbers: c._count.phoneNumbers,
-        createdAt: c.createdAt.toISOString(),
-        updatedAt: c.updatedAt.toISOString(),
-      })),
-      meta: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
-  });
+      };
+    }
+  );
 
   fastify.post<{
     Body: {
@@ -368,24 +384,24 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
     };
   }>('/api/v1/campaigns', async (request, reply) => {
     try {
-      const user = (request as any).user;
+      const user = (request as AuthRequest).user;
       const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
       const tenantId = demoTenantId || user?.tenantId;
-      
+
       if (!tenantId) {
-        reply.code(401);
+        void reply.code(401);
         return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
       }
 
       const body = request.body;
 
       if (!body.name || !body.name.trim()) {
-        reply.code(400);
+        void reply.code(400);
         return { error: { code: 'VALIDATION_ERROR', message: 'Campaign name is required' } };
       }
 
       if (!body.publisherId) {
-        reply.code(400);
+        void reply.code(400);
         return { error: { code: 'VALIDATION_ERROR', message: 'Publisher ID is required' } };
       }
 
@@ -399,7 +415,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
       });
 
       if (!publisher) {
-        reply.code(404);
+        void reply.code(404);
         return { error: { code: 'NOT_FOUND', message: 'Publisher not found' } };
       }
 
@@ -413,7 +429,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
         });
 
         if (!flow) {
-          reply.code(404);
+          void reply.code(404);
           return { error: { code: 'NOT_FOUND', message: 'Flow not found' } };
         }
       }
@@ -428,7 +444,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
         });
 
         if (!callerIdPool) {
-          reply.code(404);
+          void reply.code(404);
           return { error: { code: 'NOT_FOUND', message: 'Caller ID pool not found' } };
         }
       }
@@ -442,12 +458,13 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
           status: body.status || 'ACTIVE',
           flowId: body.flowId || null,
           callerIdPoolId: body.callerIdPoolId || null,
-          metadata: body.metadata || {},
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          metadata: (body.metadata as any) || {},
         },
       });
 
       // Audit log
-      const { auditCreate } = await import('../audit.js');
+      const { auditCreate } = await import('../services/audit.js');
       await auditCreate(
         tenantId,
         'Campaign',
@@ -459,14 +476,13 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
           flowId: campaign.flowId,
         },
         {
-          tenantId,
-          userId: user?.id,
+          userId: (user as AuthenticatedUser)?.userId,
           ipAddress: request.ip,
-          requestId: (request as any).id,
+          requestId: request.id,
         }
       );
 
-      reply.code(201);
+      void reply.code(201);
       return {
         id: campaign.id,
         tenantId: campaign.tenantId,
@@ -480,54 +496,64 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
         updatedAt: campaign.updatedAt.toISOString(),
       };
     } catch (error: any) {
-      reply.code(400);
+      void reply.code(400);
       return {
         error: {
           code: 'CREATE_FAILED',
-          message: error.message || 'Failed to create campaign',
+          message: (error as Error).message || 'Failed to create campaign',
         },
       };
     }
   });
 
-  fastify.get('/api/v1/campaigns/:campaignId', async (request, reply) => {
-    return {
-      id: request.params.campaignId,
-      tenantId: '00000000-0000-0000-0000-000000000000',
-      publisherId: '00000000-0000-0000-0000-000000000000',
-      name: 'Campaign',
-      status: 'ACTIVE',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-  });
+  fastify.get<{ Params: { campaignId: string } }>(
+    '/api/v1/campaigns/:campaignId',
+    async (request, _reply) => {
+      return {
+        id: request.params.campaignId,
+        tenantId: '00000000-0000-0000-0000-000000000000',
+        publisherId: '00000000-0000-0000-0000-000000000000',
+        name: 'Campaign',
+        status: 'ACTIVE',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+  );
 
-  fastify.patch('/api/v1/campaigns/:campaignId', async (request, reply) => {
-    return {
-      id: request.params.campaignId,
-      tenantId: '00000000-0000-0000-0000-000000000000',
-      publisherId: '00000000-0000-0000-0000-000000000000',
-      name: 'Campaign',
-      status: 'ACTIVE',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-  });
+  fastify.patch<{ Params: { campaignId: string } }>(
+    '/api/v1/campaigns/:campaignId',
+    async (request, _reply) => {
+      return {
+        id: request.params.campaignId,
+        tenantId: '00000000-0000-0000-0000-000000000000',
+        publisherId: '00000000-0000-0000-0000-000000000000',
+        name: 'Campaign',
+        status: 'ACTIVE',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+  );
 
-  fastify.delete('/api/v1/campaigns/:campaignId', async (request, reply) => {
-    reply.code(204);
-  });
+  fastify.delete<{ Params: { campaignId: string } }>(
+    '/api/v1/campaigns/:campaignId',
+    async (_request, reply) => {
+      void reply.code(204);
+    }
+  );
 }
 
 // Public API - Flows
 export async function registerFlowRoutes(fastify: FastifyInstance) {
+  await Promise.resolve();
   fastify.get('/api/v1/flows', async (request, reply) => {
-    const user = (request as any).user;
+    const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
     const tenantId = demoTenantId || user?.tenantId;
-    
+
     if (!tenantId) {
-      reply.code(401);
+      void reply.code(401);
       return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
     }
 
@@ -547,7 +573,7 @@ export async function registerFlowRoutes(fastify: FastifyInstance) {
     });
 
     return {
-      data: flows.map((f) => ({
+      data: flows.map(f => ({
         id: f.id,
         name: f.name,
         version: f.versions[0]?.version || 1,
@@ -561,8 +587,8 @@ export async function registerFlowRoutes(fastify: FastifyInstance) {
     };
   });
 
-  fastify.post('/api/v1/flows', async (request, reply) => {
-    reply.code(201);
+  fastify.post('/api/v1/flows', async (_request, reply) => {
+    void reply.code(201);
     return {
       id: '00000000-0000-0000-0000-000000000000',
       tenantId: '00000000-0000-0000-0000-000000000000',
@@ -573,7 +599,7 @@ export async function registerFlowRoutes(fastify: FastifyInstance) {
     };
   });
 
-  fastify.get('/api/v1/flows/:flowId', async (request, reply) => {
+  fastify.get<{ Params: { flowId: string } }>('/api/v1/flows/:flowId', async (request, _reply) => {
     return {
       id: request.params.flowId,
       tenantId: '00000000-0000-0000-0000-000000000000',
@@ -584,27 +610,31 @@ export async function registerFlowRoutes(fastify: FastifyInstance) {
     };
   });
 
-  fastify.patch('/api/v1/flows/:flowId', async (request, reply) => {
-    return {
-      id: request.params.flowId,
-      tenantId: '00000000-0000-0000-0000-000000000000',
-      name: 'Flow',
-      status: 'DRAFT',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-  });
+  fastify.patch<{ Params: { flowId: string } }>(
+    '/api/v1/flows/:flowId',
+    async (request, _reply) => {
+      return {
+        id: request.params.flowId,
+        tenantId: '00000000-0000-0000-0000-000000000000',
+        name: 'Flow',
+        status: 'DRAFT',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+  );
 }
 
 // Public API - Publishers
 export async function registerPublisherRoutes(fastify: FastifyInstance) {
+  await Promise.resolve();
   fastify.get('/api/v1/publishers', async (request, reply) => {
-    const user = (request as any).user;
+    const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
     const tenantId = demoTenantId || user?.tenantId;
-    
+
     if (!tenantId) {
-      reply.code(401);
+      void reply.code(401);
       return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
     }
 
@@ -623,7 +653,7 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
     });
 
     return {
-      data: publishers.map((p) => ({
+      data: publishers.map(p => ({
         id: p.id,
         name: p.name,
         code: p.code,
@@ -637,61 +667,69 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
 
 // Public API - Calls
 export async function registerCallRoutes(fastify: FastifyInstance) {
-  fastify.get('/api/v1/calls', async (request, reply) => {
-    const user = (request as any).user;
-    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+  await Promise.resolve();
+  fastify.get<{ Querystring: { page?: string; limit?: string } }>(
+    '/api/v1/calls',
+    async (request, reply) => {
+      const user = (request as AuthRequest).user;
+      const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+      const tenantId = demoTenantId || user?.tenantId;
 
-    if (!tenantId) {
-      reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
-    }
+      if (!tenantId) {
+        void reply.code(401);
+        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      }
 
-    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
-    const page = parseInt((request.query as any)?.page || '1');
-    const limit = parseInt((request.query as any)?.limit || '20');
-    const skip = (page - 1) * limit;
+      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+      const page = parseInt(request.query.page || '1');
+      const limit = parseInt(request.query.limit || '20');
+      const skip = (page - 1) * limit;
 
-    const [calls, total] = await Promise.all([
-      prisma.call.findMany({
-        where: { tenantId },
-        take: limit,
-        skip,
-        orderBy: { createdAt: 'desc' },
-        include: {
-          campaign: true,
-          fromNumber: true,
+      const [calls, total] = await Promise.all([
+        prisma.call.findMany({
+          where: { tenantId },
+          take: limit,
+          skip,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            campaign: true,
+            fromNumber: true,
+          },
+        }),
+        prisma.call.count({ where: { tenantId } }),
+      ]);
+
+      return {
+        data: calls,
+        meta: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
         },
-      }),
-      prisma.call.count({ where: { tenantId } }),
-    ]);
-
-    return {
-      data: calls,
-      meta: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
-  });
+      };
+    }
+  );
 
   fastify.post('/api/v1/calls', async (request, reply) => {
-    const user = (request as any).user;
+    const user = (request as AuthRequest).user;
     if (!user || !user.tenantId) {
-      reply.code(401);
+      void reply.code(401);
       return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
     }
 
-    const body = request.body as any;
+    const body = request.body as {
+      estimatedMinutes?: number;
+      estimatedCost?: number;
+      toNumber?: string;
+    };
     const { quotaService } = await import('../services/quota-service.js');
 
     // Check concurrent calls quota
     const overrideToken = request.headers['x-quota-override'] as string | undefined;
     const concurrentCheck = await quotaService.checkConcurrentCalls(user.tenantId, overrideToken);
     if (!concurrentCheck.allowed) {
-      reply.code(403);
+      void reply.code(403);
       return {
         error: {
           code: 'QUOTA_EXCEEDED',
@@ -704,9 +742,13 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
 
     // Check daily minutes quota
     const estimatedMinutes = body.estimatedMinutes || 1;
-    const minutesCheck = await quotaService.checkDailyMinutes(user.tenantId, estimatedMinutes, overrideToken);
+    const minutesCheck = await quotaService.checkDailyMinutes(
+      user.tenantId,
+      estimatedMinutes,
+      overrideToken
+    );
     if (!minutesCheck.allowed) {
-      reply.code(403);
+      void reply.code(403);
       return {
         error: {
           code: 'QUOTA_EXCEEDED',
@@ -721,7 +763,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
     const estimatedCost = body.estimatedCost || 0;
     const budgetCheck = await quotaService.checkBudget(user.tenantId, estimatedCost, overrideToken);
     if (!budgetCheck.allowed) {
-      reply.code(403);
+      void reply.code(403);
       return {
         error: {
           code: 'BUDGET_EXCEEDED',
@@ -733,7 +775,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
     }
 
     // Create call (placeholder - implement actual call creation)
-    reply.code(201);
+    void reply.code(201);
     return {
       id: '00000000-0000-0000-0000-000000000000',
       tenantId: user.tenantId,
@@ -751,7 +793,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
     };
   });
 
-  fastify.get('/api/v1/calls/:callId', async (request, reply) => {
+  fastify.get<{ Params: { callId: string } }>('/api/v1/calls/:callId', async (request, _reply) => {
     return {
       id: request.params.callId,
       tenantId: '00000000-0000-0000-0000-000000000000',
@@ -767,9 +809,10 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
 
 // Public API - Recordings (legacy placeholder routes)
 export async function registerRecordingRoutes(fastify: FastifyInstance) {
+  await Promise.resolve();
   // These routes are now handled by registerRecordingManagementRoutes
   // Keeping for backward compatibility
-  fastify.get('/api/v1/recordings', async (request, reply) => {
+  fastify.get('/api/v1/recordings', async (_request, _reply) => {
     return {
       data: [],
       meta: {
@@ -781,64 +824,71 @@ export async function registerRecordingRoutes(fastify: FastifyInstance) {
     };
   });
 
-  fastify.get('/api/v1/recordings/:recordingId', async (request, reply) => {
-    return {
-      id: request.params.recordingId,
-      callId: '00000000-0000-0000-0000-000000000000',
-      url: 'https://example.com/recording.wav',
-      format: 'wav',
-      status: 'COMPLETED',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-  });
+  fastify.get<{ Params: { recordingId: string } }>(
+    '/api/v1/recordings/:recordingId',
+    async (request, _reply) => {
+      return {
+        id: request.params.recordingId,
+        callId: '00000000-0000-0000-0000-000000000000',
+        url: 'https://example.com/recording.wav',
+        format: 'wav',
+        status: 'COMPLETED',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+  );
 }
 
 // Public API - Webhooks
 export async function registerWebhookRoutes(fastify: FastifyInstance) {
-  fastify.get('/api/v1/webhooks', async (request, reply) => {
-    const user = (request as any).user;
-    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
-    
-    if (!tenantId) {
-      reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+  await Promise.resolve();
+  fastify.get<{ Querystring: { page?: string; limit?: string } }>(
+    '/api/v1/webhooks',
+    async (request, reply) => {
+      const user = (request as AuthRequest).user;
+      const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+      const tenantId = demoTenantId || user?.tenantId;
+
+      if (!tenantId) {
+        void reply.code(401);
+        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      }
+
+      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+      const page = parseInt(request.query.page || '1');
+      const limit = parseInt(request.query.limit || '20');
+      const skip = (page - 1) * limit;
+
+      const [webhooks, total] = await Promise.all([
+        prisma.webhook.findMany({
+          where: { tenantId },
+          take: limit,
+          skip,
+          orderBy: { createdAt: 'desc' },
+        }),
+        prisma.webhook.count({ where: { tenantId } }),
+      ]);
+
+      return {
+        data: webhooks.map(w => ({
+          id: w.id,
+          url: w.url,
+          events: w.events,
+          status: w.status.toLowerCase(),
+          lastTriggeredAt: w.lastTriggeredAt?.toISOString() || null,
+          createdAt: w.createdAt.toISOString(),
+          updatedAt: w.updatedAt.toISOString(),
+        })),
+        meta: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
     }
-
-    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
-    const page = parseInt((request.query as any)?.page || '1');
-    const limit = parseInt((request.query as any)?.limit || '20');
-    const skip = (page - 1) * limit;
-
-    const [webhooks, total] = await Promise.all([
-      prisma.webhook.findMany({
-        where: { tenantId },
-        take: limit,
-        skip,
-        orderBy: { createdAt: 'desc' },
-      }),
-      prisma.webhook.count({ where: { tenantId } }),
-    ]);
-
-    return {
-      data: webhooks.map((w) => ({
-        id: w.id,
-        url: w.url,
-        events: w.events,
-        status: w.status.toLowerCase(),
-        lastTriggeredAt: w.lastTriggeredAt?.toISOString() || null,
-        createdAt: w.createdAt.toISOString(),
-        updatedAt: w.updatedAt.toISOString(),
-      })),
-      meta: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
-  });
+  );
 
   fastify.post<{
     Body: {
@@ -847,24 +897,24 @@ export async function registerWebhookRoutes(fastify: FastifyInstance) {
       status?: 'ACTIVE' | 'INACTIVE';
     };
   }>('/api/v1/webhooks', async (request, reply) => {
-    const user = (request as any).user;
+    const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
     const tenantId = demoTenantId || user?.tenantId;
-    
+
     if (!tenantId) {
-      reply.code(401);
+      void reply.code(401);
       return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
     }
 
     const body = request.body;
 
     if (!body.url || !body.url.trim()) {
-      reply.code(400);
+      void reply.code(400);
       return { error: { code: 'VALIDATION_ERROR', message: 'URL is required' } };
     }
 
     if (!body.events || !Array.isArray(body.events) || body.events.length === 0) {
-      reply.code(400);
+      void reply.code(400);
       return { error: { code: 'VALIDATION_ERROR', message: 'At least one event is required' } };
     }
 
@@ -872,13 +922,13 @@ export async function registerWebhookRoutes(fastify: FastifyInstance) {
     try {
       new URL(body.url);
     } catch {
-      reply.code(400);
+      void reply.code(400);
       return { error: { code: 'VALIDATION_ERROR', message: 'Invalid URL format' } };
     }
 
     const prisma = (await import('../lib/prisma.js')).getPrismaClient();
     const { randomBytes } = await import('crypto');
-    
+
     // Generate webhook secret
     const secret = randomBytes(32).toString('hex');
 
@@ -893,7 +943,7 @@ export async function registerWebhookRoutes(fastify: FastifyInstance) {
     });
 
     // Audit log
-    const { auditCreate } = await import('../audit.js');
+    const { auditCreate } = await import('../services/audit.js');
     await auditCreate(
       tenantId,
       'Webhook',
@@ -904,14 +954,13 @@ export async function registerWebhookRoutes(fastify: FastifyInstance) {
         status: webhook.status,
       },
       {
-        tenantId,
-        userId: user?.id,
+        userId: user?.userId,
         ipAddress: request.ip,
-        requestId: (request as any).id,
+        requestId: request.id,
       }
     );
 
-    reply.code(201);
+    void reply.code(201);
     return {
       id: webhook.id,
       tenantId: webhook.tenantId,
@@ -923,42 +972,45 @@ export async function registerWebhookRoutes(fastify: FastifyInstance) {
     };
   });
 
-  fastify.get('/api/v1/webhooks/:webhookId', async (request, reply) => {
-    const user = (request as any).user;
-    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
-    
-    if (!tenantId) {
-      reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+  fastify.get<{ Params: { webhookId: string } }>(
+    '/api/v1/webhooks/:webhookId',
+    async (request, reply) => {
+      const user = (request as AuthRequest).user;
+      const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+      const tenantId = demoTenantId || user?.tenantId;
+
+      if (!tenantId) {
+        void reply.code(401);
+        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      }
+
+      const { webhookId } = request.params as { webhookId: string };
+      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+
+      const webhook = await prisma.webhook.findFirst({
+        where: {
+          id: webhookId,
+          tenantId,
+        },
+      });
+
+      if (!webhook) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Webhook not found' } };
+      }
+
+      return {
+        id: webhook.id,
+        tenantId: webhook.tenantId,
+        url: webhook.url,
+        events: webhook.events,
+        status: webhook.status.toLowerCase(),
+        lastTriggeredAt: webhook.lastTriggeredAt?.toISOString() || null,
+        createdAt: webhook.createdAt.toISOString(),
+        updatedAt: webhook.updatedAt.toISOString(),
+      };
     }
-
-    const { webhookId } = request.params as { webhookId: string };
-    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
-
-    const webhook = await prisma.webhook.findFirst({
-      where: {
-        id: webhookId,
-        tenantId,
-      },
-    });
-
-    if (!webhook) {
-      reply.code(404);
-      return { error: { code: 'NOT_FOUND', message: 'Webhook not found' } };
-    }
-
-    return {
-      id: webhook.id,
-      tenantId: webhook.tenantId,
-      url: webhook.url,
-      events: webhook.events,
-      status: webhook.status.toLowerCase(),
-      lastTriggeredAt: webhook.lastTriggeredAt?.toISOString() || null,
-      createdAt: webhook.createdAt.toISOString(),
-      updatedAt: webhook.updatedAt.toISOString(),
-    };
-  });
+  );
 
   fastify.patch<{
     Params: { webhookId: string };
@@ -968,12 +1020,12 @@ export async function registerWebhookRoutes(fastify: FastifyInstance) {
       status?: 'ACTIVE' | 'INACTIVE' | 'FAILED';
     };
   }>('/api/v1/webhooks/:webhookId', async (request, reply) => {
-    const user = (request as any).user;
+    const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
     const tenantId = demoTenantId || user?.tenantId;
-    
+
     if (!tenantId) {
-      reply.code(401);
+      void reply.code(401);
       return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
     }
 
@@ -989,7 +1041,7 @@ export async function registerWebhookRoutes(fastify: FastifyInstance) {
     });
 
     if (!existingWebhook) {
-      reply.code(404);
+      void reply.code(404);
       return { error: { code: 'NOT_FOUND', message: 'Webhook not found' } };
     }
 
@@ -999,13 +1051,13 @@ export async function registerWebhookRoutes(fastify: FastifyInstance) {
         new URL(body.url);
         updateData.url = body.url.trim();
       } catch {
-        reply.code(400);
+        void reply.code(400);
         return { error: { code: 'VALIDATION_ERROR', message: 'Invalid URL format' } };
       }
     }
     if (body.events !== undefined) {
       if (!Array.isArray(body.events) || body.events.length === 0) {
-        reply.code(400);
+        void reply.code(400);
         return { error: { code: 'VALIDATION_ERROR', message: 'At least one event is required' } };
       }
       updateData.events = body.events;
@@ -1020,20 +1072,12 @@ export async function registerWebhookRoutes(fastify: FastifyInstance) {
     });
 
     // Audit log
-    const { auditUpdate } = await import('../audit.js');
-    await auditUpdate(
-      tenantId,
-      'Webhook',
-      webhookId,
-      existingWebhook,
-      updatedWebhook,
-      {
-        tenantId,
-        userId: user?.id,
-        ipAddress: request.ip,
-        requestId: (request as any).id,
-      }
-    );
+    const { auditUpdate } = await import('../services/audit.js');
+    await auditUpdate(tenantId, 'Webhook', webhookId, existingWebhook, updatedWebhook, {
+      userId: user?.userId,
+      ipAddress: request.ip,
+      requestId: request.id,
+    });
 
     return {
       id: updatedWebhook.id,
@@ -1047,125 +1091,124 @@ export async function registerWebhookRoutes(fastify: FastifyInstance) {
     };
   });
 
-  fastify.delete('/api/v1/webhooks/:webhookId', async (request, reply) => {
-    const user = (request as any).user;
-    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
-    
-    if (!tenantId) {
-      reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
-    }
+  fastify.delete<{ Params: { webhookId: string } }>(
+    '/api/v1/webhooks/:webhookId',
+    async (request, reply) => {
+      const user = (request as AuthRequest).user;
+      const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+      const tenantId = demoTenantId || user?.tenantId;
 
-    const { webhookId } = request.params as { webhookId: string };
-    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
-
-    const webhook = await prisma.webhook.findFirst({
-      where: {
-        id: webhookId,
-        tenantId,
-      },
-    });
-
-    if (!webhook) {
-      reply.code(404);
-      return { error: { code: 'NOT_FOUND', message: 'Webhook not found' } };
-    }
-
-    await prisma.webhook.delete({
-      where: { id: webhookId },
-    });
-
-    // Audit log
-    const { auditCreate } = await import('../audit.js');
-    await auditCreate(
-      tenantId,
-      'Webhook',
-      webhookId,
-      { deleted: true, url: webhook.url },
-      {
-        tenantId,
-        userId: user?.id,
-        ipAddress: request.ip,
-        requestId: (request as any).id,
+      if (!tenantId) {
+        void reply.code(401);
+        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
       }
-    );
 
-    reply.code(204);
-  });
+      const { webhookId } = request.params as { webhookId: string };
+      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+
+      const webhook = await prisma.webhook.findFirst({
+        where: {
+          id: webhookId,
+          tenantId,
+        },
+      });
+
+      if (!webhook) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Webhook not found' } };
+      }
+
+      await prisma.webhook.delete({
+        where: { id: webhookId },
+      });
+
+      // Audit log
+      const { auditCreate } = await import('../services/audit.js');
+      await auditCreate(
+        tenantId,
+        'Webhook',
+        webhookId,
+        { deleted: true, url: webhook.url },
+        {
+          userId: (user as AuthenticatedUser)?.userId,
+          ipAddress: request.ip,
+          requestId: request.id,
+        }
+      );
+
+      return reply.code(204).send();
+    }
+  );
 }
 
 // Public API - Users
 export async function registerUserRoutes(fastify: FastifyInstance) {
-  fastify.get('/api/v1/users', async (request, reply) => {
-    const user = (request as any).user;
-    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
-    
-    if (!tenantId) {
-      reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
-    }
+  await Promise.resolve();
+  fastify.get<{ Querystring: { page?: string; limit?: string } }>(
+    '/api/v1/users',
+    async (request, reply) => {
+      const user = (request as AuthRequest).user;
+      const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+      const tenantId = demoTenantId || user?.tenantId;
 
-    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
-    const page = parseInt((request.query as any)?.page || '1');
-    const limit = parseInt((request.query as any)?.limit || '20');
-    const skip = (page - 1) * limit;
+      if (!tenantId) {
+        void reply.code(401);
+        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      }
 
-    const [users, total] = await Promise.all([
-      prisma.user.findMany({
-        where: { tenantId },
-        take: limit,
-        skip,
-        orderBy: { createdAt: 'desc' },
-        include: {
-          roles: {
-            include: {
-              role: true,
-            },
-          },
-        },
-        select: {
-          id: true,
-          email: true,
-          firstName: true,
-          lastName: true,
-          status: true,
-          createdAt: true,
-          lastLoginAt: true,
-          roles: {
-            include: {
-              role: {
-                select: {
-                  name: true,
+      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+      const page = parseInt(request.query.page || '1');
+      const limit = parseInt(request.query.limit || '20');
+      const skip = (page - 1) * limit;
+
+      const [users, total] = await Promise.all([
+        prisma.user.findMany({
+          where: { tenantId },
+          take: limit,
+          skip,
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            status: true,
+            createdAt: true,
+            lastLoginAt: true,
+            roles: {
+              select: {
+                role: {
+                  select: {
+                    name: true,
+                  },
                 },
               },
             },
           },
-        },
-      }),
-      prisma.user.count({ where: { tenantId } }),
-    ]);
+        }),
+        prisma.user.count({ where: { tenantId } }),
+      ]);
 
-    return {
-      data: users.map((u) => ({
-        id: u.id,
-        email: u.email,
-        firstName: u.firstName,
-        lastName: u.lastName,
-        status: u.status.toLowerCase(),
-        roles: u.roles.map((ur) => ur.role.name.toLowerCase()),
-        invitedAt: u.createdAt.toISOString(),
-        lastLoginAt: u.lastLoginAt?.toISOString() || null,
-      })),
-      meta: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
-  });
+      return {
+        data: users.map(u => ({
+          id: u.id,
+          email: u.email,
+          firstName: u.firstName,
+          lastName: u.lastName,
+          status: u.status.toLowerCase(),
+          roles: u.roles.map(ur => ur.role.name.toLowerCase()),
+          invitedAt: u.createdAt.toISOString(),
+          lastLoginAt: u.lastLoginAt?.toISOString() || null,
+        })),
+        meta: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
+    }
+  );
 
   fastify.post<{
     Body: {
@@ -1175,31 +1218,31 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
       roleIds?: string[];
     };
   }>('/api/v1/users/invite', async (request, reply) => {
-    const user = (request as any).user;
+    const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
     const tenantId = demoTenantId || user?.tenantId;
-    
+
     if (!tenantId) {
-      reply.code(401);
+      void reply.code(401);
       return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
     }
 
     const body = request.body;
 
     if (!body.email || !body.email.trim()) {
-      reply.code(400);
+      void reply.code(400);
       return { error: { code: 'VALIDATION_ERROR', message: 'Email is required' } };
     }
 
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(body.email)) {
-      reply.code(400);
+      void reply.code(400);
       return { error: { code: 'VALIDATION_ERROR', message: 'Invalid email format' } };
     }
 
     const prisma = (await import('../lib/prisma.js')).getPrismaClient();
-    
+
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
       where: {
@@ -1211,7 +1254,7 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
     });
 
     if (existingUser) {
-      reply.code(409);
+      void reply.code(409);
       return { error: { code: 'CONFLICT', message: 'User with this email already exists' } };
     }
 
@@ -1241,7 +1284,7 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
           if (firstRole) {
             roleIds = [firstRole.id];
           } else {
-            reply.code(400);
+            void reply.code(400);
             return { error: { code: 'NO_ROLES', message: 'No roles available in system' } };
           }
         }
@@ -1259,10 +1302,10 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
         status: 'ACTIVE',
         metadata: {
           tempPassword: true, // Flag that password needs to be changed
-          invitedBy: user?.id,
+          invitedBy: (user as AuthenticatedUser)?.userId,
         },
         roles: {
-          create: roleIds.map((roleId) => ({
+          create: roleIds.map(roleId => ({
             roleId,
           })),
         },
@@ -1277,7 +1320,7 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
     });
 
     // Audit log
-    const { auditCreate } = await import('../audit.js');
+    const { auditCreate } = await import('../services/audit.js');
     await auditCreate(
       tenantId,
       'User',
@@ -1286,27 +1329,26 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
         email: newUser.email,
         firstName: newUser.firstName,
         lastName: newUser.lastName,
-        roles: newUser.roles.map((r) => r.role.name),
+        roles: newUser.roles.map(r => r.role.name),
       },
       {
-        tenantId,
-        userId: user?.id,
+        userId: (user as AuthenticatedUser)?.userId,
         ipAddress: request.ip,
-        requestId: (request as any).id,
+        requestId: request.id,
       }
     );
 
     // TODO: Send invitation email with temp password
     // For now, we'll just return success (in production, send email)
 
-    reply.code(201);
+    void reply.code(201);
     return {
       id: newUser.id,
       email: newUser.email,
       firstName: newUser.firstName,
       lastName: newUser.lastName,
       status: newUser.status.toLowerCase(),
-      roles: newUser.roles.map((r) => r.role.name.toLowerCase()),
+      roles: newUser.roles.map(r => r.role.name.toLowerCase()),
       createdAt: newUser.createdAt.toISOString(),
       // In production, don't return temp password - send via email
       tempPassword: tempPassword, // Only for development/testing
@@ -1316,21 +1358,23 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
 
 // Public API - Reporting
 export async function registerReportingRoutes(fastify: FastifyInstance) {
+  await Promise.resolve();
   const { analyticsService } = await import('../services/analytics.js');
   const { getPrismaClient } = await import('../lib/prisma.js');
   const { createHash } = await import('crypto');
 
   // Optional authentication hook - try to authenticate but don't fail if it doesn't work
-  fastify.addHook('onRequest', async (request, reply) => {
+  fastify.addHook('onRequest', async (request, _reply) => {
     const authHeader = request.headers.authorization;
     const apiKey = request.headers['x-api-key'] as string;
-    
+
     // Try to authenticate without failing the request
     if (authHeader && authHeader.startsWith('Bearer ')) {
       try {
         const token = authHeader.substring(7);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const decoded = await (request as any).jwtVerify(token);
-        (request as any).user = decoded;
+        (request as AuthRequest).user = decoded as AuthenticatedUser;
       } catch (err) {
         // Ignore - will use default tenant
       }
@@ -1343,13 +1387,15 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
           include: { tenant: true },
         });
 
-        if (dbApiKey && dbApiKey.status === 'ACTIVE' && 
-            (!dbApiKey.expiresAt || dbApiKey.expiresAt > new Date()) &&
-            dbApiKey.tenant.status === 'ACTIVE') {
-          const scopes = (dbApiKey.scopes && Array.isArray(dbApiKey.scopes))
-            ? dbApiKey.scopes as string[]
-            : [];
-          (request as any).user = {
+        if (
+          dbApiKey &&
+          dbApiKey.status === 'ACTIVE' &&
+          (!dbApiKey.expiresAt || dbApiKey.expiresAt > new Date()) &&
+          dbApiKey.tenant.status === 'ACTIVE'
+        ) {
+          const scopes =
+            dbApiKey.scopes && Array.isArray(dbApiKey.scopes) ? (dbApiKey.scopes as string[]) : [];
+          (request as AuthRequest).user = {
             tenantId: dbApiKey.tenantId,
             apiKeyId: dbApiKey.id,
             scopes,
@@ -1370,8 +1416,8 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
       buyerId?: string;
       granularity?: 'hour' | 'day';
     };
-  }>('/api/v1/reporting/metrics', async (request, reply) => {
-    const user = (request as any).user;
+  }>('/api/v1/reporting/metrics', async (request, _reply) => {
+    const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
     const tenantId = demoTenantId || user?.tenantId || 'default';
     const startDate = request.query.startDate
@@ -1394,8 +1440,8 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     return result;
   });
 
-  fastify.get('/api/v1/reporting/calls', async (request, reply) => {
-    const tenantId = (request as any).user?.tenantId || 'default';
+  fastify.get('/api/v1/reporting/calls', async (request, _reply) => {
+    const tenantId = (request as AuthRequest).user?.tenantId || 'default';
     const startDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const endDate = new Date();
 
@@ -1410,189 +1456,196 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     return result;
   });
 
-  fastify.get<{ Params: { campaignId: string }; Querystring: { startDate?: string; endDate?: string } }>(
-    '/api/v1/reporting/campaigns/:campaignId',
-    async (request, reply) => {
-      const tenantId = (request as any).user?.tenantId || 'default';
-      const startDate = request.query.startDate
-        ? new Date(request.query.startDate)
-        : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // Default: last 7 days
-      const endDate = request.query.endDate ? new Date(request.query.endDate) : new Date();
+  fastify.get<{
+    Params: { campaignId: string };
+    Querystring: { startDate?: string; endDate?: string };
+  }>('/api/v1/reporting/campaigns/:campaignId', async (request, _reply) => {
+    const tenantId = (request as AuthRequest).user?.tenantId || 'default';
+    const startDate = request.query.startDate
+      ? new Date(request.query.startDate)
+      : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // Default: last 7 days
+    const endDate = request.query.endDate ? new Date(request.query.endDate) : new Date();
 
-      const filters = {
-        tenantId,
-        startDate,
-        endDate,
-        campaignId: request.params.campaignId,
-        granularity: 'day' as const,
-      };
+    const filters = {
+      tenantId,
+      startDate,
+      endDate,
+      campaignId: request.params.campaignId,
+      granularity: 'day' as const,
+    };
 
-      const result = await analyticsService.getMetrics(filters);
-      return {
-        campaignId: request.params.campaignId,
-        ...result,
-      };
-    }
-  );
+    const result = await analyticsService.getMetrics(filters);
+    return {
+      campaignId: request.params.campaignId,
+      ...result,
+    };
+  });
 }
 
 // Public API - Billing
 export async function registerBillingRoutes(fastify: FastifyInstance) {
-  fastify.get('/api/v1/billing/invoices', async (request, reply) => {
-    const user = (request as any).user;
-    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
-    
-    if (!tenantId) {
-      reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
-    }
+  await Promise.resolve();
+  fastify.get<{ Querystring: { page?: string; limit?: string } }>(
+    '/api/v1/billing/invoices',
+    async (request, reply) => {
+      const user = (request as AuthRequest).user;
+      const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+      const tenantId = demoTenantId || user?.tenantId;
 
-    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
-    const page = parseInt((request.query as any)?.page || '1');
-    const limit = parseInt((request.query as any)?.limit || '20');
-    const skip = (page - 1) * limit;
+      if (!tenantId) {
+        void reply.code(401);
+        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      }
 
-    // Get billing account for tenant
-    const billingAccount = await prisma.billingAccount.findFirst({
-      where: { tenantId },
-    });
+      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+      const page = parseInt(request.query.page || '1');
+      const limit = parseInt(request.query.limit || '20');
+      const skip = (page - 1) * limit;
 
-    if (!billingAccount) {
+      // Get billing account for tenant
+      const billingAccount = await prisma.billingAccount.findFirst({
+        where: { tenantId },
+      });
+
+      if (!billingAccount) {
+        return {
+          data: [],
+          meta: {
+            page,
+            limit,
+            total: 0,
+            totalPages: 0,
+          },
+        };
+      }
+
+      const [invoices, total] = await Promise.all([
+        prisma.invoice.findMany({
+          where: { billingAccountId: billingAccount.id },
+          take: limit,
+          skip,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            lines: {
+              select: {
+                id: true,
+                description: true,
+                quantity: true,
+                unitPrice: true,
+                total: true,
+              },
+            },
+          },
+        }),
+        prisma.invoice.count({ where: { billingAccountId: billingAccount.id } }),
+      ]);
+
       return {
-        data: [],
+        data: invoices.map(inv => ({
+          id: inv.id,
+          invoiceNumber: inv.invoiceNumber,
+          status: inv.status.toLowerCase(),
+          period: {
+            start: inv.periodStart.toISOString(),
+            end: inv.periodEnd.toISOString(),
+          },
+          subtotal: inv.subtotal.toString(),
+          tax: inv.tax.toString(),
+          total: inv.total.toString(),
+          dueDate: inv.dueDate.toISOString(),
+          paidAt: inv.paidAt?.toISOString() || null,
+          lines: inv.lines.map(line => ({
+            id: line.id,
+            description: line.description,
+            quantity: line.quantity.toString(),
+            unitPrice: line.unitPrice.toString(),
+            total: line.total.toString(),
+          })),
+          createdAt: inv.createdAt.toISOString(),
+          updatedAt: inv.updatedAt.toISOString(),
+        })),
         meta: {
           page,
           limit,
-          total: 0,
-          totalPages: 0,
+          total,
+          totalPages: Math.ceil(total / limit),
         },
       };
     }
+  );
 
-    const [invoices, total] = await Promise.all([
-      prisma.invoice.findMany({
-        where: { billingAccountId: billingAccount.id },
-        take: limit,
-        skip,
-        orderBy: { createdAt: 'desc' },
+  fastify.get<{ Params: { invoiceId: string } }>(
+    '/api/v1/billing/invoices/:invoiceId',
+    async (request, reply) => {
+      const user = (request as AuthRequest).user;
+      const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+      const tenantId = demoTenantId || user?.tenantId;
+
+      if (!tenantId) {
+        void reply.code(401);
+        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      }
+
+      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+      const { invoiceId } = request.params as { invoiceId: string };
+
+      // Get billing account for tenant
+      const billingAccount = await prisma.billingAccount.findFirst({
+        where: { tenantId },
+      });
+
+      if (!billingAccount) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Billing account not found' } };
+      }
+
+      const invoice = await prisma.invoice.findFirst({
+        where: {
+          id: invoiceId,
+          billingAccountId: billingAccount.id,
+        },
         include: {
-          lines: {
-            select: {
-              id: true,
-              description: true,
-              quantity: true,
-              unitPrice: true,
-              total: true,
-            },
-          },
+          lines: true,
         },
-      }),
-      prisma.invoice.count({ where: { billingAccountId: billingAccount.id } }),
-    ]);
+      });
 
-    return {
-      data: invoices.map((inv) => ({
-        id: inv.id,
-        invoiceNumber: inv.invoiceNumber,
-        status: inv.status.toLowerCase(),
-        period: {
-          start: inv.periodStart.toISOString(),
-          end: inv.periodEnd.toISOString(),
-        },
-        subtotal: inv.subtotal.toString(),
-        tax: inv.tax.toString(),
-        total: inv.total.toString(),
-        dueDate: inv.dueDate.toISOString(),
-        paidAt: inv.paidAt?.toISOString() || null,
-        lines: inv.lines.map((line) => ({
+      if (!invoice) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Invoice not found' } };
+      }
+
+      return {
+        id: invoice.id,
+        billingAccountId: invoice.billingAccountId,
+        invoiceNumber: invoice.invoiceNumber,
+        status: invoice.status.toLowerCase(),
+        periodStart: invoice.periodStart.toISOString(),
+        periodEnd: invoice.periodEnd.toISOString(),
+        subtotal: invoice.subtotal.toString(),
+        tax: invoice.tax.toString(),
+        total: invoice.total.toString(),
+        dueDate: invoice.dueDate.toISOString(),
+        paidAt: invoice.paidAt?.toISOString() || null,
+        lines: invoice.lines.map(line => ({
           id: line.id,
           description: line.description,
           quantity: line.quantity.toString(),
           unitPrice: line.unitPrice.toString(),
           total: line.total.toString(),
         })),
-        createdAt: inv.createdAt.toISOString(),
-        updatedAt: inv.updatedAt.toISOString(),
-      })),
-      meta: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
-  });
-
-  fastify.get('/api/v1/billing/invoices/:invoiceId', async (request, reply) => {
-    const user = (request as any).user;
-    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
-    
-    if (!tenantId) {
-      reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+        createdAt: invoice.createdAt.toISOString(),
+        updatedAt: invoice.updatedAt.toISOString(),
+      };
     }
-
-    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
-    const { invoiceId } = request.params as { invoiceId: string };
-
-    // Get billing account for tenant
-    const billingAccount = await prisma.billingAccount.findFirst({
-      where: { tenantId },
-    });
-
-    if (!billingAccount) {
-      reply.code(404);
-      return { error: { code: 'NOT_FOUND', message: 'Billing account not found' } };
-    }
-
-    const invoice = await prisma.invoice.findFirst({
-      where: {
-        id: invoiceId,
-        billingAccountId: billingAccount.id,
-      },
-      include: {
-        lines: true,
-      },
-    });
-
-    if (!invoice) {
-      reply.code(404);
-      return { error: { code: 'NOT_FOUND', message: 'Invoice not found' } };
-    }
-
-    return {
-      id: invoice.id,
-      billingAccountId: invoice.billingAccountId,
-      invoiceNumber: invoice.invoiceNumber,
-      status: invoice.status.toLowerCase(),
-      periodStart: invoice.periodStart.toISOString(),
-      periodEnd: invoice.periodEnd.toISOString(),
-      subtotal: invoice.subtotal.toString(),
-      tax: invoice.tax.toString(),
-      total: invoice.total.toString(),
-      dueDate: invoice.dueDate.toISOString(),
-      paidAt: invoice.paidAt?.toISOString() || null,
-      lines: invoice.lines.map((line) => ({
-        id: line.id,
-        description: line.description,
-        quantity: line.quantity.toString(),
-        unitPrice: line.unitPrice.toString(),
-        total: line.total.toString(),
-      })),
-      createdAt: invoice.createdAt.toISOString(),
-      updatedAt: invoice.updatedAt.toISOString(),
-    };
-  });
+  );
 
   fastify.get('/api/v1/billing/balance', async (request, reply) => {
-    const user = (request as any).user;
+    const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
     const tenantId = demoTenantId || user?.tenantId;
-    
+
     if (!tenantId) {
-      reply.code(401);
+      void reply.code(401);
       return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
     }
 
@@ -1621,13 +1674,13 @@ export async function registerBillingRoutes(fastify: FastifyInstance) {
     });
 
     const available = balances
-      .filter((b) => b.type === 'AVAILABLE')
+      .filter(b => b.type === 'AVAILABLE')
       .reduce((sum, b) => sum + Number(b.amount), 0);
     const pending = balances
-      .filter((b) => b.type === 'PENDING')
+      .filter(b => b.type === 'PENDING')
       .reduce((sum, b) => sum + Number(b.amount), 0);
     const held = balances
-      .filter((b) => b.type === 'HELD')
+      .filter(b => b.type === 'HELD')
       .reduce((sum, b) => sum + Number(b.amount), 0);
     const total = available + pending + held;
 
@@ -1644,7 +1697,8 @@ export async function registerBillingRoutes(fastify: FastifyInstance) {
 
 // Admin API - Tenants
 export async function registerAdminTenantRoutes(fastify: FastifyInstance) {
-  fastify.get('/admin/api/v1/tenants', async (request, reply) => {
+  await Promise.resolve();
+  fastify.get('/admin/api/v1/tenants', async (_request, _reply) => {
     return {
       data: [],
       meta: {
@@ -1656,8 +1710,8 @@ export async function registerAdminTenantRoutes(fastify: FastifyInstance) {
     };
   });
 
-  fastify.post('/admin/api/v1/tenants', async (request, reply) => {
-    reply.code(201);
+  fastify.post('/admin/api/v1/tenants', async (_request, reply) => {
+    void reply.code(201);
     return {
       id: '00000000-0000-0000-0000-000000000000',
       name: 'Tenant',
@@ -1668,33 +1722,40 @@ export async function registerAdminTenantRoutes(fastify: FastifyInstance) {
     };
   });
 
-  fastify.get('/admin/api/v1/tenants/:tenantId', async (request, reply) => {
-    return {
-      id: request.params.tenantId,
-      name: 'Tenant',
-      slug: 'tenant',
-      status: 'ACTIVE',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-  });
+  fastify.get<{ Params: { tenantId: string } }>(
+    '/admin/api/v1/tenants/:tenantId',
+    async (request, _reply) => {
+      return {
+        id: request.params.tenantId,
+        name: 'Tenant',
+        slug: 'tenant',
+        status: 'ACTIVE',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+  );
 
-  fastify.patch('/admin/api/v1/tenants/:tenantId', async (request, reply) => {
-    return {
-      id: request.params.tenantId,
-      name: 'Tenant',
-      slug: 'tenant',
-      status: 'ACTIVE',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-  });
+  fastify.patch<{ Params: { tenantId: string } }>(
+    '/admin/api/v1/tenants/:tenantId',
+    async (request, _reply) => {
+      return {
+        id: request.params.tenantId,
+        name: 'Tenant',
+        slug: 'tenant',
+        status: 'ACTIVE',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+  );
 }
 
 // Admin API - Numbers
 export async function registerAdminNumberRoutes(fastify: FastifyInstance) {
-  fastify.post('/admin/api/v1/numbers/provision', async (request, reply) => {
-    reply.code(201);
+  await Promise.resolve();
+  fastify.post('/admin/api/v1/numbers/provision', async (_request, reply) => {
+    void reply.code(201);
     return {
       id: '00000000-0000-0000-0000-000000000000',
       tenantId: '00000000-0000-0000-0000-000000000000',
@@ -1708,7 +1769,8 @@ export async function registerAdminNumberRoutes(fastify: FastifyInstance) {
 
 // Admin API - Carriers
 export async function registerAdminCarrierRoutes(fastify: FastifyInstance) {
-  fastify.get('/admin/api/v1/carriers', async (request, reply) => {
+  await Promise.resolve();
+  fastify.get('/admin/api/v1/carriers', async (_request, _reply) => {
     return {
       data: [],
       meta: {
@@ -1720,8 +1782,8 @@ export async function registerAdminCarrierRoutes(fastify: FastifyInstance) {
     };
   });
 
-  fastify.post('/admin/api/v1/carriers', async (request, reply) => {
-    reply.code(201);
+  fastify.post('/admin/api/v1/carriers', async (_request, reply) => {
+    void reply.code(201);
     return {
       id: '00000000-0000-0000-0000-000000000000',
       tenantId: '00000000-0000-0000-0000-000000000000',
@@ -1733,34 +1795,41 @@ export async function registerAdminCarrierRoutes(fastify: FastifyInstance) {
     };
   });
 
-  fastify.get('/admin/api/v1/carriers/:carrierId', async (request, reply) => {
-    return {
-      id: request.params.carrierId,
-      tenantId: '00000000-0000-0000-0000-000000000000',
-      name: 'Carrier',
-      code: 'CARRIER_001',
-      status: 'ACTIVE',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-  });
+  fastify.get<{ Params: { carrierId: string } }>(
+    '/admin/api/v1/carriers/:carrierId',
+    async (request, _reply) => {
+      return {
+        id: request.params.carrierId,
+        tenantId: '00000000-0000-0000-0000-000000000000',
+        name: 'Carrier',
+        code: 'CARRIER_001',
+        status: 'ACTIVE',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+  );
 
-  fastify.patch('/admin/api/v1/carriers/:carrierId', async (request, reply) => {
-    return {
-      id: request.params.carrierId,
-      tenantId: '00000000-0000-0000-0000-000000000000',
-      name: 'Carrier',
-      code: 'CARRIER_001',
-      status: 'ACTIVE',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-  });
+  fastify.patch<{ Params: { carrierId: string } }>(
+    '/admin/api/v1/carriers/:carrierId',
+    async (request, _reply) => {
+      return {
+        id: request.params.carrierId,
+        tenantId: '00000000-0000-0000-0000-000000000000',
+        name: 'Carrier',
+        code: 'CARRIER_001',
+        status: 'ACTIVE',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+  );
 }
 
 // Admin API - Trunks
 export async function registerAdminTrunkRoutes(fastify: FastifyInstance) {
-  fastify.get('/admin/api/v1/trunks', async (request, reply) => {
+  await Promise.resolve();
+  fastify.get('/admin/api/v1/trunks', async (_request, _reply) => {
     return {
       data: [],
       meta: {
@@ -1772,8 +1841,8 @@ export async function registerAdminTrunkRoutes(fastify: FastifyInstance) {
     };
   });
 
-  fastify.post('/admin/api/v1/trunks', async (request, reply) => {
-    reply.code(201);
+  fastify.post('/admin/api/v1/trunks', async (_request, reply) => {
+    void reply.code(201);
     return {
       id: '00000000-0000-0000-0000-000000000000',
       tenantId: '00000000-0000-0000-0000-000000000000',
@@ -1788,40 +1857,47 @@ export async function registerAdminTrunkRoutes(fastify: FastifyInstance) {
     };
   });
 
-  fastify.get('/admin/api/v1/trunks/:trunkId', async (request, reply) => {
-    return {
-      id: request.params.trunkId,
-      tenantId: '00000000-0000-0000-0000-000000000000',
-      carrierId: '00000000-0000-0000-0000-000000000000',
-      name: 'Trunk',
-      type: 'SIP',
-      host: 'sip.example.com',
-      port: 5060,
-      status: 'ACTIVE',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-  });
+  fastify.get<{ Params: { trunkId: string } }>(
+    '/admin/api/v1/trunks/:trunkId',
+    async (request, _reply) => {
+      return {
+        id: request.params.trunkId,
+        tenantId: '00000000-0000-0000-0000-000000000000',
+        carrierId: '00000000-0000-0000-0000-000000000000',
+        name: 'Trunk',
+        type: 'SIP',
+        host: 'sip.example.com',
+        port: 5060,
+        status: 'ACTIVE',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+  );
 
-  fastify.patch('/admin/api/v1/trunks/:trunkId', async (request, reply) => {
-    return {
-      id: request.params.trunkId,
-      tenantId: '00000000-0000-0000-0000-000000000000',
-      carrierId: '00000000-0000-0000-0000-000000000000',
-      name: 'Trunk',
-      type: 'SIP',
-      host: 'sip.example.com',
-      port: 5060,
-      status: 'ACTIVE',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-  });
+  fastify.patch<{ Params: { trunkId: string } }>(
+    '/admin/api/v1/trunks/:trunkId',
+    async (request, _reply) => {
+      return {
+        id: request.params.trunkId,
+        tenantId: '00000000-0000-0000-0000-000000000000',
+        carrierId: '00000000-0000-0000-0000-000000000000',
+        name: 'Trunk',
+        type: 'SIP',
+        host: 'sip.example.com',
+        port: 5060,
+        status: 'ACTIVE',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+  );
 }
 
 // Admin API - Rate Cards
 export async function registerAdminRateCardRoutes(fastify: FastifyInstance) {
-  fastify.get('/admin/api/v1/rate-cards', async (request, reply) => {
+  await Promise.resolve();
+  fastify.get('/admin/api/v1/rate-cards', async (_request, _reply) => {
     return {
       data: [],
       meta: {
@@ -1833,8 +1909,8 @@ export async function registerAdminRateCardRoutes(fastify: FastifyInstance) {
     };
   });
 
-  fastify.post('/admin/api/v1/rate-cards', async (request, reply) => {
-    reply.code(201);
+  fastify.post('/admin/api/v1/rate-cards', async (_request, reply) => {
+    void reply.code(201);
     return {
       id: '00000000-0000-0000-0000-000000000000',
       billingAccountId: '00000000-0000-0000-0000-000000000000',
@@ -1847,30 +1923,35 @@ export async function registerAdminRateCardRoutes(fastify: FastifyInstance) {
     };
   });
 
-  fastify.get('/admin/api/v1/rate-cards/:rateCardId', async (request, reply) => {
-    return {
-      id: request.params.rateCardId,
-      billingAccountId: '00000000-0000-0000-0000-000000000000',
-      name: 'Rate Card',
-      effectiveFrom: new Date().toISOString(),
-      status: 'ACTIVE',
-      rates: {},
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-  });
+  fastify.get<{ Params: { rateCardId: string } }>(
+    '/admin/api/v1/rate-cards/:rateCardId',
+    async (request, _reply) => {
+      return {
+        id: request.params.rateCardId,
+        billingAccountId: '00000000-0000-0000-0000-000000000000',
+        name: 'Rate Card',
+        effectiveFrom: new Date().toISOString(),
+        status: 'ACTIVE',
+        rates: {},
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+  );
 
-  fastify.patch('/admin/api/v1/rate-cards/:rateCardId', async (request, reply) => {
-    return {
-      id: request.params.rateCardId,
-      billingAccountId: '00000000-0000-0000-0000-000000000000',
-      name: 'Rate Card',
-      effectiveFrom: new Date().toISOString(),
-      status: 'ACTIVE',
-      rates: {},
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-  });
+  fastify.patch<{ Params: { rateCardId: string } }>(
+    '/admin/api/v1/rate-cards/:rateCardId',
+    async (request, _reply) => {
+      return {
+        id: request.params.rateCardId,
+        billingAccountId: '00000000-0000-0000-0000-000000000000',
+        name: 'Rate Card',
+        effectiveFrom: new Date().toISOString(),
+        status: 'ACTIVE',
+        rates: {},
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+  );
 }
-

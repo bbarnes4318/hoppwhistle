@@ -21,12 +21,12 @@
     "incremental": false,
     "baseUrl": ".",
     "paths": {
-      "@callfabric/shared": ["./packages/shared/src"],
-      "@callfabric/shared/*": ["./packages/shared/src/*"],
-      "@callfabric/routing-dsl": ["./packages/routing-dsl/src"],
-      "@callfabric/routing-dsl/*": ["./packages/routing-dsl/src/*"],
-      "@callfabric/sdk": ["./packages/sdk/src"],
-      "@callfabric/sdk/*": ["./packages/sdk/src/*"]
+      "@hopwhistle/shared": ["./packages/shared/src"],
+      "@hopwhistle/shared/*": ["./packages/shared/src/*"],
+      "@hopwhistle/routing-dsl": ["./packages/routing-dsl/src"],
+      "@hopwhistle/routing-dsl/*": ["./packages/routing-dsl/src/*"],
+      "@hopwhistle/sdk": ["./packages/sdk/src"],
+      "@hopwhistle/sdk/*": ["./packages/sdk/src/*"]
     }
   },
   "exclude": [

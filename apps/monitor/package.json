@@ -1,0 +1,25 @@
+{
+  "name": "@hopwhistle/monitor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsup",
+    "start": "node dist/index.js",
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "dotenv-flow": "^4.1.0",
+    "modesl": "^1.2.1",
+    "node-fetch": "^3.3.2",
+    "tsx": "^4.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.5",
+    "tsup": "^8.0.1",
+    "typescript": "^5.3.3",
+    "eslint": "^8.55.0"
+  }
+}

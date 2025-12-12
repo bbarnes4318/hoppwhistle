@@ -260,6 +260,32 @@ export class FlowEngine {
           await this.handleComplianceBlock(complianceResult);
           return;
         }
+
+        // Dynamic Routing: Select best buyer if applicable
+        let routeParams = action.params;
+        try {
+          const call = await this.prisma.call.findUnique({
+            where: { id: this.callId },
+            select: { campaignId: true },
+          });
+
+          if (call?.campaignId) {
+            const { routingService } = await import('./routing.js');
+            const bestBuyer = await routingService.selectBestBuyer(this.tenantId, call.campaignId);
+
+            if (bestBuyer) {
+              routeParams = {
+                ...routeParams,
+                buyerId: bestBuyer.buyerId,
+                destination: bestBuyer.endpoint,
+              };
+            }
+          }
+        } catch (err) {
+          console.error('Error in dynamic routing:', err);
+          // Fallback to original params
+        }
+
         // Proceed with buyer route
         await eventBus.publish('call.*', {
           event: 'call.buyer.route',
@@ -267,7 +293,7 @@ export class FlowEngine {
           data: {
             callId: this.callId,
             action: 'buyer.route',
-            params: action.params,
+            params: routeParams,
             complianceOverride: complianceResult.override,
           },
         });
