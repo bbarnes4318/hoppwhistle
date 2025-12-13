@@ -12,6 +12,7 @@ import {
   Shield,
   GitBranch,
   DollarSign,
+  AudioLines,
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -27,6 +28,10 @@ const navigation = [
   { name: 'Calls', href: '/calls', icon: PhoneCall },
   { name: 'Billing', href: '/billing', icon: Receipt },
   { name: 'Settings', href: '/settings', icon: Settings },
+];
+
+const toolsNavigation = [
+  { name: 'Recording Analyzer', href: '/tools/recording-analyzer', icon: AudioLines },
 ];
 
 const adminNavigation = [
@@ -51,7 +56,7 @@ export function Sidebar() {
           priority
         />
       </div>
-      <nav className="flex-1 space-y-1 p-4">
+      <nav className="flex-1 space-y-1 overflow-y-auto p-4">
         {navigation.map(item => {
           const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
           return (
@@ -70,6 +75,33 @@ export function Sidebar() {
             </Link>
           );
         })}
+
+        {/* Tools Section */}
+        <div className="pt-4">
+          <div className="px-3 py-2 text-xs font-semibold uppercase text-muted-foreground">
+            Tools
+          </div>
+          {toolsNavigation.map(item => {
+            const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
+            return (
+              <Link
+                key={item.name}
+                href={item.href}
+                className={cn(
+                  'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                  isActive
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                )}
+              >
+                <item.icon className="h-5 w-5" />
+                {item.name}
+              </Link>
+            );
+          })}
+        </div>
+
+        {/* Admin Section */}
         <div className="pt-4">
           <div className="px-3 py-2 text-xs font-semibold uppercase text-muted-foreground">
             Admin

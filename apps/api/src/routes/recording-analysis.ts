@@ -231,4 +231,164 @@ export async function registerRecordingAnalysisRoutes(fastify: FastifyInstance) 
       },
     };
   });
+
+  /**
+   * Re-run analysis with different fields
+   */
+  fastify.post<{
+    Params: { id: string };
+    Body: { selectedFields: string[] };
+  }>('/api/v1/recording-analysis/:id/rerun', async (request, reply) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+    const tenantId = (request as any).user?.tenantId as string | undefined;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+    const userId = (request as any).user?.userId as string | undefined;
+    if (!tenantId) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+    }
+
+    const { id } = request.params;
+    const { selectedFields } = request.body ?? {};
+
+    if (!Array.isArray(selectedFields) || selectedFields.length === 0) {
+      void reply.code(400);
+      return {
+        error: { code: 'VALIDATION_ERROR', message: 'selectedFields must be a non-empty array' },
+      };
+    }
+
+    // Find original analysis
+    const original = await prisma.recordingAnalysis.findFirst({
+      where: { id, tenantId },
+    });
+
+    if (!original) {
+      void reply.code(404);
+      return { error: { code: 'NOT_FOUND', message: 'Analysis not found' } };
+    }
+
+    const redis = getRedisClient();
+    const storage = getStorageService();
+    const batchId = randomUUID();
+    const jobIds: string[] = [];
+
+    // Create new job with same source but different fields
+    const row = await prisma.recordingAnalysis.create({
+      data: {
+        tenantId,
+        userId: userId || '',
+        batchId,
+        vertical: original.vertical,
+        selectedFields,
+        sourceType: original.sourceType,
+        sourceUrl: original.sourceUrl,
+        storageKey: original.storageKey,
+        filename: original.filename,
+        status: 'queued',
+      },
+      select: { id: true },
+    });
+
+    jobIds.push(row.id);
+
+    // Get recording URL
+    let recordingUrl = original.sourceUrl;
+    if (original.sourceType === 'upload' && original.storageKey) {
+      recordingUrl = await storage.getSignedUrl(original.storageKey, 86400);
+    }
+
+    if (recordingUrl) {
+      await redis.xadd(
+        'events:stream',
+        '*',
+        'channel',
+        'recording.*',
+        'payload',
+        JSON.stringify({
+          event: 'recording.ready',
+          tenantId,
+          data: { callId: row.id, recordingUrl, durationSec: 0 },
+        })
+      );
+
+      await prisma.recordingAnalysis.update({
+        where: { id: row.id },
+        data: { status: 'transcribing' },
+      });
+    }
+
+    void reply.code(201);
+    return { batchId, jobIds };
+  });
+
+  /**
+   * Export batch as CSV
+   */
+  fastify.get<{
+    Params: { batchId: string };
+  }>('/api/v1/recording-analysis/batch/:batchId/csv', async (request, reply) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+    const tenantId = (request as any).user?.tenantId as string | undefined;
+    if (!tenantId) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+    }
+
+    const batchId = request.params.batchId;
+
+    const items = await prisma.recordingAnalysis.findMany({
+      where: { tenantId, batchId },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (items.length === 0) {
+      void reply.code(404);
+      return { error: { code: 'NOT_FOUND', message: 'Batch not found' } };
+    }
+
+    // Build CSV
+    const allFields = new Set<string>();
+    items.forEach(item => {
+      if (item.extracted && typeof item.extracted === 'object') {
+        Object.keys(item.extracted as object).forEach(k => allFields.add(k));
+      }
+    });
+
+    const headers = [
+      'id',
+      'status',
+      'sourceType',
+      'sourceUrl',
+      'filename',
+      'vertical',
+      ...Array.from(allFields),
+    ];
+    const rows = items.map(item => {
+      const extracted = (item.extracted || {}) as Record<string, unknown>;
+      return [
+        item.id,
+        item.status,
+        item.sourceType,
+        item.sourceUrl || '',
+        item.filename || '',
+        item.vertical,
+        ...Array.from(allFields).map(f => {
+          const val = extracted[f];
+          if (val === null || val === undefined) return '';
+          if (typeof val === 'object') return JSON.stringify(val);
+          return String(val);
+        }),
+      ];
+    });
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')),
+    ].join('\n');
+
+    void reply.header('Content-Type', 'text/csv');
+    void reply.header('Content-Disposition', `attachment; filename="batch-${batchId}.csv"`);
+    return csvContent;
+  });
 }

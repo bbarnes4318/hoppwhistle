@@ -1,7 +1,9 @@
 import type { RecordingAnalysisItem, Vertical } from './types';
 
+const API_BASE = '/api/v1';
+
 export async function presignUpload(filename: string, contentType: string) {
-  const r = await fetch('/api/recording-analysis/presign', {
+  const r = await fetch(`${API_BASE}/recording-analysis/presign`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ filename, contentType }),
@@ -25,7 +27,7 @@ export async function createAnalysisBatch(params: {
   urls: string[];
   uploads: Array<{ storageKey: string; filename: string }>;
 }) {
-  const r = await fetch('/api/recording-analysis/analyze', {
+  const r = await fetch(`${API_BASE}/recording-analysis/analyze`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -35,7 +37,23 @@ export async function createAnalysisBatch(params: {
 }
 
 export async function fetchBatch(batchId: string) {
-  const r = await fetch(`/api/recording-analysis/batch/${batchId}`);
+  const r = await fetch(`${API_BASE}/recording-analysis/batch/${batchId}`);
   if (!r.ok) throw new Error(await r.text());
   return (await r.json()) as { batchId: string; items: RecordingAnalysisItem[] };
+}
+
+export async function rerunAnalysisForItem(itemId: string, params: { selectedFields: string[] }) {
+  const r = await fetch(`${API_BASE}/recording-analysis/${itemId}/rerun`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return (await r.json()) as { batchId: string; jobIds: string[] };
+}
+
+export async function downloadBatchCsv(batchId: string) {
+  const r = await fetch(`${API_BASE}/recording-analysis/batch/${batchId}/csv`);
+  if (!r.ok) throw new Error(await r.text());
+  return await r.text();
 }
