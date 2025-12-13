@@ -36,5 +36,13 @@
       }
     }
   },
-  "ignorePatterns": ["dist", "build", ".next", "node_modules", "coverage", "*.config.js"]
+  "ignorePatterns": [
+    "dist",
+    "build",
+    ".next",
+    "node_modules",
+    "coverage",
+    "*.config.js",
+    "*.config.ts"
+  ]
 }
