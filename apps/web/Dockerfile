@@ -48,8 +48,8 @@ RUN sed -i 's/const nextConfig = {/const nextConfig = { typescript: { ignoreBuil
 RUN rm -f playwright.config.ts
 RUN rm -rf e2e
 
-# Run build using local binary
-RUN ./node_modules/.bin/next build
+# Run build
+RUN pnpm exec next build
 
 FROM base AS runner
 WORKDIR /app
