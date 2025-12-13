@@ -39,10 +39,7 @@ ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 # Install dependencies
 RUN pnpm add next @xyflow/react next-themes html2canvas react-markdown @tailwindcss/typography
 
-# --- FIX: Force Next.js to ignore TypeScript/ESLint errors during build ---
-# This modifies next.config.js to allow the build to pass even with code bugs
-RUN sed -i 's/const nextConfig = {/const nextConfig = { typescript: { ignoreBuildErrors: true }, eslint: { ignoreDuringBuilds: true },/' next.config.js || true
-# -------------------------------------------------------------------------
+# Config is now in next.config.js
 
 # Remove test files that might cause issues
 RUN rm -f playwright.config.ts
