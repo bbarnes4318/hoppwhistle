@@ -56,6 +56,7 @@ model Tenant {
   cnamLookups        CnamLookup[]
   carrierLookups     CarrierLookup[]
   tags             Tag[]
+  leads            Lead[]
 
   @@index([slug])
   @@index([status])
@@ -174,6 +175,7 @@ model User {
   auditLogs   AuditLog[]
   createdCalls Call[]  @relation("CallCreator")
   stirShakenOverrides StirShakenStatus[] @relation("StirShakenOverrideUser")
+  assignedLeads Lead[]
 
   @@unique([tenantId, email])
   @@index([tenantId, email])
@@ -434,6 +436,7 @@ model Campaign {
   flow          Flow?         @relation(fields: [flowId], references: [id])
   phoneNumbers  PhoneNumber[]
   calls         Call[]
+  leads         Lead[]
 
   @@index([tenantId])
   @@index([publisherId])
@@ -677,6 +680,7 @@ model Call {
   transcriptions Transcription[]
   tags        CallTag[]
   accruals    AccrualLedger[]
+  leadCalls   LeadCall[]
 
   @@index([tenantId])
   @@index([tenantId, createdAt])
@@ -1461,3 +1465,85 @@ model RecordingAnalysis {
   @@index([status])
   @@map("recording_analysis")
 }
+
+// ============================================================================
+// Lead/Customer CRM (for Screen Pop)
+// ============================================================================
+
+model Lead {
+  id            String   @id @default(uuid())
+  tenantId      String
+  campaignId    String?
+
+  // Contact Information
+  firstName     String?
+  lastName      String?
+  fullName      String?
+  phoneNumber   String   // E.164 format - primary lookup field
+  email         String?
+  company       String?
+
+  // Address
+  address       String?
+  city          String?
+  state         String?
+  zipCode       String?
+  country       String?
+
+  // Lead Info
+  leadSource    String?
+  status        LeadStatus @default(NEW)
+  priority      Int      @default(0)
+
+  // Custom Fields (flexible)
+  customFields  Json?
+  notes         String?
+  tags          String[]
+
+  // Assignment
+  assignedToId  String?
+
+  // Timestamps
+  lastContactedAt DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  campaign  Campaign? @relation(fields: [campaignId], references: [id])
+  assignedTo User?    @relation(fields: [assignedToId], references: [id])
+  calls     LeadCall[]
+
+  @@unique([tenantId, phoneNumber])
+  @@index([tenantId])
+  @@index([tenantId, campaignId])
+  @@index([phoneNumber])
+  @@index([tenantId, status])
+  @@index([assignedToId])
+  @@map("leads")
+}
+
+model LeadCall {
+  id        String   @id @default(uuid())
+  leadId    String
+  callId    String
+  createdAt DateTime @default(now())
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  call Call @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@unique([leadId, callId])
+  @@index([leadId])
+  @@index([callId])
+  @@map("lead_calls")
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  CONVERTED
+  LOST
+  DO_NOT_CALL
+}
+

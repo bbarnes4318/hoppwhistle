@@ -4,6 +4,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { getPrismaClient } from '../lib/prisma.js';
 import { callStateService } from '../services/call-state.js';
 import { eventBus } from '../services/event-bus.js';
+import { leadService } from '../services/lead-service.js';
 import { getRedisClient } from '../services/redis.js';
 
 /**
@@ -776,6 +777,39 @@ export function registerAgentPhoneRoutes(fastify: FastifyInstance): void {
         hasMore: calls.length === limit,
       },
     };
+  });
+
+  /**
+   * GET /api/v1/agent/lead/lookup
+   * Look up lead by phone number for screen pop
+   */
+  fastify.get('/api/v1/agent/lead/lookup', async (request: FastifyRequest, reply: FastifyReply) => {
+    const { tenantId } = getUser(request);
+    const query = request.query as { phoneNumber?: string };
+    const phoneNumber = query.phoneNumber;
+
+    if (!phoneNumber) {
+      return reply.status(400).send({
+        error: { code: 'MISSING_PHONE', message: 'phoneNumber query parameter is required' },
+      });
+    }
+
+    try {
+      const screenPopData = await leadService.getScreenPopData(tenantId, phoneNumber);
+
+      if (!screenPopData) {
+        return reply.status(404).send({
+          error: { code: 'LEAD_NOT_FOUND', message: 'No lead found for this phone number' },
+        });
+      }
+
+      return { lead: screenPopData };
+    } catch (err) {
+      console.error('[LeadLookup] Error:', err);
+      return reply.status(500).send({
+        error: { code: 'LOOKUP_FAILED', message: 'Failed to lookup lead' },
+      });
+    }
   });
 }
 
