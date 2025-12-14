@@ -66,9 +66,8 @@ function getUser(request: FastifyRequest): UserInfo {
 const AGENT_STATUS_PREFIX = 'agent:status:';
 const AGENT_STATUS_TTL = 86400; // 24 hours
 
-// Get Prisma and Redis clients
-const prisma = getPrismaClient();
-const redis = getRedisClient();
+// Get Prisma and Redis clients lazily to avoid blocking during plugin registration
+// These are called inside functions rather than at module top-level
 
 // ============================================================================
 // Agent Status Helpers (Redis-backed for real-time, fast access)
@@ -81,6 +80,7 @@ interface AgentStatusData {
 }
 
 async function getAgentStatus(userId: string): Promise<AgentStatusData> {
+  const redis = getRedisClient();
   const key = `${AGENT_STATUS_PREFIX}${userId}`;
   const data = await redis.get(key);
   if (data) {
@@ -93,6 +93,7 @@ async function getAgentStatus(userId: string): Promise<AgentStatusData> {
 }
 
 async function setAgentStatus(userId: string, status: AgentStatusData): Promise<void> {
+  const redis = getRedisClient();
   const key = `${AGENT_STATUS_PREFIX}${userId}`;
   await redis.setex(key, AGENT_STATUS_TTL, JSON.stringify(status));
 }
@@ -180,6 +181,7 @@ export function registerAgentPhoneRoutes(fastify: FastifyInstance): void {
 
       // Generate unique call SID
       const callSid = `call_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      const prisma = getPrismaClient();
 
       // Create call in PostgreSQL
       const call = await prisma.call.create({
@@ -241,6 +243,7 @@ export function registerAgentPhoneRoutes(fastify: FastifyInstance): void {
       // Simulate call connection after 2 seconds (in production, this comes from carrier webhook)
       setTimeout(() => {
         void (async () => {
+          const prisma = getPrismaClient();
           // Update PostgreSQL
           await prisma.call.update({
             where: { id: call.id },
@@ -286,6 +289,7 @@ export function registerAgentPhoneRoutes(fastify: FastifyInstance): void {
     async (request, reply: FastifyReply) => {
       const { callId } = request.params;
       const { userId, tenantId } = getUser(request);
+      const prisma = getPrismaClient();
 
       // Get call from PostgreSQL
       const call = await prisma.call.findUnique({
@@ -348,6 +352,7 @@ export function registerAgentPhoneRoutes(fastify: FastifyInstance): void {
     async (request, reply: FastifyReply) => {
       const { callId } = request.params;
       const { userId, tenantId } = getUser(request);
+      const prisma = getPrismaClient();
 
       // Get call from PostgreSQL
       const call = await prisma.call.findUnique({
@@ -488,6 +493,7 @@ export function registerAgentPhoneRoutes(fastify: FastifyInstance): void {
       }
 
       // Get call from PostgreSQL
+      const prisma = getPrismaClient();
       const call = await prisma.call.findUnique({
         where: { id: callId },
       });
@@ -621,6 +627,7 @@ export function registerAgentPhoneRoutes(fastify: FastifyInstance): void {
       }
 
       // Fallback to PostgreSQL
+      const prisma = getPrismaClient();
       const call = await prisma.call.findUnique({
         where: { id: callId },
       });
@@ -658,6 +665,7 @@ export function registerAgentPhoneRoutes(fastify: FastifyInstance): void {
       const campaignId = body.campaignId ?? '';
 
       // Create call in PostgreSQL
+      const prisma = getPrismaClient();
       const call = await prisma.call.create({
         data: {
           tenantId,
@@ -728,6 +736,7 @@ export function registerAgentPhoneRoutes(fastify: FastifyInstance): void {
     const query = request.query as { limit?: string; offset?: string };
     const limit = parseInt(query.limit ?? '50', 10);
     const offset = parseInt(query.offset ?? '0', 10);
+    const prisma = getPrismaClient();
 
     const calls = await prisma.call.findMany({
       where: {
