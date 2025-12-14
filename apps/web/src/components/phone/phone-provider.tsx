@@ -173,6 +173,25 @@ export function PhoneProvider({
 }: PhoneProviderProps): JSX.Element {
   // Normalize apiUrl to just be the base (remove trailing /api/v1 if present)
   const normalizedApiUrl = apiUrl.replace(/\/api\/v1\/?$/, '');
+
+  // API key for authenticated requests
+  const apiKey = process.env.NEXT_PUBLIC_API_KEY || '';
+
+  // Common headers for API requests
+  const getApiHeaders = useCallback(
+    (contentType = true): HeadersInit => {
+      const headers: HeadersInit = {};
+      if (contentType) {
+        headers['Content-Type'] = 'application/json';
+      }
+      if (apiKey) {
+        headers['x-api-key'] = apiKey;
+      }
+      return headers;
+    },
+    [apiKey]
+  );
+
   // State
   const [agentStatus, setAgentStatusState] = useState<AgentStatus>('offline');
   const [currentCall, setCurrentCall] = useState<CallInfo | null>(null);
@@ -461,14 +480,14 @@ export function PhoneProvider({
     (status: AgentStatus) => {
       void fetch(`${normalizedApiUrl}/api/v1/agent/status`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getApiHeaders(),
         body: JSON.stringify({ status }),
       }).catch(() => {
         // Ignore errors, update locally anyway
       });
       setAgentStatusState(status);
     },
-    [normalizedApiUrl]
+    [normalizedApiUrl, getApiHeaders]
   );
 
   const openPhonePanel = useCallback(() => setIsPhonePanelOpen(true), []);
@@ -483,7 +502,7 @@ export function PhoneProvider({
       try {
         const response = await fetch(`${normalizedApiUrl}/api/v1/agent/call/originate`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getApiHeaders(),
           body: JSON.stringify({ phoneNumber }),
         });
 
@@ -514,7 +533,7 @@ export function PhoneProvider({
         setIsConnecting(false);
       }
     },
-    [normalizedApiUrl]
+    [normalizedApiUrl, getApiHeaders]
   );
 
   const answerCall = useCallback(async () => {
@@ -523,6 +542,7 @@ export function PhoneProvider({
     try {
       await fetch(`${normalizedApiUrl}/api/v1/agent/call/${currentCall.callId}/answer`, {
         method: 'POST',
+        headers: getApiHeaders(false),
       });
 
       setCurrentCall(prev => {
@@ -541,7 +561,7 @@ export function PhoneProvider({
       const message = err instanceof Error ? err.message : 'Failed to answer call';
       setError(message);
     }
-  }, [normalizedApiUrl, currentCall, stopRingtone, startCallDurationTimer]);
+  }, [normalizedApiUrl, currentCall, stopRingtone, startCallDurationTimer, getApiHeaders]);
 
   const hangupCall = useCallback(async () => {
     if (!currentCall) return;
@@ -549,6 +569,7 @@ export function PhoneProvider({
     try {
       await fetch(`${normalizedApiUrl}/api/v1/agent/call/${currentCall.callId}/hangup`, {
         method: 'POST',
+        headers: getApiHeaders(false),
       });
 
       const completedCall: CallInfo = {
@@ -564,7 +585,7 @@ export function PhoneProvider({
       const message = err instanceof Error ? err.message : 'Failed to hang up';
       setError(message);
     }
-  }, [normalizedApiUrl, currentCall, stopCallDurationTimer]);
+  }, [normalizedApiUrl, currentCall, stopCallDurationTimer, getApiHeaders]);
 
   const toggleMute = useCallback(() => {
     setCurrentCall(prev => {
@@ -579,6 +600,7 @@ export function PhoneProvider({
     try {
       await fetch(`${normalizedApiUrl}/api/v1/agent/call/${currentCall.callId}/hold`, {
         method: 'POST',
+        headers: getApiHeaders(false),
       });
 
       setCurrentCall(prev => {
@@ -593,7 +615,7 @@ export function PhoneProvider({
       const message = err instanceof Error ? err.message : 'Failed to toggle hold';
       setError(message);
     }
-  }, [normalizedApiUrl, currentCall]);
+  }, [normalizedApiUrl, currentCall, getApiHeaders]);
 
   const sendDTMF = useCallback(
     (digit: string) => {
@@ -611,7 +633,7 @@ export function PhoneProvider({
       try {
         await fetch(`${normalizedApiUrl}/api/v1/agent/call/${currentCall.callId}/transfer`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getApiHeaders(),
           body: JSON.stringify({ destination, type }),
         });
 
@@ -624,7 +646,7 @@ export function PhoneProvider({
         setError(message);
       }
     },
-    [normalizedApiUrl, currentCall]
+    [normalizedApiUrl, currentCall, getApiHeaders]
   );
 
   const setAudioInput = useCallback((deviceId: string) => {
