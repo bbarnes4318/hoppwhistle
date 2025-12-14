@@ -168,9 +168,11 @@ interface PhoneProviderProps {
 
 export function PhoneProvider({
   children,
-  wsUrl = 'ws://localhost:3001',
-  apiUrl = '/api/v1',
+  wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3001',
+  apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001',
 }: PhoneProviderProps): JSX.Element {
+  // Normalize apiUrl to just be the base (remove trailing /api/v1 if present)
+  const normalizedApiUrl = apiUrl.replace(/\/api\/v1\/?$/, '');
   // State
   const [agentStatus, setAgentStatusState] = useState<AgentStatus>('offline');
   const [currentCall, setCurrentCall] = useState<CallInfo | null>(null);
@@ -447,7 +449,7 @@ export function PhoneProvider({
 
   const setAgentStatus = useCallback(
     (status: AgentStatus) => {
-      void fetch(`${apiUrl}/agent/status`, {
+      void fetch(`${normalizedApiUrl}/api/v1/agent/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
@@ -456,7 +458,7 @@ export function PhoneProvider({
       });
       setAgentStatusState(status);
     },
-    [apiUrl]
+    [normalizedApiUrl]
   );
 
   const openPhonePanel = useCallback(() => setIsPhonePanelOpen(true), []);
@@ -469,7 +471,7 @@ export function PhoneProvider({
       setError(null);
 
       try {
-        const response = await fetch(`${apiUrl}/agent/call/originate`, {
+        const response = await fetch(`${normalizedApiUrl}/api/v1/agent/call/originate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ phoneNumber }),
@@ -502,14 +504,14 @@ export function PhoneProvider({
         setIsConnecting(false);
       }
     },
-    [apiUrl]
+    [normalizedApiUrl]
   );
 
   const answerCall = useCallback(async () => {
     if (!currentCall) return;
 
     try {
-      await fetch(`${apiUrl}/agent/call/${currentCall.callId}/answer`, {
+      await fetch(`${normalizedApiUrl}/api/v1/agent/call/${currentCall.callId}/answer`, {
         method: 'POST',
       });
 
@@ -529,13 +531,13 @@ export function PhoneProvider({
       const message = err instanceof Error ? err.message : 'Failed to answer call';
       setError(message);
     }
-  }, [apiUrl, currentCall, stopRingtone, startCallDurationTimer]);
+  }, [normalizedApiUrl, currentCall, stopRingtone, startCallDurationTimer]);
 
   const hangupCall = useCallback(async () => {
     if (!currentCall) return;
 
     try {
-      await fetch(`${apiUrl}/agent/call/${currentCall.callId}/hangup`, {
+      await fetch(`${normalizedApiUrl}/api/v1/agent/call/${currentCall.callId}/hangup`, {
         method: 'POST',
       });
 
@@ -552,7 +554,7 @@ export function PhoneProvider({
       const message = err instanceof Error ? err.message : 'Failed to hang up';
       setError(message);
     }
-  }, [apiUrl, currentCall, stopCallDurationTimer]);
+  }, [normalizedApiUrl, currentCall, stopCallDurationTimer]);
 
   const toggleMute = useCallback(() => {
     setCurrentCall(prev => {
@@ -565,7 +567,7 @@ export function PhoneProvider({
     if (!currentCall) return;
 
     try {
-      await fetch(`${apiUrl}/agent/call/${currentCall.callId}/hold`, {
+      await fetch(`${normalizedApiUrl}/api/v1/agent/call/${currentCall.callId}/hold`, {
         method: 'POST',
       });
 
@@ -581,7 +583,7 @@ export function PhoneProvider({
       const message = err instanceof Error ? err.message : 'Failed to toggle hold';
       setError(message);
     }
-  }, [apiUrl, currentCall]);
+  }, [normalizedApiUrl, currentCall]);
 
   const sendDTMF = useCallback(
     (digit: string) => {
@@ -597,7 +599,7 @@ export function PhoneProvider({
       if (!currentCall) return;
 
       try {
-        await fetch(`${apiUrl}/agent/call/${currentCall.callId}/transfer`, {
+        await fetch(`${normalizedApiUrl}/api/v1/agent/call/${currentCall.callId}/transfer`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ destination, type }),
@@ -612,7 +614,7 @@ export function PhoneProvider({
         setError(message);
       }
     },
-    [apiUrl, currentCall]
+    [normalizedApiUrl, currentCall]
   );
 
   const setAudioInput = useCallback((deviceId: string) => {
