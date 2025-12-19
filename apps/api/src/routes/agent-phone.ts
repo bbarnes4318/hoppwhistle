@@ -99,7 +99,8 @@ async function setAgentStatus(userId: string, status: AgentStatusData): Promise<
   await redis.setex(key, AGENT_STATUS_TTL, JSON.stringify(status));
 }
 
-export function registerAgentPhoneRoutes(fastify: FastifyInstance): void {
+// eslint-disable-next-line @typescript-eslint/require-await
+export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promise<void> {
   // ============================================================================
   // Agent Status Endpoints
   // ============================================================================
