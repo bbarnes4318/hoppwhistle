@@ -239,11 +239,21 @@
   <context name="internal">
     <!-- External Calls via SignalWire Gateway -->
     <extension name="external-calls">
-      <condition field="destination_number" expression="^(\+.+|1?\d{10,})$">
+      <condition field="destination_number" expression="^(\+?1)?(\d{10})$">
         <action application="log" data="INFO External call to ${destination_number} via SignalWire"/>
+        <action application="set" data="e164_dest=+1$2"/>
         <action application="set" data="effective_caller_id_number=${caller_id_number}"/>
         <action application="set" data="effective_caller_id_name=${caller_id_name}"/>
-        <action application="bridge" data="sofia/gateway/signalwire/${destination_number}"/>
+        <!-- SignalWire often requires P-Asserted-Identity -->
+        <action application="export" data="sip_h_P-Asserted-Identity=<sip:+17866929905@pvn-shanevici.sip.signalwire.com>"/> 
+        <action application="bridge" data="sofia/gateway/signalwire/${e164_dest}"/>
+      </condition>
+      <!-- Catch already normalized or other formats -->
+      <condition field="destination_number" expression="^(\+\d+)$" break="on-true">
+        <action application="log" data="INFO External call to E164 number ${destination_number}"/>
+        <action application="set" data="e164_dest=${destination_number}"/>
+        <action application="export" data="sip_h_P-Asserted-Identity=<sip:+17866929905@pvn-shanevici.sip.signalwire.com>"/>
+        <action application="bridge" data="sofia/gateway/signalwire/${e164_dest}"/>
       </condition>
     </extension>
 
