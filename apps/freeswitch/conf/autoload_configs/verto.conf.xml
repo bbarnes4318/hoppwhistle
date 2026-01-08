@@ -42,6 +42,10 @@
 
       <!-- Dialplan context for verto calls -->
       <param name="context" value="internal"/>
+      <param name="dialplan" value="XML"/>
+      
+      <!-- Dial string for outbound calls - routes to dialplan -->
+      <param name="dial-string" value="{presence_id=${dialed_user}@${dialed_domain}}${sofia_contact(${dialed_user}@${dialed_domain})}"/>
 
       <!-- Timer values -->
       <param name="timer-T1" value="500"/>
