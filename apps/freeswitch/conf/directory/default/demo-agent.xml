@@ -1,15 +1,21 @@
 <include>
-  <user id=" demo-agent\>
- <params>
- <param name=\password\ value=\1\/>
- <param name=\vm-password\ value=\1\/>
- </params>
- <variables>
- <variable name=\toll_allow\ value=\domestic,international,local\/>
- <variable name=\accountcode\ value=\demo-agent\/>
- <variable name=\user_context\ value=\internal\/>
- <variable name=\effective_caller_id_name\ value=\Demo Agent\/>
- <variable name=\effective_caller_id_number\ value=\1000\/>
- </variables>
- </user>
+  <user id="demo-agent">
+    <params>
+      <param name="password" value="1"/>
+      <param name="vm-password" value="1"/>
+      <!-- Verto specific permissions -->
+      <param name="jsonrpc-allowed-methods" value="verto.invite,verto.answer,verto.attach,verto.info,verto.display,verto.bye,verto.modify,verto.media,verto.ping"/>
+      <param name="verto-context" value="internal"/>
+      <param name="verto-dialplan" value="XML"/>
+    </params>
+    <variables>
+      <variable name="toll_allow" value="domestic,international,local"/>
+      <variable name="accountcode" value="demo-agent"/>
+      <variable name="user_context" value="internal"/>
+      <variable name="verto_context" value="internal"/>
+      <variable name="verto_dialplan" value="XML"/>
+      <variable name="effective_caller_id_name" value="Demo Agent"/>
+      <variable name="effective_caller_id_number" value="1000"/>
+    </variables>
+  </user>
 </include>
