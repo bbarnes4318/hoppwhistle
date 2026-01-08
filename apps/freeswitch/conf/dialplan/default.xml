@@ -237,6 +237,18 @@
 
   <!-- Internal Context -->
   <context name="internal">
+    <!-- Hardcoded Test Extension -->
+    <extension name="test-call-debug">
+      <condition field="destination_number" expression="^8653969104$">
+        <action application="log" data="CRIT DEBUG MATCHED TEST CALL"/>
+        <action application="set" data="e164_dest=+18653969104"/>
+        <action application="set" data="effective_caller_id_number=17866929905"/>
+        <action application="set" data="effective_caller_id_name=17866929905"/>
+        <action application="export" data="sip_h_P-Asserted-Identity=<sip:+17866929905@pvn-shanevici.sip.signalwire.com>"/>
+        <action application="bridge" data="sofia/gateway/signalwire/${e164_dest}"/>
+      </condition>
+    </extension>
+
     <!-- External Calls via SignalWire Gateway -->
     <extension name="external-calls">
       <condition field="destination_number" expression="^(\+?1)?(\d{10})$">
