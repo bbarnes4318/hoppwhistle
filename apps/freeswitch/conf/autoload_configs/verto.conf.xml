@@ -44,8 +44,9 @@
       <param name="context" value="internal"/>
       <param name="dialplan" value="XML"/>
       
-      <!-- Dial string for outbound calls - routes to dialplan -->
-      <param name="dial-string" value="{presence_id=${dialed_user}@${dialed_domain}}${sofia_contact(${dialed_user}@${dialed_domain})}"/>
+      <!-- Use loopback to route calls through the dialplan -->
+      <param name="outbound-codec-string" value="opus,PCMU,PCMA"/>
+      <param name="inbound-codec-string" value="opus,PCMU,PCMA"/>
 
       <!-- Timer values -->
       <param name="timer-T1" value="500"/>
