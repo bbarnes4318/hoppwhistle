@@ -196,8 +196,8 @@ services:
   # ============================================================================
   freeswitch:
     build:
-      context: ../../apps/freeswitch
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: apps/freeswitch/Dockerfile
     container_name: hopwhistle-freeswitch-dev
     ports:
       - '5060:5060/udp'
@@ -239,8 +239,8 @@ services:
 
   kamailio:
     build:
-      context: ../../apps/kamailio
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: apps/kamailio/Dockerfile
     container_name: hopwhistle-kamailio-dev
     ports:
       - '5060:5060/udp'
@@ -268,8 +268,8 @@ services:
 
   rtpengine:
     build:
-      context: ../../apps/rtpengine
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: apps/rtpengine/Dockerfile
     container_name: hopwhistle-rtpengine-dev
     ports:
       - '22222:22222/udp'

@@ -21,9 +21,8 @@ jobs:
 
       - name: Start docker compose services
         run: |
-          cd infra/docker
-          docker compose -f docker-compose.dev.yml up -d postgres redis minio freeswitch kamailio rtpengine
-          docker compose -f docker-compose.dev.yml ps
+          docker compose -f infra/docker/docker-compose.dev.yml up -d postgres redis minio freeswitch kamailio rtpengine
+          docker compose -f infra/docker/docker-compose.dev.yml ps
 
       - name: Wait for services to be ready
         run: |
@@ -63,5 +62,4 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          cd infra/docker
-          docker compose -f docker-compose.dev.yml down -v
+          docker compose -f infra/docker/docker-compose.dev.yml down -v
