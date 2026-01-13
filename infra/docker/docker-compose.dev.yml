@@ -198,6 +198,8 @@ services:
     build:
       context: ../..
       dockerfile: apps/freeswitch/Dockerfile
+      args:
+        SIGNALWIRE_TOKEN: ${SIGNALWIRE_TOKEN}
     container_name: hopwhistle-freeswitch-dev
     ports:
       - '5060:5060/udp'

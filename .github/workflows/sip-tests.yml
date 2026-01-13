@@ -20,6 +20,8 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Start docker compose services
+        env:
+          SIGNALWIRE_TOKEN: ${{ secrets.SIGNALWIRE_TOKEN }}
         run: |
           docker compose -f infra/docker/docker-compose.dev.yml up -d postgres redis minio freeswitch kamailio rtpengine
           docker compose -f infra/docker/docker-compose.dev.yml ps
