@@ -1,0 +1,19 @@
+<!--
+  Wholesale SIP Gateway Configuration
+  This gateway uses preprocessor variables to allow runtime configuration
+  via environment variables. Set OUTBOUND_SIP_PROXY, OUTBOUND_SIP_USER,
+  OUTBOUND_SIP_PASS in your environment before starting FreeSWITCH.
+-->
+<include>
+  <gateway name="wholesale">
+    <param name="username" value="$${env(OUTBOUND_SIP_USER)}"/>
+    <param name="password" value="$${env(OUTBOUND_SIP_PASS)}"/>
+    <param name="proxy" value="$${env(OUTBOUND_SIP_PROXY)}"/>
+    <param name="realm" value="$${env(OUTBOUND_SIP_PROXY)}"/>
+    <param name="register" value="true"/>
+    <param name="register-transport" value="udp"/>
+    <param name="retry-seconds" value="30"/>
+    <param name="expire-seconds" value="3600"/>
+    <param name="caller-id-in-from" value="true"/>
+  </gateway>
+</include>

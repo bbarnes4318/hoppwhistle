@@ -1,204 +1,67 @@
-<!-- Default Dialplan -->
 <include>
-  <!-- Trunk Context - Authenticates trunks and routes inbound calls -->
   <context name="trunk">
     <extension name="authenticate-trunk">
       <condition field="destination_number" expression="^.+$" break="never">
         <action application="log" data="INFO Inbound call from ${caller_id_number} to ${destination_number}"/>
-
-        <!-- Authenticate trunk via API -->
         <action application="set" data="trunk_auth_url=${api_url}/api/v1/trunks/auth"/>
         <action application="set" data="trunk_auth_body={&quot;from&quot;:&quot;${caller_id_number}&quot;,&quot;to&quot;:&quot;${destination_number}&quot;,&quot;source_ip&quot;:&quot;${network_addr}&quot;}"/>
         <action application="set" data="trunk_auth_result=${curl(${trunk_auth_url} POST ${trunk_auth_body} X-API-Key:${api_key})}"/>
-
-        <action application="log" data="INFO Trunk auth result: ${trunk_auth_result}"/>
-
-        <!-- Check if authenticated (simple check for status:authenticated) -->
         <condition field="${trunk_auth_result}" expression="authenticated">
           <action application="log" data="INFO Trunk authenticated"/>
           <action application="transfer" data="lookup-did XML default"/>
         </condition>
-
-        <!-- Reject if not authenticated -->
         <anti-action application="log" data="WARNING Trunk authentication failed"/>
         <anti-action application="respond" data="403 Forbidden"/>
         <anti-action application="hangup" data="CALL_REJECTED"/>
       </condition>
     </extension>
 
-    <!-- External Outbound Calls via SignalWire -->
-    <!-- External Outbound Calls via SignalWire -->
-    <extension name="external-outbound-calls">
-      <!-- Normalize 10 digit to E.164 -->
-      <condition field="destination_number" expression="^(\d{10})$" break="on-true">
-        <action application="log" data="INFO Normalizing 10-digit number ${destination_number} to E.164"/>
+    <extension name="send-to-signalwire-prefix">
+      <condition field="destination_number" expression="^9(\d{10,})$">
+        <action application="log" data="INFO Outbound call to $1 via SignalWire"/>
+        <action application="set" data="effective_caller_id_number=$${outbound_caller_id}"/>
+        <action application="set" data="effective_caller_id_name=$${outbound_caller_id}"/>
+        <action application="export" data="sip_h_P-Asserted-Identity=<sip:$${outbound_caller_id}@$${signalwire_domain}>"/>
+        <action application="bridge" data="sofia/gateway/signalwire/+1$1"/>
+      </condition>
+    </extension>
+
+    <extension name="send-to-telnyx-default">
+      <condition field="destination_number" expression="^(\d{10,})$|^(\+1\d{10})$">
+        <action application="log" data="INFO Outbound call to ${destination_number} via Telnyx"/>
+        
         <action application="set" data="e164_dest=+1${destination_number}"/>
-        <action application="execute_extension" data="send-to-signalwire"/>
-      </condition>
-      <!-- Normalize 11 digit (1+10) to E.164 -->
-      <condition field="destination_number" expression="^1(\d{10})$" break="on-true">
-        <action application="log" data="INFO Normalizing 11-digit number ${destination_number} to E.164"/>
-        <action application="set" data="e164_dest=+1$1"/>
-        <action application="execute_extension" data="send-to-signalwire"/>
-      </condition>
-      <!-- Already E.164 or other -->
-      <condition field="destination_number" expression="^(\+.+)$" break="on-true">
-        <action application="set" data="e164_dest=${destination_number}"/>
-        <action application="execute_extension" data="send-to-signalwire"/>
+        <condition field="destination_number" expression="^\+1">
+           <action application="set" data="e164_dest=${destination_number}"/>
+        </condition>
+
+        <action application="set" data="effective_caller_id_number=$${outbound_caller_id}"/>
+        <action application="set" data="effective_caller_id_name=$${outbound_caller_id}"/>
+        <action application="bridge" data="sofia/gateway/telnyx/${e164_dest}"/>
       </condition>
     </extension>
 
-    <extension name="send-to-signalwire">
-      <condition field="destination_number" expression="^.+$">
-        <action application="log" data="INFO Outbound call to ${e164_dest} via SignalWire"/>
-        <action application="set" data="effective_caller_id_number=+17866929905"/>
-        <action application="set" data="effective_caller_id_name=+17866929905"/>
-        <!-- SignalWire often requires P-Asserted-Identity with the correct domain -->
-        <action application="export" data="sip_h_P-Asserted-Identity=<sip:+17866929905@pvn-shanevici.sip.signalwire.com>"/>
-        <action application="bridge" data="sofia/gateway/signalwire/${e164_dest}"/>
-      </condition>
-    </extension>
-
-    <!-- DID Lookup -->
     <extension name="lookup-did">
       <condition field="destination_number" expression="^.+$" break="never">
         <action application="log" data="INFO Looking up DID: ${destination_number}"/>
-
-        <!-- Lookup DID via API -->
         <action application="set" data="did_lookup_url=${api_url}/api/v1/numbers/lookup"/>
         <action application="set" data="did_lookup_body={&quot;number&quot;:&quot;${destination_number}&quot;}"/>
         <action application="set" data="did_lookup_result=${curl(${did_lookup_url} POST ${did_lookup_body} X-API-Key:${api_key})}"/>
-
-        <action application="log" data="INFO DID lookup result: ${did_lookup_result}"/>
-
-        <!-- Extract values from JSON response (simplified - in production use lua/json) -->
         <action application="set" data="did_tenant_id=00000000-0000-0000-0000-000000000000"/>
         <action application="set" data="did_flow_id=simple-direct-route"/>
         <action application="set" data="call_id=${uuid}"/>
-
-        <!-- Emit call.started event via ESL -->
-        <action application="event" data="CUSTOM callfabric::call.started call_id=${call_id} tenant_id=${did_tenant_id} from=${caller_id_number} to=${destination_number}"/>
-
-        <!-- Start recording -->
-        <action application="set" data="recording_filename=${recordings_path}/${call_id}.${recordings_format}"/>
-        <action application="set" data="recording_enabled=true"/>
-
-        <condition field="${recording_enabled}" expression="^true$">
-          <action application="answer"/>
-          <action application="record_session" data="${recording_filename}"/>
-        </condition>
-
-        <!-- Route to flow execution -->
         <action application="transfer" data="execute-flow XML default"/>
       </condition>
     </extension>
 
-    <!-- Execute Flow -->
     <extension name="execute-flow">
       <condition field="destination_number" expression="^.+$" break="never">
-        <action application="log" data="INFO Executing flow ${did_flow_id} for call ${call_id}"/>
-
-        <!-- Get flow instructions from API -->
-        <action application="set" data="flow_exec_url=${api_url}/api/v1/flows/execute"/>
-        <action application="set" data="flow_exec_body={&quot;callId&quot;:&quot;${call_id}&quot;,&quot;flowId&quot;:&quot;${did_flow_id}&quot;,&quot;tenantId&quot;:&quot;${did_tenant_id}&quot;}"/>
-        <action application="set" data="flow_instructions=${curl(${flow_exec_url} POST ${flow_exec_body} X-API-Key:${api_key})}"/>
-
-        <action application="log" data="INFO Flow instructions: ${flow_instructions}"/>
-
-        <!-- Default: route to voicemail or hangup -->
         <action application="transfer" data="voicemail XML default"/>
       </condition>
     </extension>
 
-    <!-- IVR Handler -->
-    <extension name="ivr-handler">
-      <condition field="destination_number" expression="^ivr-(.+)$">
-        <action application="log" data="INFO IVR handler for ${destination_number}"/>
-
-        <action application="answer"/>
-
-        <!-- Play prompt and collect DTMF -->
-        <action application="set" data="ivr_prompt=tone_stream://%(1000,0,800)"/>
-        <action application="playback" data="${ivr_prompt}"/>
-        <action application="sleep" data="1000"/>
-        <action application="read" data="ivr_input ${ivr_prompt} 1 # 5000"/>
-
-        <action application="log" data="INFO DTMF received: ${ivr_input}"/>
-
-        <!-- Send DTMF event to API -->
-        <action application="set" data="dtmf_url=${api_url}/api/v1/flows/events"/>
-        <action application="set" data="dtmf_body={&quot;callId&quot;:&quot;${call_id}&quot;,&quot;event&quot;:{&quot;type&quot;:&quot;dtmf.received&quot;,&quot;callId&quot;:&quot;${call_id}&quot;,&quot;digits&quot;:&quot;${ivr_input}&quot;}}"/>
-        <action application="set" data="dtmf_result=${curl(${dtmf_url} POST ${dtmf_body} X-API-Key:${api_key})}"/>
-
-        <!-- Continue based on API response -->
-        <action application="transfer" data="continue-flow XML default"/>
-      </condition>
-    </extension>
-
-    <!-- Queue Handler -->
-    <extension name="queue-handler">
-      <condition field="destination_number" expression="^queue-(.+)$">
-        <action application="log" data="INFO Queue handler for ${destination_number}"/>
-        <action application="set" data="queue_id=${regex(${destination_number}|queue-(.+))}"/>
-
-        <action application="answer"/>
-
-        <!-- Emit queue.join event -->
-        <action application="event" data="CUSTOM callfabric::queue.join call_id=${call_id} queue_id=${queue_id}"/>
-
-        <!-- Join queue with timeout -->
-        <action application="set" data="queue_timeout=60"/>
-        <action application="queue" data="${queue_id}"/>
-
-        <!-- On queue connect -->
-        <action application="set" data="queue_agent=${CHANNEL(queue-answered)}"/>
-        <action application="event" data="CUSTOM callfabric::queue.connected call_id=${call_id} queue_id=${queue_id} agent_id=${queue_agent}"/>
-
-        <!-- Bridge to agent (would need actual agent endpoint) -->
-        <action application="log" data="INFO Queue connected to agent ${queue_agent}"/>
-      </condition>
-    </extension>
-
-    <!-- Buyer Handler -->
-    <extension name="buyer-handler">
-      <condition field="destination_number" expression="^buyer-(.+)$">
-        <action application="log" data="INFO Buyer handler for ${destination_number}"/>
-
-        <action application="answer"/>
-
-        <!-- Get buyer destination from API -->
-        <action application="set" data="buyer_url=${api_url}/api/v1/flows/events"/>
-        <action application="set" data="buyer_body={&quot;callId&quot;:&quot;${call_id}&quot;,&quot;event&quot;:{&quot;type&quot;:&quot;call.buyer.route&quot;,&quot;callId&quot;:&quot;${call_id}&quot;}}"/>
-        <action application="set" data="buyer_result=${curl(${buyer_url} POST ${buyer_body} X-API-Key:${api_key})}"/>
-
-        <action application="log" data="INFO Buyer result: ${buyer_result}"/>
-
-        <!-- Fallback if no buyer available -->
-        <action application="transfer" data="voicemail XML default"/>
-      </condition>
-    </extension>
-
-    <!-- Continue Flow -->
-    <extension name="continue-flow">
-      <condition field="destination_number" expression="^continue-flow$">
-        <action application="log" data="INFO Continuing flow execution"/>
-
-        <!-- Get next instruction from API -->
-        <action application="set" data="next_url=${api_url}/api/v1/flows/events"/>
-        <action application="set" data="next_body={&quot;callId&quot;:&quot;${call_id}&quot;,&quot;event&quot;:{&quot;type&quot;:&quot;call.continued&quot;,&quot;callId&quot;:&quot;${call_id}&quot;}}"/>
-        <action application="set" data="next_result=${curl(${next_url} POST ${next_body} X-API-Key:${api_key})}"/>
-
-        <action application="log" data="INFO Next action: ${next_result}"/>
-
-        <!-- Default: hangup -->
-        <action application="transfer" data="hangup-normal XML default"/>
-      </condition>
-    </extension>
-
-    <!-- Voicemail Handler -->
     <extension name="voicemail">
       <condition field="destination_number" expression="^voicemail$">
-        <action application="log" data="INFO Routing to voicemail"/>
         <action application="answer"/>
         <action application="playback" data="tone_stream://%(1000,0,800)"/>
         <action application="voicemail" data="default ${domain_name}"/>
@@ -206,77 +69,9 @@
       </condition>
     </extension>
 
-    <!-- Hangup Handler -->
-    <extension name="hangup-handler">
-      <condition field="destination_number" expression="^hangup-(.+)$">
-        <action application="log" data="INFO Hanging up call: ${destination_number}"/>
-
-        <action application="set" data="hangup_reason=${regex(${destination_number}|hangup-(.+))}"/>
-        <action application="set" data="hangup_reason=${hangup_reason:NORMAL_CLEARING}"/>
-
-        <!-- Emit call.ended event -->
-        <action application="event" data="CUSTOM callfabric::call.ended call_id=${call_id} reason=${hangup_reason}"/>
-
-        <!-- Stop recording if active -->
-        <action application="stop_record_session"/>
-
-        <!-- Upload recording to S3 -->
-        <action application="system" data="/usr/local/freeswitch/scripts/upload-recording.sh ${recording_filename} ${call_id}"/>
-
-        <action application="hangup" data="${hangup_reason}"/>
-      </condition>
-    </extension>
-
-    <!-- Hangup Normal -->
     <extension name="hangup-normal">
       <condition field="destination_number" expression="^hangup-normal$">
         <action application="transfer" data="hangup-NORMAL_CLEARING XML default"/>
-      </condition>
-    </extension>
-  </context>
-
-  <!-- Internal Context -->
-  <context name="internal">
-    <!-- Hardcoded Test Extension -->
-    <extension name="test-call-debug">
-      <condition field="destination_number" expression="^8653969104$">
-        <action application="log" data="CRIT DEBUG MATCHED TEST CALL"/>
-        <action application="answer"/>
-        <action application="set" data="e164_dest=+18653969104"/>
-        <action application="set" data="effective_caller_id_number=+17866929905"/>
-        <action application="set" data="effective_caller_id_name=HopWhistle"/>
-        <action application="set" data="hangup_after_bridge=true"/>
-        <action application="set" data="ignore_early_media=true"/>
-        <action application="export" data="sip_h_P-Asserted-Identity=<sip:+17866929905@pvn-shanevici.sip.signalwire.com>"/>
-        <action application="bridge" data="sofia/gateway/signalwire/${e164_dest}"/>
-      </condition>
-    </extension>
-
-    <!-- External Calls via SignalWire Gateway -->
-    <extension name="external-calls">
-      <condition field="destination_number" expression="^(\+?1)?(\d{10})$">
-        <action application="log" data="INFO External call to ${destination_number} via SignalWire"/>
-        <action application="set" data="e164_dest=+1$2"/>
-        <action application="set" data="effective_caller_id_number=${caller_id_number}"/>
-        <action application="set" data="effective_caller_id_name=${caller_id_name}"/>
-        <!-- SignalWire often requires P-Asserted-Identity -->
-        <action application="export" data="sip_h_P-Asserted-Identity=<sip:+17866929905@pvn-shanevici.sip.signalwire.com>"/> 
-        <action application="bridge" data="sofia/gateway/signalwire/${e164_dest}"/>
-      </condition>
-      <!-- Catch already normalized or other formats -->
-      <condition field="destination_number" expression="^(\+\d+)$" break="on-true">
-        <action application="log" data="INFO External call to E164 number ${destination_number}"/>
-        <action application="set" data="e164_dest=${destination_number}"/>
-        <action application="export" data="sip_h_P-Asserted-Identity=<sip:+17866929905@pvn-shanevici.sip.signalwire.com>"/>
-        <action application="bridge" data="sofia/gateway/signalwire/${e164_dest}"/>
-      </condition>
-    </extension>
-
-    <extension name="internal-calls">
-      <condition field="destination_number" expression="^(\d+)$">
-        <action application="log" data="INFO Internal call to ${destination_number}"/>
-        <action application="answer"/>
-        <action application="bridge" data="user/${destination_number}@${domain_name}"/>
       </condition>
     </extension>
   </context>

@@ -192,6 +192,11 @@ async function buildServer() {
   const { registerAgentPhoneRoutes } = await import('./routes/agent-phone.js');
   await server.register(registerAgentPhoneRoutes);
 
+  // Start Fronter Bot socket server (handles outbound call socket connections)
+  const { fronterBotService } = await import('./services/fronter-bot.js');
+  await fronterBotService.start();
+  console.log('[API] Fronter Bot socket server started');
+
   // Error handler
   server.setErrorHandler((error, request, reply) => {
     server.log.error(error);

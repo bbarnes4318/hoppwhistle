@@ -1,0 +1,20 @@
+<profile name="internal">
+  <settings>
+    <param name="sip-port" value="5060"/>
+    <param name="rtp-ip" value="$${local_ip_v4}"/>
+    <param name="sip-ip" value="$${local_ip_v4}"/>
+    <param name="ext-rtp-ip" value="107.170.36.116"/>
+    <param name="ext-sip-ip" value="107.170.36.116"/>
+    <param name="context" value="public"/>
+    <param name="dialplan" value="XML"/>
+  </settings>
+  <gateways>
+    <gateway name="my_telnyx">
+      <param name="realm" value="sip.telnyx.com"/>
+      <param name="proxy" value="sip.telnyx.com"/>
+      <param name="username" value="jimbosky35"/>
+      <param name="password" value="Thunder3560"/>
+      <param name="register" value="false"/>
+    </gateway>
+  </gateways>
+</profile>

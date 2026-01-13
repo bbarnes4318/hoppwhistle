@@ -6,10 +6,12 @@ import { register } from './lib/metrics.js';
 import { initTracing, shutdownTracing } from './lib/tracing.js';
 import { BillingWorker } from './services/billing-worker.js';
 import { ClickHouseETL } from './services/clickhouse-etl.js';
+import { DialerWorker } from './services/dialer-worker.js';
 import { startRecordingAnalysisWorker } from './services/recording-analysis-worker.js';
 
 const billingWorker = new BillingWorker();
 const clickhouseETL = new ClickHouseETL();
+const dialerWorker = new DialerWorker();
 
 async function main() {
   try {
@@ -46,8 +48,12 @@ async function main() {
     logger.info({ msg: 'ClickHouse ETL worker started' });
 
     // Start Recording Analysis worker
-    void startRecordingAnalysisWorker();
-    logger.info({ msg: 'Recording Analysis worker started' });
+    // void startRecordingAnalysisWorker();
+    // logger.info({ msg: 'Recording Analysis worker started' });
+
+    // Start Dialer Worker (The Hopper)
+    await dialerWorker.start();
+    logger.info({ msg: 'Dialer worker started' });
   } catch (error) {
     logger.error({ msg: 'Failed to start workers', err: error });
     process.exit(1);
@@ -57,7 +63,7 @@ async function main() {
   const shutdown = async () => {
     logger.info({ msg: 'Shutting down workers' });
     await shutdownTracing();
-    await Promise.all([billingWorker.stop(), clickhouseETL.stop()]);
+    await Promise.all([billingWorker.stop(), clickhouseETL.stop(), dialerWorker.stop()]);
     process.exit(0);
   };
 
@@ -66,3 +72,9 @@ async function main() {
 }
 
 main();
+
+// --- AUTODIALER STARTUP ---
+import { Autodialer } from './services/autodialer';
+const dialer = new Autodialer();
+dialer.start().catch(err => console.error('Failed to start dialer:', err));
+// --------------------------

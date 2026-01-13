@@ -1,10 +1,10 @@
 <include>
   <gateway name="signalwire">
-    <param name="username" value="$${env(SIGNALWIRE_SIP_USERNAME)}"/>
-    <param name="password" value="$${env(SIGNALWIRE_SIP_PASSWORD)}"/>
-    <param name="realm" value="$${env(SIGNALWIRE_SIP_DOMAIN)}"/>
-    <param name="proxy" value="$${env(SIGNALWIRE_SIP_DOMAIN)}"/>
-    <param name="register" value="true"/>
+    <param name="realm" value="$${signalwire_domain}"/>
+    <param name="proxy" value="$${signalwire_proxy}"/>
+    <param name="username" value="$${signalwire_user}"/>
+    <param name="password" value="$${signalwire_pass}"/>
+    <param name="register" value="false"/>
     <param name="caller-id-in-from" value="true"/>
     <param name="ping" value="25"/>
   </gateway>

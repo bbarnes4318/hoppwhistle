@@ -1,0 +1,52 @@
+import subprocess, time, json, random, os
+
+# --- PRODUCTION CONFIGURATION ---
+AGENT_TRANSFER_NUMBER = "+18653969104" 
+TELNYX_VALID_DID = "+17868404940"
+DID_FILE = '/opt/hopwhistle/dids.json'
+LEAD_FILE = '/opt/hopwhistle/test_lead.txt'
+PROGRESS_FILE = '/opt/hopwhistle/already_called.log'
+TELNYX_GATEWAY = "sip.telnyx.com"
+PAUSE_FILE = '/opt/hopwhistle/PAUSE'
+
+
+def start_blast():
+    print(f"--- NOVA-3 PRODUCTION DIALER STARTING ---")
+    while True:
+        if os.path.exists(PAUSE_FILE):
+            print("--- DIALER PAUSED VIA DASHBOARD ---")
+            time.sleep(10)
+            continue
+        try:
+            with open(DID_FILE, 'r') as f: DID_POOL = json.load(f)
+            with open(LEAD_FILE, 'r') as f: leads = [line.strip() for line in f if line.strip()]
+            called_numbers = set()
+            if os.path.exists(PROGRESS_FILE):
+                with open(PROGRESS_FILE, 'r') as f:
+                    called_numbers = set(line.strip() for line in f)
+        except Exception as e:
+            print(f"File Error: {e}")
+            time.sleep(10)
+            continue
+        remaining_leads = [l for l in leads if l not in called_numbers]
+        if not remaining_leads:
+            print("--- CAMPAIGN COMPLETE ---")
+            time.sleep(60)
+            continue
+        for i, customer_num in enumerate(remaining_leads):
+            if os.path.exists(PAUSE_FILE): break
+            mask = random.choice(list(DID_POOL.keys())).replace('+', '')
+            clean = customer_num.replace('+', '').strip()
+            final_dest = f"+{clean}" if clean.startswith('1') else f"+1{clean}"
+            print(f"DIALING: {final_dest}")
+            vars = (f"absolute_codec_string=PCMU,transfer_to_num={AGENT_TRANSFER_NUMBER},"
+                    f"telnyx_auth_id={TELNYX_VALID_DID},fractel_mask_num={mask},"
+                    f"origination_caller_id_number={TELNYX_VALID_DID},"
+                    f"effective_caller_id_number={mask},effective_caller_id_name={mask},ignore_early_media=true")
+            cmd = f"docker exec docker-freeswitch-1 fs_cli -x \"bgapi originate {{{vars}}}sofia/internal/{final_dest}@{TELNYX_GATEWAY} &lua(/opt/hopwhistle/handler.lua)\""
+            subprocess.run(cmd, shell=True, capture_output=True)
+            with open(PROGRESS_FILE, 'a') as f: f.write(f"{customer_num}\n")
+            time.sleep(random.uniform(10, 18))
+
+if __name__ == '__main__':
+    start_blast()

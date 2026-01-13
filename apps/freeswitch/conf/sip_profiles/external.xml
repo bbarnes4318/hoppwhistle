@@ -60,15 +60,15 @@
 
   <!-- Gateways -->
   <gateways>
-    <gateway name="signalwire">
-      <param name="username" value="$${signalwire_sip_username}"/>
-      <param name="password" value="$${signalwire_sip_password}"/>
-      <param name="realm" value="$${signalwire_sip_domain}"/>
-      <param name="proxy" value="$${signalwire_sip_domain}"/>
+    <gateway name="telnyx">
+      <param name="username" value="$${env(OUTBOUND_SIP_USER)}"/>
+      <param name="password" value="$${env(OUTBOUND_SIP_PASS)}"/>
+      <param name="realm" value="sip.telnyx.com"/>
+      <param name="proxy" value="sip.telnyx.com"/>
       <param name="register" value="true"/>
-      <param name="caller-id-in-from" value="false"/>
+      <param name="caller-id-in-from" value="true"/>
       <param name="ping" value="25"/>
     </gateway>
+    <X-PRE-PROCESS cmd="include" data="external/*.xml"/>
   </gateways>
 </profile>
-

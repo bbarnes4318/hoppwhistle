@@ -103,7 +103,8 @@ services:
       - '8082:8082/tcp' # Verto WebSocket (secure)
       - '8083:8083/tcp' # Verto WebSocket (dev)
     environment:
-      - FREESWITCH_ESL_PASSWORD=${FREESWITCH_ESL_PASSWORD:-ClueCon}
+      # Hardcoded to verify fix
+      - FREESWITCH_ESL_PASSWORD=ClueCon
       - API_URL=http://api:3001
       - API_KEY=${API_KEY:-demo-key}
       - S3_ENDPOINT=http://minio:9000
@@ -175,6 +176,9 @@ services:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
       - DEEPSEEK_ENDPOINT=${DEEPSEEK_ENDPOINT:-https://api.deepseek.com/chat/completions}
       - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-chat}
+      # FronterBot Binding
+      - SOCKET_LISTENER_HOST=0.0.0.0
+      - SOCKET_LISTENER_PORT=8021
     depends_on:
       redis:
         condition: service_healthy
@@ -206,6 +210,20 @@ services:
       - DEEPSEEK_ENDPOINT=${DEEPSEEK_ENDPOINT:-https://api.deepseek.com/chat/completions}
       - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-chat}
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      # DIALER / FRONTER CONFIG
+      - FREESWITCH_HOST=freeswitch
+      - FREESWITCH_ESL_PORT=8021
+      # Hardcoded to verify fix
+      - FREESWITCH_ESL_PASSWORD=ClueCon
+      - OUTBOUND_SIP_PROXY=${OUTBOUND_SIP_PROXY}
+      - OUTBOUND_SIP_USER=${OUTBOUND_SIP_USER}
+      - OUTBOUND_SIP_PASS=${OUTBOUND_SIP_PASS}
+      - MAX_CONCURRENT_CALLS=${MAX_CONCURRENT_CALLS}
+      - DIALER_POLL_INTERVAL_MS=${DIALER_POLL_INTERVAL_MS}
+      - OUTBOUND_CALLER_ID=${OUTBOUND_CALLER_ID}
+      # Worker tells FreeSWITCH to connect to 'api' service hostname
+      - SOCKET_LISTENER_HOST=api
+      - SOCKET_LISTENER_PORT=8021
     depends_on:
       redis:
         condition: service_healthy

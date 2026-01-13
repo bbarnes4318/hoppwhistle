@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hopwhistle Voice AI</title>
+    <style>
+        :root {
+            --bg: #1a1a1a;
+            --card: #2d2d2d;
+            --text: #ffffff;
+            --accent: #10b981;
+            --accent-hover: #059669;
+            --border: #404040;
+        }
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 40px;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            width: 100%;
+            max-width: 1000px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+        .header {
+            grid-column: 1 / -1;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 20px;
+        }
+        h1 { margin: 0; font-weight: 300; letter-spacing: 1px; }
+        
+        .card {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            border: 1px solid var(--border);
+        }
+        
+        .full-width { grid-column: 1 / -1; }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+            color: #ccc;
+            font-weight: 500;
+        }
+        
+        input[type="text"], textarea, select {
+            width: 100%;
+            background: #111;
+            border: 1px solid var(--border);
+            color: white;
+            padding: 12px;
+            border-radius: 6px;
+            font-size: 1rem;
+            box-sizing: border-box;
+            margin-bottom: 15px;
+        }
+        
+        .row { display: flex; gap: 10px; }
+
+        button {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 1rem;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.2s;
+            width: 100%;
+        }
+        button:hover { background: var(--accent-hover); }
+        button.secondary { background: #404040; }
+        
+        .audio-player { width: 100%; margin-top: 10px; display: none; }
+        .status { margin-top: 10px; font-size: 0.9rem; text-align: center; min-height: 20px; }
+        .success { color: var(--accent); }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h1>Hopwhistle Voice AI</h1>
+        <p style="color: #666; margin-top: 5px;">Powered by Cartesia Sonic</p>
+    </div>
+
+    <div class="card">
+        <h2>Agent Settings</h2>
+        <label>Transfer Calls To</label>
+        <input type="text" id="transferNum" placeholder="+1555..." onchange="saveSettings()">
+        <p style="color:#666; font-size:0.8rem">This is the number the bot connects the customer to.</p>
+    </div>
+
+    <div class="card">
+        <h2>Test Console</h2>
+        <label>Your Cell Phone</label>
+        <input type="text" id="testPhone" placeholder="+1...">
+        <button onclick="sendTestCall()">SEND TEST CALL</button>
+        <div id="callStatus" class="status"></div>
+    </div>
+
+    <div class="card full-width">
+        <h2>AI Voice Studio</h2>
+        <div class="row">
+            <div style="flex: 1;">
+                <label>Select Voice</label>
+                <select id="voiceId">
+                    <option value="a0e99841-438c-4a64-b679-ae501e7d6091">Barbershop Man (Deep, Professional)</option>
+                    <option value="694f9389-aac1-45b6-b726-9d9369183238">Sarah (Friendly, Clear)</option>
+                    <option value="79a125e8-cd45-4c13-8a67-188112f4dd22">British Lady (Formal)</option>
+                    <option value="421b3369-f63f-4b03-8980-37a44df1d4e8">Australian Man (Casual)</option>
+                    <option value="34575e71-908f-4ab6-ab54-b08c95d6597d">New York Man (Direct)</option>
+                </select>
+            </div>
+            <div style="flex: 3;">
+                <label>Script</label>
+                <textarea id="scriptText" rows="3">Hello! This is Alex from Hopwhistle. We noticed you were interested in our services. Do you have a moment to chat?</textarea>
+            </div>
+        </div>
+        
+        <div class="row">
+            <button class="secondary" onclick="generatePreview()">▶ Play Preview</button>
+            <button onclick="deployVoice()">✓ Use This Voice</button>
+        </div>
+        
+        <audio id="previewPlayer" controls class="audio-player"></audio>
+        <div id="voiceStatus" class="status"></div>
+    </div>
+
+    <div class="card full-width">
+        <h2>Campaign Launcher</h2>
+        <label>Lead List</label>
+        <textarea id="leadList" rows="6" placeholder="1865...\n1551..."></textarea>
+        <div class="row">
+            <button class="secondary" onclick="document.getElementById('leadList').value = ''">Clear</button>
+            <button onclick="startCampaign()">LAUNCH CAMPAIGN</button>
+        </div>
+        <div id="campaignStatus" class="status"></div>
+    </div>
+</div>
+
+<script>
+    // Load Settings
+    fetch('/settings').then(r => r.json()).then(data => {
+        document.getElementById('transferNum').value = data.transfer_number;
+    });
+
+    function saveSettings() {
+        const num = document.getElementById('transferNum').value;
+        fetch('/settings', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ transfer_number: num })
+        });
+    }
+
+    // --- CARTESIA LOGIC ---
+    function generatePreview() {
+        const text = document.getElementById('scriptText').value;
+        const voice = document.getElementById('voiceId').value;
+        const status = document.getElementById('voiceStatus');
+        const player = document.getElementById('previewPlayer');
+
+        status.innerText = "Generating AI Audio...";
+        
+        fetch('/generate_preview', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ text: text, voice_id: voice })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if(data.error) {
+                status.innerText = "Error: " + data.error;
+                status.className = "status error";
+            } else {
+                status.innerText = "";
+                player.src = data.url;
+                player.style.display = "block";
+                player.play();
+            }
+        });
+    }
+
+    function deployVoice() {
+        if(!confirm("Are you sure? This will update the voice for all future calls.")) return;
+        
+        fetch('/deploy_cartesia', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('voiceStatus').innerText = "✓ Voice Deployed Successfully!";
+            document.getElementById('voiceStatus').className = "status success";
+        });
+    }
+
+    // --- DIALER LOGIC ---
+    function sendTestCall() {
+        const phone = document.getElementById('testPhone').value;
+        if (!phone) return alert("Enter a phone number");
+        document.getElementById('callStatus').innerText = "Connecting...";
+        fetch('/test_call', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ phone: phone })
+        }).then(r => r.json()).then(data => {
+            document.getElementById('callStatus').innerText = "Calling " + data.number + "...";
+        });
+    }
+
+    function startCampaign() {
+        const leads = document.getElementById('leadList').value;
+        if (!leads) return alert("Paste some leads first");
+        if (!confirm("Start dialing campaign?")) return;
+        fetch('/start_campaign', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ leads: leads })
+        }).then(r => r.json()).then(data => {
+            document.getElementById('campaignStatus').innerText = "✓ Campaign Started! Dialing " + data.count + " leads.";
+            document.getElementById('campaignStatus').className = "status success";
+        });
+    }
+</script>
+</body>
+</html>

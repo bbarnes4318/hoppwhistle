@@ -59,3 +59,12 @@ infra/docker/.env
 
 infra/docker/.env.voice
 logs-latest.txt
+
+recordings/
+*.log
+*.json
+pause.flag
+PAUSE
+__pycache__/
+.env.master
+.env

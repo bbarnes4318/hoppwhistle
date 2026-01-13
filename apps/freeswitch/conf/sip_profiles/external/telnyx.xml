@@ -1,0 +1,11 @@
+<include>
+  <gateway name="telnyx">
+    <param name="realm" value="$${telnyx_proxy}"/>
+    <param name="proxy" value="$${telnyx_proxy}"/>
+    <param name="username" value="$${telnyx_user}"/>
+    <param name="password" value="$${telnyx_pass}"/>
+    <param name="register" value="false"/>
+    <param name="caller-id-in-from" value="true"/>
+    <param name="ping" value="25"/>
+  </gateway>
+</include>
