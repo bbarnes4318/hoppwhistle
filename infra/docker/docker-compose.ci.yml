@@ -96,7 +96,7 @@ services:
 
   # Use pre-built RTPEngine image - no build required
   rtpengine:
-    image: drachtio/rtpengine:0.1.0
+    image: freetechsolutions/rtpengine:latest
     container_name: hopwhistle-rtpengine-ci
     ports:
       - '22222:22222/udp'
@@ -105,11 +105,6 @@ services:
       - NET_ADMIN
     stop_grace_period: 3s
     stop_signal: SIGKILL
-    healthcheck:
-      test: ['CMD', 'true']
-      interval: 10s
-      timeout: 5s
-      retries: 3
     networks:
       - hopwhistle-network
 
