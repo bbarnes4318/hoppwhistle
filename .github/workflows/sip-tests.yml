@@ -63,5 +63,6 @@ jobs:
 
       - name: Cleanup
         if: always()
+        timeout-minutes: 2
         run: |
-          docker compose -f infra/docker/docker-compose.dev.yml down -v
+          docker compose -f infra/docker/docker-compose.dev.yml down -v -t 5

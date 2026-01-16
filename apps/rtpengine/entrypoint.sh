@@ -1,6 +1,18 @@
 #!/bin/bash
 set -e
 
+# Signal handler for graceful shutdown
+cleanup() {
+    echo "Received shutdown signal, stopping RTPEngine..."
+    if [ -f /run/rtpengine.pid ]; then
+        kill -TERM $(cat /run/rtpengine.pid) 2>/dev/null || true
+    fi
+    exit 0
+}
+
+# Trap SIGTERM and SIGINT for graceful shutdown
+trap cleanup SIGTERM SIGINT
+
 # 1. Detect Public IP if not set
 if [ -z "$PUBLIC_IP" ]; then
   echo "PUBLIC_IP env var not set. Attempting auto-detection..."

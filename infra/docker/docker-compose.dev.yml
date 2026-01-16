@@ -1,6 +1,5 @@
-version: '3.8'
-
 services:
+
   # ============================================================================
   # Database & Cache
   # ============================================================================
@@ -284,6 +283,9 @@ services:
     cap_add:
       - NET_ADMIN
       - SYS_ADMIN
+    # Ensure container stops quickly in CI to prevent timeout
+    stop_grace_period: 5s
+    stop_signal: SIGKILL
     healthcheck:
       test: ['CMD', 'rtpengine-ctl', '-t', '127.0.0.1:9900', 'ping']
       interval: 30s
