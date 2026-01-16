@@ -73,7 +73,7 @@ services:
 
   # Use pre-built Kamailio image - no build required
   kamailio:
-    image: kamailio/kamailio:5.7-bullseye
+    image: freetechsolutions/kamailio:latest
     container_name: hopwhistle-kamailio-ci
     ports:
       - '5061:5060/udp'
@@ -81,16 +81,9 @@ services:
     environment:
       FREESWITCH_NODES: freeswitch:5080
       RTPENGINE_SOCK: udp:rtpengine:22222
-    healthcheck:
-      test: ['CMD', 'kamctl', 'ping']
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
     stop_grace_period: 5s
     depends_on:
-      freeswitch:
-        condition: service_healthy
+      - freeswitch
     networks:
       - hopwhistle-network
 
