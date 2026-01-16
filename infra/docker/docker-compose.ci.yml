@@ -1,0 +1,118 @@
+# CI-optimized Docker Compose - Uses ONLY pre-built images for speed
+# No build step required - all images are pulled from Docker Hub
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: hopwhistle-postgres-ci
+    environment:
+      POSTGRES_USER: callfabric
+      POSTGRES_PASSWORD: callfabric_dev
+      POSTGRES_DB: callfabric
+    ports:
+      - '5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U callfabric']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - hopwhistle-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: hopwhistle-redis-ci
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - hopwhistle-network
+
+  minio:
+    image: minio/minio:latest
+    container_name: hopwhistle-minio-ci
+    ports:
+      - '9000:9000'
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - hopwhistle-network
+
+  # Use pre-built FreeSWITCH image - no build required
+  freeswitch:
+    image: drachtio/drachtio-freeswitch-mrf:0.9.5-2
+    container_name: hopwhistle-freeswitch-ci
+    ports:
+      - '5060:5060/udp'
+      - '5060:5060/tcp'
+      - '5080:5080/udp'
+      - '5080:5080/tcp'
+      - '8021:8021/tcp'
+    environment:
+      FREESWITCH_ESL_PASSWORD: ClueCon
+    healthcheck:
+      test: ['CMD', 'fs_cli', '-x', 'status']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    stop_grace_period: 5s
+    networks:
+      - hopwhistle-network
+
+  # Use pre-built Kamailio image - no build required
+  kamailio:
+    image: kamailio/kamailio:5.7-bullseye
+    container_name: hopwhistle-kamailio-ci
+    ports:
+      - '5061:5060/udp'
+      - '5061:5060/tcp'
+    environment:
+      FREESWITCH_NODES: freeswitch:5080
+      RTPENGINE_SOCK: udp:rtpengine:22222
+    healthcheck:
+      test: ['CMD', 'kamctl', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    stop_grace_period: 5s
+    depends_on:
+      freeswitch:
+        condition: service_healthy
+    networks:
+      - hopwhistle-network
+
+  # Use pre-built RTPEngine image - no build required
+  rtpengine:
+    image: drachtio/rtpengine:0.1.0
+    container_name: hopwhistle-rtpengine-ci
+    ports:
+      - '22222:22222/udp'
+      - '10000-10100:10000-10100/udp'
+    cap_add:
+      - NET_ADMIN
+    stop_grace_period: 3s
+    stop_signal: SIGKILL
+    healthcheck:
+      test: ['CMD', 'true']
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - hopwhistle-network
+
+networks:
+  hopwhistle-network:
+    driver: bridge
