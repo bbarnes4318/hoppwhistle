@@ -1,6 +1,6 @@
 # Use a community-maintained FreeSWITCH image that's regularly updated
 # This bypasses the SignalWire authentication requirement
-FROM drachtio/drachtio-freeswitch-mrf:0.5.17
+FROM drachtio/drachtio-freeswitch-mrf:0.9.5-2
 
 USER root
 
