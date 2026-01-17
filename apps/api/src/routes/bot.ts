@@ -1,4 +1,5 @@
 // AI Bot routes - Campaign control, TTS preview, lead management
+import { ChildProcess, spawn } from 'child_process';
 import { promises as fs } from 'fs';
 
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -9,6 +10,10 @@ const PAUSE_FLAG = '/opt/hopwhistle/pause.flag';
 const STATUS_FILE = '/opt/hopwhistle/dialer_status.json';
 const DIDS_FILE = '/opt/hopwhistle/dids.json';
 const SETTINGS_FILE = '/opt/hopwhistle/bot_settings.json';
+const DIALER_SCRIPT = '/opt/hopwhistle/dial.py';
+
+// Track dialer process globally
+let dialerProcess: ChildProcess | null = null;
 
 interface BotStatus {
   status: 'idle' | 'running' | 'paused' | 'complete' | 'error';
@@ -81,7 +86,34 @@ export function registerBotRoutes(fastify: FastifyInstance): void {
       };
       await fs.writeFile(STATUS_FILE, JSON.stringify(status));
 
-      return { success: true, message: 'Campaign started' };
+      // Kill any existing dialer process
+      if (dialerProcess) {
+        dialerProcess.kill('SIGTERM');
+        dialerProcess = null;
+      }
+
+      // Start the dialer Python script
+      dialerProcess = spawn('python3', [DIALER_SCRIPT], {
+        cwd: '/opt/hopwhistle',
+        detached: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+
+      // Log output for debugging
+      dialerProcess.stdout?.on('data', (data: Buffer) => {
+        console.log(`[dial.py] ${data.toString().trim()}`);
+      });
+
+      dialerProcess.stderr?.on('data', (data: Buffer) => {
+        console.error(`[dial.py ERROR] ${data.toString().trim()}`);
+      });
+
+      dialerProcess.on('exit', code => {
+        console.log(`[dial.py] Process exited with code ${code}`);
+        dialerProcess = null;
+      });
+
+      return { success: true, message: 'Campaign started', pid: dialerProcess.pid };
     } catch (e: unknown) {
       void reply.code(500);
       return { error: 'Failed to start campaign', message: getErrorMessage(e) };
@@ -116,6 +148,19 @@ export function registerBotRoutes(fastify: FastifyInstance): void {
     try {
       // Create pause flag to stop any running calls
       await fs.writeFile(PAUSE_FLAG, new Date().toISOString());
+
+      // Kill the dialer process if running
+      if (dialerProcess) {
+        dialerProcess.kill('SIGTERM');
+        dialerProcess = null;
+      }
+
+      // Also try to kill by finding python dial.py processes
+      try {
+        spawn('pkill', ['-f', 'dial.py']);
+      } catch {
+        // Ignore if pkill fails
+      }
 
       // Update status to idle
       const status: BotStatus = {
