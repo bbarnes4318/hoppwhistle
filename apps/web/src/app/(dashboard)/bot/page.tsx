@@ -1,30 +1,29 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
 import {
-  Play,
-  Pause,
-  Square,
-  Upload,
-  PhoneCall,
   CheckCircle,
   Clock,
-  TrendingUp,
-  Volume2,
-  Settings2,
-  RefreshCw,
-  Save,
   Loader2,
   Mic,
+  Pause,
+  PhoneCall,
+  Play,
+  RefreshCw,
+  Save,
+  Settings2,
+  Square,
+  TrendingUp,
+  Upload,
   User,
+  Volume2,
 } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useState, useEffect, useRef } from 'react';
+
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
   SelectContent,
@@ -32,6 +31,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 
 // Deepgram Aura voices
 const VOICES = [
@@ -48,6 +49,12 @@ const VOICES = [
   { id: 'aura-helios-en', name: 'Helios', gender: 'Male', accent: 'British' },
   { id: 'aura-zeus-en', name: 'Zeus', gender: 'Male', accent: 'American' },
 ];
+
+const DEFAULT_SCRIPT = `Hello! This is a quick call from {company}.
+
+We're reaching out about the final expense coverage you requested information on.
+
+Is this a good time to speak for just a moment?`;
 
 // Status types for the campaign
 type CampaignStatus = 'idle' | 'running' | 'paused' | 'complete' | 'error';
@@ -78,11 +85,7 @@ export default function BotDashboard() {
   // Configuration state
   const [concurrency, setConcurrency] = useState(10);
   const [selectedVoice, setSelectedVoice] = useState('aura-asteria-en');
-  const [script, setScript] = useState(`Hello! This is a quick call from {company}.
-
-We're reaching out about the final expense coverage you requested information on.
-
-Is this a good time to speak for just a moment?`);
+  const [script, setScript] = useState(DEFAULT_SCRIPT);
 
   // UI state
   const [isLoadingTTS, setIsLoadingTTS] = useState(false);
@@ -93,10 +96,9 @@ Is this a good time to speak for just a moment?`);
 
   // Leads state
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [isLoadingLeads, setIsLoadingLeads] = useState(false);
 
   // Stats
-  const [stats, setStats] = useState({
+  const [stats] = useState({
     totalCalls: 0,
     humanAnswered: 0,
     machineDetected: 0,
@@ -111,15 +113,15 @@ Is this a good time to speak for just a moment?`);
         const res = await fetch('/api/bot/settings');
         if (res.ok) {
           const data = await res.json();
-          setScript(data.script || script);
-          setSelectedVoice(data.voice || 'aura-asteria-en');
-          setConcurrency(data.concurrency || 10);
+          if (data.script) setScript(data.script);
+          if (data.voice) setSelectedVoice(data.voice);
+          if (data.concurrency) setConcurrency(data.concurrency);
         }
       } catch {
         // Use defaults
       }
     };
-    loadSettings();
+    void loadSettings();
   }, []);
 
   // Poll for status updates
@@ -139,7 +141,10 @@ Is this a good time to speak for just a moment?`);
       }
     };
 
-    const interval = setInterval(pollStatus, 2000);
+    void pollStatus();
+    const interval = setInterval(() => {
+      void pollStatus();
+    }, 2000);
     return () => clearInterval(interval);
   }, []);
 
@@ -201,7 +206,7 @@ Is this a good time to speak for just a moment?`);
         audio.onended = () => setIsPlaying(false);
         audio.onpause = () => setIsPlaying(false);
 
-        audio.play();
+        void audio.play();
       }
     } catch (e) {
       console.error('TTS preview failed:', e);
@@ -243,7 +248,6 @@ Is this a good time to speak for just a moment?`);
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setIsLoadingLeads(true);
     const formData = new FormData();
     formData.append('file', file);
 
@@ -259,8 +263,6 @@ Is this a good time to speak for just a moment?`);
       }
     } catch (e) {
       console.error('Failed to upload leads:', e);
-    } finally {
-      setIsLoadingLeads(false);
     }
   };
 
@@ -362,18 +364,26 @@ Is this a good time to speak for just a moment?`);
         <CardContent className="pt-6">
           <div className="flex items-center gap-4">
             <Button
-              onClick={handleStart}
+              onClick={() => void handleStart()}
               disabled={campaignStatus === 'running'}
               className="bg-green-600 hover:bg-green-700"
             >
               <Play className="mr-2 h-4 w-4" />
               Start Campaign
             </Button>
-            <Button onClick={handlePause} disabled={campaignStatus !== 'running'} variant="outline">
+            <Button
+              onClick={() => void handlePause()}
+              disabled={campaignStatus !== 'running'}
+              variant="outline"
+            >
               <Pause className="mr-2 h-4 w-4" />
               Pause
             </Button>
-            <Button onClick={handleStop} disabled={campaignStatus === 'idle'} variant="destructive">
+            <Button
+              onClick={() => void handleStop()}
+              disabled={campaignStatus === 'idle'}
+              variant="destructive"
+            >
               <Square className="mr-2 h-4 w-4" />
               Stop
             </Button>
@@ -476,7 +486,7 @@ Is this a good time to speak for just a moment?`);
 
                 <div className="flex gap-2">
                   <Button
-                    onClick={isPlaying ? handleStopPlayback : handlePreviewTTS}
+                    onClick={isPlaying ? handleStopPlayback : () => void handlePreviewTTS()}
                     disabled={isLoadingTTS || !script.trim()}
                     className="flex-1"
                     variant={isPlaying ? 'destructive' : 'default'}
@@ -516,7 +526,7 @@ Is this a good time to speak for just a moment?`);
                     read time
                   </p>
                   <Button
-                    onClick={handleSaveSettings}
+                    onClick={() => void handleSaveSettings()}
                     disabled={isSaving}
                     variant={saveSuccess ? 'default' : 'outline'}
                     className={saveSuccess ? 'bg-green-600 hover:bg-green-700' : ''}
@@ -560,7 +570,7 @@ Is this a good time to speak for just a moment?`);
                   id="leads-upload"
                   type="file"
                   accept=".csv,.txt"
-                  onChange={handleUploadLeads}
+                  onChange={e => void handleUploadLeads(e)}
                   className="hidden"
                 />
               </div>
