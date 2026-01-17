@@ -13,6 +13,7 @@ import {
   GitBranch,
   DollarSign,
   AudioLines,
+  Bot,
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -22,6 +23,7 @@ import { cn } from '@/lib/utils';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'AI Bot', href: '/bot', icon: Bot },
   { name: 'Phone', href: '/phone', icon: Phone },
   { name: 'Numbers', href: '/numbers', icon: PhoneCall },
   { name: 'Campaigns', href: '/campaigns', icon: Megaphone },

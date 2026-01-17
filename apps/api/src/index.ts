@@ -192,6 +192,10 @@ async function buildServer() {
   const { registerAgentPhoneRoutes } = await import('./routes/agent-phone.js');
   await server.register(registerAgentPhoneRoutes);
 
+  // Register AI Bot routes (outbound dialer control, TTS preview)
+  const { registerBotRoutes } = await import('./routes/bot.js');
+  await server.register(registerBotRoutes);
+
   // Start Fronter Bot socket server (handles outbound call socket connections)
   const { fronterBotService } = await import('./services/fronter-bot.js');
   await fronterBotService.start();
