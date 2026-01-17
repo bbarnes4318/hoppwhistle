@@ -1,5 +1,4 @@
 services:
-
   # ============================================================================
   # Database & Cache
   # ============================================================================
@@ -233,6 +232,11 @@ services:
         condition: service_healthy
       api:
         condition: service_started
+    cap_add:
+      - SYS_NICE
+      - IPC_LOCK
+      - SYS_RESOURCE
+    privileged: true
     networks:
       - hopwhistle-network
 
