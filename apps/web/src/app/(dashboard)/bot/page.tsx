@@ -365,7 +365,10 @@ export default function BotDashboard() {
       {!isSetupComplete && (
         <Card className="border-l-4 border-l-amber-500 bg-amber-50/50 dark:bg-amber-950/10">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-amber-700 dark:text-amber-500">
+            <CardTitle
+              className="flex items-center gap-2 text-amber-700 dark:text-amber-500 cursor-help"
+              title="Conductor places outbound calls and routes qualified prospects to agents in real time."
+            >
               <AlertTriangle className="h-5 w-5" />
               Setup Required
             </CardTitle>
@@ -489,6 +492,11 @@ export default function BotDashboard() {
               <Play className="mr-2 h-4 w-4" />
               Start Campaign
             </Button>
+            {isSetupComplete && campaignStatus === 'idle' && (
+              <span className="text-xs text-muted-foreground animate-in fade-in slide-in-from-left-2">
+                Ready to begin outbound execution.
+              </span>
+            )}
             <Button
               onClick={() => void handlePause()}
               disabled={campaignStatus !== 'running'}
