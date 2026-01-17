@@ -301,4 +301,111 @@ Is this a good time to speak for just a moment?`,
       }
     }
   );
+
+  // Get call history/log
+  fastify.get('/api/bot/calls', async () => {
+    const HISTORY_FILE = '/opt/hopwhistle/call_history.log';
+    try {
+      const content = await fs.readFile(HISTORY_FILE, 'utf-8');
+      const lines = content.split('\n').filter((l: string) => l.trim());
+
+      interface CallRecord {
+        id: string;
+        timestamp: string;
+        customerPhone: string;
+        status: string;
+        duration: string;
+        callId: string;
+        did: string;
+        transferred: boolean;
+        hasRecording: boolean;
+      }
+
+      const calls: CallRecord[] = [];
+
+      for (const line of lines) {
+        // Format: Time|Customer|Status|Duration|CallID|DID
+        const parts = line.split('|');
+        if (parts.length >= 5) {
+          const callId = parts[4]?.trim() || '';
+          const status = parts[2]?.trim() || '';
+
+          calls.push({
+            id: `call_${calls.length + 1}`,
+            timestamp: parts[0]?.trim() || '',
+            customerPhone: (parts[1]?.trim() || '').replace('%2B', '+'),
+            status,
+            duration: parts[3]?.trim() || '0',
+            callId,
+            did: parts[5]?.trim() || '',
+            transferred:
+              status.toLowerCase().includes('transfer') || status.toLowerCase().includes('lead'),
+            hasRecording: true,
+          });
+        }
+      }
+
+      return { calls: calls.reverse() };
+    } catch {
+      return { calls: [] };
+    }
+  });
+
+  // Serve recording audio file
+  fastify.get<{
+    Params: { callId: string };
+  }>(
+    '/api/bot/recordings/:callId',
+    async (request: FastifyRequest<{ Params: { callId: string } }>, reply: FastifyReply) => {
+      const { callId } = request.params;
+      const RECORDINGS_DIR = '/opt/hopwhistle/recordings/';
+
+      try {
+        let filePath = `${RECORDINGS_DIR}${callId}.mp3`;
+        let contentType = 'audio/mpeg';
+
+        try {
+          await fs.access(filePath);
+        } catch {
+          filePath = `${RECORDINGS_DIR}${callId}.wav`;
+          contentType = 'audio/wav';
+          await fs.access(filePath);
+        }
+
+        const fileBuffer = await fs.readFile(filePath);
+        void reply
+          .header('Content-Type', contentType)
+          .header('Content-Length', fileBuffer.length)
+          .header('Accept-Ranges', 'bytes')
+          .send(fileBuffer);
+        return;
+      } catch {
+        void reply.code(404);
+        return { error: 'Recording not found' };
+      }
+    }
+  );
+
+  // Check if recording exists
+  fastify.get<{
+    Params: { callId: string };
+  }>(
+    '/api/bot/recordings/:callId/exists',
+    async (request: FastifyRequest<{ Params: { callId: string } }>) => {
+      const { callId } = request.params;
+      const RECORDINGS_DIR = '/opt/hopwhistle/recordings/';
+
+      try {
+        try {
+          await fs.access(`${RECORDINGS_DIR}${callId}.mp3`);
+          return { exists: true, format: 'mp3' };
+        } catch {
+          await fs.access(`${RECORDINGS_DIR}${callId}.wav`);
+          return { exists: true, format: 'wav' };
+        }
+      } catch {
+        return { exists: false };
+      }
+    }
+  );
 }

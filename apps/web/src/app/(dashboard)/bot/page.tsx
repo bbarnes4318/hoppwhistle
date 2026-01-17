@@ -3,10 +3,13 @@
 import {
   CheckCircle,
   Clock,
+  FileAudio,
+  History,
   Loader2,
   Mic,
   Pause,
   PhoneCall,
+  PhoneForwarded,
   Play,
   RefreshCw,
   Save,
@@ -75,6 +78,18 @@ interface Lead {
   calledAt?: string;
 }
 
+interface CallRecord {
+  id: string;
+  timestamp: string;
+  customerPhone: string;
+  status: string;
+  duration: string;
+  callId: string;
+  did: string;
+  transferred: boolean;
+  hasRecording: boolean;
+}
+
 export default function BotDashboard() {
   // Campaign state
   const [campaignStatus, setCampaignStatus] = useState<CampaignStatus>('idle');
@@ -96,6 +111,11 @@ export default function BotDashboard() {
 
   // Leads state
   const [leads, setLeads] = useState<Lead[]>([]);
+
+  // Call logs state
+  const [callLogs, setCallLogs] = useState<CallRecord[]>([]);
+  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+  const [playingCallId, setPlayingCallId] = useState<string | null>(null);
 
   // Stats
   const [stats] = useState({
@@ -122,6 +142,26 @@ export default function BotDashboard() {
       }
     };
     void loadSettings();
+  }, []);
+
+  // Load call logs
+  const loadCallLogs = async () => {
+    setIsLoadingLogs(true);
+    try {
+      const res = await fetch('/api/bot/calls');
+      if (res.ok) {
+        const data = await res.json();
+        setCallLogs(data.calls || []);
+      }
+    } catch {
+      // Failed to load
+    } finally {
+      setIsLoadingLogs(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadCallLogs();
   }, []);
 
   // Poll for status updates
@@ -407,12 +447,16 @@ export default function BotDashboard() {
 
       {/* Main Content Tabs */}
       <Tabs defaultValue="voice" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="voice" className="flex items-center gap-2">
             <Mic className="h-4 w-4" />
             Voice & Script
           </TabsTrigger>
           <TabsTrigger value="leads">Lead List</TabsTrigger>
+          <TabsTrigger value="calllog" className="flex items-center gap-2">
+            <History className="h-4 w-4" />
+            Call Log
+          </TabsTrigger>
           <TabsTrigger value="monitor">Live Monitor</TabsTrigger>
         </TabsList>
 
@@ -652,6 +696,115 @@ export default function BotDashboard() {
                   ))
                 )}
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Call Log Tab */}
+        <TabsContent value="calllog">
+          <Card>
+            <CardHeader className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950 dark:to-orange-950 rounded-t-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <History className="h-5 w-5 text-amber-600" />
+                    Call History
+                  </CardTitle>
+                  <CardDescription>
+                    View past calls with recordings and transfer status
+                  </CardDescription>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void loadCallLogs()}
+                  disabled={isLoadingLogs}
+                >
+                  {isLoadingLogs ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-6">
+              {callLogs.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
+                  <FileAudio className="h-12 w-12 mb-4" />
+                  <p className="font-medium">No call history yet</p>
+                  <p className="text-sm">Calls will appear here after running a campaign</p>
+                </div>
+              ) : (
+                <div className="rounded-lg border">
+                  <div className="max-h-[500px] overflow-auto">
+                    <table className="w-full">
+                      <thead className="sticky top-0 bg-muted">
+                        <tr>
+                          <th className="p-3 text-left font-medium">Time</th>
+                          <th className="p-3 text-left font-medium">Phone Number</th>
+                          <th className="p-3 text-left font-medium">Duration</th>
+                          <th className="p-3 text-left font-medium">Result</th>
+                          <th className="p-3 text-left font-medium">Recording</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {callLogs.map(call => (
+                          <tr key={call.id} className="border-t hover:bg-muted/50">
+                            <td className="p-3 text-sm">{call.timestamp}</td>
+                            <td className="p-3 font-mono text-sm">{call.customerPhone}</td>
+                            <td className="p-3 text-sm">{call.duration}s</td>
+                            <td className="p-3">
+                              {call.transferred ? (
+                                <Badge className="bg-green-600 hover:bg-green-700">
+                                  <PhoneForwarded className="mr-1 h-3 w-3" />
+                                  Live Transfer
+                                </Badge>
+                              ) : (
+                                <Badge variant="secondary">{call.status}</Badge>
+                              )}
+                            </td>
+                            <td className="p-3">
+                              {call.callId ? (
+                                <div className="flex items-center gap-2">
+                                  <audio
+                                    id={`audio-${call.callId}`}
+                                    src={`/api/bot/recordings/${call.callId}`}
+                                    className="h-8 w-48"
+                                    controls
+                                    preload="none"
+                                    onPlay={() => {
+                                      // Stop other playing audios
+                                      if (playingCallId && playingCallId !== call.callId) {
+                                        const prevAudio = document.getElementById(
+                                          `audio-${playingCallId}`
+                                        ) as HTMLAudioElement | null;
+                                        if (prevAudio) prevAudio.pause();
+                                      }
+                                      setPlayingCallId(call.callId);
+                                    }}
+                                    onPause={() => {
+                                      if (playingCallId === call.callId) setPlayingCallId(null);
+                                    }}
+                                    onEnded={() => setPlayingCallId(null)}
+                                  />
+                                </div>
+                              ) : (
+                                <span className="text-sm text-muted-foreground">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {callLogs.length > 0 && (
+                    <p className="p-3 text-center text-sm text-muted-foreground border-t">
+                      Showing {callLogs.length} calls
+                    </p>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
