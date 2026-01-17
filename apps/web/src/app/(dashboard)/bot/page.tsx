@@ -19,6 +19,7 @@ import {
   Upload,
   User,
   Volume2,
+  AlertTriangle,
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 
@@ -126,6 +127,11 @@ export default function BotDashboard() {
     avgDuration: 0,
   });
 
+  // Setup state
+  const [activeTab, setActiveTab] = useState('voice');
+  const [hasPreviewedVoice, setHasPreviewedVoice] = useState(false);
+  const [isScriptSaved, setIsScriptSaved] = useState(false);
+
   // Load saved settings on mount
   useEffect(() => {
     const loadSettings = async () => {
@@ -133,7 +139,10 @@ export default function BotDashboard() {
         const res = await fetch('/api/bot/settings');
         if (res.ok) {
           const data = await res.json();
-          if (data.script) setScript(data.script);
+          if (data.script) {
+            setScript(data.script);
+            setIsScriptSaved(true);
+          }
           if (data.voice) setSelectedVoice(data.voice);
           if (data.concurrency) setConcurrency(data.concurrency);
         }
@@ -188,7 +197,14 @@ export default function BotDashboard() {
     return () => clearInterval(interval);
   }, []);
 
+  const isSetupComplete = selectedVoice && isScriptSaved && hasPreviewedVoice;
+
   const handleStart = async () => {
+    if (!isSetupComplete) {
+      alert('Please complete voice and conversation setup before starting outbound execution.');
+      return;
+    }
+
     try {
       const res = await fetch('/api/bot/start', {
         method: 'POST',
@@ -247,6 +263,7 @@ export default function BotDashboard() {
         audio.onpause = () => setIsPlaying(false);
 
         void audio.play();
+        setHasPreviewedVoice(true);
       }
     } catch (e) {
       console.error('TTS preview failed:', e);
@@ -275,6 +292,7 @@ export default function BotDashboard() {
       });
       if (res.ok) {
         setSaveSuccess(true);
+        setIsScriptSaved(true);
         setTimeout(() => setSaveSuccess(false), 3000);
       }
     } catch (e) {
@@ -311,7 +329,7 @@ export default function BotDashboard() {
       CampaignStatus,
       { variant: 'default' | 'secondary' | 'destructive' | 'outline'; label: string }
     > = {
-      idle: { variant: 'secondary', label: 'Idle' },
+      idle: { variant: 'secondary', label: 'Standing By' },
       running: { variant: 'default', label: 'Running' },
       paused: { variant: 'outline', label: 'Paused' },
       complete: { variant: 'default', label: 'Complete' },
@@ -329,10 +347,10 @@ export default function BotDashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">
-            AI Voice Bot
+            Conductor
           </h1>
           <p className="text-muted-foreground">
-            Automated outbound calling with intelligent conversation handling
+            Configure and run outbound calling with real-time qualification and live transfers
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -342,6 +360,66 @@ export default function BotDashboard() {
           </Button>
         </div>
       </div>
+
+      {/* Setup Required Panel */}
+      {!isSetupComplete && (
+        <Card className="border-l-4 border-l-amber-500 bg-amber-50/50 dark:bg-amber-950/10">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-amber-700 dark:text-amber-500">
+              <AlertTriangle className="h-5 w-5" />
+              Setup Required
+            </CardTitle>
+            <CardDescription className="text-amber-600/90 dark:text-amber-400/90">
+              Conductor needs a voice and conversation defined before outbound execution can begin.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div
+                className="flex items-center gap-2 p-3 rounded-lg border bg-background/50 cursor-pointer hover:bg-background transition-colors"
+                onClick={() => setActiveTab('voice')}
+              >
+                <div
+                  className={`h-2 w-2 rounded-full ${selectedVoice ? 'bg-green-500' : 'bg-amber-500'}`}
+                />
+                <span className={selectedVoice ? 'text-foreground' : 'text-muted-foreground'}>
+                  Voice Profile selected
+                </span>
+                {selectedVoice && <CheckCircle className="ml-auto h-4 w-4 text-green-500" />}
+              </div>
+
+              <div
+                className="flex items-center gap-2 p-3 rounded-lg border bg-background/50 cursor-pointer hover:bg-background transition-colors"
+                onClick={() => setActiveTab('voice')}
+              >
+                <div
+                  className={`h-2 w-2 rounded-full ${isScriptSaved ? 'bg-green-500' : 'bg-amber-500'}`}
+                />
+                <span className={isScriptSaved ? 'text-foreground' : 'text-muted-foreground'}>
+                  Conversation Script saved
+                </span>
+                {isScriptSaved && <CheckCircle className="ml-auto h-4 w-4 text-green-500" />}
+              </div>
+
+              <div
+                className="flex items-center gap-2 p-3 rounded-lg border bg-background/50 cursor-pointer hover:bg-background transition-colors"
+                onClick={() => setActiveTab('voice')}
+              >
+                <div
+                  className={`h-2 w-2 rounded-full ${hasPreviewedVoice ? 'bg-green-500' : 'bg-amber-500'}`}
+                />
+                <span className={hasPreviewedVoice ? 'text-foreground' : 'text-muted-foreground'}>
+                  Voice Sample previewed
+                </span>
+                {hasPreviewedVoice && <CheckCircle className="ml-auto h-4 w-4 text-green-500" />}
+              </div>
+            </div>
+            <p className="mt-4 text-sm text-muted-foreground">
+              Complete setup below before starting outbound execution
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-4">
@@ -363,7 +441,7 @@ export default function BotDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{completedCalls}</div>
-            <p className="text-xs text-muted-foreground">calls processed</p>
+            <p className="text-xs text-muted-foreground">completed sessions</p>
           </CardContent>
         </Card>
 
@@ -374,7 +452,7 @@ export default function BotDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{remainingCalls}</div>
-            <p className="text-xs text-muted-foreground">leads in queue</p>
+            <p className="text-xs text-muted-foreground">contacts queued</p>
           </CardContent>
         </Card>
 
@@ -387,7 +465,7 @@ export default function BotDashboard() {
             <div className="text-2xl font-bold">
               {completedCalls > 0 ? Math.round((stats.transferred / completedCalls) * 100) : 0}%
             </div>
-            <p className="text-xs text-muted-foreground">transferred to agent</p>
+            <p className="text-xs text-muted-foreground">successfully routed</p>
           </CardContent>
         </Card>
       </div>
@@ -405,8 +483,8 @@ export default function BotDashboard() {
           <div className="flex items-center gap-4">
             <Button
               onClick={() => void handleStart()}
-              disabled={campaignStatus === 'running'}
-              className="bg-green-600 hover:bg-green-700"
+              disabled={campaignStatus === 'running' || !isSetupComplete}
+              className="bg-green-600 hover:bg-green-700 disabled:opacity-50"
             >
               <Play className="mr-2 h-4 w-4" />
               Start Campaign
@@ -446,16 +524,16 @@ export default function BotDashboard() {
       </Card>
 
       {/* Main Content Tabs */}
-      <Tabs defaultValue="voice" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="voice" className="flex items-center gap-2">
             <Mic className="h-4 w-4" />
-            Voice & Script
+            Conversation
           </TabsTrigger>
-          <TabsTrigger value="leads">Lead List</TabsTrigger>
+          <TabsTrigger value="leads">Contacts</TabsTrigger>
           <TabsTrigger value="calllog" className="flex items-center gap-2">
             <History className="h-4 w-4" />
-            Call Log
+            Call History
           </TabsTrigger>
           <TabsTrigger value="monitor">Live Monitor</TabsTrigger>
         </TabsList>
@@ -468,9 +546,9 @@ export default function BotDashboard() {
               <CardHeader className="bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-950 dark:to-purple-950 rounded-t-lg">
                 <CardTitle className="flex items-center gap-2">
                   <Volume2 className="h-5 w-5 text-indigo-600" />
-                  AI Voice
+                  Voice Profile
                 </CardTitle>
-                <CardDescription>Choose the voice for your AI bot</CardDescription>
+                <CardDescription>Choose the voice for your conductor agent</CardDescription>
               </CardHeader>
               <CardContent className="pt-6 space-y-4">
                 <Select value={selectedVoice} onValueChange={setSelectedVoice}>
@@ -542,7 +620,7 @@ export default function BotDashboard() {
                     ) : (
                       <Volume2 className="mr-2 h-4 w-4" />
                     )}
-                    {isLoadingTTS ? 'Generating...' : isPlaying ? 'Stop' : 'Preview Voice'}
+                    {isLoadingTTS ? 'Generating...' : isPlaying ? 'Stop' : 'Preview Voice Sample'}
                   </Button>
                 </div>
               </CardContent>
@@ -551,10 +629,10 @@ export default function BotDashboard() {
             {/* Script Editor Card */}
             <Card className="lg:col-span-2">
               <CardHeader className="bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950 dark:to-teal-950 rounded-t-lg">
-                <CardTitle>Bot Script</CardTitle>
+                <CardTitle>Conversation Script</CardTitle>
                 <CardDescription>
-                  Edit the script your AI bot will use. Use {'{name}'} and {'{company}'} for dynamic
-                  placeholders.
+                  Edit the script your conductor will use. Use {'{name}'} and {'{company}'} for
+                  dynamic placeholders.
                 </CardDescription>
               </CardHeader>
               <CardContent className="pt-6 space-y-4">
@@ -582,7 +660,7 @@ export default function BotDashboard() {
                     ) : (
                       <Save className="mr-2 h-4 w-4" />
                     )}
-                    {isSaving ? 'Saving...' : saveSuccess ? 'Saved!' : 'Save Settings'}
+                    {isSaving ? 'Saving...' : saveSuccess ? 'Saved!' : 'Save Conversation'}
                   </Button>
                 </div>
               </CardContent>
@@ -594,7 +672,7 @@ export default function BotDashboard() {
         <TabsContent value="leads">
           <Card>
             <CardHeader>
-              <CardTitle>Lead List Management</CardTitle>
+              <CardTitle>Contact List Management</CardTitle>
               <CardDescription>Upload a CSV file with phone numbers to call</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -603,7 +681,7 @@ export default function BotDashboard() {
                   <div className="flex items-center gap-2 rounded-lg border-2 border-dashed border-muted-foreground/25 px-6 py-8 hover:bg-muted/50 hover:border-primary/50 transition-colors">
                     <Upload className="h-8 w-8 text-muted-foreground" />
                     <div>
-                      <p className="font-medium">Upload Lead CSV</p>
+                      <p className="font-medium">Upload Contacts CSV</p>
                       <p className="text-sm text-muted-foreground">
                         Columns: phone, name (optional)
                       </p>

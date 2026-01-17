@@ -23,7 +23,12 @@ import { cn } from '@/lib/utils';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'AI Bot', href: '/bot', icon: Bot },
+  {
+    name: 'Conductor',
+    href: '/bot',
+    icon: Bot,
+    title: 'Outbound calling & live transfer orchestration',
+  },
   { name: 'Phone', href: '/phone', icon: Phone },
   { name: 'Numbers', href: '/numbers', icon: PhoneCall },
   { name: 'Campaigns', href: '/campaigns', icon: Megaphone },
@@ -66,6 +71,7 @@ export function Sidebar() {
             <Link
               key={item.name}
               href={item.href}
+              title={(item as any).title}
               className={cn(
                 'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
                 isActive
