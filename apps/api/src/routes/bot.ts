@@ -1,7 +1,6 @@
 // AI Bot routes - Campaign control, TTS preview, lead management
-import { FastifyInstance, FastifyRequest } from 'fastify';
+import { FastifyInstance } from 'fastify';
 import { promises as fs } from 'fs';
-import path from 'path';
 
 // Configuration paths (same as dial.py)
 const LEAD_FILE = '/opt/hopwhistle/test_lead.txt';
@@ -26,7 +25,7 @@ interface Lead {
 
 export async function registerBotRoutes(fastify: FastifyInstance) {
   // Get current bot/dialer status
-  fastify.get('/api/bot/status', async (_request, reply) => {
+  fastify.get('/api/bot/status', async () => {
     try {
       const statusData = await fs.readFile(STATUS_FILE, 'utf-8');
       const status: BotStatus = JSON.parse(statusData);
@@ -38,7 +37,7 @@ export async function registerBotRoutes(fastify: FastifyInstance) {
         active_calls: 0,
         completed: 0,
         remaining: 0,
-        timestamp: Date.now() / 1000
+        timestamp: Date.now() / 1000,
       };
     }
   });
@@ -50,7 +49,7 @@ export async function registerBotRoutes(fastify: FastifyInstance) {
       callDelay?: [number, number];
       script?: string;
     };
-  }>('/api/bot/start', async (request, reply) => {
+  }>('/api/bot/start', async (_request, reply) => {
     try {
       // Remove pause flag if it exists
       try {
@@ -65,7 +64,7 @@ export async function registerBotRoutes(fastify: FastifyInstance) {
         active_calls: 0,
         completed: 0,
         remaining: 0,
-        timestamp: Date.now() / 1000
+        timestamp: Date.now() / 1000,
       };
       await fs.writeFile(STATUS_FILE, JSON.stringify(status));
 
@@ -114,7 +113,7 @@ export async function registerBotRoutes(fastify: FastifyInstance) {
         active_calls: 0,
         completed: 0,
         remaining: 0,
-        timestamp: Date.now() / 1000
+        timestamp: Date.now() / 1000,
       };
       await fs.writeFile(STATUS_FILE, JSON.stringify(status));
 
@@ -153,7 +152,7 @@ export async function registerBotRoutes(fastify: FastifyInstance) {
             id: `lead_${leads.length + 1}`,
             phone,
             name: parts[1] || undefined,
-            status: 'pending'
+            status: 'pending',
           });
         }
       }
@@ -165,7 +164,7 @@ export async function registerBotRoutes(fastify: FastifyInstance) {
       return {
         success: true,
         leads,
-        count: leads.length
+        count: leads.length,
       };
     } catch (e: any) {
       void reply.code(500);
@@ -174,7 +173,7 @@ export async function registerBotRoutes(fastify: FastifyInstance) {
   });
 
   // Get leads list
-  fastify.get('/api/bot/leads', async (_request, reply) => {
+  fastify.get('/api/bot/leads', async () => {
     try {
       const content = await fs.readFile(LEAD_FILE, 'utf-8');
       const phones = content.split('\n').filter(l => l.trim());
@@ -182,7 +181,7 @@ export async function registerBotRoutes(fastify: FastifyInstance) {
       const leads: Lead[] = phones.map((phone, i) => ({
         id: `lead_${i + 1}`,
         phone: phone.trim(),
-        status: 'pending'
+        status: 'pending',
       }));
 
       return { leads };
@@ -214,10 +213,10 @@ export async function registerBotRoutes(fastify: FastifyInstance) {
       const response = await fetch('https://api.deepgram.com/v1/speak?model=aura-asteria-en', {
         method: 'POST',
         headers: {
-          'Authorization': `Token ${apiKey}`,
-          'Content-Type': 'application/json'
+          Authorization: `Token ${apiKey}`,
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ text: text.trim() })
+        body: JSON.stringify({ text: text.trim() }),
       });
 
       if (!response.ok) {
@@ -232,7 +231,7 @@ export async function registerBotRoutes(fastify: FastifyInstance) {
         .header('Content-Type', 'audio/mpeg')
         .header('Content-Length', audioBuffer.byteLength)
         .send(Buffer.from(audioBuffer));
-
+      return;
     } catch (e: any) {
       void reply.code(500);
       return { error: 'TTS preview failed', message: e.message };
@@ -240,7 +239,7 @@ export async function registerBotRoutes(fastify: FastifyInstance) {
   });
 
   // Get DID pool for caller ID rotation
-  fastify.get('/api/bot/dids', async (_request, reply) => {
+  fastify.get('/api/bot/dids', async () => {
     try {
       const content = await fs.readFile(DIDS_FILE, 'utf-8');
       const dids = JSON.parse(content);
