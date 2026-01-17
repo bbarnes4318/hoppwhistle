@@ -1,6 +1,7 @@
 // AI Bot routes - Campaign control, TTS preview, lead management
-import { FastifyInstance } from 'fastify';
 import { promises as fs } from 'fs';
+
+import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 // Configuration paths (same as dial.py)
 const LEAD_FILE = '/opt/hopwhistle/test_lead.txt';
@@ -23,14 +24,19 @@ interface Lead {
   status: 'pending' | 'calling' | 'success' | 'failed' | 'no_answer';
 }
 
-export async function registerBotRoutes(fastify: FastifyInstance) {
+function getErrorMessage(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  return 'Unknown error';
+}
+
+export function registerBotRoutes(fastify: FastifyInstance): void {
   // Get current bot/dialer status
   fastify.get('/api/bot/status', async () => {
     try {
       const statusData = await fs.readFile(STATUS_FILE, 'utf-8');
-      const status: BotStatus = JSON.parse(statusData);
+      const status = JSON.parse(statusData) as BotStatus;
       return status;
-    } catch (e) {
+    } catch {
       // No status file means dialer isn't running
       return {
         status: 'idle',
@@ -49,12 +55,12 @@ export async function registerBotRoutes(fastify: FastifyInstance) {
       callDelay?: [number, number];
       script?: string;
     };
-  }>('/api/bot/start', async (_request, reply) => {
+  }>('/api/bot/start', async (_request: FastifyRequest, reply: FastifyReply) => {
     try {
       // Remove pause flag if it exists
       try {
         await fs.unlink(PAUSE_FLAG);
-      } catch (e) {
+      } catch {
         // File doesn't exist, that's fine
       }
 
@@ -68,18 +74,15 @@ export async function registerBotRoutes(fastify: FastifyInstance) {
       };
       await fs.writeFile(STATUS_FILE, JSON.stringify(status));
 
-      // TODO: In production, this would trigger the Python dialer process
-      // For now, we just update the status and the dialer polls this
-
       return { success: true, message: 'Campaign started' };
-    } catch (e: any) {
+    } catch (e: unknown) {
       void reply.code(500);
-      return { error: 'Failed to start campaign', message: e.message };
+      return { error: 'Failed to start campaign', message: getErrorMessage(e) };
     }
   });
 
   // Pause the dialing campaign
-  fastify.post('/api/bot/pause', async (_request, reply) => {
+  fastify.post('/api/bot/pause', async (_request: FastifyRequest, reply: FastifyReply) => {
     try {
       // Create pause flag
       await fs.writeFile(PAUSE_FLAG, new Date().toISOString());
@@ -87,22 +90,22 @@ export async function registerBotRoutes(fastify: FastifyInstance) {
       // Update status
       try {
         const statusData = await fs.readFile(STATUS_FILE, 'utf-8');
-        const status: BotStatus = JSON.parse(statusData);
+        const status = JSON.parse(statusData) as BotStatus;
         status.status = 'paused';
         await fs.writeFile(STATUS_FILE, JSON.stringify(status));
-      } catch (e) {
+      } catch {
         // Status file might not exist
       }
 
       return { success: true, message: 'Campaign paused' };
-    } catch (e: any) {
+    } catch (e: unknown) {
       void reply.code(500);
-      return { error: 'Failed to pause campaign', message: e.message };
+      return { error: 'Failed to pause campaign', message: getErrorMessage(e) };
     }
   });
 
   // Stop/reset the dialing campaign
-  fastify.post('/api/bot/stop', async (_request, reply) => {
+  fastify.post('/api/bot/stop', async (_request: FastifyRequest, reply: FastifyReply) => {
     try {
       // Create pause flag to stop any running calls
       await fs.writeFile(PAUSE_FLAG, new Date().toISOString());
@@ -118,14 +121,14 @@ export async function registerBotRoutes(fastify: FastifyInstance) {
       await fs.writeFile(STATUS_FILE, JSON.stringify(status));
 
       return { success: true, message: 'Campaign stopped' };
-    } catch (e: any) {
+    } catch (e: unknown) {
       void reply.code(500);
-      return { error: 'Failed to stop campaign', message: e.message };
+      return { error: 'Failed to stop campaign', message: getErrorMessage(e) };
     }
   });
 
   // Upload leads CSV
-  fastify.post('/api/bot/leads/upload', async (request, reply) => {
+  fastify.post('/api/bot/leads/upload', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       // For multipart file upload
       const data = await request.file();
@@ -138,12 +141,12 @@ export async function registerBotRoutes(fastify: FastifyInstance) {
       const content = buffer.toString('utf-8');
 
       // Parse CSV-ish content (one phone per line, optional name)
-      const lines = content.split('\n').filter(l => l.trim());
+      const lines = content.split('\n').filter((l: string) => l.trim());
       const leads: Lead[] = [];
       const phoneSet = new Set<string>();
 
       for (const line of lines) {
-        const parts = line.split(',').map(p => p.trim());
+        const parts = line.split(',').map((p: string) => p.trim());
         const phone = parts[0]?.replace(/[^\d+]/g, '');
 
         if (phone && phone.length >= 10 && !phoneSet.has(phone)) {
@@ -158,7 +161,7 @@ export async function registerBotRoutes(fastify: FastifyInstance) {
       }
 
       // Write to lead file for dialer
-      const phoneNumbers = leads.map(l => l.phone).join('\n');
+      const phoneNumbers = leads.map((l: Lead) => l.phone).join('\n');
       await fs.writeFile(LEAD_FILE, phoneNumbers);
 
       return {
@@ -166,9 +169,9 @@ export async function registerBotRoutes(fastify: FastifyInstance) {
         leads,
         count: leads.length,
       };
-    } catch (e: any) {
+    } catch (e: unknown) {
       void reply.code(500);
-      return { error: 'Failed to upload leads', message: e.message };
+      return { error: 'Failed to upload leads', message: getErrorMessage(e) };
     }
   });
 
@@ -176,16 +179,16 @@ export async function registerBotRoutes(fastify: FastifyInstance) {
   fastify.get('/api/bot/leads', async () => {
     try {
       const content = await fs.readFile(LEAD_FILE, 'utf-8');
-      const phones = content.split('\n').filter(l => l.trim());
+      const phones = content.split('\n').filter((l: string) => l.trim());
 
-      const leads: Lead[] = phones.map((phone, i) => ({
+      const leads: Lead[] = phones.map((phone: string, i: number) => ({
         id: `lead_${i + 1}`,
         phone: phone.trim(),
-        status: 'pending',
+        status: 'pending' as const,
       }));
 
       return { leads };
-    } catch (e) {
+    } catch {
       return { leads: [] };
     }
   });
@@ -193,58 +196,61 @@ export async function registerBotRoutes(fastify: FastifyInstance) {
   // TTS Preview using Deepgram
   fastify.post<{
     Body: { text: string };
-  }>('/api/bot/tts/preview', async (request, reply) => {
-    try {
-      const { text } = request.body;
+  }>(
+    '/api/bot/tts/preview',
+    async (request: FastifyRequest<{ Body: { text: string } }>, reply: FastifyReply) => {
+      try {
+        const { text } = request.body;
 
-      if (!text || text.trim().length === 0) {
-        void reply.code(400);
-        return { error: 'Text is required' };
-      }
+        if (!text || text.trim().length === 0) {
+          void reply.code(400);
+          return { error: 'Text is required' };
+        }
 
-      // Get Deepgram API key from environment
-      const apiKey = process.env.DEEPGRAM_API_KEY;
-      if (!apiKey) {
+        // Get Deepgram API key from environment
+        const apiKey = process.env.DEEPGRAM_API_KEY;
+        if (!apiKey) {
+          void reply.code(500);
+          return { error: 'Deepgram API key not configured' };
+        }
+
+        // Call Deepgram TTS API
+        const response = await fetch('https://api.deepgram.com/v1/speak?model=aura-asteria-en', {
+          method: 'POST',
+          headers: {
+            Authorization: `Token ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ text: text.trim() }),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          void reply.code(response.status);
+          return { error: 'TTS generation failed', details: errorText };
+        }
+
+        // Stream audio back to client
+        const audioBuffer = await response.arrayBuffer();
+        void reply
+          .header('Content-Type', 'audio/mpeg')
+          .header('Content-Length', audioBuffer.byteLength)
+          .send(Buffer.from(audioBuffer));
+        return;
+      } catch (e: unknown) {
         void reply.code(500);
-        return { error: 'Deepgram API key not configured' };
+        return { error: 'TTS preview failed', message: getErrorMessage(e) };
       }
-
-      // Call Deepgram TTS API
-      const response = await fetch('https://api.deepgram.com/v1/speak?model=aura-asteria-en', {
-        method: 'POST',
-        headers: {
-          Authorization: `Token ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ text: text.trim() }),
-      });
-
-      if (!response.ok) {
-        const error = await response.text();
-        void reply.code(response.status);
-        return { error: 'TTS generation failed', details: error };
-      }
-
-      // Stream audio back to client
-      const audioBuffer = await response.arrayBuffer();
-      void reply
-        .header('Content-Type', 'audio/mpeg')
-        .header('Content-Length', audioBuffer.byteLength)
-        .send(Buffer.from(audioBuffer));
-      return;
-    } catch (e: any) {
-      void reply.code(500);
-      return { error: 'TTS preview failed', message: e.message };
     }
-  });
+  );
 
   // Get DID pool for caller ID rotation
   fastify.get('/api/bot/dids', async () => {
     try {
       const content = await fs.readFile(DIDS_FILE, 'utf-8');
-      const dids = JSON.parse(content);
+      const dids = JSON.parse(content) as Record<string, unknown>;
       return { dids: Object.keys(dids) };
-    } catch (e) {
+    } catch {
       return { dids: [] };
     }
   });
