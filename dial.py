@@ -2,6 +2,10 @@ import subprocess, time, json, random, os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 import logging
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # --- LOGGING SETUP ---
 logging.basicConfig(
@@ -14,23 +18,35 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-# --- CONFIGURATION ---
-AGENT_TRANSFER_NUMBER = "+18653969104"
-TELNYX_VALID_DID = "+17868404940"
-DID_FILE = '/opt/hopwhistle/dids.json'
-LEAD_FILE = '/opt/hopwhistle/test_lead.txt'
-PROGRESS_FILE = '/opt/hopwhistle/already_called.log'
-PAUSE_FLAG = "/opt/hopwhistle/pause.flag"
-STATUS_FILE = "/opt/hopwhistle/dialer_status.json"
+# --- CONFIGURATION FROM ENVIRONMENT ---
+AGENT_TRANSFER_NUMBER = os.getenv('AGENT_TRANSFER_NUMBER', '+18653969104')
+TELNYX_VALID_DID = os.getenv('TELNYX_VALID_DID', '+17868404940')
+TELNYX_API_KEY = os.getenv('TELNYX_API_KEY', '')
+TELNYX_CONNECTION_ID = os.getenv('TELNYX_CONNECTION_ID', '')
+DEEPGRAM_API_KEY = os.getenv('DEEPGRAM_API_KEY', '')
+FREESWITCH_HOST = os.getenv('FREESWITCH_HOST', 'freeswitch')
+FREESWITCH_ESL_PORT = os.getenv('FREESWITCH_ESL_PORT', '8021')
+FREESWITCH_ESL_PASSWORD = os.getenv('FREESWITCH_ESL_PASSWORD', 'ClueCon')
+OUTBOUND_SIP_PROXY = os.getenv('OUTBOUND_SIP_PROXY', 'sip.telnyx.com')
+
+# File paths
+DID_FILE = os.getenv('DID_FILE', '/opt/hopwhistle/dids.json')
+LEAD_FILE = os.getenv('LEAD_FILE', '/opt/hopwhistle/test_lead.txt')
+PROGRESS_FILE = os.getenv('PROGRESS_FILE', '/opt/hopwhistle/already_called.log')
+PAUSE_FLAG = os.getenv('PAUSE_FLAG', '/opt/hopwhistle/pause.flag')
+STATUS_FILE = os.getenv('STATUS_FILE', '/opt/hopwhistle/dialer_status.json')
 
 # --- CONCURRENCY SETTINGS ---
-MAX_CONCURRENT_CALLS = 10  # Maximum simultaneous outbound calls
-CALL_DELAY_MIN = 3.0       # Minimum seconds between starting new calls
-CALL_DELAY_MAX = 6.0       # Maximum seconds (randomized for spam avoidance)
-STAGGER_INITIAL_CALLS = True  # Stagger first batch to avoid burst
+MAX_CONCURRENT_CALLS = int(os.getenv('MAX_CONCURRENT_CALLS', '10'))
+CALL_DELAY_MIN = float(os.getenv('CALL_DELAY_MIN', '3.0'))
+CALL_DELAY_MAX = float(os.getenv('CALL_DELAY_MAX', '6.0'))
+STAGGER_INITIAL_CALLS = os.getenv('STAGGER_INITIAL_CALLS', 'true').lower() == 'true'
 
 # CARRIER CONFIGS
-VOXBEAM_PREFIX = "0011104"  # Call Center Route
+VOXBEAM_PREFIX = os.getenv('VOXBEAM_PREFIX', '0011104')
+
+# Docker container name (for fs_cli commands)
+FREESWITCH_CONTAINER = os.getenv('FREESWITCH_CONTAINER', 'docker-freeswitch-1')
 
 # Thread-safe progress tracking
 progress_lock = Lock()
@@ -96,7 +112,7 @@ def dial_single(customer_num: str, did_pool: dict) -> dict:
         # 2. CONSTRUCT THE FAILOVER CHAIN
         # Syntax: carrier1|carrier2|carrier3
         # Timeouts per leg for quick failover
-        leg_a = f"[leg_timeout=6]sofia/internal/{fmt_telnyx}@sip.telnyx.com"
+        leg_a = f"[leg_timeout=6]sofia/internal/{fmt_telnyx}@{OUTBOUND_SIP_PROXY}"
         leg_b = f"[leg_timeout=6]sofia/gateway/voxbeam/{VOXBEAM_PREFIX}{fmt_clean}"
         leg_c = f"[leg_timeout=6]sofia/gateway/anveo/{fmt_clean}"
 
@@ -110,7 +126,7 @@ def dial_single(customer_num: str, did_pool: dict) -> dict:
                 f"effective_caller_id_number={mask},effective_caller_id_name={mask},"
                 f"ignore_early_media=true,continue_on_fail=true")
 
-        cmd = f"docker exec docker-freeswitch-1 fs_cli -x \"bgapi originate {{{vars}}}{dial_string} &lua(/opt/hopwhistle/handler.lua)\""
+        cmd = f"docker exec {FREESWITCH_CONTAINER} fs_cli -x \"bgapi originate {{{vars}}}{dial_string} &lua(/opt/hopwhistle/handler.lua)\""
 
         proc_result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
 
@@ -148,8 +164,17 @@ def start_concurrent_blast():
     log.info("NOVA-3 CONCURRENT DIALER v2.0")
     log.info(f"Max Concurrent: {MAX_CONCURRENT_CALLS}")
     log.info(f"Call Delay: {CALL_DELAY_MIN}-{CALL_DELAY_MAX}s (randomized)")
+    log.info(f"Telnyx Connection ID: {TELNYX_CONNECTION_ID}")
+    log.info(f"FreeSWITCH Host: {FREESWITCH_HOST}")
+    log.info(f"Outbound Proxy: {OUTBOUND_SIP_PROXY}")
     log.info("Sequence: TELNYX -> VOXBEAM -> ANVEO")
     log.info("=" * 60)
+
+    # Verify required env vars
+    if not TELNYX_API_KEY:
+        log.warning("TELNYX_API_KEY not set - some features may not work")
+    if not DEEPGRAM_API_KEY:
+        log.warning("DEEPGRAM_API_KEY not set - TTS/STT features disabled")
 
     while True:
         if os.path.exists(PAUSE_FLAG):
