@@ -50,6 +50,7 @@ services:
     environment:
       - NODE_ENV=production
       - HOSTNAME=0.0.0.0
+      - PORT=3000
       - NEXT_PUBLIC_API_URL=http://45.32.213.201:3001
     ports:
       - '3000:3000'
