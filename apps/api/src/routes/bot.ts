@@ -8,6 +8,7 @@ const LEAD_FILE = '/opt/hopwhistle/test_lead.txt';
 const PAUSE_FLAG = '/opt/hopwhistle/pause.flag';
 const STATUS_FILE = '/opt/hopwhistle/dialer_status.json';
 const DIDS_FILE = '/opt/hopwhistle/dids.json';
+const SETTINGS_FILE = '/opt/hopwhistle/bot_settings.json';
 
 interface BotStatus {
   status: 'idle' | 'running' | 'paused' | 'complete' | 'error';
@@ -22,6 +23,12 @@ interface Lead {
   phone: string;
   name?: string;
   status: 'pending' | 'calling' | 'success' | 'failed' | 'no_answer';
+}
+
+interface BotSettings {
+  script: string;
+  voice: string;
+  concurrency: number;
 }
 
 function getErrorMessage(e: unknown): string {
@@ -195,12 +202,15 @@ export function registerBotRoutes(fastify: FastifyInstance): void {
 
   // TTS Preview using Deepgram
   fastify.post<{
-    Body: { text: string };
+    Body: { text: string; voice?: string };
   }>(
     '/api/bot/tts/preview',
-    async (request: FastifyRequest<{ Body: { text: string } }>, reply: FastifyReply) => {
+    async (
+      request: FastifyRequest<{ Body: { text: string; voice?: string } }>,
+      reply: FastifyReply
+    ) => {
       try {
-        const { text } = request.body;
+        const { text, voice = 'aura-asteria-en' } = request.body;
 
         if (!text || text.trim().length === 0) {
           void reply.code(400);
@@ -214,8 +224,8 @@ export function registerBotRoutes(fastify: FastifyInstance): void {
           return { error: 'Deepgram API key not configured' };
         }
 
-        // Call Deepgram TTS API
-        const response = await fetch('https://api.deepgram.com/v1/speak?model=aura-asteria-en', {
+        // Call Deepgram TTS API with selected voice
+        const response = await fetch(`https://api.deepgram.com/v1/speak?model=${voice}`, {
           method: 'POST',
           headers: {
             Authorization: `Token ${apiKey}`,
@@ -254,4 +264,41 @@ export function registerBotRoutes(fastify: FastifyInstance): void {
       return { dids: [] };
     }
   });
+
+  // Get saved bot settings
+  fastify.get('/api/bot/settings', async () => {
+    try {
+      const content = await fs.readFile(SETTINGS_FILE, 'utf-8');
+      const settings = JSON.parse(content) as BotSettings;
+      return settings;
+    } catch {
+      // Return defaults if no settings file
+      return {
+        script: `Hello! This is a quick call from {company}.
+
+We're reaching out about the final expense coverage you requested information on.
+
+Is this a good time to speak for just a moment?`,
+        voice: 'aura-asteria-en',
+        concurrency: 10,
+      };
+    }
+  });
+
+  // Save bot settings
+  fastify.post<{
+    Body: BotSettings;
+  }>(
+    '/api/bot/settings',
+    async (request: FastifyRequest<{ Body: BotSettings }>, reply: FastifyReply) => {
+      try {
+        const settings = request.body;
+        await fs.writeFile(SETTINGS_FILE, JSON.stringify(settings, null, 2));
+        return { success: true, message: 'Settings saved' };
+      } catch (e: unknown) {
+        void reply.code(500);
+        return { error: 'Failed to save settings', message: getErrorMessage(e) };
+      }
+    }
+  );
 }
