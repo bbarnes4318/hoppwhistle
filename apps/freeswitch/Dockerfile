@@ -2,34 +2,34 @@
 FROM safarov/freeswitch:1.10.12
 
 # Create additional directories
-RUN mkdir -p /etc/freeswitch/scripts /recordings
+RUN mkdir -p /recordings
 
-# IMPORTANT: Copy config files individually to MERGE with base config, not replace!
-# The base image already has all the essential FreeSWITCH configs we need
+# The base image uses /usr/share/freeswitch/conf/vanilla/ as default config
+# We need to copy our customizations there to MERGE with the base config
 
 # Copy our custom autoload_configs (merges/overwrites only what we provide)
-COPY apps/freeswitch/conf/autoload_configs/*.xml /etc/freeswitch/autoload_configs/
+COPY apps/freeswitch/conf/autoload_configs/*.xml /usr/share/freeswitch/conf/vanilla/autoload_configs/
 
 # Copy our custom sip_profiles
-COPY apps/freeswitch/conf/sip_profiles/*.xml /etc/freeswitch/sip_profiles/
-COPY apps/freeswitch/conf/sip_profiles/external/ /etc/freeswitch/sip_profiles/external/
+COPY apps/freeswitch/conf/sip_profiles/*.xml /usr/share/freeswitch/conf/vanilla/sip_profiles/
+COPY apps/freeswitch/conf/sip_profiles/external/ /usr/share/freeswitch/conf/vanilla/sip_profiles/external/
 
 # Copy our custom dialplan
-COPY apps/freeswitch/conf/dialplan/*.xml /etc/freeswitch/dialplan/
+COPY apps/freeswitch/conf/dialplan/*.xml /usr/share/freeswitch/conf/vanilla/dialplan/
 
 # Copy vars.xml for environment variable substitution
-COPY apps/freeswitch/conf/vars.xml /etc/freeswitch/vars.xml
-COPY apps/freeswitch/conf/vars.xml /etc/freeswitch/vars.xml.template
+COPY apps/freeswitch/conf/vars.xml /usr/share/freeswitch/conf/vanilla/vars.xml
 
 # Copy scripts
-COPY apps/freeswitch/scripts/ /etc/freeswitch/scripts/
+RUN mkdir -p /usr/share/freeswitch/scripts
+COPY apps/freeswitch/scripts/ /usr/share/freeswitch/scripts/
 
 # Copy entrypoint
 COPY apps/freeswitch/docker-entrypoint.sh /docker-entrypoint.sh
 
 # Fix Windows line endings and make executable
 RUN sed -i 's/\r$//' /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh
-RUN chmod +x /etc/freeswitch/scripts/*.sh 2>/dev/null || true
+RUN chmod +x /usr/share/freeswitch/scripts/*.sh 2>/dev/null || true
 
 # Expose ports (SIP, ESL, RTP, Verto WebSocket)
 EXPOSE 5060/udp 5060/tcp 5066/tcp 5080/udp 5080/tcp 7443/tcp 8021/tcp 8082/tcp 8083/tcp 16384-32768/udp
