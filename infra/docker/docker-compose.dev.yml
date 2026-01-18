@@ -118,11 +118,6 @@ services:
       S3_FORCE_PATH_STYLE: 'true'
       CLICKHOUSE_URL: http://clickhouse:8123
       CLICKHOUSE_DATABASE: ${CLICKHOUSE_DB:-hopwhistle}
-    volumes:
-      - ../../:/workspace
-      - api_node_modules:/workspace/node_modules
-      - api_app_node_modules:/workspace/apps/api/node_modules
-    working_dir: /workspace/apps/api
     depends_on:
       postgres:
         condition: service_healthy
@@ -132,7 +127,6 @@ services:
         condition: service_healthy
     networks:
       - hopwhistle-network
-    command: sh -c "pnpm install && pnpm dev"
 
   web:
     build:
@@ -147,17 +141,10 @@ services:
       NEXT_PUBLIC_WS_URL: ws://localhost:3001
       NEXT_PUBLIC_API_KEY: ${API_KEY:-demo-key}
       NEXT_PUBLIC_APP_NAME: Hopwhistle
-    volumes:
-      - ../../:/workspace
-      - web_node_modules:/workspace/node_modules
-      - web_app_node_modules:/workspace/apps/web/node_modules
-      - web_next:/workspace/apps/web/.next
-    working_dir: /workspace/apps/web
     depends_on:
       - api
     networks:
       - hopwhistle-network
-    command: sh -c "pnpm install && pnpm dev"
 
   worker:
     build:
@@ -175,11 +162,6 @@ services:
       FREESWITCH_ESL_PORT: 8021
       FREESWITCH_ESL_PASSWORD: ${FREESWITCH_ESL_PASSWORD:-ClueCon}
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-5}
-    volumes:
-      - ../../:/workspace
-      - worker_node_modules:/workspace/node_modules
-      - worker_app_node_modules:/workspace/apps/worker/node_modules
-    working_dir: /workspace/apps/worker
     depends_on:
       postgres:
         condition: service_healthy
@@ -187,7 +169,6 @@ services:
         condition: service_healthy
     networks:
       - hopwhistle-network
-    command: sh -c "pnpm install && pnpm dev"
 
   # ============================================================================
   # Telephony Infrastructure
