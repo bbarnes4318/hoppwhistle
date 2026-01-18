@@ -28,7 +28,7 @@
 
       <!-- Authentication -->
       <param name="challenge-realm" value="auto_from"/>
-      <param name="auth-calls" value="true"/>
+      <param name="auth-calls" value="false"/>
       <param name="apply-inbound-acl" value="domains"/>
 
       <!-- NAT Traversal -->
