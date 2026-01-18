@@ -142,23 +142,6 @@ export function usePhone(): PhoneContextType {
 // WebSocket Event Types
 // ============================================================================
 
-interface WebSocketEvent {
-  type: string;
-  channel?: string;
-  payload?: {
-    callId?: string;
-    callerNumber?: string;
-    from?: string;
-    callerName?: string;
-    prospectData?: ProspectData;
-    screenPopData?: ProspectData;
-    queueName?: string;
-    campaignId?: string;
-    isOnHold?: boolean;
-    [key: string]: unknown;
-  };
-}
-
 interface ApiResponse {
   callId?: string;
   error?: {
@@ -178,7 +161,6 @@ interface PhoneProviderProps {
 
 export function PhoneProvider({
   children,
-  wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3001',
   apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001',
 }: PhoneProviderProps): JSX.Element {
   // Normalize apiUrl to just be the base (remove trailing /api/v1 if present)
@@ -209,7 +191,7 @@ export function PhoneProvider({
   const [isPhonePanelOpen, setIsPhonePanelOpen] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isRegistered, setIsRegistered] = useState(false);
-  const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
+  const [audioDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedAudioInput, setSelectedAudioInput] = useState<string | null>(null);
   const [selectedAudioOutput, setSelectedAudioOutput] = useState<string | null>(null);
   const [screenPopFields, setScreenPopFields] = useState<ScreenPopField[]>(() => {
@@ -228,7 +210,7 @@ export function PhoneProvider({
   const [error, setError] = useState<string | null>(null);
 
   // Refs
-  const wsRef = useRef<WebSocket | null>(null);
+
   const callDurationIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const ringtoneRef = useRef<HTMLAudioElement | null>(null);
   const userAgentRef = useRef<UserAgent | null>(null);
@@ -303,80 +285,6 @@ export function PhoneProvider({
   // SIP / WebRTC Implementation
   // ============================================================================
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    // Hardcoded credentials for Demo Agent (matches FS directory)
-    const sipUser = 'demo-agent';
-    const sipPass = '1';
-    // Use PUBLIC_IP from env, fallback to window location if local
-    const domain = process.env.NEXT_PUBLIC_IP || window.location.hostname;
-    // SIP WS endpoint - port 8083 is open (Verto port repurpose)
-    const sipWsUrl = `ws://${domain}:8083`;
-
-    console.log('[Phone] Initializing SIP UA:', { sipUser, domain, sipWsUrl });
-
-    const uri = UserAgent.makeURI(`sip:${sipUser}@${domain}`);
-    if (!uri) {
-      setError('Invalid SIP URI');
-      return;
-    }
-
-    const options: UserAgentOptions = {
-      uri,
-      transportOptions: {
-        server: sipWsUrl,
-      },
-      authorizationUsername: sipUser,
-      authorizationPassword: sipPass,
-      delegate: {
-        onConnect: () => {
-          console.log('[Phone] SIP Transport Connected');
-          setError(null);
-        },
-        onDisconnect: error => {
-          console.log('[Phone] SIP Transport Disconnected', error);
-          setIsRegistered(false);
-          if (error) setError('SIP connection lost');
-        },
-        onInvite: (invitation: Invitation) => {
-          console.log('[Phone] Incoming SIP Invite');
-          handleIncomingSipCall(invitation);
-        },
-      },
-    };
-
-    const ua = new UserAgent(options);
-    userAgentRef.current = ua;
-
-    ua.start()
-      .then(() => {
-        console.log('[Phone] SIP UA Started');
-        const registerer = new Registerer(ua);
-        registerer
-          .register()
-          .then(() => {
-            console.log('[Phone] SIP Registered');
-            setIsRegistered(true);
-            setAgentStatusState('available');
-          })
-          .catch(e => {
-            console.error('[Phone] SIP Registration Failed', e);
-            setError('Registration failed');
-          });
-      })
-      .catch(e => {
-        console.error('[Phone] SIP UA Start Failed', e);
-        setError('Phone initialization failed');
-      });
-
-    return () => {
-      if (ua) {
-        ua.stop();
-      }
-    };
-  }, []);
-
   const handleIncomingSipCall = useCallback(
     (invitation: Invitation) => {
       sessionRef.current = invitation;
@@ -416,7 +324,10 @@ export function PhoneProvider({
 
   const setupRemoteAudio = (session: Session) => {
     const stream = new MediaStream();
-    session.sessionDescriptionHandler?.peerConnection?.getReceivers().forEach(receiver => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pc = (session.sessionDescriptionHandler as any)?.peerConnection;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    pc?.getReceivers().forEach((receiver: any) => {
       if (receiver.track) {
         stream.addTrack(receiver.track);
       }
@@ -621,13 +532,12 @@ export function PhoneProvider({
     });
   }, []);
 
-  const sendDTMF = useCallback((digit: string) => {
-    if (sessionRef.current && sessionRef.current.state === SessionState.Established) {
-      sessionRef.current.dtmf(digit);
-    }
-  }, []);
+  if (sessionRef.current && sessionRef.current.state === SessionState.Established) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (sessionRef.current as any).dtmf(digit);
+  }
 
-  const transferCall = useCallback(async (destination: string, type: 'blind' | 'warm') => {
+  const transferCall = useCallback(async (_destination: string, _type: 'blind' | 'warm') => {
     // TODO: Implement SIP REFER
     console.log('Transfer not fully implemented in SIP yet');
   }, []);
@@ -648,6 +558,81 @@ export function PhoneProvider({
   }, []);
 
   const clearError = useCallback(() => setError(null), []);
+
+  // Main SIP Initialization - Moved to bottom to satisfy dependencies
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    // Hardcoded credentials for Demo Agent (matches FS directory)
+    const sipUser = 'demo-agent';
+    const sipPass = '1';
+    // Use PUBLIC_IP from env, fallback to window location if local
+    const domain = process.env.NEXT_PUBLIC_IP || window.location.hostname;
+    // SIP WS endpoint - port 8083 is open (Verto port repurpose)
+    const sipWsUrl = `ws://${domain}:8083`;
+
+    console.log('[Phone] Initializing SIP UA:', { sipUser, domain, sipWsUrl });
+
+    const uri = UserAgent.makeURI(`sip:${sipUser}@${domain}`);
+    if (!uri) {
+      setError('Invalid SIP URI');
+      return;
+    }
+
+    const options: UserAgentOptions = {
+      uri,
+      transportOptions: {
+        server: sipWsUrl,
+      },
+      authorizationUsername: sipUser,
+      authorizationPassword: sipPass,
+      delegate: {
+        onConnect: () => {
+          console.log('[Phone] SIP Transport Connected');
+          setError(null);
+        },
+        onDisconnect: error => {
+          console.log('[Phone] SIP Transport Disconnected', error);
+          setIsRegistered(false);
+          if (error) setError('SIP connection lost');
+        },
+        onInvite: (invitation: Invitation) => {
+          console.log('[Phone] Incoming SIP Invite');
+          handleIncomingSipCall(invitation);
+        },
+      },
+    };
+
+    const ua = new UserAgent(options);
+    userAgentRef.current = ua;
+
+    ua.start()
+      .then(() => {
+        console.log('[Phone] SIP UA Started');
+        const registerer = new Registerer(ua);
+        registerer
+          .register()
+          .then(() => {
+            console.log('[Phone] SIP Registered');
+            setIsRegistered(true);
+            setAgentStatusState('available');
+          })
+          .catch(e => {
+            console.error('[Phone] SIP Registration Failed', e);
+            setError('Registration failed');
+          });
+      })
+      .catch(e => {
+        console.error('[Phone] SIP UA Start Failed', e);
+        setError('Phone initialization failed');
+      });
+
+    return () => {
+      if (ua) {
+        ua.stop();
+      }
+    };
+  }, [handleIncomingSipCall]);
 
   const value: PhoneContextType = {
     agentStatus,
