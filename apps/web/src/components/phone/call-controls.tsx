@@ -2,6 +2,7 @@
 
 import { Grid, Mic, MicOff, Pause, PhoneForwarded, PhoneOff, Play } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import { CallTransferDialog } from './call-transfer-dialog';
 import { usePhone } from './phone-provider';
@@ -68,8 +69,10 @@ export function CallControls(): JSX.Element {
 
   return (
     <>
-      {/* Transfer Dialog */}
-      {showTransfer && <CallTransferDialog onClose={() => setShowTransfer(false)} />}
+      {/* Transfer Dialog - rendered via portal to avoid parent overflow:hidden */}
+      {showTransfer &&
+        typeof document !== 'undefined' &&
+        createPortal(<CallTransferDialog onClose={() => setShowTransfer(false)} />, document.body)}
 
       {/* Controls Grid */}
       <div className="space-y-4">
