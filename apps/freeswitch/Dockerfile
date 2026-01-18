@@ -9,6 +9,8 @@ RUN apt-get update && apt-get install -y \
     curl \
     jq \
     gettext-base \
+    procps \
+    freeswitch-mod-verto \
     && rm -rf /var/lib/apt/lists/*
 
 # Create directories
