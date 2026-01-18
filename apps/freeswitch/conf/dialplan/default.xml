@@ -1,77 +1,47 @@
 <include>
   <context name="default">
-    <extension name="authenticate-trunk">
-      <condition field="destination_number" expression="^.+$" break="never">
-        <action application="log" data="INFO Inbound call from ${caller_id_number} to ${destination_number}"/>
-        <action application="set" data="trunk_auth_url=${api_url}/api/v1/trunks/auth"/>
-        <action application="set" data="trunk_auth_body={&quot;from&quot;:&quot;${caller_id_number}&quot;,&quot;to&quot;:&quot;${destination_number}&quot;,&quot;source_ip&quot;:&quot;${network_addr}&quot;}"/>
-        <action application="set" data="trunk_auth_result=${curl(${trunk_auth_url} POST ${trunk_auth_body} X-API-Key:${api_key})}"/>
-        <condition field="${trunk_auth_result}" expression="authenticated">
-          <action application="log" data="INFO Trunk authenticated"/>
-          <action application="transfer" data="lookup-did XML default"/>
-        </condition>
-        <anti-action application="log" data="WARNING Trunk authentication failed"/>
-        <anti-action application="respond" data="403 Forbidden"/>
-        <anti-action application="hangup" data="CALL_REJECTED"/>
+    <!-- Direct outbound calls for internal users (WebRTC agents) -->
+    <extension name="outbound-to-telnyx">
+      <condition field="destination_number" expression="^(\d{10,11})$">
+        <action application="log" data="INFO Outbound call from ${caller_id_number} to ${destination_number} via Telnyx"/>
+        <action application="set" data="effective_caller_id_number=${outbound_caller_id}"/>
+        <action application="set" data="effective_caller_id_name=Hopwhistle"/>
+        <action application="bridge" data="sofia/gateway/telnyx/+1${destination_number}"/>
       </condition>
     </extension>
 
-    <extension name="send-to-signalwire-prefix">
-      <condition field="destination_number" expression="^9(\d{10,})$">
-        <action application="log" data="INFO Outbound call to $1 via SignalWire"/>
-        <action application="set" data="effective_caller_id_number=$${outbound_caller_id}"/>
-        <action application="set" data="effective_caller_id_name=$${outbound_caller_id}"/>
-        <action application="export" data="sip_h_P-Asserted-Identity=<sip:$${outbound_caller_id}@$${signalwire_domain}>"/>
-        <action application="bridge" data="sofia/gateway/signalwire/+1$1"/>
+    <!-- Calls with + prefix already formatted -->
+    <extension name="outbound-e164">
+      <condition field="destination_number" expression="^(\+1\d{10})$">
+        <action application="log" data="INFO Outbound E.164 call to ${destination_number} via Telnyx"/>
+        <action application="set" data="effective_caller_id_number=${outbound_caller_id}"/>
+        <action application="set" data="effective_caller_id_name=Hopwhistle"/>
+        <action application="bridge" data="sofia/gateway/telnyx/${destination_number}"/>
       </condition>
     </extension>
 
-    <extension name="send-to-telnyx-default">
-      <condition field="destination_number" expression="^(\d{10,})$|^(\+1\d{10})$">
-        <action application="log" data="INFO Outbound call to ${destination_number} via Telnyx"/>
-
-        <action application="set" data="e164_dest=+1${destination_number}"/>
-        <condition field="destination_number" expression="^\+1">
-           <action application="set" data="e164_dest=${destination_number}"/>
-        </condition>
-
-        <action application="set" data="effective_caller_id_number=$${outbound_caller_id}"/>
-        <action application="set" data="effective_caller_id_name=$${outbound_caller_id}"/>
-        <action application="bridge" data="sofia/gateway/telnyx/${e164_dest}"/>
+    <!-- Inbound calls from trunk - authenticate first -->
+    <extension name="authenticate-trunk" continue="true">
+      <condition field="${sip_from_uri}" expression="telnyx\.com">
+        <action application="log" data="INFO Inbound from Telnyx trunk"/>
+        <action application="transfer" data="lookup-did XML default"/>
       </condition>
     </extension>
 
     <extension name="lookup-did">
-      <condition field="destination_number" expression="^.+$" break="never">
+      <condition field="destination_number" expression="^.+$">
         <action application="log" data="INFO Looking up DID: ${destination_number}"/>
-        <action application="set" data="did_lookup_url=${api_url}/api/v1/numbers/lookup"/>
-        <action application="set" data="did_lookup_body={&quot;number&quot;:&quot;${destination_number}&quot;}"/>
-        <action application="set" data="did_lookup_result=${curl(${did_lookup_url} POST ${did_lookup_body} X-API-Key:${api_key})}"/>
-        <action application="set" data="did_tenant_id=00000000-0000-0000-0000-000000000000"/>
-        <action application="set" data="did_flow_id=simple-direct-route"/>
-        <action application="set" data="call_id=${uuid}"/>
-        <action application="transfer" data="execute-flow XML default"/>
-      </condition>
-    </extension>
-
-    <extension name="execute-flow">
-      <condition field="destination_number" expression="^.+$" break="never">
-        <action application="transfer" data="voicemail XML default"/>
-      </condition>
-    </extension>
-
-    <extension name="voicemail">
-      <condition field="destination_number" expression="^voicemail$">
         <action application="answer"/>
-        <action application="playback" data="tone_stream://%(1000,0,800)"/>
-        <action application="voicemail" data="default ${domain_name}"/>
-        <action application="hangup" data="NORMAL_CLEARING"/>
+        <action application="playback" data="ivr/ivr-welcome.wav"/>
+        <action application="hangup"/>
       </condition>
     </extension>
 
-    <extension name="hangup-normal">
-      <condition field="destination_number" expression="^hangup-normal$">
-        <action application="transfer" data="hangup-NORMAL_CLEARING XML default"/>
+    <!-- Fallback -->
+    <extension name="unmatched">
+      <condition field="destination_number" expression="^.+$">
+        <action application="log" data="WARNING Unmatched call to ${destination_number}"/>
+        <action application="hangup" data="NO_ROUTE_DESTINATION"/>
       </condition>
     </extension>
   </context>
