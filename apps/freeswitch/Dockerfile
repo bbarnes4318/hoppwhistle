@@ -18,7 +18,8 @@ COPY apps/freeswitch/conf/vars.xml /etc/freeswitch/vars.xml.template
 # Copy entrypoint
 COPY apps/freeswitch/docker-entrypoint.sh /docker-entrypoint.sh
 
-RUN chmod +x /docker-entrypoint.sh
+# Fix Windows line endings and make executable
+RUN sed -i 's/\r$//' /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh
 RUN chmod +x /etc/freeswitch/scripts/*.sh 2>/dev/null || true
 
 # Expose ports (SIP, ESL, RTP, Verto WebSocket)
