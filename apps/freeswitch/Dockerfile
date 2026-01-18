@@ -1,5 +1,5 @@
-# Use SignalWire FreeSWITCH image which includes mod_verto for WebRTC
-FROM signalwire/freeswitch:1.10
+# Use safarov FreeSWITCH image which includes mod_verto for WebRTC
+FROM safarov/freeswitch:1.10.10
 
 USER root
 
