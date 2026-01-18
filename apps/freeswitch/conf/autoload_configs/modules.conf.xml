@@ -27,7 +27,8 @@
     <load module="mod_native_file"/>
     <load module="mod_opus"/>
     <load module="mod_png"/>
-    <load module="mod_portaudio"/>
+    <!-- mod_portaudio requires physical sound hardware - disabled on servers -->
+    <!-- <load module="mod_portaudio"/> -->
     <load module="mod_say_en"/>
     <load module="mod_sndfile"/>
     <load module="mod_tone_stream"/>
