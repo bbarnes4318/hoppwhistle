@@ -1,10 +1,8 @@
 # Use safarov FreeSWITCH image which includes mod_verto for WebRTC
 FROM safarov/freeswitch:1.10.12
 
-USER root
-
-# Install additional dependencies
-RUN apt-get update && apt-get install -y \
+# Install additional dependencies (image already runs as root)
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
     curl \
     jq \
     gettext-base \
