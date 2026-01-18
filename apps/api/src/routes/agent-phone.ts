@@ -1,4 +1,3 @@
-import type { Prisma } from '@prisma/client';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
@@ -168,7 +167,8 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
 
   /**
    * POST /api/v1/agent/call/originate
-   * Initiate an outbound call - persists to PostgreSQL
+   * Initiate an outbound call via FreeSWITCH - persists to PostgreSQL
+   * Uses the same VOIP setup as the AI bot (Telnyx/Voxbeam/Anveo)
    */
   fastify.post<{ Body: OriginateCallBody }>(
     '/api/v1/agent/call/originate',
@@ -242,33 +242,9 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
         },
       });
 
-      // Simulate call connection after 2 seconds (in production, this comes from carrier webhook)
-      setTimeout(() => {
-        void (async () => {
-          const prisma = getPrismaClient();
-          // Update PostgreSQL
-          await prisma.call.update({
-            where: { id: call.id },
-            data: {
-              status: 'ANSWERED',
-              answeredAt: new Date(),
-            },
-          });
-
-          // Update Redis state
-          await callStateService.updateCallState(call.id, { status: 'answered' });
-
-          // Emit event
-          void eventBus.publish('call.*', {
-            event: 'call.answered',
-            tenantId,
-            data: {
-              callId: call.id,
-              timestamp: new Date().toISOString(),
-            },
-          });
-        })();
-      }, 2000);
+      // Note: The actual call is placed via Verto WebRTC from the browser.
+      // The API just tracks the call state. The browser fetches Verto credentials
+      // from /api/v1/agent/webrtc/credentials and connects directly to FreeSWITCH.
 
       void reply.code(201);
       return {
@@ -278,6 +254,10 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
         phoneNumber,
         direction: 'outbound',
         createdAt: call.createdAt.toISOString(),
+        // Browser should use these credentials to connect via Verto
+        verto: {
+          endpoint: '/api/v1/agent/webrtc/credentials',
+        },
       };
     }
   );
@@ -593,11 +573,17 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       const password = Buffer.from(`${userId}:${Date.now()}`).toString('base64').slice(0, 16);
       const expiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
 
+      // Build Verto WebSocket URL
+      // Priority: VERTO_WS_URL env var > PUBLIC_IP:8082 > localhost fallback
+      const publicIp = process.env.PUBLIC_IP;
+      const vertoUrl =
+        process.env.VERTO_WS_URL || (publicIp ? `wss://${publicIp}:8082` : 'wss://localhost:8082');
+
       return {
         username,
         password,
-        realm: process.env.FREESWITCH_REALM ?? 'freeswitch',
-        wsUrl: process.env.VERTO_WS_URL ?? 'wss://localhost:8082',
+        realm: process.env.FREESWITCH_REALM ?? process.env.PUBLIC_IP ?? 'freeswitch',
+        wsUrl: vertoUrl,
         stunServers: ['stun:stun.l.google.com:19302'],
         turnServers: [],
         expiresAt: expiry.toISOString(),

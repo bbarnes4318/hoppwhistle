@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils';
 // Dial Pad Component
 // ============================================================================
 
-// Keypad buttons with letters
+// Keypad buttons - standard phone layout with digits and letters
 const keypadButtons = [
   { digit: '1', letters: '' },
   { digit: '2', letters: 'ABC' },
@@ -195,7 +195,9 @@ export function DialPad(): JSX.Element {
             )}
           >
             <span className="text-2xl text-white font-medium">{digit}</span>
-            {letters && <span className="text-[10px] text-gray-500 -mt-1">{letters}</span>}
+            {letters && (
+              <span className="text-[10px] text-gray-500 tracking-widest -mt-0.5">{letters}</span>
+            )}
           </button>
         ))}
       </div>

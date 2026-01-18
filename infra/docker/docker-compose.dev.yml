@@ -198,12 +198,14 @@ services:
       dockerfile: apps/freeswitch/Dockerfile
     container_name: hopwhistle-freeswitch-dev
     ports:
-      - '5060:5060/udp'
-      - '5060:5060/tcp'
+      # SIP ports (internal - use Kamailio for external SIP)
       - '5080:5080/udp'
       - '5080:5080/tcp'
-      - '5061:5061/tcp'
+      # ESL - Event Socket Layer for API communication
       - '8021:8021/tcp'
+      # Verto WebSocket for WebRTC browser calling
+      - '8082:8082/tcp'
+      - '8083:8083/tcp'
     environment:
       FREESWITCH_ESL_PASSWORD: ${FREESWITCH_ESL_PASSWORD:-ClueCon}
       API_URL: http://api:3001
@@ -246,6 +248,7 @@ services:
       dockerfile: apps/kamailio/Dockerfile
     container_name: hopwhistle-kamailio-dev
     ports:
+      # SIP ports - Kamailio is the SIP edge/SBC
       - '5060:5060/udp'
       - '5060:5060/tcp'
       - '5061:5061/tcp'

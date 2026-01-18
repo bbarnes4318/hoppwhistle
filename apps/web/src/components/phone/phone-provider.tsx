@@ -496,17 +496,22 @@ export function PhoneProvider({
 
   const makeCall = useCallback(
     async (phoneNumber: string) => {
+      console.log('[Phone] Initiating call to:', phoneNumber);
       setIsConnecting(true);
       setError(null);
 
       try {
-        const response = await fetch(`${normalizedApiUrl}/api/v1/agent/call/originate`, {
+        const url = `${normalizedApiUrl}/api/v1/agent/call/originate`;
+        console.log('[Phone] Calling API:', url);
+
+        const response = await fetch(url, {
           method: 'POST',
           headers: getApiHeaders(),
           body: JSON.stringify({ phoneNumber }),
         });
 
         const data = (await response.json()) as ApiResponse;
+        console.log('[Phone] API response:', response.status, data);
 
         if (!response.ok) {
           throw new Error(data.error?.message ?? 'Failed to place call');
@@ -524,16 +529,34 @@ export function PhoneProvider({
           recordingEnabled: true,
         };
 
+        console.log('[Phone] Call initiated successfully:', callInfo);
         setCurrentCall(callInfo);
         setAgentStatusState('on-call');
+        setIsPhonePanelOpen(true); // Open phone panel to show call status
+
+        // Start duration timer after a brief delay to simulate connection
+        setTimeout(() => {
+          setCurrentCall(prev => {
+            if (prev && prev.callId === callInfo.callId) {
+              return {
+                ...prev,
+                state: 'active',
+                answerTime: new Date(),
+              };
+            }
+            return prev;
+          });
+          startCallDurationTimer();
+        }, 2000);
       } catch (err) {
+        console.error('[Phone] Call failed:', err);
         const message = err instanceof Error ? err.message : 'Failed to place call';
         setError(message);
       } finally {
         setIsConnecting(false);
       }
     },
-    [normalizedApiUrl, getApiHeaders]
+    [normalizedApiUrl, getApiHeaders, startCallDurationTimer]
   );
 
   const answerCall = useCallback(async () => {
