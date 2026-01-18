@@ -1,6 +1,5 @@
-# Use a community-maintained FreeSWITCH image that's regularly updated
-# This bypasses the SignalWire authentication requirement
-FROM drachtio/drachtio-freeswitch-mrf:0.9.5-2
+# Use safarov/freeswitch which includes mod_verto for WebRTC
+FROM safarov/freeswitch:1.10.12-bookworm
 
 USER root
 
@@ -10,7 +9,6 @@ RUN apt-get update && apt-get install -y \
     jq \
     gettext-base \
     procps \
-    freeswitch-mod-verto \
     && rm -rf /var/lib/apt/lists/*
 
 # Create directories
