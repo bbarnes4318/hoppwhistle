@@ -9,10 +9,10 @@
 
       <!-- Network Settings -->
       <param name="sip-ip" value="$${local_ip_v4}"/>
-      <param name="ext-sip-ip" value="auto-nat"/>
+      <param name="ext-sip-ip" value="$${public_ip}"/>
       <param name="sip-port" value="5060"/>
       <param name="rtp-ip" value="$${local_ip_v4}"/>
-      <param name="ext-rtp-ip" value="auto-nat"/>
+      <param name="ext-rtp-ip" value="$${public_ip}"/>
 
       <!-- WebSocket Bindings for WebRTC -->
       <param name="ws-binding" value=":8083"/>
