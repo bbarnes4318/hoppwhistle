@@ -9,8 +9,8 @@
     <!-- Authentication -->
     <param name="password" value="$${esl_password}"/>
 
-    <!-- ACL for allowed IPs (optional, leave empty for all) -->
-    <param name="apply-inbound-acl" value="domains"/>
+    <!-- ACL for allowed IPs - loopback.auto allows local connections -->
+    <param name="apply-inbound-acl" value="loopback.auto"/>
 
     <!-- Enable mod_event_socket -->
     <param name="enable" value="true"/>
