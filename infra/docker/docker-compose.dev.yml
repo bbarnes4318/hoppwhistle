@@ -203,6 +203,10 @@ services:
       RECORDINGS_FORMAT: ${RECORDINGS_FORMAT:-wav}
       ENABLE_TLS: ${ENABLE_TLS:-false}
       ENABLE_SRTP: ${ENABLE_SRTP:-optional}
+      OUTBOUND_SIP_PROXY: ${OUTBOUND_SIP_PROXY:-sip.telnyx.com}
+      OUTBOUND_SIP_USER: ${OUTBOUND_SIP_USER}
+      OUTBOUND_SIP_PASS: ${OUTBOUND_SIP_PASS}
+      OUTBOUND_CALLER_ID: ${OUTBOUND_CALLER_ID}
     volumes:
       - freeswitch_recordings:/recordings
       # NOTE: Do NOT mount freeswitch_conf here - config is baked into the image via Dockerfile
