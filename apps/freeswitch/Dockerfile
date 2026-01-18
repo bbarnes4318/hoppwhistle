@@ -1,5 +1,5 @@
-# Use safarov/freeswitch which includes mod_verto for WebRTC
-FROM safarov/freeswitch:1.10.12
+# Use drachtio FreeSWITCH MRF image (mod_verto not available, will use SIP softphone)
+FROM drachtio/drachtio-freeswitch-mrf:0.9.5-2
 
 USER root
 
