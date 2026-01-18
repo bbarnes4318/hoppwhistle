@@ -1,5 +1,5 @@
 # Use safarov/freeswitch which includes mod_verto for WebRTC
-FROM safarov/freeswitch:1.10.12-bookworm
+FROM safarov/freeswitch:1.10.12
 
 USER root
 
