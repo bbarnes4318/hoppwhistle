@@ -9,7 +9,9 @@
 
     <!-- Network Settings -->
     <param name="listen-ip" value="0.0.0.0"/>
-    <param name="listen-port" value="5080"/>
+    <param name="listen-port" value="5060"/>
+    <param name="ws-binding" value=":5066"/>
+    <param name="wss-binding" value=":7443"/>
     <param name="rtp-ip" value="$${local_ip_v4}"/>
     <param name="ext-rtp-ip" value="auto-nat"/>
     <param name="sip-ip" value="$${local_ip_v4}"/>

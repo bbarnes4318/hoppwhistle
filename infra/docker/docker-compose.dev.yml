@@ -191,6 +191,8 @@ services:
       # Verto WebSocket for WebRTC browser calling
       - '8082:8082/tcp'
       - '8083:8083/tcp'
+      - '5066:5066/tcp'
+      - '7443:7443/tcp'
     environment:
       FREESWITCH_ESL_PASSWORD: ${FREESWITCH_ESL_PASSWORD:-ClueCon}
       API_URL: http://api:3001
