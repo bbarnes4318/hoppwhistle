@@ -1,10 +1,8 @@
 # Use safarov FreeSWITCH image which includes mod_verto for WebRTC
 FROM safarov/freeswitch:1.10.12
 
-# Install additional dependencies (Alpine-based image uses apk)
-RUN apk add --no-cache curl jq gettext procps
-
-
+# Note: safarov image is Debian-based but has limited package manager access
+# The image should already have what we need
 # Create directories
 RUN mkdir -p /etc/freeswitch/scripts /recordings
 
