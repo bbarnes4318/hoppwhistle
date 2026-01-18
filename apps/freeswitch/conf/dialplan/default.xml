@@ -1,5 +1,5 @@
 <include>
-  <context name="trunk">
+  <context name="default">
     <extension name="authenticate-trunk">
       <condition field="destination_number" expression="^.+$" break="never">
         <action application="log" data="INFO Inbound call from ${caller_id_number} to ${destination_number}"/>
@@ -29,7 +29,7 @@
     <extension name="send-to-telnyx-default">
       <condition field="destination_number" expression="^(\d{10,})$|^(\+1\d{10})$">
         <action application="log" data="INFO Outbound call to ${destination_number} via Telnyx"/>
-        
+
         <action application="set" data="e164_dest=+1${destination_number}"/>
         <condition field="destination_number" expression="^\+1">
            <action application="set" data="e164_dest=${destination_number}"/>
