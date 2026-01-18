@@ -52,7 +52,7 @@
     <load module="mod_sndfile"/>
 
     <!-- WebRTC/Verto module for browser-based calling -->
-    <load module="mod_verto"/>
+    <!-- <load module="mod_verto"/> -->
 
     <!-- TLS/SRTP modules -->
     <load module="mod_tls"/>
