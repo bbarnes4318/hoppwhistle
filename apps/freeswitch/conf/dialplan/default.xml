@@ -1,46 +1,20 @@
 <include>
   <context name="default">
-    <!-- Direct outbound calls for internal users (WebRTC agents) -->
+    <!-- Simple outbound test - hardcoded caller ID for debugging -->
     <extension name="outbound-to-telnyx">
       <condition field="destination_number" expression="^(\d{10,11})$">
-        <action application="log" data="INFO Outbound call from ${caller_id_number} to ${destination_number} via Telnyx"/>
-        <action application="set" data="effective_caller_id_number=${outbound_caller_id}"/>
+        <action application="log" data="INFO Outbound call to ${destination_number}"/>
+        <action application="set" data="effective_caller_id_number=+18653969104"/>
         <action application="set" data="effective_caller_id_name=Hopwhistle"/>
+        <action application="set" data="hangup_after_bridge=true"/>
         <action application="bridge" data="sofia/gateway/telnyx/+1${destination_number}"/>
       </condition>
     </extension>
 
-    <!-- Calls with + prefix already formatted -->
-    <extension name="outbound-e164">
-      <condition field="destination_number" expression="^(\+1\d{10})$">
-        <action application="log" data="INFO Outbound E.164 call to ${destination_number} via Telnyx"/>
-        <action application="set" data="effective_caller_id_number=${outbound_caller_id}"/>
-        <action application="set" data="effective_caller_id_name=Hopwhistle"/>
-        <action application="bridge" data="sofia/gateway/telnyx/${destination_number}"/>
-      </condition>
-    </extension>
-
-    <!-- Inbound calls from trunk - authenticate first -->
-    <extension name="authenticate-trunk" continue="true">
-      <condition field="${sip_from_uri}" expression="telnyx\.com">
-        <action application="log" data="INFO Inbound from Telnyx trunk"/>
-        <action application="transfer" data="lookup-did XML default"/>
-      </condition>
-    </extension>
-
-    <extension name="lookup-did">
-      <condition field="destination_number" expression="^.+$">
-        <action application="log" data="INFO Looking up DID: ${destination_number}"/>
-        <action application="answer"/>
-        <action application="playback" data="ivr/ivr-welcome.wav"/>
-        <action application="hangup"/>
-      </condition>
-    </extension>
-
-    <!-- Fallback -->
+    <!-- Fallback for any unmatched -->
     <extension name="unmatched">
       <condition field="destination_number" expression="^.+$">
-        <action application="log" data="WARNING Unmatched call to ${destination_number}"/>
+        <action application="log" data="WARNING Unmatched: ${destination_number}"/>
         <action application="hangup" data="NO_ROUTE_DESTINATION"/>
       </condition>
     </extension>
