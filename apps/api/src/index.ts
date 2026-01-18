@@ -60,6 +60,72 @@ async function buildServer() {
   // Register authentication
   await registerAuth(server);
 
+  // Global API key authentication for /api/v1/* routes
+  const { createHash } = await import('crypto');
+  const { getPrismaClient } = await import('./lib/prisma.js');
+
+  server.addHook('onRequest', async (request, _reply) => {
+    // Only authenticate /api/v1/* routes
+    if (!request.url.startsWith('/api/v1/')) {
+      return;
+    }
+
+    const authHeader = request.headers.authorization;
+    const apiKey = request.headers['x-api-key'] as string;
+
+    // Try JWT first
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const token = authHeader.substring(7);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any
+        const decoded = await (request as any).jwtVerify(token);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any
+        (request as any).user = decoded;
+        return;
+      } catch {
+        // JWT failed, try API key
+      }
+    }
+
+    // Try API key
+    if (apiKey) {
+      try {
+        const prisma = getPrismaClient();
+        const keyHash = createHash('sha256').update(apiKey).digest('hex');
+        const dbApiKey = await prisma.apiKey.findUnique({
+          where: { keyHash },
+          include: { tenant: true },
+        });
+
+        if (
+          dbApiKey &&
+          dbApiKey.status === 'ACTIVE' &&
+          (!dbApiKey.expiresAt || dbApiKey.expiresAt > new Date()) &&
+          dbApiKey.tenant.status === 'ACTIVE'
+        ) {
+          const scopes =
+            dbApiKey.scopes && Array.isArray(dbApiKey.scopes) ? (dbApiKey.scopes as string[]) : [];
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (request as any).user = {
+            tenantId: dbApiKey.tenantId,
+            apiKeyId: dbApiKey.id,
+            scopes,
+          };
+
+          // Update last used timestamp (don't await)
+          void prisma.apiKey
+            .update({
+              where: { id: dbApiKey.id },
+              data: { lastUsedAt: new Date() },
+            })
+            .catch(() => {});
+        }
+      } catch {
+        // API key auth failed
+      }
+    }
+  });
+
   // Register rate limiting globally
   await server.register(import('@fastify/rate-limit'), {
     max: 100, // Default: 100 requests per minute

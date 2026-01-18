@@ -5,12 +5,13 @@ import { promises as fs } from 'fs';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 // Configuration paths (same as dial.py)
-const LEAD_FILE = '/opt/hopwhistle/test_lead.txt';
-const PAUSE_FLAG = '/opt/hopwhistle/pause.flag';
-const STATUS_FILE = '/opt/hopwhistle/dialer_status.json';
-const DIDS_FILE = '/opt/hopwhistle/dids.json';
-const SETTINGS_FILE = '/opt/hopwhistle/bot_settings.json';
-const DIALER_SCRIPT = '/opt/hopwhistle/dial.py';
+const BASE_DIR = process.env.HOPWHISTLE_DIR || '/opt/hopwhistle';
+const LEAD_FILE = `${BASE_DIR}/test_lead.txt`;
+const PAUSE_FLAG = `${BASE_DIR}/pause.flag`;
+const STATUS_FILE = `${BASE_DIR}/dialer_status.json`;
+const DIDS_FILE = `${BASE_DIR}/dids.json`;
+const SETTINGS_FILE = `${BASE_DIR}/bot_settings.json`;
+const DIALER_SCRIPT = `${BASE_DIR}/dial.py`;
 
 // Track dialer process globally
 let dialerProcess: ChildProcess | null = null;
@@ -41,7 +42,7 @@ function getErrorMessage(e: unknown): string {
   return 'Unknown error';
 }
 
-export function registerBotRoutes(fastify: FastifyInstance): void {
+export async function registerBotRoutes(fastify: FastifyInstance): Promise<void> {
   // Get current bot/dialer status
   fastify.get('/api/bot/status', async () => {
     try {
@@ -94,7 +95,7 @@ export function registerBotRoutes(fastify: FastifyInstance): void {
 
       // Start the dialer Python script
       dialerProcess = spawn('python3', [DIALER_SCRIPT], {
-        cwd: '/opt/hopwhistle',
+        cwd: BASE_DIR,
         detached: true,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
@@ -349,7 +350,7 @@ Is this a good time to speak for just a moment?`,
 
   // Get call history/log
   fastify.get('/api/bot/calls', async () => {
-    const HISTORY_FILE = '/opt/hopwhistle/call_history.log';
+    const HISTORY_FILE = `${BASE_DIR}/call_history.log`;
     try {
       const content = await fs.readFile(HISTORY_FILE, 'utf-8');
       const lines = content.split('\n').filter((l: string) => l.trim());
@@ -403,7 +404,7 @@ Is this a good time to speak for just a moment?`,
     '/api/bot/recordings/:callId',
     async (request: FastifyRequest<{ Params: { callId: string } }>, reply: FastifyReply) => {
       const { callId } = request.params;
-      const RECORDINGS_DIR = '/opt/hopwhistle/recordings/';
+      const RECORDINGS_DIR = `${BASE_DIR}/recordings/`;
 
       try {
         let filePath = `${RECORDINGS_DIR}${callId}.mp3`;
@@ -438,7 +439,7 @@ Is this a good time to speak for just a moment?`,
     '/api/bot/recordings/:callId/exists',
     async (request: FastifyRequest<{ Params: { callId: string } }>) => {
       const { callId } = request.params;
-      const RECORDINGS_DIR = '/opt/hopwhistle/recordings/';
+      const RECORDINGS_DIR = `${BASE_DIR}/recordings/`;
 
       try {
         try {
