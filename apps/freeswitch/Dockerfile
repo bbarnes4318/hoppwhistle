@@ -1,5 +1,5 @@
 # Use safarov FreeSWITCH image which includes mod_verto for WebRTC
-FROM safarov/freeswitch:1.10.10
+FROM safarov/freeswitch:1.10.12
 
 USER root
 
