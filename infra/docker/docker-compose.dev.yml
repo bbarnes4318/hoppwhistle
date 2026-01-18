@@ -132,6 +132,10 @@ services:
     build:
       context: ../..
       dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://${PUBLIC_IP:-localhost}:3001
+        NEXT_PUBLIC_WS_URL: ws://${PUBLIC_IP:-localhost}:3001
+        NEXT_PUBLIC_API_KEY: ${API_KEY:-demo-key}
     container_name: hopwhistle-web-dev
     ports:
       - '3000:3000'
