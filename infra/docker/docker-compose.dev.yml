@@ -220,7 +220,7 @@ services:
       ENABLE_SRTP: ${ENABLE_SRTP:-optional}
     volumes:
       - freeswitch_recordings:/recordings
-      - freeswitch_conf:/usr/local/freeswitch/conf
+      # NOTE: Do NOT mount freeswitch_conf here - config is baked into the image via Dockerfile
     healthcheck:
       test: ['CMD', 'fs_cli', '-x', 'status']
       interval: 30s
