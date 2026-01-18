@@ -532,10 +532,12 @@ export function PhoneProvider({
     });
   }, []);
 
-  if (sessionRef.current && sessionRef.current.state === SessionState.Established) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (sessionRef.current as any).dtmf(digit);
-  }
+  const sendDTMF = useCallback((digit: string) => {
+    if (sessionRef.current && sessionRef.current.state === SessionState.Established) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (sessionRef.current as any).dtmf(digit);
+    }
+  }, []);
 
   const transferCall = useCallback(async (_destination: string, _type: 'blind' | 'warm') => {
     // TODO: Implement SIP REFER
