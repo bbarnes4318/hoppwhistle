@@ -1,10 +1,10 @@
 <include>
   <context name="default">
-    <!-- Simple outbound test - hardcoded caller ID for debugging -->
+    <!-- Outbound calls - use Telnyx DID as caller ID -->
     <extension name="outbound-to-telnyx">
       <condition field="destination_number" expression="^(\d{10,11})$">
-        <action application="log" data="INFO Outbound call to ${destination_number}"/>
-        <action application="set" data="effective_caller_id_number=+18653969104"/>
+        <action application="log" data="INFO Outbound call to ${destination_number} from ${outbound_caller_id}"/>
+        <action application="set" data="effective_caller_id_number=${outbound_caller_id}"/>
         <action application="set" data="effective_caller_id_name=Hopwhistle"/>
         <action application="set" data="hangup_after_bridge=true"/>
         <action application="bridge" data="sofia/gateway/telnyx/+1${destination_number}"/>
