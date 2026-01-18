@@ -15,4 +15,5 @@
   <X-PRE-PROCESS cmd="set" data="telnyx_pass=$${env(OUTBOUND_SIP_PASS)}"/>
 
   <X-PRE-PROCESS cmd="set" data="outbound_caller_id=$${env(OUTBOUND_CALLER_ID)}"/>
+  <X-PRE-PROCESS cmd="set" data="esl_password=$${env(FREESWITCH_ESL_PASSWORD)}"/>
 </include>
