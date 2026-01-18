@@ -10,7 +10,7 @@
     <load module="mod_loopback"/>
     <load module="mod_commands"/>
     <load module="mod_conference"/>
-    <load module="mod_db"/>
+    <!-- <load module="mod_db"/> -->
     <load module="mod_dptools"/>
     <load module="mod_expr"/>
     <load module="mod_fifo"/>
@@ -23,7 +23,7 @@
     <load module="mod_fsv"/>
     <load module="mod_httapi"/>
     <load module="mod_local_stream"/>
-    <load module="mod_lua"/>
+    <!-- <load module="mod_lua"/> -->
     <load module="mod_native_file"/>
     <load module="mod_opus"/>
     <load module="mod_png"/>
