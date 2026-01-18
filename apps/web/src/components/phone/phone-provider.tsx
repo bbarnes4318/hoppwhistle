@@ -311,8 +311,8 @@ export function PhoneProvider({
     const sipPass = '1';
     // Use PUBLIC_IP from env, fallback to window location if local
     const domain = process.env.NEXT_PUBLIC_IP || window.location.hostname;
-    // SIP WS endpoint - port 5066 exposed in Docker for SIP WS
-    const sipWsUrl = `ws://${domain}:5066`;
+    // SIP WS endpoint - port 8083 is open (Verto port repurpose)
+    const sipWsUrl = `ws://${domain}:8083`;
 
     console.log('[Phone] Initializing SIP UA:', { sipUser, domain, sipWsUrl });
 
