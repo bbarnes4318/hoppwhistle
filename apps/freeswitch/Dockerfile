@@ -14,14 +14,14 @@ RUN apt-get update && apt-get install -y \
 # Create directories
 RUN mkdir -p /usr/local/freeswitch/scripts /recordings
 
-# Copy config - Note: this image uses /etc/freeswitch
-COPY apps/freeswitch/conf/ /etc/freeswitch/
+# Copy config - drachtio image uses /usr/local/freeswitch/conf/ NOT /etc/freeswitch
+COPY apps/freeswitch/conf/ /usr/local/freeswitch/conf/
 
 # Copy scripts
 COPY apps/freeswitch/scripts/ /usr/local/freeswitch/scripts/
 
 # Copy vars.xml template
-COPY apps/freeswitch/conf/vars.xml /etc/freeswitch/vars.xml.template
+COPY apps/freeswitch/conf/vars.xml /usr/local/freeswitch/conf/vars.xml.template
 
 # Copy entrypoint
 COPY apps/freeswitch/docker-entrypoint.sh /docker-entrypoint.sh
