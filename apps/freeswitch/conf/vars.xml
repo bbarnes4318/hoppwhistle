@@ -2,18 +2,18 @@
   <X-PRE-PROCESS cmd="set" data="global_codec_prefs=OPUS,G722,PCMU,PCMA,H264,VP8"/>
   <X-PRE-PROCESS cmd="set" data="outbound_codec_prefs=OPUS,G722,PCMU,PCMA,H264,VP8"/>
 
-  <X-PRE-PROCESS cmd="set" data="api_url=$${env(API_BASE_URL)}"/>
-  <X-PRE-PROCESS cmd="set" data="api_key=$${env(API_KEY)}"/>
+  <X-PRE-PROCESS cmd="set" data="api_url=${API_URL}"/>
+  <X-PRE-PROCESS cmd="set" data="api_key=${API_KEY}"/>
 
-  <X-PRE-PROCESS cmd="set" data="signalwire_domain=$${env(SIGNALWIRE_SIP_DOMAIN)}"/>
-  <X-PRE-PROCESS cmd="set" data="signalwire_proxy=$${env(SIGNALWIRE_OUTBOUND_PROXY)}"/>
-  <X-PRE-PROCESS cmd="set" data="signalwire_user=$${env(SIGNALWIRE_SIP_USERNAME)}"/>
-  <X-PRE-PROCESS cmd="set" data="signalwire_pass=$${env(SIGNALWIRE_SIP_PASSWORD)}"/>
+  <X-PRE-PROCESS cmd="set" data="signalwire_domain=${SIGNALWIRE_SIP_DOMAIN}"/>
+  <X-PRE-PROCESS cmd="set" data="signalwire_proxy=${SIGNALWIRE_OUTBOUND_PROXY}"/>
+  <X-PRE-PROCESS cmd="set" data="signalwire_user=${SIGNALWIRE_SIP_USERNAME}"/>
+  <X-PRE-PROCESS cmd="set" data="signalwire_pass=${SIGNALWIRE_SIP_PASSWORD}"/>
 
-  <X-PRE-PROCESS cmd="set" data="telnyx_proxy=$${env(OUTBOUND_SIP_PROXY)}"/>
-  <X-PRE-PROCESS cmd="set" data="telnyx_user=$${env(OUTBOUND_SIP_USER)}"/>
-  <X-PRE-PROCESS cmd="set" data="telnyx_pass=$${env(OUTBOUND_SIP_PASS)}"/>
+  <X-PRE-PROCESS cmd="set" data="telnyx_proxy=${OUTBOUND_SIP_PROXY}"/>
+  <X-PRE-PROCESS cmd="set" data="telnyx_user=${OUTBOUND_SIP_USER}"/>
+  <X-PRE-PROCESS cmd="set" data="telnyx_pass=${OUTBOUND_SIP_PASS}"/>
 
-  <X-PRE-PROCESS cmd="set" data="outbound_caller_id=$${env(OUTBOUND_CALLER_ID)}"/>
-  <X-PRE-PROCESS cmd="set" data="esl_password=$${env(FREESWITCH_ESL_PASSWORD)}"/>
+  <X-PRE-PROCESS cmd="set" data="outbound_caller_id=${OUTBOUND_CALLER_ID}"/>
+  <X-PRE-PROCESS cmd="set" data="esl_password=${FREESWITCH_ESL_PASSWORD}"/>
 </include>
