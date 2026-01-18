@@ -158,33 +158,43 @@ async function buildServer() {
     : join(process.cwd(), '../../docs', 'openapi.yaml');
   const baseDir = isProduction ? '/app/docs' : join(process.cwd(), '../../docs');
 
-  // Register Swagger - use static mode to load from external spec file
-  await server.register(swagger, {
-    mode: 'static',
-    specification: {
-      path: specPath,
-      baseDir: baseDir,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      postProcessor: (spec: any) => {
-        // Ensure version is correct for compatibility
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-        spec.openapi = '3.0.3';
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-        return spec;
-      },
-    },
-  });
+  // Register Swagger - use static mode to load from external spec file (optional)
+  try {
+    const { existsSync } = await import('fs');
+    if (existsSync(specPath)) {
+      await server.register(swagger, {
+        mode: 'static',
+        specification: {
+          path: specPath,
+          baseDir: baseDir,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          postProcessor: (spec: any) => {
+            // Ensure version is correct for compatibility
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+            spec.openapi = '3.0.3';
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+            return spec;
+          },
+        },
+      });
 
-  // Register Swagger UI
-  await server.register(swaggerUi, {
-    routePrefix: '/docs',
-    uiConfig: {
-      docExpansion: 'list',
-      deepLinking: false,
-    },
-    staticCSP: true,
-    transformStaticCSP: header => header,
-  });
+      // Register Swagger UI
+      await server.register(swaggerUi, {
+        routePrefix: '/docs',
+        uiConfig: {
+          docExpansion: 'list',
+          deepLinking: false,
+        },
+        staticCSP: true,
+        transformStaticCSP: header => header,
+      });
+      logger.info({ msg: 'Swagger UI registered', path: '/docs' });
+    } else {
+      logger.warn({ msg: 'OpenAPI spec not found, skipping swagger', specPath });
+    }
+  } catch (err) {
+    logger.warn({ msg: 'Failed to register Swagger, API will continue without docs', err });
+  }
 
   // Health endpoints
   await server.register(registerHealthRoutes);
