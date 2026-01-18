@@ -1,19 +1,28 @@
 # Use safarov FreeSWITCH image which includes mod_verto for WebRTC
 FROM safarov/freeswitch:1.10.12
 
-# Note: safarov image is Debian-based but has limited package manager access
-# The image should already have what we need
-# Create directories
+# Create additional directories
 RUN mkdir -p /etc/freeswitch/scripts /recordings
 
-# Copy config - signalwire image uses /etc/freeswitch/
-COPY apps/freeswitch/conf/ /etc/freeswitch/
+# IMPORTANT: Copy config files individually to MERGE with base config, not replace!
+# The base image already has all the essential FreeSWITCH configs we need
+
+# Copy our custom autoload_configs (merges/overwrites only what we provide)
+COPY apps/freeswitch/conf/autoload_configs/*.xml /etc/freeswitch/autoload_configs/
+
+# Copy our custom sip_profiles
+COPY apps/freeswitch/conf/sip_profiles/*.xml /etc/freeswitch/sip_profiles/
+COPY apps/freeswitch/conf/sip_profiles/external/ /etc/freeswitch/sip_profiles/external/
+
+# Copy our custom dialplan
+COPY apps/freeswitch/conf/dialplan/*.xml /etc/freeswitch/dialplan/
+
+# Copy vars.xml for environment variable substitution
+COPY apps/freeswitch/conf/vars.xml /etc/freeswitch/vars.xml
+COPY apps/freeswitch/conf/vars.xml /etc/freeswitch/vars.xml.template
 
 # Copy scripts
 COPY apps/freeswitch/scripts/ /etc/freeswitch/scripts/
-
-# Copy vars.xml template
-COPY apps/freeswitch/conf/vars.xml /etc/freeswitch/vars.xml.template
 
 # Copy entrypoint
 COPY apps/freeswitch/docker-entrypoint.sh /docker-entrypoint.sh
@@ -27,4 +36,3 @@ EXPOSE 5060/udp 5060/tcp 5066/tcp 5080/udp 5080/tcp 7443/tcp 8021/tcp 8082/tcp 8
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["freeswitch", "-nf", "-c"]
-
