@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { getPrismaClient } from '../lib/prisma.js';
 import { callStateService } from '../services/call-state.js';
 import { eventBus } from '../services/event-bus.js';
+import { freeswitchService } from '../services/freeswitch-service.js';
 import { leadService } from '../services/lead-service.js';
 import { getRedisClient } from '../services/redis.js';
 
@@ -453,6 +454,44 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
         acknowledged: true,
         message: 'Mute is handled client-side via WebRTC',
       };
+    }
+  );
+
+  /**
+   * POST /api/v1/agent/call/merge
+   * Merge two calls into a conference (3-way calling)
+   */
+  fastify.post<{ Body: { activeCallId: string; heldCallId: string } }>(
+    '/api/v1/agent/call/merge',
+    async (request, reply) => {
+      const { activeCallId, heldCallId } = request.body;
+      const { userId } = getUser(request);
+
+      if (!activeCallId || !heldCallId) {
+        void reply.code(400);
+        return {
+          error: {
+            code: 'MISSING_CALL_ID',
+            message: 'Both activeCallId and heldCallId are required',
+          },
+        };
+      }
+
+      try {
+        await freeswitchService.mergeCalls(activeCallId, heldCallId);
+
+        // Update call states in backend if needed (optional for now)
+        // We might want to mark them as 'conferenced'
+
+        return {
+          success: true,
+          message: 'Calls merged into conference',
+        };
+      } catch (err) {
+        request.log.error({ msg: 'Merge failed', err });
+        void reply.code(500);
+        return { error: { code: 'MERGE_FAILED', message: 'Failed to merge calls' } };
+      }
     }
   );
 

@@ -457,16 +457,44 @@ export interface PhoneContextType {
       return;
     }
 
+    // Get call IDs using the SIP Call-ID header or internal id
+    // Note: sip.js session.id is usually the Call-ID
+    const activeCallId = sessionRef.current.id;
+    const heldCallId = heldSessionRef.current.id;
+
     console.log('[Phone] Merging calls...', {
-      active: sessionRef.current.id,
-      held: heldSessionRef.current.id
+      active: activeCallId,
+      held: heldCallId
     });
 
-    // TODO: Call backend API to merge
-    // For now, just log and notify
-    setError('Merging requires backend conference support (Coming Soon)');
+    try {
+      // Call backend API to merge
+      const response = await fetch(`${normalizedApiUrl}/api/v1/agent/call/merge`, {
+        method: 'POST',
+        headers: getApiHeaders(),
+        body: JSON.stringify({
+          activeCallId,
+          heldCallId
+        }),
+      });
 
-  }, []);
+      if (!response.ok) {
+        throw new Error('Merge failed');
+      }
+
+      // On success, the held session is effectively consumed/merged.
+      // We should probably rely on the backend events, but simpler to clean up local state
+      heldSessionRef.current = null;
+      setHasHeldCalls(false);
+
+      // The active session remains as the "Conference" session
+      console.log('[Phone] Merge command sent successfully');
+
+    } catch (err) {
+      console.error('[Phone] Merge failed:', err);
+      setError('Failed to merge calls');
+    }
+  }, [normalizedApiUrl, getApiHeaders]);
 
   const setAudioInput = useCallback((deviceId: string) => {
     setSelectedAudioInput(deviceId);
