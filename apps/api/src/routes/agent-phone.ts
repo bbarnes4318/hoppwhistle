@@ -480,8 +480,17 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       try {
         await freeswitchService.mergeCalls(activeCallId, heldCallId);
 
-        // Update call states in backend if needed (optional for now)
-        // We might want to mark them as 'conferenced'
+        // Publish merge event
+        void eventBus.publish('call.*', {
+          event: 'call.merged',
+          tenantId: getUser(request).tenantId,
+          data: {
+            activeSipCallId: activeCallId,
+            heldSipCallId: heldCallId,
+            agentId: userId,
+            timestamp: new Date().toISOString(),
+          },
+        });
 
         return {
           success: true,

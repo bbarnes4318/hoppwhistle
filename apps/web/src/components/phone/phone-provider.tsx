@@ -109,7 +109,83 @@ export interface PhoneContextType {
   clearError: () => void;
 }
 
-// ... (lines 110-188) ...
+// ============================================================================
+// Default Screen Pop Fields
+// ============================================================================
+
+const defaultScreenPopFields: ScreenPopField[] = [
+  { id: 'fullName', label: 'Full Name', key: 'fullName', enabled: true, order: 1 },
+  { id: 'phoneNumber', label: 'Phone Number', key: 'phoneNumber', enabled: true, order: 2 },
+  { id: 'email', label: 'Email', key: 'email', enabled: true, order: 3 },
+  { id: 'company', label: 'Company', key: 'company', enabled: true, order: 4 },
+  { id: 'address', label: 'Address', key: 'address', enabled: false, order: 5 },
+  { id: 'city', label: 'City', key: 'city', enabled: false, order: 6 },
+  { id: 'state', label: 'State', key: 'state', enabled: false, order: 7 },
+  { id: 'zipCode', label: 'Zip Code', key: 'zipCode', enabled: false, order: 8 },
+  { id: 'leadSource', label: 'Lead Source', key: 'leadSource', enabled: true, order: 9 },
+  { id: 'campaignName', label: 'Campaign', key: 'campaignName', enabled: true, order: 10 },
+  { id: 'notes', label: 'Notes', key: 'notes', enabled: false, order: 11 },
+];
+
+// ============================================================================
+// Context
+// ============================================================================
+
+const PhoneContext = createContext<PhoneContextType | null>(null);
+
+export function usePhone(): PhoneContextType {
+  const context = useContext(PhoneContext);
+  if (!context) {
+    throw new Error('usePhone must be used within a PhoneProvider');
+  }
+  return context;
+}
+
+// ============================================================================
+// WebSocket Event Types
+// ============================================================================
+
+interface ApiResponse {
+  callId?: string;
+  error?: {
+    message?: string;
+  };
+}
+
+// ============================================================================
+// Provider Component
+// ============================================================================
+
+interface PhoneProviderProps {
+  children: ReactNode;
+  wsUrl?: string;
+  apiUrl?: string;
+}
+
+export function PhoneProvider({
+  children,
+  apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001',
+}: PhoneProviderProps): JSX.Element {
+  // Normalize apiUrl to just be the base (remove trailing /api/v1 if present)
+  const normalizedApiUrl = apiUrl.replace(/\/api\/v1\/?$/, '');
+
+  // API key for authenticated requests
+  const apiKey = process.env.NEXT_PUBLIC_API_KEY || '';
+
+  // Common headers for API requests
+  const getApiHeaders = useCallback(
+    (contentType = true): HeadersInit => {
+      const headers: HeadersInit = {};
+      if (contentType) {
+        headers['Content-Type'] = 'application/json';
+      }
+      if (apiKey) {
+        headers['x-api-key'] = apiKey;
+      }
+      return headers;
+    },
+    [apiKey]
+  );
 
   // State
   const [agentStatus, setAgentStatusState] = useState<AgentStatus>('offline');
@@ -121,7 +197,6 @@ export interface PhoneContextType {
   const [audioDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedAudioInput, setSelectedAudioInput] = useState<string | null>(null);
   const [selectedAudioOutput, setSelectedAudioOutput] = useState<string | null>(null);
-  const [hasHeldCalls, setHasHeldCalls] = useState(false);
   const [screenPopFields, setScreenPopFields] = useState<ScreenPopField[]>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('screenPopFields');
@@ -145,6 +220,7 @@ export interface PhoneContextType {
   const sessionRef = useRef<Session | null>(null);
   const heldSessionRef = useRef<Session | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [hasHeldCalls, setHasHeldCalls] = useState(false);
 
   // ============================================================================
   // Audio Utilities
@@ -294,7 +370,6 @@ export interface PhoneContextType {
       return null;
     });
     setAgentStatusState('available');
-    setIsConnecting(false); // Reset connecting state so user can make new calls
     stopRingtone();
     stopCallDurationTimer();
     sessionRef.current = null;
@@ -353,60 +428,126 @@ export interface PhoneContextType {
         const inviter = new Inviter(userAgentRef.current, target);
         sessionRef.current = inviter;
 
-  const handleCallEnded = useCallback(() => {
-    setCurrentCall(prev => {
-      if (prev) {
-        const completedCall: CallInfo = {
-          ...prev,
-          state: 'ended',
-          endTime: new Date(),
+        const callInfo: CallInfo = {
+          callId: apiCallId ?? `call_${Date.now()}`,
+          direction: 'outbound',
+          state: 'connecting',
+          phoneNumber,
+          startTime: new Date(),
+          duration: 0,
+          isMuted: false,
+          isOnHold: false,
+          recordingEnabled: true,
         };
-        setCallHistory(history => [completedCall, ...history].slice(0, 50));
+
+        setCurrentCall(callInfo);
+        setAgentStatusState('on-call');
+        setIsPhonePanelOpen(true);
+
+        inviter.stateChange.addListener(newState => {
+          console.log('[Phone] Session state:', newState);
+          if (newState === SessionState.Established) {
+            handleCallAnswered();
+            setupRemoteAudio(inviter);
+          } else if (newState === SessionState.Terminated) {
+            handleCallEnded();
+          }
+        });
+
+        inviter
+          .invite()
+          .then(() => {
+            console.log('[Phone] INVITE sent');
+          })
+          .catch(e => {
+            console.error('[Phone] INVITE failed', e);
+            setError('Call failed');
+            handleCallEnded();
+          });
+      } catch (err) {
+        console.error('[Phone] Call failed:', err);
+        const message = err instanceof Error ? err.message : 'Failed to place call';
+        setError(message);
+        setIsConnecting(false);
       }
-      return null;
-    });
-    setAgentStatusState('available');
-    setIsConnecting(false); // Reset connecting state so user can make new calls
-    stopRingtone();
-    stopCallDurationTimer();
+    },
+    [normalizedApiUrl, getApiHeaders, handleCallAnswered, handleCallEnded, isRegistered]
+  );
 
-    // Check if we have a held call to restore
-    if (heldSessionRef.current) {
-      console.log('[Phone] Restoring held call...');
-      sessionRef.current = heldSessionRef.current;
-      heldSessionRef.current = null;
-      setHasHeldCalls(false);
-
-      // Reconstitute call info from session
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const remoteIdentity = (sessionRef.current as any).remoteIdentity;
-      const callerName = remoteIdentity?.displayName || 'Unknown';
-      const callerNumber = remoteIdentity?.uri?.user || 'Unknown';
-
-      // Auto-unhold for convenience? Or let user do it.
-      // Let's keep it on hold but show it in UI
-      const restoredCall: CallInfo = {
-        callId: sessionRef.current.id,
-        direction: 'inbound', // Approximation
-        state: 'hold',
-        phoneNumber: callerNumber,
-        callerName: callerName,
-        startTime: new Date(), // Approximate
-        duration: 0,
-        isMuted: false,
-        isOnHold: true,
-        recordingEnabled: true,
-      };
-
-      setCurrentCall(restoredCall);
-      setAgentStatusState('on-call');
-      setIsPhonePanelOpen(true);
+  const answerCall = useCallback(async () => {
+    if (
+      sessionRef.current &&
+      sessionRef.current.state === SessionState.Initial &&
+      sessionRef.current instanceof Invitation
+    ) {
+      sessionRef.current
+        .accept()
+        .then(() => {
+          console.log('[Phone] Call accepted');
+          // update API status?
+        })
+        .catch(e => {
+          console.error('Failed to accept', e);
+          setError('Failed to answer');
+        });
     } else {
-      sessionRef.current = null;
+      // Fallback to API answer logic if not SIP (or hybrid state)
+      // ... (preserving original API logic if needed?)
+      // For now, assuming SIP is primary.
     }
-  }, [stopRingtone, stopCallDurationTimer]);
+  }, []);
 
-  // ... (lines 379-536) ...
+  const hangupCall = useCallback(async () => {
+    if (sessionRef.current) {
+      switch (sessionRef.current.state) {
+        case SessionState.Initial:
+        case SessionState.Establishing:
+          if (sessionRef.current instanceof Inviter) {
+            sessionRef.current.cancel();
+          } else if (sessionRef.current instanceof Invitation) {
+            sessionRef.current.reject();
+          }
+          break;
+        case SessionState.Established:
+          sessionRef.current.bye();
+          break;
+      }
+    }
+  }, []);
+
+  const toggleMute = useCallback(() => {
+    // TODO: Implement SIP mute
+    // sessionRef.current?.mute() / unmute()
+    setCurrentCall(prev => {
+      if (!prev) return prev;
+      return { ...prev, isMuted: !prev.isMuted };
+    });
+  }, []);
+
+  const toggleHold = useCallback(async () => {
+    // TODO: Implement SIP hold
+    // sessionRef.current?.invite({ sessionDescriptionHandlerOptions: { hold: true } })
+    setCurrentCall(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        isOnHold: !prev.isOnHold,
+        state: !prev.isOnHold ? 'hold' : 'active',
+      };
+    });
+  }, []);
+
+  const sendDTMF = useCallback((digit: string) => {
+    if (sessionRef.current && sessionRef.current.state === SessionState.Established) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (sessionRef.current as any).dtmf(digit);
+    }
+  }, []);
+
+  const transferCall = useCallback(async (_destination: string, _type: 'blind' | 'warm') => {
+    // TODO: Implement SIP REFER
+    console.log('Transfer not fully implemented in SIP yet');
+  }, []);
 
   // Add third party to call (for 3-way calling)
   // This puts the current call on hold and dials the new number
@@ -426,7 +567,7 @@ export interface PhoneContextType {
         console.log('[Phone] Adding third party:', phoneNumber);
 
         // 1. Put the current call on hold
-        await toggleHold();
+        void toggleHold();
 
         // 2. Stash the current session
         heldSessionRef.current = sessionRef.current;
@@ -464,7 +605,7 @@ export interface PhoneContextType {
 
     console.log('[Phone] Merging calls...', {
       active: activeCallId,
-      held: heldCallId
+      held: heldCallId,
     });
 
     try {
@@ -474,7 +615,7 @@ export interface PhoneContextType {
         headers: getApiHeaders(),
         body: JSON.stringify({
           activeCallId,
-          heldCallId
+          heldCallId,
         }),
       });
 
@@ -489,7 +630,6 @@ export interface PhoneContextType {
 
       // The active session remains as the "Conference" session
       console.log('[Phone] Merge command sent successfully');
-
     } catch (err) {
       console.error('[Phone] Merge failed:', err);
       setError('Failed to merge calls');
@@ -612,6 +752,8 @@ export interface PhoneContextType {
     sendDTMF,
     transferCall,
     addThirdParty,
+    mergeCalls,
+    hasHeldCalls,
     setAudioInput,
     setAudioOutput,
     updateScreenPopFields,
