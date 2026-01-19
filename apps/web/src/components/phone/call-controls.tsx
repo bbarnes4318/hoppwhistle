@@ -1,9 +1,10 @@
 'use client';
 
-import { Grid, Mic, MicOff, Pause, PhoneForwarded, PhoneOff, Play } from 'lucide-react';
+import { Grid, Mic, MicOff, Pause, PhoneForwarded, PhoneOff, Play, UserPlus } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+import { AddCallDialog } from './add-call-dialog';
 import { CallTransferDialog } from './call-transfer-dialog';
 import { usePhone } from './phone-provider';
 
@@ -16,6 +17,7 @@ import { cn } from '@/lib/utils';
 export function CallControls(): JSX.Element {
   const { currentCall, toggleMute, toggleHold, hangupCall } = usePhone();
   const [showTransfer, setShowTransfer] = useState(false);
+  const [showAddCall, setShowAddCall] = useState(false);
   const [showKeypad, setShowKeypad] = useState(false);
 
   const isMuted = currentCall?.isMuted ?? false;
@@ -41,6 +43,11 @@ export function CallControls(): JSX.Element {
     setShowTransfer(true);
   }, []);
 
+  // Handle add call
+  const handleAddCall = useCallback(() => {
+    setShowAddCall(true);
+  }, []);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -58,12 +65,15 @@ export function CallControls(): JSX.Element {
         case 't':
           handleTransfer();
           break;
+        case 'a':
+          handleAddCall();
+          break;
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleMute, handleHold, handleTransfer]);
+  }, [handleMute, handleHold, handleTransfer, handleAddCall]);
 
   if (!currentCall) return <></>;
 
@@ -74,10 +84,15 @@ export function CallControls(): JSX.Element {
         typeof document !== 'undefined' &&
         createPortal(<CallTransferDialog onClose={() => setShowTransfer(false)} />, document.body)}
 
+      {/* Add Call Dialog - rendered via portal */}
+      {showAddCall &&
+        typeof document !== 'undefined' &&
+        createPortal(<AddCallDialog onClose={() => setShowAddCall(false)} />, document.body)}
+
       {/* Controls Grid */}
       <div className="space-y-4">
         {/* Main Controls */}
-        <div className="flex items-center justify-center gap-4">
+        <div className="flex items-center justify-center gap-4 flex-wrap">
           {/* Mute Button */}
           <button
             onClick={handleMute}
@@ -130,26 +145,6 @@ export function CallControls(): JSX.Element {
             <span className="text-xs text-gray-400">{isOnHold ? 'Resume' : 'Hold'}</span>
           </button>
 
-          {/* Transfer Button */}
-          <button
-            onClick={handleTransfer}
-            className={cn(
-              'group relative flex flex-col items-center gap-1.5',
-              'transition-transform hover:scale-105 active:scale-95'
-            )}
-          >
-            <div
-              className={cn(
-                'w-14 h-14 rounded-full flex items-center justify-center',
-                'bg-white/10 border-2 border-transparent hover:bg-white/15',
-                'transition-all duration-200'
-              )}
-            >
-              <PhoneForwarded className="w-6 h-6 text-white" />
-            </div>
-            <span className="text-xs text-gray-400">Transfer</span>
-          </button>
-
           {/* Keypad Button */}
           <button
             onClick={() => setShowKeypad(!showKeypad)}
@@ -170,6 +165,49 @@ export function CallControls(): JSX.Element {
               <Grid className="w-6 h-6 text-white" />
             </div>
             <span className="text-xs text-gray-400">Keypad</span>
+          </button>
+        </div>
+
+        {/* Secondary Controls (Transfer, Add Call) */}
+        <div className="flex items-center justify-center gap-4">
+          {/* Transfer Button */}
+          <button
+            onClick={handleTransfer}
+            className={cn(
+              'group relative flex flex-col items-center gap-1.5',
+              'transition-transform hover:scale-105 active:scale-95'
+            )}
+          >
+            <div
+              className={cn(
+                'w-14 h-14 rounded-full flex items-center justify-center',
+                'bg-white/10 border-2 border-transparent hover:bg-white/15',
+                'transition-all duration-200'
+              )}
+            >
+              <PhoneForwarded className="w-6 h-6 text-white" />
+            </div>
+            <span className="text-xs text-gray-400">Transfer</span>
+          </button>
+
+          {/* Add Call Button */}
+          <button
+            onClick={handleAddCall}
+            className={cn(
+              'group relative flex flex-col items-center gap-1.5',
+              'transition-transform hover:scale-105 active:scale-95'
+            )}
+          >
+            <div
+              className={cn(
+                'w-14 h-14 rounded-full flex items-center justify-center',
+                'bg-white/10 border-2 border-transparent hover:bg-white/15',
+                'transition-all duration-200'
+              )}
+            >
+              <UserPlus className="w-6 h-6 text-white" />
+            </div>
+            <span className="text-xs text-gray-400">Add Call</span>
           </button>
         </div>
 
@@ -197,7 +235,8 @@ export function CallControls(): JSX.Element {
           <p className="text-gray-600 text-xs">
             <kbd className="px-1 py-0.5 bg-white/5 rounded text-gray-500">M</kbd> Mute{' '}
             <kbd className="px-1 py-0.5 bg-white/5 rounded text-gray-500">H</kbd> Hold{' '}
-            <kbd className="px-1 py-0.5 bg-white/5 rounded text-gray-500">T</kbd> Transfer
+            <kbd className="px-1 py-0.5 bg-white/5 rounded text-gray-500">T</kbd> Transfer{' '}
+            <kbd className="px-1 py-0.5 bg-white/5 rounded text-gray-500">A</kbd> Add
           </p>
         </div>
       </div>

@@ -100,6 +100,7 @@ export interface PhoneContextType {
   toggleHold: () => Promise<void>;
   sendDTMF: (digit: string) => void;
   transferCall: (destination: string, type: 'blind' | 'warm') => Promise<void>;
+  addThirdParty: (phoneNumber: string) => Promise<void>;
   setAudioInput: (deviceId: string) => void;
   setAudioOutput: (deviceId: string) => void;
   updateScreenPopFields: (fields: ScreenPopField[]) => void;
@@ -540,10 +541,106 @@ export function PhoneProvider({
     }
   }, []);
 
-  const transferCall = useCallback(async (_destination: string, _type: 'blind' | 'warm') => {
-    // TODO: Implement SIP REFER
-    console.log('Transfer not fully implemented in SIP yet');
+  const transferCall = useCallback(async (destination: string, type: 'blind' | 'warm') => {
+    if (!sessionRef.current || sessionRef.current.state !== SessionState.Established) {
+      setError('No active call to transfer');
+      return;
+    }
+
+    try {
+      // Clean up destination number
+      let targetNumber = destination.replace(/[^0-9+]/g, '');
+
+      // Add +1 prefix for US numbers if not present
+      if (!targetNumber.startsWith('+') && targetNumber.length === 10) {
+        targetNumber = `+1${targetNumber}`;
+      }
+
+      // Get domain from environment
+      const domain = process.env.NEXT_PUBLIC_IP || window.location.hostname;
+
+      // Create the target URI for the transfer
+      // For external calls, we dial through the same FreeSWITCH that will route via gateway
+      const targetUri = UserAgent.makeURI(`sip:${targetNumber}@${domain}`);
+
+      if (!targetUri) {
+        setError('Invalid transfer destination');
+        return;
+      }
+
+      console.log(`[Phone] Initiating ${type} transfer to:`, targetNumber);
+
+      if (type === 'blind') {
+        // Blind transfer - use SIP REFER
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const session = sessionRef.current as any;
+
+        // sip.js refer() sends a REFER request to transfer the call
+        if (session.refer) {
+          session.refer(targetUri, {
+            requestDelegate: {
+              onAccept: () => {
+                console.log('[Phone] Transfer accepted');
+                // The call will be transferred, our leg will end
+              },
+              onReject: () => {
+                console.error('[Phone] Transfer rejected');
+                setError('Transfer was rejected');
+              },
+            },
+          });
+        } else {
+          // Fallback: construct and send REFER manually via session
+          console.log('[Phone] Using fallback REFER method');
+          setError('Blind transfer not supported on this session');
+        }
+      } else {
+        // Warm/Attended transfer - put current call on hold and initiate new call
+        // Then connect them using an attended transfer
+        setError('Warm transfer requires putting call on hold first - use Hold then dial');
+      }
+    } catch (err) {
+      console.error('[Phone] Transfer failed:', err);
+      const message = err instanceof Error ? err.message : 'Transfer failed';
+      setError(message);
+    }
   }, []);
+
+  // Add third party to call (for 3-way calling)
+  // This puts the current call on hold and dials the new number
+  const addThirdParty = useCallback(
+    async (phoneNumber: string) => {
+      if (!sessionRef.current || sessionRef.current.state !== SessionState.Established) {
+        setError('No active call to add party to');
+        return;
+      }
+
+      if (!userAgentRef.current) {
+        setError('Phone not connected');
+        return;
+      }
+
+      try {
+        console.log('[Phone] Adding third party:', phoneNumber);
+
+        // First, put the current call on hold
+        await toggleHold();
+
+        // Then dial the new number
+        // Note: For a full 3-way call implementation, we'd need to:
+        // 1. Put A-leg on hold
+        // 2. Call B-leg
+        // 3. When B answers, use a conference bridge to merge
+        // For now, we just hold and dial (the agent can then warm transfer)
+        await makeCall(phoneNumber);
+      } catch (err) {
+        console.error('[Phone] Add third party failed:', err);
+        const message = err instanceof Error ? err.message : 'Failed to add party';
+        setError(message);
+      }
+    },
+    [toggleHold, makeCall]
+  );
 
   const setAudioInput = useCallback((deviceId: string) => {
     setSelectedAudioInput(deviceId);
@@ -660,6 +757,7 @@ export function PhoneProvider({
     toggleHold,
     sendDTMF,
     transferCall,
+    addThirdParty,
     setAudioInput,
     setAudioOutput,
     updateScreenPopFields,
