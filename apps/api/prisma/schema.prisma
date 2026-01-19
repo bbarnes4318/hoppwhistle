@@ -57,6 +57,7 @@ model Tenant {
   carrierLookups     CarrierLookup[]
   tags             Tag[]
   leads            Lead[]
+  retentionPolicies RetentionPolicy[]
 
   @@index([slug])
   @@index([status])
@@ -1513,6 +1514,7 @@ model Lead {
   campaign  Campaign? @relation(fields: [campaignId], references: [id])
   assignedTo User?    @relation(fields: [assignedToId], references: [id])
   calls     LeadCall[]
+  retentionPolicies RetentionPolicy[]
 
   @@unique([tenantId, phoneNumber])
   @@index([tenantId])
@@ -1545,5 +1547,90 @@ enum LeadStatus {
   CONVERTED
   LOST
   DO_NOT_CALL
+}
+
+// ============================================================================
+// Retention & Onboarding Module
+// ============================================================================
+
+enum PolicyStatus {
+  SUBMITTED
+  UW_REVIEW
+  ISSUED
+  PAID
+  DECLINED
+  NOT_TAKEN
+  LAPSED
+}
+
+enum PolicyType {
+  LEVEL
+  GRADED
+  MODIFIED
+  GUARANTEED_ISSUE
+}
+
+enum RelationshipType {
+  SPOUSE
+  CHILD
+  PARENT
+  GRANDCHILD
+  SIBLING
+  PARTNER
+  FRIEND
+  OTHER
+}
+
+model RetentionPolicy {
+  id              String       @id @default(uuid())
+  tenantId        String
+  leadId          String       // References Lead for customer data / call-pop integration
+
+  // Beneficiary Info
+  primaryBeneficiary     String?
+  primaryRelationship    RelationshipType?
+  contingentBeneficiary  String?
+  contingentRelationship RelationshipType?
+
+  // Policy Info
+  carrier         String?
+  coverage        Decimal?     @db.Decimal(10, 2)
+  monthlyPremium  Decimal?     @db.Decimal(10, 2)
+  policyType      PolicyType?
+
+  // Billing Logic
+  ssBilling       Boolean      @default(false)
+  billingDateStr  String?      // SS: "1st", "3rd", "2nd Wed", etc. OR standard: "1"-"28"
+
+  // Workflow
+  status              PolicyStatus @default(SUBMITTED)
+  onboardingAttempts  Int          @default(0)
+
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  // Relations
+  tenant          Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead            Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  notes           RetentionNote[]
+
+  @@unique([tenantId, leadId])
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([leadId])
+  @@map("retention_policies")
+}
+
+model RetentionNote {
+  id          String   @id @default(uuid())
+  policyId    String
+  userId      String?  // Who logged the note
+  note        String
+  createdAt   DateTime @default(now())
+
+  policy      RetentionPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@index([policyId])
+  @@map("retention_notes")
 }
 

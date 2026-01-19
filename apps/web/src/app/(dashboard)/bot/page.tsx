@@ -102,6 +102,9 @@ export default function BotDashboard() {
   const [concurrency, setConcurrency] = useState(10);
   const [selectedVoice, setSelectedVoice] = useState('aura-asteria-en');
   const [script, setScript] = useState(DEFAULT_SCRIPT);
+  const [transferPhoneNumber, setTransferPhoneNumber] = useState('+18653969104');
+  const [callerId, setCallerId] = useState('');
+  const [availableDids, setAvailableDids] = useState<string[]>([]);
 
   // UI state
   const [isLoadingTTS, setIsLoadingTTS] = useState(false);
@@ -145,12 +148,30 @@ export default function BotDashboard() {
           }
           if (data.voice) setSelectedVoice(data.voice);
           if (data.concurrency) setConcurrency(data.concurrency);
+          if (data.transferPhoneNumber) setTransferPhoneNumber(data.transferPhoneNumber);
+          if (data.callerId) setCallerId(data.callerId);
         }
       } catch {
         // Use defaults
       }
     };
     void loadSettings();
+  }, []);
+
+  // Load DIDs
+  useEffect(() => {
+    const loadDids = async () => {
+      try {
+        const res = await fetch('/api/bot/dids');
+        if (res.ok) {
+          const data = await res.json();
+          setAvailableDids(data.dids || []);
+        }
+      } catch {
+        // Silent fail
+      }
+    };
+    void loadDids();
   }, []);
 
   // Load call logs
@@ -209,7 +230,13 @@ export default function BotDashboard() {
       const res = await fetch('/api/bot/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ concurrency, script, voice: selectedVoice }),
+        body: JSON.stringify({
+          concurrency,
+          script,
+          voice: selectedVoice,
+          transferPhoneNumber,
+          callerId,
+        }),
       });
       if (res.ok) {
         setCampaignStatus('running');
@@ -288,7 +315,13 @@ export default function BotDashboard() {
       const res = await fetch('/api/bot/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ script, voice: selectedVoice, concurrency }),
+        body: JSON.stringify({
+          script,
+          voice: selectedVoice,
+          concurrency,
+          transferPhoneNumber,
+          callerId,
+        }),
       });
       if (res.ok) {
         setSaveSuccess(true);
@@ -630,6 +663,50 @@ export default function BotDashboard() {
                     )}
                     {isLoadingTTS ? 'Generating...' : isPlaying ? 'Stop' : 'Preview Voice Sample'}
                   </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Campaign Settings Card */}
+            <Card className="lg:col-span-1">
+              <CardHeader className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950 dark:to-cyan-950 rounded-t-lg">
+                <CardTitle className="flex items-center gap-2">
+                  <Settings2 className="h-5 w-5 text-blue-600" />
+                  Call Configuration
+                </CardTitle>
+                <CardDescription>Setup routing and caller identity</CardDescription>
+              </CardHeader>
+              <CardContent className="pt-6 space-y-4">
+                <div className="space-y-2">
+                  <Label>Live Transfer Number</Label>
+                  <Input
+                    value={transferPhoneNumber}
+                    onChange={e => setTransferPhoneNumber(e.target.value)}
+                    placeholder="+1 (555) 000-0000"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Destination for qualified transfers
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Outbound Caller ID (DID)</Label>
+                  <Select value={callerId} onValueChange={setCallerId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Random (Pool Rotation)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">
+                        <span className="text-muted-foreground">Random (Pool Rotation)</span>
+                      </SelectItem>
+                      {availableDids.map(did => (
+                        <SelectItem key={did} value={did}>
+                          {did}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Number displayed to leads</p>
                 </div>
               </CardContent>
             </Card>

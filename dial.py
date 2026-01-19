@@ -106,8 +106,10 @@ def dial_single(customer_num: str, did_pool: dict) -> dict:
         # Voxbeam/Anveo Format (1...)
         fmt_clean = f"1{clean}" if not clean.startswith('1') else clean
 
-        # Rotate caller ID from pool (spam avoidance)
-        mask = random.choice(list(did_pool.keys())).replace('+', '')
+        if os.getenv('FORCE_CALLER_ID'):
+            mask = os.getenv('FORCE_CALLER_ID').replace('+', '')
+        else:
+            mask = random.choice(list(did_pool.keys())).replace('+', '')
 
         # 2. CONSTRUCT THE FAILOVER CHAIN
         # Syntax: carrier1|carrier2|carrier3

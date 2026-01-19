@@ -272,6 +272,10 @@ async function buildServer() {
   const { registerBotRoutes } = await import('./routes/bot.js');
   await server.register(registerBotRoutes);
 
+  // Register Retention & Onboarding routes
+  const { registerRetentionRoutes } = await import('./routes/retention.js');
+  await server.register(registerRetentionRoutes);
+
   // Start Fronter Bot socket server (handles outbound call socket connections)
   const { fronterBotService } = await import('./services/fronter-bot.js');
   await fronterBotService.start();

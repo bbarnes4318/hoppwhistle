@@ -14,6 +14,7 @@ import {
   DollarSign,
   AudioLines,
   Bot,
+  ClipboardCheck,
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -34,6 +35,12 @@ const navigation = [
   { name: 'Campaigns', href: '/campaigns', icon: Megaphone },
   { name: 'Flows', href: '/flows', icon: GitBranch },
   { name: 'Calls', href: '/calls', icon: AudioLines },
+  {
+    name: 'Retention',
+    href: '/retention',
+    icon: ClipboardCheck,
+    title: 'Policy onboarding & retention queue',
+  },
   { name: 'Billing', href: '/billing', icon: Receipt },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
