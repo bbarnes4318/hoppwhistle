@@ -370,6 +370,7 @@ export function PhoneProvider({
       return null;
     });
     setAgentStatusState('available');
+    setIsConnecting(false); // Reset connecting state so user can make new calls
     stopRingtone();
     stopCallDurationTimer();
     sessionRef.current = null;
