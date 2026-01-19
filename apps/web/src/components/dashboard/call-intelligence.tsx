@@ -129,13 +129,13 @@ export function CallIntelligence({ filters }: CallIntelligenceProps) {
         return {
           id: call.id,
           timestamp: new Date(call.createdAt),
-          duration: call.duration || 0,
+          duration: call.duration || call.billableDuration || 0,
           isBillable,
           saleOutcome,
           campaign: call.campaign?.name || 'Direct',
           source: call.direction || 'inbound',
-          recordingUrl: call.recordings?.[0]?.url || '/sample.wav',
-          transcriptAvailable: Math.random() > 0.5,
+          recordingUrl: call.recordings?.[0]?.url,
+          transcriptAvailable: !!call.recordings?.[0]?.url,
           from: call.fromNumber?.number,
           to: call.toNumber,
           status: call.status,
@@ -195,6 +195,8 @@ export function CallIntelligence({ filters }: CallIntelligenceProps) {
   };
 
   const handlePlay = (call: CallRecord) => {
+    if (!call.recordingUrl) return;
+
     if (playingId === call.id) {
       audioRef.current?.pause();
       setPlayingId(null);
@@ -202,7 +204,7 @@ export function CallIntelligence({ filters }: CallIntelligenceProps) {
       if (audioRef.current) {
         audioRef.current.pause();
       }
-      audioRef.current = new Audio(call.recordingUrl || '/sample.wav');
+      audioRef.current = new Audio(call.recordingUrl);
       audioRef.current.play();
       audioRef.current.onended = () => setPlayingId(null);
       setPlayingId(call.id);
@@ -210,8 +212,10 @@ export function CallIntelligence({ filters }: CallIntelligenceProps) {
   };
 
   const handleDownload = (call: CallRecord) => {
+    if (!call.recordingUrl) return;
+
     const link = document.createElement('a');
-    link.href = call.recordingUrl || '/sample.wav';
+    link.href = call.recordingUrl;
     link.download = `call-${call.id}.wav`;
     link.click();
   };

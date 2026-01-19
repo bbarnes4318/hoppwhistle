@@ -1,14 +1,6 @@
 'use client';
 
-import {
-  Phone,
-  DollarSign,
-  CheckCircle,
-  XCircle,
-  TrendingUp,
-  Banknote,
-  Activity,
-} from 'lucide-react';
+import { Phone, DollarSign, CheckCircle, TrendingUp, Activity, Receipt } from 'lucide-react';
 import { useEffect, useState, useCallback } from 'react';
 
 import { KPICard } from './kpi-card';
@@ -18,14 +10,14 @@ import { apiClient } from '@/lib/api';
 interface DashboardMetrics {
   totalCalls: number;
   billableCalls: number;
-  nonBillableCalls: number;
+  cost: number;
   salesClosed: number;
-  conversionRate: number;
   revenue: number;
-  revenuePerCall: number;
+  conversionRate: number;
   trends: {
     calls: number;
     billable: number;
+    cost: number;
     sales: number;
     revenue: number;
   };
@@ -112,16 +104,16 @@ export function DashboardKPIs({ dateRange, onFilterChange }: DashboardKPIsProps)
 
       // Calculate derived metrics
       const billableCalls = current.completedCalls || 0;
-      const nonBillableCalls = current.totalCalls - billableCalls;
+      const cost = current.totalCost || 0;
       const salesClosed = Math.floor(billableCalls * (current.conversionRate || 0.15));
       const conversionRate = billableCalls > 0 ? (salesClosed / billableCalls) * 100 : 0;
-      const revenue = current.totalCost || 0;
-      const revenuePerCall = current.totalCalls > 0 ? revenue / current.totalCalls : 0;
+      const revenue = cost; // Revenue tied to sales data
 
       // Calculate trends
       const prevBillable = prev?.completedCalls || 0;
+      const prevCost = prev?.totalCost || 0;
       const prevSales = Math.floor(prevBillable * (prev?.conversionRate || 0.15));
-      const prevRevenue = prev?.totalCost || 0;
+      const prevRevenue = prevCost;
 
       const calcTrend = (curr: number, previous: number) => {
         if (previous === 0) return curr > 0 ? 100 : 0;
@@ -131,14 +123,14 @@ export function DashboardKPIs({ dateRange, onFilterChange }: DashboardKPIsProps)
       setMetrics({
         totalCalls: current.totalCalls || 0,
         billableCalls,
-        nonBillableCalls,
+        cost,
         salesClosed,
-        conversionRate,
         revenue,
-        revenuePerCall,
+        conversionRate,
         trends: {
           calls: calcTrend(current.totalCalls || 0, prev?.totalCalls || 0),
           billable: calcTrend(billableCalls, prevBillable),
+          cost: calcTrend(cost, prevCost),
           sales: calcTrend(salesClosed, prevSales),
           revenue: calcTrend(revenue, prevRevenue),
         },
@@ -149,12 +141,11 @@ export function DashboardKPIs({ dateRange, onFilterChange }: DashboardKPIsProps)
       setMetrics({
         totalCalls: 0,
         billableCalls: 0,
-        nonBillableCalls: 0,
+        cost: 0,
         salesClosed: 0,
-        conversionRate: 0,
         revenue: 0,
-        revenuePerCall: 0,
-        trends: { calls: 0, billable: 0, sales: 0, revenue: 0 },
+        conversionRate: 0,
+        trends: { calls: 0, billable: 0, cost: 0, sales: 0, revenue: 0 },
       });
     } finally {
       setLoading(false);
@@ -182,7 +173,7 @@ export function DashboardKPIs({ dateRange, onFilterChange }: DashboardKPIsProps)
         </div>
       )}
 
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <KPICard
           title="Total Calls"
           value={metrics?.totalCalls ?? 0}
@@ -205,12 +196,13 @@ export function DashboardKPIs({ dateRange, onFilterChange }: DashboardKPIsProps)
         />
 
         <KPICard
-          title="Non-Billable"
-          value={metrics?.nonBillableCalls ?? 0}
-          icon={XCircle}
+          title="Cost"
+          value={formatCurrency(metrics?.cost ?? 0)}
+          icon={Receipt}
+          trend={metrics?.trends.cost}
+          trendLabel="vs prev period"
           variant="warning"
           loading={loading}
-          onClick={() => onFilterChange?.({ type: 'billable', value: 'false' })}
         />
 
         <KPICard
@@ -225,14 +217,6 @@ export function DashboardKPIs({ dateRange, onFilterChange }: DashboardKPIsProps)
         />
 
         <KPICard
-          title="Conversion Rate"
-          value={`${(metrics?.conversionRate ?? 0).toFixed(1)}%`}
-          icon={Activity}
-          variant="conversion"
-          loading={loading}
-        />
-
-        <KPICard
           title="Revenue"
           value={formatCurrency(metrics?.revenue ?? 0)}
           icon={DollarSign}
@@ -243,9 +227,10 @@ export function DashboardKPIs({ dateRange, onFilterChange }: DashboardKPIsProps)
         />
 
         <KPICard
-          title="RPC"
-          value={formatCurrency(metrics?.revenuePerCall ?? 0)}
-          icon={Banknote}
+          title="Conversion Rate"
+          value={`${(metrics?.conversionRate ?? 0).toFixed(1)}%`}
+          icon={Activity}
+          variant="conversion"
           loading={loading}
         />
       </div>

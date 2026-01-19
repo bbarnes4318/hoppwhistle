@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { Calendar, RefreshCw } from 'lucide-react';
 
 import { DashboardKPIs } from '@/components/dashboard/dashboard-kpis';
-import { CallsOverTime } from '@/components/dashboard/calls-over-time';
 import { SalesFunnel } from '@/components/dashboard/sales-funnel';
 import { TopPerformers } from '@/components/dashboard/top-performers';
 import { CallIntelligence } from '@/components/dashboard/call-intelligence';
@@ -100,9 +99,8 @@ export default function DashboardPage() {
         <DashboardKPIs dateRange={getDateRange()} onFilterChange={handleFilterChange} />
       </section>
 
-      {/* Mid-Page Insights Grid */}
-      <section className="grid gap-6 lg:grid-cols-3 mb-6 flex-shrink-0">
-        <CallsOverTime />
+      {/* Mid-Page Insights Grid - 2 columns */}
+      <section className="grid gap-6 lg:grid-cols-2 mb-6 flex-shrink-0">
         <SalesFunnel onStageClick={stage => console.log('Stage clicked:', stage)} />
         <TopPerformers />
       </section>
