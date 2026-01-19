@@ -227,7 +227,7 @@ export default function BotDashboard() {
     }
 
     try {
-      const res = await fetch('/api/bot/start', {
+      const res = await fetch(`${API_URL}/api/bot/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -248,7 +248,7 @@ export default function BotDashboard() {
 
   const handlePause = async () => {
     try {
-      await fetch('/api/bot/pause', { method: 'POST' });
+      await fetch(`${API_URL}/api/bot/pause`, { method: 'POST' });
       setCampaignStatus('paused');
     } catch (e) {
       console.error('Failed to pause campaign:', e);
@@ -257,7 +257,7 @@ export default function BotDashboard() {
 
   const handleStop = async () => {
     try {
-      await fetch('/api/bot/stop', { method: 'POST' });
+      await fetch(`${API_URL}/api/bot/stop`, { method: 'POST' });
       setCampaignStatus('idle');
     } catch (e) {
       console.error('Failed to stop campaign:', e);
@@ -275,7 +275,7 @@ export default function BotDashboard() {
     setIsPlaying(false);
 
     try {
-      const res = await fetch('/api/bot/tts/preview', {
+      const res = await fetch(`${API_URL}/api/bot/tts/preview`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: script, voice: selectedVoice }),
@@ -312,7 +312,7 @@ export default function BotDashboard() {
     setSaveSuccess(false);
 
     try {
-      const res = await fetch('/api/bot/settings', {
+      const res = await fetch(`${API_URL}/api/bot/settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -343,7 +343,7 @@ export default function BotDashboard() {
     formData.append('file', file);
 
     try {
-      const res = await fetch('/api/bot/leads/upload', {
+      const res = await fetch(`${API_URL}/api/bot/leads/upload`, {
         method: 'POST',
         body: formData,
       });
@@ -691,12 +691,15 @@ export default function BotDashboard() {
 
                 <div className="space-y-2">
                   <Label>Outbound Caller ID (DID)</Label>
-                  <Select value={callerId} onValueChange={setCallerId}>
+                  <Select
+                    value={callerId || 'random'}
+                    onValueChange={v => setCallerId(v === 'random' ? '' : v)}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Random (Pool Rotation)" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">
+                      <SelectItem value="random">
                         <span className="text-muted-foreground">Random (Pool Rotation)</span>
                       </SelectItem>
                       {availableDids.map(did => (
