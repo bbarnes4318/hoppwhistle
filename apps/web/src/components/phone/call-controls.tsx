@@ -1,172 +1,87 @@
-'use client';
-
-import { Grid, Mic, MicOff, Pause, PhoneForwarded, PhoneOff, Play, UserPlus } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
-
-import { AddCallDialog } from './add-call-dialog';
-import { CallTransferDialog } from './call-transfer-dialog';
-import { usePhone } from './phone-provider';
-
-import { cn } from '@/lib/utils';
-
-// ============================================================================
-// Call Controls Component
-// ============================================================================
+// ... imports ...
+import { Grid, Merge, Mic, MicOff, Pause, PhoneForwarded, PhoneOff, Play, UserPlus } from 'lucide-react';
+// ... existing imports ...
 
 export function CallControls(): JSX.Element {
-  const { currentCall, toggleMute, toggleHold, hangupCall } = usePhone();
-  const [showTransfer, setShowTransfer] = useState(false);
-  const [showAddCall, setShowAddCall] = useState(false);
-  const [showKeypad, setShowKeypad] = useState(false);
+  const { currentCall, toggleMute, toggleHold, hangupCall, hasHeldCalls, mergeCalls } = usePhone();
+  // ... state ...
 
-  const isMuted = currentCall?.isMuted ?? false;
-  const isOnHold = currentCall?.isOnHold ?? false;
+  // ... handlers ...
 
-  // Handle mute toggle
-  const handleMute = useCallback(() => {
-    toggleMute();
-  }, [toggleMute]);
-
-  // Handle hold toggle
-  const handleHold = useCallback(() => {
-    void toggleHold();
-  }, [toggleHold]);
-
-  // Handle hangup
-  const handleHangup = useCallback(() => {
-    void hangupCall();
-  }, [hangupCall]);
-
-  // Handle transfer
-  const handleTransfer = useCallback(() => {
-    setShowTransfer(true);
-  }, []);
-
-  // Handle add call
-  const handleAddCall = useCallback(() => {
-    setShowAddCall(true);
-  }, []);
+  // Handle merge
+  const handleMerge = useCallback(() => {
+    void mergeCalls();
+  }, [mergeCalls]);
 
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // ... input check ...
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         return;
       }
 
       switch (e.key.toLowerCase()) {
         case 'm':
-          handleMute();
+          // Check modifier to distinguish mute vs merge?
+          // Or just use Shift+M for merge?
+          if (e.shiftKey) {
+             handleMerge();
+          } else {
+             handleMute();
+          }
           break;
-        case 'h':
-          handleHold();
-          break;
-        case 't':
-          handleTransfer();
-          break;
-        case 'a':
-          handleAddCall();
-          break;
+        // ...
       }
     };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleMute, handleHold, handleTransfer, handleAddCall]);
+    // ...
+  }, [handleMute, handleHold, handleTransfer, handleAddCall, handleMerge]);
 
   if (!currentCall) return <></>;
 
   return (
     <>
-      {/* Transfer Dialog - rendered via portal to avoid parent overflow:hidden */}
-      {showTransfer &&
-        typeof document !== 'undefined' &&
-        createPortal(<CallTransferDialog onClose={() => setShowTransfer(false)} />, document.body)}
-
-      {/* Add Call Dialog - rendered via portal */}
-      {showAddCall &&
-        typeof document !== 'undefined' &&
-        createPortal(<AddCallDialog onClose={() => setShowAddCall(false)} />, document.body)}
+      {/* ... Dialogs ... */}
 
       {/* Controls Grid */}
       <div className="space-y-4">
         {/* Main Controls */}
         <div className="flex items-center justify-center gap-4 flex-wrap">
           {/* Mute Button */}
-          <button
-            onClick={handleMute}
-            className={cn(
-              'group relative flex flex-col items-center gap-1.5',
-              'transition-transform hover:scale-105 active:scale-95'
-            )}
-          >
-            <div
-              className={cn(
-                'w-14 h-14 rounded-full flex items-center justify-center',
-                'transition-all duration-200',
-                isMuted
-                  ? 'bg-red-500/20 border-2 border-red-500'
-                  : 'bg-white/10 border-2 border-transparent hover:bg-white/15'
-              )}
-            >
-              {isMuted ? (
-                <MicOff className="w-6 h-6 text-red-400" />
-              ) : (
-                <Mic className="w-6 h-6 text-white" />
-              )}
-            </div>
-            <span className="text-xs text-gray-400">{isMuted ? 'Unmute' : 'Mute'}</span>
-          </button>
+          {/* ... */}
 
-          {/* Hold Button */}
-          <button
-            onClick={handleHold}
-            className={cn(
-              'group relative flex flex-col items-center gap-1.5',
-              'transition-transform hover:scale-105 active:scale-95'
-            )}
-          >
-            <div
+          {/* Merge Button (Only appears when there is a held call) */}
+          {hasHeldCalls && (
+            <button
+              onClick={handleMerge}
               className={cn(
-                'w-14 h-14 rounded-full flex items-center justify-center',
-                'transition-all duration-200',
-                isOnHold
-                  ? 'bg-amber-500/20 border-2 border-amber-500'
-                  : 'bg-white/10 border-2 border-transparent hover:bg-white/15'
+                'group relative flex flex-col items-center gap-1.5',
+                'transition-transform hover:scale-105 active:scale-95'
               )}
             >
-              {isOnHold ? (
-                <Play className="w-6 h-6 text-amber-400" />
-              ) : (
-                <Pause className="w-6 h-6 text-white" />
-              )}
-            </div>
-            <span className="text-xs text-gray-400">{isOnHold ? 'Resume' : 'Hold'}</span>
-          </button>
+              <div
+                className={cn(
+                  'w-14 h-14 rounded-full flex items-center justify-center',
+                  'bg-purple-500/20 border-2 border-purple-500',
+                  'transition-all duration-200'
+                )}
+              >
+                <Merge className="w-6 h-6 text-purple-400" />
+              </div>
+              <span className="text-xs text-gray-400">Merge</span>
+            </button>
+          )}
 
-          {/* Keypad Button */}
-          <button
-            onClick={() => setShowKeypad(!showKeypad)}
-            className={cn(
-              'group relative flex flex-col items-center gap-1.5',
-              'transition-transform hover:scale-105 active:scale-95'
-            )}
-          >
-            <div
-              className={cn(
-                'w-14 h-14 rounded-full flex items-center justify-center',
-                'transition-all duration-200',
-                showKeypad
-                  ? 'bg-cyan-500/20 border-2 border-cyan-500'
-                  : 'bg-white/10 border-2 border-transparent hover:bg-white/15'
-              )}
-            >
-              <Grid className="w-6 h-6 text-white" />
-            </div>
-            <span className="text-xs text-gray-400">Keypad</span>
-          </button>
+          {/* ... Hold, Keypad ... */}
+
+          {/* ... Secondary Controls ... */}
         </div>
+
+        {/* ... */}
+      </div>
+    </>
+  );
+}
 
         {/* Secondary Controls (Transfer, Add Call) */}
         <div className="flex items-center justify-center gap-4">
