@@ -663,10 +663,10 @@ export function PhoneProvider({
     const sipPass = '1';
     // Use PUBLIC_IP from env, fallback to window location if local
     const domain = process.env.NEXT_PUBLIC_IP || window.location.hostname;
-    // SIP WS endpoint - port 8083 is open (Verto port repurpose)
-    // Use wss:// for HTTPS pages to avoid mixed content errors
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    const sipWsUrl = `${wsProtocol}://${domain}:8083`;
+    // SIP WS endpoint - use /ws path via nginx (terminates SSL and proxies to FreeSWITCH:8083)
+    // For local dev, connect directly to ws://domain:8083
+    const isSecure = window.location.protocol === 'https:';
+    const sipWsUrl = isSecure ? `wss://${domain}/ws` : `ws://${domain}:8083`;
 
     console.log('[Phone] Initializing SIP UA:', { sipUser, domain, sipWsUrl });
 
