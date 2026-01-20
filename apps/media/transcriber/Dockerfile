@@ -15,10 +15,10 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/media/transcriber/package.json ./apps/media/transcriber/
 COPY packages/shared/package.json ./packages/shared/
 
-# Install all dependencies
-RUN pnpm install --filter @callfabric/transcriber...
+# Install ALL root dependencies first
+RUN pnpm install
 
-# Install tsx globally so it's always available
+# Install tsx globally
 RUN npm install -g tsx
 
 # Copy source
@@ -31,7 +31,6 @@ RUN useradd -m -u 1001 transcriber && \
 
 USER transcriber
 
-# Stay in /app where node_modules exists, run tsx with full path
 WORKDIR /app
 
 ENTRYPOINT ["/usr/bin/tini", "--"]

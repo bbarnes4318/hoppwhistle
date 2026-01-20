@@ -76,17 +76,20 @@ services:
   # ===========================================
   rtpengine:
     image: drachtio/rtpengine:latest
-    network_mode: host
     privileged: true
     cap_add:
       - NET_ADMIN
       - SYS_NICE
+    ports:
+      - '22222:22222/udp'
+      - '10000-10100:10000-10100/udp'
     environment:
       - MY_IP=45.32.213.201
       - PORT_MIN=10000
       - PORT_MAX=10100
       - LOG_LEVEL=6
     restart: unless-stopped
+
   # ===========================================
   # FREESWITCH - Telephony Server
   # ===========================================
