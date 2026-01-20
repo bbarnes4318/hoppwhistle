@@ -84,7 +84,7 @@ services:
       - '22222:22222/udp'
       - '10000-10100:10000-10100/udp'
     environment:
-      - MY_IP=45.32.213.201
+      - PUBLIC_IP=${PUBLIC_IP}
       - PORT_MIN=10000
       - PORT_MAX=10100
       - LOG_LEVEL=6
