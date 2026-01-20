@@ -165,6 +165,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
+      - API_KEY=${API_KEY:-demo-key}
       - DATABASE_URL=postgresql://callfabric:callfabric_dev@hopwhistle-postgres-dev:5432/callfabric
       - REDIS_URL=redis://redis:6379
       - CLICKHOUSE_URL=http://clickhouse:8123
