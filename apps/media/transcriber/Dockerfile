@@ -16,14 +16,17 @@ COPY apps/media/transcriber/package.json ./apps/media/transcriber/
 COPY packages/shared/package.json ./packages/shared/
 
 # Install dependencies (including dev for typescript)
-RUN pnpm install --frozen-lockfile --filter @callfabric/transcriber... --dev
+RUN pnpm install --frozen-lockfile --filter @callfabric/transcriber...
+
+# Install typescript globally for build
+RUN npm install -g typescript
 
 # Copy source
 COPY apps/media/transcriber ./apps/media/transcriber
 COPY packages/shared ./packages/shared
 
 # Build with typescript
-RUN cd apps/media/transcriber && ./node_modules/.bin/tsc
+RUN cd apps/media/transcriber && tsc
 
 # Create non-root user
 RUN useradd -m -u 1001 transcriber && \
