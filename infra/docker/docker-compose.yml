@@ -76,12 +76,13 @@ services:
   # ===========================================
   rtpengine:
     image: drachtio/rtpengine:latest
-    ports:
-      - '22222:22222/udp'
-      - '10000-10100:10000-10100/udp'
+    network_mode: host
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+      - SYS_NICE
     environment:
       - PUBLIC_IP=${PUBLIC_IP}
-    network_mode: host
     restart: unless-stopped
 
   # ===========================================
