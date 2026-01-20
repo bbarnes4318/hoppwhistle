@@ -81,6 +81,7 @@ services:
     cap_add:
       - NET_ADMIN
       - SYS_NICE
+    command: rtpengine --interface=${PUBLIC_IP} --listen-ng=22222 --port-min=10000 --port-max=10100 --log-level=5 --foreground
     env_file:
       - .env
     environment:

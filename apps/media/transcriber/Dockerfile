@@ -15,15 +15,15 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/media/transcriber/package.json ./apps/media/transcriber/
 COPY packages/shared/package.json ./packages/shared/
 
-# Install dependencies
-RUN pnpm install --frozen-lockfile --filter @callfabric/transcriber...
+# Install dependencies (including dev for typescript)
+RUN pnpm install --frozen-lockfile --filter @callfabric/transcriber... --dev
 
 # Copy source
 COPY apps/media/transcriber ./apps/media/transcriber
 COPY packages/shared ./packages/shared
 
-# Build with tsc directly
-RUN cd apps/media/transcriber && pnpm exec tsc
+# Build with typescript
+RUN cd apps/media/transcriber && ./node_modules/.bin/tsc
 
 # Create non-root user
 RUN useradd -m -u 1001 transcriber && \
