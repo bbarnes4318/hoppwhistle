@@ -661,16 +661,16 @@ export function PhoneProvider({
     // Use existing FreeSWITCH user (1000-1019 available, password is 1234)
     const sipUser = '1000';
     const sipPass = '1234';
-    // Use PUBLIC_IP from env, fallback to window location if local
-    const domain = process.env.NEXT_PUBLIC_IP || window.location.hostname;
-    // SIP WS endpoint - use /ws path via nginx (terminates SSL and proxies to FreeSWITCH:8083)
-    // For local dev, connect directly to ws://domain:8083
+    // SIP domain must match FreeSWITCH config - use env PUBLIC_IP (45.32.213.201)
+    // WebSocket connects via nginx wss://hopwhistle.com/ws
+    const sipDomain = process.env.NEXT_PUBLIC_IP || '45.32.213.201';
+    const wsHost = window.location.hostname;
     const isSecure = window.location.protocol === 'https:';
-    const sipWsUrl = isSecure ? `wss://${domain}/ws` : `ws://${domain}:8083`;
+    const sipWsUrl = isSecure ? `wss://${wsHost}/ws` : `ws://${wsHost}:8083`;
 
-    console.log('[Phone] Initializing SIP UA:', { sipUser, domain, sipWsUrl });
+    console.log('[Phone] Initializing SIP UA:', { sipUser, sipDomain, sipWsUrl });
 
-    const uri = UserAgent.makeURI(`sip:${sipUser}@${domain}`);
+    const uri = UserAgent.makeURI(`sip:${sipUser}@${sipDomain}`);
     if (!uri) {
       setError('Invalid SIP URI');
       return;
