@@ -1,0 +1,858 @@
+root@hoppwhistle:/opt/hopwhistle# docker logs hopwhistle-redis-dev
+1:C 18 Jan 2026 18:23:18.924 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https://github.com/jemalloc/jemalloc/issues/1328. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.
+1:C 18 Jan 2026 18:23:18.925 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+1:C 18 Jan 2026 18:23:18.925 * Redis version=7.4.7, bits=64, commit=00000000, modified=0, pid=1, just started
+1:C 18 Jan 2026 18:23:18.925 * Configuration loaded
+1:M 18 Jan 2026 18:23:18.925 * Increased maximum number of open files to 10032 (it was originally set to 1024).
+1:M 18 Jan 2026 18:23:18.925 * monotonic clock: POSIX clock_gettime
+1:M 18 Jan 2026 18:23:18.931 * Running mode=standalone, port=6379.
+1:M 18 Jan 2026 18:23:18.931 * Server initialized
+1:M 18 Jan 2026 18:23:18.932 * Reading RDB base file on AOF loading...
+1:M 18 Jan 2026 18:23:18.932 * Loading RDB produced by version 7.4.7
+1:M 18 Jan 2026 18:23:18.932 * RDB age 97376 seconds
+1:M 18 Jan 2026 18:23:18.932 * RDB memory usage when created 0.90 Mb
+1:M 18 Jan 2026 18:23:18.932 * RDB is base AOF
+1:M 18 Jan 2026 18:23:18.932 * Done loading RDB, keys loaded: 0, keys expired: 0.
+1:M 18 Jan 2026 18:23:18.932 * DB loaded from base file appendonly.aof.1.base.rdb: 0.000 seconds
+1:M 18 Jan 2026 18:23:18.940 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.941 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.942 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.945 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.947 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.951 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.953 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.954 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.955 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.956 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.957 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.957 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.958 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.960 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.961 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.962 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.963 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.965 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.966 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.967 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.969 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.970 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.971 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.972 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.972 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.973 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.975 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.976 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.977 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.978 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.979 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.979 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.980 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.981 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.982 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.983 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.984 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.985 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.985 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.986 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.987 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.988 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.988 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.989 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.990 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.990 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.991 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.992 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.992 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.993 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.994 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.995 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.998 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.999 * DB saved on disk
+1:M 18 Jan 2026 18:23:18.999 * DB loaded from incr file appendonly.aof.1.incr.aof: 0.066 seconds
+1:M 18 Jan 2026 18:23:18.999 * DB loaded from append only file: 0.067 seconds
+1:M 18 Jan 2026 18:23:18.999 * Opening AOF incr file appendonly.aof.1.incr.aof on server start
+1:M 18 Jan 2026 18:23:18.999 * Ready to accept connections tcp
+1:M 18 Jan 2026 18:29:47.138 * DB saved on disk
+1:M 18 Jan 2026 18:29:47.354 * DB saved on disk
+1:M 18 Jan 2026 18:29:48.113 * DB saved on disk
+1:M 18 Jan 2026 18:29:48.327 * DB saved on disk
+1:M 18 Jan 2026 18:29:48.434 * DB saved on disk
+1:M 18 Jan 2026 18:29:49.188 * DB saved on disk
+1:M 18 Jan 2026 18:29:49.512 * DB saved on disk
+1:signal-handler (1768767634) Received SIGTERM scheduling shutdown...
+1:M 18 Jan 2026 20:20:34.297 * User requested shutdown...
+1:M 18 Jan 2026 20:20:34.297 * Calling fsync() on the AOF file.
+1:M 18 Jan 2026 20:20:34.299 * Saving the final RDB snapshot before exiting.
+1:M 18 Jan 2026 20:20:34.301 * DB saved on disk
+1:M 18 Jan 2026 20:20:34.301 # Redis is now ready to exit, bye bye...
+1:C 18 Jan 2026 20:25:41.221 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https://github.com/jemalloc/jemalloc/issues/1328. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.
+1:C 18 Jan 2026 20:25:41.222 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+1:C 18 Jan 2026 20:25:41.222 * Redis version=7.4.7, bits=64, commit=00000000, modified=0, pid=1, just started
+1:C 18 Jan 2026 20:25:41.222 * Configuration loaded
+1:M 18 Jan 2026 20:25:41.223 * Increased maximum number of open files to 10032 (it was originally set to 1024).
+1:M 18 Jan 2026 20:25:41.223 * monotonic clock: POSIX clock_gettime
+1:M 18 Jan 2026 20:25:41.224 * Running mode=standalone, port=6379.
+1:M 18 Jan 2026 20:25:41.224 * Server initialized
+1:M 18 Jan 2026 20:25:41.226 * Reading RDB base file on AOF loading...
+1:M 18 Jan 2026 20:25:41.226 * Loading RDB produced by version 7.4.7
+1:M 18 Jan 2026 20:25:41.226 * RDB age 104719 seconds
+1:M 18 Jan 2026 20:25:41.226 * RDB memory usage when created 0.90 Mb
+1:M 18 Jan 2026 20:25:41.226 * RDB is base AOF
+1:M 18 Jan 2026 20:25:41.226 * Done loading RDB, keys loaded: 0, keys expired: 0.
+1:M 18 Jan 2026 20:25:41.226 * DB loaded from base file appendonly.aof.1.base.rdb: 0.000 seconds
+1:M 18 Jan 2026 20:25:41.227 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.228 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.230 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.231 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.232 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.233 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.234 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.235 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.236 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.237 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.238 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.240 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.241 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.242 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.244 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.246 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.247 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.248 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.249 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.250 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.251 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.252 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.255 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.256 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.258 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.258 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.260 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.262 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.263 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.264 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.265 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.267 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.268 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.269 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.271 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.272 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.273 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.274 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.275 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.277 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.278 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.279 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.282 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.283 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.284 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.285 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.285 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.286 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.287 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.288 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.290 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.291 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.293 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.294 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.296 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.298 * DB saved on disk
+1:M 18 Jan 2026 20:25:41.298 * DB loaded from incr file appendonly.aof.1.incr.aof: 0.072 seconds
+1:M 18 Jan 2026 20:25:41.298 * DB loaded from append only file: 0.072 seconds
+1:M 18 Jan 2026 20:25:41.298 * Opening AOF incr file appendonly.aof.1.incr.aof on server start
+1:M 18 Jan 2026 20:25:41.298 * Ready to accept connections tcp
+1:M 18 Jan 2026 20:33:52.877 * DB saved on disk
+1:M 18 Jan 2026 20:33:53.083 * DB saved on disk
+1:M 18 Jan 2026 20:33:54.524 * DB saved on disk
+1:M 18 Jan 2026 20:33:54.936 * DB saved on disk
+1:M 18 Jan 2026 20:33:55.348 * DB saved on disk
+1:M 18 Jan 2026 20:33:56.789 * DB saved on disk
+1:M 18 Jan 2026 20:33:57.406 * DB saved on disk
+1:M 18 Jan 2026 22:02:47.802 * 1 changes in 3600 seconds. Saving...
+1:M 18 Jan 2026 22:02:47.802 * Background saving started by pid 3498
+3498:C 18 Jan 2026 22:02:47.813 * DB saved on disk
+3498:C 18 Jan 2026 22:02:47.814 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB
+1:M 18 Jan 2026 22:02:47.903 * Background saving terminated with success
+1:M 18 Jan 2026 22:43:34.789 * DB saved on disk
+1:M 18 Jan 2026 22:43:34.989 * DB saved on disk
+1:M 18 Jan 2026 22:43:36.382 * DB saved on disk
+1:M 18 Jan 2026 22:43:36.780 * DB saved on disk
+1:M 18 Jan 2026 22:43:37.178 * DB saved on disk
+1:M 18 Jan 2026 22:43:38.571 * DB saved on disk
+1:M 18 Jan 2026 22:43:39.167 * DB saved on disk
+1:M 18 Jan 2026 23:03:03.120 * DB saved on disk
+1:M 18 Jan 2026 23:03:03.521 * DB saved on disk
+1:M 18 Jan 2026 23:03:04.923 * DB saved on disk
+1:M 18 Jan 2026 23:03:05.324 * DB saved on disk
+1:M 18 Jan 2026 23:03:05.525 * DB saved on disk
+1:M 18 Jan 2026 23:03:06.930 * DB saved on disk
+1:M 18 Jan 2026 23:03:07.530 * DB saved on disk
+1:M 19 Jan 2026 00:03:08.024 * 1 changes in 3600 seconds. Saving...
+1:M 19 Jan 2026 00:03:08.025 * Background saving started by pid 7819
+7819:C 19 Jan 2026 00:03:08.028 * DB saved on disk
+7819:C 19 Jan 2026 00:03:08.028 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB
+1:M 19 Jan 2026 00:03:08.125 * Background saving terminated with success
+1:M 19 Jan 2026 00:10:35.388 * DB saved on disk
+1:M 19 Jan 2026 00:10:35.822 * DB saved on disk
+1:M 19 Jan 2026 00:10:37.336 * DB saved on disk
+1:M 19 Jan 2026 00:10:37.780 * DB saved on disk
+1:M 19 Jan 2026 00:10:38.001 * DB saved on disk
+1:M 19 Jan 2026 00:10:39.534 * DB saved on disk
+1:M 19 Jan 2026 00:10:40.183 * DB saved on disk
+1:M 19 Jan 2026 00:53:27.922 * DB saved on disk
+1:M 19 Jan 2026 00:53:28.349 * DB saved on disk
+1:M 19 Jan 2026 00:53:29.829 * DB saved on disk
+1:M 19 Jan 2026 00:53:30.249 * DB saved on disk
+1:M 19 Jan 2026 00:53:30.460 * DB saved on disk
+1:M 19 Jan 2026 00:53:31.940 * DB saved on disk
+1:M 19 Jan 2026 00:53:32.580 * DB saved on disk
+1:M 19 Jan 2026 01:34:27.070 * DB saved on disk
+1:M 19 Jan 2026 01:34:27.092 * DB saved on disk
+1:M 19 Jan 2026 01:34:27.170 * DB saved on disk
+1:M 19 Jan 2026 01:34:27.191 * DB saved on disk
+1:M 19 Jan 2026 01:34:27.222 * DB saved on disk
+1:M 19 Jan 2026 01:34:27.295 * DB saved on disk
+1:M 19 Jan 2026 01:34:27.327 * DB saved on disk
+1:M 19 Jan 2026 01:51:13.010 # Possible SECURITY ATTACK detected. It looks like somebody is sending POST or Host: commands to Redis. This is likely due to an attacker attempting to use Cross Protocol Scripting to compromise your Redis instance. Connection from 52.3.221.120:49074 aborted.
+1:M 19 Jan 2026 02:29:09.423 * DB saved on disk
+1:M 19 Jan 2026 02:29:09.639 * DB saved on disk
+1:M 19 Jan 2026 02:29:10.395 * DB saved on disk
+1:M 19 Jan 2026 02:29:10.611 * DB saved on disk
+1:M 19 Jan 2026 02:29:10.721 * DB saved on disk
+1:M 19 Jan 2026 02:29:11.476 * DB saved on disk
+1:M 19 Jan 2026 02:29:11.800 * DB saved on disk
+1:M 19 Jan 2026 03:30:06.169 * DB saved on disk
+1:M 19 Jan 2026 03:30:06.454 * DB saved on disk
+1:M 19 Jan 2026 03:30:07.449 * DB saved on disk
+1:M 19 Jan 2026 03:30:07.735 * DB saved on disk
+1:M 19 Jan 2026 03:30:07.878 * DB saved on disk
+1:M 19 Jan 2026 03:30:08.874 * DB saved on disk
+1:M 19 Jan 2026 03:30:09.300 * DB saved on disk
+1:M 19 Jan 2026 04:26:09.534 * DB saved on disk
+1:M 19 Jan 2026 04:26:09.939 * DB saved on disk
+1:M 19 Jan 2026 04:26:11.353 * DB saved on disk
+1:M 19 Jan 2026 04:26:11.759 * DB saved on disk
+1:M 19 Jan 2026 04:26:11.961 * DB saved on disk
+1:M 19 Jan 2026 04:26:13.382 * DB saved on disk
+1:M 19 Jan 2026 04:26:13.989 * DB saved on disk
+1:M 19 Jan 2026 05:17:44.325 * DB saved on disk
+1:M 19 Jan 2026 05:17:44.504 * DB saved on disk
+1:M 19 Jan 2026 05:17:45.123 * DB saved on disk
+1:M 19 Jan 2026 05:17:45.299 * DB saved on disk
+1:M 19 Jan 2026 05:17:45.388 * DB saved on disk
+1:M 19 Jan 2026 05:17:46.012 * DB saved on disk
+1:M 19 Jan 2026 05:17:46.276 * DB saved on disk
+1:M 19 Jan 2026 06:34:48.905 * DB saved on disk
+1:M 19 Jan 2026 06:34:48.927 * DB saved on disk
+1:M 19 Jan 2026 06:34:49.078 * DB saved on disk
+1:M 19 Jan 2026 06:34:49.101 * DB saved on disk
+1:M 19 Jan 2026 06:34:49.112 * DB saved on disk
+1:M 19 Jan 2026 06:34:49.185 * DB saved on disk
+1:M 19 Jan 2026 06:34:49.217 * DB saved on disk
+1:M 19 Jan 2026 08:26:40.848 * DB saved on disk
+1:M 19 Jan 2026 08:26:41.097 * DB saved on disk
+1:M 19 Jan 2026 08:26:41.919 * DB saved on disk
+1:M 19 Jan 2026 08:26:42.146 * DB saved on disk
+1:M 19 Jan 2026 08:26:42.261 * DB saved on disk
+1:M 19 Jan 2026 08:26:43.093 * DB saved on disk
+1:M 19 Jan 2026 08:26:43.439 * DB saved on disk
+1:M 19 Jan 2026 09:43:09.404 # Possible SECURITY ATTACK detected. It looks like somebody is sending POST or Host: commands to Redis. This is likely due to an attacker attempting to use Cross Protocol Scripting to compromise your Redis instance. Connection from 3.143.33.63:42398 aborted.
+1:M 19 Jan 2026 09:44:55.888 # Possible SECURITY ATTACK detected. It looks like somebody is sending POST or Host: commands to Redis. This is likely due to an attacker attempting to use Cross Protocol Scripting to compromise your Redis instance. Connection from 3.143.33.63:41806 aborted.
+1:M 19 Jan 2026 10:03:12.351 * DB saved on disk
+1:M 19 Jan 2026 10:03:13.310 * DB saved on disk
+1:M 19 Jan 2026 10:03:14.654 * DB saved on disk
+1:M 19 Jan 2026 10:03:15.045 * DB saved on disk
+1:M 19 Jan 2026 10:03:15.237 * DB saved on disk
+1:M 19 Jan 2026 10:03:16.580 * DB saved on disk
+1:M 19 Jan 2026 10:03:17.151 * DB saved on disk
+1:M 19 Jan 2026 10:29:34.804 * DB saved on disk
+1:M 19 Jan 2026 10:29:35.016 * DB saved on disk
+1:M 19 Jan 2026 10:29:35.915 * DB saved on disk
+1:M 19 Jan 2026 10:29:36.218 * DB saved on disk
+1:M 19 Jan 2026 10:29:36.325 * DB saved on disk
+1:M 19 Jan 2026 10:29:37.226 * DB saved on disk
+1:M 19 Jan 2026 10:29:37.621 * DB saved on disk
+1:M 19 Jan 2026 11:13:42.617 * DB saved on disk
+1:M 19 Jan 2026 11:13:42.821 * DB saved on disk
+1:M 19 Jan 2026 11:13:43.534 * DB saved on disk
+1:M 19 Jan 2026 11:13:43.738 * DB saved on disk
+1:M 19 Jan 2026 11:13:43.841 * DB saved on disk
+1:M 19 Jan 2026 11:13:44.556 * DB saved on disk
+1:M 19 Jan 2026 11:13:44.862 * DB saved on disk
+1:M 19 Jan 2026 11:42:13.463 * DB saved on disk
+1:M 19 Jan 2026 11:42:13.905 * DB saved on disk
+1:M 19 Jan 2026 11:42:15.450 * DB saved on disk
+1:M 19 Jan 2026 11:42:15.891 * DB saved on disk
+1:M 19 Jan 2026 11:42:16.112 * DB saved on disk
+1:M 19 Jan 2026 11:42:18.079 * DB saved on disk
+1:M 19 Jan 2026 11:42:19.592 * DB saved on disk
+1:M 19 Jan 2026 11:59:28.067 * DB saved on disk
+1:M 19 Jan 2026 11:59:28.517 * DB saved on disk
+1:M 19 Jan 2026 11:59:30.600 * DB saved on disk
+1:M 19 Jan 2026 11:59:31.066 * DB saved on disk
+1:M 19 Jan 2026 11:59:31.300 * DB saved on disk
+1:M 19 Jan 2026 11:59:34.244 * DB saved on disk
+1:M 19 Jan 2026 11:59:35.796 * DB saved on disk
+1:M 19 Jan 2026 12:41:10.577 * DB saved on disk
+1:M 19 Jan 2026 12:41:11.036 * DB saved on disk
+1:M 19 Jan 2026 12:41:12.639 * DB saved on disk
+1:M 19 Jan 2026 12:41:13.098 * DB saved on disk
+1:M 19 Jan 2026 12:41:13.328 * DB saved on disk
+1:M 19 Jan 2026 12:41:14.933 * DB saved on disk
+1:M 19 Jan 2026 12:41:15.621 * DB saved on disk
+1:M 19 Jan 2026 13:25:54.970 * DB saved on disk
+1:M 19 Jan 2026 13:25:55.025 * DB saved on disk
+1:M 19 Jan 2026 13:25:55.244 * DB saved on disk
+1:M 19 Jan 2026 13:25:55.296 * DB saved on disk
+1:M 19 Jan 2026 13:25:55.331 * DB saved on disk
+1:M 19 Jan 2026 13:25:55.568 * DB saved on disk
+1:M 19 Jan 2026 13:25:55.669 * DB saved on disk
+1:M 19 Jan 2026 14:09:51.124 * DB saved on disk
+1:M 19 Jan 2026 14:09:51.342 * DB saved on disk
+1:M 19 Jan 2026 14:09:54.651 * DB saved on disk
+1:M 19 Jan 2026 14:09:55.084 * DB saved on disk
+1:M 19 Jan 2026 14:09:55.518 * DB saved on disk
+1:M 19 Jan 2026 14:09:57.449 * DB saved on disk
+1:M 19 Jan 2026 14:09:58.096 * DB saved on disk
+1:M 19 Jan 2026 14:37:53.144 * DB saved on disk
+1:M 19 Jan 2026 14:37:53.615 * DB saved on disk
+1:M 19 Jan 2026 14:37:55.262 * DB saved on disk
+1:M 19 Jan 2026 14:37:55.734 * DB saved on disk
+1:M 19 Jan 2026 14:37:55.970 * DB saved on disk
+1:M 19 Jan 2026 14:37:58.056 * DB saved on disk
+1:M 19 Jan 2026 14:37:58.764 * DB saved on disk
+1:M 19 Jan 2026 16:28:10.427 * DB saved on disk
+1:M 19 Jan 2026 16:28:10.685 * DB saved on disk
+1:M 19 Jan 2026 16:28:11.719 * DB saved on disk
+1:M 19 Jan 2026 16:28:11.957 * DB saved on disk
+1:M 19 Jan 2026 16:28:12.051 * DB saved on disk
+1:M 19 Jan 2026 16:28:13.056 * DB saved on disk
+1:M 19 Jan 2026 16:28:13.475 * DB saved on disk
+1:M 19 Jan 2026 16:52:22.737 * DB saved on disk
+1:M 19 Jan 2026 16:52:23.195 * DB saved on disk
+1:M 19 Jan 2026 16:52:24.836 * DB saved on disk
+1:M 19 Jan 2026 16:52:25.296 * DB saved on disk
+1:M 19 Jan 2026 16:52:25.529 * DB saved on disk
+1:M 19 Jan 2026 16:52:27.148 * DB saved on disk
+1:M 19 Jan 2026 16:52:27.842 * DB saved on disk
+1:M 19 Jan 2026 17:00:06.021 # Possible SECURITY ATTACK detected. It looks like somebody is sending POST or Host: commands to Redis. This is likely due to an attacker attempting to use Cross Protocol Scripting to compromise your Redis instance. Connection from 45.79.190.216:59034 aborted.
+1:M 19 Jan 2026 18:08:02.080 * DB saved on disk
+1:M 19 Jan 2026 18:08:02.371 * DB saved on disk
+1:M 19 Jan 2026 18:08:03.388 * DB saved on disk
+1:M 19 Jan 2026 18:08:03.679 * DB saved on disk
+1:M 19 Jan 2026 18:08:03.825 * DB saved on disk
+1:M 19 Jan 2026 18:08:04.842 * DB saved on disk
+1:M 19 Jan 2026 18:08:05.277 * DB saved on disk
+1:M 19 Jan 2026 18:49:00.249 * DB saved on disk
+1:M 19 Jan 2026 18:49:00.476 * DB saved on disk
+1:M 19 Jan 2026 18:49:01.269 * DB saved on disk
+1:M 19 Jan 2026 18:49:01.496 * DB saved on disk
+1:M 19 Jan 2026 18:49:01.611 * DB saved on disk
+1:M 19 Jan 2026 18:49:02.405 * DB saved on disk
+1:M 19 Jan 2026 18:49:02.745 * DB saved on disk
+1:M 19 Jan 2026 19:12:31.186 * DB saved on disk
+1:M 19 Jan 2026 19:12:31.681 * DB saved on disk
+1:M 19 Jan 2026 19:12:33.412 * DB saved on disk
+1:M 19 Jan 2026 19:12:33.907 * DB saved on disk
+1:M 19 Jan 2026 19:12:34.155 * DB saved on disk
+1:M 19 Jan 2026 19:12:35.888 * DB saved on disk
+1:M 19 Jan 2026 19:12:36.630 * DB saved on disk
+1:M 19 Jan 2026 19:33:00.079 * DB saved on disk
+1:M 19 Jan 2026 19:33:00.491 * DB saved on disk
+1:M 19 Jan 2026 19:33:01.930 * DB saved on disk
+1:M 19 Jan 2026 19:33:02.342 * DB saved on disk
+1:M 19 Jan 2026 19:33:02.548 * DB saved on disk
+1:M 19 Jan 2026 19:33:03.986 * DB saved on disk
+1:M 19 Jan 2026 19:33:04.602 * DB saved on disk
+1:M 19 Jan 2026 19:33:18.953 # Possible SECURITY ATTACK detected. It looks like somebody is sending POST or Host: commands to Redis. This is likely due to an attacker attempting to use Cross Protocol Scripting to compromise your Redis instance. Connection from 91.230.168.37:36259 aborted.
+1:M 19 Jan 2026 19:33:47.956 * DB saved on disk
+1:M 19 Jan 2026 19:33:48.177 * DB saved on disk
+1:M 19 Jan 2026 19:33:48.952 * DB saved on disk
+1:M 19 Jan 2026 19:33:49.174 * DB saved on disk
+1:M 19 Jan 2026 19:33:49.286 * DB saved on disk
+1:M 19 Jan 2026 19:33:50.078 * DB saved on disk
+1:M 19 Jan 2026 19:33:50.410 * DB saved on disk
+1:M 19 Jan 2026 19:44:38.020 * DB saved on disk
+1:M 19 Jan 2026 19:44:38.302 * DB saved on disk
+1:M 19 Jan 2026 19:44:39.217 * DB saved on disk
+1:M 19 Jan 2026 19:44:39.501 * DB saved on disk
+1:M 19 Jan 2026 19:44:39.609 * DB saved on disk
+1:M 19 Jan 2026 19:44:40.512 * DB saved on disk
+1:M 19 Jan 2026 19:44:40.924 * DB saved on disk
+1:M 19 Jan 2026 22:08:22.502 * DB saved on disk
+1:M 19 Jan 2026 22:08:22.713 * DB saved on disk
+1:M 19 Jan 2026 22:08:24.188 * DB saved on disk
+1:M 19 Jan 2026 22:08:24.609 * DB saved on disk
+1:M 19 Jan 2026 22:08:25.031 * DB saved on disk
+1:M 19 Jan 2026 22:08:26.506 * DB saved on disk
+1:M 19 Jan 2026 22:08:27.137 * DB saved on disk
+1:M 19 Jan 2026 22:35:33.598 * DB saved on disk
+1:M 19 Jan 2026 22:35:33.827 * DB saved on disk
+1:M 19 Jan 2026 22:35:34.581 * DB saved on disk
+1:M 19 Jan 2026 22:35:34.850 * DB saved on disk
+1:M 19 Jan 2026 22:35:34.968 * DB saved on disk
+1:M 19 Jan 2026 22:35:35.863 * DB saved on disk
+1:M 19 Jan 2026 22:35:36.183 * DB saved on disk
+1:M 19 Jan 2026 22:39:21.907 * DB saved on disk
+1:M 19 Jan 2026 22:39:22.451 * DB saved on disk
+1:M 19 Jan 2026 22:39:24.361 * DB saved on disk
+1:M 19 Jan 2026 22:39:24.906 * DB saved on disk
+1:M 19 Jan 2026 22:39:25.182 * DB saved on disk
+1:M 19 Jan 2026 22:39:27.086 * DB saved on disk
+1:M 19 Jan 2026 22:39:27.904 * DB saved on disk
+1:M 19 Jan 2026 23:05:24.191 # Possible SECURITY ATTACK detected. It looks like somebody is sending POST or Host: commands to Redis. This is likely due to an attacker attempting to use Cross Protocol Scripting to compromise your Redis instance. Connection from 3.85.210.225:51284 aborted.
+1:signal-handler (1768866350) Received SIGTERM scheduling shutdown...
+1:M 19 Jan 2026 23:45:50.489 * User requested shutdown...
+1:M 19 Jan 2026 23:45:50.489 * Calling fsync() on the AOF file.
+1:M 19 Jan 2026 23:45:50.490 * Saving the final RDB snapshot before exiting.
+1:M 19 Jan 2026 23:45:50.505 * DB saved on disk
+1:M 19 Jan 2026 23:45:50.505 # Redis is now ready to exit, bye bye...
+1:C 19 Jan 2026 23:46:05.912 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https://github.com/jemalloc/jemalloc/issues/1328. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.
+1:C 19 Jan 2026 23:46:05.913 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+1:C 19 Jan 2026 23:46:05.913 * Redis version=7.4.7, bits=64, commit=00000000, modified=0, pid=1, just started
+1:C 19 Jan 2026 23:46:05.913 * Configuration loaded
+1:M 19 Jan 2026 23:46:05.913 * Increased maximum number of open files to 10032 (it was originally set to 1024).
+1:M 19 Jan 2026 23:46:05.913 * monotonic clock: POSIX clock_gettime
+1:M 19 Jan 2026 23:46:05.917 * Running mode=standalone, port=6379.
+1:M 19 Jan 2026 23:46:05.917 * Server initialized
+1:M 19 Jan 2026 23:46:05.918 * Reading RDB base file on AOF loading...
+1:M 19 Jan 2026 23:46:05.918 * Loading RDB produced by version 7.4.7
+1:M 19 Jan 2026 23:46:05.918 * RDB age 203143 seconds
+1:M 19 Jan 2026 23:46:05.918 * RDB memory usage when created 0.90 Mb
+1:M 19 Jan 2026 23:46:05.918 * RDB is base AOF
+1:M 19 Jan 2026 23:46:05.918 * Done loading RDB, keys loaded: 0, keys expired: 0.
+1:M 19 Jan 2026 23:46:05.918 * DB loaded from base file appendonly.aof.1.base.rdb: 0.000 seconds
+1:M 19 Jan 2026 23:46:05.920 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.921 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.922 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.923 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.924 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.925 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.926 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.927 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.930 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.932 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.934 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.934 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.935 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.936 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.937 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.938 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.938 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.940 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.941 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.942 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.944 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.946 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.947 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.949 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.951 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.952 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.953 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.954 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.955 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.956 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.958 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.963 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.967 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.969 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.970 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.971 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.972 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.973 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.974 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.974 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.975 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.978 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.979 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.980 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.981 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.982 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.983 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.984 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.985 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.986 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.986 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.987 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.988 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.989 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.989 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.990 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.990 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.991 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.992 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.992 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.993 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.994 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.994 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.995 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.995 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.996 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.996 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.997 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.997 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.998 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.999 * DB saved on disk
+1:M 19 Jan 2026 23:46:05.999 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.000 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.002 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.003 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.004 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.004 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.005 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.005 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.006 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.007 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.007 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.008 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.008 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.009 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.009 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.010 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.010 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.011 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.012 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.012 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.013 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.013 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.014 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.014 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.015 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.015 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.016 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.017 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.017 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.018 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.019 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.019 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.020 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.021 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.022 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.023 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.024 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.025 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.026 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.027 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.028 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.028 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.029 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.029 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.030 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.030 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.031 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.032 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.032 * DB saved on disk
+1:M 19 Jan 2026 23:46:06.032 * DB loaded from incr file appendonly.aof.1.incr.aof: 0.114 seconds
+1:M 19 Jan 2026 23:46:06.032 * DB loaded from append only file: 0.115 seconds
+1:M 19 Jan 2026 23:46:06.032 * Opening AOF incr file appendonly.aof.1.incr.aof on server start
+1:M 19 Jan 2026 23:46:06.032 * Ready to accept connections tcp
+1:M 19 Jan 2026 23:50:39.169 * DB saved on disk
+1:M 19 Jan 2026 23:50:39.381 * DB saved on disk
+1:M 19 Jan 2026 23:50:40.132 * DB saved on disk
+1:M 19 Jan 2026 23:50:40.343 * DB saved on disk
+1:M 19 Jan 2026 23:50:40.450 * DB saved on disk
+1:M 19 Jan 2026 23:50:41.191 * DB saved on disk
+1:M 19 Jan 2026 23:50:41.508 * DB saved on disk
+1:M 20 Jan 2026 00:02:33.570 * DB saved on disk
+1:M 20 Jan 2026 00:02:33.851 * DB saved on disk
+1:M 20 Jan 2026 00:02:34.834 * DB saved on disk
+1:M 20 Jan 2026 00:02:35.116 * DB saved on disk
+1:M 20 Jan 2026 00:02:35.260 * DB saved on disk
+1:M 20 Jan 2026 00:02:36.240 * DB saved on disk
+1:M 20 Jan 2026 00:02:36.660 * DB saved on disk
+1:signal-handler (1768870443) Received SIGTERM scheduling shutdown...
+1:M 20 Jan 2026 00:54:03.438 * User requested shutdown...
+1:M 20 Jan 2026 00:54:03.438 * Calling fsync() on the AOF file.
+1:M 20 Jan 2026 00:54:03.439 * Saving the final RDB snapshot before exiting.
+1:M 20 Jan 2026 00:54:03.453 * DB saved on disk
+1:M 20 Jan 2026 00:54:03.453 # Redis is now ready to exit, bye bye...
+1:C 20 Jan 2026 01:47:43.747 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https://github.com/jemalloc/jemalloc/issues/1328. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.
+1:C 20 Jan 2026 01:47:43.747 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https://github.com/jemalloc/jemalloc/issues/1328. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.
+1:C 20 Jan 2026 01:47:43.747 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+1:C 20 Jan 2026 01:47:43.747 * Redis version=7.4.7, bits=64, commit=00000000, modified=0, pid=1, just started
+1:C 20 Jan 2026 01:47:43.747 * Configuration loaded
+1:C 20 Jan 2026 01:47:43.747 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+1:C 20 Jan 2026 01:47:43.747 * Redis version=7.4.7, bits=64, commit=00000000, modified=0, pid=1, just started
+1:C 20 Jan 2026 01:47:43.747 * Configuration loaded
+1:M 20 Jan 2026 01:47:43.748 * Increased maximum number of open files to 10032 (it was originally set to 1024).
+1:M 20 Jan 2026 01:47:43.748 * Increased maximum number of open files to 10032 (it was originally set to 1024).
+1:M 20 Jan 2026 01:47:43.748 * monotonic clock: POSIX clock_gettime
+1:M 20 Jan 2026 01:47:43.748 * monotonic clock: POSIX clock_gettime
+1:M 20 Jan 2026 01:47:43.749 * Running mode=standalone, port=6379.
+1:M 20 Jan 2026 01:47:43.750 * Server initialized
+1:M 20 Jan 2026 01:47:43.749 * Running mode=standalone, port=6379.
+1:M 20 Jan 2026 01:47:43.750 * Server initialized
+1:M 20 Jan 2026 01:47:43.751 * Reading RDB base file on AOF loading...
+1:M 20 Jan 2026 01:47:43.751 * Reading RDB base file on AOF loading...
+1:M 20 Jan 2026 01:47:43.751 * Loading RDB produced by version 7.4.7
+1:M 20 Jan 2026 01:47:43.751 * Loading RDB produced by version 7.4.7
+1:M 20 Jan 2026 01:47:43.751 * RDB age 210441 seconds
+1:M 20 Jan 2026 01:47:43.751 * RDB age 210441 seconds
+1:M 20 Jan 2026 01:47:43.751 * RDB memory usage when created 0.90 Mb
+1:M 20 Jan 2026 01:47:43.751 * RDB is base AOF
+1:M 20 Jan 2026 01:47:43.751 * Done loading RDB, keys loaded: 0, keys expired: 0.
+1:M 20 Jan 2026 01:47:43.751 * RDB memory usage when created 0.90 Mb
+1:M 20 Jan 2026 01:47:43.751 * RDB is base AOF
+1:M 20 Jan 2026 01:47:43.751 * Done loading RDB, keys loaded: 0, keys expired: 0.
+1:M 20 Jan 2026 01:47:43.752 * DB loaded from base file appendonly.aof.1.base.rdb: 0.002 seconds
+1:M 20 Jan 2026 01:47:43.752 * DB loaded from base file appendonly.aof.1.base.rdb: 0.002 seconds
+1:M 20 Jan 2026 01:47:43.754 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.754 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.755 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.755 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.756 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.756 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.757 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.757 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.758 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.758 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.759 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.759 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.760 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.760 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.761 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.761 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.762 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.762 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.762 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.762 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.763 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.763 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.764 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.764 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.765 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.765 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.766 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.766 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.767 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.767 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.768 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.768 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.769 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.770 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.771 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.772 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.773 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.769 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.770 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.771 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.772 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.773 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.774 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.774 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.775 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.775 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.775 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.775 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.776 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.776 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.777 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.777 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.777 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.777 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.778 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.778 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.779 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.779 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.779 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.779 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.780 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.780 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.780 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.780 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.781 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.781 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.782 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.782 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.783 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.783 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.784 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.784 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.785 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.785 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.786 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.786 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.786 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.786 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.787 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.787 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.788 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.788 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.788 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.788 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.789 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.789 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.790 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.790 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.790 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.790 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.791 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.791 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.792 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.792 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.793 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.793 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.794 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.794 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.795 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.795 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.795 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.795 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.796 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.796 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.797 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.797 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.798 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.798 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.799 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.799 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.799 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.799 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.800 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.801 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.802 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.800 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.801 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.802 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.803 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.803 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.804 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.804 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.805 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.805 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.806 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.806 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.806 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.806 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.807 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.807 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.808 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.808 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.808 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.808 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.809 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.809 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.810 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.810 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.811 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.811 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.811 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.811 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.812 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.812 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.813 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.813 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.814 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.814 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.814 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.814 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.815 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.815 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.817 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.817 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.817 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.817 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.818 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.818 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.819 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.819 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.820 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.820 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.820 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.820 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.821 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.821 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.822 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.822 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.822 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.822 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.823 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.823 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.823 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.823 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.824 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.824 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.825 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.826 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.825 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.826 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.827 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.827 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.827 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.827 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.828 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.828 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.829 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.829 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.830 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.830 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.831 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.831 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.832 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.832 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.832 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.832 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.833 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.833 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.833 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.833 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.834 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.834 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.834 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.834 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.835 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.836 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.836 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.835 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.836 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.836 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.837 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.837 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.839 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.839 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.839 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.839 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.840 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.840 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.840 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.840 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.841 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.841 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.842 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.842 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.842 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.842 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.843 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.843 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.844 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.844 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.844 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.844 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.845 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.845 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.846 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.846 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.846 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.846 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.847 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.847 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.847 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.847 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.848 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.848 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.849 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.849 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.849 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.849 * DB saved on disk
+1:M 20 Jan 2026 01:47:43.850 * DB loaded from incr file appendonly.aof.1.incr.aof: 0.097 seconds
+1:M 20 Jan 2026 01:47:43.850 * DB loaded from incr file appendonly.aof.1.incr.aof: 0.097 seconds
+1:M 20 Jan 2026 01:47:43.850 * DB loaded from append only file: 0.100 seconds
+1:M 20 Jan 2026 01:47:43.850 * Opening AOF incr file appendonly.aof.1.incr.aof on server start
+1:M 20 Jan 2026 01:47:43.850 * Ready to accept connections tcp
+1:M 20 Jan 2026 01:47:43.850 * DB loaded from append only file: 0.100 seconds
+1:M 20 Jan 2026 01:47:43.850 * Opening AOF incr file appendonly.aof.1.incr.aof on server start
+1:M 20 Jan 2026 01:47:43.850 * Ready to accept connections tcp
+root@hoppwhistle:/opt/hopwhistle# free -h
+               total        used        free      shared  buff/cache   available
+Mem:           7.7Gi       1.8Gi       4.8Gi       3.6Mi       1.4Gi       5.9Gi
+Swap:          8.0Gi       432Mi       7.6Gi
+root@hoppwhistle:/opt/hopwhistle#

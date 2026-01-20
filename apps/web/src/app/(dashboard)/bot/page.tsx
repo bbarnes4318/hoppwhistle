@@ -1,42 +1,17 @@
 'use client';
 
-import {
-  CheckCircle,
-  Clock,
-  FileAudio,
-  History,
-  Loader2,
-  Mic,
-  Pause,
-  PhoneCall,
-  PhoneForwarded,
-  Play,
-  RefreshCw,
-  Save,
-  Settings2,
-  Square,
-  TrendingUp,
-  Upload,
-  User,
-  Volume2,
-  AlertTriangle,
-} from 'lucide-react';
-import { useState, useEffect, useRef } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { useState, useEffect, useRef, Suspense } from 'react';
 
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Textarea } from '@/components/ui/textarea';
+import { CampaignHeader, CampaignStatus } from './components/CampaignHeader';
+import { StepState } from './components/CampaignStepper';
+import { ContextPanel } from './components/ContextPanel';
+import { LiveMonitoringDrawer } from './components/LiveMonitoringDrawer';
+import { ReadinessBanner } from './components/ReadinessBanner';
+import { Step1VoiceScript } from './components/steps/Step1VoiceScript';
+import { Step2RoutingNumbers } from './components/steps/Step2RoutingNumbers';
+import { Step3LeadsCampaign } from './components/steps/Step3LeadsCampaign';
+import { Step4ReviewLaunch } from './components/steps/Step4ReviewLaunch';
 
 // Deepgram Aura voices
 const VOICES = [
@@ -60,8 +35,12 @@ We're reaching out about the final expense coverage you requested information on
 
 Is this a good time to speak for just a moment?`;
 
-// Status types for the campaign
-type CampaignStatus = 'idle' | 'running' | 'paused' | 'complete' | 'error';
+interface Lead {
+  id: string;
+  phone: string;
+  name?: string;
+  status: 'pending' | 'calling' | 'success' | 'failed' | 'no_answer';
+}
 
 interface DialerStatus {
   status: CampaignStatus;
@@ -71,69 +50,47 @@ interface DialerStatus {
   timestamp: number;
 }
 
-interface Lead {
-  id: string;
-  phone: string;
-  name?: string;
-  status: 'pending' | 'calling' | 'success' | 'failed' | 'no_answer';
-  calledAt?: string;
-}
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
-interface CallRecord {
-  id: string;
-  timestamp: string;
-  customerPhone: string;
-  status: string;
-  duration: string;
-  callId: string;
-  did: string;
-  transferred: boolean;
-  hasRecording: boolean;
-}
+function BotDashboardContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
 
-export default function BotDashboard() {
+  // Get current step from URL, default to 1
+  const currentStep = parseInt(searchParams.get('step') || '1', 10);
+  const setCurrentStep = (step: number) => {
+    router.push(`/bot?step=${step}`);
+  };
+
   // Campaign state
+  const [campaignName, setCampaignName] = useState('New Campaign');
   const [campaignStatus, setCampaignStatus] = useState<CampaignStatus>('idle');
   const [activeCalls, setActiveCalls] = useState(0);
   const [completedCalls, setCompletedCalls] = useState(0);
   const [remainingCalls, setRemainingCalls] = useState(0);
 
   // Configuration state
-  const [concurrency, setConcurrency] = useState(10);
+  const [concurrency, setConcurrency] = useState(5);
   const [selectedVoice, setSelectedVoice] = useState('aura-asteria-en');
   const [script, setScript] = useState(DEFAULT_SCRIPT);
-  const [transferPhoneNumber, setTransferPhoneNumber] = useState('+18653969104');
+  const [transferPhoneNumber, setTransferPhoneNumber] = useState('');
   const [callerId, setCallerId] = useState('');
   const [availableDids, setAvailableDids] = useState<string[]>([]);
 
-  // UI state
-  const [isLoadingTTS, setIsLoadingTTS] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  // Setup state
+  const [hasPreviewedVoice, setHasPreviewedVoice] = useState(false);
+  const [isScriptSaved, setIsScriptSaved] = useState(false);
 
   // Leads state
   const [leads, setLeads] = useState<Lead[]>([]);
 
-  // Call logs state
-  const [callLogs, setCallLogs] = useState<CallRecord[]>([]);
-  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
-  const [playingCallId, setPlayingCallId] = useState<string | null>(null);
+  // Audio ref for voice preview
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Stats
   const [stats] = useState({
-    totalCalls: 0,
-    humanAnswered: 0,
-    machineDetected: 0,
     transferred: 0,
-    avgDuration: 0,
   });
-
-  // Setup state
-  const [activeTab, setActiveTab] = useState('voice');
-  const [hasPreviewedVoice, setHasPreviewedVoice] = useState(false);
-  const [isScriptSaved, setIsScriptSaved] = useState(false);
 
   // Load saved settings on mount
   useEffect(() => {
@@ -174,26 +131,6 @@ export default function BotDashboard() {
     void loadDids();
   }, []);
 
-  // Load call logs
-  const loadCallLogs = async () => {
-    setIsLoadingLogs(true);
-    try {
-      const res = await fetch('/api/bot/calls');
-      if (res.ok) {
-        const data = await res.json();
-        setCallLogs(data.calls || []);
-      }
-    } catch {
-      // Failed to load
-    } finally {
-      setIsLoadingLogs(false);
-    }
-  };
-
-  useEffect(() => {
-    void loadCallLogs();
-  }, []);
-
   // Poll for status updates
   useEffect(() => {
     const pollStatus = async () => {
@@ -207,25 +144,51 @@ export default function BotDashboard() {
           setRemainingCalls(data.remaining);
         }
       } catch {
-        // Silent fail - API might not be running
+        // Silent fail
       }
     };
 
     void pollStatus();
-    const interval = setInterval(() => {
-      void pollStatus();
-    }, 2000);
+    const interval = setInterval(() => void pollStatus(), 2000);
     return () => clearInterval(interval);
   }, []);
 
-  const isSetupComplete = selectedVoice && isScriptSaved && hasPreviewedVoice;
+  // Step completion logic
+  const step1Complete = Boolean(selectedVoice && isScriptSaved);
+  const step1Warnings = !hasPreviewedVoice ? ['Voice preview recommended'] : [];
 
+  const step2Complete = transferPhoneNumber.length >= 10;
+  const step2Warnings = !callerId ? ['Using random caller ID'] : [];
+
+  const step3Complete = leads.length > 0;
+  const step3Warnings: string[] = [];
+
+  const isReady = step1Complete && step2Complete && step3Complete;
+
+  const steps: StepState[] = [
+    {
+      id: 1,
+      label: 'Voice & Script',
+      complete: step1Complete,
+      hasWarning: step1Warnings.length > 0,
+    },
+    { id: 2, label: 'Routing', complete: step2Complete, hasWarning: step2Warnings.length > 0 },
+    { id: 3, label: 'Leads', complete: step3Complete, hasWarning: step3Warnings.length > 0 },
+    { id: 4, label: 'Review', complete: isReady, hasWarning: false },
+  ];
+
+  // Blocking issues for banner
+  const blockingIssues: string[] = [];
+  if (!selectedVoice) blockingIssues.push('Select a voice');
+  if (!isScriptSaved) blockingIssues.push('Save your script');
+  if (!step2Complete) blockingIssues.push('Add transfer number');
+  if (!step3Complete) blockingIssues.push('Upload leads');
+
+  const allWarnings = [...step1Warnings, ...step2Warnings];
+
+  // Handlers
   const handleStart = async () => {
-    if (!isSetupComplete) {
-      alert('Please complete voice and conversation setup before starting outbound execution.');
-      return;
-    }
-
+    if (!isReady) return;
     try {
       const res = await fetch(`${API_URL}/api/bot/start`, {
         method: 'POST',
@@ -264,16 +227,7 @@ export default function BotDashboard() {
     }
   };
 
-  const handlePreviewTTS = async () => {
-    // Stop any current playback
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
-    }
-
-    setIsLoadingTTS(true);
-    setIsPlaying(false);
-
+  const handlePreviewVoice = async () => {
     try {
       const res = await fetch(`${API_URL}/api/bot/tts/preview`, {
         method: 'POST',
@@ -284,33 +238,15 @@ export default function BotDashboard() {
         const blob = await res.blob();
         const audio = new Audio(URL.createObjectURL(blob));
         audioRef.current = audio;
-
-        audio.onplay = () => setIsPlaying(true);
-        audio.onended = () => setIsPlaying(false);
-        audio.onpause = () => setIsPlaying(false);
-
         void audio.play();
         setHasPreviewedVoice(true);
       }
     } catch (e) {
       console.error('TTS preview failed:', e);
-    } finally {
-      setIsLoadingTTS(false);
-    }
-  };
-
-  const handleStopPlayback = () => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
-      setIsPlaying(false);
     }
   };
 
   const handleSaveSettings = async () => {
-    setIsSaving(true);
-    setSaveSuccess(false);
-
     try {
       const res = await fetch(`${API_URL}/api/bot/settings`, {
         method: 'POST',
@@ -324,14 +260,10 @@ export default function BotDashboard() {
         }),
       });
       if (res.ok) {
-        setSaveSuccess(true);
         setIsScriptSaved(true);
-        setTimeout(() => setSaveSuccess(false), 3000);
       }
     } catch (e) {
       console.error('Failed to save settings:', e);
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -357,624 +289,133 @@ export default function BotDashboard() {
     }
   };
 
-  const getStatusBadge = (status: CampaignStatus) => {
-    const variants: Record<
-      CampaignStatus,
-      { variant: 'default' | 'secondary' | 'destructive' | 'outline'; label: string }
-    > = {
-      idle: { variant: 'secondary', label: 'Standing By' },
-      running: { variant: 'default', label: 'Running' },
-      paused: { variant: 'outline', label: 'Paused' },
-      complete: { variant: 'default', label: 'Complete' },
-      error: { variant: 'destructive', label: 'Error' },
-    };
-    const { variant, label } = variants[status];
-    return <Badge variant={variant}>{label}</Badge>;
-  };
-
   const selectedVoiceData = VOICES.find(v => v.id === selectedVoice);
 
+  // Render current step content
+  const renderStepContent = () => {
+    switch (currentStep) {
+      case 1:
+        return (
+          <Step1VoiceScript
+            selectedVoice={selectedVoice}
+            onVoiceChange={setSelectedVoice}
+            script={script}
+            onScriptChange={setScript}
+            hasPreviewedVoice={hasPreviewedVoice}
+            onPreviewVoice={handlePreviewVoice}
+            isScriptSaved={isScriptSaved}
+            onSaveScript={handleSaveSettings}
+            onContinue={() => setCurrentStep(2)}
+            apiUrl={API_URL}
+          />
+        );
+      case 2:
+        return (
+          <Step2RoutingNumbers
+            transferPhoneNumber={transferPhoneNumber}
+            onTransferPhoneNumberChange={setTransferPhoneNumber}
+            callerId={callerId}
+            onCallerIdChange={setCallerId}
+            availableDids={availableDids}
+            onContinue={() => setCurrentStep(3)}
+            onBack={() => setCurrentStep(1)}
+          />
+        );
+      case 3:
+        return (
+          <Step3LeadsCampaign
+            leads={leads}
+            onUploadLeads={handleUploadLeads}
+            concurrency={concurrency}
+            onConcurrencyChange={setConcurrency}
+            onContinue={() => setCurrentStep(4)}
+            onBack={() => setCurrentStep(2)}
+          />
+        );
+      case 4:
+        return (
+          <Step4ReviewLaunch
+            campaignName={campaignName}
+            voiceName={selectedVoiceData?.name || ''}
+            transferNumber={transferPhoneNumber}
+            callerId={callerId}
+            leadCount={leads.length}
+            concurrency={concurrency}
+            stepStatuses={{
+              step1: { complete: step1Complete, warnings: step1Warnings },
+              step2: { complete: step2Complete, warnings: step2Warnings },
+              step3: { complete: step3Complete, warnings: step3Warnings },
+            }}
+            isReady={isReady}
+            onStart={() => void handleStart()}
+            onBack={() => setCurrentStep(3)}
+            onGoToStep={setCurrentStep}
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
+  const successRate =
+    completedCalls > 0 ? Math.round((stats.transferred / completedCalls) * 100) : 0;
+  const isMonitoringVisible = campaignStatus === 'running' || campaignStatus === 'paused';
+
   return (
-    <div className="flex flex-col gap-6 p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">
-            Conductor
-          </h1>
-          <p className="text-muted-foreground">
-            Configure and run outbound calling with real-time qualification and live transfers
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {getStatusBadge(campaignStatus)}
-          <Button variant="outline" size="icon" onClick={() => window.location.reload()}>
-            <RefreshCw className="h-4 w-4" />
-          </Button>
+    <div className="flex flex-col min-h-screen">
+      {/* Sticky Header */}
+      <CampaignHeader
+        campaignName={campaignName}
+        onCampaignNameChange={setCampaignName}
+        status={campaignStatus}
+        currentStep={currentStep}
+        steps={steps}
+        onStepClick={setCurrentStep}
+        isReady={isReady}
+        onStart={() => void handleStart()}
+        onPause={() => void handlePause()}
+        onStop={() => void handleStop()}
+        canEditName={currentStep === 1}
+      />
+
+      {/* Readiness Banner */}
+      <ReadinessBanner isReady={isReady} blockingIssues={blockingIssues} warnings={allWarnings} />
+
+      {/* Main Content: Two-Column Layout */}
+      <div className="flex flex-1">
+        {/* Primary Workspace (70%) */}
+        <main
+          className="flex-1 p-6 overflow-y-auto"
+          style={{ paddingBottom: isMonitoringVisible ? '180px' : '24px' }}
+        >
+          <div className="max-w-4xl mx-auto">{renderStepContent()}</div>
+        </main>
+
+        {/* Context Panel (30%) - Hidden on mobile */}
+        <div className="hidden lg:block">
+          <ContextPanel currentStep={currentStep} />
         </div>
       </div>
 
-      {/* Setup Required Panel */}
-      {!isSetupComplete && (
-        <Card className="border-l-4 border-l-amber-500 bg-amber-50/50 dark:bg-amber-950/10">
-          <CardHeader>
-            <CardTitle
-              className="flex items-center gap-2 text-amber-700 dark:text-amber-500 cursor-help"
-              title="Conductor places outbound calls and routes qualified prospects to agents in real time."
-            >
-              <AlertTriangle className="h-5 w-5" />
-              Setup Required
-            </CardTitle>
-            <CardDescription className="text-amber-600/90 dark:text-amber-400/90">
-              Conductor needs a voice and conversation defined before outbound execution can begin.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div
-                className="flex items-center gap-2 p-3 rounded-lg border bg-background/50 cursor-pointer hover:bg-background transition-colors"
-                onClick={() => setActiveTab('voice')}
-              >
-                <div
-                  className={`h-2 w-2 rounded-full ${selectedVoice ? 'bg-green-500' : 'bg-amber-500'}`}
-                />
-                <span className={selectedVoice ? 'text-foreground' : 'text-muted-foreground'}>
-                  Voice Profile selected
-                </span>
-                {selectedVoice && <CheckCircle className="ml-auto h-4 w-4 text-green-500" />}
-              </div>
-
-              <div
-                className="flex items-center gap-2 p-3 rounded-lg border bg-background/50 cursor-pointer hover:bg-background transition-colors"
-                onClick={() => setActiveTab('voice')}
-              >
-                <div
-                  className={`h-2 w-2 rounded-full ${isScriptSaved ? 'bg-green-500' : 'bg-amber-500'}`}
-                />
-                <span className={isScriptSaved ? 'text-foreground' : 'text-muted-foreground'}>
-                  Conversation Script saved
-                </span>
-                {isScriptSaved && <CheckCircle className="ml-auto h-4 w-4 text-green-500" />}
-              </div>
-
-              <div
-                className="flex items-center gap-2 p-3 rounded-lg border bg-background/50 cursor-pointer hover:bg-background transition-colors"
-                onClick={() => setActiveTab('voice')}
-              >
-                <div
-                  className={`h-2 w-2 rounded-full ${hasPreviewedVoice ? 'bg-green-500' : 'bg-amber-500'}`}
-                />
-                <span className={hasPreviewedVoice ? 'text-foreground' : 'text-muted-foreground'}>
-                  Voice Sample previewed
-                </span>
-                {hasPreviewedVoice && <CheckCircle className="ml-auto h-4 w-4 text-green-500" />}
-              </div>
-            </div>
-            <p className="mt-4 text-sm text-muted-foreground">
-              Complete setup below before starting outbound execution
-            </p>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card className="border-l-4 border-l-blue-500">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Calls</CardTitle>
-            <PhoneCall className="h-4 w-4 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{activeCalls}</div>
-            <p className="text-xs text-muted-foreground">of {concurrency} max concurrent</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-l-4 border-l-green-500">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Completed</CardTitle>
-            <CheckCircle className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{completedCalls}</div>
-            <p className="text-xs text-muted-foreground">completed sessions</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-l-4 border-l-amber-500">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Remaining</CardTitle>
-            <Clock className="h-4 w-4 text-amber-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{remainingCalls}</div>
-            <p className="text-xs text-muted-foreground">contacts queued</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-l-4 border-l-purple-500">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Success Rate</CardTitle>
-            <TrendingUp className="h-4 w-4 text-purple-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {completedCalls > 0 ? Math.round((stats.transferred / completedCalls) * 100) : 0}%
-            </div>
-            <p className="text-xs text-muted-foreground">successfully routed</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Control Panel */}
-      <Card>
-        <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 rounded-t-lg">
-          <CardTitle className="flex items-center gap-2">
-            <Settings2 className="h-5 w-5" />
-            Campaign Controls
-          </CardTitle>
-          <CardDescription>Start, pause, or stop the current dialing campaign</CardDescription>
-        </CardHeader>
-        <CardContent className="pt-6">
-          <div className="flex items-center gap-4">
-            <Button
-              onClick={() => void handleStart()}
-              disabled={campaignStatus === 'running' || !isSetupComplete}
-              className="bg-green-600 hover:bg-green-700 disabled:opacity-50"
-            >
-              <Play className="mr-2 h-4 w-4" />
-              Start Campaign
-            </Button>
-            {isSetupComplete && campaignStatus === 'idle' && (
-              <span className="text-xs text-muted-foreground animate-in fade-in slide-in-from-left-2">
-                Ready to begin outbound execution.
-              </span>
-            )}
-            <Button
-              onClick={() => void handlePause()}
-              disabled={campaignStatus !== 'running'}
-              variant="outline"
-            >
-              <Pause className="mr-2 h-4 w-4" />
-              Pause
-            </Button>
-            <Button
-              onClick={() => void handleStop()}
-              disabled={campaignStatus === 'idle'}
-              variant="destructive"
-            >
-              <Square className="mr-2 h-4 w-4" />
-              Stop
-            </Button>
-
-            <div className="ml-auto flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Label className="text-sm">Concurrency:</Label>
-                <Input
-                  type="number"
-                  value={concurrency}
-                  onChange={e => setConcurrency(Number(e.target.value))}
-                  className="w-20"
-                  min={1}
-                  max={10}
-                />
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Main Content Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="voice" className="flex items-center gap-2">
-            <Mic className="h-4 w-4" />
-            Conversation
-          </TabsTrigger>
-          <TabsTrigger value="leads">Contacts</TabsTrigger>
-          <TabsTrigger value="calllog" className="flex items-center gap-2">
-            <History className="h-4 w-4" />
-            Call History
-          </TabsTrigger>
-          <TabsTrigger value="monitor">Live Monitor</TabsTrigger>
-        </TabsList>
-
-        {/* Voice & Script Tab */}
-        <TabsContent value="voice">
-          <div className="grid gap-6 lg:grid-cols-3">
-            {/* Voice Selection Card */}
-            <Card className="lg:col-span-1">
-              <CardHeader className="bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-950 dark:to-purple-950 rounded-t-lg">
-                <CardTitle className="flex items-center gap-2">
-                  <Volume2 className="h-5 w-5 text-indigo-600" />
-                  Voice Profile
-                </CardTitle>
-                <CardDescription>Choose the voice for your conductor agent</CardDescription>
-              </CardHeader>
-              <CardContent className="pt-6 space-y-4">
-                <Select value={selectedVoice} onValueChange={setSelectedVoice}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select a voice" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                      Female Voices
-                    </div>
-                    {VOICES.filter(v => v.gender === 'Female').map(voice => (
-                      <SelectItem key={voice.id} value={voice.id}>
-                        <div className="flex items-center gap-2">
-                          <User className="h-4 w-4 text-pink-500" />
-                          <span>{voice.name}</span>
-                          <span className="text-xs text-muted-foreground">({voice.accent})</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground mt-2">
-                      Male Voices
-                    </div>
-                    {VOICES.filter(v => v.gender === 'Male').map(voice => (
-                      <SelectItem key={voice.id} value={voice.id}>
-                        <div className="flex items-center gap-2">
-                          <User className="h-4 w-4 text-blue-500" />
-                          <span>{voice.name}</span>
-                          <span className="text-xs text-muted-foreground">({voice.accent})</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                {/* Selected Voice Preview */}
-                {selectedVoiceData && (
-                  <div className="rounded-lg border bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 p-4">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`flex h-12 w-12 items-center justify-center rounded-full ${
-                          selectedVoiceData.gender === 'Female'
-                            ? 'bg-pink-100 text-pink-600 dark:bg-pink-900'
-                            : 'bg-blue-100 text-blue-600 dark:bg-blue-900'
-                        }`}
-                      >
-                        <User className="h-6 w-6" />
-                      </div>
-                      <div>
-                        <p className="font-semibold">{selectedVoiceData.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {selectedVoiceData.gender} • {selectedVoiceData.accent}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex gap-2">
-                  <Button
-                    onClick={isPlaying ? handleStopPlayback : () => void handlePreviewTTS()}
-                    disabled={isLoadingTTS || !script.trim()}
-                    className="flex-1"
-                    variant={isPlaying ? 'destructive' : 'default'}
-                  >
-                    {isLoadingTTS ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : isPlaying ? (
-                      <Square className="mr-2 h-4 w-4" />
-                    ) : (
-                      <Volume2 className="mr-2 h-4 w-4" />
-                    )}
-                    {isLoadingTTS ? 'Generating...' : isPlaying ? 'Stop' : 'Preview Voice Sample'}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Campaign Settings Card */}
-            <Card className="lg:col-span-1">
-              <CardHeader className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950 dark:to-cyan-950 rounded-t-lg">
-                <CardTitle className="flex items-center gap-2">
-                  <Settings2 className="h-5 w-5 text-blue-600" />
-                  Call Configuration
-                </CardTitle>
-                <CardDescription>Setup routing and caller identity</CardDescription>
-              </CardHeader>
-              <CardContent className="pt-6 space-y-4">
-                <div className="space-y-2">
-                  <Label>Live Transfer Number</Label>
-                  <Input
-                    value={transferPhoneNumber}
-                    onChange={e => setTransferPhoneNumber(e.target.value)}
-                    placeholder="+1 (555) 000-0000"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Destination for qualified transfers
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Outbound Caller ID (DID)</Label>
-                  <Select
-                    value={callerId || 'random'}
-                    onValueChange={v => setCallerId(v === 'random' ? '' : v)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Random (Pool Rotation)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="random">
-                        <span className="text-muted-foreground">Random (Pool Rotation)</span>
-                      </SelectItem>
-                      {availableDids.map(did => (
-                        <SelectItem key={did} value={did}>
-                          {did}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">Number displayed to leads</p>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Script Editor Card */}
-            <Card className="lg:col-span-2">
-              <CardHeader className="bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950 dark:to-teal-950 rounded-t-lg">
-                <CardTitle>Conversation Script</CardTitle>
-                <CardDescription>
-                  Edit the script your conductor will use. Use {'{name}'} and {'{company}'} for
-                  dynamic placeholders.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-6 space-y-4">
-                <Textarea
-                  value={script}
-                  onChange={e => setScript(e.target.value)}
-                  placeholder="Enter your call script here..."
-                  className="min-h-[250px] font-mono text-sm leading-relaxed"
-                />
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-muted-foreground">
-                    {script.length} characters • ~{Math.ceil(script.split(' ').length / 150)} min
-                    read time
-                  </p>
-                  <Button
-                    onClick={() => void handleSaveSettings()}
-                    disabled={isSaving}
-                    variant={saveSuccess ? 'default' : 'outline'}
-                    className={saveSuccess ? 'bg-green-600 hover:bg-green-700' : ''}
-                  >
-                    {isSaving ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : saveSuccess ? (
-                      <CheckCircle className="mr-2 h-4 w-4" />
-                    ) : (
-                      <Save className="mr-2 h-4 w-4" />
-                    )}
-                    {isSaving ? 'Saving...' : saveSuccess ? 'Saved!' : 'Save Conversation'}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        {/* Leads Tab */}
-        <TabsContent value="leads">
-          <Card>
-            <CardHeader>
-              <CardTitle>Contact List Management</CardTitle>
-              <CardDescription>Upload a CSV file with phone numbers to call</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-4">
-                <Label htmlFor="leads-upload" className="cursor-pointer">
-                  <div className="flex items-center gap-2 rounded-lg border-2 border-dashed border-muted-foreground/25 px-6 py-8 hover:bg-muted/50 hover:border-primary/50 transition-colors">
-                    <Upload className="h-8 w-8 text-muted-foreground" />
-                    <div>
-                      <p className="font-medium">Upload Contacts CSV</p>
-                      <p className="text-sm text-muted-foreground">
-                        Columns: phone, name (optional)
-                      </p>
-                    </div>
-                  </div>
-                </Label>
-                <Input
-                  id="leads-upload"
-                  type="file"
-                  accept=".csv,.txt"
-                  onChange={e => void handleUploadLeads(e)}
-                  className="hidden"
-                />
-              </div>
-
-              {leads.length > 0 && (
-                <div className="rounded-lg border">
-                  <div className="max-h-[400px] overflow-auto">
-                    <table className="w-full">
-                      <thead className="sticky top-0 bg-muted">
-                        <tr>
-                          <th className="p-3 text-left font-medium">Phone</th>
-                          <th className="p-3 text-left font-medium">Name</th>
-                          <th className="p-3 text-left font-medium">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {leads.slice(0, 100).map(lead => (
-                          <tr key={lead.id} className="border-t hover:bg-muted/50">
-                            <td className="p-3 font-mono text-sm">{lead.phone}</td>
-                            <td className="p-3 text-sm">{lead.name || '-'}</td>
-                            <td className="p-3">
-                              <Badge
-                                variant={
-                                  lead.status === 'success'
-                                    ? 'default'
-                                    : lead.status === 'failed'
-                                      ? 'destructive'
-                                      : lead.status === 'calling'
-                                        ? 'secondary'
-                                        : 'outline'
-                                }
-                              >
-                                {lead.status}
-                              </Badge>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  {leads.length > 100 && (
-                    <p className="p-3 text-center text-sm text-muted-foreground border-t">
-                      Showing 100 of {leads.length} leads
-                    </p>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Live Monitor Tab */}
-        <TabsContent value="monitor">
-          <Card>
-            <CardHeader>
-              <CardTitle>Live Call Monitor</CardTitle>
-              <CardDescription>Real-time view of active calls and their status</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {activeCalls === 0 ? (
-                  <div className="col-span-full flex items-center justify-center py-12 text-muted-foreground">
-                    <PhoneCall className="mr-2 h-5 w-5" />
-                    No active calls. Start a campaign to see live activity.
-                  </div>
-                ) : (
-                  Array.from({ length: activeCalls }).map((_, i) => (
-                    <Card key={i} className="border-green-500/50 bg-green-500/5">
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="font-mono text-sm">+1 (XXX) XXX-XXXX</p>
-                            <p className="text-xs text-muted-foreground">Connected • 0:45</p>
-                          </div>
-                          <div className="flex h-3 w-3 animate-pulse rounded-full bg-green-500" />
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Call Log Tab */}
-        <TabsContent value="calllog">
-          <Card>
-            <CardHeader className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950 dark:to-orange-950 rounded-t-lg">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <History className="h-5 w-5 text-amber-600" />
-                    Call History
-                  </CardTitle>
-                  <CardDescription>
-                    View past calls with recordings and transfer status
-                  </CardDescription>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void loadCallLogs()}
-                  disabled={isLoadingLogs}
-                >
-                  {isLoadingLogs ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-6">
-              {callLogs.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
-                  <FileAudio className="h-12 w-12 mb-4" />
-                  <p className="font-medium">No call history yet</p>
-                  <p className="text-sm">Calls will appear here after running a campaign</p>
-                </div>
-              ) : (
-                <div className="rounded-lg border">
-                  <div className="max-h-[500px] overflow-auto">
-                    <table className="w-full">
-                      <thead className="sticky top-0 bg-muted">
-                        <tr>
-                          <th className="p-3 text-left font-medium">Time</th>
-                          <th className="p-3 text-left font-medium">Phone Number</th>
-                          <th className="p-3 text-left font-medium">Duration</th>
-                          <th className="p-3 text-left font-medium">Result</th>
-                          <th className="p-3 text-left font-medium">Recording</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {callLogs.map(call => (
-                          <tr key={call.id} className="border-t hover:bg-muted/50">
-                            <td className="p-3 text-sm">{call.timestamp}</td>
-                            <td className="p-3 font-mono text-sm">{call.customerPhone}</td>
-                            <td className="p-3 text-sm">{call.duration}s</td>
-                            <td className="p-3">
-                              {call.transferred ? (
-                                <Badge className="bg-green-600 hover:bg-green-700">
-                                  <PhoneForwarded className="mr-1 h-3 w-3" />
-                                  Live Transfer
-                                </Badge>
-                              ) : (
-                                <Badge variant="secondary">{call.status}</Badge>
-                              )}
-                            </td>
-                            <td className="p-3">
-                              {call.callId ? (
-                                <div className="flex items-center gap-2">
-                                  <audio
-                                    id={`audio-${call.callId}`}
-                                    src={`/api/bot/recordings/${call.callId}`}
-                                    className="h-8 w-48"
-                                    controls
-                                    preload="none"
-                                    onPlay={() => {
-                                      // Stop other playing audios
-                                      if (playingCallId && playingCallId !== call.callId) {
-                                        const prevAudio = document.getElementById(
-                                          `audio-${playingCallId}`
-                                        ) as HTMLAudioElement | null;
-                                        if (prevAudio) prevAudio.pause();
-                                      }
-                                      setPlayingCallId(call.callId);
-                                    }}
-                                    onPause={() => {
-                                      if (playingCallId === call.callId) setPlayingCallId(null);
-                                    }}
-                                    onEnded={() => setPlayingCallId(null)}
-                                  />
-                                </div>
-                              ) : (
-                                <span className="text-sm text-muted-foreground">—</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  {callLogs.length > 0 && (
-                    <p className="p-3 text-center text-sm text-muted-foreground border-t">
-                      Showing {callLogs.length} calls
-                    </p>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+      {/* Live Monitoring Drawer */}
+      <LiveMonitoringDrawer
+        isVisible={isMonitoringVisible}
+        activeCalls={activeCalls}
+        completedCalls={completedCalls}
+        remainingCalls={remainingCalls}
+        successRate={successRate}
+        concurrency={concurrency}
+      />
     </div>
+  );
+}
+
+export default function BotDashboard() {
+  return (
+    <Suspense
+      fallback={<div className="flex items-center justify-center min-h-screen">Loading...</div>}
+    >
+      <BotDashboardContent />
+    </Suspense>
   );
 }
