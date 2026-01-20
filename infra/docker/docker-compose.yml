@@ -81,15 +81,12 @@ services:
     cap_add:
       - NET_ADMIN
       - SYS_NICE
-    env_file:
-      - .env
     environment:
-      - INTERFACE=${PUBLIC_IP}
+      - PUBLIC_IP=${PUBLIC_IP:?PUBLIC_IP must be set}
       - PORT_MIN=10000
       - PORT_MAX=10100
       - LOG_LEVEL=6
     restart: unless-stopped
-
   # ===========================================
   # FREESWITCH - Telephony Server
   # ===========================================

@@ -15,18 +15,12 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/media/transcriber/package.json ./apps/media/transcriber/
 COPY packages/shared/package.json ./packages/shared/
 
-# Install ALL dependencies (including devDependencies for @types/node)
+# Install all dependencies
 RUN pnpm install --filter @callfabric/transcriber...
-
-# Install typescript and types globally for reliable build
-RUN npm install -g typescript @types/node
 
 # Copy source
 COPY apps/media/transcriber ./apps/media/transcriber
 COPY packages/shared ./packages/shared
-
-# Build with typescript
-RUN cd apps/media/transcriber && tsc
 
 # Create non-root user
 RUN useradd -m -u 1001 transcriber && \
@@ -36,5 +30,6 @@ USER transcriber
 
 WORKDIR /app/apps/media/transcriber
 
+# Use tsx to run TypeScript directly (it's in dependencies)
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["node", "dist/index.js"]
+CMD ["npx", "tsx", "src/index.ts"]
