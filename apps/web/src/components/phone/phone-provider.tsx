@@ -658,9 +658,9 @@ export function PhoneProvider({
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    // Hardcoded credentials for Demo Agent (matches FS directory)
-    const sipUser = 'demo-agent';
-    const sipPass = '1';
+    // Use existing FreeSWITCH user (1000-1019 available, password is 1234)
+    const sipUser = '1000';
+    const sipPass = '1234';
     // Use PUBLIC_IP from env, fallback to window location if local
     const domain = process.env.NEXT_PUBLIC_IP || window.location.hostname;
     // SIP WS endpoint - use /ws path via nginx (terminates SSL and proxies to FreeSWITCH:8083)
