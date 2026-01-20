@@ -82,11 +82,12 @@ services:
       - NET_ADMIN
       - SYS_NICE
     environment:
-      - PUBLIC_IP=${PUBLIC_IP:?PUBLIC_IP must be set}
+      - PUBLIC_IP=45.32.213.201
       - PORT_MIN=10000
       - PORT_MAX=10100
       - LOG_LEVEL=6
     restart: unless-stopped
+
   # ===========================================
   # FREESWITCH - Telephony Server
   # ===========================================

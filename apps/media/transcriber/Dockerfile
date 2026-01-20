@@ -30,6 +30,6 @@ USER transcriber
 
 WORKDIR /app/apps/media/transcriber
 
-# Use tsx to run TypeScript directly (it's in dependencies)
+# Use pnpm dev which uses tsx (already configured in package.json)
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["npx", "tsx", "src/index.ts"]
+CMD ["pnpm", "dev"]
