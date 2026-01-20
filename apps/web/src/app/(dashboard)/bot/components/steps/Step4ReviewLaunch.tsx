@@ -64,10 +64,34 @@ export function Step4ReviewLaunch({
 
   return (
     <div className="space-y-6">
+      {/* Ready to Launch Header */}
+      <div className="text-center py-4">
+        <h2 className="text-2xl font-bold text-green-600">Ready to Launch</h2>
+        <p className="text-muted-foreground mt-2">
+          Review everything below. Once started, calls will begin immediately.
+        </p>
+      </div>
+
+      {/* Key Metrics Highlight */}
+      <div className="grid grid-cols-3 gap-4 p-4 rounded-lg bg-muted/50 border">
+        <div className="text-center">
+          <p className="text-3xl font-bold text-primary">{leadCount}</p>
+          <p className="text-sm text-muted-foreground">Leads to call</p>
+        </div>
+        <div className="text-center border-x">
+          <p className="text-3xl font-bold text-primary">{concurrency}</p>
+          <p className="text-sm text-muted-foreground">Concurrent calls</p>
+        </div>
+        <div className="text-center">
+          <p className="text-lg font-bold text-primary font-mono">{transferNumber || 'Not set'}</p>
+          <p className="text-sm text-muted-foreground">Transfer to</p>
+        </div>
+      </div>
+
       {/* Summary Header */}
       <Card>
         <CardHeader>
-          <CardTitle>Campaign Summary</CardTitle>
+          <CardTitle>Configuration Checklist</CardTitle>
           <CardDescription>Review your settings before launching "{campaignName}"</CardDescription>
         </CardHeader>
         <CardContent>

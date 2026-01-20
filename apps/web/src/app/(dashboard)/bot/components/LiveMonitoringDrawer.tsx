@@ -56,63 +56,70 @@ export function LiveMonitoringDrawer({
       {/* Expanded State */}
       {isExpanded && (
         <div className="px-6 pb-4">
-          <div className="grid gap-4 md:grid-cols-4">
-            {/* Active Calls */}
-            <Card className="border-l-4 border-l-blue-500">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Active Calls</p>
-                    <p className="text-2xl font-bold">{activeCalls}</p>
-                    <p className="text-xs text-muted-foreground">of {concurrency} max</p>
+          {activeCalls === 0 && completedCalls === 0 ? (
+            <div className="flex items-center justify-center gap-3 py-6 text-muted-foreground">
+              <PhoneCall className="h-5 w-5" />
+              <span>Calls will appear here once your campaign starts.</span>
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-4">
+              {/* Active Calls */}
+              <Card className="border-l-4 border-l-blue-500">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Active Calls</p>
+                      <p className="text-2xl font-bold">{activeCalls}</p>
+                      <p className="text-xs text-muted-foreground">of {concurrency} max</p>
+                    </div>
+                    <PhoneCall className="h-8 w-8 text-blue-500 opacity-50" />
                   </div>
-                  <PhoneCall className="h-8 w-8 text-blue-500 opacity-50" />
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
 
-            {/* Completed */}
-            <Card className="border-l-4 border-l-green-500">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Completed</p>
-                    <p className="text-2xl font-bold">{completedCalls}</p>
-                    <p className="text-xs text-muted-foreground">calls finished</p>
+              {/* Completed */}
+              <Card className="border-l-4 border-l-green-500">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Completed</p>
+                      <p className="text-2xl font-bold">{completedCalls}</p>
+                      <p className="text-xs text-muted-foreground">calls finished</p>
+                    </div>
+                    <CheckCircle className="h-8 w-8 text-green-500 opacity-50" />
                   </div>
-                  <CheckCircle className="h-8 w-8 text-green-500 opacity-50" />
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
 
-            {/* Remaining */}
-            <Card className="border-l-4 border-l-amber-500">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Remaining</p>
-                    <p className="text-2xl font-bold">{remainingCalls}</p>
-                    <p className="text-xs text-muted-foreground">leads queued</p>
+              {/* Remaining */}
+              <Card className="border-l-4 border-l-amber-500">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Remaining</p>
+                      <p className="text-2xl font-bold">{remainingCalls}</p>
+                      <p className="text-xs text-muted-foreground">leads queued</p>
+                    </div>
+                    <Clock className="h-8 w-8 text-amber-500 opacity-50" />
                   </div>
-                  <Clock className="h-8 w-8 text-amber-500 opacity-50" />
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
 
-            {/* Success Rate */}
-            <Card className="border-l-4 border-l-purple-500">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Success Rate</p>
-                    <p className="text-2xl font-bold">{successRate}%</p>
-                    <p className="text-xs text-muted-foreground">transferred</p>
+              {/* Success Rate */}
+              <Card className="border-l-4 border-l-purple-500">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Success Rate</p>
+                      <p className="text-2xl font-bold">{successRate}%</p>
+                      <p className="text-xs text-muted-foreground">transferred</p>
+                    </div>
+                    <TrendingUp className="h-8 w-8 text-purple-500 opacity-50" />
                   </div>
-                  <TrendingUp className="h-8 w-8 text-purple-500 opacity-50" />
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </div>
       )}
     </div>

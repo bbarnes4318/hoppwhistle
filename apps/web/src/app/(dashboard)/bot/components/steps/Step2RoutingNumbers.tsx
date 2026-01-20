@@ -60,11 +60,17 @@ export function Step2RoutingNumbers({
               value={transferPhoneNumber}
               onChange={e => onTransferPhoneNumberChange(e.target.value)}
               placeholder="+1 (555) 000-0000"
-              className="max-w-md"
+              className={`max-w-md ${transferPhoneNumber && !isTransferValid ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
             />
-            <p className="text-sm text-muted-foreground">
-              When a lead qualifies, they'll be transferred to this number in real-time.
-            </p>
+            {transferPhoneNumber && !isTransferValid ? (
+              <p className="text-sm text-red-500">
+                Please enter a valid phone number (at least 10 digits)
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                When a lead qualifies, they'll be transferred to this number in real-time.
+              </p>
+            )}
           </div>
 
           {/* Caller ID */}

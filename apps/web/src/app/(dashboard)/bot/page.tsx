@@ -1,16 +1,18 @@
 'use client';
 
 import { useSearchParams, useRouter } from 'next/navigation';
-import { useState, useEffect, useRef, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense, useCallback } from 'react';
 
 import { CampaignHeader, CampaignStatus } from './components/CampaignHeader';
 import { StepState } from './components/CampaignStepper';
 import { ContextPanel } from './components/ContextPanel';
+import { LaunchConfirmationModal } from './components/LaunchConfirmationModal';
 import { LiveMonitoringDrawer } from './components/LiveMonitoringDrawer';
 import { ReadinessBanner } from './components/ReadinessBanner';
+import { SaveStatus } from './components/SaveIndicator';
 import { Step1VoiceScript } from './components/steps/Step1VoiceScript';
 import { Step2RoutingNumbers } from './components/steps/Step2RoutingNumbers';
-import { Step3LeadsCampaign } from './components/steps/Step3LeadsCampaign';
+import { Step3LeadsCampaign, LeadUploadError } from './components/steps/Step3LeadsCampaign';
 import { Step4ReviewLaunch } from './components/steps/Step4ReviewLaunch';
 
 // Deepgram Aura voices
@@ -83,6 +85,14 @@ function BotDashboardContent() {
 
   // Leads state
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [leadUploadError, setLeadUploadError] = useState<LeadUploadError | null>(null);
+
+  // Save state
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Launch confirmation modal
+  const [showLaunchModal, setShowLaunchModal] = useState(false);
 
   // Audio ref for voice preview
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -91,6 +101,49 @@ function BotDashboardContent() {
   const [stats] = useState({
     transferred: 0,
   });
+
+  // Auto-save function
+  const performSave = useCallback(async () => {
+    setSaveStatus('saving');
+    try {
+      const res = await fetch(`${API_URL}/api/bot/settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          script,
+          voice: selectedVoice,
+          concurrency,
+          transferPhoneNumber,
+          callerId,
+        }),
+      });
+      if (res.ok) {
+        setSaveStatus('saved');
+        setIsScriptSaved(true);
+        // Clear saved status after 3 seconds
+        if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = setTimeout(() => setSaveStatus('idle'), 3000);
+      } else {
+        setSaveStatus('error');
+      }
+    } catch {
+      setSaveStatus('error');
+    }
+  }, [script, selectedVoice, concurrency, transferPhoneNumber, callerId]);
+
+  // Debounced auto-save on script changes
+  const scriptDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  useEffect(() => {
+    if (!isScriptSaved && script !== DEFAULT_SCRIPT) {
+      if (scriptDebounceRef.current) clearTimeout(scriptDebounceRef.current);
+      scriptDebounceRef.current = setTimeout(() => {
+        void performSave();
+      }, 2000);
+    }
+    return () => {
+      if (scriptDebounceRef.current) clearTimeout(scriptDebounceRef.current);
+    };
+  }, [script, isScriptSaved, performSave]);
 
   // Load saved settings on mount
   useEffect(() => {
@@ -160,7 +213,7 @@ function BotDashboardContent() {
   const step2Complete = transferPhoneNumber.length >= 10;
   const step2Warnings = !callerId ? ['Using random caller ID'] : [];
 
-  const step3Complete = leads.length > 0;
+  const step3Complete = leads.length > 0 && !leadUploadError;
   const step3Warnings: string[] = [];
 
   const isReady = step1Complete && step2Complete && step3Complete;
@@ -187,8 +240,12 @@ function BotDashboardContent() {
   const allWarnings = [...step1Warnings, ...step2Warnings];
 
   // Handlers
-  const handleStart = async () => {
+  const handleStartRequest = () => {
     if (!isReady) return;
+    setShowLaunchModal(true);
+  };
+
+  const handleConfirmStart = async () => {
     try {
       const res = await fetch(`${API_URL}/api/bot/start`, {
         method: 'POST',
@@ -247,29 +304,21 @@ function BotDashboardContent() {
   };
 
   const handleSaveSettings = async () => {
-    try {
-      const res = await fetch(`${API_URL}/api/bot/settings`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          script,
-          voice: selectedVoice,
-          concurrency,
-          transferPhoneNumber,
-          callerId,
-        }),
-      });
-      if (res.ok) {
-        setIsScriptSaved(true);
-      }
-    } catch (e) {
-      console.error('Failed to save settings:', e);
-    }
+    await performSave();
   };
 
   const handleUploadLeads = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Validate file type
+    if (!file.name.endsWith('.csv') && !file.name.endsWith('.txt')) {
+      setLeadUploadError({
+        type: 'invalid_file',
+        message: 'Please upload a CSV or TXT file.',
+      });
+      return;
+    }
 
     const formData = new FormData();
     formData.append('file', file);
@@ -281,11 +330,30 @@ function BotDashboardContent() {
       });
       if (res.ok) {
         const data = await res.json();
+        if (!data.leads || data.leads.length === 0) {
+          setLeadUploadError({
+            type: 'empty_file',
+            message: 'The file contains no valid phone numbers.',
+          });
+          return;
+        }
         setLeads(data.leads);
         setRemainingCalls(data.leads.length);
+        setLeadUploadError(null);
+        // Trigger auto-save after successful upload
+        void performSave();
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        setLeadUploadError({
+          type: 'upload_failed',
+          message: errorData.message || 'Failed to process the file. Please try again.',
+        });
       }
-    } catch (e) {
-      console.error('Failed to upload leads:', e);
+    } catch {
+      setLeadUploadError({
+        type: 'upload_failed',
+        message: 'Network error. Please check your connection and try again.',
+      });
     }
   };
 
@@ -330,6 +398,8 @@ function BotDashboardContent() {
             onConcurrencyChange={setConcurrency}
             onContinue={() => setCurrentStep(4)}
             onBack={() => setCurrentStep(2)}
+            uploadError={leadUploadError}
+            onClearError={() => setLeadUploadError(null)}
           />
         );
       case 4:
@@ -347,7 +417,7 @@ function BotDashboardContent() {
               step3: { complete: step3Complete, warnings: step3Warnings },
             }}
             isReady={isReady}
-            onStart={() => void handleStart()}
+            onStart={handleStartRequest}
             onBack={() => setCurrentStep(3)}
             onGoToStep={setCurrentStep}
           />
@@ -372,10 +442,12 @@ function BotDashboardContent() {
         steps={steps}
         onStepClick={setCurrentStep}
         isReady={isReady}
-        onStart={() => void handleStart()}
+        onStart={handleStartRequest}
         onPause={() => void handlePause()}
         onStop={() => void handleStop()}
         canEditName={currentStep === 1}
+        saveStatus={saveStatus}
+        onRetrySave={() => void performSave()}
       />
 
       {/* Readiness Banner */}
@@ -405,6 +477,16 @@ function BotDashboardContent() {
         remainingCalls={remainingCalls}
         successRate={successRate}
         concurrency={concurrency}
+      />
+
+      {/* Launch Confirmation Modal */}
+      <LaunchConfirmationModal
+        open={showLaunchModal}
+        onOpenChange={setShowLaunchModal}
+        onConfirm={() => void handleConfirmStart()}
+        leadCount={leads.length}
+        voiceName={selectedVoiceData?.name || ''}
+        transferNumber={transferPhoneNumber}
       />
     </div>
   );

@@ -1,6 +1,14 @@
 'use client';
 
-import { Upload, Users, ArrowRight, ArrowLeft, Settings } from 'lucide-react';
+import {
+  Upload,
+  Users,
+  ArrowRight,
+  ArrowLeft,
+  Settings,
+  AlertCircle,
+  RefreshCw,
+} from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -16,6 +24,11 @@ interface Lead {
   status: 'pending' | 'calling' | 'success' | 'failed' | 'no_answer';
 }
 
+export interface LeadUploadError {
+  type: 'invalid_file' | 'missing_phone' | 'empty_file' | 'upload_failed';
+  message: string;
+}
+
 interface Step3LeadsCampaignProps {
   leads: Lead[];
   onUploadLeads: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -23,6 +36,8 @@ interface Step3LeadsCampaignProps {
   onConcurrencyChange: (value: number) => void;
   onContinue: () => void;
   onBack: () => void;
+  uploadError?: LeadUploadError | null;
+  onClearError?: () => void;
 }
 
 export function Step3LeadsCampaign({
@@ -32,8 +47,15 @@ export function Step3LeadsCampaign({
   onConcurrencyChange,
   onContinue,
   onBack,
+  uploadError,
+  onClearError,
 }: Step3LeadsCampaignProps) {
-  const canContinue = leads.length > 0;
+  const canContinue = leads.length > 0 && !uploadError;
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (onClearError) onClearError();
+    onUploadLeads(e);
+  };
 
   return (
     <div className="space-y-6">
@@ -62,9 +84,39 @@ export function Step3LeadsCampaign({
             id="leads-upload"
             type="file"
             accept=".csv,.txt"
-            onChange={onUploadLeads}
+            onChange={handleFileChange}
             className="hidden"
           />
+
+          {/* Upload Error */}
+          {uploadError && (
+            <div className="flex items-start gap-3 p-4 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900">
+              <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-medium text-red-700 dark:text-red-400">Upload failed</p>
+                <p className="text-sm text-red-600 dark:text-red-500 mt-1">{uploadError.message}</p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => document.getElementById('leads-upload')?.click()}
+                className="shrink-0 border-red-300 text-red-600 hover:bg-red-100"
+              >
+                <RefreshCw className="h-3 w-3 mr-1" />
+                Try Again
+              </Button>
+            </div>
+          )}
+
+          {/* Empty State */}
+          {leads.length === 0 && !uploadError && (
+            <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/50 border border-dashed">
+              <Users className="h-5 w-5 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">
+                Upload a CSV to see lead count and enable calling.
+              </p>
+            </div>
+          )}
 
           {/* Lead Count Preview */}
           {leads.length > 0 && (

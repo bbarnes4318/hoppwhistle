@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
 import { CampaignStepper, StepState } from './CampaignStepper';
+import { SaveIndicator, SaveStatus } from './SaveIndicator';
 
 export type CampaignStatus = 'idle' | 'running' | 'paused' | 'complete' | 'error';
 
@@ -23,6 +24,8 @@ interface CampaignHeaderProps {
   onPause: () => void;
   onStop: () => void;
   canEditName: boolean;
+  saveStatus: SaveStatus;
+  onRetrySave?: () => void;
 }
 
 export function CampaignHeader({
@@ -37,6 +40,8 @@ export function CampaignHeader({
   onPause,
   onStop,
   canEditName,
+  saveStatus,
+  onRetrySave,
 }: CampaignHeaderProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(campaignName);
@@ -162,6 +167,7 @@ export function CampaignHeader({
             </div>
           )}
           {getStatusBadge()}
+          <SaveIndicator status={saveStatus} onRetry={onRetrySave} />
         </div>
 
         {/* Center: Stepper */}
