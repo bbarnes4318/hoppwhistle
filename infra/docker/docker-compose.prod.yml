@@ -11,7 +11,7 @@ services:
       - HOST=0.0.0.0
       - JWT_SECRET=${JWT_SECRET:-35353535}
       - DATABASE_URL=postgresql://callfabric:callfabric_dev@hopwhistle-postgres-dev:5432/callfabric
-      - REDIS_URL=redis://hopwhistle-redis-dev:6379
+      - REDIS_URL=redis://redis:6379
       - CLICKHOUSE_URL=http://hopwhistle-clickhouse-dev:8123
       - S3_ENDPOINT=http://hopwhistle-minio-dev:9000
       - S3_BUCKET=${S3_BUCKET:-recordings}
@@ -36,7 +36,7 @@ services:
     environment:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://callfabric:callfabric_dev@hopwhistle-postgres-dev:5432/callfabric
-      - REDIS_URL=redis://hopwhistle-redis-dev:6379
+      - REDIS_URL=redis://redis:6379
       - CLICKHOUSE_URL=http://hopwhistle-clickhouse-dev:8123
     networks:
       - docker_hopwhistle-network
@@ -51,7 +51,7 @@ services:
       - NODE_ENV=production
       - HOSTNAME=0.0.0.0
       - PORT=3000
-      - NEXT_PUBLIC_API_URL=http://45.32.213.201:3001
+      - NEXT_PUBLIC_API_URL=https://hopwhistle.com
     ports:
       - '3000:3000'
     networks:
