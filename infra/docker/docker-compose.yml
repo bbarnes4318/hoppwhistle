@@ -247,17 +247,17 @@ services:
       context: ../../
       dockerfile: apps/web/Dockerfile
       args:
-        - NEXT_PUBLIC_API_URL=http://${PUBLIC_IP}:3001
-        - NEXT_PUBLIC_WS_URL=ws://${PUBLIC_IP}:3001
+        - NEXT_PUBLIC_API_URL=https://hopwhistle.com
+        - NEXT_PUBLIC_WS_URL=wss://hopwhistle.com
         - NEXT_PUBLIC_API_KEY=${API_KEY:-demo-key}
     ports:
       - '3000:3000'
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=http://${PUBLIC_IP}:3001
-      - NEXT_PUBLIC_WS_URL=ws://${PUBLIC_IP}:3001
+      - NEXT_PUBLIC_API_URL=https://hopwhistle.com
+      - NEXT_PUBLIC_WS_URL=wss://hopwhistle.com
       - NEXT_PUBLIC_API_KEY=${API_KEY:-demo-key}
-      - NEXTAUTH_URL=http://${PUBLIC_IP}:3000
+      - NEXTAUTH_URL=https://hopwhistle.com
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-change-me}
     depends_on:
       api:
