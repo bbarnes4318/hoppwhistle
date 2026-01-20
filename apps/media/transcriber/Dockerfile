@@ -16,14 +16,14 @@ COPY apps/media/transcriber/package.json ./apps/media/transcriber/
 COPY packages/shared/package.json ./packages/shared/
 
 # Install dependencies
-RUN pnpm install --frozen-lockfile --filter @hopwhistle/transcriber...
+RUN pnpm install --frozen-lockfile --filter @callfabric/transcriber...
 
 # Copy source
 COPY apps/media/transcriber ./apps/media/transcriber
 COPY packages/shared ./packages/shared
 
 # Build
-RUN pnpm --filter @hopwhistle/transcriber build
+RUN pnpm --filter @callfabric/transcriber build
 
 # Create non-root user
 RUN useradd -m -u 1001 transcriber && \
