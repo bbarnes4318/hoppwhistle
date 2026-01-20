@@ -22,8 +22,8 @@ RUN pnpm install --frozen-lockfile --filter @callfabric/transcriber...
 COPY apps/media/transcriber ./apps/media/transcriber
 COPY packages/shared ./packages/shared
 
-# Build
-RUN pnpm --filter @callfabric/transcriber build
+# Build with tsc directly
+RUN cd apps/media/transcriber && npx tsc
 
 # Create non-root user
 RUN useradd -m -u 1001 transcriber && \
