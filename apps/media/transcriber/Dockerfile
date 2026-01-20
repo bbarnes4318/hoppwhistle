@@ -23,7 +23,7 @@ COPY apps/media/transcriber ./apps/media/transcriber
 COPY packages/shared ./packages/shared
 
 # Build with tsc directly
-RUN cd apps/media/transcriber && npx tsc
+RUN cd apps/media/transcriber && pnpm exec tsc
 
 # Create non-root user
 RUN useradd -m -u 1001 transcriber && \
