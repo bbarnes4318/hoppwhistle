@@ -81,6 +81,8 @@ services:
     cap_add:
       - NET_ADMIN
       - SYS_NICE
+    env_file:
+      - .env
     environment:
       - PUBLIC_IP=${PUBLIC_IP}
     restart: unless-stopped
