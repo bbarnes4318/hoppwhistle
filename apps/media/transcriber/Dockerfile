@@ -15,8 +15,8 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/media/transcriber/package.json ./apps/media/transcriber/
 COPY packages/shared/package.json ./packages/shared/
 
-# Install ALL root dependencies first
-RUN pnpm install
+# Install dependencies for transcriber and its workspace deps
+RUN pnpm install --filter @callfabric/transcriber...
 
 # Install tsx globally
 RUN npm install -g tsx
