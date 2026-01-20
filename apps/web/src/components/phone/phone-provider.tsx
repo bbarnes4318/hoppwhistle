@@ -662,11 +662,11 @@ export function PhoneProvider({
     const sipUser = '1000';
     const sipPass = '1234';
     // SIP domain must match FreeSWITCH config - use env PUBLIC_IP (45.32.213.201)
-    // WebSocket connects via nginx wss://hopwhistle.com/ws
+    // Connect directly to FreeSWITCH WSS on port 7443 (bypasses nginx proxy issues)
     const sipDomain = process.env.NEXT_PUBLIC_IP || '45.32.213.201';
-    const wsHost = window.location.hostname;
     const isSecure = window.location.protocol === 'https:';
-    const sipWsUrl = isSecure ? `wss://${wsHost}/ws` : `ws://${wsHost}:8083`;
+    // Use direct WSS to FreeSWITCH port 7443 for production, WS:8083 for local dev
+    const sipWsUrl = isSecure ? `wss://${sipDomain}:7443` : `ws://${sipDomain}:8083`;
 
     console.log('[Phone] Initializing SIP UA:', { sipUser, sipDomain, sipWsUrl });
 
