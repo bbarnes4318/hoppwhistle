@@ -15,11 +15,11 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/media/transcriber/package.json ./apps/media/transcriber/
 COPY packages/shared/package.json ./packages/shared/
 
-# Install dependencies (including dev for typescript)
-RUN pnpm install --frozen-lockfile --filter @callfabric/transcriber...
+# Install ALL dependencies (including devDependencies for @types/node)
+RUN pnpm install --filter @callfabric/transcriber...
 
-# Install typescript globally for build
-RUN npm install -g typescript
+# Install typescript and types globally for reliable build
+RUN npm install -g typescript @types/node
 
 # Copy source
 COPY apps/media/transcriber ./apps/media/transcriber

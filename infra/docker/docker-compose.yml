@@ -81,11 +81,13 @@ services:
     cap_add:
       - NET_ADMIN
       - SYS_NICE
-    command: rtpengine --interface=${PUBLIC_IP} --listen-ng=127.0.0.1:22222 --port-min=10000 --port-max=10100 --log-level=6 --foreground --no-fallback
     env_file:
       - .env
     environment:
-      - PUBLIC_IP=${PUBLIC_IP}
+      - INTERFACE=${PUBLIC_IP}
+      - PORT_MIN=10000
+      - PORT_MAX=10100
+      - LOG_LEVEL=6
     restart: unless-stopped
 
   # ===========================================
