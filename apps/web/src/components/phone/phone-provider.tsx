@@ -420,10 +420,9 @@ export function PhoneProvider({
         // Call ID from API for tracking
         const apiCallId = data.callId;
 
-        // SIP INVITE
-        const target = UserAgent.makeURI(
-          `sip:${phoneNumber}@${process.env.NEXT_PUBLIC_IP || window.location.hostname}`
-        );
+        // SIP INVITE - use server IP for the target domain (must match FreeSWITCH)
+        const sipTargetDomain = process.env.NEXT_PUBLIC_IP || '45.32.213.201';
+        const target = UserAgent.makeURI(`sip:${phoneNumber}@${sipTargetDomain}`);
         if (!target) throw new Error('Invalid target URI');
 
         const inviter = new Inviter(userAgentRef.current, target);
