@@ -658,15 +658,17 @@ export function PhoneProvider({
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    // Use existing FreeSWITCH user (1000-1019 available, password is 1234)
+    // SIP credentials (matches FreeSWITCH directory: /etc/freeswitch/directory/default/1000.xml)
     const sipUser = '1000';
     const sipPass = '1234';
-    // SIP domain must match FreeSWITCH config - use env PUBLIC_IP (45.32.213.201)
-    // Connect directly to FreeSWITCH WSS on port 7443 (bypasses nginx proxy issues)
+    // SIP realm must match FreeSWITCH's configured domain (the server's public IP)
     const sipDomain = process.env.NEXT_PUBLIC_IP || '45.32.213.201';
+    // WebSocket host uses window hostname for SSL cert validation
+    const wsHost = window.location.hostname;
     const isSecure = window.location.protocol === 'https:';
-    // Use direct WSS to FreeSWITCH port 7443 for production, WS:8083 for local dev
-    const sipWsUrl = isSecure ? `wss://${sipDomain}:7443` : `ws://${sipDomain}:8083`;
+    // Port 7444: Nginx Stream SSL termination -> FreeSWITCH:8083
+    // Port 8083: Direct WS for local/dev
+    const sipWsUrl = isSecure ? `wss://${wsHost}:7444` : `ws://${sipDomain}:8083`;
 
     console.log('[Phone] Initializing SIP UA:', { sipUser, sipDomain, sipWsUrl });
 
