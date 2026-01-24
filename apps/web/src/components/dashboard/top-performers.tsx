@@ -92,7 +92,7 @@ export function TopPerformers() {
           value: bestTimeLabel,
           subtext: `${(bestHour?.asr || 0).toFixed(0)}% ASR`,
           icon: <Clock className="h-4 w-4" />,
-          color: 'text-blue-500',
+          color: 'text-brand-cyan',
         },
         {
           label: 'Top Campaign',

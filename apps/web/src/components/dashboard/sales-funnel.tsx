@@ -88,7 +88,7 @@ export function SalesFunnel({ onStageClick }: SalesFunnelProps) {
           label: 'Qualified',
           value: qualified,
           percentage: (qualified / maxValue) * 100,
-          color: 'bg-blue-500',
+          color: 'bg-brand-cyan',
         },
         {
           label: 'Billable',
@@ -108,7 +108,7 @@ export function SalesFunnel({ onStageClick }: SalesFunnelProps) {
       // Set empty stages on error
       setStages([
         { label: 'Total Calls', value: 0, percentage: 100, color: 'bg-slate-500' },
-        { label: 'Qualified', value: 0, percentage: 0, color: 'bg-blue-500' },
+        { label: 'Qualified', value: 0, percentage: 0, color: 'bg-brand-cyan' },
         { label: 'Billable', value: 0, percentage: 0, color: 'bg-emerald-500' },
         { label: 'Sold', value: 0, percentage: 0, color: 'bg-violet-500' },
       ]);

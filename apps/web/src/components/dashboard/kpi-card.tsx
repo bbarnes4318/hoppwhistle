@@ -36,7 +36,7 @@ export function KPICard({
   const variantStyles = {
     default: 'bg-card border-border',
     revenue: 'bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 border-emerald-500/20',
-    conversion: 'bg-gradient-to-br from-blue-500/10 to-blue-600/5 border-blue-500/20',
+    conversion: 'bg-gradient-to-br from-brand-cyan/10 to-brand-violet/5 border-brand-cyan/20',
     warning: 'bg-gradient-to-br from-amber-500/10 to-amber-600/5 border-amber-500/20',
   };
 

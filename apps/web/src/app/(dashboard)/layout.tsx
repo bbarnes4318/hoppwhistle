@@ -16,10 +16,14 @@ import { Footer } from '@/components/layout/footer';
 import { Header } from '@/components/layout/header';
 import { Sidebar } from '@/components/layout/sidebar';
 import { AgentPhonePanel, PhoneProvider } from '@/components/phone';
+import { DynamicFavicon } from '@/components/ui/dynamic-favicon';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }): JSX.Element {
   return (
     <PhoneProvider>
+      {/* Dynamic Pulsing Favicon */}
+      <DynamicFavicon />
+
       <div className="flex h-screen overflow-hidden bg-surface-dark">
         {/* Sidebar - Collapsible Vertical Rail */}
         <Sidebar />
