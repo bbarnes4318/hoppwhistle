@@ -1,16 +1,29 @@
 'use client';
 
+/**
+ * Project Cortex | Call Telemetry
+ *
+ * Call history with Command Grid table styling.
+ */
+
 import { Search, Play } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { formatPhoneNumber, formatDate, formatDuration } from '@/lib/utils';
-
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { CommandHeader, CommandPanel } from '@/components/ui/command-grid';
+import { NeuralOrbMini } from '@/components/ui/neural-orb';
+import { formatPhoneNumber, formatDate, formatDuration, cn } from '@/lib/utils';
 
 // Mock data
 const mockCalls = [
@@ -38,7 +51,7 @@ export default function CallsPage() {
   const [search, setSearch] = useState('');
 
   const filteredCalls = mockCalls.filter(
-    (c) =>
+    c =>
       c.from.includes(search) ||
       c.to.includes(search) ||
       c.id.toLowerCase().includes(search.toLowerCase())
@@ -46,60 +59,89 @@ export default function CallsPage() {
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <div className="flex items-center justify-between flex-shrink-0 mb-4">
-        <div>
-          <h1 className="text-3xl font-bold">Calls</h1>
-          <p className="text-muted-foreground">View and manage call history</p>
-        </div>
-        <div className="relative w-64">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            id="calls-search"
-            name="calls-search"
-            placeholder="Search calls..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-      </div>
+      {/* Command Header */}
+      <CommandHeader
+        title="Call Telemetry"
+        subtitle="VECTORING // SIGNAL ARCHIVE"
+        actions={
+          <div className="relative w-64">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
+            <Input
+              id="calls-search"
+              name="calls-search"
+              placeholder="Vectoring signal..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className={cn(
+                'pl-10 bg-surface-dark border-grid-line font-mono text-sm',
+                'placeholder:text-text-muted/50',
+                'focus:border-brand-cyan focus:ring-brand-cyan/20'
+              )}
+            />
+          </div>
+        }
+      />
 
-      <Card className="flex-1 flex flex-col overflow-hidden min-h-0">
-        <CardHeader className="flex-shrink-0">
-          <CardTitle>Call History</CardTitle>
-          <CardDescription>Recent calls and their details</CardDescription>
-        </CardHeader>
-        <CardContent className="flex-1 overflow-y-auto min-h-0">
+      {/* Call Log Panel */}
+      <CommandPanel
+        title="Signal Archive"
+        telemetry={`${filteredCalls.length} RECORDS`}
+        variant="default"
+        className="flex-1 overflow-hidden min-h-0"
+      >
+        <div className="overflow-y-auto h-full">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Call ID</TableHead>
-                <TableHead>From</TableHead>
-                <TableHead>To</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Duration</TableHead>
+                <TableHead>SIGNAL ID</TableHead>
+                <TableHead>ORIGIN</TableHead>
+                <TableHead>DESTINATION</TableHead>
+                <TableHead>STATUS</TableHead>
+                <TableHead>DURATION</TableHead>
                 <TableHead>ASR</TableHead>
-                <TableHead>Time</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead>TIMESTAMP</TableHead>
+                <TableHead className="text-right">ACTIONS</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredCalls.map((call) => (
+              {filteredCalls.map(call => (
                 <TableRow key={call.id}>
-                  <TableCell className="font-mono text-sm">{call.id}</TableCell>
-                  <TableCell>{formatPhoneNumber(call.from)}</TableCell>
-                  <TableCell>{formatPhoneNumber(call.to)}</TableCell>
-                  <TableCell>
-                    <Badge variant={call.status === 'completed' ? 'success' : 'warning'}>
-                      {call.status}
-                    </Badge>
+                  <TableCell className="font-mono text-xs text-brand-cyan">{call.id}</TableCell>
+                  <TableCell className="font-mono text-sm">
+                    {formatPhoneNumber(call.from)}
                   </TableCell>
-                  <TableCell>{formatDuration(call.duration)}</TableCell>
-                  <TableCell>{(call.asr * 100).toFixed(1)}%</TableCell>
-                  <TableCell>{formatDate(call.createdAt)}</TableCell>
+                  <TableCell className="font-mono text-sm">{formatPhoneNumber(call.to)}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <NeuralOrbMini state={call.status === 'completed' ? 'idle' : 'speaking'} />
+                      <Badge
+                        variant={call.status === 'completed' ? 'success' : 'warning'}
+                        className="font-mono text-xs uppercase"
+                      >
+                        {call.status}
+                      </Badge>
+                    </div>
+                  </TableCell>
+                  <TableCell className="font-mono text-sm">
+                    {formatDuration(call.duration)}
+                  </TableCell>
+                  <TableCell className="font-mono text-sm">
+                    <span
+                      className={call.asr > 0.6 ? 'text-status-success' : 'text-status-warning'}
+                    >
+                      {(call.asr * 100).toFixed(1)}%
+                    </span>
+                  </TableCell>
+                  <TableCell className="font-mono text-xs text-text-secondary">
+                    {formatDate(call.createdAt)}
+                  </TableCell>
                   <TableCell className="text-right">
                     <Link href={`/calls/${call.id}`}>
-                      <Button variant="ghost" size="sm">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-text-secondary hover:text-brand-cyan hover:bg-brand-cyan/10"
+                      >
                         <Play className="h-4 w-4" />
                       </Button>
                     </Link>
@@ -108,9 +150,8 @@ export default function CallsPage() {
               ))}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
+        </div>
+      </CommandPanel>
     </div>
   );
 }
-

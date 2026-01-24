@@ -1,31 +1,32 @@
 'use client';
 
 /**
- * Project Cortex | Neural Orb Component
+ * Project Cortex | Neural Orb AI Visualizer
  *
- * The signature "Active Call Indicator" for Hopwhistle.
- * Replaces legacy call status with pulsing, glowing orb.
+ * GPU-accelerated animations using transform/opacity only.
+ * Zero main-thread blocking.
  *
- * States:
- * - dormant: No active call (dim)
- * - awakening: Incoming/outgoing call (breathing animation)
- * - pulsing: Call connected (steady pulse)
- * - vectoring: On hold (slow rotation)
+ * Visual States:
+ * - idle: Breathing ring of Hyper-Violet (#9C4AFF), 12bpm pulse
+ * - listening: Electric Cyan waveform (#00E5FF) reacting to amplitude
+ * - processing: Rapidly spinning Iridescent sphere (Cyan + Magenta)
+ * - speaking: Outward pulsing Toxic Lime (#CCFF00)
  */
 
-import { motion, AnimatePresence, type Variants } from 'framer-motion';
-
+import { motion, type Variants } from 'framer-motion';
 import { useCallState } from '@/hooks/adapters';
 import { cn } from '@/lib/utils';
 
-export type OrbState = 'dormant' | 'awakening' | 'pulsing' | 'vectoring';
+export type OrbState = 'idle' | 'listening' | 'processing' | 'speaking';
 
 interface NeuralOrbProps {
   /** Override automatic state detection */
   state?: OrbState;
   /** Size variant */
   size?: 'sm' | 'md' | 'lg' | 'xl';
-  /** Show call duration inside orb */
+  /** Mock amplitude for listening state (0-1) */
+  amplitude?: number;
+  /** Show call duration */
   showDuration?: boolean;
   /** Additional class names */
   className?: string;
@@ -33,91 +34,178 @@ interface NeuralOrbProps {
   onClick?: () => void;
 }
 
-const sizeClasses = {
-  sm: 'w-8 h-8',
-  md: 'w-12 h-12',
-  lg: 'w-16 h-16',
-  xl: 'w-24 h-24',
+const sizeMap = {
+  sm: { orb: 32, ring: 40, glow: 48 },
+  md: { orb: 48, ring: 60, glow: 72 },
+  lg: { orb: 64, ring: 80, glow: 96 },
+  xl: { orb: 96, ring: 120, glow: 144 },
 };
 
-const glowIntensity = {
-  dormant: 'rgba(74, 85, 104, 0.3)',
-  awakening: 'rgba(0, 229, 255, 0.5)',
-  pulsing: 'rgba(0, 229, 255, 0.8)',
-  vectoring: 'rgba(156, 74, 255, 0.6)',
+// Color palette
+const colors = {
+  idle: '#9C4AFF', // Hyper-Violet
+  listening: '#00E5FF', // Electric Cyan
+  processing: {
+    cyan: '#00E5FF',
+    magenta: '#FF00FF',
+  },
+  speaking: '#CCFF00', // Toxic Lime
 };
 
-const coreColor = {
-  dormant: '#4A5568',
-  awakening: '#00E5FF',
-  pulsing: '#00E5FF',
-  vectoring: '#9C4AFF',
-};
+// 12 BPM = 5 second cycle for idle breathing
+const BREATHING_DURATION = 5;
 
+// GPU-accelerated variants (transform & opacity only)
 const orbVariants: Variants = {
-  dormant: {
-    scale: 1,
-    boxShadow: `0 0 10px ${glowIntensity.dormant}`,
-  },
-  awakening: {
-    scale: [1, 1.1, 1],
-    boxShadow: [
-      `0 0 20px ${glowIntensity.awakening}`,
-      `0 0 40px ${glowIntensity.awakening}`,
-      `0 0 20px ${glowIntensity.awakening}`,
-    ],
+  idle: {
+    scale: [1, 1.08, 1],
+    opacity: [0.8, 1, 0.8],
     transition: {
-      duration: 1.5,
+      duration: BREATHING_DURATION,
       repeat: Infinity,
       ease: 'easeInOut',
     },
   },
-  pulsing: {
-    scale: [1, 1.05, 1],
-    boxShadow: [
-      `0 0 30px ${glowIntensity.pulsing}`,
-      `0 0 50px ${glowIntensity.pulsing}`,
-      `0 0 30px ${glowIntensity.pulsing}`,
-    ],
+  listening: {
+    scale: [1, 1.15, 1.05, 1.2, 1],
+    opacity: 1,
     transition: {
-      duration: 2,
+      duration: 0.8,
       repeat: Infinity,
       ease: 'easeInOut',
     },
   },
-  vectoring: {
+  processing: {
     scale: 1,
-    rotate: [0, 360],
-    boxShadow: `0 0 25px ${glowIntensity.vectoring}`,
+    opacity: 1,
+    rotate: 360,
     transition: {
       rotate: {
-        duration: 4,
+        duration: 0.8,
         repeat: Infinity,
         ease: 'linear',
       },
     },
   },
+  speaking: {
+    scale: [1, 1.25, 1],
+    opacity: [1, 0.7, 1],
+    transition: {
+      duration: 0.4,
+      repeat: Infinity,
+      ease: 'easeOut',
+    },
+  },
 };
 
-const innerRingVariants: Variants = {
-  dormant: { opacity: 0.3, scale: 0.8 },
-  awakening: {
-    opacity: [0.5, 1, 0.5],
-    scale: [0.8, 1.2, 0.8],
-    transition: { duration: 1.5, repeat: Infinity },
+const ringVariants: Variants = {
+  idle: {
+    scale: [1, 1.1, 1],
+    opacity: [0.4, 0.7, 0.4],
+    transition: {
+      duration: BREATHING_DURATION,
+      repeat: Infinity,
+      ease: 'easeInOut',
+      delay: 0.2,
+    },
   },
-  pulsing: {
-    opacity: [0.7, 1, 0.7],
-    scale: [0.9, 1.1, 0.9],
-    transition: { duration: 2, repeat: Infinity },
+  listening: {
+    scale: [1, 1.3, 1.1, 1.4, 1],
+    opacity: [0.5, 0.9, 0.6, 1, 0.5],
+    transition: {
+      duration: 0.6,
+      repeat: Infinity,
+      ease: 'easeInOut',
+    },
   },
-  vectoring: {
+  processing: {
+    scale: 1.1,
     opacity: 0.8,
-    scale: 1,
-    rotate: [0, -360],
-    transition: { rotate: { duration: 3, repeat: Infinity, ease: 'linear' } },
+    rotate: -360,
+    transition: {
+      rotate: {
+        duration: 1.2,
+        repeat: Infinity,
+        ease: 'linear',
+      },
+    },
+  },
+  speaking: {
+    scale: [1, 1.5, 1.8],
+    opacity: [0.8, 0.4, 0],
+    transition: {
+      duration: 0.6,
+      repeat: Infinity,
+      ease: 'easeOut',
+    },
   },
 };
+
+const glowVariants: Variants = {
+  idle: {
+    scale: [1, 1.15, 1],
+    opacity: [0.2, 0.4, 0.2],
+    transition: {
+      duration: BREATHING_DURATION,
+      repeat: Infinity,
+      ease: 'easeInOut',
+      delay: 0.4,
+    },
+  },
+  listening: {
+    scale: [1, 1.5, 1.2, 1.6, 1],
+    opacity: [0.3, 0.6, 0.4, 0.7, 0.3],
+    transition: {
+      duration: 0.5,
+      repeat: Infinity,
+      ease: 'easeInOut',
+    },
+  },
+  processing: {
+    scale: [1.2, 1.4, 1.2],
+    opacity: [0.5, 0.8, 0.5],
+    transition: {
+      duration: 0.4,
+      repeat: Infinity,
+      ease: 'easeInOut',
+    },
+  },
+  speaking: {
+    scale: [1, 2, 2.5],
+    opacity: [0.6, 0.3, 0],
+    transition: {
+      duration: 0.5,
+      repeat: Infinity,
+      ease: 'easeOut',
+    },
+  },
+};
+
+function getOrbColor(state: OrbState): string {
+  switch (state) {
+    case 'idle':
+      return colors.idle;
+    case 'listening':
+      return colors.listening;
+    case 'processing':
+      return `conic-gradient(from 0deg, ${colors.processing.cyan}, ${colors.processing.magenta}, ${colors.processing.cyan})`;
+    case 'speaking':
+      return colors.speaking;
+  }
+}
+
+function getRingColor(state: OrbState): string {
+  switch (state) {
+    case 'idle':
+      return colors.idle;
+    case 'listening':
+      return colors.listening;
+    case 'processing':
+      return colors.processing.magenta;
+    case 'speaking':
+      return colors.speaking;
+  }
+}
 
 function formatDuration(seconds: number): string {
   const mins = Math.floor(seconds / 60);
@@ -126,122 +214,166 @@ function formatDuration(seconds: number): string {
 }
 
 /**
- * Neural Orb - Active Call Indicator
+ * Neural Orb AI Visualizer
  *
- * Automatically detects call state or can be manually controlled.
+ * GPU-accelerated component for real-time AI state visualization.
+ * Uses only transform and opacity for 60fps performance.
  */
 export function NeuralOrb({
   state: overrideState,
   size = 'md',
+  amplitude = 0.5,
   showDuration = false,
   className,
   onClick,
 }: NeuralOrbProps) {
   const { isActive, state: callState, isOnHold, duration } = useCallState();
 
-  // Determine orb state from call state if not overridden
+  // Auto-detect state from call state if not overridden
   const orbState: OrbState =
     overrideState ??
     (isOnHold
-      ? 'vectoring'
+      ? 'processing'
       : callState === 'connected'
-        ? 'pulsing'
+        ? 'speaking'
         : callState === 'ringing'
-          ? 'awakening'
+          ? 'listening'
           : isActive
-            ? 'pulsing'
-            : 'dormant');
+            ? 'processing'
+            : 'idle');
+
+  const dimensions = sizeMap[size];
+  const orbColor = getOrbColor(orbState);
+  const ringColor = getRingColor(orbState);
+
+  // Dynamic scale based on amplitude for listening state
+  const amplitudeScale = orbState === 'listening' ? 1 + amplitude * 0.3 : 1;
 
   return (
-    <motion.div
+    <div
       className={cn(
-        'relative flex items-center justify-center rounded-full cursor-pointer',
-        'bg-gradient-to-br from-surface-panel to-surface-dark',
-        sizeClasses[size],
+        'relative flex items-center justify-center cursor-pointer',
+        'will-change-transform', // GPU hint
         className
       )}
-      variants={orbVariants}
-      animate={orbState}
-      initial="dormant"
+      style={{
+        width: dimensions.glow,
+        height: dimensions.glow,
+      }}
       onClick={onClick}
-      whileHover={{ scale: 1.1 }}
-      whileTap={{ scale: 0.95 }}
     >
-      {/* Inner Ring */}
+      {/* Outer Glow Layer */}
       <motion.div
-        className={cn('absolute inset-1 rounded-full border-2', 'border-current opacity-50')}
-        style={{ borderColor: coreColor[orbState] }}
-        variants={innerRingVariants}
+        className="absolute rounded-full"
+        style={{
+          width: dimensions.glow,
+          height: dimensions.glow,
+          background:
+            orbState === 'processing'
+              ? `radial-gradient(circle, ${colors.processing.cyan}40, ${colors.processing.magenta}20, transparent 70%)`
+              : `radial-gradient(circle, ${ringColor}40, transparent 70%)`,
+          willChange: 'transform, opacity',
+        }}
+        variants={glowVariants}
         animate={orbState}
+        initial="idle"
       />
 
-      {/* Core */}
+      {/* Ring Layer */}
       <motion.div
-        className={cn(
-          'absolute rounded-full',
-          size === 'sm'
-            ? 'w-3 h-3'
-            : size === 'md'
-              ? 'w-5 h-5'
-              : size === 'lg'
-                ? 'w-7 h-7'
-                : 'w-10 h-10'
-        )}
-        style={{ backgroundColor: coreColor[orbState] }}
+        className="absolute rounded-full border-2"
+        style={{
+          width: dimensions.ring,
+          height: dimensions.ring,
+          borderColor: ringColor,
+          willChange: 'transform, opacity',
+        }}
+        variants={ringVariants}
+        animate={orbState}
+        initial="idle"
+      />
+
+      {/* Core Orb */}
+      <motion.div
+        className="absolute rounded-full"
+        style={{
+          width: dimensions.orb,
+          height: dimensions.orb,
+          background: orbColor,
+          willChange: 'transform, opacity',
+          transform: `scale(${amplitudeScale})`,
+        }}
+        variants={orbVariants}
+        animate={orbState}
+        initial="idle"
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.95 }}
+      />
+
+      {/* Inner Highlight (for depth) */}
+      <motion.div
+        className="absolute rounded-full"
+        style={{
+          width: dimensions.orb * 0.5,
+          height: dimensions.orb * 0.5,
+          background: 'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.4), transparent 60%)',
+          willChange: 'opacity',
+        }}
         animate={{
-          opacity: orbState === 'dormant' ? 0.5 : 1,
+          opacity: orbState === 'idle' ? [0.3, 0.5, 0.3] : 0.4,
+        }}
+        transition={{
+          duration: BREATHING_DURATION,
+          repeat: Infinity,
+          ease: 'easeInOut',
         }}
       />
 
-      {/* Duration Display (for larger sizes) */}
-      <AnimatePresence>
-        {showDuration && orbState !== 'dormant' && (size === 'lg' || size === 'xl') && (
-          <motion.span
-            className="absolute -bottom-6 font-mono text-xs text-brand-cyan"
-            initial={{ opacity: 0, y: -5 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -5 }}
-          >
-            {formatDuration(duration)}
-          </motion.span>
-        )}
-      </AnimatePresence>
-    </motion.div>
+      {/* Duration Display */}
+      {showDuration && orbState !== 'idle' && (size === 'lg' || size === 'xl') && (
+        <motion.span
+          className="absolute -bottom-6 font-mono text-xs"
+          style={{ color: ringColor }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+        >
+          {formatDuration(duration)}
+        </motion.span>
+      )}
+    </div>
   );
 }
 
 /**
- * NeuralOrbStatic - Non-animated version for SSR or reduced motion
+ * NeuralOrbMini - Compact version for inline use
  */
-export function NeuralOrbStatic({
-  state = 'dormant',
-  size = 'md',
+export function NeuralOrbMini({
+  state = 'idle',
   className,
-}: Pick<NeuralOrbProps, 'state' | 'size' | 'className'>) {
+}: {
+  state?: OrbState;
+  className?: string;
+}) {
   return (
-    <div
-      className={cn(
-        'relative flex items-center justify-center rounded-full',
-        'bg-gradient-to-br from-surface-panel to-surface-dark',
-        sizeClasses[size],
-        state !== 'dormant' && 'glow-cyan',
-        className
-      )}
-    >
-      <div
-        className={cn(
-          'absolute rounded-full',
-          size === 'sm'
-            ? 'w-3 h-3'
-            : size === 'md'
-              ? 'w-5 h-5'
-              : size === 'lg'
-                ? 'w-7 h-7'
-                : 'w-10 h-10'
-        )}
-        style={{ backgroundColor: coreColor[state] }}
-      />
-    </div>
+    <motion.div
+      className={cn('w-3 h-3 rounded-full', className)}
+      style={{
+        background: getOrbColor(state),
+        willChange: 'transform, opacity',
+      }}
+      animate={
+        state === 'idle'
+          ? { scale: [1, 1.15, 1], opacity: [0.7, 1, 0.7] }
+          : state === 'processing'
+            ? { rotate: 360 }
+            : { scale: [1, 1.2, 1] }
+      }
+      transition={{
+        duration: state === 'processing' ? 0.8 : 2,
+        repeat: Infinity,
+        ease: state === 'processing' ? 'linear' : 'easeInOut',
+      }}
+    />
   );
 }
 

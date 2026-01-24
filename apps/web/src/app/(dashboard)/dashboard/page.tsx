@@ -1,5 +1,11 @@
 'use client';
 
+/**
+ * Project Cortex | Command Center Dashboard
+ *
+ * Real-time call analytics with Command Grid layout.
+ */
+
 import { useState } from 'react';
 import { Calendar, RefreshCw } from 'lucide-react';
 
@@ -8,6 +14,8 @@ import { SalesFunnel } from '@/components/dashboard/sales-funnel';
 import { TopPerformers } from '@/components/dashboard/top-performers';
 import { CallIntelligence } from '@/components/dashboard/call-intelligence';
 import { Button } from '@/components/ui/button';
+import { CommandGrid, CommandPanel, CommandHeader } from '@/components/ui/command-grid';
+import { NeuralOrb } from '@/components/ui/neural-orb';
 import { cn } from '@/lib/utils';
 
 type DatePreset = 'today' | '7d' | '30d' | 'custom';
@@ -54,61 +62,88 @@ export default function DashboardPage() {
 
   return (
     <div className="h-full flex flex-col overflow-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-shrink-0 mb-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Command Center</h1>
-          <p className="text-muted-foreground mt-1">
-            Real-time call analytics and revenue insights
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          {/* Date Presets */}
-          <div className="flex items-center gap-1 rounded-lg border bg-muted/30 p-1">
-            {(['today', '7d', '30d'] as DatePreset[]).map(preset => (
+      {/* Command Header */}
+      <CommandHeader
+        title="Command Center"
+        subtitle="VECTORING // REAL-TIME TELEMETRY"
+        actions={
+          <div className="flex items-center gap-4">
+            {/* Neural Orb Status */}
+            <div className="flex items-center gap-3">
+              <NeuralOrb size="sm" />
+              <span className="telemetry-label hidden md:block">SYSTEM ACTIVE</span>
+            </div>
+
+            {/* Date Presets */}
+            <div className="flex items-center gap-1 rounded-lg border border-grid-line bg-surface-panel/50 p-1">
+              {(['today', '7d', '30d'] as DatePreset[]).map(preset => (
+                <Button
+                  key={preset}
+                  variant={datePreset === preset ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setDatePreset(preset)}
+                  className={cn(
+                    'h-8 px-3 font-mono text-xs',
+                    datePreset === preset
+                      ? 'bg-brand-cyan text-surface-dark'
+                      : 'text-text-secondary hover:text-text-primary hover:bg-grid-line/50'
+                  )}
+                >
+                  {preset === 'today' ? 'TODAY' : preset.toUpperCase()}
+                </Button>
+              ))}
               <Button
-                key={preset}
-                variant={datePreset === preset ? 'default' : 'ghost'}
+                variant={datePreset === 'custom' ? 'default' : 'ghost'}
                 size="sm"
-                onClick={() => setDatePreset(preset)}
+                onClick={() => setDatePreset('custom')}
                 className={cn(
                   'h-8 px-3',
-                  datePreset === preset && 'bg-primary text-primary-foreground shadow-sm'
+                  datePreset === 'custom'
+                    ? 'bg-brand-cyan text-surface-dark'
+                    : 'text-text-secondary hover:text-text-primary'
                 )}
               >
-                {preset === 'today' ? 'Today' : preset.toUpperCase()}
+                <Calendar className="h-4 w-4" />
               </Button>
-            ))}
+            </div>
+
+            {/* Refresh */}
             <Button
-              variant={datePreset === 'custom' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setDatePreset('custom')}
-              className="h-8 px-3"
+              variant="outline"
+              size="icon"
+              onClick={handleRefresh}
+              className="border-grid-line text-text-secondary hover:text-brand-cyan hover:border-brand-cyan"
             >
-              <Calendar className="h-4 w-4" />
+              <RefreshCw className="h-4 w-4" />
             </Button>
           </div>
-          <Button variant="outline" size="icon" onClick={handleRefresh}>
-            <RefreshCw className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
+        }
+      />
 
       {/* KPI Cards - Above the Fold */}
       <section className="flex-shrink-0 mb-6">
         <DashboardKPIs dateRange={getDateRange()} onFilterChange={handleFilterChange} />
       </section>
 
-      {/* Mid-Page Insights Grid - 2 columns */}
-      <section className="grid gap-6 lg:grid-cols-2 mb-6 flex-shrink-0">
-        <SalesFunnel onStageClick={stage => console.log('Stage clicked:', stage)} />
-        <TopPerformers />
-      </section>
+      {/* Mid-Page Insights Grid */}
+      <CommandGrid columns={2} gap="md" className="mb-6 flex-shrink-0">
+        <CommandPanel title="Sales Funnel" telemetry="LIVE" variant="default">
+          <SalesFunnel onStageClick={stage => console.log('Stage clicked:', stage)} />
+        </CommandPanel>
+        <CommandPanel title="Top Performers" telemetry="24H" variant="default">
+          <TopPerformers />
+        </CommandPanel>
+      </CommandGrid>
 
       {/* Call Intelligence Section */}
-      <section className="flex-1 min-h-0">
+      <CommandPanel
+        title="Call Intelligence"
+        telemetry="VECTORING"
+        variant="accent"
+        className="flex-1 min-h-0"
+      >
         <CallIntelligence filters={filters} />
-      </section>
+      </CommandPanel>
     </div>
   );
 }
