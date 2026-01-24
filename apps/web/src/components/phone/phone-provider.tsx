@@ -474,7 +474,7 @@ export function PhoneProvider({
     [normalizedApiUrl, getApiHeaders, handleCallAnswered, handleCallEnded, isRegistered]
   );
 
-  const answerCall = useCallback(async () => {
+  const answerCall = useCallback(() => {
     if (
       sessionRef.current &&
       sessionRef.current.state === SessionState.Initial &&
@@ -497,19 +497,19 @@ export function PhoneProvider({
     }
   }, []);
 
-  const hangupCall = useCallback(async () => {
+  const hangupCall = useCallback(() => {
     if (sessionRef.current) {
       switch (sessionRef.current.state) {
         case SessionState.Initial:
         case SessionState.Establishing:
           if (sessionRef.current instanceof Inviter) {
-            sessionRef.current.cancel();
+            void sessionRef.current.cancel();
           } else if (sessionRef.current instanceof Invitation) {
-            sessionRef.current.reject();
+            void sessionRef.current.reject();
           }
           break;
         case SessionState.Established:
-          sessionRef.current.bye();
+          void sessionRef.current.bye();
           break;
       }
     }
@@ -524,7 +524,7 @@ export function PhoneProvider({
     });
   }, []);
 
-  const toggleHold = useCallback(async () => {
+  const toggleHold = useCallback(() => {
     // TODO: Implement SIP hold
     // sessionRef.current?.invite({ sessionDescriptionHandlerOptions: { hold: true } })
     setCurrentCall(prev => {
@@ -544,7 +544,7 @@ export function PhoneProvider({
     }
   }, []);
 
-  const transferCall = useCallback(async (_destination: string, _type: 'blind' | 'warm') => {
+  const transferCall = useCallback((_destination: string, _type: 'blind' | 'warm') => {
     // TODO: Implement SIP REFER
     console.log('Transfer not fully implemented in SIP yet');
   }, []);
@@ -727,7 +727,7 @@ export function PhoneProvider({
 
     return () => {
       if (ua) {
-        ua.stop();
+        void ua.stop();
       }
     };
   }, [handleIncomingSipCall]);
