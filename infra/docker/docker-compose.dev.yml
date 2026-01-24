@@ -212,6 +212,8 @@ services:
       PUBLIC_IP: ${PUBLIC_IP}
     volumes:
       - freeswitch_recordings:/recordings
+      # Mount Let's Encrypt certs for WSS (on production servers only)
+      - /etc/letsencrypt/live/hopwhistle.com:/etc/freeswitch/letsencrypt:ro
       # NOTE: Do NOT mount freeswitch_conf here - config is baked into the image via Dockerfile
     healthcheck:
       test: ['CMD', 'fs_cli', '-x', 'status']

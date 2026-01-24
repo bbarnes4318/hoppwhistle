@@ -18,6 +18,10 @@
       <param name="ws-binding" value=":8083"/>
       <param name="wss-binding" value=":7443"/>
 
+      <!-- TLS Settings for WSS (Let's Encrypt certs) -->
+      <param name="tls-cert-dir" value="/etc/freeswitch/letsencrypt"/>
+      <param name="tls-version" value="tlsv1.2"/>
+
       <!-- SIP Settings -->
       <param name="dialplan" value="XML"/>
       <param name="context" value="default"/>
