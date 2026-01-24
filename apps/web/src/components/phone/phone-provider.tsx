@@ -665,9 +665,9 @@ export function PhoneProvider({
     // WebSocket host uses window hostname for SSL cert validation
     const wsHost = window.location.hostname;
     const isSecure = window.location.protocol === 'https:';
-    // Port 7443: Direct FreeSWITCH WSS (bypasses Nginx stream proxy issues)
+    // Port 7444: Nginx stream proxy (terminates SSL with valid Let's Encrypt certs)
     // Port 8083: Direct WS for local/dev
-    const sipWsUrl = isSecure ? `wss://${wsHost}:7443` : `ws://${sipDomain}:8083`;
+    const sipWsUrl = isSecure ? `wss://${wsHost}:7444` : `ws://${sipDomain}:8083`;
 
     console.log('[Phone] Initializing SIP UA:', { sipUser, sipDomain, sipWsUrl });
 
