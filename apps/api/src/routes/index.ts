@@ -793,16 +793,113 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
     };
   });
 
-  fastify.get<{ Params: { callId: string } }>('/api/v1/calls/:callId', async (request, _reply) => {
+  fastify.get<{ Params: { callId: string } }>('/api/v1/calls/:callId', async (request, reply) => {
+    const user = (request as AuthRequest).user;
+    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+    const tenantId = demoTenantId || user?.tenantId;
+
+    if (!tenantId) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+    }
+
+    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+    const { callId } = request.params;
+
+    const call = await prisma.call.findFirst({
+      where: {
+        id: callId,
+        tenantId,
+      },
+      include: {
+        campaign: true,
+        fromNumber: true,
+        publisher: true,
+        buyer: true,
+        recordings: true,
+        transcriptions: true,
+      },
+    });
+
+    if (!call) {
+      void reply.code(404);
+      return { error: { code: 'NOT_FOUND', message: 'Call not found' } };
+    }
+
     return {
-      id: request.params.callId,
-      tenantId: '00000000-0000-0000-0000-000000000000',
-      toNumber: '+15551234567',
-      callSid: 'call_1234567890',
-      status: 'INITIATED',
-      direction: 'OUTBOUND',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      // Core fields
+      id: call.id,
+      tenantId: call.tenantId,
+      callSid: call.callSid,
+      externalId: call.externalId,
+      status: call.status,
+      direction: call.direction,
+
+      // Timestamps
+      callDate: call.createdAt,
+      callCompleteTimestamp: call.callCompleteTimestamp,
+      callConnectedTimestamp: call.callConnectedTimestamp,
+      previouslyConnectedDate: call.previouslyConnectedDate,
+      createdAt: call.createdAt,
+      updatedAt: call.updatedAt,
+      startedAt: call.startedAt,
+      answeredAt: call.answeredAt,
+      endedAt: call.endedAt,
+
+      // Identity IDs
+      campaignId: call.campaignId,
+      publisherId: call.publisherId,
+      buyerId: call.buyerId,
+      targetId: call.targetId,
+      targetGroupId: call.targetGroupId,
+
+      // Identity Names (denormalized)
+      campaignName: call.campaignName || call.campaign?.name,
+      publisherName: call.publisherName || call.publisher?.name,
+      buyerName: call.buyerName || call.buyer?.name,
+      targetName: call.targetName,
+      targetGroupName: call.targetGroupName,
+
+      // Telephony
+      callerId: call.callerId,
+      callerIdAreaCode: call.callerIdAreaCode,
+      callerIdState: call.callerIdState,
+      did: call.did,
+      toNumber: call.toNumber,
+      targetNumber: call.targetNumber,
+      duration: call.duration,
+      durationFormatted: call.durationFormatted,
+      connectedDuration: call.connectedDuration,
+      connectedDurationFormatted: call.connectedDurationFormatted,
+      recordingUrl: call.recordingUrl,
+
+      // Financials
+      revenue: call.revenue,
+      payout: call.payout,
+      profit: call.profit,
+      cost: call.cost,
+
+      // Boolean/Status
+      isDuplicate: call.isDuplicate,
+      converted: call.converted,
+      missedCall: call.missedCall,
+      blocked: call.blocked,
+      paidOut: call.paidOut,
+      previouslyConnected: call.previouslyConnected,
+
+      // Reason Codes
+      noPayoutReason: call.noPayoutReason,
+      noConversionReason: call.noConversionReason,
+      blockReason: call.blockReason,
+      previouslyConnectedTarget: call.previouslyConnectedTarget,
+
+      // Related entities
+      campaign: call.campaign,
+      publisher: call.publisher,
+      buyer: call.buyer,
+      fromNumber: call.fromNumber,
+      recordings: call.recordings,
+      transcriptions: call.transcriptions,
     };
   });
 }

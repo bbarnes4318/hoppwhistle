@@ -58,7 +58,14 @@ This will generate `docs/erd.png` using the Prisma ERD generator.
 
 ### Call Tracking
 
-- **Call** - Call records
+- **Call** - Call records with enterprise tracking fields:
+  - **Timestamps**: callCompleteTimestamp, callConnectedTimestamp, previouslyConnectedDate
+  - **Identity IDs**: publisherId, buyerId, targetId, targetGroupId (FK relations)
+  - **Identity Names**: campaignName, publisherName, buyerName, targetName, targetGroupName (denormalized)
+  - **Telephony**: callerId, callerIdAreaCode, callerIdState, did, targetNumber, connectedDuration, durationFormatted, connectedDurationFormatted, recordingUrl
+  - **Financials**: revenue, payout, profit, cost (Decimal 10,4)
+  - **Status Flags**: isDuplicate, converted, missedCall, blocked, paidOut, previouslyConnected
+  - **Reason Codes**: noPayoutReason, noConversionReason, blockReason, previouslyConnectedTarget
 - **CallLeg** - Individual call legs (for multi-leg calls)
 - **Cdr** - Normalized Call Detail Records
 - **Recording** - Call recordings

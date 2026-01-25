@@ -471,6 +471,7 @@ model Publisher {
   tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   campaigns Campaign[]
   buyers    Buyer[]
+  calls     Call[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -497,6 +498,7 @@ model Buyer {
   tenant    Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   publisher Publisher      @relation(fields: [publisherId], references: [id])
   endpoints BuyerEndpoint[]
+  calls     Call[]
 
   @@unique([tenantId, publisherId, code])
   @@index([tenantId])
@@ -670,11 +672,65 @@ model Call {
   answeredAt      DateTime?
   endedAt         DateTime?
 
+  // ============================================================================
+  // Enterprise Call Tracking Fields
+  // ============================================================================
+
+  // Timestamps
+  callCompleteTimestamp    DateTime?  // When call fully completed
+  callConnectedTimestamp   DateTime?  // When call connected to target
+  previouslyConnectedDate  DateTime?  // Previous connection date if repeat caller
+
+  // Identity IDs (Foreign Keys)
+  publisherId     String?  // FK to Publisher
+  buyerId         String?  // FK to Buyer
+  targetId        String?  // Target entity reference
+  targetGroupId   String?  // Target group reference
+
+  // Identity Names (Denormalized for Reporting)
+  campaignName      String?  // Snapshot of campaign.name at call time
+  publisherName     String?  // Snapshot of publisher.name
+  buyerName         String?  // Snapshot of buyer.name
+  targetName        String?  // Target display name
+  targetGroupName   String?  // Target group display name
+
+  // Telephony Data
+  callerId                    String?  // Inbound caller number (ANI)
+  callerIdAreaCode            Int?     // 3-digit area code
+  callerIdState               String?  // 2-char state code (e.g., "TN")
+  did                         String?  // Inbound DID number (DNIS)
+  targetNumber                String?  // Forwarded-to number
+  connectedDuration           Int?     // Connected duration in seconds
+  durationFormatted           String?  // Total duration as hh:mm:ss
+  connectedDurationFormatted  String?  // Connected duration as hh:mm:ss
+  recordingUrl                String?  // URL to call recording
+
+  // Financial Fields (Currency/Decimal)
+  revenue  Decimal? @db.Decimal(10, 4)  // Total revenue for this call
+  payout   Decimal? @db.Decimal(10, 4)  // Amount paid to publisher
+  profit   Decimal? @db.Decimal(10, 4)  // Revenue minus payout/cost
+
+  // Boolean/Status Fields
+  isDuplicate          Boolean @default(false)  // If caller is duplicate
+  converted            Boolean @default(false)  // If call resulted in conversion
+  missedCall           Boolean @default(false)  // If call was missed
+  blocked              Boolean @default(false)  // If call was blocked
+  paidOut              Boolean @default(false)  // If payout was issued
+  previouslyConnected  Boolean @default(false)  // If caller previously connected
+
+  // Reason Code Fields
+  noPayoutReason            String?  // Reason payout was denied
+  noConversionReason        String?  // Reason conversion failed
+  blockReason               String?  // Reason call was blocked
+  previouslyConnectedTarget String?  // Previous target info
+
   // Relations
   tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   campaign    Campaign?     @relation(fields: [campaignId], references: [id])
   fromNumber  PhoneNumber?  @relation("CallFromNumber", fields: [fromNumberId], references: [id])
   createdBy   User?         @relation("CallCreator", fields: [createdById], references: [id])
+  publisher   Publisher?    @relation(fields: [publisherId], references: [id])
+  buyer       Buyer?        @relation(fields: [buyerId], references: [id])
   legs        CallLeg[]
   cdrs        Cdr[]
   recordings  Recording[]
@@ -691,6 +747,11 @@ model Call {
   @@index([status])
   @@index([direction])
   @@index([importHash])
+  @@index([publisherId])
+  @@index([buyerId])
+  @@index([converted])
+  @@index([isDuplicate])
+  @@index([callConnectedTimestamp])
   @@map("calls")
 }
 
