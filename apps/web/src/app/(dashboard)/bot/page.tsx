@@ -455,12 +455,25 @@ function BotDashboardContent() {
 
       {/* Main Content: Two-Column Layout */}
       <div className="flex flex-1">
-        {/* Primary Workspace (70%) */}
+        {/* Primary Workspace - Node Flow Canvas */}
         <main
-          className="flex-1 p-6 overflow-y-auto"
+          className="flex-1 p-6 overflow-y-auto bg-void relative"
           style={{ paddingBottom: isMonitoringVisible ? '180px' : '24px' }}
         >
-          <div className="max-w-4xl mx-auto">{renderStepContent()}</div>
+          {/* Grid Pattern Overlay */}
+          <div
+            className="absolute inset-0 pointer-events-none opacity-[0.02]"
+            style={{
+              backgroundImage: `
+                linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)
+              `,
+              backgroundSize: '40px 40px',
+            }}
+          />
+
+          {/* Content */}
+          <div className="max-w-4xl mx-auto relative z-10">{renderStepContent()}</div>
         </main>
 
         {/* Context Panel (30%) - Hidden on mobile */}

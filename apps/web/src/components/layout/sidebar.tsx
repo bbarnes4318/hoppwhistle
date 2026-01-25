@@ -1,13 +1,20 @@
 'use client';
 
 /**
- * Project Cortex | Command Grid Sidebar
+ * Project Cortex | Slim Sidebar (The Rail)
  *
- * Collapsible vertical rail in Carbon Obsidian.
- * Icons: stroke-based outlines that fill with Iridescent Gradient on hover.
+ * GEOMETRY:
+ * - Width: 220px (slim, fixed)
+ * - Height: 100vh (full viewport)
+ * - Compact padding to fit all items
+ *
+ * VISUALS:
+ * - Font: JetBrains Mono, small & professional
+ * - Active State: Electric Cyan text + Left Border
+ * - Flex Column, items left-aligned
  */
 
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
   LayoutDashboard,
   Phone,
@@ -23,231 +30,175 @@ import {
   AudioLines,
   Bot,
   ClipboardCheck,
-  ChevronLeft,
-  ChevronRight,
+  FileSpreadsheet,
+  Target,
+  BarChart3,
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
 
 import { cn } from '@/lib/utils';
 
+// ============================================================================
+// NAVIGATION — ALL ITEMS RESTORED
+// ============================================================================
+
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  {
-    name: 'Conductor',
-    href: '/bot',
-    icon: Bot,
-    title: 'Outbound calling & live transfer orchestration',
-  },
-  { name: 'Phone', href: '/phone', icon: Phone },
-  { name: 'Numbers', href: '/numbers', icon: PhoneCall },
+  { name: 'Conductor', href: '/bot', icon: Bot },
+  { name: 'Comm Link', href: '/phone', icon: Phone },
+  { name: 'Endpoints', href: '/numbers', icon: PhoneCall },
   { name: 'Campaigns', href: '/campaigns', icon: Megaphone },
-  { name: 'Flows', href: '/flows', icon: GitBranch },
+  { name: 'Targets', href: '/targets', icon: Target },
+  { name: 'Flow Matrix', href: '/flows', icon: GitBranch },
   { name: 'Calls', href: '/calls', icon: AudioLines },
-  {
-    name: 'Retention',
-    href: '/retention',
-    icon: ClipboardCheck,
-    title: 'Policy onboarding & retention queue',
-  },
-  { name: 'Billing', href: '/billing', icon: Receipt },
+  { name: 'Call Log', href: '/call-log', icon: FileSpreadsheet },
+  { name: 'Retention', href: '/retention', icon: ClipboardCheck },
+  { name: 'Reports', href: '/billing', icon: BarChart3 },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
 const toolsNavigation = [
-  { name: 'Recording Analyzer', href: '/tools/recording-analyzer', icon: AudioLines },
+  { name: 'Audio Analyzer', href: '/tools/recording-analyzer', icon: AudioLines },
 ];
 
 const adminNavigation = [
-  { name: 'Users', href: '/settings/users', icon: Users },
+  { name: 'Operators', href: '/settings/users', icon: Users },
   { name: 'Webhooks', href: '/settings/webhooks', icon: FileText },
-  { name: 'DNC Lists', href: '/settings/dnc', icon: Shield },
-  { name: 'Quotas & Budgets', href: '/settings/quotas', icon: DollarSign },
+  { name: 'DNC Matrix', href: '/settings/dnc', icon: Shield },
+  { name: 'Quotas', href: '/settings/quotas', icon: DollarSign },
 ];
+
+// ============================================================================
+// Navigation Item Component
+// ============================================================================
 
 interface NavItemProps {
   item: {
     name: string;
     href: string;
     icon: React.ComponentType<{ className?: string }>;
-    title?: string;
   };
   isActive: boolean;
-  isCollapsed: boolean;
 }
 
-function NavItem({ item, isActive, isCollapsed }: NavItemProps) {
+function NavItem({ item, isActive }: NavItemProps) {
   const Icon = item.icon;
 
   return (
     <Link
       href={item.href}
-      title={item.title || item.name}
       className={cn(
-        'group relative flex items-center gap-3 rounded-lg transition-all duration-200',
-        isCollapsed ? 'justify-center p-3' : 'px-3 py-2',
-        isActive
-          ? 'bg-brand-cyan/10 text-brand-cyan'
-          : 'text-text-secondary hover:text-text-primary'
+        'group relative flex items-center gap-2.5 px-3 py-1.5 transition-all duration-150',
+        isActive ? 'text-neon-cyan' : 'text-text-secondary hover:text-text-primary hover:bg-white/5'
       )}
     >
-      {/* Icon with gradient fill on hover */}
-      <div className="relative">
-        <Icon
-          className={cn(
-            'h-5 w-5 transition-all duration-200',
-            isActive ? 'stroke-brand-cyan' : 'stroke-current group-hover:stroke-brand-cyan'
-          )}
-        />
-      </div>
-
-      {/* Label (hidden when collapsed) */}
-      <AnimatePresence>
-        {!isCollapsed && (
-          <motion.span
-            initial={{ opacity: 0, width: 0 }}
-            animate={{ opacity: 1, width: 'auto' }}
-            exit={{ opacity: 0, width: 0 }}
-            className="text-sm font-medium whitespace-nowrap overflow-hidden"
-          >
-            {item.name}
-          </motion.span>
-        )}
-      </AnimatePresence>
-
-      {/* Active indicator */}
+      {/* Active Indicator — 3px Left Border */}
       {isActive && (
         <motion.div
           layoutId="sidebar-active"
-          className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-brand-cyan rounded-r"
+          className={cn(
+            'absolute left-0 top-0 bottom-0 w-[3px]',
+            'bg-neon-cyan',
+            'shadow-[0_0_8px_rgba(0,229,255,0.5)]'
+          )}
+          transition={{ type: 'spring', stiffness: 500, damping: 30 }}
         />
       )}
+
+      {/* Icon */}
+      <Icon
+        className={cn(
+          'h-3.5 w-3.5 shrink-0 transition-colors duration-150',
+          isActive ? 'text-neon-cyan' : 'text-current group-hover:text-neon-cyan'
+        )}
+      />
+
+      {/* Label — JetBrains Mono */}
+      <span
+        className="font-mono text-[10px] font-medium tracking-wide"
+        style={{ fontFamily: "'JetBrains Mono', monospace" }}
+      >
+        {item.name}
+      </span>
     </Link>
   );
 }
 
-function SectionLabel({ label, isCollapsed }: { label: string; isCollapsed: boolean }) {
-  if (isCollapsed) return null;
+// ============================================================================
+// Section Label Component
+// ============================================================================
 
+function SectionLabel({ label }: { label: string }) {
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="px-3 py-2 text-xs font-semibold uppercase tracking-widest text-text-muted"
+    <div
+      className="px-3 pt-3 pb-1 font-mono text-[9px] font-bold uppercase tracking-widest text-text-muted"
+      style={{ fontFamily: "'JetBrains Mono', monospace" }}
     >
       {label}
-    </motion.div>
+    </div>
   );
 }
 
+// ============================================================================
+// Sidebar Component
+// ============================================================================
+
 export function Sidebar() {
   const pathname = usePathname();
-  const [isCollapsed, setIsCollapsed] = useState(false);
 
   return (
-    <motion.div
-      className={cn('flex h-full flex-col border-r border-grid-line', 'bg-surface-panel')}
-      initial={false}
-      animate={{ width: isCollapsed ? 72 : 256 }}
-      transition={{ duration: 0.2, ease: 'easeInOut' }}
+    <div
+      className={cn(
+        'flex flex-col h-screen w-[220px] shrink-0',
+        'bg-panel border-r border-white/5'
+      )}
     >
-      {/* SVG Gradient Definition */}
-      <svg className="absolute h-0 w-0">
-        <defs>
-          <linearGradient id="icon-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#00E5FF" />
-            <stop offset="100%" stopColor="#9C4AFF" />
-          </linearGradient>
-        </defs>
-      </svg>
-
-      {/* Logo Area */}
-      <div
-        className={cn(
-          'flex h-16 items-center border-b border-grid-line',
-          isCollapsed ? 'justify-center px-2' : 'px-6'
-        )}
-      >
-        <AnimatePresence mode="wait">
-          {isCollapsed ? (
-            <motion.div
-              key="collapsed-logo"
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-              className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-cyan to-brand-violet flex items-center justify-center"
-            >
-              <span className="font-display font-bold text-surface-dark text-sm">H</span>
-            </motion.div>
-          ) : (
-            <motion.div
-              key="full-logo"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            >
-              <Image
-                src="/hopwhistle.png"
-                alt="Hopwhistle"
-                width={120}
-                height={40}
-                className="h-8 w-auto"
-                priority
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
+      {/* Logo Area — Compact */}
+      <div className="flex items-center h-11 px-3 border-b border-white/5 shrink-0">
+        <Image
+          src="/hopwhistle.png"
+          alt="Hopwhistle"
+          width={100}
+          height={32}
+          className="h-5 w-auto"
+          priority
+        />
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto p-2 space-y-1">
+      {/* Navigation — Scrollable if needed */}
+      <nav className="flex-1 overflow-y-auto py-1">
+        {/* Main Navigation */}
         {navigation.map(item => {
           const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
-          return (
-            <NavItem key={item.name} item={item} isActive={isActive} isCollapsed={isCollapsed} />
-          );
+          return <NavItem key={item.name} item={item} isActive={isActive} />;
         })}
 
         {/* Tools Section */}
-        <div className="pt-4">
-          <SectionLabel label="Tools" isCollapsed={isCollapsed} />
-          {toolsNavigation.map(item => {
-            const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
-            return (
-              <NavItem key={item.name} item={item} isActive={isActive} isCollapsed={isCollapsed} />
-            );
-          })}
-        </div>
+        <SectionLabel label="Tools" />
+        {toolsNavigation.map(item => {
+          const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
+          return <NavItem key={item.name} item={item} isActive={isActive} />;
+        })}
 
         {/* Admin Section */}
-        <div className="pt-4">
-          <SectionLabel label="Admin" isCollapsed={isCollapsed} />
-          {adminNavigation.map(item => {
-            const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
-            return (
-              <NavItem key={item.name} item={item} isActive={isActive} isCollapsed={isCollapsed} />
-            );
-          })}
-        </div>
+        <SectionLabel label="Admin" />
+        {adminNavigation.map(item => {
+          const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
+          return <NavItem key={item.name} item={item} isActive={isActive} />;
+        })}
       </nav>
 
-      {/* Collapse Toggle */}
-      <div className="border-t border-grid-line p-2">
-        <button
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          className={cn(
-            'flex w-full items-center justify-center rounded-lg p-2',
-            'text-text-muted hover:text-text-primary hover:bg-grid-line/50',
-            'transition-colors duration-200'
-          )}
-          aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      {/* Footer — Version */}
+      <div className="px-3 py-1.5 border-t border-white/5 shrink-0">
+        <p
+          className="font-mono text-[8px] text-text-muted uppercase tracking-widest"
+          style={{ fontFamily: "'JetBrains Mono', monospace" }}
         >
-          {isCollapsed ? <ChevronRight className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
-        </button>
+          Cortex v2.14
+        </p>
       </div>
-    </motion.div>
+    </div>
   );
 }

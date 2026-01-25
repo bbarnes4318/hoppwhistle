@@ -377,4 +377,91 @@ export function NeuralOrbMini({
   );
 }
 
+/**
+ * LiveCallOrb - Pulses Toxic Lime when there are active calls
+ * Used in the header to indicate system activity
+ */
+export function LiveCallOrb({
+  activeCalls = 0,
+  className,
+}: {
+  activeCalls?: number;
+  className?: string;
+}) {
+  const isActive = activeCalls > 0;
+
+  return (
+    <div className={cn('relative flex items-center justify-center', 'w-10 h-10', className)}>
+      {/* Outer glow ring */}
+      <motion.div
+        className="absolute rounded-full"
+        style={{
+          width: 40,
+          height: 40,
+          background: isActive
+            ? 'radial-gradient(circle, rgba(204,255,0,0.3), transparent 70%)'
+            : 'radial-gradient(circle, rgba(156,74,255,0.2), transparent 70%)',
+          willChange: 'transform, opacity',
+        }}
+        animate={{
+          scale: isActive ? [1, 1.3, 1] : [1, 1.1, 1],
+          opacity: isActive ? [0.5, 0.8, 0.5] : [0.3, 0.5, 0.3],
+        }}
+        transition={{
+          duration: isActive ? 1.5 : 3,
+          repeat: Infinity,
+          ease: 'easeInOut',
+        }}
+      />
+
+      {/* Ring */}
+      <motion.div
+        className="absolute rounded-full border-2"
+        style={{
+          width: 28,
+          height: 28,
+          borderColor: isActive ? '#CCFF00' : '#9C4AFF',
+          willChange: 'transform, opacity',
+        }}
+        animate={{
+          scale: isActive ? [1, 1.15, 1] : [1, 1.05, 1],
+          opacity: isActive ? [0.6, 1, 0.6] : [0.4, 0.6, 0.4],
+        }}
+        transition={{
+          duration: isActive ? 1.5 : 3,
+          repeat: Infinity,
+          ease: 'easeInOut',
+          delay: 0.1,
+        }}
+      />
+
+      {/* Core orb */}
+      <motion.div
+        className="absolute rounded-full flex items-center justify-center"
+        style={{
+          width: 20,
+          height: 20,
+          background: isActive ? '#CCFF00' : '#9C4AFF',
+          willChange: 'transform, opacity',
+        }}
+        animate={{
+          scale: isActive ? [1, 1.1, 1] : [1, 1.05, 1],
+        }}
+        transition={{
+          duration: isActive ? 1 : 2,
+          repeat: Infinity,
+          ease: 'easeInOut',
+        }}
+      >
+        {/* Call count */}
+        {isActive && (
+          <span className="font-mono text-[10px] font-bold text-void">
+            {activeCalls > 99 ? '99+' : activeCalls}
+          </span>
+        )}
+      </motion.div>
+    </div>
+  );
+}
+
 export default NeuralOrb;

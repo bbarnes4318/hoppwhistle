@@ -1,18 +1,18 @@
 'use client';
 
-import { Phone, PhoneForwarded, ArrowRight, ArrowLeft, Settings2 } from 'lucide-react';
+/**
+ * Project Cortex | Step 2: Routing Numbers (Node Flow Interface)
+ *
+ * Call routing configuration with dark cyberpunk inputs.
+ */
+
+import { Phone, PhoneForwarded, ArrowRight, ArrowLeft, Workflow } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { GlassPanel, NodeConnector } from '@/components/ui/glass-panel';
+import { NodeInput } from '@/components/ui/node-input';
+import { NodeField } from '@/components/ui/node-label';
+import { cn } from '@/lib/utils';
 
 interface Step2RoutingNumbersProps {
   transferPhoneNumber: string;
@@ -36,136 +36,157 @@ export function Step2RoutingNumbers({
   const isTransferValid = transferPhoneNumber.length >= 10;
 
   return (
-    <div className="space-y-6">
-      {/* Routing Configuration */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Settings2 className="h-5 w-5 text-primary" />
-            Call Routing Setup
-          </CardTitle>
-          <CardDescription>
-            Configure where qualified leads are transferred and how calls appear
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Transfer Number */}
-          <div className="space-y-2">
-            <Label htmlFor="transfer-number" className="flex items-center gap-2">
-              <PhoneForwarded className="h-4 w-4 text-green-600" />
-              Live Transfer Destination
-            </Label>
-            <Input
-              id="transfer-number"
-              value={transferPhoneNumber}
-              onChange={e => onTransferPhoneNumberChange(e.target.value)}
-              placeholder="+1 (555) 000-0000"
-              className={`max-w-md ${transferPhoneNumber && !isTransferValid ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
-            />
-            {transferPhoneNumber && !isTransferValid ? (
-              <p className="text-sm text-red-500">
-                Please enter a valid phone number (at least 10 digits)
-              </p>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                When a lead qualifies, they'll be transferred to this number in real-time.
-              </p>
+    <div className="space-y-0">
+      {/* NODE 01: Transfer Destination */}
+      <GlassPanel
+        active
+        accentColor="violet"
+        title="NODE 01 // TRANSFER ENDPOINT"
+        subtitle="Where qualified leads are routed in real-time"
+        icon={<PhoneForwarded className="h-5 w-5" />}
+      >
+        <NodeField
+          label="LIVE TRANSFER DESTINATION"
+          icon={<PhoneForwarded className="h-4 w-4" />}
+          required
+          hint="When a lead qualifies, they'll be transferred to this number"
+          error={
+            transferPhoneNumber && !isTransferValid
+              ? 'Enter a valid phone number (10+ digits)'
+              : undefined
+          }
+        >
+          <NodeInput
+            value={transferPhoneNumber}
+            onChange={e => onTransferPhoneNumberChange(e.target.value)}
+            placeholder="+1 (555) 000-0000"
+            error={!!transferPhoneNumber && !isTransferValid}
+          />
+        </NodeField>
+      </GlassPanel>
+
+      {/* Node Connector */}
+      <NodeConnector />
+
+      {/* NODE 02: Caller ID */}
+      <GlassPanel
+        active={isTransferValid}
+        accentColor="cyan"
+        title="NODE 02 // CALLER ID"
+        subtitle="The number displayed when your AI calls leads"
+        icon={<Phone className="h-5 w-5" />}
+      >
+        <NodeField
+          label="OUTBOUND CALLER ID"
+          icon={<Phone className="h-4 w-4" />}
+          hint="Leave empty to use pool rotation (recommended)"
+        >
+          <select
+            value={callerId || 'random'}
+            onChange={e => onCallerIdChange(e.target.value === 'random' ? '' : e.target.value)}
+            className={cn(
+              'flex h-10 w-full rounded-lg px-4 py-2',
+              'bg-panel border border-white/10',
+              'text-text-primary font-mono text-sm',
+              'focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan/30',
+              'transition-all duration-200'
             )}
+          >
+            <option value="random" className="bg-panel">
+              Random (Pool Rotation)
+            </option>
+            {availableDids.map(did => (
+              <option key={did} value={did} className="bg-panel">
+                {did}
+              </option>
+            ))}
+          </select>
+        </NodeField>
+      </GlassPanel>
+
+      {/* Node Connector */}
+      <NodeConnector />
+
+      {/* NODE 03: Flow Diagram */}
+      <GlassPanel
+        accentColor="lime"
+        title="NODE 03 // SIGNAL FLOW"
+        subtitle="Visual overview of the call qualification flow"
+        icon={<Workflow className="h-5 w-5" />}
+      >
+        <div className="flex items-center justify-center gap-4 py-6">
+          {/* AI Calls */}
+          <div className="flex flex-col items-center gap-2">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-neon-violet/10 border border-neon-violet/30">
+              <Phone className="h-8 w-8 text-neon-violet" />
+            </div>
+            <span className="text-xs font-mono text-text-muted uppercase">AI CALLS</span>
           </div>
 
-          {/* Caller ID */}
-          <div className="space-y-2">
-            <Label htmlFor="caller-id" className="flex items-center gap-2">
-              <Phone className="h-4 w-4 text-blue-600" />
-              Outbound Caller ID
-            </Label>
-            <Select
-              value={callerId || 'random'}
-              onValueChange={v => onCallerIdChange(v === 'random' ? '' : v)}
-            >
-              <SelectTrigger className="max-w-md">
-                <SelectValue placeholder="Random (Pool Rotation)" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="random">
-                  <span className="text-muted-foreground">Random (Pool Rotation)</span>
-                </SelectItem>
-                {availableDids.map(did => (
-                  <SelectItem key={did} value={did}>
-                    {did}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-sm text-muted-foreground">
-              The number displayed to leads when your AI calls them.
-            </p>
+          {/* Arrow */}
+          <div className="flex flex-col items-center gap-2">
+            <ArrowRight className="h-6 w-6 text-neon-cyan" />
+            <span className="text-[10px] text-neon-cyan font-mono">QUALIFIES</span>
           </div>
-        </CardContent>
-      </Card>
 
-      {/* Call Flow Diagram */}
-      <Card>
-        <CardHeader>
-          <CardTitle>How Calls Work</CardTitle>
-          <CardDescription>Visual overview of the call qualification flow</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-center gap-4 py-6">
-            {/* AI Calls */}
-            <div className="flex flex-col items-center gap-2">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-primary">
-                <Phone className="h-8 w-8" />
-              </div>
-              <span className="text-sm font-medium">AI Calls Lead</span>
+          {/* Qualification */}
+          <div className="flex flex-col items-center gap-2">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-toxic-lime/10 border border-toxic-lime/30">
+              <svg
+                className="h-8 w-8 text-toxic-lime"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
             </div>
-
-            {/* Arrow */}
-            <div className="flex flex-col items-center gap-2">
-              <ArrowRight className="h-6 w-6 text-muted-foreground" />
-              <span className="text-xs text-muted-foreground">Qualifies</span>
-            </div>
-
-            {/* Qualification */}
-            <div className="flex flex-col items-center gap-2">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-900/50">
-                <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-              </div>
-              <span className="text-sm font-medium">Qualification</span>
-            </div>
-
-            {/* Arrow */}
-            <div className="flex flex-col items-center gap-2">
-              <ArrowRight className="h-6 w-6 text-muted-foreground" />
-              <span className="text-xs text-muted-foreground">If qualified</span>
-            </div>
-
-            {/* Transfer */}
-            <div className="flex flex-col items-center gap-2">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-green-600 dark:bg-green-900/50">
-                <PhoneForwarded className="h-8 w-8" />
-              </div>
-              <span className="text-sm font-medium">Live Transfer</span>
-            </div>
+            <span className="text-xs font-mono text-text-muted uppercase">QUALIFIED</span>
           </div>
-        </CardContent>
-      </Card>
+
+          {/* Arrow */}
+          <div className="flex flex-col items-center gap-2">
+            <ArrowRight className="h-6 w-6 text-neon-cyan" />
+            <span className="text-[10px] text-neon-cyan font-mono">TRANSFER</span>
+          </div>
+
+          {/* Transfer */}
+          <div className="flex flex-col items-center gap-2">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-status-success/10 border border-status-success/30">
+              <PhoneForwarded className="h-8 w-8 text-status-success" />
+            </div>
+            <span className="text-xs font-mono text-text-muted uppercase">LIVE AGENT</span>
+          </div>
+        </div>
+      </GlassPanel>
 
       {/* Navigation */}
-      <div className="flex justify-between">
-        <Button onClick={onBack} variant="outline" className="gap-2">
+      <div className="flex justify-between pt-6">
+        <Button
+          onClick={onBack}
+          variant="outline"
+          className="gap-2 border-white/10 text-text-secondary hover:text-text-primary hover:bg-white/5"
+        >
           <ArrowLeft className="h-4 w-4" />
-          Back
+          BACK
         </Button>
-        <Button onClick={onContinue} disabled={!isTransferValid} size="lg" className="gap-2">
-          Continue
+        <Button
+          onClick={onContinue}
+          disabled={!isTransferValid}
+          size="lg"
+          className={cn(
+            'gap-2 font-display uppercase tracking-widest',
+            'bg-neon-violet hover:bg-neon-violet/80 text-white',
+            'shadow-[0_0_15px_rgba(156,74,255,0.3)]',
+            'disabled:opacity-50 disabled:shadow-none'
+          )}
+        >
+          CONTINUE TO LEADS
           <ArrowRight className="h-4 w-4" />
         </Button>
       </div>

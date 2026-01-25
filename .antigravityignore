@@ -35,6 +35,7 @@ apps/api/src/services/call-state.ts
 apps/api/src/services/stir-shaken-service.ts
 apps/api/src/services/recording-service.ts
 apps/api/src/services/recording-lifecycle.ts
+apps/api/src/services/cnam-service.ts
 
 # ============================================================================
 # TIER 3: WORKER PROCESSES
@@ -63,3 +64,54 @@ apps/web/src/lib/backend-check.ts
 # - RTPENGINE_*
 # - SIP_*
 # - TWILIO_*
+
+# ============================================================================
+# TIER 5: AI FRONTER / CONDUCTOR SUBSYSTEM (SPECIALIZED LOCKDOWN)
+# ============================================================================
+#
+# REASON: The Conductor is a specialized AI Fronter tool. It is functionally
+#         distinct from the Campaign Routing logic (Pay Per Call platform).
+#
+# CONSTRAINT:
+#   ❌ Agent must NOT refactor layout, logic, or workflow of these files
+#   ✅ Agent MAY inherit global CSS variables (colors, fonts) from Phase 1
+#   ✅ Agent MAY update imports if shared UI components change signatures
+#
+# This subsystem handles:
+#   - AI Voice Bot orchestration
+#   - TTS (Text-to-Speech) preview and generation
+#   - Lead autodial campaigns
+#   - Voice persona configuration
+#
+
+# Conductor UI (Bot Dashboard)
+apps/web/src/app/(dashboard)/bot/**
+
+# Bot API Routes
+apps/api/src/routes/bot.ts
+apps/api/src/routes/bot/**
+
+# Bot Services
+apps/api/src/services/bot-service.ts
+apps/api/src/services/tts-service.ts
+apps/api/src/services/llm-service.ts
+apps/api/src/services/deepgram-service.ts
+apps/api/src/services/voice-synthesis.ts
+
+# Bot Workers
+apps/worker/src/services/bot-worker.ts
+apps/worker/src/services/ai-caller.ts
+
+# ============================================================================
+# TIER 6: SHARED DESIGN SYSTEM (READ-ONLY ENFORCEMENT)
+# ============================================================================
+#
+# These files define the Sovereign Palette and should NOT be overwritten
+# without explicit approval. Agent may READ to ensure consistency.
+#
+
+# Tailwind Config (Sovereign Palette)
+# apps/web/tailwind.config.ts  # READ-ONLY reference, modifications require approval
+
+# Global CSS Variables
+# apps/web/src/app/globals.css  # READ-ONLY reference, modifications require approval

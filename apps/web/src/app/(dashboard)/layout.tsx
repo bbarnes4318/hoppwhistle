@@ -3,51 +3,65 @@
 /**
  * Project Cortex | Dashboard Layout
  *
+ * COCKPIT MODE: 100vh Viewport Lock
+ * - NO page scrolling
+ * - Behaves like a Native Desktop App
+ *
  * Command Grid Shell:
- * - Sidebar (collapsible vertical rail)
- * - Header (Protocol Status Bar)
- * - Main content (Command Grid)
+ * - Sidebar (collapsible vertical rail) - h-screen
+ * - Header (Protocol Status Bar) - fixed height
+ * - Main content (overflow-hidden, internal scroll only)
  * - Phone Panel (floating)
+ *
+ * Role-Based Views:
+ * - Operator: Full access (buyers, margins, caps)
+ * - Publisher: Restricted (qualified calls, payout only)
  *
  * SAFETY: Outlet/children remains connected to router.
  */
 
-import { Footer } from '@/components/layout/footer';
 import { Header } from '@/components/layout/header';
 import { Sidebar } from '@/components/layout/sidebar';
 import { AgentPhonePanel, PhoneProvider } from '@/components/phone';
 import { DynamicFavicon } from '@/components/ui/dynamic-favicon';
+import { UserProvider } from '@/contexts/UserContext';
+import { RoleSwitcher } from '@/components/ui/RoleSwitcher';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }): JSX.Element {
   return (
-    <PhoneProvider>
-      {/* Dynamic Pulsing Favicon */}
-      <DynamicFavicon />
+    <UserProvider>
+      <PhoneProvider>
+        {/* Dynamic Pulsing Favicon */}
+        <DynamicFavicon />
 
-      <div className="flex h-screen overflow-hidden bg-surface-dark">
-        {/* Sidebar - Collapsible Vertical Rail */}
-        <Sidebar />
+        {/* COCKPIT MODE: h-screen flex, no overflow */}
+        <div className="flex h-screen w-screen overflow-hidden bg-void">
+          {/* Sidebar - Full Height Rail */}
+          <Sidebar />
 
-        {/* Main Content Area */}
-        <div className="flex flex-1 flex-col overflow-hidden">
-          {/* Header - Protocol Status Bar */}
-          <Header />
+          {/* Main Content Area - Flex Column */}
+          <div className="flex flex-1 flex-col overflow-hidden">
+            {/* Header - Fixed Height */}
+            <Header />
 
-          {/* Main Content - Command Grid Container */}
-          <main className="flex-1 overflow-auto bg-surface-dark p-6">
-            <div className="h-full overflow-auto">
+            {/* Main Content - Internal Scroll Only */}
+            <main className="flex-1 overflow-hidden relative">
               {/* SAFETY: children prop connects to router - DO NOT REMOVE */}
               {children}
-            </div>
-          </main>
+            </main>
 
-          {/* Footer */}
-          <Footer />
+            {/* NO FOOTER - Cockpit Mode */}
+          </div>
+
+          {/* Agent Phone Panel - Floating softphone */}
+          <AgentPhonePanel />
         </div>
 
-        {/* Agent Phone Panel - Floating softphone */}
-        <AgentPhonePanel />
-      </div>
-    </PhoneProvider>
+        {/* DEV: Role Switcher - Bottom Left (after sidebar) */}
+        <div className="fixed bottom-4 left-[230px] z-50">
+          <RoleSwitcher />
+        </div>
+      </PhoneProvider>
+    </UserProvider>
   );
 }

@@ -14,7 +14,7 @@ import { useState, useEffect } from 'react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { NeuralOrb } from '@/components/ui/neural-orb';
+import { LiveCallOrb } from '@/components/ui/neural-orb';
 import { cn } from '@/lib/utils';
 
 interface StatusMetric {
@@ -68,8 +68,8 @@ function useSystemStatus(): StatusMetric[] {
 
 function StatusIndicator({ metric }: { metric: StatusMetric }) {
   const statusColors = {
-    online: 'text-brand-cyan',
-    warning: 'text-brand-lime',
+    online: 'text-neon-cyan',
+    warning: 'text-toxic-lime',
     error: 'text-status-error',
     neutral: 'text-text-muted',
   };
@@ -89,18 +89,18 @@ export function Header() {
   const isOnline = systemStatus[0].value === 'ONLINE';
 
   return (
-    <header className="flex h-14 items-center justify-between border-b border-grid-line bg-surface-panel px-6">
+    <header className="flex h-14 items-center justify-between border-b border-white/5 bg-panel px-6">
       {/* Left: Protocol Status Bar */}
       <div className="flex items-center gap-6">
         {/* Connection Indicator */}
         <div className="flex items-center gap-2">
           <motion.div
-            className={cn('w-2 h-2 rounded-full', isOnline ? 'bg-brand-cyan' : 'bg-status-error')}
+            className={cn('w-2 h-2 rounded-full', isOnline ? 'bg-neon-cyan' : 'bg-status-error')}
             animate={isOnline ? { scale: [1, 1.2, 1] } : {}}
             transition={{ duration: 2, repeat: Infinity }}
           />
           {isOnline ? (
-            <Wifi className="h-4 w-4 text-brand-cyan" />
+            <Wifi className="h-4 w-4 text-neon-cyan" />
           ) : (
             <WifiOff className="h-4 w-4 text-status-error" />
           )}
@@ -111,15 +111,17 @@ export function Header() {
           {systemStatus.map((metric, index) => (
             <div key={metric.label} className="flex items-center gap-4">
               <StatusIndicator metric={metric} />
-              {index < systemStatus.length - 1 && <span className="text-grid-line">//</span>}
+              {index < systemStatus.length - 1 && (
+                <span className="text-white/10 font-mono">//</span>
+              )}
             </div>
           ))}
         </div>
 
         {/* Mobile: Compact Status */}
         <div className="md:hidden flex items-center gap-2">
-          <Activity className="h-4 w-4 text-brand-cyan" />
-          <span className="font-mono text-xs text-brand-cyan">{systemStatus[1].value}</span>
+          <Activity className="h-4 w-4 text-neon-cyan" />
+          <span className="font-mono text-xs text-neon-cyan">{systemStatus[1].value}</span>
         </div>
       </div>
 
@@ -133,9 +135,9 @@ export function Header() {
             name="global-search"
             placeholder="Vectoring... search calls, numbers, campaigns"
             className={cn(
-              'pl-10 bg-surface-dark border-grid-line',
+              'pl-10 bg-void border-white/10',
               'placeholder:text-text-muted/50 placeholder:font-mono placeholder:text-xs',
-              'focus:border-brand-cyan focus:ring-brand-cyan/20'
+              'focus:border-neon-cyan focus:ring-neon-cyan/20'
             )}
           />
         </div>
@@ -143,14 +145,14 @@ export function Header() {
 
       {/* Right: Actions */}
       <div className="flex items-center gap-3">
-        {/* Neural Orb - Live Call Indicator */}
-        <NeuralOrb size="sm" />
+        {/* LiveCallOrb - Pulses Toxic Lime when calls active */}
+        <LiveCallOrb activeCalls={23} />
 
         {/* Notifications */}
         <Button
           variant="ghost"
           size="icon"
-          className="text-text-secondary hover:text-text-primary hover:bg-grid-line/50"
+          className="text-text-secondary hover:text-neon-cyan hover:bg-white/5"
         >
           <Bell className="h-5 w-5" />
         </Button>
@@ -162,7 +164,7 @@ export function Header() {
         <Button
           variant="ghost"
           size="icon"
-          className="text-text-secondary hover:text-text-primary hover:bg-grid-line/50"
+          className="text-text-secondary hover:text-neon-cyan hover:bg-white/5"
         >
           <User className="h-5 w-5" />
         </Button>

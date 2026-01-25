@@ -41,9 +41,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${inter.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable}`}
+      className={`${inter.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable} h-screen overflow-hidden`}
     >
-      <body className="font-sans antialiased">
+      <body className="font-sans antialiased h-screen overflow-hidden">
         {/* Force Dark Mode as Default */}
         <ThemeProvider
           attribute="class"

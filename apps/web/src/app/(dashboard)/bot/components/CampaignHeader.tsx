@@ -78,7 +78,11 @@ export function CampaignHeader({
       }
     > = {
       idle: { variant: 'secondary', label: 'Not Ready' },
-      running: { variant: 'default', label: 'Running', className: 'bg-blue-600 animate-pulse' },
+      running: {
+        variant: 'default',
+        label: 'Running',
+        className: 'bg-neon-cyan text-void animate-pulse',
+      },
       paused: { variant: 'outline', label: 'Paused', className: 'border-amber-500 text-amber-600' },
       complete: { variant: 'default', label: 'Complete', className: 'bg-green-600' },
       error: { variant: 'destructive', label: 'Error' },

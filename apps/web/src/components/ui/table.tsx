@@ -1,10 +1,11 @@
 /**
- * Project Cortex | Command Grid Table
+ * Project Cortex | Neon Stream Data Table
  *
  * Refactored table styles:
  * - No zebra striping
- * - Single-line dividers (#273140)
- * - Gradient border on left edge on hover
+ * - Single-line dividers (border-white/5)
+ * - Gradient border on left edge on hover with bg glow
+ * - All data cells use font-mono (JetBrains Mono)
  */
 
 import * as React from 'react';
@@ -30,7 +31,7 @@ const TableHeader = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <thead
     ref={ref}
-    className={cn('[&_tr]:border-b [&_tr]:border-[#273140]', 'bg-surface-panel/50', className)}
+    className={cn('[&_tr]:border-b [&_tr]:border-white/5', 'bg-panel/50', className)}
     {...props}
   />
 ));
@@ -51,7 +52,7 @@ const TableFooter = React.forwardRef<
   <tfoot
     ref={ref}
     className={cn(
-      'border-t border-[#273140] bg-surface-panel/30 font-medium [&>tr]:last:border-b-0',
+      'border-t border-white/5 bg-panel/30 font-medium [&>tr]:last:border-b-0',
       className
     )}
     {...props}
@@ -65,17 +66,17 @@ const TableRow = React.forwardRef<HTMLTableRowElement, React.HTMLAttributes<HTML
       ref={ref}
       className={cn(
         // Single-line dividers, no zebra striping
-        'border-b border-[#273140] transition-all duration-200',
-        // Hover: gradient border on left edge
+        'border-b border-white/5 transition-all duration-200',
+        // Hover: Left glow bar + background tint
         'relative',
-        'hover:bg-surface-panel/30',
-        // Gradient left border effect on hover
-        'before:absolute before:left-0 before:top-0 before:h-full before:w-0.5',
-        'before:bg-gradient-to-b before:from-brand-cyan before:to-brand-violet',
+        'hover:bg-neon-cyan/5',
+        // Gradient left border effect on hover (3px neon-cyan bar)
+        'before:absolute before:left-0 before:top-0 before:h-full before:w-[3px]',
+        'before:bg-neon-cyan before:shadow-[0_0_8px_rgba(0,229,255,0.5)]',
         'before:opacity-0 before:transition-opacity before:duration-200',
         'hover:before:opacity-100',
         // Selected state
-        'data-[state=selected]:bg-brand-cyan/10 data-[state=selected]:before:opacity-100',
+        'data-[state=selected]:bg-neon-cyan/10 data-[state=selected]:before:opacity-100',
         className
       )}
       {...props}
@@ -92,7 +93,7 @@ const TableHead = React.forwardRef<
     ref={ref}
     className={cn(
       'h-11 px-4 text-left align-middle',
-      'text-xs font-semibold uppercase tracking-widest text-text-muted',
+      'font-display text-xs font-semibold uppercase tracking-widest text-text-muted',
       '[&:has([role=checkbox])]:pr-0',
       className
     )}
@@ -108,7 +109,7 @@ const TableCell = React.forwardRef<
   <td
     ref={ref}
     className={cn(
-      'px-4 py-3 align-middle text-sm text-text-primary',
+      'px-4 py-3 align-middle text-sm text-text-primary font-mono',
       '[&:has([role=checkbox])]:pr-0',
       className
     )}

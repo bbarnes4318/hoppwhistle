@@ -1,0 +1,254 @@
+# .antigravityrules
+# Project Cortex | Domain-Specific Rules for AI Agent
+# Hopwhistle Pay-Per-Call Platform
+
+---
+
+## 1. SOVEREIGN LEXICON (Terminology)
+
+| Platform Term | Industry Term | Definition |
+|---------------|---------------|------------|
+| **Signal** | Call | Inbound connection from caller |
+| **Target** | Buyer | Destination endpoint that receives calls |
+| **Publisher** | Traffic Source | Entity that sends calls to the platform |
+| **Campaign** | Routing Matrix | Configuration linking Publishers → Targets |
+| **Buffer** | Duration Threshold | Time before payout/revenue is triggered |
+| **Yield** | Net Margin | Revenue - Cost per call |
+| **Vertical** | Industry/Niche | Category (Medicare, Mass Tort, Solar, etc.) |
+
+---
+
+## 2. PLATFORM ARCHITECTURE
+
+### Entity Relationships
+```
+Publisher → Campaign → Target
+    ↓          ↓         ↓
+  DID      Filters    Buyer
+  Payout   IVR/Geo    Revenue
+```
+
+### Core Tables
+- `publishers` - Traffic sources with payout terms
+- `targets` - Buyer endpoints with caps/hours
+- `campaigns` - Routing configurations
+- `campaign_publishers` - Links publishers to campaigns
+- `campaign_targets` - Links targets to campaigns with overrides
+- `calls` - Signal log with billing status
+
+---
+
+## 3. BUFFER TIMER LOGIC (CRITICAL)
+
+### The Two Independent Buffers
+
+| Buffer Type | Direction | Definition | Example |
+|-------------|-----------|------------|---------|
+| **Publisher Buffer** | Cost | Duration before we OWE the Publisher | 60 seconds |
+| **Buyer Buffer** | Revenue | Duration before the Buyer OWES us | 90 seconds |
+
+### ⚠️ MARGIN DANGER ZONE
+
+A call can result in **NEGATIVE MARGIN** if:
+- Call duration > Publisher Buffer (we pay publisher)
+- Call duration < Buyer Buffer (buyer doesn't pay us)
+
+**Example:**
+```
+Publisher Buffer: 60s
+Buyer Buffer: 90s
+Call Duration: 75s
+
+Result:
+- Publisher Payout: TRIGGERED ✓ (75s > 60s)
+- Buyer Revenue: NOT TRIGGERED ✗ (75s < 90s)
+- Net Yield: -$25.00 (LOSS)
+```
+
+### Implementation Notes
+- Always display both buffers in UI
+- Warn operators if Pub Buffer < Buyer Buffer
+- Track "Washout" calls (paid pub, no buyer revenue)
+
+---
+
+## 4. CALL STATUS LIFECYCLE
+
+```
+INBOUND → BUFFERING → [BILLABLE | SHORT | MISSED]
+   ↓          ↓              ↓        ↓       ↓
+  Ring     Timer         Revenue    $0     $0
+  IVR      Counting      Payout    Loss   N/A
+```
+
+### Status Definitions
+
+| Status | Definition | Revenue | Cost |
+|--------|------------|---------|------|
+| **BUFFERING** | Call in progress, timer running | Pending | Pending |
+| **BILLABLE** | Both buffers passed | ✓ Yes | ✓ Yes |
+| **SHORT** | Call ended before buyer buffer | ✗ No | Maybe |
+| **MISSED** | No answer / abandoned | ✗ No | ✗ No |
+| **OVERFLOW** | All targets unavailable | ✗ No | ✗ No |
+
+---
+
+## 5. PAY-PER-CALL ROUTING PHYSICS
+
+### Routing Hierarchy
+
+**Order of Evaluation:**
+1. **Priority Tier** (1 = highest priority)
+2. **Weight** (% distribution within same tier)
+3. **Availability** (is target accepting calls?)
+
+### Availability Check (Pre-Routing)
+
+Before routing to ANY target, the system MUST verify:
+
+1. **Is Target OPEN?**
+   - Check `hours_of_operation` against current time
+   - Respect target's timezone
+
+2. **Is Target Under GLOBAL Cap?**
+   - `current_concurrency < concurrency_cap`
+   - `daily_used < daily_cap`
+
+3. **Is Target Under CAMPAIGN Cap?**
+   - `campaign_daily_used < campaign_daily_cap`
+   - `campaign_concurrency < campaign_concurrency_cap`
+
+If ANY check fails → Skip to next target in waterfall.
+
+### Waterfall Failover Logic
+
+```
+Priority 1 Targets (Weight-based selection)
+    ↓ All unavailable?
+Priority 2 Targets (Weight-based selection)
+    ↓ All unavailable?
+Priority 3 Targets ...
+    ↓ All unavailable?
+OVERFLOW (No agents available message)
+```
+
+### Weight Distribution
+
+Within the same Priority Tier:
+- Weights are relative percentages
+- Should sum to 100% (system normalizes if not)
+- Used for round-robin load balancing
+
+**Example:**
+```
+Priority 1:
+  - Target A: 50% weight
+  - Target B: 30% weight
+  - Target C: 20% weight
+
+For every 10 calls to P1:
+  - ~5 go to Target A
+  - ~3 go to Target B
+  - ~2 go to Target C
+```
+
+### Timeout & Retry
+
+| Event | Action |
+|-------|--------|
+| **Ring Timeout (30s)** | Try next target in tier |
+| **Busy Signal** | Try next target immediately |
+| **SIP 486 (Busy)** | Try next target immediately |
+| **SIP 503 (Unavailable)** | Try next target immediately |
+| **SIP 408 (Timeout)** | Try next target in tier |
+| **All Targets Failed** | Escalate to next Priority Tier |
+
+---
+
+## 6. CAMPAIGN OVERRIDE RULES
+
+### Override Hierarchy
+
+Campaign-level settings OVERRIDE global target settings:
+
+| Setting | Global Target | Campaign Override |
+|---------|--------------|-------------------|
+| **Buffer** | 90s (default) | 120s (for this campaign) |
+| **Revenue** | $35 (default) | $45 (for this campaign) |
+| **Daily Cap** | 50 (global) | 30 (for this campaign) |
+| **Concurrency** | 10 (global) | 5 (for this campaign) |
+
+### When Both Caps Apply
+
+A target is SKIPPED if:
+- Global cap reached, OR
+- Campaign cap reached
+
+**Example:**
+```
+Target: Mutual of Omaha
+Global Daily Cap: 100
+Campaign Daily Cap: 30
+
+If campaign has sent 30 calls → Target skipped for THIS campaign
+If global has received 100 calls → Target skipped for ALL campaigns
+```
+
+---
+
+## 7. TERMINOLOGY ENFORCEMENT
+
+### NEVER Use These Terms:
+- ❌ "Call" → Use "Signal"
+- ❌ "Lead" → Use "Conversion"
+- ❌ "Buyer" → Use "Target"
+- ❌ "Profit" → Use "Yield"
+
+### ALWAYS Use Sovereign Lexicon:
+- ✓ "Signal Stream" (call log)
+- ✓ "Target Waterfall" (routing priority)
+- ✓ "Buffer Timer" (duration threshold)
+- ✓ "Yield Gap" (revenue - cost)
+
+---
+
+## 8. UI/UX RULES FOR ROUTING
+
+### Visual Indicators
+
+| Target Status | Visual | Color |
+|---------------|--------|-------|
+| **OPEN + Available** | Solid dot | `neon-mint` |
+| **OPEN + Near Cap** | Pulsing dot | `toxic-lime` |
+| **OPEN + Capped** | X icon | `status-error` |
+| **CLOSED** | Empty dot | `text-muted` |
+| **PAUSED** | Pause icon | `status-warning` |
+
+### Waterfall Display
+
+- Higher priority = visually ABOVE lower priority
+- Drag-and-drop to reorder
+- Collapsed/expanded cards for detail
+- Dimmed cards for skipped targets
+
+---
+
+## 9. DATA INTEGRITY RULES
+
+### Required Validations
+
+1. **Publisher must have DID assigned** before activation
+2. **Campaign must have ≥1 publisher AND ≥1 target** to be valid
+3. **Target destination number** must be valid E.164 or SIP URI
+4. **Buffer values** must be positive integers (seconds)
+5. **Weight values** must be 0-100 (percentage)
+
+### Audit Trail
+
+Log ALL changes to:
+- Campaign status (active/paused)
+- Target caps
+- Routing priority changes
+- Publisher payouts
+
+---

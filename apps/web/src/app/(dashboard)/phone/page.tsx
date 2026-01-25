@@ -107,7 +107,7 @@ export default function PhonePage(): JSX.Element {
                   {inboundCalls}
                 </span>
                 <span className="flex items-center gap-1">
-                  <PhoneOutgoing className="w-4 h-4 text-blue-500" />
+                  <PhoneOutgoing className="w-4 h-4 text-neon-violet" />
                   {outboundCalls}
                 </span>
               </div>
@@ -159,8 +159,8 @@ export default function PhonePage(): JSX.Element {
                       className={cn(
                         'w-10 h-10 rounded-full flex items-center justify-center',
                         call.direction === 'inbound'
-                          ? 'bg-cyan-500/10 text-cyan-500'
-                          : 'bg-blue-500/10 text-blue-500'
+                          ? 'bg-neon-cyan/10 text-neon-cyan'
+                          : 'bg-neon-violet/10 text-neon-violet'
                       )}
                     >
                       {call.direction === 'inbound' ? (

@@ -1,34 +1,37 @@
 'use client';
 
-import { Volume2, User, Loader2, Square, Save, CheckCircle, ArrowRight } from 'lucide-react';
+/**
+ * Project Cortex | Step 1: Voice & Script (Node Flow Interface)
+ *
+ * Persona cards for voice selection with glowing effects.
+ * Dark inputs with neon focus states.
+ */
+
+import { Volume2, Loader2, Square, Save, CheckCircle, ArrowRight } from 'lucide-react';
 import { useState, useRef } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Textarea } from '@/components/ui/textarea';
+import { GlassPanel, NodeConnector } from '@/components/ui/glass-panel';
+import { NodeTextarea } from '@/components/ui/node-input';
+import { NodeLabel } from '@/components/ui/node-label';
+import { PersonaCard, PersonaCardGrid } from '../PersonaCard';
 import { cn } from '@/lib/utils';
 
 // Deepgram Aura voices
 const VOICES = [
-  { id: 'aura-asteria-en', name: 'Asteria', gender: 'Female', accent: 'American' },
-  { id: 'aura-luna-en', name: 'Luna', gender: 'Female', accent: 'American' },
-  { id: 'aura-stella-en', name: 'Stella', gender: 'Female', accent: 'American' },
-  { id: 'aura-athena-en', name: 'Athena', gender: 'Female', accent: 'British' },
-  { id: 'aura-hera-en', name: 'Hera', gender: 'Female', accent: 'American' },
-  { id: 'aura-orion-en', name: 'Orion', gender: 'Male', accent: 'American' },
-  { id: 'aura-arcas-en', name: 'Arcas', gender: 'Male', accent: 'American' },
-  { id: 'aura-perseus-en', name: 'Perseus', gender: 'Male', accent: 'American' },
-  { id: 'aura-angus-en', name: 'Angus', gender: 'Male', accent: 'Irish' },
-  { id: 'aura-orpheus-en', name: 'Orpheus', gender: 'Male', accent: 'American' },
-  { id: 'aura-helios-en', name: 'Helios', gender: 'Male', accent: 'British' },
-  { id: 'aura-zeus-en', name: 'Zeus', gender: 'Male', accent: 'American' },
+  { id: 'aura-asteria-en', name: 'Asteria', gender: 'Female' as const, accent: 'American' },
+  { id: 'aura-luna-en', name: 'Luna', gender: 'Female' as const, accent: 'American' },
+  { id: 'aura-stella-en', name: 'Stella', gender: 'Female' as const, accent: 'American' },
+  { id: 'aura-athena-en', name: 'Athena', gender: 'Female' as const, accent: 'British' },
+  { id: 'aura-hera-en', name: 'Hera', gender: 'Female' as const, accent: 'American' },
+  { id: 'aura-orion-en', name: 'Orion', gender: 'Male' as const, accent: 'American' },
+  { id: 'aura-arcas-en', name: 'Arcas', gender: 'Male' as const, accent: 'American' },
+  { id: 'aura-perseus-en', name: 'Perseus', gender: 'Male' as const, accent: 'American' },
+  { id: 'aura-angus-en', name: 'Angus', gender: 'Male' as const, accent: 'Irish' },
+  { id: 'aura-orpheus-en', name: 'Orpheus', gender: 'Male' as const, accent: 'American' },
+  { id: 'aura-helios-en', name: 'Helios', gender: 'Male' as const, accent: 'British' },
+  { id: 'aura-zeus-en', name: 'Zeus', gender: 'Male' as const, accent: 'American' },
 ];
-
-const DEFAULT_SCRIPT = `Hello! This is a quick call from {company}.
-
-We're reaching out about the final expense coverage you requested information on.
-
-Is this a good time to speak for just a moment?`;
 
 interface Step1VoiceScriptProps {
   selectedVoice: string;
@@ -91,130 +94,121 @@ export function Step1VoiceScript({
   const canContinue = selectedVoice && isScriptSaved;
 
   return (
-    <div className="space-y-6">
-      {/* Voice Selection - Card Grid */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Volume2 className="h-5 w-5 text-primary" />
-            Choose Your AI Voice
-          </CardTitle>
-          <CardDescription>Select the voice that best represents your brand</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            {VOICES.map(voice => (
-              <button
-                key={voice.id}
-                onClick={() => onVoiceChange(voice.id)}
-                className={cn(
-                  'flex items-center gap-3 p-4 rounded-lg border-2 transition-all text-left',
-                  selectedVoice === voice.id
-                    ? 'border-primary bg-primary/5 shadow-sm'
-                    : 'border-muted hover:border-primary/50 hover:bg-muted/50'
-                )}
-              >
-                <div
-                  className={cn(
-                    'flex h-10 w-10 items-center justify-center rounded-full shrink-0',
-                    voice.gender === 'Female'
-                      ? 'bg-pink-100 text-pink-600 dark:bg-pink-900/50'
-                      : 'bg-blue-100 text-blue-600 dark:bg-blue-900/50'
-                  )}
-                >
-                  <User className="h-5 w-5" />
-                </div>
-                <div className="min-w-0">
-                  <p className="font-medium truncate">{voice.name}</p>
-                  <p className="text-xs text-muted-foreground">{voice.accent}</p>
-                </div>
-              </button>
-            ))}
-          </div>
+    <div className="space-y-0">
+      {/* NODE 01: Voice Selection */}
+      <GlassPanel
+        active
+        accentColor="violet"
+        title="NODE 01 // VOICE PERSONA"
+        subtitle="Select the AI voice for your campaign"
+        icon={<Volume2 className="h-5 w-5" />}
+      >
+        {/* Persona Cards Grid */}
+        <PersonaCardGrid>
+          {VOICES.map(voice => (
+            <PersonaCard
+              key={voice.id}
+              voice={voice}
+              selected={selectedVoice === voice.id}
+              onSelect={() => onVoiceChange(voice.id)}
+            />
+          ))}
+        </PersonaCardGrid>
 
-          {/* Preview Button */}
-          {selectedVoiceData && (
-            <div className="mt-6 flex items-center gap-4 p-4 rounded-lg bg-muted/50">
-              <div
-                className={cn(
-                  'flex h-12 w-12 items-center justify-center rounded-full shrink-0',
-                  selectedVoiceData.gender === 'Female'
-                    ? 'bg-pink-100 text-pink-600'
-                    : 'bg-blue-100 text-blue-600'
-                )}
-              >
-                <User className="h-6 w-6" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold">{selectedVoiceData.name}</p>
-                <p className="text-sm text-muted-foreground">
-                  {selectedVoiceData.gender} • {selectedVoiceData.accent}
-                </p>
-              </div>
-              <Button
-                onClick={isPlaying ? handleStopPlayback : () => void handlePreview()}
-                disabled={isLoadingTTS || !script.trim()}
-                variant={isPlaying ? 'destructive' : 'outline'}
-                className="shrink-0"
-              >
-                {isLoadingTTS ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : isPlaying ? (
-                  <Square className="mr-2 h-4 w-4" />
-                ) : (
-                  <Volume2 className="mr-2 h-4 w-4" />
-                )}
-                {isLoadingTTS ? 'Generating...' : isPlaying ? 'Stop' : 'Preview Voice'}
-              </Button>
-              {hasPreviewedVoice && <CheckCircle className="h-5 w-5 text-green-500 shrink-0" />}
+        {/* Preview Section */}
+        {selectedVoiceData && (
+          <div className="mt-6 flex items-center gap-4 p-4 rounded-lg bg-void/50 border border-white/5">
+            <div className="flex-1 min-w-0">
+              <p className="font-display font-semibold text-neon-cyan uppercase tracking-wide">
+                {selectedVoiceData.name}
+              </p>
+              <p className="text-xs text-text-muted font-mono">
+                {selectedVoiceData.gender} • {selectedVoiceData.accent}
+              </p>
             </div>
-          )}
-        </CardContent>
-      </Card>
+            <Button
+              onClick={isPlaying ? handleStopPlayback : () => void handlePreview()}
+              disabled={isLoadingTTS || !script.trim()}
+              variant="outline"
+              className={cn(
+                'shrink-0 border-neon-cyan/30 text-neon-cyan',
+                'hover:bg-neon-cyan/10 hover:border-neon-cyan'
+              )}
+            >
+              {isLoadingTTS ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : isPlaying ? (
+                <Square className="mr-2 h-4 w-4" />
+              ) : (
+                <Volume2 className="mr-2 h-4 w-4" />
+              )}
+              {isLoadingTTS ? 'GENERATING...' : isPlaying ? 'STOP' : 'PREVIEW'}
+            </Button>
+            {hasPreviewedVoice && <CheckCircle className="h-5 w-5 text-status-success shrink-0" />}
+          </div>
+        )}
+      </GlassPanel>
 
-      {/* Script Editor */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Conversation Script</CardTitle>
-          <CardDescription>
-            Write what your AI caller will say. Use {'{name}'} and {'{company}'} for
-            personalization.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Textarea
+      {/* Node Connector */}
+      <NodeConnector />
+
+      {/* NODE 02: Script Editor */}
+      <GlassPanel
+        active={!!selectedVoice}
+        accentColor="cyan"
+        title="NODE 02 // CONVERSATION SCRIPT"
+        subtitle="Define what your AI will say. Use {name} and {company} for personalization."
+      >
+        <div className="space-y-4">
+          <NodeLabel>SCRIPT CONTENT</NodeLabel>
+          <NodeTextarea
             value={script}
             onChange={e => onScriptChange(e.target.value)}
-            placeholder="Enter your call script here..."
-            className="min-h-[200px] font-mono text-sm leading-relaxed"
+            placeholder="Hello! This is a quick call from {company}..."
+            className="min-h-[200px]"
           />
+
           <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">
-              {script.length} characters • ~{Math.ceil(script.split(' ').length / 150)} min read
+            <p className="text-xs text-text-muted font-mono">
+              {script.length} CHARS • ~{Math.ceil(script.split(' ').length / 150)} MIN READ
             </p>
             <Button
               onClick={() => void handleSave()}
               disabled={isSaving}
-              variant={saveSuccess ? 'default' : 'outline'}
-              className={saveSuccess ? 'bg-green-600 hover:bg-green-700' : ''}
+              className={cn(
+                'gap-2',
+                saveSuccess
+                  ? 'bg-status-success hover:bg-status-success/80'
+                  : 'bg-neon-cyan text-void hover:bg-neon-cyan/80'
+              )}
             >
               {isSaving ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : saveSuccess ? (
-                <CheckCircle className="mr-2 h-4 w-4" />
+                <CheckCircle className="h-4 w-4" />
               ) : (
-                <Save className="mr-2 h-4 w-4" />
+                <Save className="h-4 w-4" />
               )}
-              {isSaving ? 'Saving...' : saveSuccess ? 'Saved!' : 'Save Script'}
+              {isSaving ? 'SAVING...' : saveSuccess ? 'SAVED' : 'SAVE SCRIPT'}
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </GlassPanel>
 
       {/* Continue CTA */}
-      <div className="flex justify-end">
-        <Button onClick={onContinue} disabled={!canContinue} size="lg" className="gap-2">
-          Save & Continue
+      <div className="flex justify-end pt-6">
+        <Button
+          onClick={onContinue}
+          disabled={!canContinue}
+          size="lg"
+          className={cn(
+            'gap-2 font-display uppercase tracking-widest',
+            'bg-neon-violet hover:bg-neon-violet/80 text-white',
+            'shadow-[0_0_15px_rgba(156,74,255,0.3)]',
+            'disabled:opacity-50 disabled:shadow-none'
+          )}
+        >
+          CONTINUE TO ROUTING
           <ArrowRight className="h-4 w-4" />
         </Button>
       </div>

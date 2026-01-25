@@ -219,7 +219,7 @@ export const getStatusConfig = (status: PolicyStatus): StatusConfig => {
     case 'ISSUED':
       return {
         label: 'Issued',
-        color: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
+        color: 'bg-neon-cyan/10 text-neon-cyan border-neon-cyan/20',
         icon: FileCheck,
         priority: 'normal',
       };

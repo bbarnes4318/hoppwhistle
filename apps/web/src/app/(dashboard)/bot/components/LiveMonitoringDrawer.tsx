@@ -64,7 +64,7 @@ export function LiveMonitoringDrawer({
           ) : (
             <div className="grid gap-4 md:grid-cols-4">
               {/* Active Calls */}
-              <Card className="border-l-4 border-l-blue-500">
+              <Card className="border-l-4 border-l-neon-cyan">
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">
                     <div>
@@ -72,7 +72,7 @@ export function LiveMonitoringDrawer({
                       <p className="text-2xl font-bold">{activeCalls}</p>
                       <p className="text-xs text-muted-foreground">of {concurrency} max</p>
                     </div>
-                    <PhoneCall className="h-8 w-8 text-blue-500 opacity-50" />
+                    <PhoneCall className="h-8 w-8 text-neon-cyan opacity-50" />
                   </div>
                 </CardContent>
               </Card>
@@ -106,7 +106,7 @@ export function LiveMonitoringDrawer({
               </Card>
 
               {/* Success Rate */}
-              <Card className="border-l-4 border-l-purple-500">
+              <Card className="border-l-4 border-l-neon-violet">
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">
                     <div>
@@ -114,7 +114,7 @@ export function LiveMonitoringDrawer({
                       <p className="text-2xl font-bold">{successRate}%</p>
                       <p className="text-xs text-muted-foreground">transferred</p>
                     </div>
-                    <TrendingUp className="h-8 w-8 text-purple-500 opacity-50" />
+                    <TrendingUp className="h-8 w-8 text-neon-violet opacity-50" />
                   </div>
                 </CardContent>
               </Card>

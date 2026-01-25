@@ -1,8 +1,5 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import {
   ArrowLeft,
   Phone,
@@ -20,15 +17,17 @@ import {
   XCircle,
   AlertTriangle,
 } from 'lucide-react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback } from 'react';
 
+import { usePhone } from '@/components/phone/phone-provider';
+import type { RetentionPolicy, PolicyStatus } from '@/components/retention';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { cn, formatCurrency, formatPhoneNumber } from '@/lib/utils';
-import { usePhone } from '@/components/phone/phone-provider';
-
-import type { RetentionPolicy, PolicyStatus } from '@/components/retention';
 
 // ============================================================================
 // Mock Data (Replace with API call using params.id)
@@ -101,7 +100,7 @@ const getStatusConfig = (status: PolicyStatus) => {
     case 'ISSUED':
       return {
         label: 'Issued',
-        color: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
+        color: 'bg-neon-cyan/10 text-neon-cyan border-neon-cyan/20',
         icon: FileText,
       };
     case 'PAID':

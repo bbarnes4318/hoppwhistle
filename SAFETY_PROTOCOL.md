@@ -44,6 +44,7 @@ apps/api/src/services/call-state.ts           # Call state management
 apps/api/src/services/stir-shaken-service.ts  # Attestation services
 apps/api/src/services/recording-service.ts    # Recording operations
 apps/api/src/services/recording-lifecycle.ts  # Recording state machine
+apps/api/src/services/cnam-service.ts         # CNAM/Caller ID (Twilio)
 ```
 
 ### Tier 3: Worker Processes (Background Jobs)
@@ -62,6 +63,29 @@ apps/web/src/components/hooks/use-websocket.ts    # WebSocket data stream
 apps/web/src/components/CallEventSubscriber.tsx   # Event subscription
 apps/web/src/components/dashboard/live-stats.tsx  # Real-time stats
 apps/web/src/lib/backend-check.ts                 # Backend availability
+```
+
+### Tier 5: AI Fronter / Conductor Subsystem (SPECIALIZED LOCKDOWN)
+
+> ⚠️ **This is a specialized AI Fronter tool, functionally distinct from the Campaign Routing logic (Pay Per Call platform).**
+
+**CONSTRAINTS:**
+
+- ❌ Agent must NOT refactor layout, logic, or workflow
+- ✅ Agent MAY inherit global CSS variables (colors, fonts) from Phase 1
+- ✅ Agent MAY update imports if shared UI components change signatures
+
+```
+apps/web/src/app/(dashboard)/bot/**       # Conductor UI (entire directory)
+apps/api/src/routes/bot.ts                # Bot API routes
+apps/api/src/routes/bot/**                # Bot route handlers
+apps/api/src/services/bot-service.ts      # Bot orchestration
+apps/api/src/services/tts-service.ts      # Text-to-Speech
+apps/api/src/services/llm-service.ts      # LLM integration
+apps/api/src/services/deepgram-service.ts # Deepgram TTS
+apps/api/src/services/voice-synthesis.ts  # Voice synthesis
+apps/worker/src/services/bot-worker.ts    # Bot background worker
+apps/worker/src/services/ai-caller.ts     # AI caller logic
 ```
 
 ---
@@ -115,6 +139,7 @@ export function useCallState() {
 3. **DO NOT** change WebSocket message types or payloads.
 4. **DO NOT** modify Prisma models affecting call/recording schemas.
 5. **DO NOT** touch `.env` variables prefixed with `FREESWITCH_`, `KAMAILIO_`, or `RTPENGINE_`.
+6. **DO NOT** refactor layout, logic, or workflow of the Conductor (`/bot`) subsystem (Tier 5).
 
 ---
 
@@ -138,6 +163,7 @@ apps/web/src/hooks/            # New hooks (adapters only)
 Before any commit to `feature/project-cortex`:
 
 - [ ] No files from Tier 1-4 appear in `git diff --name-only`
+- [ ] No files from Tier 5 (Conductor/Bot) modified except CSS variable inheritance
 - [ ] Backend routes return identical responses (regression test)
 - [ ] WebSocket message format unchanged
 - [ ] SIP registration still succeeds on port 7443
@@ -146,11 +172,12 @@ Before any commit to `feature/project-cortex`:
 
 ## STATUS
 
-| Item             | Status        |
-| ---------------- | ------------- |
-| Forensic Scan    | ✅ Complete   |
-| Quarantine List  | ✅ Defined    |
-| Adapter Strategy | ✅ Documented |
-| User Approval    | 🔶 PENDING    |
+| Item             | Status          |
+| ---------------- | --------------- |
+| Forensic Scan    | ✅ Complete     |
+| Quarantine List  | ✅ Defined      |
+| Adapter Strategy | ✅ Documented   |
+| Iron Dome Active | ✅ **ENFORCED** |
+| Telephony Risk   | 🟢 **0.00%**    |
 
-**Awaiting approval to proceed to Phase 1: Blueprint (Implementation Plan).**
+**Iron Dome Protocol is ACTIVE. The UI layer will communicate via existing API endpoints only.**

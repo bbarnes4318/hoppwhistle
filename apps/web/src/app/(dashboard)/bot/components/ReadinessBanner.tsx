@@ -40,15 +40,11 @@ export function ReadinessBanner({ isReady, blockingIssues, warnings }: Readiness
 
   if (warnings.length > 0) {
     return (
-      <div className="flex items-center gap-3 px-6 py-3 bg-blue-50 dark:bg-blue-950/20 border-b border-blue-200 dark:border-blue-900">
-        <Info className="h-5 w-5 text-blue-600 shrink-0" />
+      <div className="flex items-center gap-3 px-6 py-3 bg-neon-cyan/5 dark:bg-neon-cyan/10 border-b border-neon-cyan/20 dark:border-neon-cyan/30">
+        <Info className="h-5 w-5 text-neon-cyan shrink-0" />
         <div className="flex-1 min-w-0">
-          <span className="text-sm font-medium text-blue-700 dark:text-blue-400">
-            Ready with notes:
-          </span>
-          <span className="text-sm text-blue-600 dark:text-blue-500 ml-2">
-            {warnings.join(' • ')}
-          </span>
+          <span className="text-sm font-medium text-neon-cyan">Ready with notes:</span>
+          <span className="text-sm text-neon-cyan/80 ml-2">{warnings.join(' • ')}</span>
         </div>
       </div>
     );

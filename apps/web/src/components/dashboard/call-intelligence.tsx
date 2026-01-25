@@ -339,9 +339,9 @@ export function CallIntelligence({ filters }: CallIntelligenceProps) {
                           variant="outline"
                           className={cn(
                             call.saleOutcome === 'sold'
-                              ? 'border-blue-500/30 bg-blue-500/10 text-blue-600'
+                              ? 'border-neon-cyan/30 bg-neon-cyan/10 text-neon-cyan'
                               : call.saleOutcome === 'pending'
-                                ? 'border-gray-500/30 bg-gray-500/10 text-gray-600'
+                                ? 'border-text-muted/30 bg-text-muted/10 text-text-muted'
                                 : 'border-rose-500/30 bg-rose-500/10 text-rose-600'
                           )}
                         >
