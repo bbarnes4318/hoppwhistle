@@ -1,60 +1,54 @@
 'use client';
 
-import { Phone, DollarSign, CheckCircle, TrendingUp, Activity, Receipt } from 'lucide-react';
+import { Phone, DollarSign, CheckCircle, Receipt, PhoneMissed, AlertTriangle } from 'lucide-react';
 import { useEffect, useState, useCallback } from 'react';
 
 import { KPICard } from './kpi-card';
 
 import { apiClient } from '@/lib/api';
+import { cn } from '@/lib/utils';
 
 interface DashboardMetrics {
   totalCalls: number;
   billableCalls: number;
-  cost: number;
-  salesClosed: number;
-  revenue: number;
-  conversionRate: number;
+  totalRevenue: number;
+  totalCost: number;
+  missedCalls: number;
+  missedCallsInARow: number;
   trends: {
     calls: number;
     billable: number;
-    cost: number;
-    sales: number;
     revenue: number;
+    cost: number;
+    missed: number;
   };
 }
 
-interface MetricsApiResponse {
-  period: { start: string; end: string };
-  metrics: {
-    totalCalls: number;
-    answeredCalls: number;
-    completedCalls: number;
-    failedCalls: number;
-    totalDuration: number;
-    totalBillableMinutes: number;
-    totalCost: number;
-    averageDuration: number;
-    asr: number;
-    aht: number;
-    conversionRate?: number;
-  };
-  breakdown: Array<{
-    timestamp: string;
-    totalCalls: number;
-    answeredCalls: number;
-    asr: number;
-    aht: number;
-    billableMinutes: number;
-    cost: number;
+interface CallsApiResponse {
+  data: Array<{
+    id: string;
+    status: string;
+    paidOut?: boolean;
+    missedCall?: boolean;
+    revenue?: string | number | null;
+    cost?: string | number | null;
+    createdAt: string;
   }>;
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
 }
 
 interface DashboardKPIsProps {
   dateRange?: { start: Date; end: Date };
   onFilterChange?: (filter: { type: string; value: string }) => void;
+  campaignId?: string;
 }
 
-export function DashboardKPIs({ dateRange, onFilterChange }: DashboardKPIsProps) {
+export function DashboardKPIs({ dateRange, onFilterChange, campaignId }: DashboardKPIsProps) {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -64,98 +58,122 @@ export function DashboardKPIs({ dateRange, onFilterChange }: DashboardKPIsProps)
     setError(null);
 
     try {
-      // Current period
       const now = new Date();
       const startDate = dateRange?.start || new Date(now.getTime() - 24 * 60 * 60 * 1000);
       const endDate = dateRange?.end || now;
 
-      // Previous period for comparison
+      // Previous period for trend comparison
       const periodDuration = endDate.getTime() - startDate.getTime();
       const prevStartDate = new Date(startDate.getTime() - periodDuration);
       const prevEndDate = startDate;
 
-      const params = new URLSearchParams({
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
-        granularity: 'hour',
-      });
-
-      const prevParams = new URLSearchParams({
-        startDate: prevStartDate.toISOString(),
-        endDate: prevEndDate.toISOString(),
-        granularity: 'hour',
-      });
+      // Build query params
+      const buildParams = (start: Date, end: Date) => {
+        const params = new URLSearchParams({
+          startDate: start.toISOString(),
+          endDate: end.toISOString(),
+          limit: '1000', // Fetch enough to calculate metrics
+        });
+        if (campaignId) {
+          params.set('campaignId', campaignId);
+        }
+        return params;
+      };
 
       const [currentResp, prevResp] = await Promise.all([
-        apiClient.get<MetricsApiResponse>(`/api/v1/reporting/metrics?${params}`),
-        apiClient.get<MetricsApiResponse>(`/api/v1/reporting/metrics?${prevParams}`),
+        apiClient.get<CallsApiResponse>(
+          `/api/v1/calls?${buildParams(startDate, endDate).toString()}`
+        ),
+        apiClient.get<CallsApiResponse>(
+          `/api/v1/calls?${buildParams(prevStartDate, prevEndDate).toString()}`
+        ),
       ]);
 
       if (currentResp.error) {
         throw new Error(currentResp.error.message);
       }
 
-      const current = currentResp.data?.metrics;
-      const prev = prevResp.data?.metrics;
+      const currentCalls = currentResp.data?.data || [];
+      const prevCalls = prevResp.data?.data || [];
 
-      if (!current) {
-        throw new Error('No metrics data received');
+      // Calculate current period metrics
+      const totalCalls = currentCalls.length;
+      const billableCalls = currentCalls.filter(c => c.paidOut === true).length;
+      const totalRevenue = currentCalls.reduce((sum, c) => {
+        const rev = typeof c.revenue === 'string' ? parseFloat(c.revenue) : c.revenue || 0;
+        return sum + (isNaN(rev) ? 0 : rev);
+      }, 0);
+      const totalCost = currentCalls.reduce((sum, c) => {
+        const cost = typeof c.cost === 'string' ? parseFloat(c.cost) : c.cost || 0;
+        return sum + (isNaN(cost) ? 0 : cost);
+      }, 0);
+      const missedCalls = currentCalls.filter(c => c.missedCall === true).length;
+
+      // Calculate missed calls in a row (check most recent calls)
+      const sortedCalls = [...currentCalls].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      let missedCallsInARow = 0;
+      for (const call of sortedCalls) {
+        if (call.missedCall === true) {
+          missedCallsInARow++;
+        } else {
+          break;
+        }
       }
 
-      // Calculate derived metrics
-      const billableCalls = current.completedCalls || 0;
-      const cost = current.totalCost || 0;
-      const salesClosed = Math.floor(billableCalls * (current.conversionRate || 0.15));
-      const conversionRate = billableCalls > 0 ? (salesClosed / billableCalls) * 100 : 0;
-      const revenue = cost; // Revenue tied to sales data
+      // Calculate previous period metrics for trends
+      const prevTotalCalls = prevCalls.length;
+      const prevBillable = prevCalls.filter(c => c.paidOut === true).length;
+      const prevRevenue = prevCalls.reduce((sum, c) => {
+        const rev = typeof c.revenue === 'string' ? parseFloat(c.revenue) : c.revenue || 0;
+        return sum + (isNaN(rev) ? 0 : rev);
+      }, 0);
+      const prevCost = prevCalls.reduce((sum, c) => {
+        const cost = typeof c.cost === 'string' ? parseFloat(c.cost) : c.cost || 0;
+        return sum + (isNaN(cost) ? 0 : cost);
+      }, 0);
+      const prevMissed = prevCalls.filter(c => c.missedCall === true).length;
 
-      // Calculate trends
-      const prevBillable = prev?.completedCalls || 0;
-      const prevCost = prev?.totalCost || 0;
-      const prevSales = Math.floor(prevBillable * (prev?.conversionRate || 0.15));
-      const prevRevenue = prevCost;
-
-      const calcTrend = (curr: number, previous: number) => {
-        if (previous === 0) return curr > 0 ? 100 : 0;
-        return ((curr - previous) / previous) * 100;
+      const calcTrend = (curr: number, prev: number) => {
+        if (prev === 0) return curr > 0 ? 100 : 0;
+        return ((curr - prev) / prev) * 100;
       };
 
       setMetrics({
-        totalCalls: current.totalCalls || 0,
+        totalCalls,
         billableCalls,
-        cost,
-        salesClosed,
-        revenue,
-        conversionRate,
+        totalRevenue,
+        totalCost,
+        missedCalls,
+        missedCallsInARow,
         trends: {
-          calls: calcTrend(current.totalCalls || 0, prev?.totalCalls || 0),
+          calls: calcTrend(totalCalls, prevTotalCalls),
           billable: calcTrend(billableCalls, prevBillable),
-          cost: calcTrend(cost, prevCost),
-          sales: calcTrend(salesClosed, prevSales),
-          revenue: calcTrend(revenue, prevRevenue),
+          revenue: calcTrend(totalRevenue, prevRevenue),
+          cost: calcTrend(totalCost, prevCost),
+          missed: calcTrend(missedCalls, prevMissed),
         },
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch metrics');
-      // Set default values on error
       setMetrics({
         totalCalls: 0,
         billableCalls: 0,
-        cost: 0,
-        salesClosed: 0,
-        revenue: 0,
-        conversionRate: 0,
-        trends: { calls: 0, billable: 0, cost: 0, sales: 0, revenue: 0 },
+        totalRevenue: 0,
+        totalCost: 0,
+        missedCalls: 0,
+        missedCallsInARow: 0,
+        trends: { calls: 0, billable: 0, revenue: 0, cost: 0, missed: 0 },
       });
     } finally {
       setLoading(false);
     }
-  }, [dateRange]);
+  }, [dateRange, campaignId]);
 
   useEffect(() => {
-    fetchMetrics();
-    // Refresh every 30 seconds
-    const interval = setInterval(fetchMetrics, 30000);
+    void fetchMetrics();
+    const interval = setInterval(() => void fetchMetrics(), 30000);
     return () => clearInterval(interval);
   }, [fetchMetrics]);
 
@@ -165,6 +183,11 @@ export function DashboardKPIs({ dateRange, onFilterChange }: DashboardKPIsProps)
     return `$${value.toFixed(2)}`;
   };
 
+  // High Alert Logic: missedCallsInARow > 10 OR missedPercentage > 30%
+  const missedPercentage =
+    metrics && metrics.totalCalls > 0 ? (metrics.missedCalls / metrics.totalCalls) * 100 : 0;
+  const isHighAlert = (metrics?.missedCallsInARow ?? 0) > 10 || missedPercentage > 30;
+
   return (
     <div className="space-y-4">
       {error && (
@@ -173,7 +196,8 @@ export function DashboardKPIs({ dateRange, onFilterChange }: DashboardKPIsProps)
         </div>
       )}
 
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-5">
+        {/* Total Calls */}
         <KPICard
           title="Total Calls"
           value={metrics?.totalCalls ?? 0}
@@ -184,6 +208,7 @@ export function DashboardKPIs({ dateRange, onFilterChange }: DashboardKPIsProps)
           onClick={() => onFilterChange?.({ type: 'status', value: 'all' })}
         />
 
+        {/* Billable Calls (paidOut = true) */}
         <KPICard
           title="Billable Calls"
           value={metrics?.billableCalls ?? 0}
@@ -195,30 +220,10 @@ export function DashboardKPIs({ dateRange, onFilterChange }: DashboardKPIsProps)
           onClick={() => onFilterChange?.({ type: 'billable', value: 'true' })}
         />
 
+        {/* Total Revenue */}
         <KPICard
-          title="Cost"
-          value={formatCurrency(metrics?.cost ?? 0)}
-          icon={Receipt}
-          trend={metrics?.trends.cost}
-          trendLabel="vs prev period"
-          variant="warning"
-          loading={loading}
-        />
-
-        <KPICard
-          title="Sales Closed"
-          value={metrics?.salesClosed ?? 0}
-          icon={TrendingUp}
-          trend={metrics?.trends.sales}
-          trendLabel="vs prev period"
-          variant="conversion"
-          loading={loading}
-          onClick={() => onFilterChange?.({ type: 'sale', value: 'true' })}
-        />
-
-        <KPICard
-          title="Revenue"
-          value={formatCurrency(metrics?.revenue ?? 0)}
+          title="Total Revenue"
+          value={formatCurrency(metrics?.totalRevenue ?? 0)}
           icon={DollarSign}
           trend={metrics?.trends.revenue}
           trendLabel="vs prev period"
@@ -226,13 +231,78 @@ export function DashboardKPIs({ dateRange, onFilterChange }: DashboardKPIsProps)
           loading={loading}
         />
 
+        {/* Total Cost */}
         <KPICard
-          title="Conversion Rate"
-          value={`${(metrics?.conversionRate ?? 0).toFixed(1)}%`}
-          icon={Activity}
-          variant="conversion"
+          title="Total Cost"
+          value={formatCurrency(metrics?.totalCost ?? 0)}
+          icon={Receipt}
+          trend={metrics?.trends.cost}
+          trendLabel="vs prev period"
+          variant="warning"
           loading={loading}
         />
+
+        {/* Missed Calls with High Alert */}
+        <div
+          className={cn(
+            'relative overflow-hidden rounded-xl border p-5 transition-all duration-200',
+            isHighAlert
+              ? 'bg-red-500/20 border-red-500 shadow-lg shadow-red-500/10'
+              : 'bg-gradient-to-br from-rose-500/10 to-rose-600/5 border-rose-500/20'
+          )}
+        >
+          {/* Background accent */}
+          <div className="absolute -right-4 -top-4 opacity-5">
+            <PhoneMissed className="h-24 w-24" />
+          </div>
+
+          <div className="relative z-10 space-y-3">
+            {/* Title with Alert Icon */}
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-muted-foreground">Missed Calls</span>
+              {isHighAlert ? (
+                <AlertTriangle className="h-4 w-4 text-red-500 animate-pulse" />
+              ) : (
+                <PhoneMissed className="h-4 w-4 text-muted-foreground" />
+              )}
+            </div>
+
+            {/* Value */}
+            <div className="flex items-baseline gap-1.5">
+              {loading ? (
+                <div className="h-9 w-24 animate-pulse rounded bg-muted" />
+              ) : (
+                <span
+                  className={cn(
+                    'text-3xl font-bold tracking-tight',
+                    isHighAlert ? 'text-red-600 dark:text-red-400' : 'text-foreground'
+                  )}
+                >
+                  {(metrics?.missedCalls ?? 0).toLocaleString()}
+                </span>
+              )}
+            </div>
+
+            {/* Trend and Alert Info */}
+            {!loading && (
+              <div className="flex items-center gap-2">
+                {isHighAlert && (
+                  <span className="text-xs font-medium text-red-600 dark:text-red-400">
+                    {missedPercentage > 30
+                      ? `${missedPercentage.toFixed(0)}% missed`
+                      : `${metrics?.missedCallsInARow} in a row`}
+                  </span>
+                )}
+                {metrics?.trends.missed !== undefined && !isHighAlert && (
+                  <span className="text-xs text-muted-foreground">
+                    {metrics.trends.missed > 0 ? '+' : ''}
+                    {metrics.trends.missed.toFixed(1)}% vs prev
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

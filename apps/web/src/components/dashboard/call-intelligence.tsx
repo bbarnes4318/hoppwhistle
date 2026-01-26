@@ -1,21 +1,20 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
-import {
-  Search,
-  Play,
-  Pause,
-  Download,
-  FileText,
-  Filter,
-  ChevronLeft,
-  ChevronRight,
-} from 'lucide-react';
+import { ChevronLeft, ChevronRight, Pause, Play, Search, Settings } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import {
   Table,
   TableBody,
@@ -24,47 +23,83 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
+// All available Call model fields
+const ALL_COLUMNS = [
+  { key: 'createdAt', label: 'Call Date', default: true },
+  { key: 'campaignName', label: 'Campaign', default: true },
+  { key: 'buyerName', label: 'Buyer', default: true },
+  { key: 'publisherName', label: 'Publisher', default: true },
+  { key: 'targetName', label: 'Target', default: true },
+  { key: 'callerId', label: 'CallerID', default: true },
+  { key: 'connectedDuration', label: 'Connected Duration', default: true },
+  { key: 'revenue', label: 'Revenue', default: true },
+  { key: 'payout', label: 'Payout', default: true },
+  { key: 'recordingUrl', label: 'Recording', default: true },
+  // Additional fields available via column picker
+  { key: 'id', label: 'Call ID', default: false },
+  { key: 'callSid', label: 'Call SID', default: false },
+  { key: 'status', label: 'Status', default: false },
+  { key: 'direction', label: 'Direction', default: false },
+  { key: 'duration', label: 'Total Duration', default: false },
+  { key: 'toNumber', label: 'To Number', default: false },
+  { key: 'did', label: 'DID', default: false },
+  { key: 'targetNumber', label: 'Target Number', default: false },
+  { key: 'callerIdAreaCode', label: 'Area Code', default: false },
+  { key: 'callerIdState', label: 'Caller State', default: false },
+  { key: 'cost', label: 'Cost', default: false },
+  { key: 'profit', label: 'Profit', default: false },
+  { key: 'converted', label: 'Converted', default: false },
+  { key: 'missedCall', label: 'Missed', default: false },
+  { key: 'isDuplicate', label: 'Duplicate', default: false },
+  { key: 'blocked', label: 'Blocked', default: false },
+  { key: 'paidOut', label: 'Paid Out', default: false },
+  { key: 'targetGroupName', label: 'Target Group', default: false },
+  { key: 'noPayoutReason', label: 'No Payout Reason', default: false },
+  { key: 'noConversionReason', label: 'No Conversion Reason', default: false },
+  { key: 'blockReason', label: 'Block Reason', default: false },
+] as const;
+
+type ColumnKey = (typeof ALL_COLUMNS)[number]['key'];
+
 interface CallRecord {
   id: string;
-  timestamp: Date;
-  duration: number;
-  isBillable: boolean;
-  saleOutcome: 'sold' | 'not_sold' | 'pending';
-  campaign: string;
-  source: string;
-  recordingUrl?: string;
-  transcriptAvailable: boolean;
-  from?: string;
-  to?: string;
+  callSid?: string;
+  createdAt: string;
   status: string;
+  direction?: string;
+  duration?: number;
+  connectedDuration?: number;
+  campaignName?: string;
+  buyerName?: string;
+  publisherName?: string;
+  targetName?: string;
+  targetGroupName?: string;
+  callerId?: string;
+  callerIdAreaCode?: number;
+  callerIdState?: string;
+  did?: string;
+  toNumber?: string;
+  targetNumber?: string;
+  revenue?: number | string;
+  payout?: number | string;
+  cost?: number | string;
+  profit?: number | string;
+  recordingUrl?: string;
+  converted?: boolean;
+  missedCall?: boolean;
+  isDuplicate?: boolean;
+  blocked?: boolean;
+  paidOut?: boolean;
+  noPayoutReason?: string;
+  noConversionReason?: string;
+  blockReason?: string;
 }
 
 interface CallsApiResponse {
-  data: Array<{
-    id: string;
-    callSid?: string;
-    status: string;
-    direction?: string;
-    duration?: number;
-    billableDuration?: number;
-    createdAt: string;
-    answeredAt?: string;
-    endedAt?: string;
-    fromNumber?: { number: string } | null;
-    toNumber?: string;
-    campaign?: { name: string } | null;
-    recordings?: Array<{ storageKey: string; url?: string }>;
-  }>;
+  data: CallRecord[];
   meta: {
     page: number;
     limit: number;
@@ -81,6 +116,22 @@ interface CallIntelligenceProps {
   };
 }
 
+const STORAGE_KEY = 'callIntelligence_visibleColumns';
+
+function getDefaultColumns(): ColumnKey[] {
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        // Fall through to default
+      }
+    }
+  }
+  return ALL_COLUMNS.filter(c => c.default).map(c => c.key);
+}
+
 export function CallIntelligence({ filters }: CallIntelligenceProps) {
   const [calls, setCalls] = useState<CallRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -88,11 +139,8 @@ export function CallIntelligence({ filters }: CallIntelligenceProps) {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
-  const [localFilters, setLocalFilters] = useState({
-    billable: filters?.billable ?? 'all',
-    sold: filters?.sold ?? 'all',
-  });
+  const [visibleColumns, setVisibleColumns] = useState<ColumnKey[]>(getDefaultColumns);
+  const [columnPickerOpen, setColumnPickerOpen] = useState(false);
 
   // Audio player state
   const [playingId, setPlayingId] = useState<string | null>(null);
@@ -108,64 +156,39 @@ export function CallIntelligence({ filters }: CallIntelligenceProps) {
         limit: '15',
       });
 
-      const response = await apiClient.get<CallsApiResponse>(`/api/v1/calls?${params}`);
+      if (filters?.campaign) {
+        params.set('campaignId', filters.campaign);
+      }
+
+      const response = await apiClient.get<CallsApiResponse>(`/api/v1/calls?${params.toString()}`);
 
       if (response.error) {
         throw new Error(response.error.message);
       }
 
-      const apiCalls = response.data?.data || [];
+      let apiCalls = response.data?.data || [];
       const meta = response.data?.meta;
 
-      const transformedCalls: CallRecord[] = apiCalls.map(call => {
-        const isBillable = (call.billableDuration || 0) > 0 || call.status === 'COMPLETED';
-        const saleOutcome: 'sold' | 'not_sold' | 'pending' =
-          call.status === 'COMPLETED' && isBillable
-            ? Math.random() > 0.7
-              ? 'sold'
-              : 'not_sold'
-            : 'pending';
-
-        return {
-          id: call.id,
-          timestamp: new Date(call.createdAt),
-          duration: call.duration || call.billableDuration || 0,
-          isBillable,
-          saleOutcome,
-          campaign: call.campaign?.name || 'Direct',
-          source: call.direction || 'inbound',
-          recordingUrl: call.recordings?.[0]?.url,
-          transcriptAvailable: !!call.recordings?.[0]?.url,
-          from: call.fromNumber?.number,
-          to: call.toNumber,
-          status: call.status,
-        };
-      });
-
       // Apply local filters
-      let filteredCalls = transformedCalls;
-      if (localFilters.billable !== 'all') {
-        filteredCalls = filteredCalls.filter(
-          c => c.isBillable === (localFilters.billable === 'true')
-        );
+      if (filters?.billable !== undefined) {
+        apiCalls = apiCalls.filter(c => c.paidOut === filters.billable);
       }
-      if (localFilters.sold !== 'all') {
-        filteredCalls = filteredCalls.filter(
-          c => (c.saleOutcome === 'sold') === (localFilters.sold === 'true')
-        );
+      if (filters?.sold !== undefined) {
+        apiCalls = apiCalls.filter(c => c.converted === filters.sold);
       }
       if (search) {
         const s = search.toLowerCase();
-        filteredCalls = filteredCalls.filter(
+        apiCalls = apiCalls.filter(
           c =>
             c.id.toLowerCase().includes(s) ||
-            c.campaign.toLowerCase().includes(s) ||
-            c.from?.includes(s) ||
-            c.to?.includes(s)
+            c.campaignName?.toLowerCase().includes(s) ||
+            c.callerId?.includes(s) ||
+            c.buyerName?.toLowerCase().includes(s) ||
+            c.publisherName?.toLowerCase().includes(s)
         );
       }
 
-      setCalls(filteredCalls);
+      setCalls(apiCalls);
       setTotalPages(meta?.totalPages || 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch calls');
@@ -173,25 +196,38 @@ export function CallIntelligence({ filters }: CallIntelligenceProps) {
     } finally {
       setLoading(false);
     }
-  }, [page, localFilters, search]);
+  }, [page, filters, search]);
 
   useEffect(() => {
-    fetchCalls();
+    void fetchCalls();
   }, [fetchCalls]);
 
-  const formatDuration = (seconds: number) => {
+  // Save column preferences to localStorage
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(visibleColumns));
+  }, [visibleColumns]);
+
+  const formatDuration = (seconds?: number) => {
+    if (!seconds) return '-';
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const formatTime = (date: Date) => {
-    return date.toLocaleString('en-US', {
+  const formatDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleString('en-US', {
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
     });
+  };
+
+  const formatCurrency = (value?: number | string) => {
+    if (value === undefined || value === null) return '-';
+    const num = typeof value === 'string' ? parseFloat(value) : value;
+    if (isNaN(num)) return '-';
+    return `$${num.toFixed(2)}`;
   };
 
   const handlePlay = (call: CallRecord) => {
@@ -205,19 +241,77 @@ export function CallIntelligence({ filters }: CallIntelligenceProps) {
         audioRef.current.pause();
       }
       audioRef.current = new Audio(call.recordingUrl);
-      audioRef.current.play();
+      void audioRef.current.play();
       audioRef.current.onended = () => setPlayingId(null);
       setPlayingId(call.id);
     }
   };
 
-  const handleDownload = (call: CallRecord) => {
-    if (!call.recordingUrl) return;
+  const toggleColumn = (key: ColumnKey) => {
+    setVisibleColumns(prev => (prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]));
+  };
 
-    const link = document.createElement('a');
-    link.href = call.recordingUrl;
-    link.download = `call-${call.id}.wav`;
-    link.click();
+  const renderCellValue = (call: CallRecord, columnKey: ColumnKey) => {
+    switch (columnKey) {
+      case 'createdAt':
+        return formatDate(call.createdAt);
+      case 'connectedDuration':
+        return formatDuration(call.connectedDuration);
+      case 'duration':
+        return formatDuration(call.duration);
+      case 'revenue':
+        return formatCurrency(call.revenue);
+      case 'payout':
+        return formatCurrency(call.payout);
+      case 'cost':
+        return formatCurrency(call.cost);
+      case 'profit':
+        return formatCurrency(call.profit);
+      case 'recordingUrl':
+        return call.recordingUrl ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => handlePlay(call)}
+            title={playingId === call.id ? 'Pause' : 'Play'}
+          >
+            {playingId === call.id ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+          </Button>
+        ) : (
+          <span className="text-muted-foreground">-</span>
+        );
+      case 'converted':
+      case 'missedCall':
+      case 'isDuplicate':
+      case 'blocked':
+      case 'paidOut': {
+        const boolVal = call[columnKey];
+        return boolVal ? (
+          <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600">
+            Yes
+          </Badge>
+        ) : (
+          <span className="text-muted-foreground">No</span>
+        );
+      }
+      case 'status':
+        return (
+          <Badge variant="outline" className="capitalize">
+            {call.status?.toLowerCase()}
+          </Badge>
+        );
+      case 'direction':
+        return (
+          <Badge variant="outline" className="capitalize">
+            {call.direction?.toLowerCase() || '-'}
+          </Badge>
+        );
+      default: {
+        const value = call[columnKey as keyof CallRecord];
+        return value ?? '-';
+      }
+    }
   };
 
   return (
@@ -234,56 +328,51 @@ export function CallIntelligence({ filters }: CallIntelligenceProps) {
               className="h-9 w-[200px] pl-9"
             />
           </div>
-          <Button
-            variant={showFilters ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setShowFilters(!showFilters)}
-            className="h-9"
-          >
-            <Filter className="mr-2 h-4 w-4" />
-            Filters
-          </Button>
+
+          {/* Column Picker */}
+          <Dialog open={columnPickerOpen} onOpenChange={setColumnPickerOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="h-9">
+                <Settings className="mr-2 h-4 w-4" />
+                Columns
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Select Columns</DialogTitle>
+              </DialogHeader>
+              <div className="grid grid-cols-2 gap-3 py-4">
+                {ALL_COLUMNS.map(column => (
+                  <label
+                    key={column.key}
+                    className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 p-2 rounded-md"
+                  >
+                    <Checkbox
+                      checked={visibleColumns.includes(column.key)}
+                      onCheckedChange={() => toggleColumn(column.key)}
+                    />
+                    <span className="text-sm">{column.label}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="flex justify-between pt-4 border-t">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    setVisibleColumns(ALL_COLUMNS.filter(c => c.default).map(c => c.key))
+                  }
+                >
+                  Reset to Default
+                </Button>
+                <Button size="sm" onClick={() => setColumnPickerOpen(false)}>
+                  Done
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </CardHeader>
-
-      {showFilters && (
-        <div className="border-t px-6 py-4">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Billable:</span>
-              <Select
-                value={String(localFilters.billable)}
-                onValueChange={v => setLocalFilters(f => ({ ...f, billable: v as any }))}
-              >
-                <SelectTrigger className="h-8 w-[100px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All</SelectItem>
-                  <SelectItem value="true">Yes</SelectItem>
-                  <SelectItem value="false">No</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Sale:</span>
-              <Select
-                value={String(localFilters.sold)}
-                onValueChange={v => setLocalFilters(f => ({ ...f, sold: v as any }))}
-              >
-                <SelectTrigger className="h-8 w-[100px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All</SelectItem>
-                  <SelectItem value="true">Sold</SelectItem>
-                  <SelectItem value="false">Not Sold</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </div>
-      )}
 
       <CardContent className="pt-0">
         {error && (
@@ -302,102 +391,32 @@ export function CallIntelligence({ filters }: CallIntelligenceProps) {
           </div>
         ) : (
           <>
-            <div className="rounded-lg border">
+            <div className="rounded-lg border overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
-                    <TableHead className="w-[140px]">Time</TableHead>
-                    <TableHead className="w-[80px]">Duration</TableHead>
-                    <TableHead className="w-[90px]">Billable</TableHead>
-                    <TableHead className="w-[90px]">Sale</TableHead>
-                    <TableHead>Campaign</TableHead>
-                    <TableHead className="w-[90px]">Source</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    {ALL_COLUMNS.filter(c => visibleColumns.includes(c.key)).map(column => (
+                      <TableHead key={column.key} className="whitespace-nowrap">
+                        {column.label}
+                      </TableHead>
+                    ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {calls.map(call => (
-                    <TableRow key={call.id} className="group">
-                      <TableCell className="font-medium">{formatTime(call.timestamp)}</TableCell>
-                      <TableCell className="font-mono text-sm">
-                        {formatDuration(call.duration)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            call.isBillable
-                              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600'
-                              : 'border-amber-500/30 bg-amber-500/10 text-amber-600'
-                          )}
-                        >
-                          {call.isBillable ? 'Yes' : 'No'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            call.saleOutcome === 'sold'
-                              ? 'border-blue-500/30 bg-blue-500/10 text-blue-600'
-                              : call.saleOutcome === 'pending'
-                                ? 'border-gray-500/30 bg-gray-500/10 text-gray-600'
-                                : 'border-rose-500/30 bg-rose-500/10 text-rose-600'
-                          )}
-                        >
-                          {call.saleOutcome === 'sold'
-                            ? 'Sold'
-                            : call.saleOutcome === 'pending'
-                              ? 'Pending'
-                              : 'No Sale'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">{call.campaign}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="capitalize">
-                          {call.source}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                          {call.recordingUrl && (
-                            <>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8"
-                                onClick={() => handlePlay(call)}
-                                title={playingId === call.id ? 'Pause' : 'Play'}
-                              >
-                                {playingId === call.id ? (
-                                  <Pause className="h-4 w-4" />
-                                ) : (
-                                  <Play className="h-4 w-4" />
-                                )}
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8"
-                                onClick={() => handleDownload(call)}
-                                title="Download"
-                              >
-                                <Download className="h-4 w-4" />
-                              </Button>
-                            </>
-                          )}
-                          {call.transcriptAvailable && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              title="View Transcript"
-                            >
-                              <FileText className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
+                    <TableRow
+                      key={call.id}
+                      className={cn(
+                        'group',
+                        call.missedCall && 'bg-red-100 dark:bg-red-950/30',
+                        call.converted && !call.missedCall && 'bg-green-100 dark:bg-green-950/30'
+                      )}
+                    >
+                      {ALL_COLUMNS.filter(c => visibleColumns.includes(c.key)).map(column => (
+                        <TableCell key={column.key} className="whitespace-nowrap">
+                          {renderCellValue(call, column.key)}
+                        </TableCell>
+                      ))}
                     </TableRow>
                   ))}
                 </TableBody>
