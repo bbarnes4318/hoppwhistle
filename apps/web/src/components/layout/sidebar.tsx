@@ -12,6 +12,7 @@ import {
   Phone,
   PhoneCall,
   Receipt,
+  Send,
   Settings,
   Shield,
   Users,
@@ -36,6 +37,12 @@ const navigation = [
   { name: 'Campaigns', href: '/campaigns', icon: Megaphone },
   { name: 'Flows', href: '/flows', icon: GitBranch },
   { name: 'Calls', href: '/calls', icon: AudioLines },
+  {
+    name: 'Publishers',
+    href: '/publishers',
+    icon: Send,
+    title: 'Manage publisher accounts',
+  },
   {
     name: 'Buyers',
     href: '/buyers',

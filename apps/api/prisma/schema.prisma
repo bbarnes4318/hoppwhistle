@@ -459,14 +459,16 @@ enum RoutingMode {
 }
 
 model Publisher {
-  id          String   @id @default(uuid())
-  tenantId    String
-  name        String
-  code        String   // Internal publisher code
-  status      PublisherStatus @default(ACTIVE)
-  metadata    Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                  String   @id @default(uuid())
+  tenantId            String
+  name                String
+  code                String   // Internal publisher code (32-char hex)
+  email               String?  @unique // Publisher's email for welcome notifications
+  accessToRecordings  Boolean  @default(false) // Whether publisher can access call recordings
+  status              PublisherStatus @default(ACTIVE)
+  metadata            Json?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   // Relations
   tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -476,6 +478,7 @@ model Publisher {
 
   @@unique([tenantId, code])
   @@index([tenantId])
+  @@index([email])
   @@map("publishers")
 }
 

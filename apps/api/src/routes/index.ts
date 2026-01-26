@@ -628,7 +628,74 @@ export async function registerFlowRoutes(fastify: FastifyInstance) {
 // Public API - Publishers
 export async function registerPublisherRoutes(fastify: FastifyInstance) {
   await Promise.resolve();
-  fastify.get('/api/v1/publishers', async (request, reply) => {
+
+  // GET all publishers (with pagination)
+  fastify.get<{ Querystring: { page?: string; limit?: string; status?: string } }>(
+    '/api/v1/publishers',
+    async (request, reply) => {
+      const user = (request as AuthRequest).user;
+      const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+      const tenantId = demoTenantId || user?.tenantId;
+
+      if (!tenantId) {
+        void reply.code(401);
+        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      }
+
+      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+      const page = parseInt(request.query.page || '1');
+      const limit = parseInt(request.query.limit || '50');
+      const skip = (page - 1) * limit;
+      const statusFilter = request.query.status;
+
+      const whereClause: { tenantId: string; status?: 'ACTIVE' | 'INACTIVE' } = { tenantId };
+      if (statusFilter === 'ACTIVE' || statusFilter === 'INACTIVE') {
+        whereClause.status = statusFilter;
+      }
+
+      const [publishers, total] = await Promise.all([
+        prisma.publisher.findMany({
+          where: whereClause,
+          take: limit,
+          skip,
+          orderBy: { name: 'asc' },
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            email: true,
+            accessToRecordings: true,
+            status: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        }),
+        prisma.publisher.count({ where: whereClause }),
+      ]);
+
+      return {
+        data: publishers.map(p => ({
+          id: p.id,
+          name: p.name,
+          code: p.code,
+          email: p.email,
+          accessToRecordings: p.accessToRecordings,
+          status: p.status,
+          createdAt: p.createdAt.toISOString(),
+          updatedAt: p.updatedAt.toISOString(),
+        })),
+        meta: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
+    }
+  );
+
+  // GET publisher stats (server-side aggregation)
+  fastify.get('/api/v1/publishers/stats', async (request, reply) => {
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
     const tenantId = demoTenantId || user?.tenantId;
@@ -639,30 +706,294 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
     }
 
     const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+
+    // Get all publishers for this tenant
     const publishers = await prisma.publisher.findMany({
-      where: { tenantId, status: 'ACTIVE' },
-      orderBy: { name: 'asc' },
-      select: {
-        id: true,
-        name: true,
-        code: true,
-        status: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      where: { tenantId },
+      select: { id: true, name: true, code: true, status: true },
     });
 
-    return {
-      data: publishers.map(p => ({
-        id: p.id,
+    // Aggregate call stats for each publisher using Prisma groupBy
+    const callStats = await prisma.call.groupBy({
+      by: ['publisherId'],
+      where: { tenantId, publisherId: { not: null } },
+      _count: { id: true },
+    });
+
+    const billableStats = await prisma.call.groupBy({
+      by: ['publisherId'],
+      where: { tenantId, publisherId: { not: null }, paidOut: true },
+      _count: { id: true },
+    });
+
+    const missedStats = await prisma.call.groupBy({
+      by: ['publisherId'],
+      where: { tenantId, publisherId: { not: null }, missedCall: true },
+      _count: { id: true },
+    });
+
+    // Create lookup maps
+    const totalCallsMap = new Map(callStats.map(s => [s.publisherId, s._count.id]));
+    const billableCallsMap = new Map(billableStats.map(s => [s.publisherId, s._count.id]));
+    const missedCallsMap = new Map(missedStats.map(s => [s.publisherId, s._count.id]));
+
+    // Combine data
+    const stats = publishers.map(p => {
+      const totalCalls = totalCallsMap.get(p.id) || 0;
+      const billableCalls = billableCallsMap.get(p.id) || 0;
+      const missedCalls = missedCallsMap.get(p.id) || 0;
+      const conversionRate = totalCalls > 0 ? (billableCalls / totalCalls) * 100 : 0;
+
+      return {
+        publisherId: p.id,
         name: p.name,
         code: p.code,
         status: p.status,
-        createdAt: p.createdAt.toISOString(),
-        updatedAt: p.updatedAt.toISOString(),
-      })),
-    };
+        totalCalls,
+        billableCalls,
+        missedCalls,
+        conversionRate: Math.round(conversionRate * 100) / 100,
+      };
+    });
+
+    return { data: stats };
   });
+
+  // POST create publisher
+  fastify.post<{
+    Body: {
+      name: string;
+      email?: string;
+      accessToRecordings?: boolean;
+    };
+  }>('/api/v1/publishers', async (request, reply) => {
+    try {
+      const user = (request as AuthRequest).user;
+      const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+      const tenantId = demoTenantId || user?.tenantId;
+
+      if (!tenantId) {
+        void reply.code(401);
+        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      }
+
+      const body = request.body;
+
+      if (!body.name || !body.name.trim()) {
+        void reply.code(400);
+        return { error: { code: 'VALIDATION_ERROR', message: 'Publisher name is required' } };
+      }
+
+      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+      const { generatePublisherCode, sendWelcomeEmail } = await import(
+        '../services/publisher-email.js'
+      );
+
+      // Generate 32-char hex code
+      const code = generatePublisherCode();
+
+      // Create publisher
+      const publisher = await prisma.publisher.create({
+        data: {
+          tenantId,
+          name: body.name.trim(),
+          code,
+          email: body.email?.trim() || null,
+          accessToRecordings: body.accessToRecordings || false,
+          status: 'ACTIVE',
+        },
+      });
+
+      // Send welcome email if email provided
+      if (publisher.email) {
+        await sendWelcomeEmail({
+          email: publisher.email,
+          publisherName: publisher.name,
+          publisherId: publisher.code,
+          accessToRecordings: publisher.accessToRecordings,
+        });
+      }
+
+      // Audit log
+      const { auditCreate } = await import('../services/audit.js');
+      await auditCreate(
+        tenantId,
+        'Publisher',
+        publisher.id,
+        {
+          name: publisher.name,
+          code: publisher.code,
+          email: publisher.email,
+          accessToRecordings: publisher.accessToRecordings,
+          status: publisher.status,
+        },
+        {
+          userId: (user as AuthenticatedUser)?.userId,
+          ipAddress: request.ip,
+          requestId: request.id,
+        }
+      );
+
+      void reply.code(201);
+      return {
+        id: publisher.id,
+        tenantId: publisher.tenantId,
+        name: publisher.name,
+        code: publisher.code,
+        email: publisher.email,
+        accessToRecordings: publisher.accessToRecordings,
+        status: publisher.status,
+        createdAt: publisher.createdAt.toISOString(),
+        updatedAt: publisher.updatedAt.toISOString(),
+      };
+    } catch (error: any) {
+      void reply.code(400);
+      return {
+        error: {
+          code: 'CREATE_FAILED',
+          message: (error as Error).message || 'Failed to create publisher',
+        },
+      };
+    }
+  });
+
+  // PATCH update publisher
+  fastify.patch<{
+    Params: { publisherId: string };
+    Body: {
+      name?: string;
+      email?: string;
+      accessToRecordings?: boolean;
+      status?: 'ACTIVE' | 'INACTIVE';
+    };
+  }>('/api/v1/publishers/:publisherId', async (request, reply) => {
+    try {
+      const user = (request as AuthRequest).user;
+      const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+      const tenantId = demoTenantId || user?.tenantId;
+
+      if (!tenantId) {
+        void reply.code(401);
+        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      }
+
+      const { publisherId } = request.params;
+      const body = request.body;
+
+      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+
+      // Verify publisher exists and belongs to tenant
+      const existingPublisher = await prisma.publisher.findFirst({
+        where: { id: publisherId, tenantId },
+      });
+
+      if (!existingPublisher) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Publisher not found' } };
+      }
+
+      // Build update data
+      const updateData: {
+        name?: string;
+        email?: string | null;
+        accessToRecordings?: boolean;
+        status?: 'ACTIVE' | 'INACTIVE';
+      } = {};
+
+      if (body.name !== undefined) updateData.name = body.name.trim();
+      if (body.email !== undefined) updateData.email = body.email?.trim() || null;
+      if (body.accessToRecordings !== undefined)
+        updateData.accessToRecordings = body.accessToRecordings;
+      if (body.status !== undefined) updateData.status = body.status;
+
+      const publisher = await prisma.publisher.update({
+        where: { id: publisherId },
+        data: updateData,
+      });
+
+      // Audit log
+      const { auditUpdate } = await import('../services/audit.js');
+      await auditUpdate(tenantId, 'Publisher', publisher.id, existingPublisher, publisher, {
+        userId: (user as AuthenticatedUser)?.userId,
+        ipAddress: request.ip,
+        requestId: request.id,
+      });
+
+      return {
+        id: publisher.id,
+        tenantId: publisher.tenantId,
+        name: publisher.name,
+        code: publisher.code,
+        email: publisher.email,
+        accessToRecordings: publisher.accessToRecordings,
+        status: publisher.status,
+        createdAt: publisher.createdAt.toISOString(),
+        updatedAt: publisher.updatedAt.toISOString(),
+      };
+    } catch (error: any) {
+      void reply.code(400);
+      return {
+        error: {
+          code: 'UPDATE_FAILED',
+          message: (error as Error).message || 'Failed to update publisher',
+        },
+      };
+    }
+  });
+
+  // DELETE publisher
+  fastify.delete<{ Params: { publisherId: string } }>(
+    '/api/v1/publishers/:publisherId',
+    async (request, reply) => {
+      try {
+        const user = (request as AuthRequest).user;
+        const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+        const tenantId = demoTenantId || user?.tenantId;
+
+        if (!tenantId) {
+          void reply.code(401);
+          return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+        }
+
+        const { publisherId } = request.params;
+        const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+
+        // Verify publisher exists and belongs to tenant
+        const publisher = await prisma.publisher.findFirst({
+          where: { id: publisherId, tenantId },
+        });
+
+        if (!publisher) {
+          void reply.code(404);
+          return { error: { code: 'NOT_FOUND', message: 'Publisher not found' } };
+        }
+
+        // Delete publisher (cascades to related data per schema)
+        await prisma.publisher.delete({
+          where: { id: publisherId },
+        });
+
+        // Audit log
+        const { auditDelete } = await import('../services/audit.js');
+        await auditDelete(tenantId, 'Publisher', publisher.id, publisher, {
+          userId: (user as AuthenticatedUser)?.userId,
+          ipAddress: request.ip,
+          requestId: request.id,
+        });
+
+        void reply.code(204);
+        return;
+      } catch (error: any) {
+        void reply.code(400);
+        return {
+          error: {
+            code: 'DELETE_FAILED',
+            message: (error as Error).message || 'Failed to delete publisher',
+          },
+        };
+      }
+    }
+  );
 }
 
 // Public API - Calls
