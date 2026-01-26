@@ -419,17 +419,20 @@ model CallerIdPoolPhoneNumber {
 // ============================================================================
 
 model Campaign {
-  id            String   @id @default(uuid())
-  tenantId      String
-  publisherId   String
-  name          String
-  status        CampaignStatus @default(ACTIVE)
-  routingMode   RoutingMode    @default(STATIC)
-  callerIdPoolId String?
-  flowId        String?  // Current active flow version
-  metadata      Json?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id               String   @id @default(uuid())
+  tenantId         String
+  publisherId      String
+  name             String
+  offerName        String?  // Name of the offer/product for this campaign
+  country          String   @default("US") // ISO country code
+  recordingEnabled Boolean  @default(true) // Whether call recording is enabled
+  status           CampaignStatus @default(ACTIVE)
+  routingMode      RoutingMode    @default(STATIC)
+  callerIdPoolId   String?
+  flowId           String?  // Current active flow version
+  metadata         Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   // Relations
   tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)

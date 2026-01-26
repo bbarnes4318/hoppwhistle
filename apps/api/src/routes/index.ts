@@ -352,6 +352,9 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
           id: c.id,
           name: c.name,
           status: c.status,
+          offerName: c.offerName,
+          country: c.country,
+          recordingEnabled: c.recordingEnabled,
           publisherId: c.publisherId,
           publisher: c.publisher,
           flowId: c.flowId,
@@ -377,6 +380,9 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
     Body: {
       name: string;
       publisherId: string;
+      offerName?: string;
+      country?: string;
+      recordingEnabled?: boolean;
       flowId?: string;
       callerIdPoolId?: string;
       status?: 'ACTIVE' | 'PAUSED';
@@ -455,6 +461,9 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
           tenantId: tenantId,
           publisherId: body.publisherId,
           name: body.name.trim(),
+          offerName: body.offerName?.trim() || null,
+          country: body.country || 'US',
+          recordingEnabled: body.recordingEnabled !== false,
           status: body.status || 'ACTIVE',
           flowId: body.flowId || null,
           callerIdPoolId: body.callerIdPoolId || null,
@@ -488,6 +497,9 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
         tenantId: campaign.tenantId,
         publisherId: campaign.publisherId,
         name: campaign.name,
+        offerName: campaign.offerName,
+        country: campaign.country,
+        recordingEnabled: campaign.recordingEnabled,
         status: campaign.status,
         flowId: campaign.flowId,
         callerIdPoolId: campaign.callerIdPoolId,
@@ -506,40 +518,387 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
     }
   });
 
+  // GET campaign stats (call counts by time window)
+  fastify.get('/api/v1/campaigns/stats', async (request, reply) => {
+    const user = (request as AuthRequest).user;
+    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+    const tenantId = demoTenantId || user?.tenantId;
+
+    if (!tenantId) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+    }
+
+    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+
+    // Get all campaigns for this tenant
+    const campaigns = await prisma.campaign.findMany({
+      where: { tenantId },
+      select: { id: true },
+    });
+
+    const campaignIds = campaigns.map(c => c.id);
+
+    // Calculate time boundaries
+    const now = new Date();
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    // Aggregate stats using groupBy for each time window
+    const [liveStats, hourStats, dayStats, monthStats, totalStats] = await Promise.all([
+      // Live calls (ANSWERED or RINGING status)
+      prisma.call.groupBy({
+        by: ['campaignId'],
+        where: {
+          tenantId,
+          campaignId: { in: campaignIds },
+          status: { in: ['ANSWERED', 'RINGING'] },
+        },
+        _count: { id: true },
+      }),
+      // Last hour
+      prisma.call.groupBy({
+        by: ['campaignId'],
+        where: {
+          tenantId,
+          campaignId: { in: campaignIds },
+          createdAt: { gte: oneHourAgo },
+        },
+        _count: { id: true },
+      }),
+      // Today
+      prisma.call.groupBy({
+        by: ['campaignId'],
+        where: {
+          tenantId,
+          campaignId: { in: campaignIds },
+          createdAt: { gte: startOfToday },
+        },
+        _count: { id: true },
+      }),
+      // This month
+      prisma.call.groupBy({
+        by: ['campaignId'],
+        where: {
+          tenantId,
+          campaignId: { in: campaignIds },
+          createdAt: { gte: startOfMonth },
+        },
+        _count: { id: true },
+      }),
+      // All time
+      prisma.call.groupBy({
+        by: ['campaignId'],
+        where: {
+          tenantId,
+          campaignId: { in: campaignIds },
+        },
+        _count: { id: true },
+      }),
+    ]);
+
+    // Create lookup maps
+    const liveMap = new Map(liveStats.map(s => [s.campaignId, s._count.id]));
+    const hourMap = new Map(hourStats.map(s => [s.campaignId, s._count.id]));
+    const dayMap = new Map(dayStats.map(s => [s.campaignId, s._count.id]));
+    const monthMap = new Map(monthStats.map(s => [s.campaignId, s._count.id]));
+    const totalMap = new Map(totalStats.map(s => [s.campaignId, s._count.id]));
+
+    // Build response
+    const stats = campaignIds.map(campaignId => ({
+      campaignId,
+      liveCount: liveMap.get(campaignId) || 0,
+      hourCount: hourMap.get(campaignId) || 0,
+      dayCount: dayMap.get(campaignId) || 0,
+      monthCount: monthMap.get(campaignId) || 0,
+      totalCount: totalMap.get(campaignId) || 0,
+    }));
+
+    return { data: stats };
+  });
+
   fastify.get<{ Params: { campaignId: string } }>(
     '/api/v1/campaigns/:campaignId',
-    async (request, _reply) => {
+    async (request, reply) => {
+      const user = (request as AuthRequest).user;
+      const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+      const tenantId = demoTenantId || user?.tenantId;
+
+      if (!tenantId) {
+        void reply.code(401);
+        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      }
+
+      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+      const campaign = await prisma.campaign.findFirst({
+        where: {
+          id: request.params.campaignId,
+          tenantId,
+        },
+        include: {
+          publisher: { select: { id: true, name: true, code: true } },
+          flow: { select: { id: true, name: true } },
+          _count: { select: { calls: true, phoneNumbers: true } },
+        },
+      });
+
+      if (!campaign) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Campaign not found' } };
+      }
+
       return {
-        id: request.params.campaignId,
-        tenantId: '00000000-0000-0000-0000-000000000000',
-        publisherId: '00000000-0000-0000-0000-000000000000',
-        name: 'Campaign',
-        status: 'ACTIVE',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        id: campaign.id,
+        name: campaign.name,
+        offerName: campaign.offerName,
+        country: campaign.country,
+        recordingEnabled: campaign.recordingEnabled,
+        status: campaign.status,
+        publisherId: campaign.publisherId,
+        publisher: campaign.publisher,
+        flowId: campaign.flowId,
+        flow: campaign.flow,
+        callerIdPoolId: campaign.callerIdPoolId,
+        metadata: campaign.metadata,
+        calls: campaign._count.calls,
+        phoneNumbers: campaign._count.phoneNumbers,
+        createdAt: campaign.createdAt.toISOString(),
+        updatedAt: campaign.updatedAt.toISOString(),
       };
     }
   );
 
-  fastify.patch<{ Params: { campaignId: string } }>(
-    '/api/v1/campaigns/:campaignId',
-    async (request, _reply) => {
+  fastify.patch<{
+    Params: { campaignId: string };
+    Body: {
+      name?: string;
+      offerName?: string;
+      country?: string;
+      recordingEnabled?: boolean;
+      status?: 'ACTIVE' | 'PAUSED' | 'ARCHIVED';
+      flowId?: string | null;
+      callerIdPoolId?: string | null;
+    };
+  }>('/api/v1/campaigns/:campaignId', async (request, reply) => {
+    try {
+      const user = (request as AuthRequest).user;
+      const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+      const tenantId = demoTenantId || user?.tenantId;
+
+      if (!tenantId) {
+        void reply.code(401);
+        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      }
+
+      const { campaignId } = request.params;
+      const body = request.body;
+      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+
+      // Verify campaign exists and belongs to tenant
+      const existingCampaign = await prisma.campaign.findFirst({
+        where: { id: campaignId, tenantId },
+      });
+
+      if (!existingCampaign) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Campaign not found' } };
+      }
+
+      // Build update data
+      const updateData: Record<string, unknown> = {};
+      if (body.name !== undefined) updateData.name = body.name.trim();
+      if (body.offerName !== undefined) updateData.offerName = body.offerName?.trim() || null;
+      if (body.country !== undefined) updateData.country = body.country;
+      if (body.recordingEnabled !== undefined) updateData.recordingEnabled = body.recordingEnabled;
+      if (body.status !== undefined) updateData.status = body.status;
+      if (body.flowId !== undefined) updateData.flowId = body.flowId;
+      if (body.callerIdPoolId !== undefined) updateData.callerIdPoolId = body.callerIdPoolId;
+
+      // Update campaign
+      const updatedCampaign = await prisma.campaign.update({
+        where: { id: campaignId },
+        data: updateData,
+        include: {
+          publisher: { select: { id: true, name: true, code: true } },
+          flow: { select: { id: true, name: true } },
+        },
+      });
+
+      // Audit log
+      const { auditUpdate } = await import('../services/audit.js');
+      await auditUpdate(tenantId, 'Campaign', campaignId, existingCampaign, updatedCampaign, {
+        userId: (user as AuthenticatedUser)?.userId,
+        ipAddress: request.ip,
+        requestId: request.id,
+      });
+
       return {
-        id: request.params.campaignId,
-        tenantId: '00000000-0000-0000-0000-000000000000',
-        publisherId: '00000000-0000-0000-0000-000000000000',
-        name: 'Campaign',
-        status: 'ACTIVE',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        id: updatedCampaign.id,
+        name: updatedCampaign.name,
+        offerName: updatedCampaign.offerName,
+        country: updatedCampaign.country,
+        recordingEnabled: updatedCampaign.recordingEnabled,
+        status: updatedCampaign.status,
+        publisherId: updatedCampaign.publisherId,
+        publisher: updatedCampaign.publisher,
+        flowId: updatedCampaign.flowId,
+        flow: updatedCampaign.flow,
+        callerIdPoolId: updatedCampaign.callerIdPoolId,
+        metadata: updatedCampaign.metadata,
+        createdAt: updatedCampaign.createdAt.toISOString(),
+        updatedAt: updatedCampaign.updatedAt.toISOString(),
       };
+    } catch (error: unknown) {
+      void reply.code(400);
+      return {
+        error: {
+          code: 'UPDATE_FAILED',
+          message: (error as Error).message || 'Failed to update campaign',
+        },
+      };
+    }
+  });
+
+  // Duplicate campaign
+  fastify.post<{ Params: { campaignId: string } }>(
+    '/api/v1/campaigns/:campaignId/duplicate',
+    async (request, reply) => {
+      try {
+        const user = (request as AuthRequest).user;
+        const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+        const tenantId = demoTenantId || user?.tenantId;
+
+        if (!tenantId) {
+          void reply.code(401);
+          return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+        }
+
+        const { campaignId } = request.params;
+        const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+
+        // Get the original campaign
+        const original = await prisma.campaign.findFirst({
+          where: { id: campaignId, tenantId },
+        });
+
+        if (!original) {
+          void reply.code(404);
+          return { error: { code: 'NOT_FOUND', message: 'Campaign not found' } };
+        }
+
+        // Create a copy with " - Copy" appended and status set to PAUSED
+        const duplicate = await prisma.campaign.create({
+          data: {
+            tenantId: original.tenantId,
+            publisherId: original.publisherId,
+            name: `${original.name} - Copy`,
+            offerName: original.offerName,
+            country: original.country,
+            recordingEnabled: original.recordingEnabled,
+            status: 'PAUSED',
+            routingMode: original.routingMode,
+            flowId: original.flowId,
+            callerIdPoolId: original.callerIdPoolId,
+            metadata: original.metadata || {},
+          },
+          include: {
+            publisher: { select: { id: true, name: true, code: true } },
+            flow: { select: { id: true, name: true } },
+          },
+        });
+
+        // Audit log
+        const { auditCreate } = await import('../services/audit.js');
+        await auditCreate(
+          tenantId,
+          'Campaign',
+          duplicate.id,
+          { duplicatedFrom: campaignId, name: duplicate.name },
+          {
+            userId: (user as AuthenticatedUser)?.userId,
+            ipAddress: request.ip,
+            requestId: request.id,
+          }
+        );
+
+        void reply.code(201);
+        return {
+          id: duplicate.id,
+          name: duplicate.name,
+          offerName: duplicate.offerName,
+          country: duplicate.country,
+          recordingEnabled: duplicate.recordingEnabled,
+          status: duplicate.status,
+          publisherId: duplicate.publisherId,
+          publisher: duplicate.publisher,
+          flowId: duplicate.flowId,
+          flow: duplicate.flow,
+          callerIdPoolId: duplicate.callerIdPoolId,
+          metadata: duplicate.metadata,
+          createdAt: duplicate.createdAt.toISOString(),
+          updatedAt: duplicate.updatedAt.toISOString(),
+        };
+      } catch (error: unknown) {
+        void reply.code(400);
+        return {
+          error: {
+            code: 'DUPLICATE_FAILED',
+            message: (error as Error).message || 'Failed to duplicate campaign',
+          },
+        };
+      }
     }
   );
 
   fastify.delete<{ Params: { campaignId: string } }>(
     '/api/v1/campaigns/:campaignId',
-    async (_request, reply) => {
-      void reply.code(204);
+    async (request, reply) => {
+      try {
+        const user = (request as AuthRequest).user;
+        const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+        const tenantId = demoTenantId || user?.tenantId;
+
+        if (!tenantId) {
+          void reply.code(401);
+          return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+        }
+
+        const { campaignId } = request.params;
+        const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+
+        // Verify campaign exists and belongs to tenant
+        const campaign = await prisma.campaign.findFirst({
+          where: { id: campaignId, tenantId },
+        });
+
+        if (!campaign) {
+          void reply.code(404);
+          return { error: { code: 'NOT_FOUND', message: 'Campaign not found' } };
+        }
+
+        // Delete campaign
+        await prisma.campaign.delete({ where: { id: campaignId } });
+
+        // Audit log
+        const { auditDelete } = await import('../services/audit.js');
+        await auditDelete(tenantId, 'Campaign', campaignId, campaign, {
+          userId: (user as AuthenticatedUser)?.userId,
+          ipAddress: request.ip,
+          requestId: request.id,
+        });
+
+        void reply.code(204);
+        return;
+      } catch (error: unknown) {
+        void reply.code(400);
+        return {
+          error: {
+            code: 'DELETE_FAILED',
+            message: (error as Error).message || 'Failed to delete campaign',
+          },
+        };
+      }
     }
   );
 }
