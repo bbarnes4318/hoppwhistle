@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
 import { Calendar, RefreshCw } from 'lucide-react';
+import { useState } from 'react';
 
+import { CallIntelligence } from '@/components/dashboard/call-intelligence';
 import { DashboardKPIs } from '@/components/dashboard/dashboard-kpis';
 import { SalesFunnel } from '@/components/dashboard/sales-funnel';
 import { TopPerformers } from '@/components/dashboard/top-performers';
-import { CallIntelligence } from '@/components/dashboard/call-intelligence';
+import { UpfrontBuyerBalances } from '@/components/dashboard/upfront-buyer-balances';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -97,6 +98,11 @@ export default function DashboardPage() {
       {/* KPI Cards - Above the Fold */}
       <section className="flex-shrink-0 mb-6">
         <DashboardKPIs dateRange={getDateRange()} onFilterChange={handleFilterChange} />
+      </section>
+
+      {/* Upfront Buyer Balances - Real-time wallet monitoring */}
+      <section className="flex-shrink-0 mb-6">
+        <UpfrontBuyerBalances />
       </section>
 
       {/* Mid-Page Insights Grid - 2 columns */}

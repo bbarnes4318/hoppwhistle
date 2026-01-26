@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
+import { buyerBillingService } from '../services/buyer-billing-service.js';
 import { callStateService } from '../services/call-state.js';
 import { eventBus } from '../services/event-bus.js';
 import { freeswitchService } from '../services/freeswitch-service.js';

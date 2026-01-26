@@ -1,20 +1,21 @@
 'use client';
 
 import {
-  LayoutDashboard,
-  Phone,
-  Megaphone,
-  PhoneCall,
-  Receipt,
-  Settings,
-  Users,
-  FileText,
-  Shield,
-  GitBranch,
-  DollarSign,
   AudioLines,
   Bot,
   ClipboardCheck,
+  DollarSign,
+  FileText,
+  GitBranch,
+  LayoutDashboard,
+  Megaphone,
+  Phone,
+  PhoneCall,
+  Receipt,
+  Settings,
+  Shield,
+  Users,
+  Wallet,
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -35,6 +36,12 @@ const navigation = [
   { name: 'Campaigns', href: '/campaigns', icon: Megaphone },
   { name: 'Flows', href: '/flows', icon: GitBranch },
   { name: 'Calls', href: '/calls', icon: AudioLines },
+  {
+    name: 'Buyers',
+    href: '/buyers',
+    icon: Wallet,
+    title: 'Manage buyers & billing wallets',
+  },
   {
     name: 'Retention',
     href: '/retention',

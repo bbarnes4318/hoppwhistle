@@ -177,6 +177,7 @@ model User {
   createdCalls Call[]  @relation("CallCreator")
   stirShakenOverrides StirShakenStatus[] @relation("StirShakenOverrideUser")
   assignedLeads Lead[]
+  buyerTransactions BuyerTransaction[] @relation("BuyerTransactionCreator")
 
   @@unique([tenantId, email])
   @@index([tenantId, email])
@@ -490,6 +491,9 @@ model Buyer {
   name        String
   code        String   // Internal buyer code
   status      BuyerStatus @default(ACTIVE)
+  billingType      BuyerBillingType @default(TERMS)
+  leadsRemaining   Int              @default(0)
+  billableDuration Int              @default(60)  // Seconds threshold for billable call
   metadata    Json?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -499,16 +503,49 @@ model Buyer {
   publisher Publisher      @relation(fields: [publisherId], references: [id])
   endpoints BuyerEndpoint[]
   calls     Call[]
+  transactions BuyerTransaction[]
 
   @@unique([tenantId, publisherId, code])
   @@index([tenantId])
   @@index([publisherId])
+  @@index([billingType])
   @@map("buyers")
+}
+
+enum BuyerBillingType {
+  TERMS    // Post-pay
+  UPFRONT  // Pre-pay wallet
 }
 
 enum BuyerStatus {
   ACTIVE
   INACTIVE
+  PAUSED  // Auto-paused when wallet empty
+}
+
+enum BuyerTransactionType {
+  CREDIT  // Admin adds leads
+  DEBIT   // System deducts on call
+}
+
+model BuyerTransaction {
+  id          String    @id @default(uuid())
+  buyerId     String
+  amount      Int       // +N for credit, -1 for debit
+  type        BuyerTransactionType
+  description String    // e.g., "Call ID #abc123" or "Admin added 100 leads"
+  callId      String?   // Reference if DEBIT
+  createdById String?   // Admin who added credits
+  createdAt   DateTime  @default(now())
+
+  buyer     Buyer  @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  call      Call?  @relation(fields: [callId], references: [id])
+  createdBy User?  @relation("BuyerTransactionCreator", fields: [createdById], references: [id])
+
+  @@index([buyerId])
+  @@index([createdAt])
+  @@index([type])
+  @@map("buyer_transactions")
 }
 
 model BuyerEndpoint {
@@ -738,6 +775,7 @@ model Call {
   tags        CallTag[]
   accruals    AccrualLedger[]
   leadCalls   LeadCall[]
+  buyerTransactions BuyerTransaction[]
 
   @@index([tenantId])
   @@index([tenantId, createdAt])
