@@ -96,6 +96,14 @@ class ApiClient {
       const data = await response.json();
 
       if (!response.ok) {
+        // Auto-logout on 401 Unauthorized - clear invalid token and redirect to login
+        if (response.status === 401) {
+          this.clearToken();
+          // Only redirect if we're in a browser and not already on login page
+          if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+            window.location.href = '/login';
+          }
+        }
         return {
           error: {
             code: data.error?.code || 'UNKNOWN_ERROR',
