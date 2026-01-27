@@ -67,7 +67,7 @@ export default function AuthPage() {
       setError(null);
 
       try {
-        const res = await fetch(`${API_BASE}/auth/google`, {
+        const res = await fetch(`${API_BASE}/api/auth/google`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ credential: response.credential }),
@@ -111,7 +111,7 @@ export default function AuthPage() {
           text: 'continue_with',
           shape: 'rectangular',
           logo_alignment: 'left',
-          width: '100%',
+          width: 300,
         }
       );
     }
@@ -124,7 +124,7 @@ export default function AuthPage() {
     setError(null);
 
     try {
-      const res = await fetch(`${API_BASE}/auth/login`, {
+      const res = await fetch(`${API_BASE}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -159,7 +159,7 @@ export default function AuthPage() {
     setError(null);
 
     try {
-      const res = await fetch(`${API_BASE}/auth/register`, {
+      const res = await fetch(`${API_BASE}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password, firstName, lastName }),
