@@ -13,6 +13,9 @@ import { verifyGoogleToken } from '../services/google-auth.js';
 // Password validation: min 8 chars, 1 uppercase, 1 number
 const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*\d).{8,}$/;
 
+// Default tenant ID for new users (must exist in database)
+const DEFAULT_TENANT_ID = 'default-tenant-id';
+
 interface UserRole {
   role: { name: string };
 }
@@ -235,9 +238,10 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     // Hash password (12 salt rounds for security)
     const passwordHash = await hash(password, 12);
 
-    // Create user
+    // Create user with default tenant
     const user = await prisma.user.create({
       data: {
+        tenantId: DEFAULT_TENANT_ID,
         email: normalizedEmail,
         passwordHash,
         authMethod: 'EMAIL',
@@ -395,9 +399,10 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
           success: true,
         });
       } else {
-        // Create new user with Google
+        // Create new user with Google and default tenant
         user = await prisma.user.create({
           data: {
+            tenantId: DEFAULT_TENANT_ID,
             email: normalizedEmail,
             googleId: googleUser.googleId,
             authMethod: 'GOOGLE',
