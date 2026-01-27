@@ -3,8 +3,6 @@ generator client {
   provider = "prisma-client-js"
 }
 
-
-
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -15,49 +13,49 @@ datasource db {
 // ============================================================================
 
 model Tenant {
-  id          String   @id @default(uuid())
-  name        String
-  slug        String   @unique
-  domain      String?  @unique
-  status      TenantStatus @default(ACTIVE)
-  metadata    Json?    // Additional tenant-specific configuration
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String       @id @default(uuid())
+  name      String
+  slug      String       @unique
+  domain    String?      @unique
+  status    TenantStatus @default(ACTIVE)
+  metadata  Json? // Additional tenant-specific configuration
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
 
   // Quota & Budget Controls
-  quota       TenantQuota?
-  budget      TenantBudget?
+  quota          TenantQuota?
+  budget         TenantBudget?
   quotaOverrides QuotaOverride[]
-  budgetAlerts BudgetAlert[]
+  budgetAlerts   BudgetAlert[]
 
   // Relations
-  users            User[]
-  apiKeys          ApiKey[]
-  rateLimitEntries RateLimitEntry[]
-  phoneNumbers     PhoneNumber[]
-  carriers         Carrier[]
-  trunks           Trunk[]
-  callerIdPools    CallerIdPool[]
-  campaigns        Campaign[]
-  publishers       Publisher[]
-  buyers           Buyer[]
-  flows            Flow[]
-  calls            Call[]
-  billingAccounts  BillingAccount[]
-  webhooks         Webhook[]
-  events           Event[]
-  auditLogs        AuditLog[]
-  featureFlags     FeatureFlag[]
-  dncLists         DncList[]
-  consentTokens    ConsentToken[]
-  compliancePolicies CompliancePolicy[]
+  users               User[]
+  apiKeys             ApiKey[]
+  rateLimitEntries    RateLimitEntry[]
+  phoneNumbers        PhoneNumber[]
+  carriers            Carrier[]
+  trunks              Trunk[]
+  callerIdPools       CallerIdPool[]
+  campaigns           Campaign[]
+  publishers          Publisher[]
+  buyers              Buyer[]
+  flows               Flow[]
+  calls               Call[]
+  billingAccounts     BillingAccount[]
+  webhooks            Webhook[]
+  events              Event[]
+  auditLogs           AuditLog[]
+  featureFlags        FeatureFlag[]
+  dncLists            DncList[]
+  consentTokens       ConsentToken[]
+  compliancePolicies  CompliancePolicy[]
   complianceOverrides ComplianceOverride[]
-  stirShakenStatuses StirShakenStatus[]
-  cnamLookups        CnamLookup[]
-  carrierLookups     CarrierLookup[]
-  tags             Tag[]
-  leads            Lead[]
-  retentionPolicies RetentionPolicy[]
+  stirShakenStatuses  StirShakenStatus[]
+  cnamLookups         CnamLookup[]
+  carrierLookups      CarrierLookup[]
+  tags                Tag[]
+  leads               Lead[]
+  retentionPolicies   RetentionPolicy[]
 
   @@index([slug])
   @@index([status])
@@ -65,16 +63,16 @@ model Tenant {
 }
 
 model TenantQuota {
-  id                    String   @id @default(uuid())
-  tenantId              String   @unique
-  maxConcurrentCalls    Int?     // Maximum concurrent calls allowed
-  maxMinutesPerDay      Int?     // Maximum call minutes per day
+  id                        String   @id @default(uuid())
+  tenantId                  String   @unique
+  maxConcurrentCalls        Int? // Maximum concurrent calls allowed
+  maxMinutesPerDay          Int? // Maximum call minutes per day
   maxRecordingRetentionDays Int? // Maximum days to retain recordings
-  maxPhoneNumbers       Int?     // Maximum phone numbers allowed
-  maxStorageGB          Decimal? @db.Decimal(10, 2) // Maximum storage in GB
-  enabled               Boolean  @default(true)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  maxPhoneNumbers           Int? // Maximum phone numbers allowed
+  maxStorageGB              Decimal? @db.Decimal(10, 2) // Maximum storage in GB
+  enabled                   Boolean  @default(true)
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -82,25 +80,25 @@ model TenantQuota {
 }
 
 model TenantBudget {
-  id                    String   @id @default(uuid())
-  tenantId              String   @unique
-  monthlyBudget         Decimal? @db.Decimal(10, 2) // Monthly budget in USD
-  dailyBudget           Decimal? @db.Decimal(10, 2) // Daily budget in USD
-  alertThreshold        Decimal  @default(80) // Alert at X% of budget
-  alertEmails           String[] // Email addresses for alerts
-  alertSlackWebhook     String?  // Slack webhook URL
-  hardStopEnabled       Boolean  @default(true) // Hard stop when budget exceeded
-  overrideToken         String?  @unique // Token to override hard stops
+  id                     String           @id @default(uuid())
+  tenantId               String           @unique
+  monthlyBudget          Decimal?         @db.Decimal(10, 2) // Monthly budget in USD
+  dailyBudget            Decimal?         @db.Decimal(10, 2) // Daily budget in USD
+  alertThreshold         Decimal          @default(80) // Alert at X% of budget
+  alertEmails            String[] // Email addresses for alerts
+  alertSlackWebhook      String? // Slack webhook URL
+  hardStopEnabled        Boolean          @default(true) // Hard stop when budget exceeded
+  overrideToken          String?          @unique // Token to override hard stops
   overrideTokenExpiresAt DateTime? // Token expiration
-  currentMonthSpend     Decimal  @default(0) @db.Decimal(10, 2)
-  currentDaySpend       Decimal  @default(0) @db.Decimal(10, 2)
-  lastAlertSentAt       DateTime? // Last time alert was sent
-  lastAlertType         BudgetAlertType?
-  enabled               Boolean  @default(true)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  currentMonthSpend      Decimal          @default(0) @db.Decimal(10, 2)
+  currentDaySpend        Decimal          @default(0) @db.Decimal(10, 2)
+  lastAlertSentAt        DateTime? // Last time alert was sent
+  lastAlertType          BudgetAlertType?
+  enabled                Boolean          @default(true)
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   alerts BudgetAlert[]
 
   @@map("tenant_budgets")
@@ -114,17 +112,17 @@ enum BudgetAlertType {
 }
 
 model BudgetAlert {
-  id          String   @id @default(uuid())
-  tenantId    String
-  budgetId    String
-  type        BudgetAlertType
-  threshold   Decimal  @db.Decimal(10, 2)
-  actual      Decimal  @db.Decimal(10, 2)
-  sentVia     String[] // email, slack, etc.
-  sentAt      DateTime @default(now())
-  metadata    Json?
+  id        String          @id @default(uuid())
+  tenantId  String
+  budgetId  String
+  type      BudgetAlertType
+  threshold Decimal         @db.Decimal(10, 2)
+  actual    Decimal         @db.Decimal(10, 2)
+  sentVia   String[] // email, slack, etc.
+  sentAt    DateTime        @default(now())
+  metadata  Json?
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   budget TenantBudget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
@@ -134,15 +132,15 @@ model BudgetAlert {
 }
 
 model QuotaOverride {
-  id          String   @id @default(uuid())
-  tenantId    String
-  quotaType   String   // concurrent_calls, minutes_per_day, etc.
-  overrideValue Int?   // Override value (null = unlimited)
-  reason      String
-  expiresAt   DateTime?
-  createdBy   String?  // User ID who created override
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String    @id @default(uuid())
+  tenantId      String
+  quotaType     String // concurrent_calls, minutes_per_day, etc.
+  overrideValue Int? // Override value (null = unlimited)
+  reason        String
+  expiresAt     DateTime?
+  createdBy     String? // User ID who created override
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -158,26 +156,26 @@ enum TenantStatus {
 }
 
 model User {
-  id          String   @id @default(uuid())
-  tenantId    String
-  email       String
+  id           String     @id @default(uuid())
+  tenantId     String
+  email        String
   passwordHash String
-  firstName   String?
-  lastName    String?
-  status      UserStatus @default(ACTIVE)
-  lastLoginAt DateTime?
-  metadata    Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  firstName    String?
+  lastName     String?
+  status       UserStatus @default(ACTIVE)
+  lastLoginAt  DateTime?
+  metadata     Json?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
   // Relations
-  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  roles       UserRole[]
-  auditLogs   AuditLog[]
-  createdCalls Call[]  @relation("CallCreator")
+  tenant              Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  roles               UserRole[]
+  auditLogs           AuditLog[]
+  createdCalls        Call[]             @relation("CallCreator")
   stirShakenOverrides StirShakenStatus[] @relation("StirShakenOverrideUser")
-  assignedLeads Lead[]
-  buyerTransactions BuyerTransaction[] @relation("BuyerTransactionCreator")
+  assignedLeads       Lead[]
+  buyerTransactions   BuyerTransaction[] @relation("BuyerTransactionCreator")
 
   @@unique([tenantId, email])
   @@index([tenantId, email])
@@ -204,12 +202,12 @@ model Role {
   id          String   @id @default(uuid())
   name        RoleName @unique
   description String?
-  permissions Json     // Array of permission strings
+  permissions Json // Array of permission strings
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   // Relations
-  userRoles   UserRole[]
+  userRoles UserRole[]
 
   @@map("roles")
 }
@@ -231,22 +229,22 @@ model UserRole {
 }
 
 model ApiKey {
-  id          String   @id @default(uuid())
-  tenantId    String
-  name        String
-  keyHash     String   @unique // Hashed API key
-  prefix      String   // First 8 chars for identification
-  status      ApiKeyStatus @default(ACTIVE)
-  scopes      Json     // Array of scope strings (e.g., ["calls:read", "calls:write"])
-  rateLimit   Int?     // Requests per minute (null = unlimited)
-  lastUsedAt  DateTime?
-  expiresAt   DateTime?
-  metadata    Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String       @id @default(uuid())
+  tenantId   String
+  name       String
+  keyHash    String       @unique // Hashed API key
+  prefix     String // First 8 chars for identification
+  status     ApiKeyStatus @default(ACTIVE)
+  scopes     Json // Array of scope strings (e.g., ["calls:read", "calls:write"])
+  rateLimit  Int? // Requests per minute (null = unlimited)
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  metadata   Json?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
 
   // Relations
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   rateLimitEntries RateLimitEntry[]
   auditLogs        AuditLog[]
 
@@ -267,32 +265,32 @@ enum ApiKeyStatus {
 // ============================================================================
 
 model PhoneNumber {
-  id            String   @id @default(uuid())
-  tenantId      String
-  number        String   // E.164 format
-  carrierId     String?
-  trunkId       String?
-  campaignId    String?  // Assigned campaign
-  provider      String?  // local | signalwire | telnyx | bandwidth | clec
-  status        PhoneNumberStatus @default(ACTIVE)
-  capabilities  Json?    // SMS, MMS, Voice, etc.
-  metadata      Json?
-  purchasedAt   DateTime?
-  releasedAt    DateTime?
-  importSource  String?  // Source of import (e.g., 'legacy', 'ringba', 'callrail')
-  importHash    String?  // Hash for deduplication
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           String            @id @default(uuid())
+  tenantId     String
+  number       String // E.164 format
+  carrierId    String?
+  trunkId      String?
+  campaignId   String? // Assigned campaign
+  provider     String? // local | signalwire | telnyx | bandwidth | clec
+  status       PhoneNumberStatus @default(ACTIVE)
+  capabilities Json? // SMS, MMS, Voice, etc.
+  metadata     Json?
+  purchasedAt  DateTime?
+  releasedAt   DateTime?
+  importSource String? // Source of import (e.g., 'legacy', 'ringba', 'callrail')
+  importHash   String? // Hash for deduplication
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
 
   // Relations
-  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  carrier       Carrier? @relation(fields: [carrierId], references: [id])
-  trunk         Trunk?   @relation(fields: [trunkId], references: [id])
-  campaign      Campaign? @relation(fields: [campaignId], references: [id])
-  callerIdPools CallerIdPoolPhoneNumber[]
+  tenant         Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  carrier        Carrier?                  @relation(fields: [carrierId], references: [id])
+  trunk          Trunk?                    @relation(fields: [trunkId], references: [id])
+  campaign       Campaign?                 @relation(fields: [campaignId], references: [id])
+  callerIdPools  CallerIdPoolPhoneNumber[]
   buyerEndpoints BuyerEndpoint[]
-  calls         Call[]   @relation("CallFromNumber")
-  callLegs      CallLeg[]
+  calls          Call[]                    @relation("CallFromNumber")
+  callLegs       CallLeg[]
 
   @@unique([tenantId, number])
   @@index([tenantId, number])
@@ -312,19 +310,19 @@ enum PhoneNumberStatus {
 }
 
 model Carrier {
-  id          String   @id @default(uuid())
-  tenantId    String
-  name        String
-  code        String   // Internal carrier code
-  status      CarrierStatus @default(ACTIVE)
-  metadata    Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String        @id @default(uuid())
+  tenantId  String
+  name      String
+  code      String // Internal carrier code
+  status    CarrierStatus @default(ACTIVE)
+  metadata  Json?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
 
   // Relations
-  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  phoneNumbers  PhoneNumber[]
-  trunks        Trunk[]
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  phoneNumbers PhoneNumber[]
+  trunks       Trunk[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -337,24 +335,24 @@ enum CarrierStatus {
 }
 
 model Trunk {
-  id          String   @id @default(uuid())
-  tenantId    String
-  carrierId   String
-  name        String
-  type        TrunkType
-  host        String
-  port        Int
-  username    String?
-  password    String?  // Encrypted
-  status      TrunkStatus @default(ACTIVE)
-  metadata    Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String      @id @default(uuid())
+  tenantId  String
+  carrierId String
+  name      String
+  type      TrunkType
+  host      String
+  port      Int
+  username  String?
+  password  String? // Encrypted
+  status    TrunkStatus @default(ACTIVE)
+  metadata  Json?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
 
   // Relations
-  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  carrier       Carrier       @relation(fields: [carrierId], references: [id])
-  phoneNumbers  PhoneNumber[]
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  carrier      Carrier       @relation(fields: [carrierId], references: [id])
+  phoneNumbers PhoneNumber[]
 
   @@index([tenantId])
   @@index([carrierId])
@@ -375,18 +373,18 @@ enum TrunkStatus {
 }
 
 model CallerIdPool {
-  id          String   @id @default(uuid())
-  tenantId    String
-  name        String
-  status      CallerIdPoolStatus @default(ACTIVE)
-  metadata    Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String             @id @default(uuid())
+  tenantId  String
+  name      String
+  status    CallerIdPoolStatus @default(ACTIVE)
+  metadata  Json?
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
 
   // Relations
-  tenant        Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  phoneNumbers  CallerIdPoolPhoneNumber[]
-  campaigns     Campaign[]
+  tenant       Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  phoneNumbers CallerIdPoolPhoneNumber[]
+  campaigns    Campaign[]
 
   @@index([tenantId])
   @@map("caller_id_pools")
@@ -398,11 +396,11 @@ enum CallerIdPoolStatus {
 }
 
 model CallerIdPoolPhoneNumber {
-  id              String   @id @default(uuid())
-  callerIdPoolId  String
-  phoneNumberId   String
-  priority        Int      @default(0)
-  createdAt       DateTime @default(now())
+  id             String   @id @default(uuid())
+  callerIdPoolId String
+  phoneNumberId  String
+  priority       Int      @default(0)
+  createdAt      DateTime @default(now())
 
   // Relations
   callerIdPool CallerIdPool @relation(fields: [callerIdPoolId], references: [id], onDelete: Cascade)
@@ -419,29 +417,29 @@ model CallerIdPoolPhoneNumber {
 // ============================================================================
 
 model Campaign {
-  id               String   @id @default(uuid())
+  id               String         @id @default(uuid())
   tenantId         String
   publisherId      String
   name             String
-  offerName        String?  // Name of the offer/product for this campaign
-  country          String   @default("US") // ISO country code
-  recordingEnabled Boolean  @default(true) // Whether call recording is enabled
+  offerName        String? // Name of the offer/product for this campaign
+  country          String         @default("US") // ISO country code
+  recordingEnabled Boolean        @default(true) // Whether call recording is enabled
   status           CampaignStatus @default(ACTIVE)
   routingMode      RoutingMode    @default(STATIC)
   callerIdPoolId   String?
-  flowId           String?  // Current active flow version
+  flowId           String? // Current active flow version
   metadata         Json?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
 
   // Relations
-  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  publisher     Publisher     @relation(fields: [publisherId], references: [id])
-  callerIdPool  CallerIdPool? @relation(fields: [callerIdPoolId], references: [id])
-  flow          Flow?         @relation(fields: [flowId], references: [id])
-  phoneNumbers  PhoneNumber[]
-  calls         Call[]
-  leads         Lead[]
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  publisher    Publisher     @relation(fields: [publisherId], references: [id])
+  callerIdPool CallerIdPool? @relation(fields: [callerIdPoolId], references: [id])
+  flow         Flow?         @relation(fields: [flowId], references: [id])
+  phoneNumbers PhoneNumber[]
+  calls        Call[]
+  leads        Lead[]
 
   @@index([tenantId])
   @@index([publisherId])
@@ -462,16 +460,16 @@ enum RoutingMode {
 }
 
 model Publisher {
-  id                  String   @id @default(uuid())
-  tenantId            String
-  name                String
-  code                String   // Internal publisher code (32-char hex)
-  email               String?  @unique // Publisher's email for welcome notifications
-  accessToRecordings  Boolean  @default(false) // Whether publisher can access call recordings
-  status              PublisherStatus @default(ACTIVE)
-  metadata            Json?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                 String          @id @default(uuid())
+  tenantId           String
+  name               String
+  code               String // Internal publisher code (32-char hex)
+  email              String?         @unique // Publisher's email for welcome notifications
+  accessToRecordings Boolean         @default(false) // Whether publisher can access call recordings
+  status             PublisherStatus @default(ACTIVE)
+  metadata           Json?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
 
   // Relations
   tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -491,25 +489,33 @@ enum PublisherStatus {
 }
 
 model Buyer {
-  id          String   @id @default(uuid())
-  tenantId    String
-  publisherId String
-  name        String
-  code        String   // Internal buyer code
-  status      BuyerStatus @default(ACTIVE)
+  id               String           @id @default(uuid())
+  tenantId         String
+  publisherId      String
+  name             String
+  code             String // Internal buyer code
+  subId            String? // External sub-identifier
+  status           BuyerStatus      @default(ACTIVE)
   billingType      BuyerBillingType @default(TERMS)
   leadsRemaining   Int              @default(0)
-  billableDuration Int              @default(60)  // Seconds threshold for billable call
-  metadata    Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  billableDuration Int              @default(60) // Seconds threshold for billable call
+
+  // Permission toggles
+  canPauseTargets       Boolean @default(false)
+  canSetCaps            Boolean @default(false)
+  canDisputeConversions Boolean @default(false)
+
+  metadata  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  tenant    Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  publisher Publisher      @relation(fields: [publisherId], references: [id])
-  endpoints BuyerEndpoint[]
-  calls     Call[]
+  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  publisher    Publisher          @relation(fields: [publisherId], references: [id])
+  endpoints    BuyerEndpoint[]
+  calls        Call[]
   transactions BuyerTransaction[]
+  stats        BuyerStats?
 
   @@unique([tenantId, publisherId, code])
   @@index([tenantId])
@@ -519,34 +525,34 @@ model Buyer {
 }
 
 enum BuyerBillingType {
-  TERMS    // Post-pay
-  UPFRONT  // Pre-pay wallet
+  TERMS // Post-pay
+  UPFRONT // Pre-pay wallet
 }
 
 enum BuyerStatus {
   ACTIVE
   INACTIVE
-  PAUSED  // Auto-paused when wallet empty
+  PAUSED // Auto-paused when wallet empty
 }
 
 enum BuyerTransactionType {
-  CREDIT  // Admin adds leads
-  DEBIT   // System deducts on call
+  CREDIT // Admin adds leads
+  DEBIT // System deducts on call
 }
 
 model BuyerTransaction {
-  id          String    @id @default(uuid())
+  id          String               @id @default(uuid())
   buyerId     String
-  amount      Int       // +N for credit, -1 for debit
+  amount      Int // +N for credit, -1 for debit
   type        BuyerTransactionType
-  description String    // e.g., "Call ID #abc123" or "Admin added 100 leads"
-  callId      String?   // Reference if DEBIT
-  createdById String?   // Admin who added credits
-  createdAt   DateTime  @default(now())
+  description String // e.g., "Call ID #abc123" or "Admin added 100 leads"
+  callId      String? // Reference if DEBIT
+  createdById String? // Admin who added credits
+  createdAt   DateTime             @default(now())
 
-  buyer     Buyer  @relation(fields: [buyerId], references: [id], onDelete: Cascade)
-  call      Call?  @relation(fields: [callId], references: [id])
-  createdBy User?  @relation("BuyerTransactionCreator", fields: [createdById], references: [id])
+  buyer     Buyer @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  call      Call? @relation(fields: [callId], references: [id])
+  createdBy User? @relation("BuyerTransactionCreator", fields: [createdById], references: [id])
 
   @@index([buyerId])
   @@index([createdAt])
@@ -555,16 +561,23 @@ model BuyerTransaction {
 }
 
 model BuyerEndpoint {
-  id          String   @id @default(uuid())
-  buyerId     String
+  id            String              @id @default(uuid())
+  buyerId       String
   phoneNumberId String?
-  type        BuyerEndpointType
-  destination String   // SIP URI or PSTN number
-  priority    Int      @default(0)
-  status      BuyerEndpointStatus @default(ACTIVE)
-  metadata    Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  name          String // Display name (e.g., "Call Center A")
+  type          BuyerEndpointType
+  destination   String // SIP URI or PSTN number
+  priority      Int                 @default(0)
+  status        BuyerEndpointStatus @default(ACTIVE)
+
+  // Cap settings (static config, no live state)
+  maxCap         Int       @default(0) // Maximum calls allowed per period
+  capPeriod      CapPeriod @default(DAY) // HOUR | DAY | MONTH
+  maxConcurrency Int       @default(10) // Maximum simultaneous calls
+
+  metadata  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
   buyer       Buyer        @relation(fields: [buyerId], references: [id], onDelete: Cascade)
@@ -588,24 +601,60 @@ enum BuyerEndpointStatus {
   FAILED
 }
 
+enum CapPeriod {
+  HOUR
+  DAY
+  MONTH
+}
+
+// Summary table for buyer analytics (updated by background job)
+model BuyerStats {
+  id      String @id @default(uuid())
+  buyerId String @unique
+
+  // Revenue aggregates (pre-calculated, UI reads only)
+  revenueHour  Decimal @default(0) @db.Decimal(12, 4)
+  revenueDay   Decimal @default(0) @db.Decimal(12, 4)
+  revenueMonth Decimal @default(0) @db.Decimal(12, 4)
+  revenueTotal Decimal @default(0) @db.Decimal(12, 4)
+
+  // Call counts
+  callsHour  Int @default(0)
+  callsDay   Int @default(0)
+  callsMonth Int @default(0)
+  callsTotal Int @default(0)
+
+  // Cap consumption for current period
+  capConsumedToday Int @default(0)
+
+  // Timestamps
+  lastUpdatedAt DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  buyer Buyer @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+
+  @@index([buyerId])
+  @@map("buyer_stats")
+}
+
 // ============================================================================
 // Flow Routing
 // ============================================================================
 
 model Flow {
-  id          String   @id @default(uuid())
+  id          String     @id @default(uuid())
   tenantId    String
   name        String
   description String?
   status      FlowStatus @default(DRAFT)
   metadata    Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 
   // Relations
-  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  versions      FlowVersion[]
-  campaigns     Campaign[]
+  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  versions  FlowVersion[]
+  campaigns Campaign[]
 
   @@index([tenantId])
   @@index([status])
@@ -619,13 +668,13 @@ enum FlowStatus {
 }
 
 model FlowVersion {
-  id          String   @id @default(uuid())
-  flowId      String
-  version     Int
-  isActive    Boolean  @default(false)
-  metadata    Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(uuid())
+  flowId    String
+  version   Int
+  isActive  Boolean  @default(false)
+  metadata  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
   flow  Flow   @relation(fields: [flowId], references: [id], onDelete: Cascade)
@@ -643,8 +692,8 @@ model Node {
   flowVersionId String
   type          NodeType
   name          String
-  config        Json     // Node-specific configuration
-  position      Json?    // UI position {x, y}
+  config        Json // Node-specific configuration
+  position      Json? // UI position {x, y}
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -670,14 +719,14 @@ enum NodeType {
 }
 
 model Edge {
-  id          String   @id @default(uuid())
+  id            String   @id @default(uuid())
   flowVersionId String
-  fromNodeId  String
-  toNodeId    String
-  condition   String?  // Optional condition expression
-  priority    Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  fromNodeId    String
+  toNodeId      String
+  condition     String? // Optional condition expression
+  priority      Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   // Relations
   flowVersion FlowVersion @relation(fields: [flowVersionId], references: [id], onDelete: Cascade)
@@ -695,92 +744,92 @@ model Edge {
 // ============================================================================
 
 model Call {
-  id              String   @id @default(uuid())
-  tenantId        String
-  campaignId      String?
-  fromNumberId    String?
-  toNumber        String   // E.164 format
-  callSid         String   @unique // External call identifier
-  externalId      String?  @unique // External call ID from legacy system (for deduplication)
-  status          CallStatus
-  direction       CallDirection
-  duration        Int?     // Seconds
-  cost            Decimal? @db.Decimal(10, 4)
-  metadata        Json?
-  importHash      String?  // Hash for deduplication
-  createdById     String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  startedAt       DateTime?
-  answeredAt      DateTime?
-  endedAt         DateTime?
+  id           String        @id @default(uuid())
+  tenantId     String
+  campaignId   String?
+  fromNumberId String?
+  toNumber     String // E.164 format
+  callSid      String        @unique // External call identifier
+  externalId   String?       @unique // External call ID from legacy system (for deduplication)
+  status       CallStatus
+  direction    CallDirection
+  duration     Int? // Seconds
+  cost         Decimal?      @db.Decimal(10, 4)
+  metadata     Json?
+  importHash   String? // Hash for deduplication
+  createdById  String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  startedAt    DateTime?
+  answeredAt   DateTime?
+  endedAt      DateTime?
 
   // ============================================================================
   // Enterprise Call Tracking Fields
   // ============================================================================
 
   // Timestamps
-  callCompleteTimestamp    DateTime?  // When call fully completed
-  callConnectedTimestamp   DateTime?  // When call connected to target
-  previouslyConnectedDate  DateTime?  // Previous connection date if repeat caller
+  callCompleteTimestamp   DateTime? // When call fully completed
+  callConnectedTimestamp  DateTime? // When call connected to target
+  previouslyConnectedDate DateTime? // Previous connection date if repeat caller
 
   // Identity IDs (Foreign Keys)
-  publisherId     String?  // FK to Publisher
-  buyerId         String?  // FK to Buyer
-  targetId        String?  // Target entity reference
-  targetGroupId   String?  // Target group reference
+  publisherId   String? // FK to Publisher
+  buyerId       String? // FK to Buyer
+  targetId      String? // Target entity reference
+  targetGroupId String? // Target group reference
 
   // Identity Names (Denormalized for Reporting)
-  campaignName      String?  // Snapshot of campaign.name at call time
-  publisherName     String?  // Snapshot of publisher.name
-  buyerName         String?  // Snapshot of buyer.name
-  targetName        String?  // Target display name
-  targetGroupName   String?  // Target group display name
+  campaignName    String? // Snapshot of campaign.name at call time
+  publisherName   String? // Snapshot of publisher.name
+  buyerName       String? // Snapshot of buyer.name
+  targetName      String? // Target display name
+  targetGroupName String? // Target group display name
 
   // Telephony Data
-  callerId                    String?  // Inbound caller number (ANI)
-  callerIdAreaCode            Int?     // 3-digit area code
-  callerIdState               String?  // 2-char state code (e.g., "TN")
-  did                         String?  // Inbound DID number (DNIS)
-  targetNumber                String?  // Forwarded-to number
-  connectedDuration           Int?     // Connected duration in seconds
-  durationFormatted           String?  // Total duration as hh:mm:ss
-  connectedDurationFormatted  String?  // Connected duration as hh:mm:ss
-  recordingUrl                String?  // URL to call recording
+  callerId                   String? // Inbound caller number (ANI)
+  callerIdAreaCode           Int? // 3-digit area code
+  callerIdState              String? // 2-char state code (e.g., "TN")
+  did                        String? // Inbound DID number (DNIS)
+  targetNumber               String? // Forwarded-to number
+  connectedDuration          Int? // Connected duration in seconds
+  durationFormatted          String? // Total duration as hh:mm:ss
+  connectedDurationFormatted String? // Connected duration as hh:mm:ss
+  recordingUrl               String? // URL to call recording
 
   // Financial Fields (Currency/Decimal)
-  revenue  Decimal? @db.Decimal(10, 4)  // Total revenue for this call
-  payout   Decimal? @db.Decimal(10, 4)  // Amount paid to publisher
-  profit   Decimal? @db.Decimal(10, 4)  // Revenue minus payout/cost
+  revenue Decimal? @db.Decimal(10, 4) // Total revenue for this call
+  payout  Decimal? @db.Decimal(10, 4) // Amount paid to publisher
+  profit  Decimal? @db.Decimal(10, 4) // Revenue minus payout/cost
 
   // Boolean/Status Fields
-  isDuplicate          Boolean @default(false)  // If caller is duplicate
-  converted            Boolean @default(false)  // If call resulted in conversion
-  missedCall           Boolean @default(false)  // If call was missed
-  blocked              Boolean @default(false)  // If call was blocked
-  paidOut              Boolean @default(false)  // If payout was issued
-  previouslyConnected  Boolean @default(false)  // If caller previously connected
+  isDuplicate         Boolean @default(false) // If caller is duplicate
+  converted           Boolean @default(false) // If call resulted in conversion
+  missedCall          Boolean @default(false) // If call was missed
+  blocked             Boolean @default(false) // If call was blocked
+  paidOut             Boolean @default(false) // If payout was issued
+  previouslyConnected Boolean @default(false) // If caller previously connected
 
   // Reason Code Fields
-  noPayoutReason            String?  // Reason payout was denied
-  noConversionReason        String?  // Reason conversion failed
-  blockReason               String?  // Reason call was blocked
-  previouslyConnectedTarget String?  // Previous target info
+  noPayoutReason            String? // Reason payout was denied
+  noConversionReason        String? // Reason conversion failed
+  blockReason               String? // Reason call was blocked
+  previouslyConnectedTarget String? // Previous target info
 
   // Relations
-  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  campaign    Campaign?     @relation(fields: [campaignId], references: [id])
-  fromNumber  PhoneNumber?  @relation("CallFromNumber", fields: [fromNumberId], references: [id])
-  createdBy   User?         @relation("CallCreator", fields: [createdById], references: [id])
-  publisher   Publisher?    @relation(fields: [publisherId], references: [id])
-  buyer       Buyer?        @relation(fields: [buyerId], references: [id])
-  legs        CallLeg[]
-  cdrs        Cdr[]
-  recordings  Recording[]
-  transcriptions Transcription[]
-  tags        CallTag[]
-  accruals    AccrualLedger[]
-  leadCalls   LeadCall[]
+  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  campaign          Campaign?          @relation(fields: [campaignId], references: [id])
+  fromNumber        PhoneNumber?       @relation("CallFromNumber", fields: [fromNumberId], references: [id])
+  createdBy         User?              @relation("CallCreator", fields: [createdById], references: [id])
+  publisher         Publisher?         @relation(fields: [publisherId], references: [id])
+  buyer             Buyer?             @relation(fields: [buyerId], references: [id])
+  legs              CallLeg[]
+  cdrs              Cdr[]
+  recordings        Recording[]
+  transcriptions    Transcription[]
+  tags              CallTag[]
+  accruals          AccrualLedger[]
+  leadCalls         LeadCall[]
   buyerTransactions BuyerTransaction[]
 
   @@index([tenantId])
@@ -816,19 +865,19 @@ enum CallDirection {
 }
 
 model CallLeg {
-  id          String   @id @default(uuid())
-  callId      String
+  id            String           @id @default(uuid())
+  callId        String
   phoneNumberId String?
-  legSid      String   @unique
-  status      CallLegStatus
-  direction   CallLegDirection
-  duration    Int?     // Seconds
-  metadata    Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  startedAt   DateTime?
-  answeredAt  DateTime?
-  endedAt     DateTime?
+  legSid        String           @unique
+  status        CallLegStatus
+  direction     CallLegDirection
+  duration      Int? // Seconds
+  metadata      Json?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  startedAt     DateTime?
+  answeredAt    DateTime?
+  endedAt       DateTime?
 
   // Relations
   call        Call         @relation(fields: [callId], references: [id], onDelete: Cascade)
@@ -857,19 +906,19 @@ enum CallLegDirection {
 }
 
 model Cdr {
-  id          String   @id @default(uuid())
-  callId      String   @unique
-  tenantId    String
-  fromNumber  String
-  toNumber    String
-  duration    Int      // Seconds
+  id               String        @id @default(uuid())
+  callId           String        @unique
+  tenantId         String
+  fromNumber       String
+  toNumber         String
+  duration         Int // Seconds
   billableDuration Int // Seconds
-  cost        Decimal  @db.Decimal(10, 4)
-  rate        Decimal? @db.Decimal(10, 6)
-  direction   CallDirection
-  status      CallStatus
-  metadata    Json?
-  createdAt   DateTime @default(now())
+  cost             Decimal       @db.Decimal(10, 4)
+  rate             Decimal?      @db.Decimal(10, 6)
+  direction        CallDirection
+  status           CallStatus
+  metadata         Json?
+  createdAt        DateTime      @default(now())
 
   // Relations
   call Call @relation(fields: [callId], references: [id], onDelete: Cascade)
@@ -883,25 +932,25 @@ model Cdr {
 }
 
 model Recording {
-  id          String   @id @default(uuid())
-  callId      String
-  legId       String?
-  url         String
-  storageKey  String?  // S3-compatible storage key
-  duration    Int?     // Seconds
-  format      String   @default("wav")
-  size        BigInt?  // Bytes
-  checksum    String?  // SHA256 checksum
-  storageTier RecordingStorageTier @default(HOT)
-  status      RecordingStatus @default(PROCESSING)
-  metadata    Json?
-  importHash  String?  // Hash for deduplication
-  lifecyclePolicyId String? // Reference to tenant lifecycle policy
-  movedToWarmAt DateTime? // When moved to warm storage
+  id                  String               @id @default(uuid())
+  callId              String
+  legId               String?
+  url                 String
+  storageKey          String? // S3-compatible storage key
+  duration            Int? // Seconds
+  format              String               @default("wav")
+  size                BigInt? // Bytes
+  checksum            String? // SHA256 checksum
+  storageTier         RecordingStorageTier @default(HOT)
+  status              RecordingStatus      @default(PROCESSING)
+  metadata            Json?
+  importHash          String? // Hash for deduplication
+  lifecyclePolicyId   String? // Reference to tenant lifecycle policy
+  movedToWarmAt       DateTime? // When moved to warm storage
   scheduledDeletionAt DateTime? // When scheduled for deletion
-  deletedAt   DateTime? // When actually deleted
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  deletedAt           DateTime? // When actually deleted
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
 
   // Relations
   call Call @relation(fields: [callId], references: [id], onDelete: Cascade)
@@ -921,9 +970,9 @@ enum RecordingStatus {
 }
 
 enum RecordingStorageTier {
-  HOT   // Frequently accessed, fast storage
-  WARM  // Less frequently accessed, cheaper storage
-  COLD  // Rarely accessed, cheapest storage (archived)
+  HOT // Frequently accessed, fast storage
+  WARM // Less frequently accessed, cheaper storage
+  COLD // Rarely accessed, cheapest storage (archived)
 }
 
 model Transcription {
@@ -933,12 +982,12 @@ model Transcription {
   text        String
   confidence  Decimal? @db.Decimal(5, 4)
   language    String   @default("en")
-  metadata    Json?    // Speaker diarization, timestamps, etc.
+  metadata    Json? // Speaker diarization, timestamps, etc.
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   // Relations
-  call      Call       @relation(fields: [callId], references: [id], onDelete: Cascade)
+  call Call @relation(fields: [callId], references: [id], onDelete: Cascade)
 
   @@index([callId])
   @@index([recordingId])
@@ -946,16 +995,16 @@ model Transcription {
 }
 
 model Tag {
-  id          String   @id @default(uuid())
-  tenantId    String
-  name        String
-  color       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  color     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  tenant Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  calls   CallTag[]
+  tenant Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  calls  CallTag[]
 
   @@unique([tenantId, name])
   @@index([tenantId])
@@ -983,22 +1032,22 @@ model CallTag {
 // ============================================================================
 
 model BillingAccount {
-  id          String   @id @default(uuid())
-  tenantId    String
-  name        String
-  status      BillingAccountStatus @default(ACTIVE)
-  currency    String   @default("USD")
-  metadata    Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String               @id @default(uuid())
+  tenantId  String
+  name      String
+  status    BillingAccountStatus @default(ACTIVE)
+  currency  String               @default("USD")
+  metadata  Json?
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
 
   // Relations
-  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  rateCards   RateCard[]
-  invoices    Invoice[]
-  balances    Balance[]
-  payouts     Payout[]
-  accruals    AccrualLedger[]
+  tenant    Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  rateCards RateCard[]
+  invoices  Invoice[]
+  balances  Balance[]
+  payouts   Payout[]
+  accruals  AccrualLedger[]
 
   @@index([tenantId])
   @@index([status])
@@ -1012,16 +1061,16 @@ enum BillingAccountStatus {
 }
 
 model RateCard {
-  id                String   @id @default(uuid())
-  billingAccountId  String
-  name              String
-  effectiveFrom     DateTime
-  effectiveTo       DateTime?
-  status            RateCardStatus @default(ACTIVE)
-  rates             Json     // Rate structure
-  metadata          Json?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id               String         @id @default(uuid())
+  billingAccountId String
+  name             String
+  effectiveFrom    DateTime
+  effectiveTo      DateTime?
+  status           RateCardStatus @default(ACTIVE)
+  rates            Json // Rate structure
+  metadata         Json?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
 
   // Relations
   billingAccount BillingAccount @relation(fields: [billingAccountId], references: [id], onDelete: Cascade)
@@ -1038,23 +1087,23 @@ enum RateCardStatus {
 }
 
 model Invoice {
-  id              String   @id @default(uuid())
+  id               String        @id @default(uuid())
   billingAccountId String
-  invoiceNumber   String   @unique
-  status          InvoiceStatus @default(DRAFT)
-  periodStart     DateTime
-  periodEnd       DateTime
-  subtotal        Decimal  @db.Decimal(10, 2)
-  tax             Decimal  @db.Decimal(10, 2) @default(0)
-  total           Decimal  @db.Decimal(10, 2)
-  dueDate         DateTime
-  paidAt          DateTime?
-  metadata        Json?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  invoiceNumber    String        @unique
+  status           InvoiceStatus @default(DRAFT)
+  periodStart      DateTime
+  periodEnd        DateTime
+  subtotal         Decimal       @db.Decimal(10, 2)
+  tax              Decimal       @default(0) @db.Decimal(10, 2)
+  total            Decimal       @db.Decimal(10, 2)
+  dueDate          DateTime
+  paidAt           DateTime?
+  metadata         Json?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
   // Relations
-  billingAccount BillingAccount @relation(fields: [billingAccountId], references: [id], onDelete: Cascade)
+  billingAccount BillingAccount  @relation(fields: [billingAccountId], references: [id], onDelete: Cascade)
   lines          InvoiceLine[]
   accruals       AccrualLedger[]
 
@@ -1091,14 +1140,14 @@ model InvoiceLine {
 }
 
 model Balance {
-  id              String   @id @default(uuid())
+  id               String      @id @default(uuid())
   billingAccountId String
-  amount          Decimal  @db.Decimal(10, 2)
-  currency        String   @default("USD")
-  type            BalanceType
-  metadata        Json?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  amount           Decimal     @db.Decimal(10, 2)
+  currency         String      @default("USD")
+  type             BalanceType
+  metadata         Json?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
 
   // Relations
   billingAccount BillingAccount @relation(fields: [billingAccountId], references: [id], onDelete: Cascade)
@@ -1115,17 +1164,17 @@ enum BalanceType {
 }
 
 model Payout {
-  id              String   @id @default(uuid())
+  id               String       @id @default(uuid())
   billingAccountId String
-  amount          Decimal  @db.Decimal(10, 2)
-  currency        String   @default("USD")
-  status          PayoutStatus @default(PENDING)
-  method          String   // bank_transfer, paypal, etc.
-  reference       String?
-  processedAt     DateTime?
-  metadata        Json?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  amount           Decimal      @db.Decimal(10, 2)
+  currency         String       @default("USD")
+  status           PayoutStatus @default(PENDING)
+  method           String // bank_transfer, paypal, etc.
+  reference        String?
+  processedAt      DateTime?
+  metadata         Json?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 
   // Relations
   billingAccount BillingAccount @relation(fields: [billingAccountId], references: [id], onDelete: Cascade)
@@ -1144,28 +1193,28 @@ enum PayoutStatus {
 }
 
 model AccrualLedger {
-  id              String   @id @default(uuid())
-  tenantId        String
+  id               String      @id @default(uuid())
+  tenantId         String
   billingAccountId String
-  publisherId     String?
-  buyerId         String?
-  callId          String?
-  type            AccrualType
-  amount          Decimal  @db.Decimal(10, 4)
-  currency        String   @default("USD")
-  description     String
-  periodDate      DateTime // Date for daily close
-  closed          Boolean  @default(false)
-  closedAt        DateTime?
-  invoiceId       String?
-  metadata        Json?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  publisherId      String?
+  buyerId          String?
+  callId           String?
+  type             AccrualType
+  amount           Decimal     @db.Decimal(10, 4)
+  currency         String      @default("USD")
+  description      String
+  periodDate       DateTime // Date for daily close
+  closed           Boolean     @default(false)
+  closedAt         DateTime?
+  invoiceId        String?
+  metadata         Json?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
 
   // Relations
   billingAccount BillingAccount @relation(fields: [billingAccountId], references: [id], onDelete: Cascade)
-  invoice       Invoice?        @relation(fields: [invoiceId], references: [id])
-  call          Call?           @relation(fields: [callId], references: [id])
+  invoice        Invoice?       @relation(fields: [invoiceId], references: [id])
+  call           Call?          @relation(fields: [callId], references: [id])
 
   @@index([tenantId])
   @@index([billingAccountId])
@@ -1192,16 +1241,16 @@ enum AccrualType {
 // ============================================================================
 
 model Webhook {
-  id          String   @id @default(uuid())
-  tenantId    String
-  url         String
-  events      String[] // Array of event types
-  secret      String   // Webhook signing secret
-  status      WebhookStatus @default(ACTIVE)
+  id              String        @id @default(uuid())
+  tenantId        String
+  url             String
+  events          String[] // Array of event types
+  secret          String // Webhook signing secret
+  status          WebhookStatus @default(ACTIVE)
   lastTriggeredAt DateTime?
-  metadata    Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  metadata        Json?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   // Relations
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -1218,15 +1267,15 @@ enum WebhookStatus {
 }
 
 model Event {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   tenantId    String
   type        String
-  entityType  String?  // call, campaign, etc.
+  entityType  String? // call, campaign, etc.
   entityId    String?
   payload     Json
-  processed   Boolean  @default(false)
+  processed   Boolean   @default(false)
   processedAt DateTime?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
   // Relations
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -1240,26 +1289,26 @@ model Event {
 }
 
 model AuditLog {
-  id          String   @id @default(uuid())
-  tenantId    String
-  userId      String?
-  apiKeyId    String?
-  action      String   // e.g., "user.create", "call.read", "api_key.revoke"
-  entityType  String   // e.g., "User", "Call", "ApiKey"
-  entityId    String?
-  resource    String?  // Resource path/identifier
-  method      String?  // HTTP method
-  changes     Json?    // Before/after values for mutations
-  ipAddress   String?
-  userAgent   String?
-  requestId   String?  // Request ID for correlation
-  success     Boolean  @default(true)
-  error       String?  // Error message if success=false
-  createdAt   DateTime @default(now())
+  id         String   @id @default(uuid())
+  tenantId   String
+  userId     String?
+  apiKeyId   String?
+  action     String // e.g., "user.create", "call.read", "api_key.revoke"
+  entityType String // e.g., "User", "Call", "ApiKey"
+  entityId   String?
+  resource   String? // Resource path/identifier
+  method     String? // HTTP method
+  changes    Json? // Before/after values for mutations
+  ipAddress  String?
+  userAgent  String?
+  requestId  String? // Request ID for correlation
+  success    Boolean  @default(true)
+  error      String? // Error message if success=false
+  createdAt  DateTime @default(now())
 
   // Relations
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user   User?  @relation(fields: [userId], references: [id])
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?   @relation(fields: [userId], references: [id])
   apiKey ApiKey? @relation(fields: [apiKeyId], references: [id])
 
   @@index([tenantId])
@@ -1275,16 +1324,16 @@ model AuditLog {
 model RateLimitEntry {
   id          String   @id @default(uuid())
   tenantId    String?
-  identifier  String   // API key ID or IP address
-  type        String   // "api_key" or "ip"
+  identifier  String // API key ID or IP address
+  type        String // "api_key" or "ip"
   count       Int      @default(1)
   windowStart DateTime @default(now())
   createdAt   DateTime @default(now())
 
   // Relations
-  tenant      Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  apiKeyId    String?
-  apiKey      ApiKey?  @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  apiKeyId String?
+  apiKey   ApiKey? @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
 
   @@unique([identifier, type, windowStart])
   @@index([identifier, type])
@@ -1315,17 +1364,17 @@ model FeatureFlag {
 // ============================================================================
 
 model DncList {
-  id          String   @id @default(uuid())
-  tenantId    String
-  name        String
-  type        DncListType
-  status      DncListStatus @default(ACTIVE)
-  metadata    Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String        @id @default(uuid())
+  tenantId  String
+  name      String
+  type      DncListType
+  status    DncListStatus @default(ACTIVE)
+  metadata  Json?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
 
   // Relations
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant  Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   entries DncListEntry[]
 
   @@index([tenantId])
@@ -1347,7 +1396,7 @@ enum DncListStatus {
 model DncListEntry {
   id          String   @id @default(uuid())
   dncListId   String
-  phoneNumber String   // E.164 format
+  phoneNumber String // E.164 format
   reason      String?
   source      String?
   createdAt   DateTime @default(now())
@@ -1362,21 +1411,21 @@ model DncListEntry {
 }
 
 model ConsentToken {
-  id          String   @id @default(uuid())
+  id          String          @id @default(uuid())
   tenantId    String
   callId      String?
   phoneNumber String
-  token       String   @unique // TrustedForm/Jornaya token
-  tokenHash   String   // SHA256 hash for fast lookup
+  token       String          @unique // TrustedForm/Jornaya token
+  tokenHash   String // SHA256 hash for fast lookup
   provider    ConsentProvider
-  status      ConsentStatus @default(PENDING)
+  status      ConsentStatus   @default(PENDING)
   verifiedAt  DateTime?
   expiresAt   DateTime?
   ipAddress   String?
-  source      String?  // Source URL/page where consent was captured
+  source      String? // Source URL/page where consent was captured
   metadata    Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 
   // Relations
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -1390,19 +1439,19 @@ model ConsentToken {
 }
 
 model CompliancePolicy {
-  id                  String   @id @default(uuid())
-  tenantId            String
-  name                String   @default("default")
-  enforceDnc          Boolean  @default(true)
-  enforceConsent      Boolean  @default(true)
-  allowOverride       Boolean  @default(false)
-  requireAdminApproval Boolean @default(true)
-  metadata            Json?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                   String   @id @default(uuid())
+  tenantId             String
+  name                 String   @default("default")
+  enforceDnc           Boolean  @default(true)
+  enforceConsent       Boolean  @default(true)
+  allowOverride        Boolean  @default(false)
+  requireAdminApproval Boolean  @default(true)
+  metadata             Json?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   // Relations
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant    Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   overrides ComplianceOverride[]
 
   @@unique([tenantId, name])
@@ -1411,10 +1460,10 @@ model CompliancePolicy {
 }
 
 model ComplianceOverride {
-  id          String   @id @default(uuid())
+  id          String                   @id @default(uuid())
   tenantId    String
   policyId    String?
-  phoneNumber String   // E.164 format
+  phoneNumber String // E.164 format
   reason      String
   callId      String?
   userId      String?
@@ -1423,11 +1472,11 @@ model ComplianceOverride {
   approvedBy  String?
   approvedAt  DateTime?
   metadata    Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
 
   // Relations
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   policy CompliancePolicy? @relation(fields: [policyId], references: [id])
 
   @@index([tenantId])
@@ -1459,26 +1508,26 @@ enum ConsentStatus {
 }
 
 model StirShakenStatus {
-  id              String   @id @default(uuid())
-  callId          String   @unique
-  tenantId        String
-  phoneNumber     String   // Calling party number
-  attestation     StirAttestationLevel
-  identity        String?  // Identity header value
-  origId          String?  // Originating Identity header
-  passthru        String?  // Passport header
-  verifiedAt      DateTime?
-  verifiedBy      String?  // External service that verified
-  override        Boolean  @default(false) // Admin override
-  overrideReason  String?
-  overrideUserId  String?
-  metadata        Json?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String               @id @default(uuid())
+  callId         String               @unique
+  tenantId       String
+  phoneNumber    String // Calling party number
+  attestation    StirAttestationLevel
+  identity       String? // Identity header value
+  origId         String? // Originating Identity header
+  passthru       String? // Passport header
+  verifiedAt     DateTime?
+  verifiedBy     String? // External service that verified
+  override       Boolean              @default(false) // Admin override
+  overrideReason String?
+  overrideUserId String?
+  metadata       Json?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
 
   // Relations
-  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  overrideUser User? @relation("StirShakenOverrideUser", fields: [overrideUserId], references: [id])
+  tenant       Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  overrideUser User?  @relation("StirShakenOverrideUser", fields: [overrideUserId], references: [id])
 
   @@index([tenantId])
   @@index([phoneNumber])
@@ -1487,23 +1536,23 @@ model StirShakenStatus {
 }
 
 enum StirAttestationLevel {
-  A      // Full attestation - known customer, authorized to use number
-  B      // Partial attestation - known customer, not authorized
-  C      // Gateway attestation - call passed through gateway
-  NONE   // No attestation
+  A // Full attestation - known customer, authorized to use number
+  B // Partial attestation - known customer, not authorized
+  C // Gateway attestation - call passed through gateway
+  NONE // No attestation
 }
 
 model CnamLookup {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   tenantId    String
   phoneNumber String
   callerName  String?
-  provider    String   // Provider used for lookup
-  cached      Boolean  @default(false)
+  provider    String // Provider used for lookup
+  cached      Boolean   @default(false)
   cachedUntil DateTime?
   metadata    Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   // Relations
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -1515,18 +1564,18 @@ model CnamLookup {
 }
 
 model CarrierLookup {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   tenantId    String
   phoneNumber String
-  carrier     String?  // Carrier name
-  lata        String?  // Local Access Transport Area
-  ocn         String?  // Operating Company Number
-  provider    String   // Provider used for lookup
-  cached      Boolean  @default(false)
+  carrier     String? // Carrier name
+  lata        String? // Local Access Transport Area
+  ocn         String? // Operating Company Number
+  provider    String // Provider used for lookup
+  cached      Boolean   @default(false)
   cachedUntil DateTime?
   metadata    Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   // Relations
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -1544,27 +1593,27 @@ model CarrierLookup {
 // ============================================================================
 
 model RecordingAnalysis {
-  id             String   @id @default(uuid())
-  tenantId       String
-  userId         String
+  id       String @id @default(uuid())
+  tenantId String
+  userId   String
 
-  batchId        String
-  vertical       String   // ACA | FINAL_EXPENSE | MEDICARE
+  batchId  String
+  vertical String // ACA | FINAL_EXPENSE | MEDICARE
 
-  sourceType     String   // url | upload
-  sourceUrl      String?
-  storageKey     String?
-  filename       String?
+  sourceType String // url | upload
+  sourceUrl  String?
+  storageKey String?
+  filename   String?
 
-  selectedFields Json     // JSON array of strings
+  selectedFields Json // JSON array of strings
 
-  status         String   // queued | transcribing | analyzing | done | failed
-  transcript     String?
-  extracted      Json?
-  error          String?
+  status     String // queued | transcribing | analyzing | done | failed
+  transcript String?
+  extracted  Json?
+  error      String?
 
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([tenantId, batchId])
   @@index([tenantId, createdAt])
@@ -1577,48 +1626,48 @@ model RecordingAnalysis {
 // ============================================================================
 
 model Lead {
-  id            String   @id @default(uuid())
-  tenantId      String
-  campaignId    String?
+  id         String  @id @default(uuid())
+  tenantId   String
+  campaignId String?
 
   // Contact Information
-  firstName     String?
-  lastName      String?
-  fullName      String?
-  phoneNumber   String   // E.164 format - primary lookup field
-  email         String?
-  company       String?
+  firstName   String?
+  lastName    String?
+  fullName    String?
+  phoneNumber String // E.164 format - primary lookup field
+  email       String?
+  company     String?
 
   // Address
-  address       String?
-  city          String?
-  state         String?
-  zipCode       String?
-  country       String?
+  address String?
+  city    String?
+  state   String?
+  zipCode String?
+  country String?
 
   // Lead Info
-  leadSource    String?
-  status        LeadStatus @default(NEW)
-  priority      Int      @default(0)
+  leadSource String?
+  status     LeadStatus @default(NEW)
+  priority   Int        @default(0)
 
   // Custom Fields (flexible)
-  customFields  Json?
-  notes         String?
-  tags          String[]
+  customFields Json?
+  notes        String?
+  tags         String[]
 
   // Assignment
-  assignedToId  String?
+  assignedToId String?
 
   // Timestamps
   lastContactedAt DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   // Relations
-  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  campaign  Campaign? @relation(fields: [campaignId], references: [id])
-  assignedTo User?    @relation(fields: [assignedToId], references: [id])
-  calls     LeadCall[]
+  tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  campaign          Campaign?         @relation(fields: [campaignId], references: [id])
+  assignedTo        User?             @relation(fields: [assignedToId], references: [id])
+  calls             LeadCall[]
   retentionPolicies RetentionPolicy[]
 
   @@unique([tenantId, phoneNumber])
@@ -1687,9 +1736,9 @@ enum RelationshipType {
 }
 
 model RetentionPolicy {
-  id              String       @id @default(uuid())
-  tenantId        String
-  leadId          String       // References Lead for customer data / call-pop integration
+  id       String @id @default(uuid())
+  tenantId String
+  leadId   String // References Lead for customer data / call-pop integration
 
   // Beneficiary Info
   primaryBeneficiary     String?
@@ -1698,26 +1747,26 @@ model RetentionPolicy {
   contingentRelationship RelationshipType?
 
   // Policy Info
-  carrier         String?
-  coverage        Decimal?     @db.Decimal(10, 2)
-  monthlyPremium  Decimal?     @db.Decimal(10, 2)
-  policyType      PolicyType?
+  carrier        String?
+  coverage       Decimal?    @db.Decimal(10, 2)
+  monthlyPremium Decimal?    @db.Decimal(10, 2)
+  policyType     PolicyType?
 
   // Billing Logic
-  ssBilling       Boolean      @default(false)
-  billingDateStr  String?      // SS: "1st", "3rd", "2nd Wed", etc. OR standard: "1"-"28"
+  ssBilling      Boolean @default(false)
+  billingDateStr String? // SS: "1st", "3rd", "2nd Wed", etc. OR standard: "1"-"28"
 
   // Workflow
-  status              PolicyStatus @default(SUBMITTED)
-  onboardingAttempts  Int          @default(0)
+  status             PolicyStatus @default(SUBMITTED)
+  onboardingAttempts Int          @default(0)
 
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  tenant          Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  lead            Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  notes           RetentionNote[]
+  tenant Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead   Lead            @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  notes  RetentionNote[]
 
   @@unique([tenantId, leadId])
   @@index([tenantId])
@@ -1727,15 +1776,14 @@ model RetentionPolicy {
 }
 
 model RetentionNote {
-  id          String   @id @default(uuid())
-  policyId    String
-  userId      String?  // Who logged the note
-  note        String
-  createdAt   DateTime @default(now())
+  id        String   @id @default(uuid())
+  policyId  String
+  userId    String? // Who logged the note
+  note      String
+  createdAt DateTime @default(now())
 
-  policy      RetentionPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  policy RetentionPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
 
   @@index([policyId])
   @@map("retention_notes")
 }
-

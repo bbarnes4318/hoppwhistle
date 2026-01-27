@@ -14,7 +14,9 @@ describe('Transcription Integration Tests', () => {
   beforeAll(() => {
     redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
     pool = new Pool({
-      connectionString: process.env.DATABASE_URL || 'postgresql://callfabric:callfabric_dev@localhost:5432/callfabric',
+      connectionString:
+        process.env.DATABASE_URL ||
+        'postgresql://hopwhistle:ChangeMe123!@45.32.213.201:5432/hopwhistle',
     });
     transcriber = new TranscriberService();
     repository = new TranscriptRepository();
@@ -27,8 +29,9 @@ describe('Transcription Integration Tests', () => {
 
   it('should transcribe a long file (>30 minutes)', async () => {
     // This test requires a sample long WAV file
-    const recordingUrl = process.env.TEST_LONG_FILE_URL || 'file:///apps/media/__tests__/assets/sample_long.wav';
-    
+    const recordingUrl =
+      process.env.TEST_LONG_FILE_URL || 'file:///apps/media/__tests__/assets/sample_long.wav';
+
     // Skip if file doesn't exist
     if (recordingUrl.startsWith('file://')) {
       console.log('Skipping long file test - file not available');
@@ -62,7 +65,8 @@ describe('Transcription Integration Tests', () => {
       engine: 'whisperx',
       language: 'en',
       durationSec: 120,
-      fullText: 'This is a test transcript with more than one hundred characters to verify that the full text is properly stored in the database.',
+      fullText:
+        'This is a test transcript with more than one hundred characters to verify that the full text is properly stored in the database.',
       segments: [
         { start: 0, end: 5, speaker: 'SPEAKER_00', text: 'This is a test transcript' },
         { start: 5, end: 10, speaker: 'SPEAKER_01', text: 'with more than one hundred characters' },
@@ -75,7 +79,11 @@ describe('Transcription Integration Tests', () => {
       },
     };
 
-    const transcriptId = await repository.upsertTranscript(testTenantId, testCallId, transcriptData);
+    const transcriptId = await repository.upsertTranscript(
+      testTenantId,
+      testCallId,
+      transcriptData
+    );
 
     expect(transcriptId).toBeDefined();
 
@@ -121,4 +129,3 @@ describe('Transcription Integration Tests', () => {
     expect(result.stage).toBe('download');
   });
 });
-
