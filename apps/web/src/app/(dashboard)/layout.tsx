@@ -1,11 +1,18 @@
 'use client';
 
+import { usePathname } from 'next/navigation';
+
 import { Footer } from '@/components/layout/footer';
 import { Header } from '@/components/layout/header';
 import { Sidebar } from '@/components/layout/sidebar';
 import { AgentPhonePanel, PhoneProvider } from '@/components/phone';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }): JSX.Element {
+  const pathname = usePathname();
+
+  // Hide floating dialer on call center page (integrated dialer there)
+  const showFloatingDialer = !pathname?.startsWith('/call-center');
+
   return (
     <PhoneProvider>
       <div className="flex h-screen overflow-hidden">
@@ -18,8 +25,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <Footer />
         </div>
 
-        {/* Agent Phone Panel - Floating softphone */}
-        <AgentPhonePanel />
+        {/* Agent Phone Panel - Floating softphone (hidden on call center page) */}
+        {showFloatingDialer && <AgentPhonePanel />}
       </div>
     </PhoneProvider>
   );
