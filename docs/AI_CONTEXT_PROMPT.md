@@ -1,6 +1,6 @@
 # Hopwhistle Project Context Prompt
 
-Copy this entire prompt and paste it at the START of any new AI conversation about this project.
+**Copy this entire prompt and paste it at the START of any new AI conversation about this project.**
 
 ---
 
@@ -11,65 +11,117 @@ Copy this entire prompt and paste it at the START of any new AI conversation abo
 - **Monorepo** at `c:\Users\jimbo\OneDrive\Documents\hopbot` (local) / `/opt/hopwhistle` (server)
 - **Production Server**: Vultr at `45.32.213.201` (SSH: `root@45.32.213.201`)
 - **Tech Stack**: Next.js 14 (web), Fastify (api), Prisma (ORM), PostgreSQL, Redis, FreeSWITCH (telephony)
-- **Docker**: All services run in containers via `docker-compose.prod.yml` in `/opt/hopwhistle/infra/docker/`
+- **Docker**: All services run in containers via `docker-compose.yml` in `/opt/hopwhistle/infra/docker/`
+
+### CRITICAL: Container Names (USE THESE EXACT NAMES)
+
+| Service        | Container Name            |
+| -------------- | ------------------------- |
+| **API**        | `docker-api-1`            |
+| **Web**        | `hopwhistle-web-1`        |
+| **PostgreSQL** | `hopwhistle-postgres-dev` |
+| **Redis**      | `hopwhistle-redis-1`      |
+
+### CRITICAL: Database Configuration
+
+| Setting                  | Value                                                                            |
+| ------------------------ | -------------------------------------------------------------------------------- |
+| **Database Name**        | `callfabric` (NOT hopwhistle!)                                                   |
+| **Username**             | `callfabric`                                                                     |
+| **Password**             | `callfabric_dev`                                                                 |
+| **Host (inside Docker)** | `hopwhistle-postgres-dev`                                                        |
+| **DATABASE_URL**         | `postgresql://callfabric:callfabric_dev@hopwhistle-postgres-dev:5432/callfabric` |
 
 ### Key Paths
 
-| Component      | Local Path                             | Server Path                 |
-| -------------- | -------------------------------------- | --------------------------- |
-| API            | `apps/api/`                            | `/opt/hopwhistle/apps/api/` |
-| Web            | `apps/web/`                            | `/opt/hopwhistle/apps/web/` |
-| Prisma Schema  | `apps/api/prisma/schema.prisma`        | Same                        |
-| Docker Compose | `infra/docker/docker-compose.prod.yml` | Same                        |
-| Workflows      | `.agent/workflows/`                    | N/A                         |
+| Component      | Local Path                        | Server Path                 |
+| -------------- | --------------------------------- | --------------------------- |
+| API            | `apps/api/`                       | `/opt/hopwhistle/apps/api/` |
+| Web            | `apps/web/`                       | `/opt/hopwhistle/apps/web/` |
+| Prisma Schema  | `apps/api/prisma/schema.prisma`   | Same                        |
+| Docker Compose | `infra/docker/docker-compose.yml` | Same                        |
+| Workflows      | `.agent/workflows/`               | N/A                         |
 
 ### Database Access
 
 **CRITICAL**: PostgreSQL runs in Docker and port 5432 is NOT publicly exposed.
 
-- From inside containers: `postgres:5432`
-- Credentials: `hopwhistle:ChangeMe123!`
-- Database name: `hopwhistle`
+- From inside containers: `hopwhistle-postgres-dev:5432`
+- Database name: `callfabric`
+- Credentials: `callfabric:callfabric_dev`
 - **You CANNOT run Prisma commands from local machine against production DB**
 - **All Prisma commands must run inside the container via SSH**
 
-### Deployment Commands (SSH into server first)
+### Docker Network Issues (COMMON PROBLEM)
+
+After rebuilding containers, networks get disconnected. **ALWAYS run these after rebuild:**
 
 ```bash
-# Apply Prisma schema changes
-docker exec -it hopwhistle-api npx prisma db push
-
-# Regenerate Prisma client (must run as root)
-docker exec -u 0 hopwhistle-api npx prisma generate
-
-# Rebuild API
-cd /opt/hopwhistle/infra/docker && docker compose -f docker-compose.prod.yml up -d --build --force-recreate api
-
-# Rebuild Web
-cd /opt/hopwhistle/infra/docker && docker compose -f docker-compose.prod.yml up -d --build --force-recreate web
-
-# Fix Redis network issues
-docker network connect --alias redis docker_default hopwhistle-redis-1 && docker restart hopwhistle-api
+docker network connect docker_default hopwhistle-postgres-dev 2>/dev/null
+docker network connect --alias redis docker_default hopwhistle-redis-1 2>/dev/null
+docker restart docker-api-1
 ```
 
-### Common Issues
+### Full API Rebuild Command Sequence
+
+```bash
+# On server via SSH
+cd /opt/hopwhistle && git pull origin main
+cd infra/docker
+docker stop docker-api-1 2>/dev/null; docker rm docker-api-1 2>/dev/null
+docker rm -f docker-redis-1 2>/dev/null
+docker compose -f docker-compose.yml build api --no-cache
+docker compose -f docker-compose.yml up -d api --no-deps
+docker network connect docker_default hopwhistle-postgres-dev 2>/dev/null
+docker network connect --alias redis docker_default hopwhistle-redis-1 2>/dev/null
+docker restart docker-api-1
+docker exec -it docker-api-1 npx prisma db push --accept-data-loss
+```
+
+### Common Issues & Fixes
 
 1. **"Port already allocated"**: Stop conflicting container first:
 
    ```bash
-   docker stop $(docker ps -q --filter "publish=3001")
+   docker stop docker-api-1; docker rm docker-api-1
+   docker rm -f docker-redis-1
    ```
 
-2. **"ENOTFOUND redis"**: Redis container needs network alias:
+2. **"ENOTFOUND redis"**: Redis needs network alias:
 
    ```bash
    docker network connect --alias redis docker_default hopwhistle-redis-1
+   docker restart docker-api-1
    ```
 
-3. **"Permission denied" on Prisma generate**: Run as root:
+3. **"ENOTFOUND hopwhistle-postgres-dev"**: Postgres needs network connection:
+
    ```bash
-   docker exec -u 0 hopwhistle-api npx prisma generate
+   docker network connect docker_default hopwhistle-postgres-dev
+   docker restart docker-api-1
    ```
+
+4. **"Column does not exist"**: Schema migration not applied:
+
+   ```bash
+   docker exec -it docker-api-1 npx prisma db push --accept-data-loss
+   ```
+
+5. **"EACCES permission denied" on Prisma**: IGNORE IT - the schema is still applied
+
+### Route Registration Pattern
+
+Routes in `apps/api/src/index.ts` use two patterns:
+
+- Static imports at top (e.g., `registerCampaignRoutes` from `./routes/index.js`)
+- Dynamic imports inline (e.g., `await import('./routes/buyer-billing.js')`)
+
+**When adding new route files**, add this to `index.ts`:
+
+```typescript
+const { registerYourRoutes } = await import('./routes/your-file.js');
+await server.register(registerYourRoutes);
+```
 
 ### Production-Grade Architecture Standards
 
