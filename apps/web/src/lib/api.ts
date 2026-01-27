@@ -23,28 +23,46 @@ class ApiClient {
     this.baseUrl = baseUrl;
     // Get API key from environment
     this.apiKey = process.env.NEXT_PUBLIC_API_KEY;
+    // Load token from localStorage if available (client-side only)
+    if (typeof window !== 'undefined') {
+      this.token = localStorage.getItem('token') || undefined;
+    }
+  }
+
+  // Get current token (checks localStorage for most up-to-date value)
+  private getAuthToken(): string | undefined {
+    if (typeof window !== 'undefined') {
+      const storedToken = localStorage.getItem('token');
+      if (storedToken) {
+        this.token = storedToken;
+      }
+    }
+    return this.token;
   }
 
   setToken(token: string) {
     this.token = token;
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('token', token);
+    }
   }
 
   clearToken() {
     this.token = undefined;
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('token');
+    }
   }
 
   setApiKey(apiKey: string) {
     this.apiKey = apiKey;
   }
 
-  private async request<T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<ApiResponse<T>> {
+  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<ApiResponse<T>> {
     // Check for demo mode
     const demoMode = localStorage.getItem('demoMode') === 'true';
     const demoTenantId = localStorage.getItem('demoTenantId');
-    
+
     // If demo mode is enabled, add demo tenant header
     if (demoMode && demoTenantId) {
       options.headers = {
@@ -58,8 +76,10 @@ class ApiClient {
       ...options.headers,
     };
 
-    if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`;
+    // Get the current auth token (checks localStorage for freshest value)
+    const authToken = this.getAuthToken();
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
     }
 
     // Add API key header if available
@@ -138,4 +158,3 @@ export const mockData = {
     revenue: Math.random() * 5000 + 1000,
   }),
 };
-
