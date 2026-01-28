@@ -1,0 +1,141 @@
+Step 1: The "Paperwork" Opener 
+
+Goal: Establish authority without scaring them. You are just "checking the work" the other agent did. 
+
+(Ring... Ring... Client picks up) 
+
+Agent: "Hi [Client Name], this is [Agent Name] with [Company]. I’m the manager checking the paperwork for the state-regulated burial program you just qualified for." 
+
+Agent: "Everything looks good, but I have the approval right here on my desk and I just need to check the spelling of your beneficiary's name before I can stick this in the mail. Do you have a minute?" 
+
+IF: "YES" / "OKAY" 
+
+GO TO: Step 2 (The Fridge). 
+
+IF: "I DIDN'T DO THIS / I DIDN'T CALL YOU" (Confusion) 
+
+Agent: "Oh, I know, honey. [Closer Name] is the agent who submitted the paperwork for you earlier. I’m just the person in the back office making sure they spelled your daughter's name right so the check doesn't bounce when the time comes. It takes two seconds." 
+
+GO TO: Step 2. 
+
+IF: "I CHANGED MY MIND / I WANT TO CANCEL" (Buyer's Remorse) 
+
+Agent: "I understand. Since I have the paperwork on my desk right now, I can certainly help you with that. But before I put this in the 'Deny' pile, I have to document who would have received the check, just so we know who is being left out. Who was the beneficiary listing?" 
+
+Client: "It was my daughter, Mary." 
+
+Agent: "Okay, Mary. And was the main reason you wanted to leave this for Mary so she wouldn't have to pay for the funeral out of her own pocket?" 
+
+(If they say yes, you resell the "Why" and loop back to Step 2). 
+
+ 
+
+Step 2: The "Refrigerator" Anchor (Compliance Test) 
+
+Goal: Get them to physically commit to the relationship. 
+
+Agent: "Okay, good. Now, do me a favor. Do you have a pen handy? I want to give you my direct line so you don't have to talk to those computers if you ever need help." 
+
+IF: "OKAY, I HAVE A PEN" 
+
+Agent: "Write down [Company Name]. That is us. And write down my name: [Agent Name]. My direct phone number is [Phone Number]." 
+
+Agent: "I want you to stick that on your refrigerator. That way, if you ever have a question about your bill or the policy, you call me directly. You don't call the bank, you don't call the TV numbers. You call me and I’ll fix it. Does that sound fair?" 
+
+GO TO: Step 3. 
+
+IF: "I DON'T NEED TO WRITE IT DOWN / I'LL REMEMBER" 
+
+Agent: "I know you have a good memory, but I actually require you to write it down before I can mail the policy. It’s part of the safety check. I can wait while you grab a napkin or an envelope." 
+
+(Wait for them. Do not proceed until they say they are ready). 
+
+GO TO: Step 3. 
+
+ 
+
+Step 3: The "Money" Logic (Fixed Income Friendly) 
+
+Goal: Ensure the billing date matches the Social Security deposit exactly. 
+
+Agent: "Now, I want to make sure the bank doesn't mess this up. I see the premium is $[Amount]." 
+
+Agent: "We have it set to come out on the [Date]. Is that the day your Social Security money actually is in the account, or does it sometimes come a day or two later?" 
+
+IF: "YES, THAT IS THE RIGHT DAY" 
+
+Agent: "Okay, perfect. I'm going to keep it on the [Date] then. Just write '$[Amount] - Insurance' on your calendar on the [Date] so you don't accidentally spend it at the grocery store and lose the coverage." 
+
+GO TO: Step 4. 
+
+IF: "IT COMES ON THE 3rd (or different date)" 
+
+Agent: "Okay, I am glad we checked. If we try to take it on the 1st but the government doesn't pay you until the 3rd, the bank might bounce it. I am going to move your date to the 3rd to be safe. Does that work better?" 
+
+GO TO: Step 4. 
+
+IF: "THAT IS TOO EXPENSIVE / I CAN'T AFFORD IT" 
+
+Agent: "I understand. My job is just to make sure this is comfortable for you. If $[Amount] is tight, we can lower the benefit slightly to drop that price down to **$[Lower Amount]**. That way you still have protection, but it’s easier on the budget. Does $[Lower Amount] feel better?" 
+
+(Adjust coverage down, save the sale). 
+
+ 
+
+Step 4: The Beneficiary Confirmation (Emotional Lock) 
+
+Goal: Remind them who this is for. 
+
+Agent: "Next, let's double-check the most important part. The check. When the time comes, I have instructions to send the tax-free check to [Beneficiary Name]. Is that still the right person?" 
+
+IF: "YES" 
+
+Agent: "Okay. I have verified the spelling. I am locking that in. This policy is for them, so we are going to make sure it stays active for them." 
+
+GO TO: Step 5. 
+
+IF: "NO, I WANT TO CHANGE IT" 
+
+Agent: "Okay, who should receive the money?" 
+
+(Take new name) 
+
+Agent: "Okay, I have updated the legal record. This ensures they won't have to fight the state for the money later." 
+
+GO TO: Step 5. 
+
+ 
+
+Step 5: The "Spam Vaccine" (Retention) 
+
+Goal: Inoculate them against other agents calling. 
+
+Agent: "Last thing, [Client Name]. Now that you are approved, your name effectively goes onto a 'State List' showing you have coverage. That means in the next few weeks, your phone is going to ring." 
+
+Agent: "You’re going to get calls from people claiming they need to 'review your policy' or that 'your insurance is expiring.' Those are lies. They are just trying to trick you into cancelling this to buy their plan." 
+
+Agent: "When they call, I want you to look at that note on your fridge, remember that I already took care of you, and just hang up on them. Can you promise me you'll do that?" 
+
+IF: "YES, I PROMISE" 
+
+Agent: "Perfect." 
+
+GO TO: Closing. 
+
+IF: "WHY WOULD THEY DO THAT?" 
+
+Agent: "Because they see you are a responsible person who bought insurance, so they want to steal your business. Don't let them confuse you. Stick with the number on the fridge." 
+
+GO TO: Closing. 
+
+ 
+
+Step 6: Closing 
+
+Agent: "Alright, I’ve stamped the approval. The policy is going in the mail today. Keep an eye out for a white envelope from [Company] in about 10 days." 
+
+Agent: "Welcome to the family, [Client Name]." 
+
+(Hang up) 
+
+ 

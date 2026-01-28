@@ -1,6 +1,6 @@
 'use client';
 
-import { Plus, Copy, Trash2, Loader2 } from 'lucide-react';
+import { Plus, Copy, Trash2, Loader2, Shield, Scale, FileText } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 import { DemoToggle } from '@/components/demo/demo-toggle';
@@ -8,7 +8,14 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AddWebhookDialog } from '@/components/webhooks/add-webhook-dialog';
 import { apiClient } from '@/lib/api';
@@ -83,6 +90,7 @@ export default function SettingsPage() {
           <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
           <TabsTrigger value="api-keys">API Keys</TabsTrigger>
           <TabsTrigger value="dnc">DNC Lists</TabsTrigger>
+          <TabsTrigger value="legal">Legal</TabsTrigger>
         </TabsList>
 
         <TabsContent value="webhooks" className="flex-1 flex flex-col overflow-hidden min-h-0">
@@ -105,7 +113,9 @@ export default function SettingsPage() {
                   <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                 </div>
               ) : webhooks.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground">No webhooks configured</div>
+                <div className="text-center py-12 text-muted-foreground">
+                  No webhooks configured
+                </div>
               ) : (
                 <Table>
                   <TableHeader>
@@ -118,12 +128,12 @@ export default function SettingsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {webhooks.map((webhook) => (
+                    {webhooks.map(webhook => (
                       <TableRow key={webhook.id}>
                         <TableCell className="font-mono text-sm">{webhook.url}</TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
-                            {webhook.events.slice(0, 2).map((event) => (
+                            {webhook.events.slice(0, 2).map(event => (
                               <Badge key={event} variant="outline" className="text-xs">
                                 {event}
                               </Badge>
@@ -250,6 +260,84 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="legal" className="flex-1 flex flex-col overflow-hidden min-h-0">
+          <Card className="flex-1 flex flex-col overflow-hidden min-h-0">
+            <CardHeader className="flex-shrink-0">
+              <div>
+                <CardTitle>Legal Documents</CardTitle>
+                <CardDescription>
+                  Privacy policy, terms of service, and compliance documents
+                </CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent className="flex-1 overflow-y-auto min-h-0">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <a
+                  href="/legal/privacy"
+                  className="flex items-center gap-3 p-4 rounded-lg border bg-card hover:bg-accent transition-colors"
+                >
+                  <Shield className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <div className="font-medium">Privacy Policy</div>
+                    <div className="text-sm text-muted-foreground">
+                      How we collect and use your data
+                    </div>
+                  </div>
+                </a>
+                <a
+                  href="/legal/terms"
+                  className="flex items-center gap-3 p-4 rounded-lg border bg-card hover:bg-accent transition-colors"
+                >
+                  <FileText className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <div className="font-medium">Terms of Service</div>
+                    <div className="text-sm text-muted-foreground">
+                      Service agreements and conditions
+                    </div>
+                  </div>
+                </a>
+                <a
+                  href="/legal/data-retention"
+                  className="flex items-center gap-3 p-4 rounded-lg border bg-card hover:bg-accent transition-colors"
+                >
+                  <FileText className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <div className="font-medium">Data Retention Policy</div>
+                    <div className="text-sm text-muted-foreground">How long we keep your data</div>
+                  </div>
+                </a>
+                <a
+                  href="/legal/call-recording"
+                  className="flex items-center gap-3 p-4 rounded-lg border bg-card hover:bg-accent transition-colors"
+                >
+                  <FileText className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <div className="font-medium">Call Recording Policy</div>
+                    <div className="text-sm text-muted-foreground">
+                      Recording consent and compliance
+                    </div>
+                  </div>
+                </a>
+                <a
+                  href="/legal/dpa"
+                  className="flex items-center gap-3 p-4 rounded-lg border bg-card hover:bg-accent transition-colors"
+                >
+                  <Scale className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <div className="font-medium">Data Processing Agreement</div>
+                    <div className="text-sm text-muted-foreground">
+                      GDPR and data processing terms
+                    </div>
+                  </div>
+                </a>
+              </div>
+              <div className="mt-6 pt-4 border-t text-sm text-muted-foreground">
+                © {new Date().getFullYear()} Hopwhistle. All rights reserved.
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       <AddWebhookDialog
@@ -260,4 +348,3 @@ export default function SettingsPage() {
     </div>
   );
 }
-

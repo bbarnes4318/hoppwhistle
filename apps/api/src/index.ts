@@ -280,6 +280,10 @@ async function buildServer() {
   const { registerBuyerBillingRoutes } = await import('./routes/buyer-billing.js');
   await server.register(registerBuyerBillingRoutes);
 
+  // Register Automation routes (carrier application RPA)
+  const automationRoutes = await import('./routes/automation.js');
+  await server.register(automationRoutes.default, { prefix: '/api/automation' });
+
   // Start Fronter Bot socket server (handles outbound call socket connections)
   const { fronterBotService } = await import('./services/fronter-bot.js');
   await fronterBotService.start();

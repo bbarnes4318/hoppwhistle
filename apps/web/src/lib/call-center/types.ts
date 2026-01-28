@@ -2,6 +2,67 @@
 // TypeScript interfaces for the integrated dialer, scripting, and quoting system
 
 // ============================================================================
+// RBAC - Role-Based Access Control
+// ============================================================================
+
+export const JOB_ROLES = {
+  LEAD_DEVELOPMENT: 'Lead Development',
+  QA_SPECIALIST: 'QA Specialist',
+  JUNIOR_ENROLLMENT_COORDINATOR: 'Junior Enrollment Coordinator',
+  SENIOR_ENROLLMENT_COORDINATOR: 'Senior Enrollment Coordinator',
+  STATE_LICENSED_UNDERWRITER: 'State Licensed Underwriter',
+  CLIENT_SUCCESS_MANAGER: 'Client Success Manager',
+  PLACEMENT_SPECIALIST: 'Placement Specialist',
+  PLACEMENT_MANAGER: 'Placement Manager',
+  SALES_MANAGER: 'Sales Manager',
+  PARTNER: 'Partner',
+} as const;
+
+export type JobRole = (typeof JOB_ROLES)[keyof typeof JOB_ROLES];
+
+export const SCRIPT_TYPES = {
+  UNDERWRITER: 'underwriter',
+  PLACEMENT: 'placement',
+} as const;
+
+export type ScriptType = (typeof SCRIPT_TYPES)[keyof typeof SCRIPT_TYPES];
+
+export interface ScriptAccess {
+  scripts: ScriptType[];
+  canToggle: boolean;
+}
+
+/**
+ * Determine which scripts a role can access
+ */
+export function getScriptAccessForRole(role: JobRole): ScriptAccess {
+  switch (role) {
+    // Script A (Underwriter) only
+    case JOB_ROLES.STATE_LICENSED_UNDERWRITER:
+      return { scripts: ['underwriter'], canToggle: false };
+
+    // Script B (Placement) only
+    case JOB_ROLES.CLIENT_SUCCESS_MANAGER:
+    case JOB_ROLES.PLACEMENT_SPECIALIST:
+    case JOB_ROLES.PLACEMENT_MANAGER:
+      return { scripts: ['placement'], canToggle: false };
+
+    // Both scripts with toggle
+    case JOB_ROLES.SALES_MANAGER:
+    case JOB_ROLES.PARTNER:
+      return { scripts: ['underwriter', 'placement'], canToggle: true };
+
+    // Internal roles - no script access
+    case JOB_ROLES.LEAD_DEVELOPMENT:
+    case JOB_ROLES.QA_SPECIALIST:
+    case JOB_ROLES.JUNIOR_ENROLLMENT_COORDINATOR:
+    case JOB_ROLES.SENIOR_ENROLLMENT_COORDINATOR:
+    default:
+      return { scripts: [], canToggle: false };
+  }
+}
+
+// ============================================================================
 // Prospect & Lead Data
 // ============================================================================
 
@@ -76,6 +137,7 @@ export interface ProspectData {
   accountNum: string;
   draftSchedule: string;
   draftDate: string;
+  billingDate: string; // For Placement Script
 
   // Physician
   physicianName: string;
@@ -140,13 +202,29 @@ export const INITIAL_PROSPECT_DATA: ProspectData = {
   accountNum: '',
   draftSchedule: 'ss_payment',
   draftDate: '',
+  billingDate: '',
   ilDesigneeChoice: null,
   applicationNumber: '',
 };
 
 // ============================================================================
-// Script System
+// Script System - Golden Path State Machine
 // ============================================================================
+
+export const NODE_TYPES = {
+  STATEMENT: 'statement' as const,
+  QUESTION: 'question' as const,
+  VERIFICATION: 'verification_question' as const,
+  DATA_COLLECTION: 'data_collection' as const,
+  DECISION: 'decision' as const,
+  OBJECTION_HANDLER: 'objection_handler' as const,
+  TRANSITION: 'transition' as const,
+  QUOTE: 'quote' as const,
+  CLOSE: 'close' as const,
+  CONDITIONAL: 'conditional' as const,
+};
+
+export type NodeType = (typeof NODE_TYPES)[keyof typeof NODE_TYPES];
 
 export type ScriptFieldType =
   | 'text'
@@ -160,6 +238,18 @@ export type ScriptFieldType =
   | 'state'
   | 'height'
   | 'currency';
+
+export interface ConversionTip {
+  text: string;
+  source: string;
+}
+
+export interface ScriptOption {
+  label: string;
+  nextNode: string;
+  color?: 'emerald' | 'red' | 'amber' | 'gray' | 'blue';
+  setData?: Record<string, unknown>;
+}
 
 export interface ScriptFieldOption {
   value: string;
@@ -185,12 +275,24 @@ export interface ScriptField {
 
 export interface ScriptNode {
   id: string;
+  type: NodeType;
+  phase: number;
   title: string;
-  category: 'intro' | 'qualification' | 'presentation' | 'application' | 'closing';
   script: string;
-  tip?: string;
-  fields?: ScriptField[];
+  timestamp?: string;
+  conversionTip?: ConversionTip;
+  eligibilityNote?: string;
+  captureVariable?: string;
+  options?: ScriptOption[];
   nextNode?: string;
+  showQuoteCalculator?: boolean;
+  showThreeOptions?: boolean;
+  showCoverageSelector?: boolean;
+  checkVariable?: string;
+  ifEmpty?: string;
+  ifNotEmpty?: string;
+  isEndNode?: boolean;
+  fields?: ScriptField[];
   conditionalNext?: {
     field: keyof ProspectData;
     conditions: Array<{
@@ -198,6 +300,12 @@ export interface ScriptNode {
       nextNode: string;
     }>;
   };
+}
+
+export interface ScriptPhase {
+  name: string;
+  timing: string;
+  color: string;
 }
 
 // ============================================================================

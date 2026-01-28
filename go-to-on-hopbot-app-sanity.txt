@@ -1,0 +1,38 @@
+Summary: Everything You Need
+I've created 3 documents for you:
+
+1. Deployment Workflow (
+.agent/workflows/deploy.md
+)
+Type /deploy in any AI conversation and it will read this workflow
+Contains step-by-step instructions with "turbo" annotations so safe commands auto-run
+This is the workflow file - the AI will follow it when you use /deploy
+2. AI Context Prompt (
+docs/AI_CONTEXT_PROMPT.md
+)
+Copy and paste this at the START of any new conversation
+Gives the AI full context about your project architecture
+Explains the critical database limitation (can't reach from local)
+Includes common fixes and production standards
+3. Quick Reference Card (
+docs/QUICK_REFERENCE.md
+)
+One-page cheat sheet for you personally
+Common commands copy-paste ready
+TL;DR - The Key Things to Know
+Fact	Value
+Server SSH	ssh root@45.32.213.201
+Project Path	/opt/hopwhistle
+Compose Dir	/opt/hopwhistle/infra/docker/
+Rebuild Command	docker compose -f docker-compose.prod.yml up -d --build --force-recreate api web
+DB is NOT public	Prisma commands MUST run inside container
+Prisma as root	docker exec -u 0 hopwhistle-api npx prisma generate
+Fix Redis	docker network connect --alias redis docker_default hopwhistle-redis-1
+How to Use for Next Time
+Start a new AI conversation
+Paste the contents of 
+docs/AI_CONTEXT_PROMPT.md
+ at the beginning
+State your task clearly
+When ready to deploy, type /deploy and the AI will follow the workflow
+The AI will now understand that it can't run Prisma locally and will give you proper SSH commands!
