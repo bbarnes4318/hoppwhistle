@@ -5,7 +5,6 @@
 // Exact 1:1 port with zero UI/functionality differences
 // ============================================================================
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Phone,
   PhoneOff,
@@ -30,9 +29,11 @@ import {
   Clock,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+
+import IntegratedScriptPanel from './IntegratedScriptPanel';
 
 import { usePhone } from '@/components/phone/phone-provider';
-import { IntegratedScriptPanel } from './IntegratedScriptPanel';
 
 // ============================================================================
 // TYPES
@@ -121,7 +122,8 @@ export function CallCenterPortal(): JSX.Element {
     currentCall,
     agentStatus: phoneAgentStatus,
     makeCall,
-    hangup,
+    hangupCall,
+    answerCall,
     toggleMute,
     toggleHold,
   } = usePhone();
@@ -164,6 +166,69 @@ export function CallCenterPortal(): JSX.Element {
   const [loadingApplications, setLoadingApplications] = useState(false);
   const [callRecords, setCallRecords] = useState<CallRecord[]>([]);
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // SYNC WITH PHONE HOOK - React to incoming/active calls from sip.js
+  // ─────────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!currentCall) {
+      // No active call - if we were on a call, show disposition
+      if (isCallActive && !showDisposition) {
+        if (callTimerRef.current) clearInterval(callTimerRef.current);
+        setIsCallActive(false);
+        setShowDisposition(true);
+        setAgentStatus('available');
+      }
+      setIsIncomingCall(false);
+      return;
+    }
+
+    // Incoming call ringing
+    if (currentCall.state === 'ringing' && currentCall.direction === 'inbound') {
+      setIsIncomingCall(true);
+      setIncomingCallData({
+        caller_id: currentCall.phoneNumber,
+        first_name: currentCall.callerName || 'Incoming',
+        last_name: 'Call',
+        phone: currentCall.phoneNumber,
+        ...currentCall.prospectData,
+      });
+      setAgentStatus('on_call');
+    }
+
+    // Call is active (connected)
+    if (currentCall.state === 'active' || currentCall.state === 'connecting') {
+      setIsIncomingCall(false);
+      setIsCallActive(true);
+      setAgentStatus('on_call');
+
+      // Set active call data if not already set
+      if (!activeCallData) {
+        setActiveCallData({
+          caller_id: currentCall.phoneNumber,
+          first_name:
+            currentCall.callerName || currentCall.direction === 'outbound'
+              ? 'Outbound'
+              : 'Incoming',
+          last_name: 'Call',
+          phone: currentCall.phoneNumber,
+          ...currentCall.prospectData,
+        });
+      }
+
+      // Start timer if not already running
+      if (!callTimerRef.current) {
+        setCallTimer(0);
+        callTimerRef.current = setInterval(() => {
+          setCallTimer(prev => prev + 1);
+        }, 1000);
+      }
+    }
+
+    // Sync mute/hold state from phone hook
+    setIsMuted(currentCall.isMuted);
+    setIsOnHold(currentCall.isOnHold);
+  }, [currentCall, isCallActive, showDisposition, activeCallData]);
+
   // Helper Functions
   const formatPhoneNumber = (value: string): string => {
     const cleaned = value.replace(/\D/g, '');
@@ -192,6 +257,12 @@ export function CallCenterPortal(): JSX.Element {
 
   // Call Handlers
   const handleAnswerCall = async () => {
+    try {
+      await answerCall(); // Use hook's answer method for SIP
+    } catch (e) {
+      console.error('Failed to answer call:', e);
+    }
+    // State updates happen via useEffect watching currentCall
     setIsIncomingCall(false);
     setIsCallActive(true);
     setActiveCallData(incomingCallData);
@@ -202,7 +273,12 @@ export function CallCenterPortal(): JSX.Element {
     }, 1000);
   };
 
-  const handleDeclineCall = () => {
+  const handleDeclineCall = async () => {
+    try {
+      await hangupCall(); // Rejecting an incoming call via hangup
+    } catch (e) {
+      console.error('Failed to decline call:', e);
+    }
     setIsIncomingCall(false);
     setIncomingCallData(null);
     setAgentStatus('available');
@@ -211,7 +287,7 @@ export function CallCenterPortal(): JSX.Element {
   const handleHangup = async () => {
     if (callTimerRef.current) clearInterval(callTimerRef.current);
     try {
-      await hangup();
+      await hangupCall();
     } catch (e) {
       console.error(e);
     }
@@ -513,7 +589,7 @@ export function CallCenterPortal(): JSX.Element {
                 <div className="grid grid-cols-3 gap-3 mb-4">
                   <button
                     onClick={() => {
-                      toggleMute(!isMuted);
+                      toggleMute();
                       setIsMuted(!isMuted);
                     }}
                     className={
@@ -532,7 +608,7 @@ export function CallCenterPortal(): JSX.Element {
                   </button>
                   <button
                     onClick={() => {
-                      toggleHold(!isOnHold);
+                      toggleHold();
                       setIsOnHold(!isOnHold);
                     }}
                     className={
