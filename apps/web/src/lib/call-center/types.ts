@@ -295,6 +295,9 @@ export interface ScriptNode {
   ifNotEmpty?: string;
   isEndNode?: boolean;
   fields?: ScriptField[];
+  stageDirection?: string;
+  rapportScript?: string;
+  isComplete?: boolean;
   conditionalNext?: {
     field: keyof ProspectData;
     conditions: Array<{

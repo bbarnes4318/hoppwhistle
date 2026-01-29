@@ -1015,7 +1015,7 @@ function calculateMutualOfOmahaPremium(
 /**
  * Check if age is within carrier's range
  */
-function isAgeEligible(carrier: string, age: number): boolean {
+export function isAgeEligible(carrier: string, age: number): boolean {
   const config = CARRIER_CONFIG[carrier];
   if (!config) return false;
   return age >= config.minAge && age <= config.maxAge;
