@@ -39,7 +39,7 @@ export function DialerControls({
     currentCall,
     agentStatus,
     makeCall,
-    hangup,
+    hangupCall,
     toggleMute,
     toggleHold,
     sendDTMF,
@@ -86,7 +86,7 @@ export function DialerControls({
   // Handle hangup
   const handleHangup = async () => {
     try {
-      await hangup();
+      await hangupCall();
     } catch (error) {
       console.error('Failed to end call:', error);
     }
@@ -153,7 +153,7 @@ export function DialerControls({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => toggleMute(!currentCall.isMuted)}
+            onClick={() => toggleMute()}
             className={cn(
               'flex flex-col items-center gap-1 h-auto py-3',
               'border-white/10 hover:bg-white/5',
@@ -168,7 +168,7 @@ export function DialerControls({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => toggleHold(!currentCall.isOnHold)}
+            onClick={() => toggleHold()}
             className={cn(
               'flex flex-col items-center gap-1 h-auto py-3',
               'border-white/10 hover:bg-white/5',

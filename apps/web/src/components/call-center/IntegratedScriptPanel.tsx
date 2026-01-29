@@ -30,11 +30,7 @@ import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 // ═══════════════════════════════════════════════════════════════════════════
 // IMPORT FROM YOUR EXISTING QUOTE CALCULATOR - NO DUPLICATED RATE TABLES
 // ═══════════════════════════════════════════════════════════════════════════
-import {
-  calculateMonthlyPremium,
-  getAllCarrierQuotes,
-  isAgeEligible,
-} from '../../lib/call-center/quoteCalculator';
+import { getAllCarrierQuotes, isAgeEligible } from '../../lib/call-center/quoteCalculator';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AREA CODE UTILITY - Derive state from phone number
@@ -55,7 +51,7 @@ import SettingsPanel from './SettingsPanel';
 // ═══════════════════════════════════════════════════════════════════════════
 // HELPER: Calculate age from DOB
 // ═══════════════════════════════════════════════════════════════════════════
-const calculateAge = dob => {
+const calculateAge = (dob: string | null | undefined): number | null => {
   if (!dob) return null;
   const birth = new Date(dob);
   const today = new Date();
@@ -94,9 +90,31 @@ const COVERAGE_OPTIONS = [
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════
+// TYPES
+// ═══════════════════════════════════════════════════════════════════════════
+interface ProspectData {
+  phone?: string;
+  caller_id?: string;
+  city?: string;
+  state?: string;
+  dob?: string;
+  date_of_birth?: string;
+  age?: number;
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  [key: string]: unknown;
+}
+
+interface IntegratedScriptPanelProps {
+  prospectData?: ProspectData;
+  onDataUpdate?: (data: Record<string, unknown>) => void;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════
-const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }) => {
+const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedScriptPanelProps) => {
   // ─────────────────────────────────────────────────────────────────────────
   // DETERMINE DATA SOURCE FOR LOCATION
   // Priority 1: Webhook Data (city + state)
