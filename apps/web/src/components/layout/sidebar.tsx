@@ -4,6 +4,7 @@ import {
   AudioLines,
   Bot,
   ClipboardCheck,
+  Clock,
   DollarSign,
   FileText,
   GitBranch,
@@ -25,7 +26,14 @@ import { usePathname } from 'next/navigation';
 
 import { cn } from '@/lib/utils';
 
-const navigation = [
+interface NavItem {
+  name: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  title?: string;
+}
+
+const navigation: NavItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   {
     name: 'Conductor',
@@ -63,18 +71,30 @@ const navigation = [
     title: 'Policy onboarding & retention queue',
   },
   { name: 'Billing', href: '/billing', icon: Receipt },
+  {
+    name: 'My Payroll',
+    href: '/payroll',
+    icon: Clock,
+    title: 'Track hours & view earnings',
+  },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
-const toolsNavigation = [
+const toolsNavigation: NavItem[] = [
   { name: 'Recording Analyzer', href: '/tools/recording-analyzer', icon: AudioLines },
 ];
 
-const adminNavigation = [
+const adminNavigation: NavItem[] = [
   { name: 'Users', href: '/settings/users', icon: Users },
   { name: 'Webhooks', href: '/settings/webhooks', icon: FileText },
   { name: 'DNC Lists', href: '/settings/dnc', icon: Shield },
   { name: 'Quotas & Budgets', href: '/settings/quotas', icon: DollarSign },
+  {
+    name: 'Payroll Admin',
+    href: '/admin/payroll',
+    icon: Receipt,
+    title: 'Manage contractor payroll',
+  },
 ];
 
 export function Sidebar() {
@@ -99,7 +119,7 @@ export function Sidebar() {
             <Link
               key={item.name}
               href={item.href}
-              title={(item as any).title}
+              title={item.title}
               className={cn(
                 'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
                 isActive
