@@ -166,6 +166,26 @@ export function CallCenterPortal(): JSX.Element {
   const [loadingApplications, setLoadingApplications] = useState(false);
   const [callRecords, setCallRecords] = useState<CallRecord[]>([]);
 
+  // User Settings & Stats
+  const [jobTitle, setJobTitle] = useState<string>('Agent');
+  const [showSettings, setShowSettings] = useState(false);
+  const [salesCount, setSalesCount] = useState(0);
+  const [totalCallsCount, setTotalCallsCount] = useState(0);
+
+  // Job titles that can access Retention Script
+  const RETENTION_JOB_TITLES = [
+    'Team Lead',
+    'Supervisor',
+    'Manager',
+    'Admin',
+    'Retention Specialist',
+  ];
+  const canAccessRetentionScript = RETENTION_JOB_TITLES.includes(jobTitle) || jobTitle === 'Admin';
+
+  // Calculate conversion rate: (Sales / Total Calls) * 100
+  const conversionRate =
+    totalCallsCount > 0 ? ((salesCount / totalCallsCount) * 100).toFixed(1) : '0.0';
+
   // ─────────────────────────────────────────────────────────────────────────
   // SYNC WITH PHONE HOOK - React to incoming/active calls from sip.js
   // ─────────────────────────────────────────────────────────────────────────
@@ -315,6 +335,14 @@ export function CallCenterPortal(): JSX.Element {
         callEndTime: new Date().toISOString(),
       };
       setCallRecords(prev => [...prev, callRecord]);
+
+      // Track stats for conversion calculation
+      setTotalCallsCount(prev => prev + 1);
+
+      // If "Sale Made" disposition, increment sales count
+      if (selectedDisposition === 'Sale Made') {
+        setSalesCount(prev => prev + 1);
+      }
     }
     setShowDisposition(false);
     setSelectedDisposition('');
@@ -506,12 +534,34 @@ export function CallCenterPortal(): JSX.Element {
               value={agentStatus}
               onChange={e => setAgentStatus(e.target.value as AgentStatus)}
               disabled={isCallActive || isIncomingCall}
-              className="appearance-none bg-[#1e1e2e] text-white text-sm pl-8 pr-8 py-1.5 rounded-lg border border-[#2e2e3e] focus:border-cyan-500 focus:outline-none cursor-pointer disabled:opacity-50"
+              className="appearance-none bg-[#1e1e2e] text-white text-sm pl-3 pr-8 py-1.5 rounded-lg border border-[#2e2e3e] focus:border-cyan-500 focus:outline-none cursor-pointer disabled:opacity-50"
             >
               <option value="available">Available</option>
               <option value="away">Away</option>
               <option value="on_call">On Call</option>
             </select>
+
+            {/* Job Title Selector */}
+            <select
+              value={jobTitle}
+              onChange={e => setJobTitle(e.target.value)}
+              className="appearance-none bg-[#1e1e2e] text-white text-sm pl-3 pr-8 py-1.5 rounded-lg border border-[#2e2e3e] focus:border-purple-500 focus:outline-none cursor-pointer"
+            >
+              <option value="Agent">Agent</option>
+              <option value="Senior Agent">Senior Agent</option>
+              <option value="Retention Specialist">Retention Specialist</option>
+              <option value="Team Lead">Team Lead</option>
+              <option value="Supervisor">Supervisor</option>
+              <option value="Manager">Manager</option>
+              <option value="Admin">Admin</option>
+            </select>
+
+            {/* Show current script access badge */}
+            <span
+              className={`px-2 py-1 text-xs rounded-full ${canAccessRetentionScript ? 'bg-purple-500/20 text-purple-300 border border-purple-500/50' : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50'}`}
+            >
+              {canAccessRetentionScript ? 'Multi-Script' : 'Sales Script'}
+            </span>
           </div>
 
           <div className="flex items-center space-x-4">
@@ -522,6 +572,13 @@ export function CallCenterPortal(): JSX.Element {
               </div>
             )}
             <button
+              onClick={() => setShowSettings(true)}
+              className="p-2 bg-[#1e1e2e] hover:bg-[#2e2e3e] rounded-lg border border-[#2e2e3e] transition-colors"
+              title="Settings"
+            >
+              <Settings className="w-4 h-4 text-gray-400" />
+            </button>
+            <button
               onClick={() => setCurrentView('roleSelect')}
               className="text-sm text-gray-400 hover:text-white transition-colors"
             >
@@ -530,6 +587,71 @@ export function CallCenterPortal(): JSX.Element {
           </div>
         </div>
       </div>
+
+      {/* Settings Modal */}
+      {showSettings && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#13131a] rounded-2xl border border-[#2e2e3e] w-full max-w-md shadow-2xl">
+            <div className="p-4 border-b border-[#2e2e3e] flex items-center justify-between">
+              <h2 className="text-lg font-bold text-white">User Settings</h2>
+              <button
+                onClick={() => setShowSettings(false)}
+                className="p-1 hover:bg-[#2e2e3e] rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">Job Title</label>
+                <select
+                  value={jobTitle}
+                  onChange={e => setJobTitle(e.target.value)}
+                  className="w-full bg-[#1e1e2e] text-white text-sm p-3 rounded-lg border border-[#2e2e3e] focus:border-purple-500 focus:outline-none"
+                >
+                  <option value="Agent">Agent</option>
+                  <option value="Senior Agent">Senior Agent</option>
+                  <option value="Retention Specialist">Retention Specialist</option>
+                  <option value="Team Lead">Team Lead</option>
+                  <option value="Supervisor">Supervisor</option>
+                  <option value="Manager">Manager</option>
+                  <option value="Admin">Admin</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">Script Access</label>
+                <div className="p-3 bg-[#1e1e2e] rounded-lg border border-[#2e2e3e]">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-white">Main Final Expense Sales Script</span>
+                    <span className="text-xs text-green-400">✓ Active</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-white">Retention Script</span>
+                    <span
+                      className={`text-xs ${canAccessRetentionScript ? 'text-green-400' : 'text-gray-500'}`}
+                    >
+                      {canAccessRetentionScript ? '✓ Available' : '✗ Restricted'}
+                    </span>
+                  </div>
+                </div>
+                {!canAccessRetentionScript && (
+                  <p className="text-xs text-gray-500 mt-2">
+                    Retention Script requires Team Lead or higher role.
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="p-4 border-t border-[#2e2e3e]">
+              <button
+                onClick={() => setShowSettings(false)}
+                className="w-full py-2 bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-medium rounded-lg hover:opacity-90 transition-opacity"
+              >
+                Save Settings
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Content - 3 Column Layout */}
       <div className="flex-1 flex overflow-hidden">
@@ -889,34 +1011,39 @@ export function CallCenterPortal(): JSX.Element {
             </div>
           ) : (
             <div className="flex-1 flex flex-col gap-4 overflow-hidden">
+              {/* Stats Bar - Order: Total Calls | Applications | Conversion | Queue */}
               <div className="grid grid-cols-4 gap-4 flex-shrink-0">
+                {/* 1. Total Calls */}
                 <div className="glass-panel rounded-xl p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs text-gray-500">Applications</p>
-                      <p className="text-2xl font-bold text-white">{applications.length}</p>
-                    </div>
-                    <FileText className="w-8 h-8 text-cyan-500" />
-                  </div>
-                </div>
-                <div className="glass-panel rounded-xl p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs text-gray-500">Todays Calls</p>
-                      <p className="text-2xl font-bold text-white">{callRecords.length}</p>
+                      <p className="text-xs text-gray-500">Total Calls</p>
+                      <p className="text-2xl font-bold text-white">{totalCallsCount}</p>
                     </div>
                     <Phone className="w-8 h-8 text-blue-500" />
                   </div>
                 </div>
+                {/* 2. Applications (Sales) */}
+                <div className="glass-panel rounded-xl p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-gray-500">Applications</p>
+                      <p className="text-2xl font-bold text-white">{salesCount}</p>
+                    </div>
+                    <FileText className="w-8 h-8 text-cyan-500" />
+                  </div>
+                </div>
+                {/* 3. Conversion - (Applications / Total Calls) * 100 */}
                 <div className="glass-panel rounded-xl p-4">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-xs text-gray-500">Conversion</p>
-                      <p className="text-2xl font-bold text-green-400">32%</p>
+                      <p className="text-2xl font-bold text-green-400">{conversionRate}%</p>
                     </div>
                     <CheckCircle className="w-8 h-8 text-green-500" />
                   </div>
                 </div>
+                {/* 4. Queue */}
                 <div className="glass-panel rounded-xl p-4">
                   <div className="flex items-center justify-between">
                     <div>
