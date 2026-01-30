@@ -1750,20 +1750,83 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
         )}
 
         {/* SCRIPT TEXT - Compact */}
-        <div className="mb-3 p-3 rounded-xl bg-gradient-to-br from-slate-800/80 to-slate-900/80 border border-slate-700/50">
-          <div
-            className="text-white text-lg leading-7 font-normal"
-            style={{
-              fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-            }}
-            dangerouslySetInnerHTML={{
-              __html: replaceVars(node.script)
-                .replace(/\*\*(.*?)\*\*/g, '<strong class="text-cyan-300 font-bold">$1</strong>')
-                .replace(/\n\n/g, ' ')
-                .replace(/\n/g, ' '),
-            }}
-          />
-        </div>
+        {/* Handle verify_age specially - show different script if DOB is missing */}
+        {node.dynamicDOB && !formData.dob && !formData.age ? (
+          // DOB MISSING - Show alternate script and input field
+          <div className="mb-3 p-3 rounded-xl bg-gradient-to-br from-amber-500/10 to-orange-500/10 border border-amber-500/30">
+            <div
+              className="text-white text-lg leading-7 font-normal mb-4"
+              style={{
+                fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+              }}
+            >
+              <strong className="text-amber-300">What is your date of birth, please?</strong>
+            </div>
+
+            {/* DOB INPUT FIELD */}
+            <div className="mt-3 p-4 rounded-xl border-2 border-amber-500/50 bg-slate-900/50">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center">
+                  <Calendar className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <p className="text-white font-bold">Enter Date of Birth</p>
+                  <p className="text-gray-400 text-sm">Required for quote calculation</p>
+                </div>
+              </div>
+              <input
+                type="date"
+                value={formData.dob || ''}
+                onChange={e => {
+                  const newDob = e.target.value;
+                  updateField('dob', newDob);
+                  updateField('dobDataSource', 'manual');
+                  // Calculate age from DOB
+                  if (newDob) {
+                    const birthDate = new Date(newDob);
+                    const today = new Date();
+                    let calculatedAge = today.getFullYear() - birthDate.getFullYear();
+                    const monthDiff = today.getMonth() - birthDate.getMonth();
+                    if (
+                      monthDiff < 0 ||
+                      (monthDiff === 0 && today.getDate() < birthDate.getDate())
+                    ) {
+                      calculatedAge--;
+                    }
+                    if (calculatedAge >= 0 && calculatedAge <= 120) {
+                      updateField('age', calculatedAge);
+                    }
+                  }
+                }}
+                max={new Date().toISOString().split('T')[0]}
+                min="1900-01-01"
+                className="w-full px-4 py-3 bg-slate-800 border-2 border-amber-500/50 rounded-xl text-white text-lg focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/20"
+              />
+              {formData.dob && formData.age && (
+                <p className="mt-2 text-emerald-400 font-medium flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4" />
+                  That makes you {formData.age} years young!
+                </p>
+              )}
+            </div>
+          </div>
+        ) : (
+          // DOB AVAILABLE - Show normal script
+          <div className="mb-3 p-3 rounded-xl bg-gradient-to-br from-slate-800/80 to-slate-900/80 border border-slate-700/50">
+            <div
+              className="text-white text-lg leading-7 font-normal"
+              style={{
+                fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+              }}
+              dangerouslySetInnerHTML={{
+                __html: replaceVars(node.script)
+                  .replace(/\*\*(.*?)\*\*/g, '<strong class="text-cyan-300 font-bold">$1</strong>')
+                  .replace(/\n\n/g, ' ')
+                  .replace(/\n/g, ' '),
+              }}
+            />
+          </div>
+        )}
 
         {/* LOCATION VERIFICATION CARD - Compact */}
         {node.dynamicLocation && (
@@ -1787,7 +1850,7 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
           </div>
         )}
 
-        {/* DOB VERIFICATION CARD - Only when DOB is pre-filled */}
+        {/* DOB VERIFICATION CARD - Only when DOB is pre-filled via webhook */}
         {node.dynamicDOB && formData.dob && formData.dobDataSource === 'webhook' && (
           <div className="mt-4 p-4 rounded-xl border border-white/10 bg-gradient-to-br from-purple-500/10 to-pink-500/10">
             <div className="flex items-center gap-3">
@@ -1808,6 +1871,34 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
               {formData.age && (
                 <div className="ml-auto text-right">
                   <p className="text-2xl font-bold text-purple-400">{formData.age}</p>
+                  <p className="text-gray-500 text-xs">years old</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* DOB EDIT CARD - Show when DOB was manually entered and user is on verify_age */}
+        {node.dynamicDOB && formData.dob && formData.dobDataSource === 'manual' && (
+          <div className="mt-4 p-4 rounded-xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-cyan-500/10">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-cyan-500 flex items-center justify-center">
+                <CheckCircle2 className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <p className="text-white font-bold">Date of Birth Entered</p>
+                <p className="text-gray-400 text-sm">
+                  {new Date(formData.dob).toLocaleDateString('en-US', {
+                    weekday: 'long',
+                    month: 'long',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })}
+                </p>
+              </div>
+              {formData.age && (
+                <div className="ml-auto text-right">
+                  <p className="text-2xl font-bold text-emerald-400">{formData.age}</p>
                   <p className="text-gray-500 text-xs">years old</p>
                 </div>
               )}

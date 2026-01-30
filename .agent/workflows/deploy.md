@@ -6,6 +6,17 @@ description: How to deploy changes to the Hopwhistle platform on Vultr
 
 // turbo-all
 
+## ⚠️ CRITICAL: ALWAYS USE --no-cache FOR BUILDS ⚠️
+
+Docker layer caching will cause builds to **skip code changes**! Always use:
+
+```bash
+docker compose -f docker-compose.yml build api --no-cache
+docker compose -f docker-compose.yml build web --no-cache
+```
+
+**NEVER use `--build` alone** - it uses cache and won't pick up your changes!
+
 ## Architecture Overview
 
 ```
@@ -130,10 +141,16 @@ curl -s http://localhost:3001/health
 curl -s http://localhost:3001/api/v1/buyers -H "x-demo-tenant-id: 00000000-0000-0000-0000-000000000000"
 ```
 
-## ONE-LINER: Full Rebuild (Copy-Paste This)
+## ONE-LINER: Full API Rebuild (Copy-Paste This)
 
 ```bash
 cd /opt/hopwhistle && git pull origin main && cd infra/docker && docker stop docker-api-1 2>/dev/null; docker rm docker-api-1 2>/dev/null; docker rm -f docker-redis-1 2>/dev/null; docker compose -f docker-compose.yml build api --no-cache && docker compose -f docker-compose.yml up -d api --no-deps && docker network connect docker_default hopwhistle-postgres-dev 2>/dev/null; docker network connect --alias redis docker_default hopwhistle-redis-1 2>/dev/null; docker restart docker-api-1 && sleep 5 && docker exec docker-api-1 npx prisma db push --accept-data-loss && curl -s http://localhost:3001/health
+```
+
+## ONE-LINER: Full Web Rebuild (Copy-Paste This)
+
+```bash
+cd /opt/hopwhistle && git pull origin main && cd infra/docker && docker stop hopwhistle-web-1 2>/dev/null; docker rm hopwhistle-web-1 2>/dev/null; docker compose -f docker-compose.yml build web --no-cache && docker compose -f docker-compose.yml up -d web --no-deps
 ```
 
 ## Troubleshooting

@@ -112,7 +112,7 @@ export const adaptNodeForComponent = (
     showCoverageSelector: node.showCoverageSelector || false,
     showThreeOptions: node.showThreeOptions || false,
     dynamicLocation: node.id === 'verify_location',
-    dynamicDOB: node.id === 'health_dob',
+    dynamicDOB: node.id === 'health_dob' || node.id === 'verify_age' || node.id === 'correct_age',
     ageDisplay: node.id?.includes('dob') || node.id?.includes('age'),
     rapportScript: node.rapportScript,
     isComplete: node.isComplete,
