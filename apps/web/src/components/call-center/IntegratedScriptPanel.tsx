@@ -43,6 +43,37 @@ import { getStateFromAreaCode } from '../../lib/call-center/utils/areaCodeLookup
 // IMPORT THE GOLDEN PATH SCRIPT VIA ADAPTER
 // ═══════════════════════════════════════════════════════════════════════════
 
+// STUB: Rate loading functions - rates are hardcoded in quoteCalculator
+// TODO: Implement Google Sheets integration if dynamic rates are needed
+const isRatesLoaded = (): boolean => true;
+const fetchAllRates = async (): Promise<void> => {
+  // No-op - rates are hardcoded in quoteCalculator.ts
+};
+const subscribeToRates = (_callback: () => void): (() => void) => {
+  // No-op subscription - return unsubscribe function
+  return () => {};
+};
+
+// STUB: calculateMonthlyPremium - returns null, actual quotes use getAllCarrierQuotes
+const calculateMonthlyPremium = (
+  _carrier: string,
+  _age: number,
+  _gender: string,
+  _tobacco: boolean,
+  _coverage: number,
+  _planType: string
+): number | null => {
+  // This function was expected by the original fe-rickie code but isn't implemented
+  // The actual quote calculation happens via getAllCarrierQuotes
+  return null;
+};
+
+// STUB: calculateEligibility - returns basic eligibility
+const calculateEligibility = (_healthAnswers: Record<string, unknown>): string => {
+  // Returns a basic eligibility tier
+  return 'LEVEL';
+};
+
 // ═══════════════════════════════════════════════════════════════════════════
 // SETTINGS PANEL FOR CARRIER SELECTION
 // ═══════════════════════════════════════════════════════════════════════════
@@ -479,11 +510,13 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
     if (!ratesLoaded) return []; // Wait for rates to load
     if (!formData.age) return []; // Don't calculate without a real age
     return getAllCarrierQuotes(
-      formData.age,
-      formData.gender,
-      formData.tobacco,
-      formData.selectedCoverage,
-      eligibility
+      {
+        age: formData.age,
+        gender: formData.gender as 'male' | 'female',
+        tobacco: formData.tobacco,
+        faceAmount: formData.selectedCoverage,
+      },
+      eligibility as 'LEVEL' | 'ROP' | 'GRADED' | 'GI' | 'NOT_ELIGIBLE' | undefined
     );
   }, [
     formData.age,
