@@ -32,6 +32,7 @@ import { useRouter } from 'next/navigation';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 import IntegratedScriptPanel from './IntegratedScriptPanel';
+import RetentionScriptPanel from './RetentionScriptPanel';
 
 import { usePhone } from '@/components/phone/phone-provider';
 import { useLeadInjection } from '@/hooks/useLeadInjection';
@@ -181,15 +182,11 @@ export function CallCenterPortal(): JSX.Element {
   const [salesCount, setSalesCount] = useState(0);
   const [totalCallsCount, setTotalCallsCount] = useState(0);
 
-  // Job titles that can access Retention Script
-  const RETENTION_JOB_TITLES = [
-    'Team Lead',
-    'Supervisor',
-    'Manager',
-    'Admin',
-    'Retention Specialist',
-  ];
-  const canAccessRetentionScript = RETENTION_JOB_TITLES.includes(jobTitle) || jobTitle === 'Admin';
+  // Fuzzy matching: Job title contains "Retention" (case-insensitive)
+  const showRetentionScript = (title: string) => title && title.toLowerCase().includes('retention');
+
+  // Show retention script if job title contains "retention" OR user is Admin
+  const canAccessRetentionScript = showRetentionScript(jobTitle) || jobTitle === 'Admin';
 
   // Calculate conversion rate: (Sales / Total Calls) * 100
   const conversionRate =
@@ -1117,12 +1114,21 @@ export function CallCenterPortal(): JSX.Element {
 
               {activeCallView === 'script' && (
                 <div className="flex-1 overflow-hidden">
-                  <IntegratedScriptPanel
-                    prospectData={activeCallData}
-                    onDataUpdate={(data: Partial<ProspectData>) =>
-                      setActiveCallData(prev => (prev ? { ...prev, ...data } : null))
-                    }
-                  />
+                  {canAccessRetentionScript ? (
+                    <RetentionScriptPanel
+                      prospectData={activeCallData}
+                      onDataUpdate={(data: Record<string, unknown>) =>
+                        setActiveCallData(prev => (prev ? { ...prev, ...data } : null))
+                      }
+                    />
+                  ) : (
+                    <IntegratedScriptPanel
+                      prospectData={activeCallData}
+                      onDataUpdate={(data: Partial<ProspectData>) =>
+                        setActiveCallData(prev => (prev ? { ...prev, ...data } : null))
+                      }
+                    />
+                  )}
                 </div>
               )}
             </div>
