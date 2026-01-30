@@ -286,6 +286,36 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
   // ═══════════════════════════════════════════════════════════════════════════
   const isSubmitEnabled = confirmedCarrier && !automationStarted && formData.state;
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // QUOTE DATA VALIDATION
+  // Check if all required fields are present for quote calculation
+  // ═══════════════════════════════════════════════════════════════════════════
+  const quoteValidation = useMemo(() => {
+    const missingFields: string[] = [];
+
+    // Check DOB / Age
+    if (!formData.dob && !formData.age) {
+      missingFields.push('Date of Birth');
+    }
+
+    // Check Gender
+    if (!formData.gender || (formData.gender !== 'Male' && formData.gender !== 'Female')) {
+      missingFields.push('Gender');
+    }
+
+    // Check Coverage Amount (should always have a default, but verify)
+    if (!formData.selectedCoverage || formData.selectedCoverage <= 0) {
+      missingFields.push('Coverage Amount');
+    }
+
+    return {
+      isValid: missingFields.length === 0,
+      missingFields,
+      hasDOB: !!formData.dob || !!formData.age,
+      hasGender: formData.gender === 'Male' || formData.gender === 'Female',
+    };
+  }, [formData.dob, formData.age, formData.gender, formData.selectedCoverage]);
+
   // ─────────────────────────────────────────────────────────────────────────
   // GOOGLE SHEETS RATE LOADING
   // ─────────────────────────────────────────────────────────────────────────
@@ -1130,14 +1160,122 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
             </div>
           )}
 
-          {/* No Quotes Available */}
+          {/* No Quotes Available - With Data Entry Fallback */}
           {!isLoading && eligibleQuotes.length === 0 && (
-            <div className="py-12 text-center">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-red-500/20 mb-4">
-                <X className="w-8 h-8 text-red-400" />
-              </div>
-              <p className="text-gray-200 font-medium">No quotes available</p>
-              <p className="text-gray-500 text-sm mt-1">Try different criteria or age range</p>
+            <div className="py-6 px-4">
+              {/* Check if missing required data */}
+              {!quoteValidation.isValid ? (
+                <div className="space-y-4">
+                  {/* Missing Data Alert */}
+                  <div className="flex items-start gap-3 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+                    <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-amber-300 font-medium text-sm">
+                        Required Information Missing
+                      </p>
+                      <p className="text-gray-400 text-xs mt-1">
+                        Please provide the following to generate quotes:
+                      </p>
+                      <ul className="mt-2 space-y-1">
+                        {quoteValidation.missingFields.map(field => (
+                          <li
+                            key={field}
+                            className="text-amber-400 text-xs flex items-center gap-1"
+                          >
+                            <span className="w-1 h-1 bg-amber-400 rounded-full" />
+                            {field}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+
+                  {/* Inline Data Entry Fields */}
+                  <div className="space-y-3 p-4 bg-white/5 border border-white/10 rounded-xl">
+                    <h4 className="text-sm font-medium text-white flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-cyan-400" />
+                      Enter Customer Information
+                    </h4>
+
+                    {/* DOB Field */}
+                    {!quoteValidation.hasDOB && (
+                      <div>
+                        <label className="text-gray-400 text-xs mb-1 block">Date of Birth *</label>
+                        <input
+                          type="date"
+                          value={formData.dob || ''}
+                          onChange={e => updateField('dob', e.target.value)}
+                          max={new Date().toISOString().split('T')[0]}
+                          className="w-full bg-slate-800/50 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/50"
+                        />
+                        {formData.dob && formData.age && (
+                          <p className="text-xs text-emerald-400 mt-1">
+                            Age calculated: {formData.age} years old
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Gender Field */}
+                    {!quoteValidation.hasGender && (
+                      <div>
+                        <label className="text-gray-400 text-xs mb-1 block">Gender *</label>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => updateField('gender', 'Male')}
+                            className={`flex-1 py-2 px-4 rounded-lg font-medium text-sm transition-all ${
+                              formData.gender === 'Male'
+                                ? 'bg-cyan-500 text-white'
+                                : 'bg-slate-800/50 border border-slate-600 text-gray-400 hover:border-cyan-500/50'
+                            }`}
+                          >
+                            Male
+                          </button>
+                          <button
+                            onClick={() => updateField('gender', 'Female')}
+                            className={`flex-1 py-2 px-4 rounded-lg font-medium text-sm transition-all ${
+                              formData.gender === 'Female'
+                                ? 'bg-cyan-500 text-white'
+                                : 'bg-slate-800/50 border border-slate-600 text-gray-400 hover:border-cyan-500/50'
+                            }`}
+                          >
+                            Female
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Auto-refresh hint */}
+                    {quoteValidation.isValid && (
+                      <div className="flex items-center gap-2 text-emerald-400 text-xs p-2 bg-emerald-500/10 rounded-lg">
+                        <CheckCircle2 className="w-4 h-4" />
+                        All required data provided - Quotes will refresh automatically
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                /* All data present but still no quotes - age/eligibility issue */
+                <div className="text-center">
+                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-red-500/20 mb-4">
+                    <X className="w-8 h-8 text-red-400" />
+                  </div>
+                  <p className="text-gray-200 font-medium">No quotes available</p>
+                  <p className="text-gray-500 text-sm mt-1">
+                    {formData.age && formData.age > 85
+                      ? `Age ${formData.age} exceeds maximum coverage age for available carriers`
+                      : formData.age && formData.age < 18
+                        ? `Age ${formData.age} is below minimum coverage age`
+                        : 'Try adjusting coverage amount or check carrier settings'}
+                  </p>
+                  {formData.age && (
+                    <p className="text-gray-600 text-xs mt-2">
+                      Current: Age {formData.age}, {formData.gender}, $
+                      {formData.selectedCoverage?.toLocaleString()} coverage
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

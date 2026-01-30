@@ -284,6 +284,10 @@ async function buildServer() {
   const automationRoutes = await import('./routes/automation.js');
   await server.register(automationRoutes.default, { prefix: '/api/automation' });
 
+  // Register Lead Injection routes (pre-call data webhook)
+  const { registerLeadInjectRoutes } = await import('./routes/lead-inject.js');
+  await server.register(registerLeadInjectRoutes);
+
   // Start Fronter Bot socket server (handles outbound call socket connections)
   const { fronterBotService } = await import('./services/fronter-bot.js');
   await fronterBotService.start();

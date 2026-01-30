@@ -34,6 +34,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import IntegratedScriptPanel from './IntegratedScriptPanel';
 
 import { usePhone } from '@/components/phone/phone-provider';
+import { useLeadInjection } from '@/hooks/useLeadInjection';
 
 // ============================================================================
 // TYPES
@@ -128,6 +129,10 @@ export function CallCenterPortal(): JSX.Element {
     toggleHold,
   } = usePhone();
 
+  // Lead Injection - Pre-call data from webhooks
+  const { leadData, isConnected: leadStreamConnected, lookupLead, clearLead } = useLeadInjection();
+  const [preInjectedData, setPreInjectedData] = useState<ProspectData | null>(null);
+
   // State
   const [currentView, setCurrentView] = useState<CurrentView>('roleSelect');
   const [agentStatus, setAgentStatus] = useState<AgentStatus>('available');
@@ -154,6 +159,10 @@ export function CallCenterPortal(): JSX.Element {
   const [callTimer, setCallTimer] = useState(0);
   const [callNotes, setCallNotes] = useState('');
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Track disposition state to prevent duplicate prompts
+  const dispositionHandledRef = useRef<boolean>(false);
+  const callSessionIdRef = useRef<string | null>(null);
 
   // Disposition
   const [selectedDisposition, setSelectedDisposition] = useState('');
@@ -188,12 +197,19 @@ export function CallCenterPortal(): JSX.Element {
 
   // ─────────────────────────────────────────────────────────────────────────
   // SYNC WITH PHONE HOOK - React to incoming/active calls from sip.js
+  // Fixed: Disposition modal now only triggers on genuine CALL_ENDED event
   // ─────────────────────────────────────────────────────────────────────────
   useEffect(() => {
+    // Case 1: No active call from the SIP hook
     if (!currentCall) {
-      // No active call - if we were on a call, show disposition
-      if (isCallActive && !showDisposition) {
+      // Only trigger disposition if we HAD an active call and haven't already handled it
+      if (isCallActive && !dispositionHandledRef.current && callSessionIdRef.current) {
+        console.log('[CallCenter] Call ended - triggering disposition modal');
         if (callTimerRef.current) clearInterval(callTimerRef.current);
+
+        // Mark disposition as handled for this call session
+        dispositionHandledRef.current = true;
+
         setIsCallActive(false);
         setShowDisposition(true);
         setAgentStatus('available');
@@ -202,7 +218,7 @@ export function CallCenterPortal(): JSX.Element {
       return;
     }
 
-    // Incoming call ringing
+    // Case 2: Incoming call ringing
     if (currentCall.state === 'ringing' && currentCall.direction === 'inbound') {
       setIsIncomingCall(true);
       setIncomingCallData({
@@ -215,8 +231,15 @@ export function CallCenterPortal(): JSX.Element {
       setAgentStatus('on_call');
     }
 
-    // Call is active (connected)
+    // Case 3: Call is active (connected)
     if (currentCall.state === 'active' || currentCall.state === 'connecting') {
+      // New call session - reset disposition tracking
+      if (!callSessionIdRef.current || callSessionIdRef.current !== currentCall.id) {
+        callSessionIdRef.current = currentCall.id || `call-${Date.now()}`;
+        dispositionHandledRef.current = false;
+        console.log('[CallCenter] New call session started:', callSessionIdRef.current);
+      }
+
       setIsIncomingCall(false);
       setIsCallActive(true);
       setAgentStatus('on_call');
@@ -247,7 +270,87 @@ export function CallCenterPortal(): JSX.Element {
     // Sync mute/hold state from phone hook
     setIsMuted(currentCall.isMuted);
     setIsOnHold(currentCall.isOnHold);
-  }, [currentCall, isCallActive, showDisposition, activeCallData]);
+  }, [currentCall, isCallActive, activeCallData]);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // LEAD INJECTION HANDLER - Pre-populate UI with webhook data
+  // ─────────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (leadData) {
+      console.log('[CallCenter] Pre-call lead data received:', leadData);
+      setPreInjectedData(leadData as ProspectData);
+
+      // If we're already on a call with matching phone, merge the data
+      if (activeCallData) {
+        const activePhone = (activeCallData.caller_id || activeCallData.phone || '').replace(
+          /\D/g,
+          ''
+        );
+        const leadPhone = (leadData.caller_id || leadData.phone || '').replace(/\D/g, '');
+
+        if (
+          activePhone &&
+          leadPhone &&
+          (activePhone === leadPhone ||
+            activePhone.endsWith(leadPhone) ||
+            leadPhone.endsWith(activePhone))
+        ) {
+          console.log('[CallCenter] Merging lead data with active call');
+          setActiveCallData(prev => ({
+            ...prev,
+            ...leadData,
+            // Preserve any existing phone info
+            caller_id: prev?.caller_id || leadData.caller_id,
+            phone: prev?.phone || leadData.phone,
+          }));
+        }
+      }
+    }
+  }, [leadData, activeCallData]);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // INCOMING CALL DATA ENRICHMENT - Lookup pre-injected data when call arrives
+  // ─────────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (isIncomingCall && incomingCallData?.caller_id) {
+      // Check if we have pre-injected data for this caller
+      const callerPhone = incomingCallData.caller_id.replace(/\D/g, '');
+      const preInjectedPhone = (preInjectedData?.caller_id || preInjectedData?.phone || '').replace(
+        /\D/g,
+        ''
+      );
+
+      if (
+        preInjectedPhone &&
+        (callerPhone === preInjectedPhone ||
+          callerPhone.endsWith(preInjectedPhone) ||
+          preInjectedPhone.endsWith(callerPhone))
+      ) {
+        console.log('[CallCenter] Enriching incoming call with pre-injected data');
+        setIncomingCallData(prev => ({
+          ...prev,
+          ...preInjectedData,
+          caller_id: prev?.caller_id, // Keep the original caller_id
+        }));
+      } else {
+        // Try to lookup from the API
+        lookupLead(callerPhone)
+          .then(lead => {
+            if (lead) {
+              console.log('[CallCenter] Enriching incoming call with API lookup data');
+              setIncomingCallData(prev => ({
+                ...prev,
+                ...lead,
+                caller_id: prev?.caller_id,
+              }));
+            }
+          })
+          .catch(() => {
+            // Lookup failed, continue with basic data
+          });
+      }
+    }
+  }, [isIncomingCall, incomingCallData?.caller_id, preInjectedData, lookupLead]);
 
   // Helper Functions
   const formatPhoneNumber = (value: string): string => {
@@ -311,8 +414,14 @@ export function CallCenterPortal(): JSX.Element {
     } catch (e) {
       console.error(e);
     }
+
+    // Only show disposition once per call session
+    if (!dispositionHandledRef.current && callSessionIdRef.current) {
+      dispositionHandledRef.current = true;
+      setShowDisposition(true);
+    }
+
     setIsCallActive(false);
-    setShowDisposition(true);
     setAgentStatus('available');
     setIsMuted(false);
     setIsOnHold(false);
@@ -352,6 +461,14 @@ export function CallCenterPortal(): JSX.Element {
     setCallNotes('');
     setCallTimer(0);
     setActiveCallData(null);
+
+    // Reset call session tracking for next call
+    callSessionIdRef.current = null;
+    dispositionHandledRef.current = false;
+
+    // Clear pre-injected lead data for next call
+    setPreInjectedData(null);
+    clearLead();
   };
 
   const startCallWithApplication = async (app: ApplicationData) => {
