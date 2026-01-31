@@ -5,9 +5,6 @@ import { FastifyRequest, FastifyReply, FastifyInstance } from 'fastify';
 import { getPrismaClient } from '../lib/prisma.js';
 import { auditLog } from '../services/audit.js';
 
-// Import types to ensure augmentations are loaded
-import '../types/fastify.js';
-
 export interface AuthenticatedUser {
   tenantId: string;
   userId?: string;

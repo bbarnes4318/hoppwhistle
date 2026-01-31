@@ -8,9 +8,6 @@ import { authenticate } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
 import * as timeTrackingService from '../services/time-tracking-service.js';
 
-// Import types to ensure module augmentations are loaded
-import '../types/fastify.js';
-
 // Type alias for clarity in route handlers
 type AuthRequest = FastifyRequest;
 

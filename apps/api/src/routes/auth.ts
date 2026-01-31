@@ -10,9 +10,6 @@ import { createSession, generateCsrfToken } from '../middleware/session.js';
 import { auditLog } from '../services/audit.js';
 import { verifyGoogleToken } from '../services/google-auth.js';
 
-// Import types to ensure module augmentations are loaded
-import '../types/fastify.js';
-
 // Password validation: min 8 chars, 1 uppercase, 1 number
 const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*\d).{8,}$/;
 
