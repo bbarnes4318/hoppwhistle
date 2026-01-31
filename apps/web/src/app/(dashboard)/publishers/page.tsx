@@ -35,6 +35,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { toast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
@@ -140,9 +141,13 @@ export default function PublishersPage() {
         resetForm();
         void fetchPublishers();
         void fetchStats();
+        toast.success('Publisher Created', `${formData.name} has been added successfully.`);
+      } else if (response.error) {
+        toast.error('Failed to Create', response.error.message);
       }
     } catch (error) {
       console.error('Failed to create publisher:', error);
+      toast.error('Error', 'Failed to create publisher.');
     } finally {
       setSaving(false);
     }
@@ -161,9 +166,13 @@ export default function PublishersPage() {
         setEditDialogOpen(false);
         resetForm();
         void fetchPublishers();
+        toast.success('Publisher Updated', `${formData.name} has been updated.`);
+      } else if (response.error) {
+        toast.error('Failed to Update', response.error.message);
       }
     } catch (error) {
       console.error('Failed to update publisher:', error);
+      toast.error('Error', 'Failed to update publisher.');
     } finally {
       setSaving(false);
     }
@@ -171,6 +180,7 @@ export default function PublishersPage() {
 
   const handleDelete = async () => {
     if (!selectedPublisher) return;
+    const publisherName = selectedPublisher.name;
     setSaving(true);
     try {
       await apiClient.delete(`/api/v1/publishers/${selectedPublisher.id}`);
@@ -178,8 +188,10 @@ export default function PublishersPage() {
       setSelectedPublisher(null);
       void fetchPublishers();
       void fetchStats();
+      toast.success('Publisher Deleted', `${publisherName} has been removed.`);
     } catch (error) {
       console.error('Failed to delete publisher:', error);
+      toast.error('Error', 'Failed to delete publisher.');
     } finally {
       setSaving(false);
     }
@@ -190,8 +202,13 @@ export default function PublishersPage() {
       const newStatus = publisher.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
       await apiClient.patch(`/api/v1/publishers/${publisher.id}`, { status: newStatus });
       void fetchPublishers();
+      toast.success(
+        'Status Updated',
+        `${publisher.name} is now ${newStatus === 'ACTIVE' ? 'active' : 'paused'}.`
+      );
     } catch (error) {
       console.error('Failed to toggle publisher status:', error);
+      toast.error('Error', 'Failed to update status.');
     }
   };
 

@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 
-import { FastifyRequest, FastifyReply , FastifyInstance } from 'fastify';
+import { FastifyRequest, FastifyReply, FastifyInstance } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
 import { auditLog } from '../services/audit.js';
@@ -8,26 +8,26 @@ import { auditLog } from '../services/audit.js';
 export interface AuthenticatedUser {
   tenantId: string;
   userId?: string;
+  email?: string;
   apiKeyId?: string;
   roles?: string[];
   scopes?: string[];
 }
 
-declare module 'fastify' {
-  interface FastifyRequest {
-    user?: AuthenticatedUser;
+// Extend @fastify/jwt module to use our AuthenticatedUser type
+declare module '@fastify/jwt' {
+  interface FastifyJWT {
+    payload: AuthenticatedUser;
+    user: AuthenticatedUser;
   }
 }
 
 /**
  * JWT authentication middleware with user validation
  */
-export async function authenticateJWT(
-  request: FastifyRequest,
-  reply: FastifyReply
-): Promise<void> {
+export async function authenticateJWT(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   const authHeader = request.headers.authorization;
-  
+
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     reply.code(401).send({
       error: {
@@ -38,11 +38,11 @@ export async function authenticateJWT(
     return;
   }
 
-  const token = authHeader.substring(7);
-  
   try {
-    const decoded = await request.jwtVerify<AuthenticatedUser>(token);
-    
+    // Verify JWT and cast to our payload type
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const decoded = (await request.jwtVerify()) as any as AuthenticatedUser;
+
     // Validate user exists and is active
     if (decoded.userId) {
       const prisma = getPrismaClient();
@@ -78,22 +78,26 @@ export async function authenticateJWT(
       }
 
       // Update last login
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { lastLoginAt: new Date() },
-      }).catch(() => {
-        // Don't fail if update fails
-      });
+      await prisma.user
+        .update({
+          where: { id: user.id },
+          data: { lastLoginAt: new Date() },
+        })
+        .catch(() => {
+          // Don't fail if update fails
+        });
 
       // Extract roles
       const roles = user.roles.map(ur => ur.role.name);
 
-      request.user = {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (request as any).user = {
         ...decoded,
         roles,
-      };
+      } as AuthenticatedUser;
     } else {
-      request.user = decoded;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (request as any).user = decoded;
     }
   } catch (err) {
     await auditLog({
@@ -134,7 +138,7 @@ export async function authenticateAPIKey(
   reply: FastifyReply
 ): Promise<void> {
   const apiKey = request.headers['x-api-key'] as string;
-  
+
   if (!apiKey) {
     reply.code(401).send({
       error: {
@@ -242,32 +246,31 @@ export async function authenticateAPIKey(
   }
 
   // Update last used timestamp
-  await prisma.apiKey.update({
-    where: { id: dbApiKey.id },
-    data: { lastUsedAt: new Date() },
-  }).catch(() => {
-    // Don't fail if update fails
-  });
+  await prisma.apiKey
+    .update({
+      where: { id: dbApiKey.id },
+      data: { lastUsedAt: new Date() },
+    })
+    .catch(() => {
+      // Don't fail if update fails
+    });
 
   // Extract scopes
-  const scopes = (dbApiKey.scopes && Array.isArray(dbApiKey.scopes))
-    ? dbApiKey.scopes as string[]
-    : [];
+  const scopes =
+    dbApiKey.scopes && Array.isArray(dbApiKey.scopes) ? (dbApiKey.scopes as string[]) : [];
 
-  request.user = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (request as any).user = {
     tenantId: dbApiKey.tenantId,
     apiKeyId: dbApiKey.id,
     scopes,
-  };
+  } as AuthenticatedUser;
 }
 
 /**
  * Combined authentication: try JWT first, then API key
  */
-export async function authenticate(
-  request: FastifyRequest,
-  reply: FastifyReply
-): Promise<void> {
+export async function authenticate(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   const authHeader = request.headers.authorization;
   const apiKey = request.headers['x-api-key'] as string;
 
@@ -291,9 +294,8 @@ export async function authenticate(
  */
 export async function registerAuth(fastify: FastifyInstance): Promise<void> {
   const { secrets } = await import('../services/secrets.js');
-  
+
   await fastify.register(import('@fastify/jwt'), {
     secret: secrets.getRequired('JWT_SECRET'),
   });
 }
-

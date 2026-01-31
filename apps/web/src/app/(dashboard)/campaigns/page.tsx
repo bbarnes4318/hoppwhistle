@@ -23,6 +23,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { toast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
@@ -166,12 +167,17 @@ export default function CampaignsPage() {
 
     try {
       await apiClient.patch(`/api/v1/campaigns/${campaign.id}`, { status: newStatus });
+      toast.success(
+        'Status Updated',
+        `${campaign.name} is now ${newStatus === 'ACTIVE' ? 'active' : 'paused'}.`
+      );
     } catch (error) {
       console.error('Failed to toggle campaign status:', error);
       // Revert on error
       setCampaigns(prev =>
         prev.map(c => (c.id === campaign.id ? { ...c, status: campaign.status } : c))
       );
+      toast.error('Error', 'Failed to update campaign status.');
     }
   };
 
@@ -181,14 +187,19 @@ export default function CampaignsPage() {
       if (response.data) {
         void fetchCampaigns();
         void fetchStats();
+        toast.success('Campaign Duplicated', `Copy of ${campaign.name} created.`);
+      } else if (response.error) {
+        toast.error('Failed to Duplicate', response.error.message);
       }
     } catch (error) {
       console.error('Failed to duplicate campaign:', error);
+      toast.error('Error', 'Failed to duplicate campaign.');
     }
   };
 
   const handleDelete = async () => {
     if (!selectedCampaign) return;
+    const campaignName = selectedCampaign.name;
     setDeleting(true);
     try {
       await apiClient.delete(`/api/v1/campaigns/${selectedCampaign.id}`);
@@ -196,8 +207,10 @@ export default function CampaignsPage() {
       setSelectedCampaign(null);
       void fetchCampaigns();
       void fetchStats();
+      toast.success('Campaign Deleted', `${campaignName} has been removed.`);
     } catch (error) {
       console.error('Failed to delete campaign:', error);
+      toast.error('Error', 'Failed to delete campaign.');
     } finally {
       setDeleting(false);
     }

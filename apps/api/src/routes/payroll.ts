@@ -8,13 +8,14 @@ import { authenticate } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
 import * as timeTrackingService from '../services/time-tracking-service.js';
 
-interface AuthRequest extends FastifyRequest {
+// Type for authenticated requests - user set by authenticate middleware
+type AuthRequest = FastifyRequest & {
   user?: {
     tenantId: string;
     userId?: string;
     roles?: string[];
   };
-}
+};
 
 export async function registerPayrollRoutes(fastify: FastifyInstance) {
   // ============================================================================

@@ -48,6 +48,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { toast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
@@ -311,9 +312,13 @@ export default function BuyersPage() {
         setCreateBuyerOpen(false);
         resetBuyerForm();
         void fetchBuyers();
+        toast.success('Buyer Created', `${buyerForm.name} has been added successfully.`);
+      } else if (response.error) {
+        toast.error('Failed to Create', response.error.message);
       }
     } catch (error) {
       console.error('Failed to create buyer:', error);
+      toast.error('Error', 'Failed to create buyer.');
     } finally {
       setSaving(false);
     }
@@ -328,9 +333,13 @@ export default function BuyersPage() {
         setEditBuyerOpen(false);
         resetBuyerForm();
         void fetchBuyers();
+        toast.success('Buyer Updated', `${buyerForm.name} has been updated.`);
+      } else if (response.error) {
+        toast.error('Failed to Update', response.error.message);
       }
     } catch (error) {
       console.error('Failed to update buyer:', error);
+      toast.error('Error', 'Failed to update buyer.');
     } finally {
       setSaving(false);
     }
@@ -341,8 +350,10 @@ export default function BuyersPage() {
     try {
       await apiClient.patch(`/api/v1/buyers/${buyer.id}`, { status: newStatus });
       void fetchBuyers();
+      toast.success('Status Updated', `${buyer.name} is now ${newStatus.toLowerCase()}.`);
     } catch (error) {
       console.error('Failed to toggle buyer status:', error);
+      toast.error('Error', 'Failed to update status.');
     }
   };
 
@@ -369,9 +380,13 @@ export default function BuyersPage() {
         setCreditsDialogOpen(false);
         setCreditsAmount(100);
         void fetchBuyers();
+        toast.success('Credits Added', `$${creditsAmount} added to ${selectedBuyer.name}.`);
+      } else if (response.error) {
+        toast.error('Failed to Add Credits', response.error.message);
       }
     } catch (error) {
       console.error('Failed to add credits:', error);
+      toast.error('Error', 'Failed to add credits.');
     } finally {
       setSaving(false);
     }
@@ -392,9 +407,13 @@ export default function BuyersPage() {
         setCreateTargetOpen(false);
         resetTargetForm();
         void fetchTargets(expandedBuyerId);
+        toast.success('Target Created', `${targetForm.name} has been added.`);
+      } else if (response.error) {
+        toast.error('Failed to Create', response.error.message);
       }
     } catch (error) {
       console.error('Failed to create target:', error);
+      toast.error('Error', 'Failed to create target.');
     } finally {
       setSaving(false);
     }
@@ -412,9 +431,13 @@ export default function BuyersPage() {
         setEditTargetOpen(false);
         resetTargetForm();
         void fetchTargets(expandedBuyerId);
+        toast.success('Target Updated', `${targetForm.name} has been updated.`);
+      } else if (response.error) {
+        toast.error('Failed to Update', response.error.message);
       }
     } catch (error) {
       console.error('Failed to update target:', error);
+      toast.error('Error', 'Failed to update target.');
     } finally {
       setSaving(false);
     }
@@ -439,8 +462,10 @@ export default function BuyersPage() {
     try {
       await apiClient.delete(`/api/v1/buyers/${expandedBuyerId}/targets/${target.id}`);
       void fetchTargets(expandedBuyerId);
+      toast.success('Target Deleted', `${target.name} has been removed.`);
     } catch (error) {
       console.error('Failed to delete target:', error);
+      toast.error('Error', 'Failed to delete target.');
     }
   };
 
