@@ -4,6 +4,7 @@ import {
   AudioLines,
   Bot,
   ClipboardCheck,
+  Clock,
   DollarSign,
   FileText,
   GitBranch,
@@ -63,6 +64,12 @@ const navigation = [
     title: 'Policy onboarding & retention queue',
   },
   { name: 'Billing', href: '/billing', icon: Receipt },
+  {
+    name: 'My Payroll',
+    href: '/payroll',
+    icon: Clock,
+    title: 'Track hours & view earnings',
+  },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
@@ -75,6 +82,12 @@ const adminNavigation = [
   { name: 'Webhooks', href: '/settings/webhooks', icon: FileText },
   { name: 'DNC Lists', href: '/settings/dnc', icon: Shield },
   { name: 'Quotas & Budgets', href: '/settings/quotas', icon: DollarSign },
+  {
+    name: 'Payroll Admin',
+    href: '/admin/payroll',
+    icon: Receipt,
+    title: 'Manage contractor payroll',
+  },
 ];
 
 export function Sidebar() {
