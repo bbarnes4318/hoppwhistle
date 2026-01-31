@@ -485,9 +485,10 @@ model Publisher {
 
   // Relations
   tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  campaigns Campaign[]
-  buyers    Buyer[]
-  calls     Call[]
+  campaigns    Campaign[]
+  buyers       Buyer[]
+  calls        Call[]
+  pingRequests PingRequest[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -528,6 +529,7 @@ model Buyer {
   calls        Call[]
   transactions BuyerTransaction[]
   stats        BuyerStats?
+  bids         BuyerBid[]
 
   @@unique([tenantId, publisherId, code])
   @@index([tenantId])
@@ -590,6 +592,16 @@ model BuyerEndpoint {
   // Geo-Routing: Empty array = National (accepts all states)
   acceptedStates String[] // 2-letter state codes, e.g., ['TN', 'FL', 'AL']
 
+  // RTB Operating Hours: Split-shift format per day
+  // {"mon": [{"start": "09:00", "end": "12:00"}, {"start": "13:00", "end": "17:00"}], ...}
+  hoursOfOperation Json?
+  timezone         String? @default("America/New_York")
+
+  // RTB Pricing: Decimal for financial accuracy
+  basePrice    Decimal @default(0) @db.Decimal(10, 4) // Static bid price
+  // Structured rules: [{"field": "age", "op": "gt", "val": 65, "adjustment": "5.00"}]
+  pricingRules Json?
+
   metadata  Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -597,6 +609,7 @@ model BuyerEndpoint {
   // Relations
   buyer       Buyer        @relation(fields: [buyerId], references: [id], onDelete: Cascade)
   phoneNumber PhoneNumber? @relation(fields: [phoneNumberId], references: [id])
+  bids        BuyerBid[]
 
   @@index([buyerId])
   @@index([phoneNumberId])
@@ -1877,4 +1890,66 @@ enum PayrollPayoutStatus {
   PROCESSING
   PAID
   CANCELLED
+}
+
+// ============================================================================
+// RTB Ping/Post Auction System
+// ============================================================================
+
+enum PingRequestStatus {
+  PROCESSING
+  WON
+  NO_BID
+}
+
+enum BuyerBidStatus {
+  WON
+  LOST
+  FILTERED
+}
+
+/// PingRequest stores incoming RTB lead data requests from publishers
+model PingRequest {
+  id           String            @id @default(uuid())
+  publisherId  String
+  requestId    String?           @unique // External request_id for idempotency
+  vertical     String?           // e.g., "health_insurance"
+  payload      Json              // Stores zip, state, age, etc.
+  status       PingRequestStatus @default(PROCESSING)
+  minBidAmount Decimal?          @db.Decimal(10, 4) // Minimum bid floor
+  winningBidId String?
+  expiresAt    DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  // Relations
+  publisher Publisher   @relation(fields: [publisherId], references: [id])
+  bids      BuyerBid[]
+
+  @@index([publisherId])
+  @@index([requestId])
+  @@index([createdAt])
+  @@map("ping_requests")
+}
+
+/// BuyerBid stores bids generated for a PingRequest auction
+model BuyerBid {
+  id              String         @id @default(uuid())
+  pingRequestId   String
+  buyerEndpointId String
+  buyerId         String
+  amount          Decimal        @db.Decimal(10, 4) // Bid price (Decimal for precision)
+  status          BuyerBidStatus @default(FILTERED)
+  rejectionReason String?
+  createdAt       DateTime       @default(now())
+
+  // Relations
+  pingRequest   PingRequest   @relation(fields: [pingRequestId], references: [id], onDelete: Cascade)
+  buyerEndpoint BuyerEndpoint @relation(fields: [buyerEndpointId], references: [id])
+  buyer         Buyer         @relation(fields: [buyerId], references: [id])
+
+  @@index([pingRequestId])
+  @@index([buyerEndpointId])
+  @@index([buyerId])
+  @@map("buyer_bids")
 }
