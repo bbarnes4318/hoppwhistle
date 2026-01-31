@@ -296,6 +296,10 @@ async function buildServer() {
   const { registerPingRoutes } = await import('./routes/ping.js');
   await server.register(registerPingRoutes);
 
+  // Register RTB Post routes (lead delivery API)
+  const { registerPostRoutes } = await import('./routes/post.js');
+  await server.register(registerPostRoutes);
+
   // Start Fronter Bot socket server (handles outbound call socket connections)
   const { fronterBotService } = await import('./services/fronter-bot.js');
   await fronterBotService.start();

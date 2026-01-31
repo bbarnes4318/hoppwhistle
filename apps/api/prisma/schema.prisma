@@ -156,19 +156,19 @@ enum TenantStatus {
 }
 
 model User {
-  id           String      @id @default(uuid())
-  tenantId     String?     // Optional for users without full tenant setup
-  email        String      @unique // Unique across all tenants for OAuth
-  passwordHash String?     // Optional for Google OAuth users
-  googleId     String?     @unique // Google OAuth subject ID
-  authMethod   AuthMethod  @default(EMAIL)
+  id           String     @id @default(uuid())
+  tenantId     String? // Optional for users without full tenant setup
+  email        String     @unique // Unique across all tenants for OAuth
+  passwordHash String? // Optional for Google OAuth users
+  googleId     String?    @unique // Google OAuth subject ID
+  authMethod   AuthMethod @default(EMAIL)
   firstName    String?
   lastName     String?
-  status       UserStatus  @default(ACTIVE)
+  status       UserStatus @default(ACTIVE)
   lastLoginAt  DateTime?
   metadata     Json?
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
   // Relations
   tenant              Tenant?            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -180,9 +180,9 @@ model User {
   buyerTransactions   BuyerTransaction[] @relation("BuyerTransactionCreator")
 
   // Payroll relations
-  timeEntries     TimeEntry[]
-  financials      UserFinancials?
-  payrollPayouts  PayrollPayout[]
+  timeEntries    TimeEntry[]
+  financials     UserFinancials?
+  payrollPayouts PayrollPayout[]
 
   @@index([tenantId, email])
   @@index([tenantId, status])
@@ -294,6 +294,11 @@ model PhoneNumber {
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
 
+  // RTB Pool Management Fields
+  poolType       PhoneNumberPoolType?   @default(STATIC)
+  poolStatus     PhoneNumberPoolStatus? @default(AVAILABLE)
+  lastAssignedAt DateTime?
+
   // Relations
   tenant         Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   carrier        Carrier?                  @relation(fields: [carrierId], references: [id])
@@ -303,6 +308,7 @@ model PhoneNumber {
   buyerEndpoints BuyerEndpoint[]
   calls          Call[]                    @relation("CallFromNumber")
   callLegs       CallLeg[]
+  pingRequests   PingRequest[] // Numbers assigned via RTB Post
 
   @@unique([tenantId, number])
   @@index([tenantId, number])
@@ -311,6 +317,8 @@ model PhoneNumber {
   @@index([carrierId])
   @@index([trunkId])
   @@index([provider])
+  @@index([poolType, poolStatus]) // For pool queries
+  @@index([poolStatus, lastAssignedAt]) // For reaper cleanup
   @@map("phone_numbers")
 }
 
@@ -319,6 +327,19 @@ enum PhoneNumberStatus {
   INACTIVE
   PORTING
   SUSPENDED
+}
+
+// RTB Number Pool Types
+enum PhoneNumberPoolType {
+  POOL // Available for dynamic leasing
+  STATIC // Permanently assigned to campaign
+  BUYER // Buyer-owned number
+}
+
+enum PhoneNumberPoolStatus {
+  AVAILABLE
+  ASSIGNED
+  RESERVED
 }
 
 model Carrier {
@@ -484,7 +505,7 @@ model Publisher {
   updatedAt          DateTime        @updatedAt
 
   // Relations
-  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   campaigns    Campaign[]
   buyers       Buyer[]
   calls        Call[]
@@ -1825,14 +1846,14 @@ model RetentionNote {
 /// Multiple entries per day are allowed
 /// Entries become locked when attached to a PayrollPayout
 model TimeEntry {
-  id              String         @id @default(uuid())
+  id              String   @id @default(uuid())
   userId          String
-  date            DateTime       @db.Date
-  hoursWorked     Decimal        @db.Decimal(5, 2)
+  date            DateTime @db.Date
+  hoursWorked     Decimal  @db.Decimal(5, 2)
   notes           String?
-  payrollPayoutId String?        // When set, entry is locked (cannot be modified)
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  payrollPayoutId String? // When set, entry is locked (cannot be modified)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   // Relations
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1850,9 +1871,9 @@ model UserFinancials {
   userId              String   @unique
   payRate             Decimal  @default(0) @db.Decimal(10, 2)
   encryptedData       String?  @db.Text // AES-256-GCM encrypted banking JSON
-  iv                  String?  // Initialization vector for decryption
-  authTag             String?  // Authentication tag for decryption
-  maskedAccountNumber String?  // Last 4 digits only, e.g., "****6789"
+  iv                  String? // Initialization vector for decryption
+  authTag             String? // Authentication tag for decryption
+  maskedAccountNumber String? // Last 4 digits only, e.g., "****6789"
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
@@ -1899,6 +1920,7 @@ enum PayrollPayoutStatus {
 enum PingRequestStatus {
   PROCESSING
   WON
+  SOLD // After successful POST
   NO_BID
 }
 
@@ -1913,8 +1935,8 @@ model PingRequest {
   id           String            @id @default(uuid())
   publisherId  String
   requestId    String?           @unique // External request_id for idempotency
-  vertical     String?           // e.g., "health_insurance"
-  payload      Json              // Stores zip, state, age, etc.
+  vertical     String? // e.g., "health_insurance"
+  payload      Json // Stores zip, state, age, etc.
   status       PingRequestStatus @default(PROCESSING)
   minBidAmount Decimal?          @db.Decimal(10, 4) // Minimum bid floor
   winningBidId String?
@@ -1922,13 +1944,20 @@ model PingRequest {
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
 
+  // Post-related fields
+  postedAt              DateTime?
+  assignedPhoneNumberId String?
+  callerNumber          String? // Caller's phone number from POST
+
   // Relations
-  publisher Publisher   @relation(fields: [publisherId], references: [id])
-  bids      BuyerBid[]
+  publisher           Publisher    @relation(fields: [publisherId], references: [id])
+  bids                BuyerBid[]
+  assignedPhoneNumber PhoneNumber? @relation(fields: [assignedPhoneNumberId], references: [id])
 
   @@index([publisherId])
   @@index([requestId])
   @@index([createdAt])
+  @@index([assignedPhoneNumberId])
   @@map("ping_requests")
 }
 
