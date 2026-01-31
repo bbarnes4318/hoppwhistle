@@ -5,7 +5,10 @@
 import { Decimal } from '@prisma/client/runtime/library';
 
 import { decryptBankingData, encryptBankingData } from '../lib/banking-encryption.js';
-import { prisma } from '../lib/prisma.js';
+import { getPrismaClient } from '../lib/prisma.js';
+
+// Get the Prisma client instance
+const prisma = getPrismaClient();
 
 // =============================================================================
 // TIME ENTRY OPERATIONS
