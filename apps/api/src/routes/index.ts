@@ -50,6 +50,8 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
           status: n.status,
           provider: n.provider,
           capabilities: n.capabilities,
+          poolType: n.poolType,
+          poolStatus: n.poolStatus,
           campaign: n.campaign ? { id: n.campaign.id, name: n.campaign.name } : null,
           purchasedAt: n.purchasedAt?.toISOString(),
           createdAt: n.createdAt.toISOString(),
@@ -247,6 +249,13 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
       if (body.capabilities !== undefined) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         updateData.capabilities = { ...(existingNumber.capabilities as any), ...body.capabilities };
+      }
+      // RTB Pool fields
+      if (body.poolType !== undefined) {
+        updateData.poolType = body.poolType;
+      }
+      if (body.poolStatus !== undefined) {
+        updateData.poolStatus = body.poolStatus;
       }
 
       const updatedNumber = await prisma.phoneNumber.update({

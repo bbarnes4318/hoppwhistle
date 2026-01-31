@@ -9,7 +9,14 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { apiClient } from '@/lib/api';
 import { formatPhoneNumber } from '@/lib/utils';
 
@@ -17,6 +24,8 @@ interface PhoneNumber {
   id: string;
   number: string;
   status: string;
+  poolType?: 'POOL' | 'STATIC' | 'BUYER' | null;
+  poolStatus?: 'AVAILABLE' | 'ASSIGNED' | 'RESERVED' | null;
   campaign: { id: string; name: string } | null;
   purchasedAt?: string;
   capabilities?: {
@@ -53,8 +62,8 @@ export default function NumbersPage() {
     }
   };
 
-  const filteredNumbers = numbers.filter((n) =>
-    n.number.includes(search) || n.campaign?.name.toLowerCase().includes(search.toLowerCase())
+  const filteredNumbers = numbers.filter(
+    n => n.number.includes(search) || n.campaign?.name.toLowerCase().includes(search.toLowerCase())
   );
 
   const handleImport = () => {
@@ -62,7 +71,7 @@ export default function NumbersPage() {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.csv,.xlsx,.xls';
-    input.onchange = (e) => {
+    input.onchange = e => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) {
         // TODO: Implement actual import logic
@@ -122,7 +131,7 @@ export default function NumbersPage() {
                 name="numbers-search"
                 placeholder="Search numbers..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={e => setSearch(e.target.value)}
                 className="pl-10"
               />
             </div>
@@ -141,13 +150,14 @@ export default function NumbersPage() {
                 <TableRow>
                   <TableHead>Number</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>RTB Pool</TableHead>
                   <TableHead>Campaign</TableHead>
                   <TableHead>Purchased</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredNumbers.map((number) => (
+                {filteredNumbers.map(number => (
                   <TableRow key={number.id}>
                     <TableCell className="font-mono">{formatPhoneNumber(number.number)}</TableCell>
                     <TableCell>
@@ -155,16 +165,21 @@ export default function NumbersPage() {
                         {number.status.toLowerCase()}
                       </Badge>
                     </TableCell>
+                    <TableCell>
+                      {number.poolType === 'POOL' ? (
+                        <Badge variant={number.poolStatus === 'AVAILABLE' ? 'success' : 'warning'}>
+                          {number.poolStatus === 'AVAILABLE' ? '✓ Available' : 'Assigned'}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">Static</span>
+                      )}
+                    </TableCell>
                     <TableCell>{number.campaign?.name || '-'}</TableCell>
                     <TableCell>
                       {number.purchasedAt ? new Date(number.purchasedAt).toLocaleDateString() : '-'}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleEdit(number)}
-                      >
+                      <Button variant="ghost" size="sm" onClick={() => handleEdit(number)}>
                         Edit
                       </Button>
                     </TableCell>
@@ -191,10 +206,11 @@ export default function NumbersPage() {
           currentStatus={selectedNumber.status}
           currentCampaignId={selectedNumber.campaign?.id}
           currentCapabilities={selectedNumber.capabilities}
+          currentPoolType={selectedNumber.poolType}
+          currentPoolStatus={selectedNumber.poolStatus}
           onSuccess={handleEditSuccess}
         />
       )}
     </div>
   );
 }
-

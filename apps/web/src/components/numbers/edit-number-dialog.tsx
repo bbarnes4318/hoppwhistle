@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { apiClient } from '@/lib/api';
 
 interface EditNumberDialogProps {
@@ -36,6 +37,8 @@ interface EditNumberDialogProps {
     mms?: boolean;
     fax?: boolean;
   };
+  currentPoolType?: 'POOL' | 'STATIC' | 'BUYER' | null;
+  currentPoolStatus?: 'AVAILABLE' | 'ASSIGNED' | 'RESERVED' | null;
   onSuccess?: () => void;
 }
 
@@ -52,6 +55,8 @@ export function EditNumberDialog({
   currentStatus,
   currentCampaignId,
   currentCapabilities = {},
+  currentPoolType,
+  currentPoolStatus,
   onSuccess,
 }: EditNumberDialogProps) {
   const [loading, setLoading] = useState(false);
@@ -67,6 +72,7 @@ export function EditNumberDialog({
       mms: currentCapabilities.mms ?? false,
       fax: currentCapabilities.fax ?? false,
     },
+    rtbPoolEnabled: currentPoolType === 'POOL',
   });
 
   useEffect(() => {
@@ -80,10 +86,11 @@ export function EditNumberDialog({
           mms: currentCapabilities.mms ?? false,
           fax: currentCapabilities.fax ?? false,
         },
+        rtbPoolEnabled: currentPoolType === 'POOL',
       });
       loadCampaigns();
     }
-  }, [open, currentStatus, currentCampaignId, currentCapabilities]);
+  }, [open, currentStatus, currentCampaignId, currentCapabilities, currentPoolType]);
 
   const loadCampaigns = async () => {
     setLoadingCampaigns(true);
@@ -99,6 +106,15 @@ export function EditNumberDialog({
     }
   };
 
+  const handleRtbToggle = (enabled: boolean) => {
+    if (enabled) {
+      // Mutual exclusivity: Clear campaign when enabling RTB
+      setFormData({ ...formData, rtbPoolEnabled: true, campaignId: '' });
+    } else {
+      setFormData({ ...formData, rtbPoolEnabled: false });
+    }
+  };
+
   const handleSave = async () => {
     setLoading(true);
     setError(null);
@@ -111,8 +127,10 @@ export function EditNumberDialog({
         campaign: { id: string; name: string } | null;
       }>(`/api/v1/numbers/${numberId}`, {
         status: formData.status,
-        campaignId: formData.campaignId || null,
+        campaignId: formData.rtbPoolEnabled ? null : formData.campaignId || null,
         capabilities: formData.capabilities,
+        poolType: formData.rtbPoolEnabled ? 'POOL' : 'STATIC',
+        poolStatus: formData.rtbPoolEnabled ? 'AVAILABLE' : null,
       });
 
       if (response.error) {
@@ -135,9 +153,7 @@ export function EditNumberDialog({
       <DialogContent className="sm:max-w-[500px] max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Edit Phone Number</DialogTitle>
-          <DialogDescription>
-            Update settings for {number}
-          </DialogDescription>
+          <DialogDescription>Update settings for {number}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4 overflow-y-auto flex-1 min-h-0">
@@ -162,19 +178,26 @@ export function EditNumberDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="campaign">Campaign (Optional)</Label>
+            <Label htmlFor="campaign">
+              Campaign{' '}
+              {formData.rtbPoolEnabled && (
+                <span className="text-muted-foreground">(disabled for RTB)</span>
+              )}
+            </Label>
             <Select
               value={formData.campaignId || undefined}
-              onValueChange={(value) =>
-                setFormData({ ...formData, campaignId: value || '' })
-              }
-              disabled={loading || loadingCampaigns}
+              onValueChange={value => setFormData({ ...formData, campaignId: value || '' })}
+              disabled={loading || loadingCampaigns || formData.rtbPoolEnabled}
             >
-              <SelectTrigger id="campaign">
-                <SelectValue placeholder="Select a campaign (optional)" />
+              <SelectTrigger id="campaign" className={formData.rtbPoolEnabled ? 'opacity-50' : ''}>
+                <SelectValue
+                  placeholder={
+                    formData.rtbPoolEnabled ? 'N/A (RTB Pool)' : 'Select a campaign (optional)'
+                  }
+                />
               </SelectTrigger>
               <SelectContent>
-                {campaigns.map((campaign) => (
+                {campaigns.map(campaign => (
                   <SelectItem key={campaign.id} value={campaign.id}>
                     {campaign.name}
                   </SelectItem>
@@ -190,7 +213,7 @@ export function EditNumberDialog({
                 <Checkbox
                   id="edit-voice"
                   checked={formData.capabilities.voice}
-                  onCheckedChange={(checked) =>
+                  onCheckedChange={checked =>
                     setFormData({
                       ...formData,
                       capabilities: { ...formData.capabilities, voice: !!checked },
@@ -205,7 +228,7 @@ export function EditNumberDialog({
                 <Checkbox
                   id="edit-sms"
                   checked={formData.capabilities.sms}
-                  onCheckedChange={(checked) =>
+                  onCheckedChange={checked =>
                     setFormData({
                       ...formData,
                       capabilities: { ...formData.capabilities, sms: !!checked },
@@ -220,7 +243,7 @@ export function EditNumberDialog({
                 <Checkbox
                   id="edit-mms"
                   checked={formData.capabilities.mms}
-                  onCheckedChange={(checked) =>
+                  onCheckedChange={checked =>
                     setFormData({
                       ...formData,
                       capabilities: { ...formData.capabilities, mms: !!checked },
@@ -235,7 +258,7 @@ export function EditNumberDialog({
                 <Checkbox
                   id="edit-fax"
                   checked={formData.capabilities.fax}
-                  onCheckedChange={(checked) =>
+                  onCheckedChange={checked =>
                     setFormData({
                       ...formData,
                       capabilities: { ...formData.capabilities, fax: !!checked },
@@ -249,19 +272,35 @@ export function EditNumberDialog({
             </div>
           </div>
 
-          {error && (
-            <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">
-              {error}
+          {/* RTB Pool Section */}
+          <div className="border-t pt-4 mt-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="rtb-pool">RTB Pool</Label>
+                <p className="text-sm text-muted-foreground">Available for dynamic routing</p>
+              </div>
+              <Switch
+                id="rtb-pool"
+                checked={formData.rtbPoolEnabled}
+                onCheckedChange={handleRtbToggle}
+                disabled={loading}
+              />
             </div>
+            {formData.rtbPoolEnabled && (
+              <p className="text-xs text-muted-foreground mt-2 bg-muted/50 p-2 rounded">
+                This number will be leased on-demand for inbound RTB calls. Campaign assignment is
+                disabled.
+              </p>
+            )}
+          </div>
+
+          {error && (
+            <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">{error}</div>
           )}
         </div>
 
         <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={loading}
-          >
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={loading}>
@@ -273,4 +312,3 @@ export function EditNumberDialog({
     </Dialog>
   );
 }
-
