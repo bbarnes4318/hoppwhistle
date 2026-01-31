@@ -179,6 +179,11 @@ model User {
   assignedLeads       Lead[]
   buyerTransactions   BuyerTransaction[] @relation("BuyerTransactionCreator")
 
+  // Payroll relations
+  timeEntries     TimeEntry[]
+  financials      UserFinancials?
+  payrollPayouts  PayrollPayout[]
+
   @@index([tenantId, email])
   @@index([tenantId, status])
   @@index([googleId])
@@ -1793,4 +1798,79 @@ model RetentionNote {
 
   @@index([policyId])
   @@map("retention_notes")
+}
+
+// =============================================================================
+// PAYROLL & TIME TRACKING
+// =============================================================================
+
+/// TimeEntry tracks work hours logged by contractors
+/// Multiple entries per day are allowed
+/// Entries become locked when attached to a PayrollPayout
+model TimeEntry {
+  id              String         @id @default(uuid())
+  userId          String
+  date            DateTime       @db.Date
+  hoursWorked     Decimal        @db.Decimal(5, 2)
+  notes           String?
+  payrollPayoutId String?        // When set, entry is locked (cannot be modified)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  // Relations
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payrollPayout PayrollPayout? @relation(fields: [payrollPayoutId], references: [id])
+
+  @@index([userId, date])
+  @@index([payrollPayoutId])
+  @@map("time_entries")
+}
+
+/// UserFinancials stores encrypted banking data and pay rates
+/// Uses AES-256-GCM encryption for sensitive banking information
+model UserFinancials {
+  id                  String   @id @default(uuid())
+  userId              String   @unique
+  payRate             Decimal  @default(0) @db.Decimal(10, 2)
+  encryptedData       String?  @db.Text // AES-256-GCM encrypted banking JSON
+  iv                  String?  // Initialization vector for decryption
+  authTag             String?  // Authentication tag for decryption
+  maskedAccountNumber String?  // Last 4 digits only, e.g., "****6789"
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_financials")
+}
+
+/// PayrollPayout represents a finalized payout for a contractor
+/// Creating a payout locks all associated TimeEntry records
+model PayrollPayout {
+  id          String              @id @default(uuid())
+  userId      String
+  startDate   DateTime            @db.Date
+  endDate     DateTime            @db.Date
+  totalHours  Decimal             @db.Decimal(10, 2)
+  totalAmount Decimal             @db.Decimal(10, 2)
+  status      PayrollPayoutStatus @default(PROCESSING)
+  paidAt      DateTime?
+  notes       String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  // Relations
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  timeEntries TimeEntry[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("payroll_payouts")
+}
+
+enum PayrollPayoutStatus {
+  PROCESSING
+  PAID
+  CANCELLED
 }

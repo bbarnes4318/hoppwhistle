@@ -4,28 +4,52 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import { getPrismaClient } from '../lib/prisma.js';
 import { auditLog } from '../services/audit.js';
 
-export type Permission = 
+export type Permission =
   // Users & Roles
-  | 'users:read' | 'users:write' | 'users:delete'
-  | 'roles:read' | 'roles:write' | 'roles:delete'
+  | 'users:read'
+  | 'users:write'
+  | 'users:delete'
+  | 'roles:read'
+  | 'roles:write'
+  | 'roles:delete'
   // API Keys
-  | 'api_keys:read' | 'api_keys:write' | 'api_keys:delete'
+  | 'api_keys:read'
+  | 'api_keys:write'
+  | 'api_keys:delete'
   // Numbers
-  | 'numbers:read' | 'numbers:write' | 'numbers:delete'
+  | 'numbers:read'
+  | 'numbers:write'
+  | 'numbers:delete'
   // Campaigns
-  | 'campaigns:read' | 'campaigns:write' | 'campaigns:delete'
+  | 'campaigns:read'
+  | 'campaigns:write'
+  | 'campaigns:delete'
   // Flows
-  | 'flows:read' | 'flows:write' | 'flows:delete' | 'flows:publish'
+  | 'flows:read'
+  | 'flows:write'
+  | 'flows:delete'
+  | 'flows:publish'
   // Calls
-  | 'calls:read' | 'calls:write' | 'calls:delete'
+  | 'calls:read'
+  | 'calls:write'
+  | 'calls:delete'
   // Recordings
-  | 'recordings:read' | 'recordings:write' | 'recordings:delete'
+  | 'recordings:read'
+  | 'recordings:write'
+  | 'recordings:delete'
   // Webhooks
-  | 'webhooks:read' | 'webhooks:write' | 'webhooks:delete'
+  | 'webhooks:read'
+  | 'webhooks:write'
+  | 'webhooks:delete'
   // Billing
-  | 'billing:read' | 'billing:write'
+  | 'billing:read'
+  | 'billing:write'
   // Reports
   | 'reports:read'
+  // Payroll
+  | 'payroll:read'
+  | 'payroll:write'
+  | 'payroll:admin'
   // Admin
   | 'admin:*';
 
@@ -33,17 +57,39 @@ export type Permission =
 const ROLE_PERMISSIONS: Record<RoleName, Permission[]> = {
   OWNER: ['admin:*'], // Owner has all permissions
   ADMIN: [
-    'users:read', 'users:write', 'users:delete',
-    'roles:read', 'roles:write',
-    'api_keys:read', 'api_keys:write', 'api_keys:delete',
-    'numbers:read', 'numbers:write', 'numbers:delete',
-    'campaigns:read', 'campaigns:write', 'campaigns:delete',
-    'flows:read', 'flows:write', 'flows:delete', 'flows:publish',
-    'calls:read', 'calls:write', 'calls:delete',
-    'recordings:read', 'recordings:write', 'recordings:delete',
-    'webhooks:read', 'webhooks:write', 'webhooks:delete',
-    'billing:read', 'billing:write',
+    'users:read',
+    'users:write',
+    'users:delete',
+    'roles:read',
+    'roles:write',
+    'api_keys:read',
+    'api_keys:write',
+    'api_keys:delete',
+    'numbers:read',
+    'numbers:write',
+    'numbers:delete',
+    'campaigns:read',
+    'campaigns:write',
+    'campaigns:delete',
+    'flows:read',
+    'flows:write',
+    'flows:delete',
+    'flows:publish',
+    'calls:read',
+    'calls:write',
+    'calls:delete',
+    'recordings:read',
+    'recordings:write',
+    'recordings:delete',
+    'webhooks:read',
+    'webhooks:write',
+    'webhooks:delete',
+    'billing:read',
+    'billing:write',
     'reports:read',
+    'payroll:read',
+    'payroll:write',
+    'payroll:admin',
   ],
   ANALYST: [
     'calls:read',
@@ -54,16 +100,15 @@ const ROLE_PERMISSIONS: Record<RoleName, Permission[]> = {
     'numbers:read',
   ],
   PUBLISHER: [
-    'flows:read', 'flows:write', 'flows:publish',
-    'campaigns:read', 'campaigns:write',
+    'flows:read',
+    'flows:write',
+    'flows:publish',
+    'campaigns:read',
+    'campaigns:write',
     'calls:read',
     'recordings:read',
   ],
-  BUYER: [
-    'calls:read', 'calls:write',
-    'recordings:read',
-    'campaigns:read',
-  ],
+  BUYER: ['calls:read', 'calls:write', 'recordings:read', 'campaigns:read'],
   READONLY: [
     'calls:read',
     'recordings:read',
@@ -82,7 +127,7 @@ function permissionMatches(required: Permission, userPermission: Permission): bo
   if (userPermission === 'admin:*') {
     return true;
   }
-  
+
   if (userPermission === required) {
     return true;
   }
@@ -90,7 +135,7 @@ function permissionMatches(required: Permission, userPermission: Permission): bo
   // Wildcard matching: 'users:*' matches 'users:read'
   const userParts = userPermission.split(':');
   const requiredParts = required.split(':');
-  
+
   if (userParts.length !== requiredParts.length) {
     return false;
   }
@@ -108,12 +153,9 @@ function permissionMatches(required: Permission, userPermission: Permission): bo
 /**
  * Get user permissions from roles
  */
-async function getUserPermissions(
-  tenantId: string,
-  userId: string
-): Promise<Permission[]> {
+async function getUserPermissions(tenantId: string, userId: string): Promise<Permission[]> {
   const prisma = getPrismaClient();
-  
+
   const user = await prisma.user.findUnique({
     where: { id: userId },
     include: {
@@ -130,12 +172,12 @@ async function getUserPermissions(
   }
 
   const permissions = new Set<Permission>();
-  
+
   for (const userRole of user.roles) {
     const roleName = userRole.role.name as RoleName;
     const rolePerms = ROLE_PERMISSIONS[roleName] || [];
     rolePerms.forEach(perm => permissions.add(perm));
-    
+
     // Also check custom permissions from role.permissions JSON
     if (userRole.role.permissions && Array.isArray(userRole.role.permissions)) {
       (userRole.role.permissions as Permission[]).forEach(perm => permissions.add(perm));
@@ -148,12 +190,9 @@ async function getUserPermissions(
 /**
  * Get API key scopes
  */
-async function getApiKeyScopes(
-  tenantId: string,
-  apiKeyId: string
-): Promise<Permission[]> {
+async function getApiKeyScopes(tenantId: string, apiKeyId: string): Promise<Permission[]> {
   const prisma = getPrismaClient();
-  
+
   const apiKey = await prisma.apiKey.findUnique({
     where: { id: apiKeyId },
   });
@@ -206,7 +245,7 @@ export async function checkPermission(
 export function requirePermission(requiredPermission: Permission) {
   return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
     const user = request.user;
-    
+
     if (!user) {
       reply.code(401).send({
         error: {
@@ -218,7 +257,7 @@ export function requirePermission(requiredPermission: Permission) {
     }
 
     const hasPermission = await checkPermission(request, requiredPermission);
-    
+
     if (!hasPermission) {
       // Audit failed authorization attempt
       await auditLog({
@@ -253,7 +292,7 @@ export function requirePermission(requiredPermission: Permission) {
 export function requireAnyPermission(...permissions: Permission[]) {
   return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
     const user = request.user;
-    
+
     if (!user) {
       reply.code(401).send({
         error: {
@@ -302,7 +341,7 @@ export function requireAnyPermission(...permissions: Permission[]) {
 export function requireRole(...roles: RoleName[]) {
   return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
     const user = request.user;
-    
+
     if (!user || !user.userId) {
       reply.code(401).send({
         error: {
@@ -363,4 +402,3 @@ export function requireRole(...roles: RoleName[]) {
     }
   };
 }
-

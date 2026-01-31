@@ -288,6 +288,10 @@ async function buildServer() {
   const { registerLeadInjectRoutes } = await import('./routes/lead-inject.js');
   await server.register(registerLeadInjectRoutes);
 
+  // Register Payroll & Time Tracking routes
+  const { registerPayrollRoutes } = await import('./routes/payroll.js');
+  await server.register(registerPayrollRoutes);
+
   // Start Fronter Bot socket server (handles outbound call socket connections)
   const { fronterBotService } = await import('./services/fronter-bot.js');
   await fronterBotService.start();
