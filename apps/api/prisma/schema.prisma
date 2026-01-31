@@ -587,6 +587,9 @@ model BuyerEndpoint {
   capPeriod      CapPeriod @default(DAY) // HOUR | DAY | MONTH
   maxConcurrency Int       @default(10) // Maximum simultaneous calls
 
+  // Geo-Routing: Empty array = National (accepts all states)
+  acceptedStates String[] // 2-letter state codes, e.g., ['TN', 'FL', 'AL']
+
   metadata  Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -808,6 +811,7 @@ model Call {
   durationFormatted          String? // Total duration as hh:mm:ss
   connectedDurationFormatted String? // Connected duration as hh:mm:ss
   recordingUrl               String? // URL to call recording
+  callerZipCode              String? // 5-digit ZIP code for geo-routing
 
   // Financial Fields (Currency/Decimal)
   revenue Decimal? @db.Decimal(10, 4) // Total revenue for this call

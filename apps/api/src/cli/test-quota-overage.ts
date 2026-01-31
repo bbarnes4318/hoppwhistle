@@ -6,7 +6,6 @@
 
 import 'dotenv-flow/config';
 import { getPrismaClient } from '../lib/prisma.js';
-import { budgetAlertService } from '../services/budget-alert-service.js';
 import { quotaService } from '../services/quota-service.js';
 
 interface TestOptions {
@@ -140,7 +139,7 @@ async function testQuotaOverage(options: TestOptions) {
 
   // Record a cost that pushes over threshold
   await quotaService.recordCallCost(options.tenantId, 0.5, 'test_call_alert');
-  
+
   // Check if alert was sent (check database)
   const alerts = await prisma.budgetAlert.findMany({
     where: {
@@ -235,8 +234,7 @@ testQuotaOverage(options as TestOptions)
   .then(() => {
     process.exit(0);
   })
-  .catch((error) => {
+  .catch(error => {
     console.error('Test failed:', error);
     process.exit(1);
   });
-

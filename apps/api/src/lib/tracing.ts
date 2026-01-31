@@ -43,8 +43,10 @@ export function initTracing(serviceName: string = 'hopwhistle-api'): void {
       ],
     });
 
-    sdk.start();
-    console.log(`[Tracing] Initialized for ${serviceName}, exporting to ${jaegerEndpoint}`);
+    if (sdk) {
+      sdk.start();
+      console.log(`[Tracing] Initialized for ${serviceName}, exporting to ${jaegerEndpoint}`);
+    }
   } catch (error) {
     console.error('[Tracing] Failed to initialize:', error);
   }

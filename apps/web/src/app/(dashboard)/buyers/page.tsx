@@ -5,6 +5,7 @@ import {
   ChevronRight,
   Edit,
   Globe,
+  MapPin,
   Pause,
   Phone,
   Play,
@@ -51,6 +52,64 @@ import {
 import { toast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
+
+// =============================================================================
+// CONSTANTS
+// =============================================================================
+
+const US_STATES = [
+  { code: 'AL', name: 'Alabama' },
+  { code: 'AK', name: 'Alaska' },
+  { code: 'AZ', name: 'Arizona' },
+  { code: 'AR', name: 'Arkansas' },
+  { code: 'CA', name: 'California' },
+  { code: 'CO', name: 'Colorado' },
+  { code: 'CT', name: 'Connecticut' },
+  { code: 'DE', name: 'Delaware' },
+  { code: 'FL', name: 'Florida' },
+  { code: 'GA', name: 'Georgia' },
+  { code: 'HI', name: 'Hawaii' },
+  { code: 'ID', name: 'Idaho' },
+  { code: 'IL', name: 'Illinois' },
+  { code: 'IN', name: 'Indiana' },
+  { code: 'IA', name: 'Iowa' },
+  { code: 'KS', name: 'Kansas' },
+  { code: 'KY', name: 'Kentucky' },
+  { code: 'LA', name: 'Louisiana' },
+  { code: 'ME', name: 'Maine' },
+  { code: 'MD', name: 'Maryland' },
+  { code: 'MA', name: 'Massachusetts' },
+  { code: 'MI', name: 'Michigan' },
+  { code: 'MN', name: 'Minnesota' },
+  { code: 'MS', name: 'Mississippi' },
+  { code: 'MO', name: 'Missouri' },
+  { code: 'MT', name: 'Montana' },
+  { code: 'NE', name: 'Nebraska' },
+  { code: 'NV', name: 'Nevada' },
+  { code: 'NH', name: 'New Hampshire' },
+  { code: 'NJ', name: 'New Jersey' },
+  { code: 'NM', name: 'New Mexico' },
+  { code: 'NY', name: 'New York' },
+  { code: 'NC', name: 'North Carolina' },
+  { code: 'ND', name: 'North Dakota' },
+  { code: 'OH', name: 'Ohio' },
+  { code: 'OK', name: 'Oklahoma' },
+  { code: 'OR', name: 'Oregon' },
+  { code: 'PA', name: 'Pennsylvania' },
+  { code: 'RI', name: 'Rhode Island' },
+  { code: 'SC', name: 'South Carolina' },
+  { code: 'SD', name: 'South Dakota' },
+  { code: 'TN', name: 'Tennessee' },
+  { code: 'TX', name: 'Texas' },
+  { code: 'UT', name: 'Utah' },
+  { code: 'VT', name: 'Vermont' },
+  { code: 'VA', name: 'Virginia' },
+  { code: 'WA', name: 'Washington' },
+  { code: 'WV', name: 'West Virginia' },
+  { code: 'WI', name: 'Wisconsin' },
+  { code: 'WY', name: 'Wyoming' },
+  { code: 'DC', name: 'Washington D.C.' },
+];
 
 // =============================================================================
 // TYPES
@@ -103,6 +162,8 @@ interface Target {
   maxCap: number;
   capPeriod: 'HOUR' | 'DAY' | 'MONTH';
   maxConcurrency: number;
+  acceptedStates: string[]; // Empty = National (accepts all states)
+  isNational: boolean;
 }
 
 interface TargetLiveStatus {
@@ -183,6 +244,7 @@ export default function BuyersPage() {
     capPeriod: 'DAY' as 'HOUR' | 'DAY' | 'MONTH',
     maxConcurrency: 10,
     status: 'ACTIVE' as 'ACTIVE' | 'INACTIVE' | 'FAILED',
+    acceptedStates: [] as string[], // Empty = National (accepts all states)
   });
   const [creditsAmount, setCreditsAmount] = useState(100);
   const [saving, setSaving] = useState(false);
@@ -498,6 +560,7 @@ export default function BuyersPage() {
       capPeriod: 'DAY',
       maxConcurrency: 10,
       status: 'ACTIVE',
+      acceptedStates: [],
     });
     setSelectedTarget(null);
   };
@@ -530,6 +593,7 @@ export default function BuyersPage() {
       capPeriod: target.capPeriod,
       maxConcurrency: target.maxConcurrency,
       status: target.status,
+      acceptedStates: target.acceptedStates || [],
     });
     setEditTargetOpen(true);
   };
@@ -822,6 +886,7 @@ export default function BuyersPage() {
                                     <TableHead>Name</TableHead>
                                     <TableHead>Destination</TableHead>
                                     <TableHead>Type</TableHead>
+                                    <TableHead>Geo</TableHead>
                                     <TableHead>Cap Settings</TableHead>
                                     <TableHead>Concurrency</TableHead>
                                     <TableHead>Status</TableHead>
@@ -860,6 +925,27 @@ export default function BuyersPage() {
                                           <Badge variant="outline" className="text-[10px]">
                                             {target.type}
                                           </Badge>
+                                        </TableCell>
+                                        <TableCell>
+                                          {target.isNational ||
+                                          target.acceptedStates?.length === 0 ? (
+                                            <Badge
+                                              variant="secondary"
+                                              className="text-[10px] bg-green-100 text-green-800"
+                                            >
+                                              <Globe className="h-3 w-3 mr-1" />
+                                              National
+                                            </Badge>
+                                          ) : (
+                                            <Badge
+                                              variant="outline"
+                                              className="text-[10px]"
+                                              title={target.acceptedStates?.join(', ')}
+                                            >
+                                              <MapPin className="h-3 w-3 mr-1" />
+                                              {target.acceptedStates?.length} states
+                                            </Badge>
+                                          )}
                                         </TableCell>
                                         <TableCell>
                                           {target.maxCap > 0 ? (
@@ -1386,6 +1472,94 @@ export default function BuyersPage() {
                 />
               </div>
             </div>
+            {/* State Filtering Section */}
+            <div className="border-t pt-4">
+              <div className="flex items-center gap-2 mb-3">
+                <MapPin className="h-4 w-4" />
+                <Label className="text-sm font-medium">State Filtering (Geo-Routing)</Label>
+              </div>
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <Label htmlFor="isNational" className="font-normal">
+                    National (Accept All States)
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    When enabled, this target accepts calls from all states
+                  </p>
+                </div>
+                <Switch
+                  id="isNational"
+                  checked={targetForm.acceptedStates.length === 0}
+                  onCheckedChange={checked => {
+                    if (checked) {
+                      setTargetForm(f => ({ ...f, acceptedStates: [] }));
+                    } else {
+                      // Default to empty, user will select states
+                      setTargetForm(f => ({ ...f, acceptedStates: [] }));
+                    }
+                  }}
+                />
+              </div>
+              {targetForm.acceptedStates.length > 0 || !targetForm.acceptedStates.length ? (
+                <div className="grid gap-2">
+                  <Label className="text-xs text-muted-foreground">
+                    {targetForm.acceptedStates.length === 0
+                      ? 'National: Accepts calls from ALL states'
+                      : `Accepts calls from ${targetForm.acceptedStates.length} state(s): ${targetForm.acceptedStates.join(', ')}`}
+                  </Label>
+                  <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto border rounded-md p-2">
+                    {US_STATES.map(state => (
+                      <Button
+                        key={state.code}
+                        type="button"
+                        variant={
+                          targetForm.acceptedStates.includes(state.code) ? 'default' : 'outline'
+                        }
+                        size="sm"
+                        className="h-6 px-2 text-xs"
+                        onClick={() => {
+                          setTargetForm(f => {
+                            const current = f.acceptedStates;
+                            if (current.includes(state.code)) {
+                              return {
+                                ...f,
+                                acceptedStates: current.filter(s => s !== state.code),
+                              };
+                            } else {
+                              return { ...f, acceptedStates: [...current, state.code] };
+                            }
+                          });
+                        }}
+                      >
+                        {state.code}
+                      </Button>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="text-xs"
+                      onClick={() =>
+                        setTargetForm(f => ({ ...f, acceptedStates: US_STATES.map(s => s.code) }))
+                      }
+                    >
+                      Select All
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="text-xs"
+                      onClick={() => setTargetForm(f => ({ ...f, acceptedStates: [] }))}
+                    >
+                      Clear All (National)
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateTargetOpen(false)}>
@@ -1518,6 +1692,86 @@ export default function BuyersPage() {
                   <SelectItem value="FAILED">Failed</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            {/* State Filtering Section */}
+            <div className="border-t pt-4">
+              <div className="flex items-center gap-2 mb-3">
+                <MapPin className="h-4 w-4" />
+                <Label className="text-sm font-medium">State Filtering (Geo-Routing)</Label>
+              </div>
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <Label htmlFor="edit-isNational" className="font-normal">
+                    National (Accept All States)
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    When enabled, this target accepts calls from all states
+                  </p>
+                </div>
+                <Switch
+                  id="edit-isNational"
+                  checked={targetForm.acceptedStates.length === 0}
+                  onCheckedChange={checked => {
+                    if (checked) {
+                      setTargetForm(f => ({ ...f, acceptedStates: [] }));
+                    }
+                  }}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label className="text-xs text-muted-foreground">
+                  {targetForm.acceptedStates.length === 0
+                    ? 'National: Accepts calls from ALL states'
+                    : `Accepts calls from ${targetForm.acceptedStates.length} state(s): ${targetForm.acceptedStates.join(', ')}`}
+                </Label>
+                <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto border rounded-md p-2">
+                  {US_STATES.map(state => (
+                    <Button
+                      key={state.code}
+                      type="button"
+                      variant={
+                        targetForm.acceptedStates.includes(state.code) ? 'default' : 'outline'
+                      }
+                      size="sm"
+                      className="h-6 px-2 text-xs"
+                      onClick={() => {
+                        setTargetForm(f => {
+                          const current = f.acceptedStates;
+                          if (current.includes(state.code)) {
+                            return { ...f, acceptedStates: current.filter(s => s !== state.code) };
+                          } else {
+                            return { ...f, acceptedStates: [...current, state.code] };
+                          }
+                        });
+                      }}
+                    >
+                      {state.code}
+                    </Button>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                    onClick={() =>
+                      setTargetForm(f => ({ ...f, acceptedStates: US_STATES.map(s => s.code) }))
+                    }
+                  >
+                    Select All
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => setTargetForm(f => ({ ...f, acceptedStates: [] }))}
+                  >
+                    Clear All (National)
+                  </Button>
+                </div>
+              </div>
             </div>
           </div>
           <DialogFooter>

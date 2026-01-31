@@ -643,6 +643,8 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
         maxCap: t.maxCap,
         capPeriod: t.capPeriod,
         maxConcurrency: t.maxConcurrency,
+        acceptedStates: t.acceptedStates,
+        isNational: t.acceptedStates.length === 0,
         createdAt: t.createdAt.toISOString(),
         updatedAt: t.updatedAt.toISOString(),
       })),
@@ -664,6 +666,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       maxCap?: number;
       capPeriod?: 'HOUR' | 'DAY' | 'MONTH';
       maxConcurrency?: number;
+      acceptedStates?: string[]; // Array of 2-letter state codes, empty = National (accepts all)
     };
   }>('/api/v1/buyers/:buyerId/targets', async (request, reply) => {
     const user = (request as AuthRequest).user;
@@ -676,7 +679,8 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
     }
 
     const { buyerId } = request.params;
-    const { name, type, destination, priority, maxCap, capPeriod, maxConcurrency } = request.body;
+    const { name, type, destination, priority, maxCap, capPeriod, maxConcurrency, acceptedStates } =
+      request.body;
 
     if (!name?.trim()) {
       void reply.code(400);
@@ -712,6 +716,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
         maxCap: maxCap ?? 0,
         capPeriod: capPeriod ?? 'DAY',
         maxConcurrency: maxConcurrency ?? 10,
+        acceptedStates: acceptedStates ?? [], // Empty = National (accepts all states)
       },
     });
 
@@ -727,6 +732,8 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       maxCap: target.maxCap,
       capPeriod: target.capPeriod,
       maxConcurrency: target.maxConcurrency,
+      acceptedStates: target.acceptedStates,
+      isNational: target.acceptedStates.length === 0,
       createdAt: target.createdAt.toISOString(),
       updatedAt: target.updatedAt.toISOString(),
     };
@@ -747,6 +754,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       maxCap?: number;
       capPeriod?: 'HOUR' | 'DAY' | 'MONTH';
       maxConcurrency?: number;
+      acceptedStates?: string[]; // Array of 2-letter state codes, empty = National (accepts all)
     };
   }>('/api/v1/buyers/:buyerId/targets/:targetId', async (request, reply) => {
     const user = (request as AuthRequest).user;
@@ -759,8 +767,17 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
     }
 
     const { buyerId, targetId } = request.params;
-    const { name, type, destination, priority, status, maxCap, capPeriod, maxConcurrency } =
-      request.body;
+    const {
+      name,
+      type,
+      destination,
+      priority,
+      status,
+      maxCap,
+      capPeriod,
+      maxConcurrency,
+      acceptedStates,
+    } = request.body;
 
     const prisma = (await import('../lib/prisma.js')).getPrismaClient();
 
@@ -791,6 +808,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
     if (maxCap !== undefined) updateData.maxCap = maxCap;
     if (capPeriod !== undefined) updateData.capPeriod = capPeriod;
     if (maxConcurrency !== undefined) updateData.maxConcurrency = maxConcurrency;
+    if (acceptedStates !== undefined) updateData.acceptedStates = acceptedStates;
 
     const target = await prisma.buyerEndpoint.update({
       where: { id: targetId },
@@ -808,6 +826,8 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       maxCap: target.maxCap,
       capPeriod: target.capPeriod,
       maxConcurrency: target.maxConcurrency,
+      acceptedStates: target.acceptedStates,
+      isNational: target.acceptedStates.length === 0,
       createdAt: target.createdAt.toISOString(),
       updatedAt: target.updatedAt.toISOString(),
     };

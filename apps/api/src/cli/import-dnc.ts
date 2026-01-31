@@ -29,7 +29,7 @@ async function importDnc(options: ImportOptions) {
 
   // Read file
   const fileContent = readFileSync(options.file, 'utf-8');
-  
+
   let entries: Array<{ phoneNumber: string; reason?: string; source?: string }> = [];
 
   if (options.format === 'csv' || options.file.endsWith('.csv')) {
@@ -39,18 +39,21 @@ async function importDnc(options: ImportOptions) {
       columns: options.skipHeader !== false,
     });
 
-    entries = records.map((record: any, index: number) => {
-      const phoneNumber = options.phoneColumn !== undefined
-        ? record[Object.keys(record)[options.phoneColumn]]
-        : record.phoneNumber || record.phone || record.number || record[0];
+    entries = records.map((record: any) => {
+      const phoneNumber =
+        options.phoneColumn !== undefined
+          ? record[Object.keys(record)[options.phoneColumn]]
+          : record.phoneNumber || record.phone || record.number || record[0];
 
-      const reason = options.reasonColumn !== undefined
-        ? record[Object.keys(record)[options.reasonColumn]]
-        : record.reason || record[1];
+      const reason =
+        options.reasonColumn !== undefined
+          ? record[Object.keys(record)[options.reasonColumn]]
+          : record.reason || record[1];
 
-      const source = options.sourceColumn !== undefined
-        ? record[Object.keys(record)[options.sourceColumn]]
-        : record.source || record[2];
+      const source =
+        options.sourceColumn !== undefined
+          ? record[Object.keys(record)[options.sourceColumn]]
+          : record.source || record[2];
 
       return {
         phoneNumber: normalizePhoneNumber(phoneNumber),
@@ -62,9 +65,9 @@ async function importDnc(options: ImportOptions) {
     // Parse text file (one phone number per line)
     entries = fileContent
       .split('\n')
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0)
-      .map((line) => ({
+      .map(line => line.trim())
+      .filter(line => line.length > 0)
+      .map(line => ({
         phoneNumber: normalizePhoneNumber(line),
       }));
   }
@@ -80,7 +83,7 @@ async function importDnc(options: ImportOptions) {
     const batch = entries.slice(i, i + batchSize);
 
     await Promise.all(
-      batch.map(async (entry) => {
+      batch.map(async entry => {
         try {
           await prisma.dncListEntry.upsert({
             where: {
@@ -108,7 +111,9 @@ async function importDnc(options: ImportOptions) {
       })
     );
 
-    console.log(`Processed ${Math.min(i + batchSize, entries.length)}/${entries.length} entries...`);
+    console.log(
+      `Processed ${Math.min(i + batchSize, entries.length)}/${entries.length} entries...`
+    );
   }
 
   console.log(`\n✅ Import complete:`);
@@ -157,7 +162,9 @@ for (const arg of args) {
 }
 
 if (!options.tenantId || !options.listId || !options.file) {
-  console.error('Usage: tsx src/cli/import-dnc.ts --tenant-id=xxx --list-id=xxx --file=dnc.csv [options]');
+  console.error(
+    'Usage: tsx src/cli/import-dnc.ts --tenant-id=xxx --list-id=xxx --file=dnc.csv [options]'
+  );
   console.error('\nOptions:');
   console.error('  --format=csv|txt          File format (default: auto-detect)');
   console.error('  --skip-header            Skip first line (CSV header)');
@@ -171,8 +178,7 @@ importDnc(options as ImportOptions)
   .then(() => {
     process.exit(0);
   })
-  .catch((error) => {
+  .catch(error => {
     console.error('Import failed:', error);
     process.exit(1);
   });
-
