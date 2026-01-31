@@ -44,6 +44,7 @@ import { useScriptAccess } from '@/hooks/useUserRoles';
 type CurrentView = 'roleSelect' | 'agentDashboard' | 'publisherSetup' | 'crmDashboard';
 type AgentStatus = 'available' | 'away' | 'on_call';
 type ActiveCallView = 'script' | 'data';
+type SelectedScript = 'sales' | 'retention';
 
 interface ProspectData {
   lead_token?: string;
@@ -181,6 +182,9 @@ export function CallCenterPortal(): JSX.Element {
   const [showSettings, setShowSettings] = useState(false);
   const [salesCount, setSalesCount] = useState(0);
   const [totalCallsCount, setTotalCallsCount] = useState(0);
+
+  // Script Selection - Default to Sales Script (Final Expense)
+  const [selectedScript, setSelectedScript] = useState<SelectedScript>('sales');
 
   // Database-driven role and script access
   const {
@@ -668,12 +672,22 @@ export function CallCenterPortal(): JSX.Element {
               {rolesLoading ? '...' : derivedJobTitle}
             </span>
 
-            {/* Show current script access badge */}
-            <span
-              className={`px-2 py-1 text-xs rounded-full ${canAccessRetentionScript ? 'bg-purple-500/20 text-purple-300 border border-purple-500/50' : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50'}`}
-            >
-              {canAccessRetentionScript ? 'Multi-Script' : 'Sales Script'}
-            </span>
+            {/* Script Selector - Dropdown for admins, static badge for regular users */}
+            {canAccessRetentionScript ? (
+              <select
+                value={selectedScript}
+                onChange={e => setSelectedScript(e.target.value as SelectedScript)}
+                className="appearance-none bg-purple-500/20 text-purple-300 text-sm pl-3 pr-8 py-1.5 rounded-lg border border-purple-500/50 focus:border-purple-400 focus:outline-none cursor-pointer hover:bg-purple-500/30 transition-colors"
+                title="Select call script"
+              >
+                <option value="sales">📋 Final Expense Sales</option>
+                <option value="retention">🎯 Retention Script</option>
+              </select>
+            ) : (
+              <span className="px-2 py-1 text-xs rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/50">
+                Sales Script
+              </span>
+            )}
           </div>
 
           <div className="flex items-center space-x-4">
@@ -733,19 +747,37 @@ export function CallCenterPortal(): JSX.Element {
                 <label className="block text-sm text-gray-400 mb-2">Script Access</label>
                 <div className="p-3 bg-[#1e1e2e] rounded-lg border border-[#2e2e3e]">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-white">Main Final Expense Sales Script</span>
-                    <span className="text-xs text-green-400">✓ Active</span>
+                    <span className="text-sm text-white">📋 Final Expense Sales Script</span>
+                    <span
+                      className={`text-xs ${selectedScript === 'sales' ? 'text-green-400' : 'text-gray-500'}`}
+                    >
+                      {selectedScript === 'sales' ? '✓ Selected' : 'Available'}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-white">Retention Script</span>
+                    <span className="text-sm text-white">🎯 Retention Script</span>
                     <span
-                      className={`text-xs ${canAccessRetentionScript ? 'text-green-400' : 'text-gray-500'}`}
+                      className={`text-xs ${
+                        !canAccessRetentionScript
+                          ? 'text-gray-500'
+                          : selectedScript === 'retention'
+                            ? 'text-green-400'
+                            : 'text-gray-400'
+                      }`}
                     >
-                      {canAccessRetentionScript ? '✓ Available' : '✗ Restricted'}
+                      {!canAccessRetentionScript
+                        ? '✗ Restricted'
+                        : selectedScript === 'retention'
+                          ? '✓ Selected'
+                          : 'Available'}
                     </span>
                   </div>
                 </div>
-                {!canAccessRetentionScript && (
+                {canAccessRetentionScript ? (
+                  <p className="text-xs text-gray-500 mt-2">
+                    Use the dropdown in the header to switch scripts during calls.
+                  </p>
+                ) : (
                   <p className="text-xs text-gray-500 mt-2">
                     Retention Script requires ADMIN or OWNER role.
                   </p>
@@ -1111,7 +1143,7 @@ export function CallCenterPortal(): JSX.Element {
 
               {activeCallView === 'script' && (
                 <div className="flex-1 overflow-hidden">
-                  {canAccessRetentionScript ? (
+                  {selectedScript === 'retention' && canAccessRetentionScript ? (
                     <RetentionScriptPanel
                       prospectData={activeCallData}
                       onDataUpdate={(data: Record<string, unknown>) =>
