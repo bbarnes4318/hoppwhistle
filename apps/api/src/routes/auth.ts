@@ -10,6 +10,9 @@ import { createSession, generateCsrfToken } from '../middleware/session.js';
 import { auditLog } from '../services/audit.js';
 import { verifyGoogleToken } from '../services/google-auth.js';
 
+// Import types to ensure module augmentations are loaded
+import '../types/fastify.js';
+
 // Password validation: min 8 chars, 1 uppercase, 1 number
 const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*\d).{8,}$/;
 
@@ -127,12 +130,11 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       .catch(() => {});
 
     // Create JWT token
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const token = await reply.jwtSign({
       tenantId: user.tenantId,
       userId: user.id,
       email: user.email,
-    } as any);
+    });
 
     // Create session
     const sessionId = await createSession(reply, {
@@ -267,12 +269,11 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     });
 
     // Create JWT token
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const token = await reply.jwtSign({
       tenantId: user.tenantId,
       userId: user.id,
       email: user.email,
-    } as any);
+    });
 
     // Create session
     const sessionId = await createSession(reply, {
@@ -465,12 +466,11 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     }
 
     // Create JWT token
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const token = await reply.jwtSign({
       tenantId: user.tenantId,
       userId: user.id,
       email: user.email,
-    } as any);
+    });
 
     // Create session
     const sessionId = await createSession(reply, {

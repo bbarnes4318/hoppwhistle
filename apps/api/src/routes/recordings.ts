@@ -1,9 +1,7 @@
 import { FastifyInstance } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
-import { authenticate } from '../middleware/auth.js';
 import { RecordingService } from '../services/recording-service.js';
-import { getStorageService } from '../services/storage.js';
 
 const recordingService = new RecordingService();
 const prisma = getPrismaClient();
@@ -98,7 +96,12 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
       return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
     }
 
-    const { page = 1, limit = 20, callId, status } = request.query as {
+    const {
+      page = 1,
+      limit = 20,
+      callId,
+      status,
+    } = request.query as {
       page?: number;
       limit?: number;
       callId?: string;
@@ -139,7 +142,7 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
     ]);
 
     return {
-      data: recordings.map((r) => ({
+      data: recordings.map(r => ({
         id: r.id,
         callId: r.callId,
         legId: r.legId,
@@ -230,10 +233,7 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
 
     try {
       const expiresIn = parseInt(request.query.expiresIn || '3600', 10);
-      const signedUrl = await recordingService.getSignedUrl(
-        request.params.recordingId,
-        expiresIn
-      );
+      const signedUrl = await recordingService.getSignedUrl(request.params.recordingId, expiresIn);
 
       return {
         url: signedUrl,
@@ -298,4 +298,3 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
     }
   );
 }
-

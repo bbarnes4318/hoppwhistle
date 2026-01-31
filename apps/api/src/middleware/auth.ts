@@ -5,6 +5,9 @@ import { FastifyRequest, FastifyReply, FastifyInstance } from 'fastify';
 import { getPrismaClient } from '../lib/prisma.js';
 import { auditLog } from '../services/audit.js';
 
+// Import types to ensure augmentations are loaded
+import '../types/fastify.js';
+
 export interface AuthenticatedUser {
   tenantId: string;
   userId?: string;
@@ -12,14 +15,6 @@ export interface AuthenticatedUser {
   apiKeyId?: string;
   roles?: string[];
   scopes?: string[];
-}
-
-// Extend @fastify/jwt module to use our AuthenticatedUser type
-declare module '@fastify/jwt' {
-  interface FastifyJWT {
-    payload: AuthenticatedUser;
-    user: AuthenticatedUser;
-  }
 }
 
 /**
@@ -39,9 +34,16 @@ export async function authenticateJWT(request: FastifyRequest, reply: FastifyRep
   }
 
   try {
-    // Verify JWT and cast to our payload type
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const decoded = (await request.jwtVerify()) as any as AuthenticatedUser;
+    // Verify JWT - jwtVerify reads from Authorization header automatically
+    // We use type assertion because the module augmentation for @fastify/jwt
+    // is not reliably picked up by TypeScript
+    const jwtPayload = await request.jwtVerify();
+    // Extract payload fields explicitly to satisfy TypeScript
+    const decoded = jwtPayload as unknown as {
+      tenantId: string;
+      userId?: string;
+      email?: string;
+    };
 
     // Validate user exists and is active
     if (decoded.userId) {
@@ -90,14 +92,19 @@ export async function authenticateJWT(request: FastifyRequest, reply: FastifyRep
       // Extract roles
       const roles = user.roles.map(ur => ur.role.name);
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (request as any).user = {
-        ...decoded,
+      // Construct authenticated user object explicitly
+      request.user = {
+        tenantId: decoded.tenantId,
+        userId: decoded.userId,
+        email: decoded.email,
         roles,
-      } as AuthenticatedUser;
+      };
     } else {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (request as any).user = decoded;
+      // API-only token without userId
+      request.user = {
+        tenantId: decoded.tenantId,
+        email: decoded.email,
+      };
     }
   } catch (err) {
     await auditLog({
@@ -259,12 +266,12 @@ export async function authenticateAPIKey(
   const scopes =
     dbApiKey.scopes && Array.isArray(dbApiKey.scopes) ? (dbApiKey.scopes as string[]) : [];
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (request as any).user = {
+  // Set authenticated user for API key auth
+  request.user = {
     tenantId: dbApiKey.tenantId,
     apiKeyId: dbApiKey.id,
     scopes,
-  } as AuthenticatedUser;
+  };
 }
 
 /**
