@@ -10,6 +10,7 @@ import {
   Save,
   Calendar,
   Play,
+  Pencil,
 } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 
@@ -314,6 +315,7 @@ export default function AdminPayrollPage() {
                             value={editPayRate}
                             onChange={e => setEditPayRate(e.target.value)}
                             className="w-24"
+                            autoFocus
                           />
                           <Button
                             size="sm"
@@ -331,15 +333,28 @@ export default function AdminPayrollPage() {
                           </Button>
                         </div>
                       ) : (
-                        <span
-                          className="cursor-pointer hover:underline"
-                          onClick={() => {
-                            setEditingUserId(entry.userId);
-                            setEditPayRate(entry.payRate.toString());
-                          }}
-                        >
-                          ${entry.payRate.toFixed(2)}/hr
-                        </span>
+                        <div className="flex items-center justify-end gap-2">
+                          {entry.payRate === 0 ? (
+                            <Badge variant="destructive" className="gap-1">
+                              <AlertCircle className="h-3 w-3" />
+                              Not Set
+                            </Badge>
+                          ) : (
+                            <span className="font-medium">${entry.payRate.toFixed(2)}/hr</span>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 w-7 p-0"
+                            onClick={() => {
+                              setEditingUserId(entry.userId);
+                              setEditPayRate(entry.payRate.toString());
+                            }}
+                            title="Edit pay rate"
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                        </div>
                       )}
                     </TableCell>
                     <TableCell className="text-right font-medium">
@@ -361,9 +376,16 @@ export default function AdminPayrollPage() {
                     <TableCell className="text-right">
                       <Button
                         size="sm"
-                        variant="outline"
+                        variant={!entry.hasBankingInfo || entry.payRate === 0 ? 'ghost' : 'outline'}
                         onClick={() => void handleOpenPayoutDialog(entry)}
                         disabled={!entry.hasBankingInfo || entry.payRate === 0}
+                        title={
+                          entry.payRate === 0
+                            ? 'Set pay rate first'
+                            : !entry.hasBankingInfo
+                              ? 'User must add banking info'
+                              : 'Create payout for this contractor'
+                        }
                       >
                         <Play className="h-4 w-4 mr-1" />
                         Create Payout
