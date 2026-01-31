@@ -531,6 +531,57 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
   );
 
   // ============================================================================
+  // Get Current User (Me)
+  // ============================================================================
+  fastify.get(
+    '/api/auth/me',
+    {
+      preHandler: [authenticate],
+    },
+    async (request, reply) => {
+      const { userId } = request.user as { userId: string; tenantId?: string };
+
+      if (!userId) {
+        return reply.code(401).send({
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Not authenticated',
+          },
+        });
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        include: {
+          roles: {
+            include: {
+              role: true,
+            },
+          },
+        },
+      });
+
+      if (!user) {
+        return reply.code(404).send({
+          error: {
+            code: 'NOT_FOUND',
+            message: 'User not found',
+          },
+        });
+      }
+
+      return reply.send({
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        roles: user.roles.map((ur: UserRole) => ur.role.name),
+        tenantId: user.tenantId,
+      });
+    }
+  );
+
+  // ============================================================================
   // Logout
   // ============================================================================
   fastify.post(

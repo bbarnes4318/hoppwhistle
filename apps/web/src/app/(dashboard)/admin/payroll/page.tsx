@@ -34,6 +34,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { toast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api';
 
 interface PayrollEntry {
@@ -111,7 +112,7 @@ export default function AdminPayrollPage() {
   const handleSavePayRate = async (userId: string) => {
     const rate = parseFloat(editPayRate);
     if (isNaN(rate) || rate < 0) {
-      alert('Please enter a valid pay rate');
+      toast.warning('Invalid Rate', 'Please enter a valid pay rate');
       return;
     }
 
@@ -123,13 +124,14 @@ export default function AdminPayrollPage() {
       });
 
       if (response.error) {
-        alert(`Failed to save pay rate: ${response.error.message}`);
+        toast.error('Failed to Save', response.error.message);
       } else {
+        toast.success('Pay Rate Updated', `New rate: $${rate.toFixed(2)}/hr`);
         setEditingUserId(null);
         await loadReport();
       }
     } catch (err) {
-      alert(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      toast.error('Error', err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setSaving(false);
     }
@@ -164,15 +166,18 @@ export default function AdminPayrollPage() {
       });
 
       if (response.error) {
-        alert(`Failed to create payout: ${response.error.message}`);
+        toast.error('Failed to Create Payout', response.error.message);
       } else {
         setPayoutDialogOpen(false);
         setSelectedUser(null);
         await loadReport();
-        alert('Payout created successfully! Time entries have been locked.');
+        toast.success(
+          'Payout Created',
+          `$${selectedUser.totalDue.toFixed(2)} payout created for ${selectedUser.userName}. Time entries have been locked.`
+        );
       }
     } catch (err) {
-      alert(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      toast.error('Error', err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setCreating(false);
     }

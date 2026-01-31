@@ -17,6 +17,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { toast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api';
 
 interface TimeEntry {
@@ -107,7 +108,7 @@ export default function PayrollPage() {
 
   const handleLogHours = async () => {
     if (!newHours || parseFloat(newHours) <= 0) {
-      alert('Please enter valid hours');
+      toast.warning('Invalid Hours', 'Please enter a valid number of hours');
       return;
     }
 
@@ -120,15 +121,19 @@ export default function PayrollPage() {
       });
 
       if (response.error) {
-        alert(`Failed to log hours: ${response.error.message}`);
+        toast.error('Failed to Log Hours', response.error.message);
       } else {
+        toast.success(
+          'Hours Logged',
+          `${newHours} hours logged for ${new Date(newDate).toLocaleDateString()}`
+        );
         setNewHours('8');
         setNewNotes('');
         await loadData();
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
-      alert(`Error: ${message}`);
+      toast.error('Error', message);
     } finally {
       setSaving(false);
     }
@@ -136,7 +141,7 @@ export default function PayrollPage() {
 
   const handleSaveBanking = async () => {
     if (!bankName || !accountNumber || !routingNumber) {
-      alert('All banking fields are required');
+      toast.warning('Missing Information', 'All banking fields are required');
       return;
     }
 
@@ -149,14 +154,18 @@ export default function PayrollPage() {
       });
 
       if (response.error) {
-        alert(`Failed to save banking info: ${response.error.message}`);
+        toast.error('Failed to Save', response.error.message);
       } else {
+        toast.success(
+          'Banking Info Saved',
+          'Your banking information has been securely encrypted and saved.'
+        );
         setEditingBanking(false);
         await loadData();
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
-      alert(`Error: ${message}`);
+      toast.error('Error', message);
     } finally {
       setSaving(false);
     }

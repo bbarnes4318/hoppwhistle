@@ -36,6 +36,7 @@ import RetentionScriptPanel from './RetentionScriptPanel';
 
 import { usePhone } from '@/components/phone/phone-provider';
 import { useLeadInjection } from '@/hooks/useLeadInjection';
+import { useScriptAccess } from '@/hooks/useUserRoles';
 
 // ============================================================================
 // TYPES
@@ -177,16 +178,17 @@ export function CallCenterPortal(): JSX.Element {
   const [callRecords, setCallRecords] = useState<CallRecord[]>([]);
 
   // User Settings & Stats
-  const [jobTitle, setJobTitle] = useState<string>('Agent');
   const [showSettings, setShowSettings] = useState(false);
   const [salesCount, setSalesCount] = useState(0);
   const [totalCallsCount, setTotalCallsCount] = useState(0);
 
-  // Fuzzy matching: Job title contains "Retention" (case-insensitive)
-  const showRetentionScript = (title: string) => title && title.toLowerCase().includes('retention');
-
-  // Show retention script if job title contains "retention" OR user is Admin
-  const canAccessRetentionScript = showRetentionScript(jobTitle) || jobTitle === 'Admin';
+  // Database-driven role and script access
+  const {
+    canAccessRetentionScript,
+    derivedJobTitle,
+    loading: rolesLoading,
+    isAdminOrOwner,
+  } = useScriptAccess();
 
   // Calculate conversion rate: (Sales / Total Calls) * 100
   const conversionRate =
@@ -655,20 +657,16 @@ export function CallCenterPortal(): JSX.Element {
               <option value="on_call">On Call</option>
             </select>
 
-            {/* Job Title Selector */}
-            <select
-              value={jobTitle}
-              onChange={e => setJobTitle(e.target.value)}
-              className="appearance-none bg-[#1e1e2e] text-white text-sm pl-3 pr-8 py-1.5 rounded-lg border border-[#2e2e3e] focus:border-purple-500 focus:outline-none cursor-pointer"
+            {/* User Role Badge (from database) */}
+            <span
+              className={`px-3 py-1.5 text-sm rounded-lg ${
+                isAdminOrOwner
+                  ? 'bg-purple-500/20 text-purple-300 border border-purple-500/50'
+                  : 'bg-slate-500/20 text-slate-300 border border-slate-500/50'
+              }`}
             >
-              <option value="Agent">Agent</option>
-              <option value="Senior Agent">Senior Agent</option>
-              <option value="Retention Specialist">Retention Specialist</option>
-              <option value="Team Lead">Team Lead</option>
-              <option value="Supervisor">Supervisor</option>
-              <option value="Manager">Manager</option>
-              <option value="Admin">Admin</option>
-            </select>
+              {rolesLoading ? '...' : derivedJobTitle}
+            </span>
 
             {/* Show current script access badge */}
             <span
@@ -717,20 +715,19 @@ export function CallCenterPortal(): JSX.Element {
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm text-gray-400 mb-2">Job Title</label>
-                <select
-                  value={jobTitle}
-                  onChange={e => setJobTitle(e.target.value)}
-                  className="w-full bg-[#1e1e2e] text-white text-sm p-3 rounded-lg border border-[#2e2e3e] focus:border-purple-500 focus:outline-none"
-                >
-                  <option value="Agent">Agent</option>
-                  <option value="Senior Agent">Senior Agent</option>
-                  <option value="Retention Specialist">Retention Specialist</option>
-                  <option value="Team Lead">Team Lead</option>
-                  <option value="Supervisor">Supervisor</option>
-                  <option value="Manager">Manager</option>
-                  <option value="Admin">Admin</option>
-                </select>
+                <label className="block text-sm text-gray-400 mb-2">Your Role</label>
+                <div className="w-full bg-[#1e1e2e] text-white text-sm p-3 rounded-lg border border-[#2e2e3e]">
+                  {rolesLoading ? (
+                    <span className="text-gray-500">Loading...</span>
+                  ) : (
+                    <span className={isAdminOrOwner ? 'text-purple-400' : 'text-slate-300'}>
+                      {derivedJobTitle}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  Your role is assigned by your organization administrator.
+                </p>
               </div>
               <div>
                 <label className="block text-sm text-gray-400 mb-2">Script Access</label>
@@ -750,7 +747,7 @@ export function CallCenterPortal(): JSX.Element {
                 </div>
                 {!canAccessRetentionScript && (
                   <p className="text-xs text-gray-500 mt-2">
-                    Retention Script requires Team Lead or higher role.
+                    Retention Script requires ADMIN or OWNER role.
                   </p>
                 )}
               </div>
