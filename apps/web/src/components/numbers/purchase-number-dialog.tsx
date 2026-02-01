@@ -30,18 +30,14 @@ interface PurchaseNumberDialogProps {
   onSuccess?: () => void;
 }
 
-export function PurchaseNumberDialog({
-  open,
-  onOpenChange,
-  onSuccess,
-}: PurchaseNumberDialogProps) {
+export function PurchaseNumberDialog({ open, onOpenChange, onSuccess }: PurchaseNumberDialogProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     areaCode: '',
     country: 'US',
     region: '',
-    provider: 'local',
+    provider: 'anveo',
     features: {
       voice: true,
       sms: false,
@@ -82,7 +78,7 @@ export function PurchaseNumberDialog({
           areaCode: '',
           country: 'US',
           region: '',
-          provider: 'local',
+          provider: 'anveo',
           features: {
             voice: true,
             sms: false,
@@ -113,18 +109,17 @@ export function PurchaseNumberDialog({
             <Label htmlFor="provider">Provider</Label>
             <Select
               value={formData.provider}
-              onValueChange={(value) =>
-                setFormData({ ...formData, provider: value })
-              }
+              onValueChange={value => setFormData({ ...formData, provider: value })}
             >
               <SelectTrigger id="provider">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="local">Local (Test)</SelectItem>
+                <SelectItem value="anveo">Anveo Direct (Recommended)</SelectItem>
                 <SelectItem value="signalwire">SignalWire</SelectItem>
                 <SelectItem value="telnyx">Telnyx</SelectItem>
                 <SelectItem value="bandwidth">Bandwidth</SelectItem>
+                <SelectItem value="local">Local (Test)</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -133,9 +128,7 @@ export function PurchaseNumberDialog({
             <Label htmlFor="country">Country</Label>
             <Select
               value={formData.country}
-              onValueChange={(value) =>
-                setFormData({ ...formData, country: value })
-              }
+              onValueChange={value => setFormData({ ...formData, country: value })}
             >
               <SelectTrigger id="country">
                 <SelectValue />
@@ -153,15 +146,11 @@ export function PurchaseNumberDialog({
               id="areaCode"
               placeholder="e.g., 212, 310, 415"
               value={formData.areaCode}
-              onChange={(e) =>
-                setFormData({ ...formData, areaCode: e.target.value })
-              }
+              onChange={e => setFormData({ ...formData, areaCode: e.target.value })}
               maxLength={3}
               pattern="[0-9]{3}"
             />
-            <p className="text-xs text-muted-foreground">
-              Leave empty to get any available number
-            </p>
+            <p className="text-xs text-muted-foreground">Leave empty to get any available number</p>
           </div>
 
           <div className="space-y-2">
@@ -170,9 +159,7 @@ export function PurchaseNumberDialog({
               id="region"
               placeholder="e.g., CA, NY, TX"
               value={formData.region}
-              onChange={(e) =>
-                setFormData({ ...formData, region: e.target.value })
-              }
+              onChange={e => setFormData({ ...formData, region: e.target.value })}
               maxLength={2}
             />
           </div>
@@ -184,7 +171,7 @@ export function PurchaseNumberDialog({
                 <Checkbox
                   id="voice"
                   checked={formData.features.voice}
-                  onCheckedChange={(checked) =>
+                  onCheckedChange={checked =>
                     setFormData({
                       ...formData,
                       features: { ...formData.features, voice: !!checked },
@@ -199,7 +186,7 @@ export function PurchaseNumberDialog({
                 <Checkbox
                   id="sms"
                   checked={formData.features.sms}
-                  onCheckedChange={(checked) =>
+                  onCheckedChange={checked =>
                     setFormData({
                       ...formData,
                       features: { ...formData.features, sms: !!checked },
@@ -214,7 +201,7 @@ export function PurchaseNumberDialog({
                 <Checkbox
                   id="mms"
                   checked={formData.features.mms}
-                  onCheckedChange={(checked) =>
+                  onCheckedChange={checked =>
                     setFormData({
                       ...formData,
                       features: { ...formData.features, mms: !!checked },
@@ -229,7 +216,7 @@ export function PurchaseNumberDialog({
                 <Checkbox
                   id="fax"
                   checked={formData.features.fax}
-                  onCheckedChange={(checked) =>
+                  onCheckedChange={checked =>
                     setFormData({
                       ...formData,
                       features: { ...formData.features, fax: !!checked },
@@ -244,18 +231,12 @@ export function PurchaseNumberDialog({
           </div>
 
           {error && (
-            <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">
-              {error}
-            </div>
+            <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">{error}</div>
           )}
         </div>
 
         <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={loading}
-          >
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
             Cancel
           </Button>
           <Button onClick={handlePurchase} disabled={loading}>
@@ -267,4 +248,3 @@ export function PurchaseNumberDialog({
     </Dialog>
   );
 }
-

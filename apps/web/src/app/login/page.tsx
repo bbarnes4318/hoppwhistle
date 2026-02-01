@@ -28,10 +28,9 @@ interface AuthResponse {
 }
 
 // Determine redirect path based on user roles
-function getRedirectPath(roles: string[]): string {
-  if (roles.includes('BUYER')) {
-    return '/buyer/dashboard';
-  }
+// With unified dashboard, all users go to /dashboard
+function getRedirectPath(_roles: string[]): string {
+  // Buyer portal removed - all users use unified dashboard with RBAC
   return '/dashboard';
 }
 

@@ -72,7 +72,7 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
       areaCode?: string;
       country?: string;
       region?: string;
-      provider?: 'local' | 'signalwire' | 'telnyx' | 'bandwidth';
+      provider?: 'local' | 'signalwire' | 'telnyx' | 'bandwidth' | 'anveo';
       features?: {
         voice?: boolean;
         sms?: boolean;
@@ -2024,6 +2024,8 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
       lastName?: string;
       role?: string;
       buyerId?: string;
+      createNewBuyer?: boolean;
+      newBuyerName?: string;
       roleIds?: string[];
     };
   }>('/api/v1/users/invite', async (request, reply) => {
@@ -2065,15 +2067,42 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
       };
     }
 
-    // BUYER role requires buyerId
-    if (requestedRole === 'BUYER' && !body.buyerId) {
+    // BUYER role requires buyerId OR createNewBuyer
+    if (requestedRole === 'BUYER' && !body.buyerId && !body.createNewBuyer) {
       void reply.code(400);
-      return { error: { code: 'VALIDATION_ERROR', message: 'buyerId is required for BUYER role' } };
+      return {
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'buyerId or createNewBuyer is required for BUYER role',
+        },
+      };
     }
 
-    // Validate buyerId exists if provided
+    // Auto-create buyer if requested
     let buyerRecord = null;
-    if (body.buyerId) {
+    if (requestedRole === 'BUYER' && body.createNewBuyer && body.newBuyerName) {
+      // Generate a unique code for the buyer
+      const generateCode = () => {
+        const chars = '0123456789ABCDEF';
+        let result = '';
+        for (let i = 0; i < 8; i++) {
+          result += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return result;
+      };
+
+      buyerRecord = await prisma.buyer.create({
+        data: {
+          tenantId: tenantId,
+          name: body.newBuyerName.trim(),
+          code: generateCode(),
+          status: 'ACTIVE',
+          billingType: 'UPFRONT',
+        },
+      });
+      body.buyerId = buyerRecord.id;
+    } else if (body.buyerId) {
+      // Validate buyerId exists if provided
       buyerRecord = await prisma.buyer.findUnique({
         where: { id: body.buyerId },
       });

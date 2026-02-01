@@ -126,7 +126,7 @@ export function CampaignForm({ buyerId, initialData, onSuccess }: CampaignFormPr
       });
 
       onSuccess?.();
-      router.push('/buyer/campaigns');
+      router.push('/campaigns');
     } catch (error) {
       console.error('Failed to save campaign:', error);
       toast({
@@ -420,7 +420,7 @@ export function CampaignForm({ buyerId, initialData, onSuccess }: CampaignFormPr
 
         {/* Actions */}
         <div className="flex justify-end gap-4">
-          <Button type="button" variant="outline" onClick={() => router.push('/buyer/campaigns')}>
+          <Button type="button" variant="outline" onClick={() => router.push('/campaigns')}>
             Cancel
           </Button>
           <Button type="submit" disabled={submitting}>

@@ -1,9 +1,10 @@
 'use client';
 
-import { Loader2, Building2 } from 'lucide-react';
+import { Loader2, Building2, UserPlus } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -49,6 +50,8 @@ export function InviteUserDialog({ open, onOpenChange, onSuccess }: InviteUserDi
   const [error, setError] = useState<string | null>(null);
   const [buyers, setBuyers] = useState<Buyer[]>([]);
   const [loadingBuyers, setLoadingBuyers] = useState(false);
+  const [createNewBuyer, setCreateNewBuyer] = useState(true); // Default to creating new buyer
+  const [newBuyerName, setNewBuyerName] = useState('');
   const [formData, setFormData] = useState({
     email: '',
     firstName: '',
@@ -57,12 +60,12 @@ export function InviteUserDialog({ open, onOpenChange, onSuccess }: InviteUserDi
     buyerId: '',
   });
 
-  // Fetch buyers when role is BUYER
+  // Fetch buyers when role is BUYER and not creating new
   useEffect(() => {
-    if (formData.role === 'BUYER' && buyers.length === 0) {
+    if (formData.role === 'BUYER' && !createNewBuyer && buyers.length === 0) {
       loadBuyers();
     }
-  }, [formData.role]);
+  }, [formData.role, createNewBuyer]);
 
   useEffect(() => {
     if (open) {
@@ -74,6 +77,8 @@ export function InviteUserDialog({ open, onOpenChange, onSuccess }: InviteUserDi
         role: 'ANALYST',
         buyerId: '',
       });
+      setCreateNewBuyer(true);
+      setNewBuyerName('');
       setError(null);
     }
   }, [open]);
@@ -105,10 +110,16 @@ export function InviteUserDialog({ open, onOpenChange, onSuccess }: InviteUserDi
       return;
     }
 
-    // Validate BUYER role requires buyerId
-    if (formData.role === 'BUYER' && !formData.buyerId) {
-      setError('Please select an associated buyer company');
-      return;
+    // Validate BUYER role requirements
+    if (formData.role === 'BUYER') {
+      if (createNewBuyer && !newBuyerName.trim()) {
+        setError('Please enter a buyer company name');
+        return;
+      }
+      if (!createNewBuyer && !formData.buyerId) {
+        setError('Please select an associated buyer company');
+        return;
+      }
     }
 
     setLoading(true);
@@ -121,6 +132,8 @@ export function InviteUserDialog({ open, onOpenChange, onSuccess }: InviteUserDi
         lastName?: string;
         role: string;
         buyerId?: string;
+        createNewBuyer?: boolean;
+        newBuyerName?: string;
       } = {
         email: formData.email.trim(),
         firstName: formData.firstName.trim() || undefined,
@@ -128,9 +141,14 @@ export function InviteUserDialog({ open, onOpenChange, onSuccess }: InviteUserDi
         role: formData.role,
       };
 
-      // Only include buyerId for BUYER role
-      if (formData.role === 'BUYER' && formData.buyerId) {
-        payload.buyerId = formData.buyerId;
+      // Handle BUYER role - either link to existing or create new
+      if (formData.role === 'BUYER') {
+        if (createNewBuyer) {
+          payload.createNewBuyer = true;
+          payload.newBuyerName = newBuyerName.trim();
+        } else {
+          payload.buyerId = formData.buyerId;
+        }
       }
 
       const response = await apiClient.post<{
@@ -139,6 +157,8 @@ export function InviteUserDialog({ open, onOpenChange, onSuccess }: InviteUserDi
         firstName?: string;
         lastName?: string;
         tempPassword?: string;
+        buyerId?: string;
+        buyerName?: string;
       }>('/api/v1/users/invite', payload);
 
       if (response.error) {
@@ -146,14 +166,12 @@ export function InviteUserDialog({ open, onOpenChange, onSuccess }: InviteUserDi
       }
 
       if (response.data) {
-        // Show success message with temp password (in dev only)
-        if (response.data.tempPassword) {
-          alert(
-            `User invited successfully!\n\nTemporary password: ${response.data.tempPassword}\n\n(Note: In production, this would be sent via email)`
-          );
-        } else {
-          alert('User invited successfully!');
-        }
+        // Show success message with temp password
+        const message = response.data.tempPassword
+          ? `✅ Buyer invited successfully!\n\n📧 Email: ${response.data.email}\n🔑 Temporary Password: ${response.data.tempPassword}\n🏢 Buyer Company: ${response.data.buyerName || 'Linked'}\n\n⚠️ Please share these credentials securely with the buyer.`
+          : 'User invited successfully!';
+
+        alert(message);
         onSuccess?.();
         onOpenChange(false);
       }
@@ -170,8 +188,15 @@ export function InviteUserDialog({ open, onOpenChange, onSuccess }: InviteUserDi
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px] max-h-[90vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Invite User</DialogTitle>
-          <DialogDescription>Send an invitation to a new team member</DialogDescription>
+          <DialogTitle className="flex items-center gap-2">
+            <UserPlus className="h-5 w-5" />
+            {isBuyerRole ? 'Invite Buyer' : 'Invite User'}
+          </DialogTitle>
+          <DialogDescription>
+            {isBuyerRole
+              ? 'Create a new buyer account with dashboard access'
+              : 'Send an invitation to a new team member'}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4 overflow-y-auto flex-1 min-h-0">
@@ -241,40 +266,77 @@ export function InviteUserDialog({ open, onOpenChange, onSuccess }: InviteUserDi
             </Select>
           </div>
 
-          {/* Associated Buyer Company - only shown when BUYER role selected */}
+          {/* Buyer Company Section - only shown when BUYER role selected */}
           {isBuyerRole && (
-            <div className="space-y-2 p-3 border rounded-md bg-muted/30">
-              <Label htmlFor="buyerId" className="flex items-center gap-2">
+            <div className="space-y-3 p-3 border rounded-md bg-primary/5 border-primary/20">
+              <div className="flex items-center gap-2 text-sm font-medium text-primary">
                 <Building2 className="h-4 w-4" />
-                Associated Buyer Company *
-              </Label>
-              <Select
-                value={formData.buyerId}
-                onValueChange={value => setFormData({ ...formData, buyerId: value })}
-                disabled={loading || loadingBuyers}
-              >
-                <SelectTrigger>
-                  <SelectValue
-                    placeholder={loadingBuyers ? 'Loading buyers...' : 'Select a buyer company'}
+                Buyer Company Setup
+              </div>
+
+              {/* Toggle between create new and select existing */}
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="createNewBuyer"
+                  checked={createNewBuyer}
+                  onCheckedChange={checked => {
+                    setCreateNewBuyer(!!checked);
+                    if (checked) {
+                      setFormData({ ...formData, buyerId: '' });
+                    } else {
+                      setNewBuyerName('');
+                    }
+                  }}
+                  disabled={loading}
+                />
+                <Label htmlFor="createNewBuyer" className="cursor-pointer">
+                  Create new buyer company
+                </Label>
+              </div>
+
+              {createNewBuyer ? (
+                <div className="space-y-2">
+                  <Label htmlFor="newBuyerName">New Buyer Company Name *</Label>
+                  <Input
+                    id="newBuyerName"
+                    placeholder="e.g., Acme Insurance Partners"
+                    value={newBuyerName}
+                    onChange={e => setNewBuyerName(e.target.value)}
+                    disabled={loading}
                   />
-                </SelectTrigger>
-                <SelectContent>
-                  {buyers.length === 0 && !loadingBuyers ? (
-                    <SelectItem value="" disabled>
-                      No active buyers found
-                    </SelectItem>
-                  ) : (
-                    buyers.map(buyer => (
-                      <SelectItem key={buyer.id} value={buyer.id}>
-                        {buyer.name} ({buyer.code})
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                The user will only have access to this buyer's portal and data.
-              </p>
+                  <p className="text-xs text-muted-foreground">
+                    A new buyer entity will be created and linked to this user.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label htmlFor="buyerId">Select Existing Buyer Company *</Label>
+                  <Select
+                    value={formData.buyerId}
+                    onValueChange={value => setFormData({ ...formData, buyerId: value })}
+                    disabled={loading || loadingBuyers}
+                  >
+                    <SelectTrigger>
+                      <SelectValue
+                        placeholder={loadingBuyers ? 'Loading buyers...' : 'Select a buyer company'}
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {buyers.length === 0 && !loadingBuyers ? (
+                        <SelectItem value="" disabled>
+                          No active buyers found
+                        </SelectItem>
+                      ) : (
+                        buyers.map(buyer => (
+                          <SelectItem key={buyer.id} value={buyer.id}>
+                            {buyer.name} ({buyer.code})
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
           )}
 
@@ -289,10 +351,15 @@ export function InviteUserDialog({ open, onOpenChange, onSuccess }: InviteUserDi
           </Button>
           <Button
             onClick={handleInvite}
-            disabled={loading || !formData.email.trim() || (isBuyerRole && !formData.buyerId)}
+            disabled={
+              loading ||
+              !formData.email.trim() ||
+              (isBuyerRole && createNewBuyer && !newBuyerName.trim()) ||
+              (isBuyerRole && !createNewBuyer && !formData.buyerId)
+            }
           >
             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Send Invitation
+            {isBuyerRole ? 'Invite Buyer' : 'Send Invitation'}
           </Button>
         </DialogFooter>
       </DialogContent>
