@@ -11,7 +11,7 @@
       <action application="set" data="effective_caller_id_number=${caller_id_number}"/>
       <action application="set" data="effective_caller_id_name=${caller_id_name}"/>
       <action application="log" data="INFO Routing to Anveo Direct: +1$1"/>
-      <action application="bridge" data="sofia/gateway/anveo-direct/1$1"/>
+      <action application="bridge" data="sofia/gateway/anveo/1$1"/>
     </condition>
   </extension>
 </include>
