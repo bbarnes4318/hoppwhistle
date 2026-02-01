@@ -101,8 +101,17 @@ export default function BuyerLayout({ children }: { children: React.ReactNode })
     // Check if user has BUYER role
     const checkAuth = async () => {
       try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          router.push('/login');
+          return;
+        }
+
         const response = await fetch('/api/auth/me', {
           credentials: 'include',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         });
 
         if (!response.ok) {
@@ -111,7 +120,7 @@ export default function BuyerLayout({ children }: { children: React.ReactNode })
         }
 
         const data = await response.json();
-        const roles = data?.data?.roles || [];
+        const roles = data?.roles || data?.data?.roles || [];
 
         // Allow BUYER role, or ADMIN/OWNER for testing
         if (roles.includes('BUYER') || roles.includes('ADMIN') || roles.includes('OWNER')) {
