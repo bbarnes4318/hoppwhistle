@@ -2,7 +2,7 @@
  * Provisioning service types and interfaces
  */
 
-export type Provider = 'local' | 'signalwire' | 'telnyx' | 'bandwidth' | 'clec';
+export type Provider = 'local' | 'signalwire' | 'telnyx' | 'bandwidth' | 'clec' | 'anveo';
 
 export type NumberStatus = 'available' | 'assigned' | 'released' | 'pending' | 'failed';
 
@@ -99,4 +99,3 @@ export interface ProvisioningAdapter {
    */
   isConfigured(): boolean;
 }
-

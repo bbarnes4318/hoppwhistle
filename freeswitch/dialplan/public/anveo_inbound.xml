@@ -1,0 +1,7 @@
+<include>
+  <extension name="public_anveo">
+    <condition field="${acl(${network_addr} anveo_direct)}" expression="true">
+      <action application="transfer" data="${destination_number} XML default"/>
+    </condition>
+  </extension>
+</include>

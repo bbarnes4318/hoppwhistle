@@ -2,6 +2,7 @@ import { logger } from '../../lib/logger.js';
 import { getPrismaClient } from '../../lib/prisma.js';
 import { auditCreate, auditUpdate } from '../audit.js';
 
+import { AnveoAdapter } from './adapters/anveo-adapter.js';
 import { BandwidthAdapter } from './adapters/bandwidth-adapter.js';
 import { LocalAdapter } from './adapters/local-adapter.js';
 import { SignalWireAdapter } from './adapters/signalwire-adapter.js';
@@ -18,7 +19,7 @@ import type {
 } from './types.js';
 
 // Default priority order for provider selection
-const DEFAULT_PROVIDER_ORDER: Provider[] = ['signalwire', 'telnyx', 'bandwidth'];
+const DEFAULT_PROVIDER_ORDER: Provider[] = ['anveo', 'signalwire', 'telnyx', 'bandwidth'];
 
 interface TenantMetadata {
   defaultProvider?: Provider;
@@ -67,6 +68,16 @@ export class ProvisioningService {
       }
     } catch (error) {
       logger.warn('Bandwidth adapter not configured, skipping');
+    }
+
+    // Anveo Direct - Primary carrier with STIR/SHAKEN
+    try {
+      const anveo = new AnveoAdapter();
+      if (anveo.isConfigured()) {
+        this.adapters.set('anveo', anveo);
+      }
+    } catch (error) {
+      logger.warn('Anveo adapter not configured, skipping');
     }
   }
 

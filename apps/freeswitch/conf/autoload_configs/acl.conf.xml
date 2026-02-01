@@ -1,5 +1,12 @@
 <configuration name="acl.conf" description="Network Lists">
   <network-lists>
+    <!-- Anveo Direct Signaling IPs -->
+    <list name="anveo_direct" default="deny">
+      <node type="allow" cidr="169.48.232.158/32"/>
+      <node type="allow" cidr="204.216.109.55/32"/>
+      <node type="allow" cidr="176.9.39.206/32"/>
+      <node type="allow" cidr="72.9.149.25/32"/>
+    </list>
     <list name="domains" default="deny">
       <!-- Allow Docker Network -->
       <node type="allow" cidr="172.18.0.0/16"/>

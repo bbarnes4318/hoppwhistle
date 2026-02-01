@@ -1,0 +1,7 @@
+<include>
+  <gateway name="anveo-direct">
+    <param name="proxy" value="sbc.anveo.com"/>
+    <param name="register" value="false"/>
+    <param name="caller-id-in-from" value="true"/>
+  </gateway>
+</include>
