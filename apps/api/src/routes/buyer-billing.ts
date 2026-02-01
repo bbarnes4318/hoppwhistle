@@ -645,6 +645,10 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
         maxConcurrency: t.maxConcurrency,
         acceptedStates: t.acceptedStates,
         isNational: t.acceptedStates.length === 0,
+        hoursOfOperation: t.hoursOfOperation,
+        timezone: t.timezone,
+        basePrice: Number(t.basePrice),
+        pricingRules: t.pricingRules,
         createdAt: t.createdAt.toISOString(),
         updatedAt: t.updatedAt.toISOString(),
       })),
@@ -667,6 +671,10 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       capPeriod?: 'HOUR' | 'DAY' | 'MONTH';
       maxConcurrency?: number;
       acceptedStates?: string[]; // Array of 2-letter state codes, empty = National (accepts all)
+      hoursOfOperation?: Record<string, Array<{ start: string; end: string }>>; // Split-shift schedule
+      timezone?: string; // e.g., 'America/New_York'
+      basePrice?: number; // Static bid price
+      pricingRules?: Array<{ field: string; op: string; val: unknown; adjustment: string }>;
     };
   }>('/api/v1/buyers/:buyerId/targets', async (request, reply) => {
     const user = (request as AuthRequest).user;
@@ -679,8 +687,20 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
     }
 
     const { buyerId } = request.params;
-    const { name, type, destination, priority, maxCap, capPeriod, maxConcurrency, acceptedStates } =
-      request.body;
+    const {
+      name,
+      type,
+      destination,
+      priority,
+      maxCap,
+      capPeriod,
+      maxConcurrency,
+      acceptedStates,
+      hoursOfOperation,
+      timezone,
+      basePrice,
+      pricingRules,
+    } = request.body;
 
     if (!name?.trim()) {
       void reply.code(400);
@@ -717,6 +737,10 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
         capPeriod: capPeriod ?? 'DAY',
         maxConcurrency: maxConcurrency ?? 10,
         acceptedStates: acceptedStates ?? [], // Empty = National (accepts all states)
+        hoursOfOperation: hoursOfOperation ?? null,
+        timezone: timezone ?? 'America/New_York',
+        basePrice: basePrice ?? 0,
+        pricingRules: pricingRules ?? null,
       },
     });
 
@@ -734,6 +758,10 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       maxConcurrency: target.maxConcurrency,
       acceptedStates: target.acceptedStates,
       isNational: target.acceptedStates.length === 0,
+      hoursOfOperation: target.hoursOfOperation,
+      timezone: target.timezone,
+      basePrice: Number(target.basePrice),
+      pricingRules: target.pricingRules,
       createdAt: target.createdAt.toISOString(),
       updatedAt: target.updatedAt.toISOString(),
     };
@@ -755,6 +783,10 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       capPeriod?: 'HOUR' | 'DAY' | 'MONTH';
       maxConcurrency?: number;
       acceptedStates?: string[]; // Array of 2-letter state codes, empty = National (accepts all)
+      hoursOfOperation?: Record<string, Array<{ start: string; end: string }>> | null; // Split-shift schedule
+      timezone?: string; // e.g., 'America/New_York'
+      basePrice?: number; // Static bid price
+      pricingRules?: Array<{ field: string; op: string; val: unknown; adjustment: string }> | null;
     };
   }>('/api/v1/buyers/:buyerId/targets/:targetId', async (request, reply) => {
     const user = (request as AuthRequest).user;
@@ -777,6 +809,10 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       capPeriod,
       maxConcurrency,
       acceptedStates,
+      hoursOfOperation,
+      timezone,
+      basePrice,
+      pricingRules,
     } = request.body;
 
     const prisma = (await import('../lib/prisma.js')).getPrismaClient();
@@ -809,6 +845,10 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
     if (capPeriod !== undefined) updateData.capPeriod = capPeriod;
     if (maxConcurrency !== undefined) updateData.maxConcurrency = maxConcurrency;
     if (acceptedStates !== undefined) updateData.acceptedStates = acceptedStates;
+    if (hoursOfOperation !== undefined) updateData.hoursOfOperation = hoursOfOperation;
+    if (timezone !== undefined) updateData.timezone = timezone;
+    if (basePrice !== undefined) updateData.basePrice = basePrice;
+    if (pricingRules !== undefined) updateData.pricingRules = pricingRules;
 
     const target = await prisma.buyerEndpoint.update({
       where: { id: targetId },
@@ -828,6 +868,10 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       maxConcurrency: target.maxConcurrency,
       acceptedStates: target.acceptedStates,
       isNational: target.acceptedStates.length === 0,
+      hoursOfOperation: target.hoursOfOperation,
+      timezone: target.timezone,
+      basePrice: Number(target.basePrice),
+      pricingRules: target.pricingRules,
       createdAt: target.createdAt.toISOString(),
       updatedAt: target.updatedAt.toISOString(),
     };

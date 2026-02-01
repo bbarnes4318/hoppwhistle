@@ -170,8 +170,12 @@ model User {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
+  // Buyer Portal: Link user to a Buyer entity for BUYER role
+  buyerId String?
+
   // Relations
   tenant              Tenant?            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  buyer               Buyer?             @relation(fields: [buyerId], references: [id])
   roles               UserRole[]
   auditLogs           AuditLog[]
   createdCalls        Call[]             @relation("CallCreator")
@@ -187,6 +191,7 @@ model User {
   @@index([tenantId, email])
   @@index([tenantId, status])
   @@index([googleId])
+  @@index([buyerId])
   @@map("users")
 }
 
@@ -207,6 +212,7 @@ enum RoleName {
   ANALYST
   PUBLISHER
   BUYER
+  AGENT
   READONLY
 }
 
@@ -546,6 +552,7 @@ model Buyer {
   // Relations
   tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   publisher    Publisher          @relation(fields: [publisherId], references: [id])
+  users        User[] // Users linked to this buyer (for Buyer Portal access)
   endpoints    BuyerEndpoint[]
   calls        Call[]
   transactions BuyerTransaction[]

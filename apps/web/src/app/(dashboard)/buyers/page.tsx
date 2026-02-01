@@ -149,6 +149,7 @@ interface BuyerStats {
   callsDay: number;
   callsMonth: number;
   callsTotal: number;
+  capConsumedToday?: number;
 }
 
 interface Target {

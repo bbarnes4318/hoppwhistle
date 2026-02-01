@@ -1,12 +1,19 @@
 'use client';
 
-import { Plus, Mail, Shield, Loader2 } from 'lucide-react';
+import { Plus, Mail, Shield, Loader2, Building2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { InviteUserDialog } from '@/components/users/invite-user-dialog';
 import { apiClient } from '@/lib/api';
 
@@ -17,6 +24,9 @@ interface User {
   lastName?: string;
   status: string;
   roles: string[];
+  buyerId?: string | null;
+  buyerName?: string | null;
+  buyerCode?: string | null;
   invitedAt: string;
   lastLoginAt: string | null;
 }
@@ -41,6 +51,18 @@ export default function UsersPage() {
       console.error('Failed to load users:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const getRoleBadgeVariant = (role: string) => {
+    switch (role.toLowerCase()) {
+      case 'admin':
+      case 'owner':
+        return 'default';
+      case 'buyer':
+        return 'secondary';
+      default:
+        return 'outline';
     }
   };
 
@@ -75,27 +97,52 @@ export default function UsersPage() {
                 <TableRow>
                   <TableHead>Email</TableHead>
                   <TableHead>Role</TableHead>
+                  <TableHead>Buyer Company</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Invited</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {users.map((user) => (
+                {users.map(user => (
                   <TableRow key={user.id}>
                     <TableCell className="flex items-center gap-2">
                       <Mail className="h-4 w-4 text-muted-foreground" />
-                      {user.email}
+                      <div>
+                        <div>{user.email}</div>
+                        {(user.firstName || user.lastName) && (
+                          <div className="text-xs text-muted-foreground">
+                            {[user.firstName, user.lastName].filter(Boolean).join(' ')}
+                          </div>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
-                        {user.roles.map((role) => (
-                          <Badge key={role} variant="outline" className="flex items-center gap-1 w-fit">
+                        {user.roles.map(role => (
+                          <Badge
+                            key={role}
+                            variant={getRoleBadgeVariant(role)}
+                            className="flex items-center gap-1 w-fit"
+                          >
                             <Shield className="h-3 w-3" />
-                            {role}
+                            {role.toUpperCase()}
                           </Badge>
                         ))}
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      {user.buyerId ? (
+                        <div className="flex items-center gap-1.5">
+                          <Building2 className="h-4 w-4 text-muted-foreground" />
+                          <div>
+                            <div className="text-sm font-medium">{user.buyerName}</div>
+                            <div className="text-xs text-muted-foreground">{user.buyerCode}</div>
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">—</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Badge variant={user.status === 'active' ? 'success' : 'warning'}>
@@ -124,4 +171,3 @@ export default function UsersPage() {
     </div>
   );
 }
-

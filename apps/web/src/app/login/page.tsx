@@ -23,7 +23,16 @@ interface AuthResponse {
     firstName: string | null;
     lastName: string | null;
     roles: string[];
+    buyerId?: string | null;
   };
+}
+
+// Determine redirect path based on user roles
+function getRedirectPath(roles: string[]): string {
+  if (roles.includes('BUYER')) {
+    return '/buyer/dashboard';
+  }
+  return '/dashboard';
 }
 
 interface PasswordStrength {
@@ -81,8 +90,12 @@ export default function AuthPage() {
         }
 
         // Store token
-        localStorage.setItem('token', (data as AuthResponse).token);
-        router.push('/dashboard');
+        const authData = data as AuthResponse;
+        localStorage.setItem('token', authData.token);
+
+        // Redirect based on role - BUYER goes to buyer portal
+        const redirectPath = getRedirectPath(authData.user.roles);
+        router.push(redirectPath);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Google authentication failed');
       } finally {
@@ -137,8 +150,12 @@ export default function AuthPage() {
         throw new Error(data.error?.message || 'Login failed');
       }
 
-      localStorage.setItem('token', (data as AuthResponse).token);
-      router.push('/dashboard');
+      const authData = data as AuthResponse;
+      localStorage.setItem('token', authData.token);
+
+      // Redirect based on role - BUYER goes to buyer portal
+      const redirectPath = getRedirectPath(authData.user.roles);
+      router.push(redirectPath);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
@@ -172,8 +189,12 @@ export default function AuthPage() {
         throw new Error(data.error?.message || 'Registration failed');
       }
 
-      localStorage.setItem('token', (data as AuthResponse).token);
-      router.push('/dashboard');
+      const authData = data as AuthResponse;
+      localStorage.setItem('token', authData.token);
+
+      // Redirect based on role - BUYER goes to buyer portal
+      const redirectPath = getRedirectPath(authData.user.roles);
+      router.push(redirectPath);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');
     } finally {

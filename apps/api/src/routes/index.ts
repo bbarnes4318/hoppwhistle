@@ -274,7 +274,7 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
       // Audit log
       const { auditUpdate } = await import('../services/audit.js');
       await auditUpdate(tenantId, 'PhoneNumber', numberId, existingNumber, updatedNumber, {
-        userId: (user as AuthenticatedUser)?.userId,
+        userId: user?.userId,
         ipAddress: request.ip,
         requestId: request.id,
       });
@@ -494,7 +494,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
           flowId: campaign.flowId,
         },
         {
-          userId: (user as AuthenticatedUser)?.userId,
+          userId: user?.userId,
           ipAddress: request.ip,
           requestId: request.id,
         }
@@ -737,7 +737,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
       // Audit log
       const { auditUpdate } = await import('../services/audit.js');
       await auditUpdate(tenantId, 'Campaign', campaignId, existingCampaign, updatedCampaign, {
-        userId: (user as AuthenticatedUser)?.userId,
+        userId: user?.userId,
         ipAddress: request.ip,
         requestId: request.id,
       });
@@ -825,7 +825,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
           duplicate.id,
           { duplicatedFrom: campaignId, name: duplicate.name },
           {
-            userId: (user as AuthenticatedUser)?.userId,
+            userId: user?.userId,
             ipAddress: request.ip,
             requestId: request.id,
           }
@@ -892,7 +892,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
         // Audit log
         const { auditDelete } = await import('../services/audit.js');
         await auditDelete(tenantId, 'Campaign', campaignId, campaign, {
-          userId: (user as AuthenticatedUser)?.userId,
+          userId: user?.userId,
           ipAddress: request.ip,
           requestId: request.id,
         });
@@ -1196,7 +1196,7 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
           status: publisher.status,
         },
         {
-          userId: (user as AuthenticatedUser)?.userId,
+          userId: user?.userId,
           ipAddress: request.ip,
           requestId: request.id,
         }
@@ -1282,7 +1282,7 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
       // Audit log
       const { auditUpdate } = await import('../services/audit.js');
       await auditUpdate(tenantId, 'Publisher', publisher.id, existingPublisher, publisher, {
-        userId: (user as AuthenticatedUser)?.userId,
+        userId: user?.userId,
         ipAddress: request.ip,
         requestId: request.id,
       });
@@ -1344,7 +1344,7 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
         // Audit log
         const { auditDelete } = await import('../services/audit.js');
         await auditDelete(tenantId, 'Publisher', publisher.id, publisher, {
-          userId: (user as AuthenticatedUser)?.userId,
+          userId: user?.userId,
           ipAddress: request.ip,
           requestId: request.id,
         });
@@ -1926,7 +1926,7 @@ export async function registerWebhookRoutes(fastify: FastifyInstance) {
         webhookId,
         { deleted: true, url: webhook.url },
         {
-          userId: (user as AuthenticatedUser)?.userId,
+          userId: user?.userId,
           ipAddress: request.ip,
           requestId: request.id,
         }
@@ -1971,6 +1971,14 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
             status: true,
             createdAt: true,
             lastLoginAt: true,
+            buyerId: true,
+            buyer: {
+              select: {
+                id: true,
+                name: true,
+                code: true,
+              },
+            },
             roles: {
               select: {
                 role: {
@@ -1993,6 +2001,9 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
           lastName: u.lastName,
           status: u.status.toLowerCase(),
           roles: u.roles.map(ur => ur.role.name.toLowerCase()),
+          buyerId: u.buyerId,
+          buyerName: u.buyer?.name || null,
+          buyerCode: u.buyer?.code || null,
           invitedAt: u.createdAt.toISOString(),
           lastLoginAt: u.lastLoginAt?.toISOString() || null,
         })),
@@ -2011,6 +2022,8 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
       email: string;
       firstName?: string;
       lastName?: string;
+      role?: string;
+      buyerId?: string;
       roleIds?: string[];
     };
   }>('/api/v1/users/invite', async (request, reply) => {
@@ -2039,13 +2052,62 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
 
     const prisma = (await import('../lib/prisma.js')).getPrismaClient();
 
+    // Validate role
+    const requestedRole = body.role?.toUpperCase() || 'ANALYST';
+    const validRoles = ['ADMIN', 'OWNER', 'ANALYST', 'AGENT', 'BUYER'];
+    if (!validRoles.includes(requestedRole)) {
+      void reply.code(400);
+      return {
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: `Invalid role. Must be one of: ${validRoles.join(', ')}`,
+        },
+      };
+    }
+
+    // BUYER role requires buyerId
+    if (requestedRole === 'BUYER' && !body.buyerId) {
+      void reply.code(400);
+      return { error: { code: 'VALIDATION_ERROR', message: 'buyerId is required for BUYER role' } };
+    }
+
+    // Validate buyerId exists if provided
+    let buyerRecord = null;
+    if (body.buyerId) {
+      buyerRecord = await prisma.buyer.findUnique({
+        where: { id: body.buyerId },
+      });
+      if (!buyerRecord) {
+        void reply.code(400);
+        return {
+          error: { code: 'VALIDATION_ERROR', message: 'Invalid buyerId - buyer not found' },
+        };
+      }
+      // Ensure the buyer belongs to the same tenant
+      if (buyerRecord.tenantId !== tenantId) {
+        void reply.code(400);
+        return {
+          error: { code: 'VALIDATION_ERROR', message: 'Buyer does not belong to your tenant' },
+        };
+      }
+    }
+
+    // Constraint: Cannot have ADMIN role with buyerId (internal vs external user)
+    if ((requestedRole === 'ADMIN' || requestedRole === 'OWNER') && body.buyerId) {
+      void reply.code(400);
+      return {
+        error: {
+          code: 'VALIDATION_ERROR',
+          message:
+            'ADMIN and OWNER roles cannot be assigned to external buyer users. Use BUYER role instead.',
+        },
+      };
+    }
+
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
       where: {
-        tenantId_email: {
-          tenantId,
-          email: body.email.toLowerCase().trim(),
-        },
+        email: body.email.toLowerCase().trim(),
       },
     });
 
@@ -2060,34 +2122,19 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
     const { hash } = await import('bcryptjs');
     const passwordHash = await hash(tempPassword, 10);
 
-    // Get default role if no roles specified (or use ANALYST as default)
-    let roleIds = body.roleIds;
-    if (!roleIds || roleIds.length === 0) {
-      const defaultRole = await prisma.role.findUnique({
-        where: { name: 'ANALYST' },
-      });
-      if (defaultRole) {
-        roleIds = [defaultRole.id];
-      } else {
-        // If ANALYST doesn't exist, try ADMIN, then get first available role
-        const adminRole = await prisma.role.findUnique({
-          where: { name: 'ADMIN' },
-        });
-        if (adminRole) {
-          roleIds = [adminRole.id];
-        } else {
-          const firstRole = await prisma.role.findFirst();
-          if (firstRole) {
-            roleIds = [firstRole.id];
-          } else {
-            void reply.code(400);
-            return { error: { code: 'NO_ROLES', message: 'No roles available in system' } };
-          }
-        }
-      }
+    // Get role ID for the requested role
+    const roleRecord = await prisma.role.findUnique({
+      where: { name: requestedRole as any },
+    });
+
+    if (!roleRecord) {
+      void reply.code(400);
+      return {
+        error: { code: 'ROLE_NOT_FOUND', message: `Role ${requestedRole} not found in system` },
+      };
     }
 
-    // Create user
+    // Create user with role and optional buyerId
     const newUser = await prisma.user.create({
       data: {
         tenantId,
@@ -2096,14 +2143,17 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
         firstName: body.firstName || null,
         lastName: body.lastName || null,
         status: 'ACTIVE',
+        buyerId: body.buyerId || null,
         metadata: {
           tempPassword: true, // Flag that password needs to be changed
-          invitedBy: (user as AuthenticatedUser)?.userId,
+          invitedBy: user?.userId,
         },
         roles: {
-          create: roleIds.map(roleId => ({
-            roleId,
-          })),
+          create: [
+            {
+              roleId: roleRecord.id,
+            },
+          ],
         },
       },
       include: {
@@ -2112,6 +2162,7 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
             role: true,
           },
         },
+        buyer: true,
       },
     });
 
@@ -2126,9 +2177,11 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
         firstName: newUser.firstName,
         lastName: newUser.lastName,
         roles: newUser.roles.map(r => r.role.name),
+        buyerId: newUser.buyerId,
+        buyerName: newUser.buyer?.name || null,
       },
       {
-        userId: (user as AuthenticatedUser)?.userId,
+        userId: user?.userId,
         ipAddress: request.ip,
         requestId: request.id,
       }
@@ -2145,6 +2198,8 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
       lastName: newUser.lastName,
       status: newUser.status.toLowerCase(),
       roles: newUser.roles.map(r => r.role.name.toLowerCase()),
+      buyerId: newUser.buyerId,
+      buyerName: newUser.buyer?.name || null,
       createdAt: newUser.createdAt.toISOString(),
       // In production, don't return temp password - send via email
       tempPassword: tempPassword, // Only for development/testing
