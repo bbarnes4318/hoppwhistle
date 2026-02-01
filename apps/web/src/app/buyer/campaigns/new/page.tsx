@@ -13,7 +13,7 @@ export default function NewCampaignPage() {
   useEffect(() => {
     const fetchBuyerId = async () => {
       try {
-        const response = await fetch('/api/v1/auth/me', {
+        const response = await fetch('/api/auth/me', {
           credentials: 'include',
         });
         if (response.ok) {

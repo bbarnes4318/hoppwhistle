@@ -101,7 +101,7 @@ export default function BuyerLayout({ children }: { children: React.ReactNode })
     // Check if user has BUYER role
     const checkAuth = async () => {
       try {
-        const response = await fetch('/api/v1/auth/me', {
+        const response = await fetch('/api/auth/me', {
           credentials: 'include',
         });
 
