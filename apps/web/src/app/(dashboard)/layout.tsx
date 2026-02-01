@@ -5,7 +5,6 @@ import { usePathname } from 'next/navigation';
 import { Header } from '@/components/layout/header';
 import { Sidebar } from '@/components/layout/sidebar';
 import { AgentPhonePanel, PhoneProvider } from '@/components/phone';
-import { cn } from '@/lib/utils';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }): JSX.Element {
   const pathname = usePathname();
@@ -28,16 +27,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   }
 
-  // Standard dashboard layout (footer removed, legal links moved to settings)
+  // Standard dashboard layout with proper scrolling
   return (
     <PhoneProvider>
-      <div className="flex h-screen overflow-hidden">
+      <div className="flex min-h-screen">
         <Sidebar />
-        <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="flex flex-1 flex-col min-h-screen">
           <Header />
-          <main className="flex-1 overflow-auto bg-background p-6">
-            <div className="h-full overflow-auto">{children}</div>
-          </main>
+          <main className="flex-1 overflow-y-auto bg-background p-6 pb-20">{children}</main>
           {/* Footer removed - legal links accessible via Settings page */}
         </div>
 

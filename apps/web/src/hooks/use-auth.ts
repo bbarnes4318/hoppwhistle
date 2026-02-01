@@ -15,10 +15,15 @@ interface UserData {
 interface UseAuthReturn {
   user: UserData | null;
   userRoles: string[];
+  /** User has BUYER role (may also have other roles) */
   isBuyer: boolean;
+  /** User is ONLY a buyer - no ADMIN/OWNER privileges */
+  isBuyerOnly: boolean;
   isAdmin: boolean;
   isOwner: boolean;
   isAgent: boolean;
+  /** User has ADMIN or OWNER (full access) */
+  hasFullAccess: boolean;
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
@@ -81,13 +86,27 @@ export function useAuth(): UseAuthReturn {
 
   const userRoles = user?.roles || [];
 
+  // Role checks
+  const isAdmin = userRoles.includes('ADMIN');
+  const isOwner = userRoles.includes('OWNER');
+  const isBuyer = userRoles.includes('BUYER');
+  const isAgent = userRoles.includes('AGENT');
+
+  // CRITICAL: hasFullAccess means ADMIN or OWNER - they see EVERYTHING
+  const hasFullAccess = isAdmin || isOwner;
+
+  // isBuyerOnly = has BUYER role but NOT admin/owner (restricted view)
+  const isBuyerOnly = isBuyer && !hasFullAccess;
+
   return {
     user,
     userRoles,
-    isBuyer: userRoles.includes('BUYER'),
-    isAdmin: userRoles.includes('ADMIN'),
-    isOwner: userRoles.includes('OWNER'),
-    isAgent: userRoles.includes('AGENT'),
+    isBuyer,
+    isBuyerOnly,
+    isAdmin,
+    isOwner,
+    isAgent,
+    hasFullAccess,
     loading,
     error,
     refetch: fetchUser,

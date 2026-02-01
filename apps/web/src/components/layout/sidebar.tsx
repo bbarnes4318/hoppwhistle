@@ -24,18 +24,16 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/use-auth';
+import { cn } from '@/lib/utils';
 
 interface NavItem {
   name: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
   title?: string;
-  // If set, only these roles can see this item
-  roles?: string[];
-  // If set, hide from these roles
-  hideFromRoles?: string[];
+  // If set, hide from BUYER-ONLY users (those without ADMIN/OWNER)
+  hideFromBuyerOnly?: boolean;
 }
 
 // Main navigation items
@@ -51,14 +49,14 @@ const navigation: NavItem[] = [
     name: 'Phone',
     href: '/phone',
     icon: Phone,
-    hideFromRoles: ['BUYER'],
+    hideFromBuyerOnly: true,
   },
   {
     name: 'Call Center',
     href: '/call-center',
     icon: Headphones,
     title: 'Integrated dialer with scripting & quoting',
-    hideFromRoles: ['BUYER'],
+    hideFromBuyerOnly: true,
   },
   { name: 'Numbers', href: '/numbers', icon: PhoneCall },
   { name: 'Campaigns', href: '/campaigns', icon: Megaphone },
@@ -75,14 +73,14 @@ const navigation: NavItem[] = [
     href: '/buyers',
     icon: Wallet,
     title: 'Manage buyers & billing wallets',
-    hideFromRoles: ['BUYER'], // Buyers shouldn't see buyer management
+    hideFromBuyerOnly: true,
   },
   {
     name: 'Retention',
     href: '/retention',
     icon: ClipboardCheck,
     title: 'Policy onboarding & retention queue',
-    hideFromRoles: ['BUYER'],
+    hideFromBuyerOnly: true,
   },
   { name: 'Billing', href: '/billing', icon: Receipt },
   {
@@ -90,7 +88,7 @@ const navigation: NavItem[] = [
     href: '/payroll',
     icon: Clock,
     title: 'Track hours & view earnings',
-    hideFromRoles: ['BUYER'],
+    hideFromBuyerOnly: true,
   },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
@@ -99,7 +97,7 @@ const toolsNavigation: NavItem[] = [
   { name: 'Recording Analyzer', href: '/tools/recording-analyzer', icon: AudioLines },
 ];
 
-// Admin section - hidden from BUYER role entirely
+// Admin section - only visible to ADMIN/OWNER
 const adminNavigation: NavItem[] = [
   { name: 'Users', href: '/settings/users', icon: Users },
   { name: 'Webhooks', href: '/settings/webhooks', icon: FileText },
@@ -119,30 +117,28 @@ const adminNavigation: NavItem[] = [
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { userRoles, isBuyer, loading } = useAuth();
+  const { hasFullAccess, isBuyerOnly, loading } = useAuth();
 
-  // Filter navigation items based on user roles
+  // Filter navigation items based on user access level
   const filterNavItems = (items: NavItem[]): NavItem[] => {
-    return items.filter(item => {
-      // Check if user has required roles (if specified)
-      if (item.roles && item.roles.length > 0) {
-        const hasRequiredRole = item.roles.some(r => userRoles.includes(r));
-        if (!hasRequiredRole) return false;
-      }
+    // ADMIN/OWNER sees EVERYTHING - no filtering
+    if (hasFullAccess) {
+      return items;
+    }
 
-      // Check if user is in hideFromRoles
-      if (item.hideFromRoles && item.hideFromRoles.length > 0) {
-        const shouldHide = item.hideFromRoles.some(r => userRoles.includes(r));
-        if (shouldHide) return false;
-      }
+    // Buyer-only users: filter out items marked hideFromBuyerOnly
+    if (isBuyerOnly) {
+      return items.filter(item => !item.hideFromBuyerOnly);
+    }
 
-      return true;
-    });
+    // Default: show all
+    return items;
   };
 
   const visibleNavigation = filterNavItems(navigation);
   const visibleToolsNav = filterNavItems(toolsNavigation);
-  const visibleAdminNav = isBuyer ? [] : filterNavItems(adminNavigation);
+  // Admin section: only show to users with full access (ADMIN/OWNER)
+  const visibleAdminNav = hasFullAccess ? adminNavigation : [];
 
   return (
     <div className="flex h-full w-64 flex-col border-r bg-card">
@@ -157,8 +153,8 @@ export function Sidebar() {
         />
       </div>
       <nav className="flex-1 space-y-1 overflow-y-auto p-4">
-        {/* Buyer Portal indicator */}
-        {isBuyer && (
+        {/* Buyer Portal indicator - only for buyer-only users */}
+        {isBuyerOnly && (
           <div className="mb-4 px-3 py-2 text-xs font-semibold uppercase text-primary bg-primary/10 rounded-md text-center">
             Buyer Portal
           </div>
@@ -211,7 +207,7 @@ export function Sidebar() {
           </div>
         )}
 
-        {/* Admin Section - Hidden for BUYER role */}
+        {/* Admin Section - Only for ADMIN/OWNER */}
         {visibleAdminNav.length > 0 && (
           <div className="pt-4">
             <div className="px-3 py-2 text-xs font-semibold uppercase text-muted-foreground">
