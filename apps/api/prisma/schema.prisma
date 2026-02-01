@@ -531,7 +531,7 @@ enum PublisherStatus {
 model Buyer {
   id               String           @id @default(uuid())
   tenantId         String
-  publisherId      String
+  publisherId      String? // Optional: Publisher that manages this buyer (if any)
   name             String
   code             String // Internal buyer code
   subId            String? // External sub-identifier
@@ -551,7 +551,7 @@ model Buyer {
 
   // Relations
   tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  publisher    Publisher          @relation(fields: [publisherId], references: [id])
+  publisher    Publisher?         @relation(fields: [publisherId], references: [id])
   users        User[] // Users linked to this buyer (for Buyer Portal access)
   endpoints    BuyerEndpoint[]
   calls        Call[]
@@ -559,7 +559,7 @@ model Buyer {
   stats        BuyerStats?
   bids         BuyerBid[]
 
-  @@unique([tenantId, publisherId, code])
+  @@unique([tenantId, code]) // Simplified: buyer code unique per tenant
   @@index([tenantId])
   @@index([publisherId])
   @@index([billingType])
