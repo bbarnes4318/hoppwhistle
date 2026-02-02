@@ -1,0 +1,22 @@
+<include>
+  <context name="default">
+    <extension name="outbound-to-anveo">
+      <condition field="destination_number" expression="^(\d{10,11})$">
+        <action application="log" data="INFO Outbound call to ${destination_number} via Anveo"/>
+        <action application="set" data="bypass_media=false"/>
+        <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
+        <action application="set" data="origination_caller_id_number=18652809892"/>
+        <action application="set" data="origination_caller_id_name=Hopwhistle"/>
+        <action application="set" data="effective_caller_id_number=18652809892"/>
+        <action application="set" data="effective_caller_id_name=Hopwhistle"/>
+        <action application="set" data="hangup_after_bridge=true"/>
+        <action application="bridge" data="sofia/gateway/anveo/0123451${destination_number}"/>
+      </condition>
+    </extension>
+    <extension name="unmatched">
+      <condition field="destination_number" expression="^.+$">
+        <action application="hangup" data="NO_ROUTE_DESTINATION"/>
+      </condition>
+    </extension>
+  </context>
+</include>
