@@ -1989,3 +1989,71 @@ model BuyerBid {
   @@index([buyerId])
   @@map("buyer_bids")
 }
+
+// ============================================================================
+// Customer Intake / Prospect Data (for Call Center Screen Pop)
+// ============================================================================
+
+model ProspectIntake {
+  id        String   @id @default(uuid())
+  tenantId  String   @default("default-tenant-id")
+
+  // Phone number - primary lookup key
+  phone     String   // E.164 or formatted, normalized on insert
+
+  // Client Info
+  firstName  String?
+  lastName   String?
+  email      String?
+  dob        DateTime? // Date of Birth
+  gender     String?
+
+  // Address
+  street     String?
+  city       String?
+  state      String?  // 2-letter code
+  zip        String?
+
+  // Policy Details
+  carrier       String?
+  policyType    String?
+  coverageAmount Decimal? @db.Decimal(10, 2)
+  monthlyPremium Decimal? @db.Decimal(10, 2)
+
+  // Beneficiaries (stored as JSON array)
+  beneficiaries Json?  // [{name, relationship, percentage}]
+
+  // Underwriting & Billing
+  ssPaidOnDate   String?  // e.g., "1st", "15th"
+  payDay         String?  // e.g., "1st", "15th"
+  bankDraftDate  String?
+
+  // Banking (masked/encrypted in practice)
+  bankName       String?
+  accountType    String?  // "checking" | "savings"
+  routingNumber  String?  // Should be encrypted in production
+  accountNumber  String?  // Should be encrypted in production
+
+  // Metadata
+  source       String?  // e.g., "intake_form", "api", "import"
+  agentId      String?  // User ID of agent who created it
+  status       ProspectIntakeStatus @default(ACTIVE)
+  notes        String?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([tenantId, phone]) // One intake per phone per tenant
+  @@index([phone])
+  @@index([tenantId])
+  @@index([tenantId, phone])
+  @@index([lastName])
+  @@index([createdAt])
+  @@map("prospect_intakes")
+}
+
+enum ProspectIntakeStatus {
+  ACTIVE
+  ARCHIVED
+  CONVERTED
+}

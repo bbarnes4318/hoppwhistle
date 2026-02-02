@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  CheckCircle2,
   ChevronDown,
   ChevronUp,
   Clock,
@@ -12,10 +13,11 @@ import {
   User,
   X,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 
 import { AgentStatusSelector } from './agent-status-selector';
 import { CallControls } from './call-controls';
+import { CustomerDetailsPanel } from './CustomerDetailsPanel';
 import { DialPad } from './dial-pad';
 import { IncomingCallModal } from './incoming-call-modal';
 import { usePhone, type AgentStatus, type CallInfo } from './phone-provider';
@@ -24,6 +26,7 @@ import { ScreenPopSettings } from './screen-pop-settings';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { useCustomerIntake } from '@/contexts/customer-intake-context';
 import { cn } from '@/lib/utils';
 
 // ============================================================================
@@ -37,13 +40,112 @@ export function AgentPhonePanel(): JSX.Element {
     isPhonePanelOpen,
     closePhonePanel,
     togglePhonePanel,
+    openPhonePanel,
+    setDialerNumber,
     error,
     clearError,
   } = usePhone();
 
+  // Customer Intake Context - shares data with CustomerIntakeForm
+  const { formData } = useCustomerIntake();
+
   const [isExpanded, setIsExpanded] = useState(true);
   const [activeTab, setActiveTab] = useState<'dialpad' | 'history' | 'settings'>('dialpad');
   const [showSettings, setShowSettings] = useState(false);
+  const [customerDetailsExpanded, setCustomerDetailsExpanded] = useState(false);
+  const [intakeMatchDetected, setIntakeMatchDetected] = useState(false);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Helper: Extract digits from phone number
+  // ─────────────────────────────────────────────────────────────────────────
+  const extractDigits = (phone: string): string => phone.replace(/\D/g, '');
+
+  // Check if intake form phone is valid (10 digits)
+  const intakePhoneDigits = useMemo(() => extractDigits(formData?.phone || ''), [formData?.phone]);
+  const isIntakePhoneValid = intakePhoneDigits.length === 10;
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Auto-Open on Valid Phone: When form phone reaches 10 digits, open panel
+  // ─────────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (isIntakePhoneValid && !isPhonePanelOpen) {
+      // Auto-open the phone panel when a valid phone number is entered
+      openPhonePanel?.();
+      // Pre-fill the dialer with the intake phone number
+      setDialerNumber?.(intakePhoneDigits);
+    }
+  }, [isIntakePhoneValid, isPhonePanelOpen, openPhonePanel, setDialerNumber, intakePhoneDigits]);
+
+  // Incoming Call Matching: Check if incoming number matches stored prospect data
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // State for API-fetched prospect data
+  const [matchedProspect, setMatchedProspect] = useState<{
+    id: string;
+    firstName?: string;
+    lastName?: string;
+    phone: string;
+    email?: string;
+    dob?: string;
+    city?: string;
+    state?: string;
+    carrier?: string;
+    policyType?: string;
+    coverageAmount?: number;
+    monthlyPremium?: number;
+    beneficiaries?: Array<{ name: string; relationship: string }>;
+    bankName?: string;
+    accountType?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    const lookupProspect = async (phoneNumber: string) => {
+      const digits = extractDigits(phoneNumber);
+      if (digits.length < 10) return;
+
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+        const response = await fetch(`${apiUrl}/api/v1/prospects/by-phone/${digits}`);
+        const data = await response.json();
+
+        if (data.found && data.prospect) {
+          console.log('[AgentPhonePanel] Matched prospect:', data.prospect);
+          setMatchedProspect(data.prospect);
+          setIntakeMatchDetected(true);
+          setCustomerDetailsExpanded(true);
+          setIsExpanded(true);
+          openPhonePanel?.();
+        } else {
+          // No database match, check context as fallback
+          const incomingLast10 = digits.slice(-10);
+          if (isIntakePhoneValid && incomingLast10 === intakePhoneDigits) {
+            setIntakeMatchDetected(true);
+            setCustomerDetailsExpanded(true);
+            setIsExpanded(true);
+            openPhonePanel?.();
+          }
+        }
+      } catch (error) {
+        console.error('[AgentPhonePanel] Prospect lookup error:', error);
+        // Fallback to context matching on API error
+        const incomingLast10 = digits.slice(-10);
+        if (isIntakePhoneValid && incomingLast10 === intakePhoneDigits) {
+          setIntakeMatchDetected(true);
+          setCustomerDetailsExpanded(true);
+          setIsExpanded(true);
+          openPhonePanel?.();
+        }
+      }
+    };
+
+    if (currentCall?.state === 'ringing' && currentCall.direction === 'inbound') {
+      void lookupProspect(currentCall.phoneNumber || '');
+    } else if (!currentCall || currentCall.state === 'ended') {
+      // Reset match detection when call ends
+      setIntakeMatchDetected(false);
+      setMatchedProspect(null);
+    }
+  }, [currentCall, intakePhoneDigits, isIntakePhoneValid, openPhonePanel]);
 
   // Format duration as MM:SS
   const formatDuration = (seconds: number): string => {
@@ -198,6 +300,78 @@ export function AgentPhonePanel(): JSX.Element {
               </button>
             </div>
           </div>
+        )}
+
+        {/* Intake Match Badge */}
+        {intakeMatchDetected && (
+          <div className="px-4 py-2 bg-emerald-500/10 border-b border-emerald-500/20">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <span className="text-emerald-400 text-xs font-medium">
+                {matchedProspect ? 'Matched to Database Record' : 'Matched to Intake Form'}
+              </span>
+              {matchedProspect && (
+                <span className="text-emerald-400/70 text-xs">
+                  ({matchedProspect.firstName} {matchedProspect.lastName})
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Customer Details Panel - Shows API prospect data or context form data */}
+        {(matchedProspect ||
+          (formData && (formData.firstName || formData.lastName || formData.phone))) && (
+          <CustomerDetailsPanel
+            formData={
+              matchedProspect
+                ? {
+                    firstName: matchedProspect.firstName || '',
+                    lastName: matchedProspect.lastName || '',
+                    phone: matchedProspect.phone || '',
+                    email: matchedProspect.email || '',
+                    dateOfBirth: matchedProspect.dob
+                      ? new Date(matchedProspect.dob).toISOString().split('T')[0]
+                      : '',
+                    city: matchedProspect.city || '',
+                    state: matchedProspect.state || '',
+                    carrier: matchedProspect.carrier || '',
+                    policyType: matchedProspect.policyType || '',
+                    coverage: matchedProspect.coverageAmount || 0,
+                    monthlyPremium: matchedProspect.monthlyPremium || 0,
+                    bankName: matchedProspect.bankName || '',
+                    accountType: matchedProspect.accountType || '',
+                    primaryBeneficiaries: (matchedProspect.beneficiaries || []).map((b, i) => ({
+                      id: `api-${i}`,
+                      name: b.name,
+                      relationship: b.relationship as
+                        | 'spouse'
+                        | 'child'
+                        | 'parent'
+                        | 'sibling'
+                        | 'other',
+                    })),
+                    // Fill in other defaults for context data shape
+                    stateOfBirth: '',
+                    address: '',
+                    zip: '',
+                    tobaccoUser: false,
+                    ssPayment: false,
+                    ssPayDay: '',
+                    firstPayDay: 0,
+                    futurePayDay: 0,
+                    secondaryBeneficiaryName: '',
+                    secondaryBeneficiaryRelationship: 'spouse',
+                    nameOnAccount: '',
+                    routingNumber: '',
+                    accountNumber: '',
+                    ssn: '',
+                  }
+                : formData
+            }
+            isExpanded={customerDetailsExpanded}
+            onToggle={() => setCustomerDetailsExpanded(!customerDetailsExpanded)}
+          />
         )}
 
         {isExpanded && (

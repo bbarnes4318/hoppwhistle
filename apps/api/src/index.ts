@@ -300,6 +300,10 @@ async function buildServer() {
   const { registerPostRoutes } = await import('./routes/post.js');
   await server.register(registerPostRoutes);
 
+  // Register Prospect Intake routes (customer intake form data)
+  const { registerProspectIntakeRoutes } = await import('./routes/prospect-intake.js');
+  await server.register(registerProspectIntakeRoutes);
+
   // Start Fronter Bot socket server (handles outbound call socket connections)
   const { fronterBotService } = await import('./services/fronter-bot.js');
   await fronterBotService.start();

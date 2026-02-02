@@ -1,7 +1,7 @@
 'use client';
 
 import { Delete, Phone } from 'lucide-react';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { usePhone } from './phone-provider';
 
@@ -45,9 +45,27 @@ const dtmfFrequencies: Record<string, [number, number]> = {
 };
 
 export function DialPad(): JSX.Element {
-  const { makeCall, sendDTMF, currentCall, isConnecting } = usePhone();
+  const { makeCall, sendDTMF, currentCall, isConnecting, dialerNumber, setDialerNumber } =
+    usePhone();
   const [phoneNumber, setPhoneNumber] = useState('');
   const audioContextRef = useRef<AudioContext | null>(null);
+
+  // Sync with dialerNumber from context (for intake form pre-fill)
+  useEffect(() => {
+    if (dialerNumber && dialerNumber !== phoneNumber) {
+      setPhoneNumber(dialerNumber);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dialerNumber]);
+
+  // Update context when local phone number changes
+  const updatePhoneNumber = useCallback(
+    (value: string) => {
+      setPhoneNumber(value);
+      setDialerNumber(value);
+    },
+    [setDialerNumber]
+  );
 
   // Format phone number for display
   const formatPhoneNumber = (number: string): string => {
@@ -113,24 +131,24 @@ export function DialPad(): JSX.Element {
         sendDTMF(digit);
       } else {
         // Add to phone number
-        setPhoneNumber(prev => prev + digit);
+        updatePhoneNumber(phoneNumber + digit);
       }
       playDTMFTone(digit);
     },
-    [currentCall, sendDTMF, playDTMFTone]
+    [currentCall, sendDTMF, playDTMFTone, phoneNumber, updatePhoneNumber]
   );
 
   // Handle backspace
   const handleBackspace = useCallback(() => {
-    setPhoneNumber(prev => prev.slice(0, -1));
-  }, []);
+    updatePhoneNumber(phoneNumber.slice(0, -1));
+  }, [phoneNumber, updatePhoneNumber]);
 
   // Handle call
   const handleCall = useCallback(() => {
     if (!phoneNumber || isConnecting) return;
     void makeCall(phoneNumber);
-    setPhoneNumber('');
-  }, [phoneNumber, isConnecting, makeCall]);
+    updatePhoneNumber('');
+  }, [phoneNumber, isConnecting, makeCall, updatePhoneNumber]);
 
   // Handle key events
   const handleKeyDown = useCallback(
@@ -158,7 +176,7 @@ export function DialPad(): JSX.Element {
         <input
           type="text"
           value={phoneNumber}
-          onChange={e => setPhoneNumber(e.target.value.replace(/[^0-9+*#()-\s]/g, ''))}
+          onChange={e => updatePhoneNumber(e.target.value.replace(/[^0-9+*#()-\s]/g, ''))}
           placeholder="Enter number..."
           className={cn(
             'flex-1 bg-transparent text-2xl font-mono text-white',

@@ -87,12 +87,14 @@ export interface PhoneContextType {
   screenPopFields: ScreenPopField[];
   error: string | null;
   isRegistered: boolean; // SIP Registration status
+  dialerNumber: string; // Pre-filled dialer number
 
   // Actions
   setAgentStatus: (status: AgentStatus) => void;
   openPhonePanel: () => void;
   closePhonePanel: () => void;
   togglePhonePanel: () => void;
+  setDialerNumber: (number: string) => void; // Pre-fill dialer
   makeCall: (phoneNumber: string) => Promise<void>;
   answerCall: () => Promise<void>;
   hangupCall: () => Promise<void>;
@@ -211,6 +213,7 @@ export function PhoneProvider({
     return defaultScreenPopFields;
   });
   const [error, setError] = useState<string | null>(null);
+  const [dialerNumber, setDialerNumber] = useState<string>('');
 
   // Refs
 
@@ -744,10 +747,12 @@ export function PhoneProvider({
     screenPopFields,
     error,
     isRegistered, // Exported for UI
+    dialerNumber, // Pre-filled dialer number
     setAgentStatus,
     openPhonePanel,
     closePhonePanel,
     togglePhonePanel,
+    setDialerNumber, // Pre-fill dialer action
     makeCall,
     answerCall,
     hangupCall,
