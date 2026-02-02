@@ -189,6 +189,8 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       const prisma = getPrismaClient();
 
       // Create call in PostgreSQL
+      // Skip createdById for demo/unauthenticated requests to avoid FK constraint issues
+      const isAuthenticatedUser = userId !== 'demo-agent';
       const call = await prisma.call.create({
         data: {
           tenantId,
@@ -196,7 +198,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
           toNumber: phoneNumber,
           direction: 'OUTBOUND',
           status: 'INITIATED',
-          createdById: userId,
+          ...(isAuthenticatedUser ? { createdById: userId } : {}),
           campaignId: campaignId ?? null,
           metadata: {
             callerId: callerId ?? null,
