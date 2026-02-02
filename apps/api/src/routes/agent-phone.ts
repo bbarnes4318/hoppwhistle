@@ -62,7 +62,7 @@ interface UserInfo {
 // Helper to get user from request
 function getUser(request: FastifyRequest): UserInfo {
   const user = (request as FastifyRequest & { user?: UserInfo }).user;
-  return user ?? { userId: 'demo-agent', tenantId: 'demo-tenant' };
+  return user ?? { userId: 'demo-agent', tenantId: 'default-tenant-id' };
 }
 
 // Redis key prefixes for agent data
