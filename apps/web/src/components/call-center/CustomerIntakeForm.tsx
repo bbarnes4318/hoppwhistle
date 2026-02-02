@@ -142,6 +142,20 @@ export function CustomerIntakeForm(): JSX.Element {
           percentage: 100 / formData.primaryBeneficiaries.length,
         }));
 
+      // Try to get TrustedForm certificate URL from hidden input
+      let trustedFormCertUrl: string | undefined;
+      try {
+        const tfInput = document.querySelector<HTMLInputElement>(
+          'input[name="xxTrustedFormCertUrl"]'
+        );
+        if (tfInput?.value) {
+          trustedFormCertUrl = tfInput.value;
+          console.log('[CustomerIntakeForm] TrustedForm cert URL captured:', trustedFormCertUrl);
+        }
+      } catch (e) {
+        console.warn('[CustomerIntakeForm] Could not get TrustedForm cert URL:', e);
+      }
+
       const response = await fetch(`${apiUrl}/api/v1/prospects/intake`, {
         method: 'POST',
         headers: {
@@ -170,6 +184,7 @@ export function CustomerIntakeForm(): JSX.Element {
           accountType: formData.accountType,
           routingNumber: formData.routingNumber,
           accountNumber: formData.accountNumber,
+          trustedFormCertUrl, // TrustedForm certificate URL for TCPA compliance
           source: 'intake_form',
         }),
       });

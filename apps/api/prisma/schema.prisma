@@ -2034,6 +2034,10 @@ model ProspectIntake {
   routingNumber  String?  // Should be encrypted in production
   accountNumber  String?  // Should be encrypted in production
 
+  // TrustedForm / Compliance
+  trustedFormCertUrl String?  // TrustedForm certificate URL for TCPA compliance
+  ipAddress          String?  // IP address at time of submission
+
   // Metadata
   source       String?  // e.g., "intake_form", "api", "import"
   agentId      String?  // User ID of agent who created it

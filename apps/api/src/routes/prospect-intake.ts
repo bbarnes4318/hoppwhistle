@@ -50,6 +50,9 @@ interface ProspectIntakePayload {
   routingNumber?: string;
   accountNumber?: string;
 
+  // TrustedForm / Compliance
+  trustedFormCertUrl?: string;
+
   // Metadata
   source?: string;
   notes?: string;
@@ -94,6 +97,9 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
       }
 
       try {
+        // Get client IP address
+        const clientIp = request.ip || request.headers['x-forwarded-for'] || 'unknown';
+
         // Upsert - update if exists, create if not
         const prospect = await prisma.prospectIntake.upsert({
           where: {
@@ -124,6 +130,8 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
             accountType: body.accountType,
             routingNumber: body.routingNumber,
             accountNumber: body.accountNumber,
+            trustedFormCertUrl: body.trustedFormCertUrl,
+            ipAddress: typeof clientIp === 'string' ? clientIp : clientIp[0],
             source: body.source || 'intake_form',
             notes: body.notes,
             updatedAt: new Date(),
@@ -152,6 +160,8 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
             accountType: body.accountType,
             routingNumber: body.routingNumber,
             accountNumber: body.accountNumber,
+            trustedFormCertUrl: body.trustedFormCertUrl,
+            ipAddress: typeof clientIp === 'string' ? clientIp : clientIp[0],
             source: body.source || 'intake_form',
             notes: body.notes,
           },
