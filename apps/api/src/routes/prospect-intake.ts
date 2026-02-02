@@ -18,6 +18,7 @@ interface ProspectIntakePayload {
   phone: string; // Required
   email?: string;
   dob?: string; // ISO date string
+  age?: number; // Age in years
   gender?: string;
 
   // Address
@@ -113,6 +114,7 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
             lastName: body.lastName,
             email: body.email,
             dob: body.dob ? new Date(body.dob) : undefined,
+            age: body.age,
             gender: body.gender,
             street: body.street,
             city: body.city,
@@ -143,6 +145,7 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
             lastName: body.lastName,
             email: body.email,
             dob: body.dob ? new Date(body.dob) : undefined,
+            age: body.age,
             gender: body.gender,
             street: body.street,
             city: body.city,

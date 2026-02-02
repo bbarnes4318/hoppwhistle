@@ -2006,6 +2006,7 @@ model ProspectIntake {
   lastName   String?
   email      String?
   dob        DateTime? // Date of Birth
+  age        Int?      // Age in years
   gender     String?
 
   // Address

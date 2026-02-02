@@ -29,6 +29,7 @@ export interface CustomerIntakeData {
   zip: string;
   state: string; // 2-letter state code
   dateOfBirth: string; // MM/DD/YYYY
+  age: number | ''; // Age in years
   stateOfBirth: string; // 2-letter state code
 
   // Policy Details
@@ -69,6 +70,7 @@ export const DEFAULT_INTAKE_DATA: CustomerIntakeData = {
   zip: '',
   state: '',
   dateOfBirth: '',
+  age: '',
   stateOfBirth: '',
   coverage: 10000,
   carrier: '',
