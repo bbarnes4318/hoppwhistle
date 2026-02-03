@@ -214,6 +214,26 @@ async function getOrCreateCredential() {
 }
 
 /**
+ * Update phone number to use new credential
+ */
+async function updatePhoneNumberCredential(phoneNumberId, credentialId) {
+  console.log(`\n[4a] Updating phone number ${phoneNumberId} to use credential ${credentialId}...`);
+
+  const payload = {
+    credentialId: credentialId,
+  };
+
+  try {
+    const result = await vapiRequest('PATCH', `/phone-number/${phoneNumberId}`, payload);
+    console.log('  ✓ Phone number credential updated');
+    return result;
+  } catch (err) {
+    console.error('  ✗ Failed to update phone number credential:', err.message);
+    throw err;
+  }
+}
+
+/**
  * Find existing phone number or create new
  */
 async function getOrCreatePhoneNumber(credentialId) {
@@ -226,6 +246,14 @@ async function getOrCreatePhoneNumber(credentialId) {
 
   if (existing) {
     console.log('  Found existing phone number:', existing.id);
+
+    // Check if the credential matches
+    if (existing.credentialId !== credentialId) {
+      console.log(`  ⚠ Phone number uses wrong credential: ${existing.credentialId}`);
+      console.log(`  ⚠ Expected credential: ${credentialId}`);
+      return await updatePhoneNumberCredential(existing.id, credentialId);
+    }
+
     return existing;
   }
 
