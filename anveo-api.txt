@@ -1,0 +1,1139 @@
+API Configuration
+On this screen you can change API security settings
+
+API User Key is required for all API requests.
+Make sure you keep API User Key in a safe place.
+Anyone who knows your API User Key will be able to initiate API requests on your behalf.
+You are fully responsible for all API Requests charges incurred.
+API UserKey:	0b7603639cc8e908e8ff16e53f0470d4fc398ede	
+API Signature Code:	
+Anveo Phone API - The Power of Anveo On Demand
+Anveo provides a comprehensive API which allows external applications to use the power of Anveo communication platform on demand
+Anveo API provides a way for external applications and systems to make phone calls, initiate outbound IVR, provision ContactME/Click to Call buttons as well as order, provision and manage DIDs (phone numbers) and Anveo Call Flows.
+3 simple steps to integrate with Anveo Communication Platform
+1. Open an Anveo.com account
+2. Subscribe to API Access service
+3. Implement Anveo API XML messages exchange according to API specification
+
+Your account has active Anveo API subscription.
+
+Anveo API supports 2 formats for API requests:
+* XML based
+* HTTP GET Query string
+XMLHTTP GET + QUERY STRING
+XML API Requests can be represented by the following structure:
+<?xml version="1.0" standalone="no" ?>
+<REQUEST>
+   <USERTOKEN>
+      <USERKEY>YOURAPIUSERKEY1891e2e883904b0b894dc5b679c1c1c13f6d</USERKEY>
+   </USERTOKEN>
+   <ACTION NAME="API_ACTION_NAME">
+      <PARAMETER NAME="SIGNATURE">396cdfaff3491f457b95e51a5ebd89ad516d623d</PARAMETER>
+      <PARAMETER NAME="TEST">TRUE</PARAMETER>
+      <PARAMETER NAME="PARAMETER_NAME_1">VALUE_1</PARAMETER>
+      <PARAMETER NAME="PARAMETER_NAME_2" ANOTHER_ATTRIBUTE="SOME_DATA" >VALUE_2</PARAMETER>
+      .....
+      <PARAMETER NAME="PARAMETER_NAME_N">PARAMETER_VALUE_N</PARAMETER>
+   </ACTION>
+</REQUEST>
+Details
+USERKEY is your API USERKEY from the API Configuration screen.
+ACTION XML node contains API Action details and NAME attribute holds the name of the API ACTION to be executed.
+PARAMETER XML Node is used to pass parameters required by some API actions. Each parameter has a name and a value plus some additional attributes. In this example, the parameter named TEST has a value of TRUE, indicating that this is a test action.
+Please remember that XML is CASE SENSITIVE. All ANVEO API XML tags and attributes should be in upper case.
+API XML Requests should be POSTed to https://www.anveo.com/api/v3.asp
+
+To ensure proper data handling we recommend that you set the following HTTP headers:
+Content-Type: application/xml; charset=UTF-8
+Accept: application/xml; charset=UTF-8
+SIGNATURE parameter is required for all API requests. SIGNATURE value which is calculated as HMAC_SHA1(YOUREMAILADDRESS,SECURE PHRASE) where YOUREMAILADDRESS is email address you use to access your Anveo account and SECURE PHRASE is Secure Phrase you've specified on API Configuration screen.
+HMAC_SHA1 can be easily calculated in many programming languages and here is how it can be done in various languages:
+PHP
+hash_hmac('sha1', "some@email.com", "my secure phrase")
+
+Ruby
+digest = OpenSSL::Digest::Digest.new('sha1')
+return OpenSSL::HMAC.hexdigest(digest, "some@email.com", "my secure phrase")
+
+C#
+var enc = Encoding.ASCII;
+HMACSHA1 hmac = new HMACSHA1(enc.GetBytes("my secure phrase"));
+hmac.Initialize();
+
+byte[] buffer = enc.GetBytes("some@email.com");
+return BitConverter.ToString(hmac.ComputeHash(buffer)).Replace("-", "").ToLower();
+
+result for all above calculations shall be 396cdfaff3491f457b95e51a5ebd89ad516d623d
+
+API CALL - RESPONSE
+API RESPONSE - XML Format.
+
+Anveo API response is ALWAYS XML message in the following format.
+<?xml version="1.0" standalone="no" ?>
+<RESPONSE>
+   <RESULT>SUCCESS(ERROR)</RESULT>
+   <VALUE NAME="SOME RESULT NAME">SOME RESULT VALUE</VALUE>
+   <VALUE NAME="SOME RESULT NAME">SOME RESULT VALUE</VALUE>
+   <ERROR>TEXT OF THE ERROR MESSAGE</ERROR>
+</RESPONSE>
+RESULT XML node contains a description of the returned message.
+VALUE XML node is used to return some data. The NAME attribute describes a name of the returned value. There could be multiple VALUE nodes.
+In case of an error ERROR XML node contains the error description. When Error XML node is not empty it means that there was an error processing the API Request and it will have a description of the error.
+To verify the success or failure of the API request you can check for the presence of ERROR XML tag and in case of API errors it will have description of the error.
+Please remember that XML is CASE SENSITIVE. All ANVEO API XML nodes and attributes should be in upper case.
+	
+
+ANVEO DID API - order, provision and manage DIDs wordlwide.
+Anveo DID API
+DID order, provision and manage.
+Anveo DID API provides a facility to order, provision and manage DID phone numbers wordwide.
+A typical DID life-cycle is as following:
+1. DID Order
+2. DID Manage (update call routing, sms options etc)
+3. DID Cancel
+Anveo DID API objects
+There are a number Anveo objects that are used in Anveo DID Responses. Each object is represented by XML Node with properties mapped to XML Node Attributes.
+
+ANVEO DID API OBJECTS - COUNTRY
+Country object
+Country object is used when Anveo returns a list of countries with ANVEO.STATES.LIST API action.
+Country object has the following attributes:
+COUNTRY_NAME [string] - the name of the country
+COUNTRY_ID [string] - Anveo country id.
+HAS_STATES [boolean] - indicates whether country has states (for example USA has states)
+IS_FAX [boolean] - whether inbound FAX is supported
+IS_SMS [boolean] - whether inbound SMS is supported
+Example
+<COUNTRY COUNTRY_NAME="ARGENTINA" COUNTRY_ID="191.195.165" HAS_STATES="false" IS_FAX="false" IS_SMS="false"/>
+terms of service    privacy policy    FAQ   API    © 2009-2026 Anveo Inc.	WWW.ANVEO.COM [0.01][o-phx-a1-f1-w-1]
+
+ANVEO DID API OBJECTS - STATE
+State object
+State object is used when Anveo returns a list of states for a country with ANVEO.STATES.LIST API action.
+State object has the following attributes:
+STATE_NAME [string] - the name of the state
+STATE_ID [string] - Anveo state id.
+STATE_CODE [string] - Short state code.
+Example
+<STATE STATE_NAME="Alabama" STATE_ID="191.195.165.31" STATE_CODE="AL" />
+
+ANVEO DID API OBJECTS - AREA
+Area object
+Area object is used when Anveo returns a list of area codes with DID availability with ANVEO.AREAS.LIST API action.
+Area object has the following attributes:
+AREA_NAME [string] - name of the area
+AREA_ID [string] - area id
+AREA_CODE [number] - area code
+STOCK [number] - the number of DIDs available in a given area code
+RATE_PLAN [object] - One or more Rate Plans available for phone numbers in a given area code
+Example
+<AREA AREA_NAME="ALBERTVILLE" AREA_ID="191.195.165.31.230" AREA_CODE="256" STOCK="49">
+   <RATE_PLAN RATE_PLAN_ID="VALUE" RATE_PLAN_NAME="Value" MONTHLY100="149" SETUP100="249" />
+   <RATE_PLAN RATE_PLAN_ID="PU" RATE_PLAN_NAME="Personal Unlimited" MONTHLY100="279" SETUP100="249" />
+   <RATE_PLAN RATE_PLAN_ID="OU" RATE_PLAN_NAME="Office Unlimited" MONTHLY100="499" SETUP100="249" />
+   <RATE_PLAN RATE_PLAN_ID="SU" RATE_PLAN_NAME="Service Unlimited" MONTHLY100="149" SETUP100="249" />
+</AREA>
+ANVEO DID API OBJECTS - RATE PLAN
+Rate Plan object
+Rate Plan object is used when Anveo returns a list of area codes with DID availability with ANVEO.AREAS.LIST API action.
+Rate Plan object has the following attributes:
+RATE_PLAN_ID [string] - Rate plan id
+RATE_PLAN_NAME [string] - Rate plan name
+MONTHLY100 [number] - monthly price for a phone number multiplied by 100
+SETUP100 [number] - setup fee for a phone number multiplied by 100
+Example
+<RATE_PLAN RATE_PLAN_ID="SU" RATE_PLAN_NAME="Service Unlimited" MONTHLY100="149" SETUP100="249" />
+
+
+ANVEO DID API OBJECTS - DID
+DID object
+DID object is used when DID information is returned.
+DID object has the following attributes:
+E164 [string] - Phone number in E.164 format without leading +
+DID_TYPE [string] - The type of DID (GEOGRAPHIC, NATIONAL, TOLLFREE, MOBILE)
+SMS_URL [string] - URL used for SMS forwarding
+SMS_EMAIL [string] - Email used for SMS forwarding
+CALL_FORWARD_TYPE [string] - Call forwarding type (SIP_URI, SIP_REGISTERED, PHONE, CALLFLOW)
+CALL_FORWARD_TO [string] - The actual call forwarding destination. The value format depends on CALL_FORWARD_TYPE
+STATUS [string] - Did status (Active, Canceled etc)
+COUNTRY_NAME [string] - Country name for DID
+AREA_NAME [string] - Area code name for DID
+AREA_CODE [string] - Area code for DID
+MONTHLY100 [string] - Monthly price for DID multiplied by 100
+RATE_PLAN_ID [string] - Rate plan id (VALUE,PU,OU,SU,TOLLFREE)
+TITLE [string] - a title assigned for the number (could be any custom text)
+ACCOUNT_NUMBER [string] - account number where DID number is currently located
+Example
+<DID E164="442033185220" DID_TYPE="GEOGRAPHIC" SMS_URL="" SMS_EMAIL="" CALL_FORWARD_TYPE="CALLFLOW"
+CALL_FORWARD_TO="8c25e06faf2b98fe4c78fab83df91b307ff287f1" STATUS="Active"
+COUNTRY_NAME="UNITED KINGDOM" AREA_NAME="LONDON" AREA_CODE="203" MONTHLY100="1000" RATE_PLAN_ID="SU" ACCOUNT_NUMBER="342342344"/>
+
+ANVEO DID API ACTIONS
+Anveo DID API Actions
+DID Actions consist of the following acctions:
+ANVEO.COUNTRIES.LIST
+ANVEO.STATES.LIST
+ANVEO.AREAS.LIST
+DID.ORDER
+DID.CANCEL
+DID.LIST
+DID.UPDATE
+
+A typical DID order flow can be represented as the following set of API Actions:
+1. ANVEO.COUNTRIES.LIST
+2. IF Country HAS States THEN ANVEO.STATES.LIST
+3. ANVEO.AREAS.LIST
+4. DID.ORDER
+5. DID.UPDATE
+6. DID.CANCEL
+
+NVEO.COUNTRIES.LIST - API REQUEST
+ANVEO.COUNTRIES.LIST - Get a list of countries.
+Description
+ANVEO.COUNTRIES.LIST API Action is used to obtain a list of countries where Anveo has coverage for a given DID Type.
+Arguments
+DID_TYPE
+Required. a type of DID to be ordered.
+XMLQUERY STRING
+Example:
+<PARAMETER NAME="DID_TYPE">GEOGRAPHIC</PARAMETER>
+Response
+COUNTRIES XML node contains a set of COUNTRY objects. Each country is represented by a single COUNTRY XML node.
+API Request Example
+XMLQUERY STRING
+<?xml version="1.0" standalone="no" ?>
+<REQUEST>
+	<USERTOKEN>
+		<USERKEY>df141891e2e883904b0b294dc5bq79c1c1c13f6d</USERKEY>
+	</USERTOKEN>
+	<ACTION NAME="ANVEO.COUNTRIES.LIST">
+		<PARAMETER NAME="DID_TYPE">GEOGRAPHIC</PARAMETER>
+	</ACTION>
+</REQUEST>
+Response Example
+<?xml version="1.0" standalone="no" ?>
+<RESPONSE>
+	<RESULT>SUCCESS</RESULT>
+	<COUNTRIES>
+		<COUNTRY COUNTRY_ID="342.234324.3." NAME="USA">
+	</COUNTRIES>
+</RESPONSE>
+
+ANVEO.STATES.LIST - API REQUEST
+ANVEO.STATES.LIST - Get a list of states for a country.
+Description
+ANVEO.STATES.LIST API Action is used to obtain a list of states for a country. This action is only requred for countries with HAS_STATES attribute set.
+Arguments
+DID_TYPE
+Required. A type of DID to be ordered.
+
+COUNTRY_ID
+Required. Country ID from ANVEO.COUNTRIES.LIST action for which a list of states is needed.
+XMLQUERY STRING
+Example:
+<PARAMETER NAME="DID_TYPE">GEOGRAPHIC</PARAMETER>
+<PARAMETER NAME="COUNTRY_ID">123.123.123.123.123.123.123.123.123.</PARAMETER>
+Response
+STATES XML node contains a list of states.
+API Request Example
+XMLQUERY STRING
+<?xml version="1.0" standalone="no" ?>
+<REQUEST>
+	<USERTOKEN>
+		<USERKEY>df141891e2e883904b0b294dc5bq79c1c1c13f6d</USERKEY>
+	</USERTOKEN>
+	<ACTION NAME="ANVEO.STATES.LIST">
+		<PARAMETER NAME="DID_TYPE">GEOGRAPHIC</PARAMETER>
+		<PARAMETER NAME="COUNTRY_ID">123.123.123.123.123.123.123.123.123</PARAMETER>
+	</ACTION>
+</REQUEST>
+		
+Response Example
+<?xml version="1.0" standalone="no" ?>
+<RESPONSE>
+	<RESULT>SUCCESS</RESULT>
+	<STATES>
+		<STATE STATE_ID="34.34.343" STATE_NAME="New York" STATE_CODE="NY">
+	</STATES>
+</RESPONSE>
+
+ANVEO.AREAS.LIST - API REQUEST
+ANVEO.AREAS.LIST - Get a list of areas where DID phone numbers are available.
+Description
+ANVEO.AREAS.LIST API Action is used to obtain a list of area codes where Anveo has DID coverage. Each area includes stock information as well as RATE_PLANs.
+Arguments
+DID_TYPE
+Required. A type of DID to be ordered.
+
+COUNTRY_ID
+Required. Country ID from ANVEO.COUNTRIES.LIST action for which a list of areas is needed. When country has states then COUNTRY_ID is optional and STATE_ID is required.
+
+STATE_ID
+Only required for countries with states. State ID from ANVEO.STATES.LIST action for which a list of areas is needed.
+XMLQUERY STRING
+Example:
+<PARAMETER NAME="DID_TYPE">GEOGRAPHIC</PARAMETER>
+<PARAMETER NAME="COUNTRY_ID">123.123.123.123.123.123.123.123.123.</PARAMETER>
+<PARAMETER NAME="STATE_ID">222.123.123.123.123.123.123.123.123.</PARAMETER>
+Response
+AREAS XML node contains a list of area codes. Each area contains a list of RATE_PLAN available for a given area code.
+API Request Examples
+XMLQUERY STRING
+API Request Example for a country without states
+<?xml version="1.0" standalone="no" ?>
+<REQUEST>
+	<USERTOKEN>
+		<USERKEY>YOURAPIKEY</USERKEY>
+	</USERTOKEN>
+	<ACTION NAME="ANVEO.AREAS.LIST">
+		<PARAMETER NAME="DID_TYPE">GEOGRAPHIC</PARAMETER>
+		<PARAMETER NAME="COUNTRY_ID">123.123.123.123.123.123.123.123.123</PARAMETER>
+	</ACTION>
+</REQUEST>
+API Request Example for a country with states
+<?xml version="1.0" standalone="no" ?>
+<REQUEST>
+	<USERTOKEN>
+		<USERKEY>df141891e2e883904b0b294dc5bq79c1c1c13f6d</USERKEY>
+	</USERTOKEN>
+	<ACTION NAME="ANVEO.AREAS.LIST">
+		<PARAMETER NAME="DID_TYPE">GEOGRAPHIC</PARAMETER>
+		<PARAMETER NAME="STATE_ID">222.123.123.123.123.123.123.123.123</PARAMETER>
+	</ACTION>
+</REQUEST>
+Response Example
+<?xml version="1.0" standalone="no" ?>
+<RESPONSE>
+  <RESULT>SUCCESS</RESULT>
+  <AREAS>
+    <AREA AREA_ID="34.34.34.343.2" AREA_NAME="New York" AREA_CODE="646" STOCK="79">
+      <RATE_PLANS>
+        <RATE_PLAN RATE_PLAN_ID="SU" RATE_PLAN_NAME="Service Unlimited" MONTHLY100="149" SETUP100="249" />
+        <RATE_PLAN RATE_PLAN_ID="OU" RATE_PLAN_NAME="Office Unlimited" MONTHLY100="499" SETUP100="249" />
+      </RATE_PLANS>
+    </AREA>
+  </AREAS>
+</RESPONSE>
+DID.ORDER - API REQUEST
+DID.ORDER - Places an order for a DID(s).
+Description
+DID.ORDER API Action is used to order DIDs in a a given area.
+Arguments
+DID_TYPE
+Required. A type of DID to be ordered. DID_TYPE can be GEOGRAPHIC, NATIONAL, TOLLFREE or MOBILE
+
+AREA_ID
+Required. Area ID from which DID should be ordered.
+
+RATE_PLAN_ID
+Optional. Rate Plan for a DID. If not specified Service Unlimited rate plan will be used.
+
+QUANTITY
+Optional. How many DIDs to be purchased. If not specified 1 number will be ordered.
+
+ACCOUNT_NUMBER
+Optional. Account number can be spacified when DID is ordered by sub-account instead of the main account.
+
+TITLE
+Optional. Title can be any value to help you identify DID number.
+XMLQUERY STRING
+Example:
+<PARAMETER NAME="DID_TYPE">GEOGRAPHIC</PARAMETER>
+<PARAMETER NAME="AREA_ID">123.123.123.123.123.123.123.123.123.</PARAMETER>
+<PARAMETER NAME="RATE_PLAN_ID">SU</PARAMETER>
+<PARAMETER NAME="QUANTITY">1</PARAMETER>
+<PARAMETER NAME="ACCOUNT_NUMBER">1234567895</PARAMETER>
+<PARAMETER NAME="TITLE">ABCDEF</PARAMETER>
+Response
+When order was processed successfully then the result will be SUCCESS and <DIDS> XML node will list all newly purchased DIDs.
+API Request Example
+XMLQUERY STRING
+<?xml version="1.0" standalone="no" ?>
+<REQUEST>
+	<USERTOKEN>
+		<USERKEY>YOURAPIKEY</USERKEY>
+	</USERTOKEN>
+	<ACTION NAME="DID.ORDER">
+		<PARAMETER NAME="DID_TYPE">GEOGRAPHIC</PARAMETER>
+		<PARAMETER NAME="AREA_ID">123.123.123.123.123.123.123.123.123</PARAMETER>
+		<PARAMETER NAME="RATE_PLAN_ID">SU</PARAMETER>
+		<PARAMETER NAME="QUANTITY">1</PARAMETER>
+		<PARAMETER NAME="TITLE">ABCDEF</PARAMETER>
+	</ACTION>
+</REQUEST>
+Response Example
+<?xml version="1.0" standalone="no" ?>
+<RESPONSE>
+  <RESULT>SUCCESS</RESULT>
+  <DIDS>
+    <DID E164="12121111111" DID_TYPE="GEOGRAPHIC" SMS_URL="" SMS_EMAIL=""
+    CALL_FORWARD_TYPE="CALLFLOW" CALL_FORWARD_TO="8c25e06faf2b98erts3gdtb83df91b307ff287f1"
+    STATUS="Active" COUNTRY_NAME="UNITED STATES" AREA_NAME="New York" AREA_CODE="212" MONTHLY100="149" TITLE="ABCDEF"/>
+  </DIDS>
+</RESPONSE>
+DID.CANCEL - API REQUEST
+DID.CANCEL - Cancels a DID.
+Description
+DID.CANCEL API Action is used to cancel a DID(s) in your account.
+Arguments
+E164
+Required. E164 of a DID number to be canceled.
+
+ACCOUNT_NUMBER
+Optional. If DID belongs to a sub account then ACCOUNT_NUMBER is required and it must contain an account number of the DID number to be canceled.
+XMLQUERY STRING
+Example:
+<PARAMETER NAME="E164">12123456789</PARAMETER>
+<PARAMETER NAME="ACCOUNT_NUMBER">23434323423</PARAMETER>
+Response
+SUCCESS when DID was canceled.
+API Request Example
+XMLQUERY STRING
+<?xml version="1.0" standalone="no" ?>
+<REQUEST>
+	<USERTOKEN>
+		<USERKEY>df141891e2e883904b0b294dc5bq79c1c1c13f6d</USERKEY>
+	</USERTOKEN>
+	<ACTION NAME="DID.CANCEL">
+		<PARAMETER NAME="E164">12123456789</PARAMETER>
+	</ACTION>
+</REQUEST>
+Response Example
+<?xml version="1.0" standalone="no" ?>
+<RESPONSE>
+  <RESULT>SUCCESS</RESULT>
+</RESPONSE>
+DID.LIST - API REQUEST
+DID.LIST - list DID phone numbers in your account.
+Description
+DID.LIST API Action is used to list DIDs in your account (or sub account) that match filter critea specified. When none of the filter options was provided it will list all DIDs.
+Arguments
+ACCOUNT_NUMBER
+Optional. Only needed when listing phone numbers from a sub-account.
+
+FILTER.DID_TYPE
+Optional. A type of DID to be listed.
+
+FILTER.E164
+Optional. E164 of DID to be listed.
+
+FILTER.SMS_EMAIL
+Optional. Include DIDs matching SMS_EMAIL.
+
+FILTER.SMS_URL
+Optional. Include DIDs matching SMS_URL.
+
+FILTER.CALL_FORWARD_TYPE
+Optional. Include DIDs matching CALL_FORWARD_TYPE.
+
+FILTER.CALL_FORWARD_TO
+Optional. Include DIDs matching FILTER.CALL_FORWARD_TO.
+
+FILTER.TITLE
+Optional. Include DIDs with title matching FILTER.TITLE.
+XMLQUERY STRING
+Example:
+<PARAMETER NAME="ACCOUNT_NUMBER">23434323423</PARAMETER>
+<PARAMETER NAME="FILTER.DID_TYPE">GEOGRAPHIC</PARAMETER>
+<PARAMETER NAME="FILTER.E164">12129535456</PARAMETER>
+<PARAMETER NAME="FILTER.SMS_EMAIL">sms@ddd.com</PARAMETER>
+<PARAMETER NAME="FILTER.SMS_URL">http://api.server.com/smshandler</PARAMETER>
+<PARAMETER NAME="FILTER.CALL_FORWARD_TYPE">CALLFLOW</PARAMETER>
+<PARAMETER NAME="FILTER.CALL_FORWARD_TO">asd7sd8as9fsfg7fd8gg7gffsd7</PARAMETER>
+<PARAMETER NAME="FILTER.TITLE">ABCDEF</PARAMETER>
+Response
+DIDS XML Node contains a list of DID objects (XML Nodes) that match filter criteria.
+API Request Example
+XMLQUERY STRING
+<?xml version="1.0" standalone="no" ?>
+<REQUEST>
+	<USERTOKEN>
+		<USERKEY>df141891e2e883904b0b294dc5bq79c1c1c13f6d</USERKEY>
+	</USERTOKEN>
+	<ACTION NAME="DID.LIST">
+		<PARAMETER NAME="FILTER.E164">12121111111</PARAMETER>
+	</ACTION>
+</REQUEST>
+Response Example
+<?xml version="1.0" standalone="no" ?>
+<RESPONSE>
+	<RESULT>SUCCESS</RESULT>
+	<DIDS>
+	  <DID E164="12121111111" DID_TYPE="GEOGRAPHIC" SMS_URL="" SMS_EMAIL=""
+	  CALL_FORWARD_TYPE="CALLFLOW" CALL_FORWARD_TO="8c25e06faf2b98erts3gdtb83df91b307ff287f1"
+	  STATUS="Active" COUNTRY_NAME="UNITED STATES" AREA_NAME="New York" AREA_CODE="212" MONTHLY100="149" TITLE="" ORDER_DATE="01/01/2013 11:02"/>
+	</DIDS>
+</RESPONSE>
+DID.UDPATE - API REQUEST
+DID.UPDATE - Places an order for a DID(s).
+Description
+DID.UPDATE API Action is used to update DID configuration including call and sms forwarding options.
+Filter Arguments
+ACCOUNT_NUMBER
+Optional. When updating DIDs from a sub-account then account number must be specified.
+
+FILTER.DID_TYPE
+Optional. Include DIDs matching DID_TYPE.
+
+FILTER.E164
+Optional. Include DIDs matching E164.
+
+FILTER.SMS_EMAIL
+Optional. Include DIDs matching SMS_EMAIL.
+
+FILTER.SMS_URL
+Optional. Include DIDs matching SMS_URL.
+
+FILTER.CALL_FORWARD_TYPE
+Optional. Include DIDs matching CALL_FORWARD_TYPE.
+
+FILTER.CALL_FORWARD_TO
+Optional. Include DIDs matching FILTER.CALL_FORWARD_TO.
+
+FILTER.TITLE
+Optional. Include DIDs with a given TITLE.
+SMS Options Arguments
+SMS_EMAIL
+Optional. Email address where all incoming SMS messages should be forwarded. If SMS_EMAIL is not set then 'sms to email' feature is disabled. SMS_URL
+Optional. HTTP URL where incoming messages should be delivered. If SMS_URL is not set then HTTP SMS delivery is disabled. SMS_PHONE
+Optional. Phone Number where incoming messages will be forwarded. Phone Number format is COUNTRY CODE + AREA CODE + PHONE NUMBER. For example: 12151234564 ( forward to 1 (USA), 215(AREA CODE) and 1234564(phone number))
+Call Options Arguments
+CALL_FORWARD_TYPE
+Optional. CALL_FORWARD_TYPE is used to specify how incoming calls should be handeled.
+CALL_FORWARD_TYPE can be one of the following:
+SIP_URI - is used to forward incoming calls to external SIP URI. A primary and backup SIP URI can also be specified.
+CALLFLOW - is used to handle incoming calls with Anveo Call Flow.
+PHONE - is used to forward incoming calls to another phone number.
+SIP_REGISTERED - is used to forward incoming calls to SIP device registered with Anveo.
+TRUNK - [ANVEO DIRECT ONLY] is used to forward incoming calls to SIP Trunk configured at Anveo Direct account.
+
+CALL_FORWARD_TO
+Optional. CALL_FORWARD_TO specifies the destination for CALL_FORWARD_TYPE option specified.
+The format depends on the CALL_FORWARD_TO as following:
+* SIP_URI - SIP URI where calls should be forwarded to. You can use $[E164]$ placeholder in SIP URI string which will be replaced with the actual Anveo phone number.It is possible specify primary and backup SIP URIs separated by comma. For example: $[e164]$@primarydomain.com,$[e164]$@seconarydomain.com
+SIP URI string may contain a port as following $[E164]$@domain.com:5060
+
+* CALLFLOW - API KEY for Anveo call flow.
+
+* PHONE - phone number in the following format: COUNTRY CODE + AREA CODE + PHONE NUMBER. For example: 12151234564 ( forward to 1 (USA), 215(AREA CODE) and 1234564(phone number))
+
+* SIP_REGISTERED - 'ACCOUNT' when Account Number remote party should be called (like the most SIP phones requre) or 'E164' when Anveo Phone Number remote party should be called (when forwarding to soft-switch like Asterisk and others).
+
+* TRUNK - TRUNK ID from Anveo Direct portal.
+
+Incoming Channels Options Arguments
+CHANNELS_LIMIT
+Optional. Set a limit on the number of concurrent calls for the phone number.
+
+CHANNELS_ONDEMAND
+Optional. Sets a number of 'On Demand' Channels the phone number can use. The maximum number of 'On-Demand' Channels is 5.
+XMLQUERY STRING
+Example:
+<PARAMETER NAME="ACCOUNT_NUMBER">3432343234</PARAMETER>
+<PARAMETER NAME="FILTER.DID_TYPE">GEOGRAPHIC</PARAMETER>
+<PARAMETER NAME="FILTER.E164">12129535456</PARAMETER>
+<PARAMETER NAME="FILTER.SMS_EMAIL">sms@ddd.com</PARAMETER>
+<PARAMETER NAME="FILTER.SMS_URL">http://api.server.com/smshandler</PARAMETER>
+<PARAMETER NAME="FILTER.CALL_FORWARD_TYPE">CALLFLOW</PARAMETER>
+<PARAMETER NAME="FILTER.CALL_FORWARD_TO">asd7sd8as9fsfg7fd8gg7gffsd7</PARAMETER>
+<PARAMETER NAME="FILTER.TITLE">ABCDEF</PARAMETER>
+<PARAMETER NAME="SMS_EMAIL">john@domain.com</PARAMETER>
+<PARAMETER NAME="SMS_URL">http://www.domain.com/smshandler?from=$[from]$&message=$[message]$</PARAMETER>
+<PARAMETER NAME="SMS_PHONE">12157010680</PARAMETER>
+<PARAMETER NAME="CALL_FORWARD_TYPE">SIP_URI</PARAMETER>
+<PARAMETER NAME="CALL_FORWARD_TO">$[e164]$@primary.com,$[e164]$@seconary.com</PARAMETER>
+<PARAMETER NAME="CHANNELS_LIMIT">10</PARAMETER>
+<PARAMETER NAME="CHANNELS_ONDEMAND">4</PARAMETER>
+Response
+Success when action was processed successfully.
+API Request Example
+XMLQUERY STRING
+<?xml version="1.0" standalone="no" ?>
+<REQUEST>
+  <USERTOKEN>
+    <USERKEY>df141891e2e883904b0b294dc5bq79c1c1c13f6d</USERKEY>
+  </USERTOKEN>
+  <ACTION NAME="DID.UPDATE">
+    <PARAMETER NAME="FILTER.E164">ALL</PARAMETER>
+    <PARAMETER NAME="SMS_EMAIL">sms@domain.com</PARAMETER>
+    <PARAMETER NAME="CALL_FORWARD_TYPE">SIP_URI</PARAMETER>
+    <PARAMETER NAME="CALL_FORWARD_TO">$[e164]$@primary.com,$[e164]$@seconary.com</PARAMETER>
+  </ACTION>
+</REQUEST>
+Response Example
+<?xml version="1.0" standalone="no" ?>
+<RESPONSE>
+	<RESULT>SUCCESS</RESULT>
+</RESPONSE>
+DID.CNAM.UPDATE - API REQUEST
+DID.CNAM.UPDATE - Updates CNAM/LIDB (Outbound Caller ID Name) for the phone number.
+Description
+DID.CNAM.UPDATE API Action is used to update CNAM/LIDB (Outbound Caller ID Name) for DID.
+CNAM/LIDB updates are charged $5 per update.
+CNAM/LIDB updates are only available for US DIDs. DID.CNAM.UPDATE API Action DOES NOT change CALL/SMS routing/handling options.
+Arguments
+E164
+Required. E164 of a DID number.
+
+ACCOUNT_NUMBER
+Optional. If DID currently belongs to a sub account then ACCOUNT_NUMBER is required and it must contain an account number of the DID number to be moved.
+
+CNAM
+Required. Caller ID Name for the phone number. Must be no more than 32 alphanumeric characters long.
+XMLQUERY STRING
+Example:
+<PARAMETER NAME="E164">12123456789</PARAMETER>
+<PARAMETER NAME="ACCOUNT_NUMBER">23434323423</PARAMETER>
+<PARAMETER NAME="CNAM">TEST</PARAMETER>
+Response
+SUCCESS when CNAM Update Request was accepted for processing.
+API Request Example
+XMLQUERY STRING
+<?xml version="1.0" standalone="no" ?>
+<REQUEST>
+	<USERTOKEN>
+		<USERKEY>df141891e2e883904b0b294dc5bq79c1c1c13f6d</USERKEY>
+	</USERTOKEN>
+	<ACTION NAME="DID.CNAM.UPDATE">
+		<PARAMETER NAME="E164">12123456789</PARAMETER>
+		<PARAMETER NAME="ACCOUNT_NUMBER">23434323423</PARAMETER>
+		<PARAMETER NAME="CNAM">TEST</PARAMETER>
+	</ACTION>
+</REQUEST>
+Response Example
+<?xml version="1.0" standalone="no" ?>
+<RESPONSE>
+  <RESULT>SUCCESS</RESULT>
+</RESPONSE>
+ANVEO.DIRECT.TRUNK.UPDATE - API REQUEST
+ANVEO.DIRECT.TRUNK.UPDATE - Updates DID SIP Trunk Details.
+Description
+ANVEO.DIRECT.TRUNK.UPDATE API Action is used to updated SIP Trunk details.
+Arguments
+TRUNK.ID
+Required. SIP Trunk ID. You can obtain it from 'Configure Trunks' page in your Anveo Direct Account.
+Example:
+<PARAMETER NAME="TRUNK.ID">1</PARAMETER>
+TITLE
+Optional. A title for your SIP Trunk.
+Example:
+<PARAMETER NAME="TITLE">My Test Trunk</PARAMETER>
+SIP.URI
+Optional. Primary SIP URI for the trunk.
+Example:
+<PARAMETER NAME="SIP.URI">$[E164]$@myserverip:port</PARAMETER>
+SIP.URI.FAILOVER
+Optional. Failover SIP URI for the trunk.
+Example:
+<PARAMETER NAME="SIP.URI.FAILOVER">$[E164]$@myserverip2:port</PARAMETER>
+Response
+Anveo will return SUCCESS when no errors were found and SIP Trunk was updated successfully.
+API Request Example
+<?xml version="1.0" standalone="no" ?>
+<REQUEST>
+	<USERTOKEN>
+		<USERKEY>df141891e2e883904b0b294dc5bq79c1c1c13f6d</USERKEY>
+	</USERTOKEN>
+	<ACTION NAME="ANVEO.DIRECT.TRUNK.UPDATE">
+		<PARAMETER NAME="TRUNK.ID">GEOGRAPHIC</PARAMETER>
+		<PARAMETER NAME="TITLE">Test Trunk</PARAMETER>
+		<PARAMETER NAME="SIP.URI">$[E164]$@233.111.111.111:5060</PARAMETER>
+		<PARAMETER NAME="SIP.URI.FAILOVER">$[E164]$@233.111.111.112:5060</PARAMETER>
+	</ACTION>
+</REQUEST>
+		
+Response Example
+<?xml version="1.0" standalone="no" ?>
+<RESPONSE>
+  <RESULT>SUCCESS</RESULT>
+</RESPONSE>
+Anveo.com - BulkSMS HTTP Gateway and SMS API
+Overview
+Anveo provides BulkSMS HTTP Gateway to send and receive SMS/Text messages.
+HTTP Request
+
+Anveo SMS API is using HTTP POST or GET requests to submit SMS Text Messages.
+
+HTTP URL format to send SMS message:
+https://www.anveo.com/api/v1.asp?apikey=YOURAPIKEY&action=sms&from=FROMPHONENUMBER&destination=DESTINATIONPHONENUMBER&message=TEXTOFTHEMESSAGE
+where
+apikey [required] is your API KEY from Anveo API
+from [required] phone number.
+NOTE
+SMS messages to US phone number can only be send from your Anveo phone number in US.
+SMS messages to Canadian phone number can only be send must your Anveo phone number in Canada.
+destination [required] is a destination phone number for SMS message (including country code).
+message [required] SMS Text Message.
+Phone number format for from and destination is Country Code + Area Code + Phone Number.
+Result
+Anveo returns the status of SMS API as a text.
+The format of the result text message is as following:
+result=AAAAAAAA^error=BBBBBBBB^parts=N^fee=ZZZ^smsid=YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY
+where
+AAAAAAAA - is success when SMS message was sent succesfully and error when there was an error while processing SMS.
+BBBBBBBB - error text.
+N - total number of SMS parts used to deliver SMS message. In most cases that number will be 1, however since Anveo supports sending Long SMS messages and in such cases the number of parts could be more then 1.
+ZZZ - the total cost (in USD) of sending SMS message.
+YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY - unique SMS messageid. SMSID is used by SMS delivery report notification (See Async. Event Notifications)
+Example (Success)
+Send SMS (success):
+
+https://www.anveo.com/api/v1.asp?apikey=23423423423423asdasd3423asd&action=sms&from=12157010000&destination=12157010680&message=this%20is%20test%20message
+
+
+Result
+result=success^error=^parts=1^fee=0.044
+Example (Error)
+Send SMS (error):
+
+https://www.anveo.com/api/v1.asp?apikey=23423423423423asdasd3423asd&action=sms&from=12157010000&destination=&message=this%20is%20test%20message
+
+
+Result
+result=error^error=destination phone number is missing or invalid.
+PHP Code Sample
+#!/usr/bin/php -q
+<?php
+/**
+* Anveo SMS API script v1.0
+*
+* PHP Script for sending SMS thru Anveo.com http gateway
+*
+* PHP versions 4 and 5 compiled with curl and https support
+* LICENSE: FREE
+*
+* @author     Anveo.com
+*/
+
+/**
+* USAGE
+* SendSMS(<to_number>,<from_number>,<message>)
+*
+*/
+function SendSMS($to_number,$from_number,$message){
+   $apikey="- YOUR API KEY -"; //CHANGE ME
+
+   echo "Sending sms ...\n";
+   // need curl with https if using https://
+   $ch = curl_init ("https://www.anveo.com/api/v1.asp?apikey=".$apikey."&action=sms&destination=".$to_number."&from=".$from_number."&message=".urlencode($message));
+   curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+   curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+   curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+   curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+   curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+   $result=curl_exec ($ch);
+   curl_close ($ch);
+
+   /*parse the result*/
+   $records_array=explode('^',$result);
+   foreach($records_array as $record){
+      $field_array=explode('=',$record);
+      if (is_array($field_array)){
+         $map[$field_array[0]]=$field_array[1];
+      }
+   }
+   echo "result:".$map["result"]."\n\n";
+   echo "error text:".$map["error"]."\n";
+   echo "parts:".$map["parts"]."\n";
+   echo "fee:".$map["fee"]."\n";
+}
+?>
+Anveo.com - SMS API to receive incoming SMS using HTTP
+Anveo can forward incoming SMS Text messages received on Anveo phone number to another server using HTTP request.
+Description
+A number of special placeholders/variables can be used in URL which Anveo will use to forward incoming SMS Text Messages. Placeholders will we replaced with the actual values from incoming SMS message.
+$[from]$ - contains the phone number from which SMS message was received.
+$[to]$ - contains Anveo Phone Number which received SMS message.
+$[message]$ - contains the actual text of the message.
+Example
+https://www.mydomain.com/smscallback?from=$[from]$&phonenumber=$[to]$&message=$[message]$
+Anveo.com - SMS over SIP
+Anveo can deliver incoming SMS Text messages received on Anveo phone number over SIP.
+Description
+Anveo can deliver SMS over SIP using 2 SIP Methods.
+* MESSAGE SIP Method
+* INVITE SIP Method
+SIP Headers
+For INVITE SIP Method Anveo uses X-ANVEO-SMS-FROM, X-ANVEO-SMS-TO and X-ANVEO-SMS-MESSAGE SIP headers to pass SMS related information.
+
+For MESSAGE SIP Method Anveo uses X-ANVEO-SMS-FROM SIP header to pass sender's phone number.
+At the moment DNS SRV is not supported and thus SIP URI MUST include fully qualified domain name (or IP) and port. For example: smshandler@mydomain.com:5060
+If your SIP device is registered with Anveo.com please be aware that SIP registration is ignored for SMS delivery over SIP.
+
+Anveo API Sandbox
+Sandbox to test API integration.
+To test API integration you can use http://sandbox.anveo.com/api/v2.asp.
+Sandbox uses the same API KEY as Anveo production server.
+
+	
+API Integration Errors and Possible Resolutions
+List of API Error Messages
+Error Text	Reason	Resolution
+API requests can only be processed over Secure Connection. Please make sure that you use https://www.anveo.com	API was sent to http://www.anveo.com/api/v2.asp connection.	Change URL to https://www.anveo.com/api/v2.asp
+Invalid XML	XML Request is invalid.	Verify XML Request message. There are many online XML Validation tools like http://www.w3schools.com/Dom/dom_validate.asp.
+Unable to locate USERTOKEN node.	USERTOKEN node is missing.	Verify XML Request Message to make sure it follows Anveo XML API Request format.
+Unable to locate USERKEY node.	USERKEY node is missing.	Verify XML Request Message to make sure it follows Anveo XML API Request format.
+Unknown User.	USERKEY value is invalid.	Verify USERKEY value and compare it with the one from API Configuration screen. Make sure there are no spaces around USERKEY.
+Unable to locate ACTION XML Node.	ACTION node is missing.	Verify XML Request Message to make sure it follows Anveo XML API Request format.
+Unknown ACTION [XXXXXX].	XXXXXX is not a valid API ACTION.	Verify ACTION tag and its NAME attribute value.
+Negative Account Balance.	Your account balance is negative.	Add funds to your account.
+CallerID is not known to Anveo. Please make sure that the CallerID phone number is verified. For details please visit http://www.anveo.com/setupQDials.asp	CallerID phone number is not verified.	Visit http://www.anveo.com/setupQDials.asp and add desired CallerID phone number and click the 'VERIFY' button to confirm phone number ownership.
+Phone Number is missing.	Required PHONENUMBER parameter is missing.	Verify XML Request Message to make sure that all required parameters are present.
+Phone Number is invalid.	Phone number in PHONENUMBER parameter is invalid.	Make sure that Phone Number consists of digits only and it starts with country code following by area code and local phone number.
+Dest Phone Number is missing.	Required DESTPHONENUMBER parameter is missing.	Verify XML Request Message to make sure that all required parameters are present.
+Dest Phone Number is invalid.	Phone number in DESTPHONENUMBER parameter is invalid.	Make sure that Phone Number consists of digits only and it starts with country code following by area code and local phone number.
+DELAY parameter should be numeric.	DELAY parameter is invalid.	Make sure that DELAY parameter has numeric value without any special characters. Review API examples for more details.
+DELAY parameter should be greater than 0 and less than 86400 (60 days).	DELAY parameter value is outside of acceptable range.	DELAY parameter should be greater than 0 and less than 86400.
+Internal Error - no rate information.	Internal Anveo Error.	Contact Anveo customer service for a possible resolution.
+No CallerID provided.	Required CALLERID parameter is missing.	Verify XML Request Message to make sure that all required parameters are present.
+Call Flow parameter is missing. Please check request XML.	Required Call Flow parameter is missing.	Verify XML Request Message to make sure that all required parameters are present.
+Call Flow parameter is missing or incorrect Call Flow Hash. Please check request XML.	Required Call Flow parameter is missing or invalid Call Flow Hash value.	Verify XML Request Message to make sure that all required parameters are present and valid. Make sure that you use the correct Call Flow API KEY.
+Call Flow has errors.	Call Flow cannot be executed due to errors.	Verify Call Flow and resolve all errors.
+Variable name is missing.	VARIABLENAME attribute of VARIABLE parameter is missing	Verify XML Request Message to make sure that all required parameters are present.
+REQUESTID parameter is missing.	Required Call Flow parameter is missing.	Verify XML Request Message to make sure that all required parameters are present.
+Invalid REQUESTID.	REQUESTID provided is not valid.	Verify XML Request Message and make sure that REQUESTID used is the one returned by DIAL.CALLFLOW or DIAL.CONNECT API Response.
+There is no active API Subscription	No active API Service subscription.	Please make sure that your have an active API Service Subscription.
+BILLINGCODE should be less than 127 characters.	BILLINGCODE is too long.	Please make sure that BILLINGCODE is less than 127 characters.
+
+CODE SAMPLES:
+
+PHP:
+Anveo API - PHP Code Sample
+
+The following PHP code sample uses PEAR PHP library to post Anveo API XML Message over HTTP.
+<?php
+//--------------------------------------------------------------------------------------------------------
+//                  PHP implementation of Anveo API to initiate DIAL.CONNECT API Action
+//
+//   The rest of Anveo API functions can be implemented by simply changing XML stored in $data variable
+//                                          2008 - Anveo team.
+//--------------------------------------------------------------------------------------------------------
+require_once "HTTP/Request.php";
+
+// ANVEO API Variables
+$url = "https://www.anveo.com/api/v3.asp";
+$data = '<?xml version="1.0" standalone="no" ?>
+<REQUEST>
+	<USERTOKEN>
+		<USERKEY>----------- YOUR API USERKEY -----------</USERKEY>
+	</USERTOKEN>
+	<ACTION NAME="DIAL.CONNECT">
+		<PARAMETER NAME="SSIGNATURE">'.hash_hmac('sha1', "some@email.com", "my secure phrase").'</PARAMETER>
+		<PARAMETER NAME="TEST">TRUE</PARAMETER>
+		<PARAMETER NAME="PHONENUMBER">1215215215</PARAMETER>
+		<PARAMETER NAME="DESTPHONENUMBER">1212121212</PARAMETER>
+		<PARAMETER NAME="CALLERID">12157010680</PARAMETER>
+		<PARAMETER NAME="DELAY">1440</PARAMETER>
+		<PARAMETER NAME="MEMO">DIAL.CONNECT API Action example to connect 1215215215 with 1212121212 delayed by 24 hours</PARAMETER>
+	</ACTION>
+</REQUEST>
+';
+$req =& new HTTP_Request($url);
+$req->addHeader("Content-Type", "application/xml; charset=UTF-8");
+$req->addHeader("Content-Length", strlen($data));
+$req->addHeader("Accept", "application/xml; charset=UTF-8");
+$req->setMethod(HTTP_REQUEST_METHOD_POST);
+$req->addRawPostData($data, true);
+$response=$req->sendRequest();
+if (PEAR::isError($response)) {
+   $result="";
+   // HTTP ERROR. Use $response->getMessage(); to get detailed error description
+}else{
+   $result=$req->getResponseBody();
+}
+
+// $result holds API result in XML format
+//echo $result;
+
+
+?>
+		
+CLASSIS ASP:
+
+Anveo API - Classic ASP Code Sample
+
+The following Classic ASP code sample uses Msxml2.ServerXMLHTTP.3.0 library to post Anveo® API XML Message over HTTP and
+MSXML.DOMDocument library to process XML API response.
+<%@ Language=VBScript CodePage=65001 %>
+<%option explicit%>
+<%
+'--------------------------------------------------------------------------------------------------------
+'              Classic ASP implementation of Anveo API to initiate DIAL.CONNECT API function
+'
+'   The rest of Anveo API functions can be implemented by simply changing XML stored in $data variable
+'                                          2008 - Anveo team.
+'--------------------------------------------------------------------------------------------------------
+
+function DoApiCall(sXml)
+	dim XmlHttp
+	dim PostURL
+	dim ResponseXml
+
+	PostURL="https://www.anveo.com/api/v2.asp"
+
+	Set XmlHttp = Server.CreateObject("Msxml2.ServerXMLHTTP.3.0")
+	XmlHttp.Open "POST", PostUrl, false
+
+	XmlHttp.SetRequestHeader "Content-Type", "application/xml; charset=UTF-8"
+	XmlHttp.SetRequestHeader "Accept", "application/xml; charset=UTF-8"
+	XmlHttp.Send sXml
+	ResponseXml = XmlHttp.ResponseText
+
+	DoApiCall=ResponseXml
+end function
+
+dim sAPICALLXML
+dim sAPIRESULTXML
+dim oXML
+sAPICALLXML="<?xml version=""1.0"" standalone=""no"" ?>" &_
+	"<REQUEST>" &_
+		"<USERTOKEN>" &_
+			"<USERKEY>----------- YOUR API USERKEY -----------</USERKEY>" &_
+		"</USERTOKEN>" &_
+		"<ACTION NAME=""DIAL.CONNECT"">" &_
+			"<PARAMETER NAME=""TEST"">TRUE</PARAMETER>" &_
+			"<PARAMETER NAME=""PHONENUMBER"">1215215215</PARAMETER>" &_
+			"<PARAMETER NAME=""DESTPHONENUMBER"">1212121212</PARAMETER>" &_
+			"<PARAMETER NAME=""CALLERID"">12157010680</PARAMETER>" &_
+			"<PARAMETER NAME=""DELAY"">1440</PARAMETER>" &_
+			"<PARAMETER NAME=""MEMO"">DIAL.CONNECT API Action example to connect 1215215215 with 1212121212 delayed by 24 hours</PARAMETER>" &_
+		"</ACTION>" &_
+	"</REQUEST>"
+
+sAPIRESULTXML=DoApiCall(sAPICALLXML)
+
+'sAPIRESULTXML holds API result in XML format
+response.write sAPIRESULTXML
+
+'TODO Add error handling
+
+'Parse XML Results
+Set oXML = Server.CreateObject("MSXML.DOMDocument")
+oXML.Async = false
+oXML.loadXml( sAPIRESULTXML )
+If (oXML.parseError.errorCode <> 0) Then
+	'ERROR loading XML
+else
+	'oXML object has XML result parsed and SelectSingleNode,GetNamedItem, methods can be used to retrieve result details
+end if
+
+%>
+
+		
+JAVA:
+
+
+JAVA code sample for Anveo API integration.
+import java.net.URL;
+import java.net.URLConnection;
+import java.net.HttpURLConnection;
+import java.io.*;
+
+public class AnveoAPI {
+    private static final String ANVEO_API_URL = "https://www.anveo.com/api/v2.asp";
+    private static final String XML = "<?xml version=\"1.0\"?>" +
+                               "<REQUEST>" +
+                                    "<USERTOKEN>" +
+                                        "<USERKEY>ssssdf141891e2e883904b0b294dc5bq79c1c1c13f6d</USERKEY>" +
+                                    "</USERTOKEN>" +
+                                    "<ACTION NAME=\"DIAL.CONNECT\">" +
+                                        "<PARAMETER NAME=\"TEST\">TRUE</PARAMETER>" +
+                                        "<PARAMETER NAME=\"PHONENUMBER\">1215215215</PARAMETER>" +
+                                        "<PARAMETER NAME=\"DESTPHONENUMBER\">1212121212</PARAMETER>" +
+                                        "<PARAMETER NAME=\"CALLERID\">12157010680</PARAMETER>" +
+                                        "<PARAMETER NAME=\"DELAY\">1440</PARAMETER>" +
+                                        "<PARAMETER NAME=\"MEMO\">DIAL.CONNECT API Action example to connect 1215215215 with 1212121212 delayed by 24 hours</PARAMETER>" +
+                                    "</ACTION>" +
+                               "</REQUEST>";
+
+    public static void main(String[] args) {
+        String xml = doApiCall();
+
+        // xml holds API result XML text
+        System.out.println(xml);
+        // parse XML Results with parser
+        // ...
+    }
+
+    private static String doApiCall() {
+        String result = null;
+        try {
+            URL url = new URL(ANVEO_API_URL);
+            URLConnection uc = url.openConnection();
+            HttpURLConnection connection = (HttpURLConnection) uc;
+            connection.setDoOutput(true);
+            connection.setDoInput(true);
+            connection.setRequestMethod("POST");
+            connection.addRequestProperty("Content-Type", "application/xml; charset=UTF-8");
+            connection.addRequestProperty("Accept", "application/xml; charset=UTF-8");
+            OutputStream out = connection.getOutputStream();
+            Writer writer = new BufferedWriter(new OutputStreamWriter(out, "UTF-8"));
+            writer.write(XML);
+            writer.flush();
+            writer.close();
+            InputStream in = connection.getInputStream();
+            BufferedReader reader = new BufferedReader(new InputStreamReader(in, "UTF-8"));
+            StringBuffer sb = new StringBuffer();
+
+            String line;
+            while ((line = reader.readLine()) != null) sb.append(line);
+            reader.close();
+            connection.disconnect();
+            result = sb.toString();
+        } catch (IOException e) {
+            e.printStackTrace();  // ERROR loading XML
+        }
+        return result;
+    }
+}
+
+		
+
+
+C#.NET:	
+
+Anveo API - C# Code Sample
+
+C# code sample for Anveo® API integration.
+using System;
+using System.Xml;
+using System.Net;
+using System.IO;
+using System.Security.Cryptography;
+
+/// <summary>
+///--------------------------------------------------------------------------------------------------------
+///              .NET C# implementation of Anveo API to initiate DIAL.CONNECT API function
+///
+///   The rest of Anveo API functions can be implemented by simply changing XML stored in $data variable
+///                                          2008 - Anveo team.
+///--------------------------------------------------------------------------------------------------------
+/// </summary>
+
+Public static string GetSignature(String email, String passphrase) {
+	var enc = Encoding.ASCII;
+	HMACSHA1 hmac = new HMACSHA1(enc.GetBytes(passphrase));
+	hmac.Initialize();
+	byte[] buffer = enc.GetBytes(email);
+	return BitConverter.ToString(hmac.ComputeHash(buffer)).Replace("-", "").ToLower();
+}
+
+public static XmlDocument doApiCall(String sApiXML)
+{
+	//Declare XMLResponse document
+	XmlDocument XMLResponse = null;
+
+	//Declare an HTTP-specific implementation of the WebRequest class.
+	HttpWebRequest objHttpWebRequest;
+
+	//Declare an HTTP-specific implementation of the WebResponse class
+	HttpWebResponse objHttpWebResponse = null;
+
+	//Declare a generic view of a sequence of bytes
+	Stream objRequestStream = null;
+	Stream objResponseStream = null;
+
+	//Declare XMLReader
+	XmlTextReader objXMLReader;
+
+	//Creates an HttpWebRequest for the Anveo API URL.
+	objHttpWebRequest = (HttpWebRequest)WebRequest.Create("https://www.anveo.com/api/v3.asp");
+
+
+	try
+	{
+		//---------- ANVEO API HttpRequest
+
+		//Prepare HttpWebRequest properties
+		byte[] bytes;
+		bytes = System.Text.Encoding.ASCII.GetBytes(sApiXML);
+		objHttpWebRequest.Method = "POST";
+		objHttpWebRequest.ContentLength = bytes.Length;
+		objHttpWebRequest.ContentType = "application/xml; encoding='utf-8'";
+		objHttpWebRequest.Accept="application/xml; encoding='utf-8'";
+
+		//Get Stream object
+		objRequestStream = objHttpWebRequest.GetRequestStream();
+
+		//Writes a sequence of bytes to the current stream
+		objRequestStream.Write(bytes, 0, bytes.Length);
+
+		//Close stream
+		objRequestStream.Close();
+
+		//Send and wait for a response.
+		objHttpWebResponse = (HttpWebResponse)objHttpWebRequest.GetResponse();
+
+		//---------- End ANVEO API HttpRequest
+
+		//---------- ANVEO API HttpResponse
+		if (objHttpWebResponse.StatusCode == HttpStatusCode.OK)
+		{
+			//Get response stream
+			objResponseStream = objHttpWebResponse.GetResponseStream();
+
+			//Load response stream into XMLReader
+			objXMLReader = new XmlTextReader(objResponseStream);
+
+			//Declare XMLDocument
+			XmlDocument xmldoc = new XmlDocument();
+			xmldoc.Load(objXMLReader);
+
+			//Set XMLResponse object returned from XMLReader
+			XMLResponse = xmldoc;
+
+			//Close XMLReader
+			objXMLReader.Close();
+		}
+
+		//Close HttpWebResponse
+		objHttpWebResponse.Close();
+	}
+	catch (WebException we)
+	{
+		//TODO: Add exception handling
+		throw new Exception(we.Message);
+	}
+	catch (Exception ex)
+	{
+		throw new Exception(ex.Message);
+	}
+	finally
+	{
+		//Close connections
+		objRequestStream.Close();
+		objResponseStream.Close();
+		objHttpWebResponse.Close();
+	}
+
+	return XMLResponse;
+}
+		
+...
+...
+...
+
+String sApiXml= @"<?xml version=""1.0"" standalone=""no"" ?>
+<REQUEST>
+	<USERTOKEN>
+		<USERKEY>----------- YOUR API USERKEY -----------</USERKEY>
+	</USERTOKEN>
+	<ACTION NAME=""DIAL.CONNECT"">
+		<PARAMETER NAME=""SIGNATURE"">SOMESIGNATURE</PARAMETER>
+		<PARAMETER NAME=""TEST"">TRUE</PARAMETER>
+		<PARAMETER NAME=""PHONENUMBER"">1215215215</PARAMETER>
+		<PARAMETER NAME=""DESTPHONENUMBER"">1212121212</PARAMETER>
+		<PARAMETER NAME=""CALLERID"">12157010680</PARAMETER>
+		<PARAMETER NAME=""DELAY"">1440</PARAMETER>
+		<PARAMETER NAME=""MEMO"">DIAL.CONNECT API Action example to connect 1215215215 with 1212121212 delayed by 24 hours</PARAMETER>
+	</ACTION>
+</REQUEST>";
+
+XmlDocument ApiXMLResponse = null;
+ApiXMLResponse=doApiCall(sApiXml);
+//System.Console.WriteLine(ApiXMLResponse.InnerXml);
+
+...
+...
+...
+
