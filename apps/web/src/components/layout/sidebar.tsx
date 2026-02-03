@@ -56,7 +56,6 @@ const navigation: NavItem[] = [
     href: '/call-center',
     icon: Headphones,
     title: 'Integrated dialer with scripting & quoting',
-    hideFromBuyerOnly: true,
   },
   { name: 'Numbers', href: '/numbers', icon: PhoneCall },
   { name: 'Campaigns', href: '/campaigns', icon: Megaphone },
