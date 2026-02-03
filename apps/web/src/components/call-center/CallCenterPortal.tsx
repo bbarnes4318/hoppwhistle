@@ -705,7 +705,7 @@ export function CallCenterPortal(): JSX.Element {
               <Settings className="w-4 h-4 text-gray-400" />
             </button>
             <button
-              onClick={() => setCurrentView('roleSelect')}
+              onClick={() => router.push('/dashboard')}
               className="text-sm text-gray-400 hover:text-white transition-colors"
             >
               ← Exit
