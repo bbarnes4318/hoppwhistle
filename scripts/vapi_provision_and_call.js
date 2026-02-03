@@ -190,21 +190,27 @@ async function placeCall(phoneNumberId, destinationNumber) {
 }
 
 /**
- * Find existing credential by name or create new
+ * Find existing credential by FreeSWITCH IP or create new
  */
 async function getOrCreateCredential() {
   const credentials = await listCredentials();
 
-  // Look for existing FreeSWITCH credential
+  // Look for existing FreeSWITCH credential by IP
   const existing = Array.isArray(credentials)
-    ? credentials.find(c => c.name === 'FreeSWITCH Vapi Trunk' || c.provider === 'byo-sip-trunk')
+    ? credentials.find(c => {
+        if (c.provider !== 'byo-sip-trunk') return false;
+        if (!c.gateways || !Array.isArray(c.gateways)) return false;
+        // Check if any gateway points to our FreeSWITCH IP
+        return c.gateways.some(g => g.ip === CONFIG.FREESWITCH_HOST);
+      })
     : null;
 
   if (existing) {
-    console.log('  Found existing credential:', existing.id);
+    console.log('  Found existing FreeSWITCH credential:', existing.id);
     return existing;
   }
 
+  console.log('  No existing FreeSWITCH credential found, creating new...');
   return await createSipTrunkCredential();
 }
 
