@@ -3,8 +3,8 @@
 import { Plus, Search, Download, Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
+import { AnveoPurchaseDialog } from '@/components/numbers/anveo-purchase-dialog';
 import { EditNumberDialog } from '@/components/numbers/edit-number-dialog';
-import { PurchaseNumberDialog } from '@/components/numbers/purchase-number-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -191,7 +191,7 @@ export default function NumbersPage() {
         </CardContent>
       </Card>
 
-      <PurchaseNumberDialog
+      <AnveoPurchaseDialog
         open={purchaseDialogOpen}
         onOpenChange={setPurchaseDialogOpen}
         onSuccess={handlePurchaseSuccess}

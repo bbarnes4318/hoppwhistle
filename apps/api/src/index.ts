@@ -304,6 +304,10 @@ async function buildServer() {
   const { registerProspectIntakeRoutes } = await import('./routes/prospect-intake.js');
   await server.register(registerProspectIntakeRoutes);
 
+  // Register Anveo Number Procurement routes (inventory, purchase, billing)
+  const { registerAnveoProcurementRoutes } = await import('./routes/anveo-procurement.js');
+  await server.register(registerAnveoProcurementRoutes);
+
   // Start Fronter Bot socket server (handles outbound call socket connections)
   const { fronterBotService } = await import('./services/fronter-bot.js');
   await fronterBotService.start();
