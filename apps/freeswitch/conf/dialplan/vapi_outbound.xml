@@ -6,10 +6,8 @@
     <!-- Rate limiting for Vapi calls only -->
     <extension name="vapi-rate-limit" continue="true">
       <condition field="destination_number" expression="^.*$">
-        <!-- CPS limit: 2 calls per second -->
-        <action application="limit" data="rate vapi_cps 2 1 !CALL_REJECTED"/>
-        <!-- Concurrent call limit: 10 -->
-        <action application="limit" data="hash vapi_concurrent ${destination_number} 10 !CALL_REJECTED"/>
+        <!-- Concurrent call limit: 10 (using hash backend which is always available) -->
+        <action application="limit" data="hash vapi ${destination_number} 10 !CALL_REJECTED"/>
       </condition>
     </extension>
 
