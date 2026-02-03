@@ -1,0 +1,10 @@
+<include>
+    <!-- Vapi-specific Anveo gateway - DO NOT use for existing app traffic -->
+    <!-- This gateway is isolated from external::anveo -->
+    <gateway name="anveo_vapi">
+        <param name="proxy" value="sbc.anveo.com"/>
+        <param name="register" value="false"/>
+        <param name="caller-id-in-from" value="true"/>
+        <param name="codec-prefs" value="PCMU,PCMA"/>
+    </gateway>
+</include>

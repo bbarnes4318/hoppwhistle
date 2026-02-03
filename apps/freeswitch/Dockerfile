@@ -31,8 +31,8 @@ COPY apps/freeswitch/docker-entrypoint.sh /docker-entrypoint.sh
 RUN sed -i 's/\r$//' /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh
 RUN chmod +x /usr/share/freeswitch/scripts/*.sh 2>/dev/null || true
 
-# Expose ports (SIP, ESL, RTP, Verto WebSocket)
-EXPOSE 5060/udp 5060/tcp 5066/tcp 5080/udp 5080/tcp 7443/tcp 8021/tcp 8082/tcp 8083/tcp 16384-32768/udp
+# Expose ports (SIP, ESL, RTP, Verto WebSocket, Vapi SIP)
+EXPOSE 5060/udp 5060/tcp 5066/tcp 5070/udp 5070/tcp 5080/udp 5080/tcp 7443/tcp 8021/tcp 8082/tcp 8083/tcp 16384-32768/udp
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["freeswitch", "-nf", "-c"]

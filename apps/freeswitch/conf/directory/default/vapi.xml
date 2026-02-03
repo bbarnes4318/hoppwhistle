@@ -1,0 +1,19 @@
+<include>
+  <!-- Vapi SIP User for authentication -->
+  <!-- Used by Vapi to authenticate SIP INVITE to FreeSWITCH -->
+  <user id="vapi">
+    <params>
+      <param name="password" value="VapiFS_5070_StrongPass!9xQ2"/>
+      <param name="vm-enabled" value="false"/>
+    </params>
+    <variables>
+      <variable name="toll_allow" value="domestic,international,local"/>
+      <variable name="accountcode" value="vapi"/>
+      <variable name="user_context" value="vapi_outbound"/>
+      <variable name="effective_caller_id_name" value="Vapi"/>
+      <variable name="effective_caller_id_number" value="+18652809894"/>
+      <variable name="outbound_caller_id_name" value="Vapi"/>
+      <variable name="outbound_caller_id_number" value="+18652809894"/>
+    </variables>
+  </user>
+</include>

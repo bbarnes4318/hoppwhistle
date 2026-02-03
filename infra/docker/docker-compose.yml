@@ -104,6 +104,8 @@ services:
       - '5062:5060/tcp'
       - '5080:5080/udp'
       - '5080:5080/tcp'
+      - '5070:5070/udp' # Vapi SIP profile
+      - '5070:5070/tcp' # Vapi SIP profile
       - '5063:5061/tcp'
       - '8021:8021/tcp'
       - '8082:8082/tcp' # Verto WebSocket (secure)

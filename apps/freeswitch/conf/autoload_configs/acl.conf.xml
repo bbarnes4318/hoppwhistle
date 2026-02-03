@@ -18,5 +18,10 @@
       <!-- Allow Public Internet for WebRTC -->
       <node type="allow" cidr="0.0.0.0/0"/>
     </list>
+    <!-- Vapi SIP Source IPs - strictly enforced for Vapi integration -->
+    <list name="vapi_sip_sources" default="deny">
+      <node type="allow" cidr="44.229.228.186/32"/>
+      <node type="allow" cidr="44.238.177.138/32"/>
+    </list>
   </network-lists>
 </configuration>

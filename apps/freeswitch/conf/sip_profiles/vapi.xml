@@ -1,0 +1,42 @@
+<!-- Vapi SIP Profile - Isolated entrypoint for Vapi outbound calls -->
+<!-- DO NOT MODIFY existing external or internal profiles -->
+<profile name="vapi">
+  <settings>
+    <!-- Basic Settings -->
+    <param name="debug" value="0"/>
+    <param name="sip-trace" value="false"/>
+
+    <!-- Network Settings - dedicated port 5070 -->
+    <param name="sip-ip" value="$${local_ip_v4}"/>
+    <param name="sip-port" value="5070"/>
+    <param name="rtp-ip" value="$${local_ip_v4}"/>
+    <param name="ext-rtp-ip" value="45.32.213.201"/>
+    <param name="ext-sip-ip" value="45.32.213.201"/>
+
+    <!-- Dialplan - ONLY vapi_outbound context -->
+    <param name="dialplan" value="XML"/>
+    <param name="context" value="vapi_outbound"/>
+
+    <!-- RTP Settings -->
+    <param name="rtp-timeout-sec" value="300"/>
+    <param name="rtp-hold-timeout-sec" value="1800"/>
+
+    <!-- Codec Settings - PCMU/PCMA only for PSTN compatibility -->
+    <param name="inbound-codec-prefs" value="PCMU,PCMA"/>
+    <param name="outbound-codec-prefs" value="PCMU,PCMA"/>
+
+    <!-- Authentication - REQUIRED for Vapi -->
+    <param name="auth-calls" value="true"/>
+    <param name="auth-all-packets" value="false"/>
+
+    <!-- ACL - Only allow Vapi IPs -->
+    <param name="apply-inbound-acl" value="vapi_sip_sources"/>
+
+    <!-- NAT Traversal -->
+    <param name="aggressive-nat-detection" value="true"/>
+    <param name="apply-nat-acl" value="nat.auto"/>
+
+    <!-- User lookup for authentication -->
+    <param name="challenge-realm" value="45.32.213.201"/>
+  </settings>
+</profile>
