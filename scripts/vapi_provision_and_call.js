@@ -105,9 +105,8 @@ async function createSipTrunkCredential() {
       },
     ],
     outboundAuthenticationPlan: {
-      authenticationRequired: true,
-      username: CONFIG.SIP_USERNAME,
-      password: CONFIG.SIP_PASSWORD,
+      authUsername: CONFIG.SIP_USERNAME,
+      authPassword: CONFIG.SIP_PASSWORD,
     },
   };
 
