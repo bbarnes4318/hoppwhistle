@@ -14,6 +14,7 @@
  * - DID.CANCEL - Release a DID
  */
 
+import { createHmac } from 'crypto';
 import { logger } from '../../lib/logger.js';
 import { secrets } from '../secrets.js';
 
@@ -92,11 +93,21 @@ export interface DidUpdateRequest {
  */
 export class AnveoDIDService {
   private apiKey: string;
+  private email: string;
+  private securePhrase: string;
+  private signature: string;
   private baseUrl: string;
   private publicIp: string;
 
   constructor() {
     this.apiKey = secrets.getRequired('ANVEO_API_KEY');
+    this.email = secrets.get('ANVEO_EMAIL') || '';
+    this.securePhrase = secrets.get('ANVEO_SECURE_PHRASE') || '';
+
+    // Calculate signature: HMAC_SHA1(email, securePhrase)
+    // Note: email is the data, securePhrase is the key
+    this.signature = this.calculateSignature();
+
     // Use sandbox in development, production in prod
     this.baseUrl =
       process.env.NODE_ENV === 'production'
@@ -108,14 +119,44 @@ export class AnveoDIDService {
       msg: 'AnveoDIDService initialized',
       baseUrl: this.baseUrl,
       publicIp: this.publicIp ? '***configured***' : 'NOT SET',
+      hasEmail: !!this.email,
+      hasSecurePhrase: !!this.securePhrase,
+      hasSignature: !!this.signature,
     });
+  }
+
+  /**
+   * Calculate HMAC-SHA1 signature for Anveo API authentication
+   * SIGNATURE = HMAC_SHA1(email, securePhrase)
+   */
+  private calculateSignature(): string {
+    if (!this.email || !this.securePhrase) {
+      logger.warn({
+        msg: 'Anveo signature cannot be calculated - missing email or securePhrase',
+        hasEmail: !!this.email,
+        hasSecurePhrase: !!this.securePhrase,
+      });
+      return '';
+    }
+
+    // HMAC_SHA1: key = securePhrase, data = email
+    const hmac = createHmac('sha1', this.securePhrase);
+    hmac.update(this.email);
+    return hmac.digest('hex');
   }
 
   /**
    * Build XML request payload
    */
   private buildXmlRequest(actionName: string, params: Record<string, string> = {}): string {
-    const paramXml = Object.entries(params)
+    // Always include SIGNATURE as the first parameter
+    const allParams: Record<string, string> = {};
+    if (this.signature) {
+      allParams.SIGNATURE = this.signature;
+    }
+    Object.assign(allParams, params);
+
+    const paramXml = Object.entries(allParams)
       .map(([name, value]) => `    <PARAMETER NAME="${name}">${this.escapeXml(value)}</PARAMETER>`)
       .join('\n');
 

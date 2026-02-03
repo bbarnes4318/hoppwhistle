@@ -185,6 +185,8 @@ services:
       - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-chat}
       # Anveo Direct Carrier Integration
       - ANVEO_API_KEY=${ANVEO_API_KEY}
+      - ANVEO_EMAIL=${ANVEO_EMAIL}
+      - ANVEO_SECURE_PHRASE=${ANVEO_SECURE_PHRASE}
       - PUBLIC_IP=${PUBLIC_IP}
       # FronterBot Binding
       - SOCKET_LISTENER_HOST=0.0.0.0

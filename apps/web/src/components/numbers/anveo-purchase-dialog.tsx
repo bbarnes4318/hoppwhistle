@@ -130,12 +130,19 @@ export function AnveoPurchaseDialog({ open, onOpenChange, onSuccess }: AnveoPurc
     try {
       const response = await apiClient.get<{
         data: AnveoCountry[];
+        error?: { message: string };
       }>('/api/v1/anveo/countries');
       if (response.data?.data) {
         setCountries(response.data.data);
+      } else if (response.data?.error) {
+        setError(response.data.error.message || 'Unknown API error');
       }
-    } catch (err) {
-      setError('Failed to load countries');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to load countries';
+      // Try to extract API error message from response
+      const apiError = (err as { response?: { data?: { error?: { message?: string } } } })?.response
+        ?.data?.error?.message;
+      setError(apiError || message);
     } finally {
       setLoading(false);
     }
@@ -247,8 +254,29 @@ export function AnveoPurchaseDialog({ open, onOpenChange, onSuccess }: AnveoPurc
               Select a country to browse available phone numbers.
             </div>
             {loading ? (
-              <div className="flex items-center justify-center py-8">
+              <div className="flex flex-col items-center justify-center py-8 gap-2">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Loading countries...</p>
+              </div>
+            ) : error ? (
+              <div className="flex flex-col items-center justify-center py-8 gap-4">
+                <div className="text-sm text-destructive bg-destructive/10 p-4 rounded-md text-center">
+                  <p className="font-medium mb-1">Failed to load countries</p>
+                  <p className="text-xs opacity-80">{error}</p>
+                </div>
+                <Button variant="outline" onClick={loadCountries}>
+                  Try Again
+                </Button>
+              </div>
+            ) : countries.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 gap-4">
+                <div className="text-sm text-muted-foreground text-center">
+                  <p>No countries available at this time.</p>
+                  <p className="text-xs mt-1">Please check your Anveo API configuration.</p>
+                </div>
+                <Button variant="outline" onClick={loadCountries}>
+                  Refresh
+                </Button>
               </div>
             ) : (
               <div className="space-y-2 max-h-[400px] overflow-y-auto">
