@@ -174,8 +174,7 @@ export class ProvisioningService {
    * Selection logic:
    * 1. Tenant preference (metadata.defaultProvider)
    * 2. Environment variable (DEFAULT_PROVIDER)
-   * 3. Development fallback (local)
-   * 4. Configured adapter order (SignalWire -> Telnyx -> Bandwidth)
+   * 3. First configured adapter in priority order (Anveo -> SignalWire -> Telnyx -> Bandwidth)
    */
   async getProviderForTenant(tenantId: string): Promise<Provider> {
     const prisma = getPrismaClient();
@@ -198,12 +197,7 @@ export class ProvisioningService {
       return defaultProvider;
     }
 
-    // 3. Development fallback
-    if (process.env.NODE_ENV === 'development') {
-      return 'local';
-    }
-
-    // 4. Check configured adapters in priority order
+    // 3. Use first configured adapter in priority order (Anveo first)
     for (const provider of DEFAULT_PROVIDER_ORDER) {
       if (this.adapters.has(provider)) {
         return provider;

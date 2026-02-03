@@ -136,8 +136,8 @@ export function CallCenterPortal(): JSX.Element {
   const { leadData, isConnected: leadStreamConnected, lookupLead, clearLead } = useLeadInjection();
   const [preInjectedData, setPreInjectedData] = useState<ProspectData | null>(null);
 
-  // State
-  const [currentView, setCurrentView] = useState<CurrentView>('roleSelect');
+  // State - Default directly to agentDashboard (skip role selection menu)
+  const [currentView, setCurrentView] = useState<CurrentView>('agentDashboard');
   const [agentStatus, setAgentStatus] = useState<AgentStatus>('available');
 
   // Call State

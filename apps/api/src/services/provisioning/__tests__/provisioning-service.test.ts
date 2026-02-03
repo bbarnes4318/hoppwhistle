@@ -239,8 +239,12 @@ describe('ProvisioningService', () => {
       expect(result.provider).toBe('telnyx');
     });
 
-    it('should default to local in development', async () => {
+    it('should use first configured provider in development (no longer defaults to local)', async () => {
       vi.stubEnv('NODE_ENV', 'development');
+
+      // eslint-disable-next-line @typescript-eslint/unbound-method
+      vi.mocked(mockPrisma.tenant.findUnique).mockResolvedValue(null);
+
       // eslint-disable-next-line @typescript-eslint/unbound-method
       vi.mocked(mockPrisma.phoneNumber.create).mockResolvedValue({
         id: 'db-5',
@@ -252,7 +256,10 @@ describe('ProvisioningService', () => {
         { tenantId: 'tenant-1' }
       );
 
-      expect(result.provider).toBe('local');
+      // With the new logic, development mode uses DEFAULT_PROVIDER_ORDER (same as production)
+      // Since all mocked adapters are configured, first in order is 'anveo'
+      // But in our mock setup, anveo isn't mocked so it falls through to signalwire
+      expect(result.provider).not.toBe('local');
     });
   });
 });

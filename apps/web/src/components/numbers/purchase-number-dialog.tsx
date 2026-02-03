@@ -119,7 +119,9 @@ export function PurchaseNumberDialog({ open, onOpenChange, onSuccess }: Purchase
                 <SelectItem value="signalwire">SignalWire</SelectItem>
                 <SelectItem value="telnyx">Telnyx</SelectItem>
                 <SelectItem value="bandwidth">Bandwidth</SelectItem>
-                <SelectItem value="local">Local (Test)</SelectItem>
+                <SelectItem value="local" className="text-muted-foreground">
+                  Local (Test - Fake Numbers Only)
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
