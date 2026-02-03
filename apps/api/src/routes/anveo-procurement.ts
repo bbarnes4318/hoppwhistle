@@ -8,10 +8,11 @@
  */
 
 import { FastifyInstance, FastifyRequest } from 'fastify';
-import { AuthenticatedUser } from '../../middleware/auth.js';
-import { getAnveoDIDService } from '../../services/provisioning/anveo-did-service.js';
-import { getPrismaClient } from '../../lib/prisma.js';
-import { logger } from '../../lib/logger.js';
+
+import { logger } from '../lib/logger.js';
+import { getPrismaClient } from '../lib/prisma.js';
+import { AuthenticatedUser } from '../middleware/auth.js';
+import { getAnveoDIDService } from '../services/provisioning/anveo-did-service.js';
 
 type AuthRequest = FastifyRequest & { user?: AuthenticatedUser };
 
@@ -315,7 +316,7 @@ export async function registerAnveoProcurementRoutes(fastify: FastifyInstance): 
       });
 
       // Audit log
-      const { auditCreate } = await import('../../services/audit.js');
+      const { auditCreate } = await import('../services/audit.js');
       await auditCreate(
         tenantId,
         'PhoneNumber',
@@ -522,7 +523,7 @@ export async function registerAnveoProcurementRoutes(fastify: FastifyInstance): 
       });
 
       // Audit log
-      const { auditUpdate } = await import('../../services/audit.js');
+      const { auditUpdate } = await import('../services/audit.js');
       await auditUpdate(
         tenantId,
         'PhoneNumber',
