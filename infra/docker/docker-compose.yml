@@ -110,6 +110,7 @@ services:
       - '8021:8021/tcp'
       - '8082:8082/tcp' # Verto WebSocket (secure)
       - '8083:8083/tcp' # Verto WebSocket (dev)
+      - '7443:7443/tcp' # WSS for WebRTC SIP (Call Center)
       # RTP media ports (audio) - MUST be exposed for call audio to work
       - '16384-16484:16384-16484/udp'
     environment:
