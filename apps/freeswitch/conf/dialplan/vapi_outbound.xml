@@ -34,8 +34,9 @@
         <action application="set" data="hangup_after_bridge=true"/>
         <action application="set" data="ignore_early_media=true"/>
 
-        <!-- Store normalized destination (strip + for Anveo) -->
-        <action application="set" data="dest_digits=1$1"/>
+        <!-- Store normalized destination with Anveo Tech Prefix -->
+        <!-- Format: 012345 (Tech Prefix) + 1 (Country) + XXXXXXXXXX (10-digit) -->
+        <action application="set" data="dest_digits=0123451$1"/>
 
         <action application="log" data="INFO [VAPI] Bridging to Anveo via anveo_vapi gateway: ${dest_digits}"/>
 
@@ -65,8 +66,8 @@
 
         <action application="set" data="hangup_after_bridge=true"/>
 
-        <!-- Strip + for carrier -->
-        <action application="set" data="dest_digits=$1"/>
+        <!-- Format: 012345 (Tech Prefix) + CountryCode + Number -->
+        <action application="set" data="dest_digits=012345$1"/>
 
         <action application="bridge" data="sofia/gateway/anveo_vapi/${dest_digits}"/>
       </condition>
