@@ -99,7 +99,7 @@ async function createSipTrunkCredential() {
         ip: CONFIG.FREESWITCH_HOST,
         port: CONFIG.FREESWITCH_PORT,
         netmask: 32,
-        inboundEnabled: false,
+        inboundEnabled: true, // Vapi sends calls TO our FreeSWITCH
         outboundEnabled: true,
         outboundProtocol: 'udp',
       },
@@ -206,11 +206,50 @@ async function getOrCreateCredential() {
 
   if (existing) {
     console.log('  Found existing FreeSWITCH credential:', existing.id);
+
+    // Check if inboundEnabled is correct
+    const gateway = existing.gateways?.find(g => g.ip === CONFIG.FREESWITCH_HOST);
+    if (gateway && gateway.inboundEnabled === false) {
+      console.log('  ⚠ Gateway has inboundEnabled=false, fixing...');
+      await updateCredentialGateway(existing.id);
+    }
+
     return existing;
   }
 
   console.log('  No existing FreeSWITCH credential found, creating new...');
   return await createSipTrunkCredential();
+}
+
+/**
+ * Update credential gateway to enable inbound
+ */
+async function updateCredentialGateway(credentialId) {
+  console.log(`\n[1a] Updating credential ${credentialId} gateway settings...`);
+
+  const payload = {
+    gateways: [
+      {
+        ip: CONFIG.FREESWITCH_HOST,
+        port: CONFIG.FREESWITCH_PORT,
+        netmask: 32,
+        inboundEnabled: true,
+        outboundEnabled: true,
+        outboundProtocol: 'udp',
+      },
+    ],
+  };
+
+  console.log('  Payload:', JSON.stringify(payload, null, 2));
+
+  try {
+    const result = await vapiRequest('PATCH', `/credential/${credentialId}`, payload);
+    console.log('  ✓ Credential gateway updated');
+    return result;
+  } catch (err) {
+    console.error('  ✗ Failed to update credential gateway:', err.message);
+    throw err;
+  }
 }
 
 /**
