@@ -25,8 +25,9 @@
     <param name="inbound-codec-prefs" value="PCMU,PCMA"/>
     <param name="outbound-codec-prefs" value="PCMU,PCMA"/>
 
-    <!-- Authentication - REQUIRED for Vapi -->
-    <param name="auth-calls" value="true"/>
+    <!-- Authentication - Using ACL for IP-based auth, not per-call auth -->
+    <!-- auth-calls=false means we trust IPs in the ACL without requiring SIP auth -->
+    <param name="auth-calls" value="false"/>
     <param name="auth-all-packets" value="false"/>
 
     <!-- ACL - Only allow Vapi IPs -->
