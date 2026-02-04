@@ -17,6 +17,9 @@ COPY apps/freeswitch/conf/sip_profiles/external/ /usr/share/freeswitch/conf/vani
 # Copy our custom dialplan
 COPY apps/freeswitch/conf/dialplan/*.xml /usr/share/freeswitch/conf/vanilla/dialplan/
 
+# Copy our custom directory users (including vapi.xml for SIP auth)
+COPY apps/freeswitch/conf/directory/default/*.xml /usr/share/freeswitch/conf/vanilla/directory/default/
+
 # Copy vars.xml for environment variable substitution
 COPY apps/freeswitch/conf/vars.xml /usr/share/freeswitch/conf/vanilla/vars.xml
 
