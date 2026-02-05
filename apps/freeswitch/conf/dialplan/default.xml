@@ -1,13 +1,14 @@
 <include>
   <context name="default">
-    <!-- Outbound calls - use Telnyx DID as caller ID -->
-    <extension name="outbound-to-telnyx">
+    <!-- Outbound calls - use Anveo with tech prefix -->
+    <extension name="outbound-to-anveo">
       <condition field="destination_number" expression="^(\d{10,11})$">
-        <action application="log" data="INFO Outbound call to ${destination_number} from ${outbound_caller_id}"/>
-        <action application="set" data="effective_caller_id_number=${outbound_caller_id}"/>
+        <action application="log" data="INFO [DEFAULT] Outbound call to ${destination_number}"/>
+        <action application="set" data="effective_caller_id_number=18652809894"/>
         <action application="set" data="effective_caller_id_name=Hopwhistle"/>
         <action application="set" data="hangup_after_bridge=true"/>
-        <action application="bridge" data="sofia/gateway/telnyx/+1${destination_number}"/>
+        <!-- Anveo requires tech prefix 012345 + country code + number -->
+        <action application="bridge" data="sofia/gateway/anveo/0123451${destination_number}"/>
       </condition>
     </extension>
 
