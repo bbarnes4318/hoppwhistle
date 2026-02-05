@@ -21,9 +21,9 @@
     <param name="rtp-timeout-sec" value="300"/>
     <param name="rtp-hold-timeout-sec" value="1800"/>
 
-    <!-- Codec Settings - PCMU/PCMA only for PSTN compatibility -->
-    <param name="inbound-codec-prefs" value="PCMU,PCMA"/>
-    <param name="outbound-codec-prefs" value="PCMU,PCMA"/>
+    <!-- Codec Settings - OPUS for Vapi, PCMU/PCMA for PSTN fallback -->
+    <param name="inbound-codec-prefs" value="OPUS,PCMU,PCMA"/>
+    <param name="outbound-codec-prefs" value="OPUS,PCMU,PCMA"/>
 
     <!-- Authentication - Using ACL for IP-based auth, not per-call auth -->
     <!-- auth-calls=false means we trust IPs in the ACL without requiring SIP auth -->
