@@ -1,0 +1,27 @@
+<include>
+  <context name="public">
+    <!--
+      Inbound calls from Anveo/PSTN
+      Calls coming to your DIDs will match here
+    -->
+
+    <!-- Inbound to Call Center DID (865-280-9894) -->
+    <extension name="inbound-call-center">
+      <condition field="destination_number" expression="^(\+?1?8652809894)$">
+        <action application="log" data="INFO [PUBLIC] Inbound call to Call Center DID"/>
+        <action application="set" data="domain_name=45.32.213.201"/>
+        <action application="set" data="call_direction=inbound"/>
+        <!-- Ring the Call Center agent -->
+        <action application="bridge" data="user/1000@45.32.213.201"/>
+      </condition>
+    </extension>
+
+    <!-- Default: reject unknown inbound -->
+    <extension name="unmatched-inbound">
+      <condition field="destination_number" expression="^.+$">
+        <action application="log" data="WARNING [PUBLIC] Unmatched inbound: ${destination_number}"/>
+        <action application="hangup" data="NO_ROUTE_DESTINATION"/>
+      </condition>
+    </extension>
+  </context>
+</include>
