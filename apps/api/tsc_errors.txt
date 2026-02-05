@@ -1,0 +1,196 @@
+﻿src/lib/tracing.ts(47,7): error TS18047: 'sdk' is possibly 'null'.
+src/middleware/csrf.ts(108,35): error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+src/middleware/logging.ts(8,64): error TS6133: 'reply' is declared but its value is never read.
+src/middleware/logging.ts(78,19): error TS18048: 'error.statusCode' is possibly 'undefined'.
+src/middleware/quota.ts(12,10): error TS7030: Not all code paths return a value.
+src/middleware/quota.ts(56,31): error TS2339: Property 'remaining' does not exist on type 'QuotaCheckResult | BudgetCheckResult'.
+  Property 'remaining' does not exist on type 'BudgetCheckResult'.
+src/middleware/rate-limit.ts(18,3): error TS6133: 'request' is declared but its value is never read.
+src/middleware/rate-limit.ts(66,9): error TS6133: 'identifier' is declared but its value is never read.
+src/middleware/rate-limit.ts(67,9): error TS6133: 'type' is declared but its value is never read.
+src/middleware/rbac.ts(57,7): error TS2741: Property 'AGENT' is missing in type '{ OWNER: "admin:*"[]; ADMIN: ("users:read" | "users:write" | "users:delete" | "roles:read" | "roles:write" | "api_keys:read" | "api_keys:write" | "api_keys:delete" | "numbers:read" | ... 23 more ... | "payroll:admin")[]; ANALYST: ("numbers:read" | ... 4 more ... | "reports:read")[]; PUBLISHER: ("campaigns:read" | .....' but required in type 'Record<RoleName, Permission[]>'.
+src/middleware/rbac.ts(378,59): error TS2345: Argument of type 'string' is not assignable to parameter of type 'RoleName'.
+src/routes/admin-billing.ts(58,13): error TS6198: All destructured elements are unused.
+src/routes/admin-billing.ts(305,67): error TS6133: 'reply' is declared but its value is never read.
+src/routes/agent-phone.ts(5,1): error TS6133: 'buyerBillingService' is declared but its value is never read.
+src/routes/ai-campaigns.ts(20,5): error TS2687: All declarations of 'user' must have identical modifiers.
+src/routes/ai-campaigns.ts(20,5): error TS2717: Subsequent property declarations must have the same type.  Property 'user' must be of type 'AuthenticatedUser', but here has type 'User | undefined'.
+src/routes/buyer-billing.ts(740,9): error TS2322: Type 'Record<string, { start: string; end: string; }[]> | null' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+  Type 'null' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+src/routes/buyer-billing.ts(743,9): error TS2322: Type '{ field: string; op: string; val: unknown; adjustment: string; }[] | null' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+  Type 'null' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+src/routes/compliance.ts(274,11): error TS2353: Object literal may only specify known properties, and 'tenantId' does not exist in type '{ userId?: string | undefined; apiKeyId?: string | undefined; ipAddress?: string | undefined; userAgent?: string | undefined; requestId?: string | undefined; }'.
+src/routes/compliance.ts(303,58): error TS7030: Not all code paths return a value.
+src/routes/compliance.ts(339,9): error TS2353: Object literal may only specify known properties, and 'tenantId' does not exist in type '{ userId?: string | undefined; apiKeyId?: string | undefined; ipAddress?: string | undefined; userAgent?: string | undefined; requestId?: string | undefined; }'.
+src/routes/compliance.ts(350,59): error TS6133: 'reply' is declared but its value is never read.
+src/routes/compliance.ts(352,21): error TS6133: 'phoneNumber' is declared but its value is never read.
+src/routes/demo-events.ts(12,60): error TS6133: 'reply' is declared but its value is never read.
+src/routes/demo-events.ts(98,69): error TS6133: 'reply' is declared but its value is never read.
+src/routes/demo.ts(12,45): error TS6133: 'request' is declared but its value is never read.
+src/routes/demo.ts(12,54): error TS6133: 'reply' is declared but its value is never read.
+src/routes/demo.ts(55,44): error TS6133: 'request' is declared but its value is never read.
+src/routes/demo.ts(80,39): error TS2353: Object literal may only specify known properties, and 'tenantId' does not exist in type 'InvoiceWhereInput'.
+src/routes/demo.ts(82,18): error TS2353: Object literal may only specify known properties, and 'tenantId' does not exist in type 'InvoiceWhereInput'.
+src/routes/demo.ts(97,23): error TS18048: 'totalRevenue._sum' is possibly 'undefined'.
+src/routes/flows.ts(28,9): error TS2698: Spread types may only be created from object types.
+src/routes/health.ts(25,39): error TS6133: 'request' is declared but its value is never read.
+src/routes/index.ts(254,16): error TS2339: Property 'poolType' does not exist on type '{ status?: "ACTIVE" | "SUSPENDED" | "INACTIVE" | undefined; campaignId?: string | null | undefined; capabilities?: { voice?: boolean | undefined; sms?: boolean | undefined; mms?: boolean | undefined; fax?: boolean | undefined; } | undefined; }'.
+src/routes/index.ts(255,36): error TS2339: Property 'poolType' does not exist on type '{ status?: "ACTIVE" | "SUSPENDED" | "INACTIVE" | undefined; campaignId?: string | null | undefined; capabilities?: { voice?: boolean | undefined; sms?: boolean | undefined; mms?: boolean | undefined; fax?: boolean | undefined; } | undefined; }'.
+src/routes/index.ts(257,16): error TS2339: Property 'poolStatus' does not exist on type '{ status?: "ACTIVE" | "SUSPENDED" | "INACTIVE" | undefined; campaignId?: string | null | undefined; capabilities?: { voice?: boolean | undefined; sms?: boolean | undefined; mms?: boolean | undefined; fax?: boolean | undefined; } | undefined; }'.
+src/routes/index.ts(258,38): error TS2339: Property 'poolStatus' does not exist on type '{ status?: "ACTIVE" | "SUSPENDED" | "INACTIVE" | undefined; campaignId?: string | null | undefined; capabilities?: { voice?: boolean | undefined; sms?: boolean | undefined; mms?: boolean | undefined; fax?: boolean | undefined; } | undefined; }'.
+src/routes/index.ts(2095,9): error TS2322: Type '{ tenantId: string; name: string; code: string; status: "ACTIVE"; billingType: "UPFRONT"; }' is not assignable to type '(Without<BuyerCreateInput, BuyerUncheckedCreateInput> & BuyerUncheckedCreateInput) | (Without<...> & BuyerCreateInput)'.
+  Type '{ tenantId: string; name: string; code: string; status: "ACTIVE"; billingType: "UPFRONT"; }' is not assignable to type 'Without<BuyerCreateInput, BuyerUncheckedCreateInput> & BuyerUncheckedCreateInput'.
+    Property 'publisherId' is missing in type '{ tenantId: string; name: string; code: string; status: "ACTIVE"; billingType: "UPFRONT"; }' but required in type 'BuyerUncheckedCreateInput'.
+src/routes/lead-inject.ts(222,52): error TS6133: 'request' is declared but its value is never read.
+src/routes/lead-inject.ts(222,61): error TS6133: 'reply' is declared but its value is never read.
+src/routes/lead-inject.ts(246,21): error TS6133: 'reply' is declared but its value is never read.
+src/routes/prospect-intake.ts(105,39): error TS2339: Property 'prospectIntake' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+src/routes/prospect-intake.ts(218,37): error TS2339: Property 'prospectIntake' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+src/routes/prospect-intake.ts(228,35): error TS2339: Property 'prospectIntake' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+src/routes/prospect-intake.ts(296,50): error TS6133: 'request' is declared but its value is never read.
+src/routes/prospect-intake.ts(298,38): error TS2339: Property 'prospectIntake' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+src/routes/prospect-intake.ts(320,34): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/routes/prospect-intake.ts(347,22): error TS2339: Property 'prospectIntake' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+src/routes/quotas.ts(1,10): error TS6133: 'createHash' is declared but its value is never read.
+src/routes/quotas.ts(8,1): error TS6133: 'quotaService' is declared but its value is never read.
+src/routes/quotas.ts(17,38): error TS2345: Argument of type '"admin:full"' is not assignable to parameter of type 'Permission'.
+src/routes/quotas.ts(38,38): error TS2345: Argument of type '"admin:full"' is not assignable to parameter of type 'Permission'.
+src/routes/quotas.ts(39,21): error TS6133: 'reply' is declared but its value is never read.
+src/routes/quotas.ts(110,38): error TS2345: Argument of type '"admin:full"' is not assignable to parameter of type 'Permission'.
+src/routes/quotas.ts(137,38): error TS2345: Argument of type '"admin:full"' is not assignable to parameter of type 'Permission'.
+src/routes/quotas.ts(138,21): error TS6133: 'reply' is declared but its value is never read.
+src/routes/quotas.ts(210,38): error TS2345: Argument of type '"admin:full"' is not assignable to parameter of type 'Permission'.
+src/routes/quotas.ts(266,38): error TS2345: Argument of type '"admin:full"' is not assignable to parameter of type 'Permission'.
+src/routes/quotas.ts(267,21): error TS6133: 'reply' is declared but its value is never read.
+src/routes/quotas.ts(301,38): error TS2345: Argument of type '"admin:full"' is not assignable to parameter of type 'Permission'.
+src/routes/quotas.ts(406,38): error TS2345: Argument of type '"admin:full"' is not assignable to parameter of type 'Permission'.
+src/routes/quotas.ts(453,38): error TS2345: Argument of type '"admin:full"' is not assignable to parameter of type 'Permission'.
+src/routes/quotas.ts(454,21): error TS6133: 'reply' is declared but its value is never read.
+src/routes/quotas.ts(476,38): error TS2345: Argument of type '"admin:full"' is not assignable to parameter of type 'Permission'.
+src/routes/quotas.ts(477,21): error TS6133: 'reply' is declared but its value is never read.
+src/routes/recordings.ts(25,43): error TS6133: 'size' is declared but its value is never read.
+src/routes/recordings.ts(257,5): error TS7030: Not all code paths return a value.
+src/routes/stir-shaken.ts(190,60): error TS6133: 'reply' is declared but its value is never read.
+src/routes/websocket.ts(4,15): error TS6196: 'EventPayload' is declared but never used.
+src/routes/websocket.ts(129,40): error TS7006: Parameter 'err' implicitly has an 'any' type.
+src/services/ai-campaign-service.ts(10,3): error TS2724: '"@prisma/client"' has no exported member named 'AICampaign'. Did you mean 'Campaign'?
+src/services/ai-campaign-service.ts(11,3): error TS2305: Module '"@prisma/client"' has no exported member 'AICampaignContact'.
+src/services/ai-campaign-service.ts(12,3): error TS2305: Module '"@prisma/client"' has no exported member 'AICampaignCall'.
+src/services/ai-campaign-service.ts(13,3): error TS2724: '"@prisma/client"' has no exported member named 'AICampaignStatus'. Did you mean 'CampaignStatus'?
+src/services/ai-campaign-service.ts(13,3): error TS6196: 'AICampaignStatus' is declared but never used.
+src/services/ai-campaign-service.ts(14,3): error TS2305: Module '"@prisma/client"' has no exported member 'ContactStatus'.
+src/services/ai-campaign-service.ts(15,3): error TS2724: '"@prisma/client"' has no exported member named 'AICallStatus'. Did you mean 'CallStatus'?
+src/services/ai-campaign-service.ts(16,3): error TS6196: 'PhoneNumber' is declared but never used.
+src/services/ai-campaign-service.ts(20,7): error TS6133: 'VAPI_API_URL' is declared but its value is never read.
+src/services/ai-campaign-service.ts(21,7): error TS6133: 'VAPI_API_KEY' is declared but its value is never read.
+src/services/ai-campaign-service.ts(22,7): error TS6133: 'VAPI_ASSISTANT_ID' is declared but its value is never read.
+src/services/ai-campaign-service.ts(23,7): error TS6133: 'VAPI_PHONE_NUMBER_ID' is declared but its value is never read.
+src/services/ai-campaign-service.ts(56,11): error TS6196: 'VapiCallResponse' is declared but never used.
+src/services/ai-campaign-service.ts(85,17): error TS2551: Property 'aICampaign' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'. Did you mean 'campaign'?
+src/services/ai-campaign-service.ts(111,17): error TS2551: Property 'aICampaign' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'. Did you mean 'campaign'?
+src/services/ai-campaign-service.ts(132,12): error TS2551: Property 'aICampaign' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'. Did you mean 'campaign'?
+src/services/ai-campaign-service.ts(142,12): error TS2551: Property 'aICampaign' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'. Did you mean 'campaign'?
+src/services/ai-campaign-service.ts(158,33): error TS2551: Property 'aICampaign' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'. Did you mean 'campaign'?
+src/services/ai-campaign-service.ts(175,17): error TS2551: Property 'aICampaign' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'. Did you mean 'campaign'?
+src/services/ai-campaign-service.ts(184,33): error TS2551: Property 'aICampaign' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'. Did you mean 'campaign'?
+src/services/ai-campaign-service.ts(196,16): error TS2551: Property 'aICampaign' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'. Did you mean 'campaign'?
+src/services/ai-campaign-service.ts(210,33): error TS2551: Property 'aICampaign' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'. Did you mean 'campaign'?
+src/services/ai-campaign-service.ts(245,20): error TS2339: Property 'aICampaignContact' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+src/services/ai-campaign-service.ts(254,18): error TS2551: Property 'aICampaign' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'. Did you mean 'campaign'?
+src/services/ai-campaign-service.ts(276,12): error TS2339: Property 'aICampaignContact' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+src/services/ai-campaign-service.ts(282,12): error TS2339: Property 'aICampaignContact' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+src/services/ai-campaign-service.ts(298,33): error TS2551: Property 'aICampaign' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'. Did you mean 'campaign'?
+src/services/ai-campaign-service.ts(310,17): error TS2551: Property 'aICampaign' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'. Did you mean 'campaign'?
+src/services/ai-campaign-service.ts(319,33): error TS2551: Property 'aICampaign' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'. Did you mean 'campaign'?
+src/services/ai-campaign-service.ts(325,17): error TS2551: Property 'aICampaign' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'. Did you mean 'campaign'?
+src/services/ai-campaign-service.ts(369,20): error TS2339: Property 'aICampaignCall' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+src/services/ai-campaign-service.ts(398,35): error TS2339: Property 'aICampaignCall' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+src/services/ai-campaign-service.ts(408,16): error TS2339: Property 'aICampaignCall' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+src/services/ai-campaign-service.ts(427,16): error TS2339: Property 'aICampaignContact' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+src/services/ai-campaign-service.ts(478,20): error TS2551: Property 'aICampaign' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'. Did you mean 'campaign'?
+src/services/ai-campaign-service.ts(509,12): error TS2339: Property 'aICampaignContact' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+src/services/ai-campaign-service.ts(514,12): error TS2339: Property 'aICampaignCall' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+src/services/ai-campaign-service.ts(519,12): error TS2339: Property 'aICampaignCall' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+src/services/ai-campaign-service.ts(528,6): error TS7006: Parameter 'acc' implicitly has an 'any' type.
+src/services/ai-campaign-service.ts(528,11): error TS7006: Parameter 's' implicitly has an 'any' type.
+src/services/ai-campaign-service.ts(536,6): error TS7006: Parameter 'acc' implicitly has an 'any' type.
+src/services/ai-campaign-service.ts(536,11): error TS7006: Parameter 's' implicitly has an 'any' type.
+src/services/ai-campaign-service.ts(543,71): error TS18046: 'a' is of type 'unknown'.
+src/services/ai-campaign-service.ts(543,75): error TS18046: 'b' is of type 'unknown'.
+src/services/ai-campaign-service.ts(548,5): error TS2322: Type 'unknown' is not assignable to type 'number'.
+src/services/ai-campaign-service.ts(559,18): error TS18046: 'totalContacts' is of type 'unknown'.
+src/services/ai-campaign-service.ts(559,59): error TS18046: 'totalContacts' is of type 'unknown'.
+src/services/ai-campaign-service.ts(574,12): error TS2339: Property 'aICampaignCall' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+src/services/ai-campaign-service.ts(580,12): error TS2339: Property 'aICampaignCall' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+src/services/audit.ts(37,9): error TS2322: Type 'Record<string, unknown> | undefined' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+  Type 'Record<string, unknown>' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+    Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 20 more.
+src/services/budget-alert-service.ts(101,5): error TS6133: 'tenantId' is declared but its value is never read.
+src/services/carrier-service.ts(218,9): error TS2322: Type 'Record<string, unknown>' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+  Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 20 more.
+src/services/carrier-service.ts(227,9): error TS2322: Type 'Record<string, unknown>' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+  Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 20 more.
+src/services/clickhouse.ts(20,11): error TS2353: Object literal may only specify known properties, and 'url' does not exist in type 'NodeClickHouseClientConfigOptions'.
+src/services/clickhouse.ts(52,7): error TS2322: Type 'Awaited<T>' is not assignable to type 'T[]'.
+  Type 'T | (T extends object & { then(onfulfilled: infer F, ...args: infer _): any; } ? F extends (value: infer V, ...args: infer _) => any ? Awaited<V> : never : T)' is not assignable to type 'T[]'.
+    Type '(null | undefined) & T' is not assignable to type 'T[]'.
+      Type 'undefined & T' is not assignable to type 'T[]'.
+src/services/cnam-service.ts(186,9): error TS2322: Type 'Record<string, unknown>' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+  Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 20 more.
+src/services/cnam-service.ts(193,9): error TS2322: Type 'Record<string, unknown>' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+  Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 20 more.
+src/services/compliance-service.ts(167,9): error TS1117: An object literal cannot have multiple properties with the same name.
+src/services/compliance-service.ts(335,9): error TS2322: Type 'Record<string, unknown>' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+  Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 20 more.
+src/services/compliance-service.ts(392,11): error TS2322: Type 'Record<string, unknown>' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+  Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 20 more.
+src/services/event-bus.ts(169,39): error TS6133: 'pattern' is declared but its value is never read.
+src/services/flow-engine.ts(211,5): error TS6133: 'nextNodeId' is declared but its value is never read.
+src/services/flow-engine.ts(257,77): error TS2345: Argument of type 'Record<string, unknown> | undefined' is not assignable to parameter of type '{ buyerId?: string | undefined; destination?: string | undefined; }'.
+  Type 'undefined' is not assignable to type '{ buyerId?: string | undefined; destination?: string | undefined; }'.
+src/services/flow-engine.ts(414,49): error TS6133: 'buyerParams' is declared but its value is never read.
+src/services/flow-store.ts(75,11): error TS2322: Type '{ flow: { version: string; name: string; id: string; nodes: ({ target: string; id: string; type: "entry"; next?: string | undefined; } | { id: string; type: "ivr"; prompt: string; choices: { target: string; digits: string; }[]; ... 4 more ...; finishOnKey?: string | undefined; } | ... 8 more ... | { ...; })[]; entry...' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+  Types of property 'flow' are incompatible.
+    Type '{ version: string; name: string; id: string; nodes: ({ target: string; id: string; type: "entry"; next?: string | undefined; } | { id: string; type: "ivr"; prompt: string; choices: { target: string; digits: string; }[]; ... 4 more ...; finishOnKey?: string | undefined; } | ... 8 more ... | { ...; })[]; entry: { ...;...' is not assignable to type 'InputJsonValue | null | undefined'.
+      Type '{ version: string; name: string; id: string; nodes: ({ target: string; id: string; type: "entry"; next?: string | undefined; } | { id: string; type: "ivr"; prompt: string; choices: { target: string; digits: string; }[]; ... 4 more ...; finishOnKey?: string | undefined; } | ... 8 more ... | { ...; })[]; entry: { ...;...' is not assignable to type 'InputJsonObject'.
+        Property 'metadata' is incompatible with index signature.
+          Type 'Record<string, unknown>' is not assignable to type 'InputJsonValue | null | undefined'.
+            Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 20 more.
+src/services/flow-store.ts(115,11): error TS2322: Type '{ flow: { version: string; name: string; id: string; nodes: ({ target: string; id: string; type: "entry"; next?: string | undefined; } | { id: string; type: "ivr"; prompt: string; choices: { target: string; digits: string; }[]; ... 4 more ...; finishOnKey?: string | undefined; } | ... 8 more ... | { ...; })[]; entry...' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+  Types of property 'flow' are incompatible.
+    Type '{ version: string; name: string; id: string; nodes: ({ target: string; id: string; type: "entry"; next?: string | undefined; } | { id: string; type: "ivr"; prompt: string; choices: { target: string; digits: string; }[]; ... 4 more ...; finishOnKey?: string | undefined; } | ... 8 more ... | { ...; })[]; entry: { ...;...' is not assignable to type 'InputJsonValue | null | undefined'.
+      Type '{ version: string; name: string; id: string; nodes: ({ target: string; id: string; type: "entry"; next?: string | undefined; } | { id: string; type: "ivr"; prompt: string; choices: { target: string; digits: string; }[]; ... 4 more ...; finishOnKey?: string | undefined; } | ... 8 more ... | { ...; })[]; entry: { ...;...' is not assignable to type 'InputJsonObject'.
+        Property 'metadata' is incompatible with index signature.
+          Type 'Record<string, unknown>' is not assignable to type 'InputJsonValue | null | undefined'.
+            Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 20 more.
+src/services/flow-store.ts(165,11): error TS2322: Type 'string' is not assignable to type 'NodeType'.
+src/services/flow-store.ts(167,11): error TS2322: Type 'Record<string, unknown>' is not assignable to type 'JsonNull | InputJsonValue'.
+  Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 20 more.
+src/services/fronter-bot.ts(106,34): error TS2749: 'ESLConnection' refers to a value, but is being used as a type here. Did you mean 'typeof ESLConnection'?
+src/services/fronter-bot.ts(190,25): error TS2749: 'ESLConnection' refers to a value, but is being used as a type here. Did you mean 'typeof ESLConnection'?
+src/services/fronter-bot.ts(205,31): error TS2749: 'ESLConnection' refers to a value, but is being used as a type here. Did you mean 'typeof ESLConnection'?
+src/services/fronter-bot.ts(225,29): error TS2749: 'ESLConnection' refers to a value, but is being used as a type here. Did you mean 'typeof ESLConnection'?
+src/services/fronter-bot.ts(283,17): error TS2322: Type 'string' is not assignable to type 'LeadStatus | EnumLeadStatusFieldUpdateOperationsInput | undefined'.
+src/services/provisioning/adapters/local-adapter.ts(143,9): error TS2322: Type 'NumberFeatures' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+  Type 'NumberFeatures' is not assignable to type 'InputJsonObject'.
+    Index signature for type 'string' is missing in type 'NumberFeatures'.
+src/services/quota-service.ts(1,1): error TS6133: 'logger' is declared but its value is never read.
+src/services/quota-service.ts(160,33): error TS2339: Property 'budget' does not exist on type '{ quota: { tenantId: string; id: string; createdAt: Date; updatedAt: Date; maxConcurrentCalls: number | null; maxMinutesPerDay: number | null; maxRecordingRetentionDays: number | null; maxPhoneNumbers: number | null; maxStorageGB: Decimal | null; enabled: boolean; } | null; quotaOverrides: { ...; }[]; } & { ...; }'.
+src/services/quota-service.ts(161,18): error TS2339: Property 'budget' does not exist on type '{ quota: { tenantId: string; id: string; createdAt: Date; updatedAt: Date; maxConcurrentCalls: number | null; maxMinutesPerDay: number | null; maxRecordingRetentionDays: number | null; maxPhoneNumbers: number | null; maxStorageGB: Decimal | null; enabled: boolean; } | null; quotaOverrides: { ...; }[]; } & { ...; }'.
+src/services/quota-service.ts(161,58): error TS2339: Property 'budget' does not exist on type '{ quota: { tenantId: string; id: string; createdAt: Date; updatedAt: Date; maxConcurrentCalls: number | null; maxMinutesPerDay: number | null; maxRecordingRetentionDays: number | null; maxPhoneNumbers: number | null; maxStorageGB: Decimal | null; enabled: boolean; } | null; quotaOverrides: { ...; }[]; } & { ...; }'.
+src/services/quota-service.ts(259,33): error TS2339: Property 'budget' does not exist on type '{ quota: { tenantId: string; id: string; createdAt: Date; updatedAt: Date; maxConcurrentCalls: number | null; maxMinutesPerDay: number | null; maxRecordingRetentionDays: number | null; maxPhoneNumbers: number | null; maxStorageGB: Decimal | null; enabled: boolean; } | null; quotaOverrides: { ...; }[]; } & { ...; }'.
+src/services/quota-service.ts(260,18): error TS2339: Property 'budget' does not exist on type '{ quota: { tenantId: string; id: string; createdAt: Date; updatedAt: Date; maxConcurrentCalls: number | null; maxMinutesPerDay: number | null; maxRecordingRetentionDays: number | null; maxPhoneNumbers: number | null; maxStorageGB: Decimal | null; enabled: boolean; } | null; quotaOverrides: { ...; }[]; } & { ...; }'.
+src/services/quota-service.ts(260,58): error TS2339: Property 'budget' does not exist on type '{ quota: { tenantId: string; id: string; createdAt: Date; updatedAt: Date; maxConcurrentCalls: number | null; maxMinutesPerDay: number | null; maxRecordingRetentionDays: number | null; maxPhoneNumbers: number | null; maxStorageGB: Decimal | null; enabled: boolean; } | null; quotaOverrides: { ...; }[]; } & { ...; }'.
+src/services/quota-service.ts(421,5): error TS6133: 'callId' is declared but its value is never read.
+src/services/recording-lifecycle.ts(1,1): error TS6133: 'RecordingStorageTier' is declared but its value is never read.
+src/services/recording-lifecycle.ts(119,11): error TS6133: 'storage' is declared but its value is never read.
+src/services/recording-service.ts(66,9): error TS2322: Type 'Record<string, unknown>' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+  Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 20 more.
+src/services/routing.ts(75,5): error TS6133: 'tenantId' is declared but its value is never read.
+src/services/stir-shaken-service.ts(49,9): error TS2322: Type 'Record<string, unknown>' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+  Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 20 more.
+src/services/stir-shaken-service.ts(58,9): error TS2322: Type 'Record<string, unknown>' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+  Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 20 more.
+../worker/src/services/stripe-service.ts(17,9): error TS2322: Type '"2024-11-20.acacia"' is not assignable to type '"2023-10-16"'.
+../worker/src/services/stripe-service.ts(71,13): error TS6133: 'invoiceItems' is declared but its value is never read.

@@ -46,6 +46,12 @@ const navigation: NavItem[] = [
     title: 'Outbound calling & live transfer orchestration',
   },
   {
+    name: 'AI Campaigns',
+    href: '/ai-campaigns',
+    icon: Megaphone,
+    title: 'Automated AI outbound calling campaigns',
+  },
+  {
     name: 'Phone',
     href: '/phone',
     icon: Phone,
@@ -116,7 +122,7 @@ const adminNavigation: NavItem[] = [
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { hasFullAccess, isBuyerOnly, loading } = useAuth();
+  const { hasFullAccess, isBuyerOnly } = useAuth();
 
   // Filter navigation items based on user access level
   const filterNavItems = (items: NavItem[]): NavItem[] => {

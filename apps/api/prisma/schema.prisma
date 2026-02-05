@@ -315,6 +315,7 @@ model PhoneNumber {
   calls          Call[]                    @relation("CallFromNumber")
   callLegs       CallLeg[]
   pingRequests   PingRequest[] // Numbers assigned via RTB Post
+  aiCampaigns    AICampaign[] // AI outbound campaigns using this number
 
   @@unique([tenantId, number])
   @@index([tenantId, number])
@@ -1995,58 +1996,58 @@ model BuyerBid {
 // ============================================================================
 
 model ProspectIntake {
-  id        String   @id @default(uuid())
-  tenantId  String   @default("default-tenant-id")
+  id       String @id @default(uuid())
+  tenantId String @default("default-tenant-id")
 
   // Phone number - primary lookup key
-  phone     String   // E.164 or formatted, normalized on insert
+  phone String // E.164 or formatted, normalized on insert
 
   // Client Info
-  firstName  String?
-  lastName   String?
-  email      String?
-  dob        DateTime? // Date of Birth
-  age        Int?      // Age in years
-  gender     String?
+  firstName String?
+  lastName  String?
+  email     String?
+  dob       DateTime? // Date of Birth
+  age       Int? // Age in years
+  gender    String?
 
   // Address
-  street     String?
-  city       String?
-  state      String?  // 2-letter code
-  zip        String?
+  street String?
+  city   String?
+  state  String? // 2-letter code
+  zip    String?
 
   // Policy Details
-  carrier       String?
-  policyType    String?
+  carrier        String?
+  policyType     String?
   coverageAmount Decimal? @db.Decimal(10, 2)
   monthlyPremium Decimal? @db.Decimal(10, 2)
 
   // Beneficiaries (stored as JSON array)
-  beneficiaries Json?  // [{name, relationship, percentage}]
+  beneficiaries Json? // [{name, relationship, percentage}]
 
   // Underwriting & Billing
-  ssPaidOnDate   String?  // e.g., "1st", "15th"
-  payDay         String?  // e.g., "1st", "15th"
-  bankDraftDate  String?
+  ssPaidOnDate  String? // e.g., "1st", "15th"
+  payDay        String? // e.g., "1st", "15th"
+  bankDraftDate String?
 
   // Banking (masked/encrypted in practice)
-  bankName       String?
-  accountType    String?  // "checking" | "savings"
-  routingNumber  String?  // Should be encrypted in production
-  accountNumber  String?  // Should be encrypted in production
+  bankName      String?
+  accountType   String? // "checking" | "savings"
+  routingNumber String? // Should be encrypted in production
+  accountNumber String? // Should be encrypted in production
 
   // TrustedForm / Compliance
-  trustedFormCertUrl String?  // TrustedForm certificate URL for TCPA compliance
-  ipAddress          String?  // IP address at time of submission
+  trustedFormCertUrl String? // TrustedForm certificate URL for TCPA compliance
+  ipAddress          String? // IP address at time of submission
 
   // Metadata
-  source       String?  // e.g., "intake_form", "api", "import"
-  agentId      String?  // User ID of agent who created it
-  status       ProspectIntakeStatus @default(ACTIVE)
-  notes        String?
+  source  String? // e.g., "intake_form", "api", "import"
+  agentId String? // User ID of agent who created it
+  status  ProspectIntakeStatus @default(ACTIVE)
+  notes   String?
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([tenantId, phone]) // One intake per phone per tenant
   @@index([phone])
@@ -2061,4 +2062,130 @@ enum ProspectIntakeStatus {
   ACTIVE
   ARCHIVED
   CONVERTED
+}
+
+// ============================================================================
+// AI Outbound Campaigns (Vapi Integration - hidden from UI)
+// ============================================================================
+
+model AICampaign {
+  id          String           @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  status      AICampaignStatus @default(DRAFT)
+
+  // AI Configuration (synced to Vapi internally)
+  assistantName String  @default("AI Agent")
+  voiceId       String  @default("alloy") // openai voice id
+  firstMessage  String  @default("Hello, this is your AI assistant calling.")
+  systemPrompt  String? @db.Text // Full conversation script
+
+  // Phone Number - MUST be from user's inventory
+  phoneNumberId String
+  phoneNumber   PhoneNumber @relation(fields: [phoneNumberId], references: [id])
+
+  // Calling Configuration
+  maxConcurrent  Int @default(1) // Max simultaneous calls
+  callsPerMinute Int @default(10) // Rate limit
+
+  // Schedule (optional)
+  scheduleEnabled Boolean   @default(false)
+  scheduleStart   DateTime?
+  scheduleEnd     DateTime?
+  timezone        String    @default("America/New_York")
+
+  // Relations
+  contacts AICampaignContact[]
+  calls    AICampaignCall[]
+
+  // Audit
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([tenantId, status])
+  @@map("ai_campaigns")
+}
+
+enum AICampaignStatus {
+  DRAFT // Being configured
+  READY // Contacts uploaded, ready to run
+  RUNNING // Actively making calls
+  PAUSED // Manually paused or auto-paused (low funds)
+  COMPLETED // All contacts processed
+}
+
+model AICampaignContact {
+  id          String        @id @default(uuid())
+  campaignId  String
+  campaign    AICampaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  phoneNumber String // E.164 format
+  firstName   String?
+  lastName    String?
+  metadata    Json? // Custom fields from CSV
+  status      ContactStatus @default(PENDING)
+  callId      String?       @unique // Link to AICampaignCall
+  calledAt    DateTime?
+  createdAt   DateTime      @default(now())
+
+  @@index([campaignId])
+  @@index([campaignId, status])
+  @@index([phoneNumber])
+  @@map("ai_campaign_contacts")
+}
+
+enum ContactStatus {
+  PENDING // Not yet called
+  CALLING // Currently in progress
+  COMPLETED // Call finished successfully
+  FAILED // Call failed (network, etc)
+  SKIPPED // Skipped (DNC, invalid number, etc)
+  NO_ANSWER // No answer after attempts
+}
+
+model AICampaignCall {
+  id         String       @id @default(uuid())
+  campaignId String
+  campaign   AICampaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contactId  String
+  externalId String? // Vapi call ID (internal use only, never shown in UI)
+  status     AICallStatus @default(QUEUED)
+  duration   Int? // Call duration in seconds
+  outcome    String? // e.g., "answered", "voicemail", "busy"
+
+  // Recording & Transcript
+  recordingUrl String?
+  transcript   String? @db.Text
+
+  // AI Analysis (The "Juice" - structured data extraction)
+  analysis   Json? // Full Vapi analysis object
+  extraction Json? // Specific extracted fields (e.g., appointment_time, sentiment)
+
+  // Billing (Refinement 2)
+  cost     Decimal? @db.Decimal(10, 4) // Actual cost from Vapi
+  billable Decimal? @db.Decimal(10, 4) // What we charge the user (with margin)
+
+  // Timestamps
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+
+  @@index([campaignId])
+  @@index([campaignId, status])
+  @@index([contactId])
+  @@index([externalId])
+  @@index([startedAt])
+  @@map("ai_campaign_calls")
+}
+
+enum AICallStatus {
+  QUEUED // Waiting to be dialed
+  RINGING // Dial in progress
+  IN_PROGRESS // Call connected
+  COMPLETED // Call finished
+  FAILED // Call failed
+  NO_ANSWER // Not answered
+  BUSY // Line busy
+  VOICEMAIL // Went to voicemail
 }

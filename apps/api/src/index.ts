@@ -308,6 +308,13 @@ async function buildServer() {
   const { registerAnveoProcurementRoutes } = await import('./routes/anveo-procurement.js');
   await server.register(registerAnveoProcurementRoutes);
 
+  // Register AI Campaign routes (AI outbound calling - Vapi integration hidden from UI)
+  const { registerAICampaignRoutes, registerVapiWebhookRoutes } = await import(
+    './routes/ai-campaigns.js'
+  );
+  await server.register(registerAICampaignRoutes);
+  await server.register(registerVapiWebhookRoutes);
+
   // Start Fronter Bot socket server (handles outbound call socket connections)
   const { fronterBotService } = await import('./services/fronter-bot.js');
   await fronterBotService.start();
