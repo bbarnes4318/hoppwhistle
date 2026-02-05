@@ -30,6 +30,10 @@
       <param name="inbound-codec-prefs" value="OPUS,G722,PCMU,PCMA"/>
       <param name="outbound-codec-prefs" value="OPUS,G722,PCMU,PCMA"/>
 
+      <!-- WebRTC to PSTN compatibility -->
+      <param name="inbound-late-negotiation" value="true"/>
+      <param name="inbound-zrtp-passthru" value="true"/>
+
       <!-- Authentication -->
       <param name="challenge-realm" value="auto_from"/>
       <param name="auth-calls" value="false"/>

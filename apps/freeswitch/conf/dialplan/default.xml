@@ -7,6 +7,9 @@
         <action application="set" data="effective_caller_id_number=18652809894"/>
         <action application="set" data="effective_caller_id_name=Hopwhistle"/>
         <action application="set" data="hangup_after_bridge=true"/>
+        <!-- Force PSTN-compatible codecs for Anveo -->
+        <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
+        <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
         <!-- Anveo requires tech prefix 012345 + country code + number -->
         <action application="bridge" data="sofia/gateway/anveo/0123451${destination_number}"/>
       </condition>
