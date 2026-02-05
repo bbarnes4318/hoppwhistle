@@ -37,9 +37,15 @@
     <!-- ACL - Only allow Vapi IPs -->
     <param name="apply-inbound-acl" value="vapi_sip_sources"/>
 
-    <!-- NAT Traversal -->
+    <!-- NAT Traversal - Critical for bidirectional audio through NAT -->
     <param name="aggressive-nat-detection" value="true"/>
     <param name="apply-nat-acl" value="nat.auto"/>
+    <param name="NDLB-force-rport" value="true"/>
+    <param name="NDLB-received-in-nat-reg-contact" value="true"/>
+
+    <!-- RTP settings for NAT - ensures symmetric RTP -->
+    <param name="rtp-rewrite-timestamps" value="true"/>
+    <param name="rtp-autofix-timing" value="true"/>
 
     <!-- User lookup for authentication -->
     <param name="challenge-realm" value="45.32.213.201"/>
