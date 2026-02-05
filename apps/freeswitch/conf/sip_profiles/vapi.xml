@@ -17,6 +17,10 @@
     <param name="dialplan" value="XML"/>
     <param name="context" value="vapi_outbound"/>
 
+    <!-- Late negotiation - REQUIRED for Opus to PCMU transcoding -->
+    <param name="inbound-late-negotiation" value="true"/>
+    <param name="inbound-zrtp-passthru" value="true"/>
+
     <!-- RTP Settings -->
     <param name="rtp-timeout-sec" value="300"/>
     <param name="rtp-hold-timeout-sec" value="1800"/>

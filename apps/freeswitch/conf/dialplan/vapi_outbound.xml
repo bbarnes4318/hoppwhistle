@@ -34,6 +34,10 @@
         <action application="set" data="hangup_after_bridge=true"/>
         <action application="set" data="ignore_early_media=true"/>
 
+        <!-- Force PCMU for outbound leg (Anveo requires G.711, Vapi sends Opus) -->
+        <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
+        <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
+
         <!-- Store normalized destination with Anveo Tech Prefix -->
         <!-- Format: 012345 (Tech Prefix) + 1 (Country) + XXXXXXXXXX (10-digit) -->
         <action application="set" data="dest_digits=0123451$1"/>
