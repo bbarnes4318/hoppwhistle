@@ -42,6 +42,18 @@ if [ -f "$VANILLA_CONF/vars.xml" ]; then
     sed -i "s|\${FREESWITCH_ESL_PASSWORD}|${FREESWITCH_ESL_PASSWORD:-ClueCon}|g" "$VANILLA_CONF/vars.xml"
 fi
 
+# Patch switch.conf.xml to restrict RTP ports to Docker-exposed range (16384-16484)
+# This is CRITICAL for Vapi audio to work - FreeSWITCH must use ports that Docker exposes
+SWITCH_CONF="$VANILLA_CONF/autoload_configs/switch.conf.xml"
+if [ -f "$SWITCH_CONF" ]; then
+    echo "Patching RTP port range in switch.conf.xml..."
+    # Uncomment rtp-start-port and set to 16384
+    sed -i 's|<!-- *<param name="rtp-start-port" value="[0-9]*"/> *-->|<param name="rtp-start-port" value="16384"/>|g' "$SWITCH_CONF"
+    # Uncomment rtp-end-port and set to 16484
+    sed -i 's|<!-- *<param name="rtp-end-port" value="[0-9]*"/> *-->|<param name="rtp-end-port" value="16484"/>|g' "$SWITCH_CONF"
+    echo "  RTP ports configured: 16384-16484"
+fi
+
 echo "Starting FreeSWITCH..."
 
 # Execute the main command
