@@ -129,6 +129,9 @@ services:
     volumes:
       - freeswitch_recordings:/recordings
       - freeswitch_conf:/usr/local/freeswitch/conf
+      # SSL certs for WSS (WebRTC) on port 7443
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /etc/letsencrypt/live/hopwhistle.com:/etc/freeswitch/letsencrypt:ro
     depends_on:
       redis:
         condition: service_healthy
