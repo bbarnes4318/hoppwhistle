@@ -363,8 +363,8 @@ export function PhoneProvider({
           setupRemoteAudio(invitation);
         }
       });
-    },
-    [playRingtone, normalizedApiUrl, getApiHeaders, handleCallEnded, handleCallAnswered]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [playRingtone, normalizedApiUrl, getApiHeaders]
   );
 
   const setupRemoteAudio = (session: Session) => {
