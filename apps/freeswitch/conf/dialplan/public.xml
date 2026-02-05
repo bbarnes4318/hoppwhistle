@@ -11,8 +11,8 @@
         <action application="log" data="INFO [PUBLIC] Inbound call to Call Center DID"/>
         <action application="set" data="domain_name=45.32.213.201"/>
         <action application="set" data="call_direction=inbound"/>
-        <!-- Ring the Call Center agent -->
-        <action application="bridge" data="user/1000@45.32.213.201"/>
+        <!-- Ring the Call Center agent via internal profile -->
+        <action application="bridge" data="${sofia_contact(internal/1000@45.32.213.201)}"/>
       </condition>
     </extension>
 
