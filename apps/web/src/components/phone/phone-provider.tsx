@@ -317,6 +317,43 @@ export function PhoneProvider({
       setIsPhonePanelOpen(true);
       playRingtone();
 
+      // Fetch prospect data for screen pop (async, non-blocking)
+      if (callerNumber && callerNumber !== 'Unknown') {
+        fetch(`${normalizedApiUrl}/api/v1/prospects/by-phone/${encodeURIComponent(callerNumber)}`, {
+          method: 'GET',
+          headers: getApiHeaders(false),
+        })
+          .then(response => response.json())
+          .then((data: { prospect?: ProspectData }) => {
+            if (data.prospect) {
+              console.log('[Phone] Screen pop data loaded:', data.prospect);
+              setCurrentCall(prev => {
+                if (!prev) return prev;
+                return {
+                  ...prev,
+                  prospectData: {
+                    id: data.prospect?.id,
+                    firstName: data.prospect?.firstName,
+                    lastName: data.prospect?.lastName,
+                    fullName:
+                      `${data.prospect?.firstName || ''} ${data.prospect?.lastName || ''}`.trim(),
+                    phoneNumber: data.prospect?.phone as string | undefined,
+                    email: data.prospect?.email,
+                    address: data.prospect?.street as string | undefined,
+                    city: data.prospect?.city,
+                    state: data.prospect?.state,
+                    zipCode: data.prospect?.zip as string | undefined,
+                    ...data.prospect,
+                  },
+                };
+              });
+            }
+          })
+          .catch(err => {
+            console.log('[Phone] No screen pop data found:', err);
+          });
+      }
+
       invitation.stateChange.addListener(newState => {
         console.log('[Phone] Invitation state changed:', newState);
         if (newState === SessionState.Terminated) {
@@ -327,7 +364,7 @@ export function PhoneProvider({
         }
       });
     },
-    [playRingtone]
+    [playRingtone, normalizedApiUrl, getApiHeaders, handleCallEnded, handleCallAnswered]
   );
 
   const setupRemoteAudio = (session: Session) => {
