@@ -40,6 +40,8 @@
     "**/*.config.ts",
     "**/tests/**/*.js",
     "**/*.spec.js",
-    "**/*.test.js"
+    "**/*.test.js",
+    "scripts/**/*.js",
+    "apps/api/src/services/american-amicable.js"
   ]
 }

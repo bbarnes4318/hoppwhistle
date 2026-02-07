@@ -363,6 +363,7 @@ export function PhoneProvider({
           setupRemoteAudio(invitation);
         }
       });
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [playRingtone, normalizedApiUrl, getApiHeaders]
   );

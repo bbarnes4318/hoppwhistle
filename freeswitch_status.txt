@@ -1,0 +1,14 @@
+﻿                     Name	   Type	                                      Data	State
+=================================================================================================
+                 external	profile	          sip:mod_sofia@45.32.213.201:5080	RUNNING (0)
+        external::voxbeam	gateway	            sip:FreeSWITCH@sbc.voxbeam.com	NOREG
+         external::telnyx	gateway	             sip:FreeSWITCH@sip.telnyx.com	NOREG
+     external::signalwire	gateway	  sip:%{SIGNALWIRE_SIP_USERNAME}@%{SIGNALWIRE_OUTBOUND_PROXY}	NOREG
+     external::anveo_vapi	gateway	              sip:FreeSWITCH@sbc.anveo.com	NOREG
+          external::anveo	gateway	              sip:FreeSWITCH@sbc.anveo.com	NOREG
+            internal-ipv6	profile	                  sip:mod_sofia@[::1]:5060	RUNNING (0)
+                     vapi	profile	          sip:mod_sofia@45.32.213.201:5070	RUNNING (0)
+                 internal	profile	             sip:mod_sofia@172.21.0.6:5060	RUNNING (0)
+=================================================================================================
+4 profiles 0 aliases
+

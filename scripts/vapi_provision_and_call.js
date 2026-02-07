@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+/* eslint-env node */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-require-imports, @typescript-eslint/no-floating-promises, @typescript-eslint/no-var-requires */
 /**
  * Vapi Provisioning and Call Script
  *
@@ -21,7 +23,8 @@ const https = require('https');
 // Configuration
 const CONFIG = {
   VAPI_API_TOKEN: process.env.VAPI_API_TOKEN || 'b8c9e434-32ca-4cbc-ae39-b6c4583622c2',
-  VAPI_ASSISTANT_ID: 'f6bcf4b4-8323-4bf8-a87d-a57d8dd9cd39',
+  VAPI_ASSISTANT_ID: '37e1c497-0d84-4b53-aac0-b95881714cbb',
+  VAPI_PHONE_NUMBER_ID: '2a20e3b4-651e-4c8e-bcc8-9d9dd884785f', // Pre-provisioned phone number ID
   VAPI_FROM_NUMBER: '+18652809894',
   FREESWITCH_HOST: '45.32.213.201',
   FREESWITCH_PORT: 5070,
@@ -328,20 +331,32 @@ async function main() {
   console.log('='.repeat(60));
 
   try {
-    // Step 1-2: Get or create SIP trunk credential
-    const credential = await getOrCreateCredential();
+    let phoneNumberId;
 
-    // Step 3-4: Get or create phone number
-    const phoneNumber = await getOrCreatePhoneNumber(credential.id);
+    // Check if we have a pre-configured phone number ID (skip provisioning)
+    if (CONFIG.VAPI_PHONE_NUMBER_ID) {
+      console.log(
+        '\n[FAST MODE] Using pre-configured Phone Number ID:',
+        CONFIG.VAPI_PHONE_NUMBER_ID
+      );
+      phoneNumberId = CONFIG.VAPI_PHONE_NUMBER_ID;
+    } else {
+      // Step 1-2: Get or create SIP trunk credential
+      const credential = await getOrCreateCredential();
+
+      // Step 3-4: Get or create phone number
+      const phoneNumber = await getOrCreatePhoneNumber(credential.id);
+      phoneNumberId = phoneNumber.id;
+      console.log('Credential ID:', credential.id);
+    }
 
     // Step 5: Place the call
-    const call = await placeCall(phoneNumber.id, destinationNumber);
+    const call = await placeCall(phoneNumberId, destinationNumber);
 
     console.log('\n' + '='.repeat(60));
     console.log('SUMMARY');
     console.log('='.repeat(60));
-    console.log('Credential ID:', credential.id);
-    console.log('Phone Number ID:', phoneNumber.id);
+    console.log('Phone Number ID:', phoneNumberId);
     console.log('Call ID:', call.id);
     console.log('Call Status:', call.status);
     console.log('\nFull Call Response:');
