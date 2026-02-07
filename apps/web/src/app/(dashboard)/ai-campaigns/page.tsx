@@ -32,7 +32,8 @@ interface AICampaign {
   name: string;
   description: string | null;
   status: 'DRAFT' | 'READY' | 'RUNNING' | 'PAUSED' | 'COMPLETED';
-  assistantName: string;
+  vertical: string;
+  agencyName: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -265,7 +266,7 @@ export default function AICampaignsPage() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>AI Assistant</TableHead>
+                  <TableHead>Vertical</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -292,7 +293,15 @@ export default function AICampaignsPage() {
                         {statusLabels[campaign.status]}
                       </Badge>
                     </TableCell>
-                    <TableCell>{campaign.assistantName}</TableCell>
+                    <TableCell>
+                      <Badge variant="secondary" className="text-xs">
+                        {campaign.vertical === 'ACA'
+                          ? 'ACA Health'
+                          : campaign.vertical === 'FINAL_EXPENSE'
+                            ? 'Final Expense'
+                            : campaign.vertical}
+                      </Badge>
+                    </TableCell>
                     <TableCell>{new Date(campaign.createdAt).toLocaleDateString()}</TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>

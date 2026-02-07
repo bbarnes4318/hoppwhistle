@@ -37,9 +37,12 @@ interface Campaign {
   name: string;
   description: string | null;
   status: 'DRAFT' | 'READY' | 'RUNNING' | 'PAUSED' | 'COMPLETED';
-  assistantName: string;
-  voiceId: string;
-  firstMessage: string;
+  vertical: string;
+  direction: string;
+  agencyName: string;
+  transferNumber: string;
+  filters: Record<string, boolean>;
+  vapiAssistantId: string | null;
   maxConcurrent: number;
   callsPerMinute: number;
   createdAt: string;
@@ -604,19 +607,35 @@ export default function CampaignDetailPage() {
           <Card>
             <CardHeader>
               <CardTitle>Campaign Settings</CardTitle>
-              <CardDescription>Configuration for this AI campaign</CardDescription>
+              <CardDescription>Template-based configuration for this AI campaign</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">
-                    Assistant Name
-                  </label>
-                  <p className="text-lg">{campaign.assistantName}</p>
+                  <label className="text-sm font-medium text-muted-foreground">Vertical</label>
+                  <p className="text-lg">
+                    <Badge variant="outline" className="text-sm">
+                      {campaign.vertical === 'ACA'
+                        ? 'ACA Health'
+                        : campaign.vertical === 'FINAL_EXPENSE'
+                          ? 'Final Expense'
+                          : campaign.vertical}
+                    </Badge>
+                  </p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">Voice</label>
-                  <p className="text-lg capitalize">{campaign.voiceId}</p>
+                  <label className="text-sm font-medium text-muted-foreground">Direction</label>
+                  <p className="text-lg">{campaign.direction}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Agency Name</label>
+                  <p className="text-lg">{campaign.agencyName}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">
+                    Transfer Number
+                  </label>
+                  <p className="text-lg">{campaign.transferNumber}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">
@@ -629,9 +648,42 @@ export default function CampaignDetailPage() {
                   <p className="text-lg">{campaign.callsPerMinute} calls/min</p>
                 </div>
               </div>
+              {/* Filters */}
               <div>
-                <label className="text-sm font-medium text-muted-foreground">Opening Message</label>
-                <p className="mt-1 p-3 rounded-md bg-muted/50 text-sm">{campaign.firstMessage}</p>
+                <label className="text-sm font-medium text-muted-foreground">Active Filters</label>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {campaign.filters &&
+                    Object.entries(campaign.filters)
+                      .filter(([, v]) => v)
+                      .map(([key]) => (
+                        <Badge key={key} variant="secondary" className="text-xs">
+                          {key.replace(/_/g, ' ')}
+                        </Badge>
+                      ))}
+                  {(!campaign.filters ||
+                    Object.values(campaign.filters).filter(Boolean).length === 0) && (
+                    <span className="text-sm text-muted-foreground">
+                      No optional filters enabled
+                    </span>
+                  )}
+                </div>
+              </div>
+              {/* Vapi Status */}
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">
+                  AI Assistant Status
+                </label>
+                <p className="mt-1">
+                  {campaign.vapiAssistantId ? (
+                    <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
+                      Provisioned
+                    </Badge>
+                  ) : (
+                    <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30">
+                      Pending
+                    </Badge>
+                  )}
+                </p>
               </div>
             </CardContent>
           </Card>

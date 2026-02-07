@@ -2065,8 +2065,22 @@ enum ProspectIntakeStatus {
 }
 
 // ============================================================================
-// AI Outbound Campaigns (Vapi Integration - hidden from UI)
+// AI Outbound Campaigns (Template-Based Vapi Integration)
 // ============================================================================
+
+model VapiTemplate {
+  id            String   @id @default(uuid())
+  name          String   // "ACA Health", "Final Expense"
+  vertical      String   @unique // "ACA", "FINAL_EXPENSE"
+  basePrompt    String   @db.Text // Core system prompt with {{placeholders}}
+  voiceId       String   @default("alloy")
+  firstMessage  String   @db.Text // Default greeting with {{placeholders}}
+  costPerMinute Decimal  @default(0.25) @db.Decimal(10, 4) // Per-minute billing rate
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("vapi_templates")
+}
 
 model AICampaign {
   id          String           @id @default(uuid())
@@ -2075,11 +2089,16 @@ model AICampaign {
   description String?
   status      AICampaignStatus @default(DRAFT)
 
-  // AI Configuration (synced to Vapi internally)
-  assistantName String  @default("AI Agent")
-  voiceId       String  @default("alloy") // openai voice id
-  firstMessage  String  @default("Hello, this is your AI assistant calling.")
-  systemPrompt  String? @db.Text // Full conversation script
+  // Template-driven configuration
+  vertical       String // "ACA", "FINAL_EXPENSE"
+  direction      String @default("OUTBOUND") // "OUTBOUND" | "INBOUND"
+  agencyName     String
+  transferNumber String // E.164 format for live transfers
+  filters        Json   @default("{}") // e.g. { "no_marketplace": true, "active_bank": true }
+
+  // Vapi Integration (populated after assistant provisioning)
+  vapiAssistantId   String? // Unique Vapi assistant ID for this campaign
+  vapiPhoneNumberId String? // Vapi phone number ID (if BYOC configured)
 
   // Phone Number - MUST be from user's inventory
   phoneNumberId String

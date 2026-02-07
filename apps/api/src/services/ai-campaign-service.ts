@@ -1,27 +1,32 @@
 /**
- * AI Campaign Service
+ * AI Campaign Service — Template-Based Vapi Integration
  *
- * Orchestrates AI outbound calling campaigns using Vapi under the hood.
- * IMPORTANT: Vapi branding is NEVER exposed in the UI - this is internal only.
+ * Users select a Vertical → input variables → toggle filters.
+ * Backend fetches the VapiTemplate, injects variables, appends filter logic,
+ * then calls Vapi API to provision a unique assistant per campaign.
+ *
+ * IMPORTANT: Vapi branding is NEVER exposed in the UI.
  */
 
 import type { Prisma } from '@prisma/client';
 
 import { getPrismaClient } from '../lib/prisma.js';
 
-// Vapi API configuration - exported for use by call initiation (TBD)
+// Vapi API configuration
 export const VapiConfig = {
   apiUrl: 'https://api.vapi.ai',
   apiKey: process.env.VAPI_API_KEY || '',
-  assistantId: process.env.VAPI_ASSISTANT_ID || '',
-  phoneNumberId: process.env.VAPI_PHONE_NUMBER_ID || '',
 };
 
 // Billing configuration
 const MINIMUM_WALLET_BALANCE = 5.0;
 const COST_MARGIN_MULTIPLIER = 1.2;
+const DEFAULT_COST_PER_MINUTE = 0.25;
 
-// Type definitions (inline to work around Prisma monorepo issues)
+// ============================================================================
+// Type Definitions
+// ============================================================================
+
 type AICampaignStatus = 'DRAFT' | 'READY' | 'RUNNING' | 'PAUSED' | 'COMPLETED';
 type ContactStatus = 'PENDING' | 'CALLING' | 'COMPLETED' | 'FAILED' | 'SKIPPED' | 'NO_ANSWER';
 type AICallStatus =
@@ -40,10 +45,13 @@ interface AICampaign {
   name: string;
   description: string | null;
   status: AICampaignStatus;
-  assistantName: string;
-  voiceId: string;
-  firstMessage: string;
-  systemPrompt: string | null;
+  vertical: string;
+  direction: string;
+  agencyName: string;
+  transferNumber: string;
+  filters: Prisma.JsonValue;
+  vapiAssistantId: string | null;
+  vapiPhoneNumberId: string | null;
   phoneNumberId: string;
   maxConcurrent: number;
   callsPerMinute: number;
@@ -86,14 +94,25 @@ interface AICampaignCall {
   endedAt: Date | null;
 }
 
+interface VapiTemplate {
+  id: string;
+  name: string;
+  vertical: string;
+  basePrompt: string;
+  voiceId: string;
+  firstMessage: string;
+  costPerMinute: number;
+}
+
 interface CreateCampaignInput {
   tenantId: string;
   name: string;
   description?: string;
-  assistantName?: string;
-  voiceId?: string;
-  firstMessage?: string;
-  systemPrompt?: string;
+  vertical: string;
+  direction?: string;
+  agencyName: string;
+  transferNumber: string;
+  filters: Record<string, boolean>;
   phoneNumberId: string;
   maxConcurrent?: number;
   callsPerMinute?: number;
@@ -125,12 +144,185 @@ export interface VapiCallResponse {
 }
 
 // ============================================================================
+// Vapi Template Engine
+// ============================================================================
+
+/**
+ * Fetch the VapiTemplate for a given vertical.
+ */
+async function getTemplate(vertical: string): Promise<VapiTemplate> {
+  const prisma = getPrismaClient();
+  const results = await prisma.$queryRaw<VapiTemplate[]>`
+    SELECT id, name, vertical, base_prompt as "basePrompt", voice_id as "voiceId",
+           first_message as "firstMessage", cost_per_minute as "costPerMinute"
+    FROM vapi_templates WHERE vertical = ${vertical}
+  `;
+  if (results.length === 0) {
+    throw new Error(`No template found for vertical: ${vertical}`);
+  }
+  return results[0];
+}
+
+/**
+ * List all available templates (for the UI wizard).
+ */
+export async function listTemplates(): Promise<VapiTemplate[]> {
+  const prisma = getPrismaClient();
+  return prisma.$queryRaw<VapiTemplate[]>`
+    SELECT id, name, vertical, voice_id as "voiceId",
+           first_message as "firstMessage", cost_per_minute as "costPerMinute",
+           '' as "basePrompt"
+    FROM vapi_templates ORDER BY name
+  `;
+}
+
+/**
+ * Compile the final prompt by injecting variables and appending filter logic.
+ */
+function compilePrompt(
+  template: VapiTemplate,
+  campaign: { agencyName: string; transferNumber: string; filters: Record<string, boolean> }
+): { systemPrompt: string; firstMessage: string } {
+  const today = new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+
+  // Replace placeholders
+  let prompt = template.basePrompt
+    .replace(/\{\{agency_name\}\}/g, campaign.agencyName)
+    .replace(/\{\{transfer_number\}\}/g, campaign.transferNumber)
+    .replace(/\{\{date\}\}/g, today);
+
+  const firstMsg = template.firstMessage
+    .replace(/\{\{agency_name\}\}/g, campaign.agencyName)
+    .replace(/\{\{transfer_number\}\}/g, campaign.transferNumber)
+    .replace(/\{\{date\}\}/g, today);
+
+  // Append conditional filter logic
+  const filterAppendix: string[] = [];
+
+  if (campaign.filters.no_marketplace) {
+    filterAppendix.push(
+      'ADDITIONAL DISQUALIFICATION: Ask if they currently have an active Marketplace health plan. If YES, say: "It sounds like you already have Marketplace coverage. We focus on helping people who don\'t currently have a plan. Thank you for your time." Then end the call politely.'
+    );
+  }
+
+  if (campaign.filters.active_bank) {
+    filterAppendix.push(
+      'ADDITIONAL VERIFICATION: Before transferring, ask: "Do you have an active checking or savings account?" If NO, say: "Unfortunately, an active bank account is required for the enrollment process. Thank you for your time." Then end the call politely.'
+    );
+  }
+
+  if (campaign.filters.no_alzheimers) {
+    filterAppendix.push(
+      'ADDITIONAL DISQUALIFICATION: Gently ask: "Are you currently being treated for or diagnosed with Alzheimer\'s or dementia?" If YES, say: "I understand, and I appreciate you sharing that. Unfortunately, our plans may not be the best fit. I\'d recommend speaking with a specialist." Then end the call politely.'
+    );
+  }
+
+  if (campaign.filters.not_nursing_home) {
+    filterAppendix.push(
+      'ADDITIONAL DISQUALIFICATION: Ask: "Are you currently residing in a nursing home or long-term care facility?" If YES, say: "Thank you for letting me know. Our plans are designed for those living independently. I appreciate your time." Then end the call politely.'
+    );
+  }
+
+  if (filterAppendix.length > 0) {
+    prompt += '\n\n--- ADDITIONAL CAMPAIGN FILTERS ---\n' + filterAppendix.join('\n\n');
+  }
+
+  return { systemPrompt: prompt, firstMessage: firstMsg };
+}
+
+/**
+ * Provision a unique Vapi assistant for a specific campaign.
+ * Calls POST https://api.vapi.ai/assistant and stores the returned ID.
+ */
+async function createVapiAssistant(campaign: AICampaign): Promise<string> {
+  if (!VapiConfig.apiKey) {
+    throw new Error('VAPI_API_KEY environment variable is not configured');
+  }
+
+  const template = await getTemplate(campaign.vertical);
+  const filters = (campaign.filters as Record<string, boolean>) || {};
+  const { systemPrompt, firstMessage } = compilePrompt(template, {
+    agencyName: campaign.agencyName,
+    transferNumber: campaign.transferNumber,
+    filters,
+  });
+
+  const assistantPayload = {
+    name: `${campaign.name}_${campaign.id.substring(0, 8)}`,
+    model: {
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'system', content: systemPrompt }],
+      tools: [
+        {
+          type: 'transferCall',
+          destinations: [
+            {
+              type: 'number',
+              number: campaign.transferNumber,
+              message: 'Please hold while I transfer you to a licensed agent.',
+            },
+          ],
+        },
+      ],
+    },
+    voice: {
+      provider: 'openai',
+      voiceId: template.voiceId,
+    },
+    transcriber: {
+      provider: 'deepgram',
+      model: 'nova-2',
+      language: 'en',
+    },
+    firstMessage,
+    endCallMessage: 'Thank you for your time. Have a great day!',
+    serverUrl: `${process.env.API_PUBLIC_URL || 'https://hopwhistle.com'}/api/v1/vapi/webhook`,
+  };
+
+  console.log(`[Vapi] Provisioning assistant for campaign ${campaign.id}...`);
+
+  const response = await fetch(`${VapiConfig.apiUrl}/assistant`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${VapiConfig.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(assistantPayload),
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    console.error(`[Vapi] Assistant creation failed: ${response.status}`, errorBody);
+    throw new Error(`Vapi assistant creation failed: ${response.status} - ${errorBody}`);
+  }
+
+  const result = (await response.json()) as { id: string };
+  console.log(`[Vapi] ✅ Assistant provisioned: ${result.id}`);
+
+  // Store the assistant ID on the campaign
+  const prisma = getPrismaClient();
+  await prisma.$executeRaw`
+    UPDATE ai_campaigns SET vapi_assistant_id = ${result.id}, updated_at = NOW()
+    WHERE id = ${campaign.id}::uuid
+  `;
+
+  return result.id;
+}
+
+// ============================================================================
 // Campaign CRUD
 // ============================================================================
 
 export async function createCampaign(input: CreateCampaignInput): Promise<AICampaign> {
   const prisma = getPrismaClient();
 
+  // Validate phone number ownership
   const phoneNumber = await prisma.phoneNumber.findFirst({
     where: {
       id: input.phoneNumberId,
@@ -143,19 +335,23 @@ export async function createCampaign(input: CreateCampaignInput): Promise<AICamp
     throw new Error('Phone number not found or not owned by tenant');
   }
 
-  // Use raw query to create since TypeScript doesn't see the model
+  // Validate template exists
+  await getTemplate(input.vertical);
+
+  // Create campaign record
+  const filtersJson = JSON.stringify(input.filters || {});
   const result = await prisma.$queryRaw<AICampaign[]>`
     INSERT INTO ai_campaigns (
-      id, tenant_id, name, description, status, assistant_name, voice_id,
-      first_message, system_prompt, phone_number_id, max_concurrent,
-      calls_per_minute, schedule_enabled, schedule_start, schedule_end,
-      timezone, created_at, updated_at
+      id, tenant_id, name, description, status, vertical, direction,
+      agency_name, transfer_number, filters,
+      phone_number_id, max_concurrent, calls_per_minute,
+      schedule_enabled, schedule_start, schedule_end, timezone,
+      created_at, updated_at
     ) VALUES (
       gen_random_uuid(), ${input.tenantId}, ${input.name}, ${input.description ?? null},
-      'DRAFT', ${input.assistantName ?? 'AI Agent'}, ${input.voiceId ?? 'alloy'},
-      ${input.firstMessage ?? 'Hello, this is your AI assistant calling.'},
-      ${input.systemPrompt ?? null}, ${input.phoneNumberId},
-      ${input.maxConcurrent ?? 1}, ${input.callsPerMinute ?? 10},
+      'DRAFT', ${input.vertical}, ${input.direction ?? 'OUTBOUND'},
+      ${input.agencyName}, ${input.transferNumber}, ${filtersJson}::jsonb,
+      ${input.phoneNumberId}, ${input.maxConcurrent ?? 1}, ${input.callsPerMinute ?? 10},
       ${input.scheduleEnabled ?? false}, ${input.scheduleStart ?? null},
       ${input.scheduleEnd ?? null}, ${input.timezone ?? 'America/New_York'},
       NOW(), NOW()
@@ -163,7 +359,19 @@ export async function createCampaign(input: CreateCampaignInput): Promise<AICamp
     RETURNING *
   `;
 
-  return result[0];
+  const campaign = result[0];
+
+  // Provision Vapi assistant in background (don't block creation)
+  try {
+    await createVapiAssistant(campaign);
+  } catch (err) {
+    console.error('[Campaign] Vapi provisioning failed (campaign still created):', err);
+    // Campaign is created but without assistant — can be retried
+  }
+
+  // Re-fetch to get the updated vapiAssistantId
+  const updated = await getCampaign(campaign.id, input.tenantId);
+  return updated || campaign;
 }
 
 export async function getCampaign(
@@ -171,14 +379,11 @@ export async function getCampaign(
   tenantId: string
 ): Promise<AICampaign | null> {
   const prisma = getPrismaClient();
-
-  const result = await prisma.$queryRaw<AICampaign[]>`
+  const results = await prisma.$queryRaw<AICampaign[]>`
     SELECT * FROM ai_campaigns
     WHERE id = ${campaignId}::uuid AND tenant_id = ${tenantId}
-    LIMIT 1
   `;
-
-  return result[0] ?? null;
+  return results[0] || null;
 }
 
 export async function listCampaigns(
@@ -217,25 +422,30 @@ export async function updateCampaign(
   tenantId: string,
   updates: Partial<CreateCampaignInput>
 ): Promise<AICampaign> {
+  const campaign = await getCampaign(campaignId, tenantId);
+  if (!campaign) throw new Error('Campaign not found');
+  if (campaign.status === 'RUNNING') throw new Error('Cannot update a running campaign');
+
   const prisma = getPrismaClient();
 
-  // Check if campaign exists
-  const existing = await getCampaign(campaignId, tenantId);
-  if (!existing) {
-    throw new Error('Campaign not found');
+  // Build SET parts dynamically
+  const sets: string[] = [];
+  const values: unknown[] = [];
+
+  if (updates.name !== undefined) {
+    sets.push('name = $1');
+    values.push(updates.name);
+  }
+  if (updates.description !== undefined) {
+    sets.push(`description = $${values.length + 1}`);
+    values.push(updates.description);
   }
 
-  // Build dynamic update - simplified for readability
+  // For MVP, use a simple update of common fields
   const result = await prisma.$queryRaw<AICampaign[]>`
     UPDATE ai_campaigns SET
       name = COALESCE(${updates.name ?? null}, name),
       description = COALESCE(${updates.description ?? null}, description),
-      assistant_name = COALESCE(${updates.assistantName ?? null}, assistant_name),
-      voice_id = COALESCE(${updates.voiceId ?? null}, voice_id),
-      first_message = COALESCE(${updates.firstMessage ?? null}, first_message),
-      system_prompt = COALESCE(${updates.systemPrompt ?? null}, system_prompt),
-      max_concurrent = COALESCE(${updates.maxConcurrent ?? null}, max_concurrent),
-      calls_per_minute = COALESCE(${updates.callsPerMinute ?? null}, calls_per_minute),
       updated_at = NOW()
     WHERE id = ${campaignId}::uuid AND tenant_id = ${tenantId}
     RETURNING *
@@ -246,14 +456,21 @@ export async function updateCampaign(
 
 export async function deleteCampaign(campaignId: string, tenantId: string): Promise<void> {
   const prisma = getPrismaClient();
-
   const campaign = await getCampaign(campaignId, tenantId);
-  if (!campaign) {
-    throw new Error('Campaign not found');
-  }
+  if (!campaign) throw new Error('Campaign not found');
+  if (campaign.status === 'RUNNING') throw new Error('Cannot delete a running campaign');
 
-  if (campaign.status === 'RUNNING') {
-    throw new Error('Cannot delete a running campaign. Pause it first.');
+  // Clean up Vapi assistant if provisioned
+  if (campaign.vapiAssistantId && VapiConfig.apiKey) {
+    try {
+      await fetch(`${VapiConfig.apiUrl}/assistant/${campaign.vapiAssistantId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${VapiConfig.apiKey}` },
+      });
+      console.log(`[Vapi] Deleted assistant ${campaign.vapiAssistantId}`);
+    } catch (err) {
+      console.error('[Vapi] Failed to delete assistant:', err);
+    }
   }
 
   await prisma.$executeRaw`
@@ -271,52 +488,51 @@ export async function uploadContacts(input: UploadContactsInput): Promise<{
   errors: string[];
 }> {
   const prisma = getPrismaClient();
-
-  // Verify campaign exists
-  const campaignCheck = await prisma.$queryRaw<[{ count: bigint }]>`
-    SELECT COUNT(*) as count FROM ai_campaigns WHERE id = ${input.campaignId}::uuid
-  `;
-
-  if (Number(campaignCheck[0].count) === 0) {
-    throw new Error('Campaign not found');
-  }
-
-  const results = { imported: 0, skipped: 0, errors: [] as string[] };
+  let imported = 0;
+  let skipped = 0;
+  const errors: string[] = [];
 
   for (const contact of input.contacts) {
     const normalized = normalizePhoneNumber(contact.phoneNumber);
     if (!normalized) {
-      results.skipped++;
-      results.errors.push(`Invalid phone number: ${contact.phoneNumber}`);
+      skipped++;
+      errors.push(`Invalid phone: ${contact.phoneNumber}`);
       continue;
     }
 
-    try {
-      await prisma.$executeRaw`
-        INSERT INTO ai_campaign_contacts (
-          id, campaign_id, phone_number, first_name, last_name, metadata, status, created_at
-        ) VALUES (
-          gen_random_uuid(), ${input.campaignId}::uuid, ${normalized},
-          ${contact.firstName ?? null}, ${contact.lastName ?? null},
-          ${JSON.stringify(contact.metadata ?? {})}::jsonb, 'PENDING', NOW()
-        )
-        ON CONFLICT DO NOTHING
-      `;
-      results.imported++;
-    } catch {
-      results.skipped++;
+    // Check for duplicates
+    const existing = await prisma.$queryRaw<[{ count: bigint }]>`
+      SELECT COUNT(*) as count FROM ai_campaign_contacts
+      WHERE campaign_id = ${input.campaignId}::uuid AND phone_number = ${normalized}
+    `;
+
+    if (Number(existing[0].count) > 0) {
+      skipped++;
+      continue;
     }
+
+    const metadata = contact.metadata ? JSON.stringify(contact.metadata) : null;
+    await prisma.$executeRaw`
+      INSERT INTO ai_campaign_contacts (
+        id, campaign_id, phone_number, first_name, last_name, metadata, status, created_at
+      ) VALUES (
+        gen_random_uuid(), ${input.campaignId}::uuid, ${normalized},
+        ${contact.firstName ?? null}, ${contact.lastName ?? null},
+        ${metadata}::jsonb, 'PENDING', NOW()
+      )
+    `;
+    imported++;
   }
 
-  // Update campaign status if we added contacts
-  if (results.imported > 0) {
+  // Auto-update status to READY if campaign has contacts and is in DRAFT
+  if (imported > 0) {
     await prisma.$executeRaw`
       UPDATE ai_campaigns SET status = 'READY', updated_at = NOW()
       WHERE id = ${input.campaignId}::uuid AND status = 'DRAFT'
     `;
   }
 
-  return results;
+  return { imported, skipped, errors };
 }
 
 export async function getContacts(
@@ -331,37 +547,39 @@ export async function getContacts(
   const prisma = getPrismaClient();
   const offset = (page - 1) * limit;
 
+  if (status) {
+    const [contacts, countResult] = await Promise.all([
+      prisma.$queryRaw<AICampaignContact[]>`
+        SELECT * FROM ai_campaign_contacts
+        WHERE campaign_id = ${campaignId}::uuid AND status = ${status}
+        ORDER BY created_at ASC
+        LIMIT ${limit} OFFSET ${offset}
+      `,
+      prisma.$queryRaw<[{ count: bigint }]>`
+        SELECT COUNT(*) as count FROM ai_campaign_contacts
+        WHERE campaign_id = ${campaignId}::uuid AND status = ${status}
+      `,
+    ]);
+
+    const total = Number(countResult[0].count);
+    return { data: contacts, meta: { page, limit, total, totalPages: Math.ceil(total / limit) } };
+  }
+
   const [contacts, countResult] = await Promise.all([
-    status
-      ? prisma.$queryRaw<AICampaignContact[]>`
-          SELECT * FROM ai_campaign_contacts
-          WHERE campaign_id = ${campaignId}::uuid AND status = ${status}
-          ORDER BY created_at ASC
-          LIMIT ${limit} OFFSET ${offset}
-        `
-      : prisma.$queryRaw<AICampaignContact[]>`
-          SELECT * FROM ai_campaign_contacts
-          WHERE campaign_id = ${campaignId}::uuid
-          ORDER BY created_at ASC
-          LIMIT ${limit} OFFSET ${offset}
-        `,
-    status
-      ? prisma.$queryRaw<[{ count: bigint }]>`
-          SELECT COUNT(*) as count FROM ai_campaign_contacts
-          WHERE campaign_id = ${campaignId}::uuid AND status = ${status}
-        `
-      : prisma.$queryRaw<[{ count: bigint }]>`
-          SELECT COUNT(*) as count FROM ai_campaign_contacts
-          WHERE campaign_id = ${campaignId}::uuid
-        `,
+    prisma.$queryRaw<AICampaignContact[]>`
+      SELECT * FROM ai_campaign_contacts
+      WHERE campaign_id = ${campaignId}::uuid
+      ORDER BY created_at ASC
+      LIMIT ${limit} OFFSET ${offset}
+    `,
+    prisma.$queryRaw<[{ count: bigint }]>`
+      SELECT COUNT(*) as count FROM ai_campaign_contacts
+      WHERE campaign_id = ${campaignId}::uuid
+    `,
   ]);
 
   const total = Number(countResult[0].count);
-
-  return {
-    data: contacts,
-    meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
-  };
+  return { data: contacts, meta: { page, limit, total, totalPages: Math.ceil(total / limit) } };
 }
 
 // ============================================================================
@@ -385,8 +603,20 @@ export async function startCampaign(campaignId: string, tenantId: string): Promi
     throw new Error('No pending contacts to call');
   }
 
+  // Billing check — require minimum balance
   const hasBalance = await checkWalletBalance(tenantId);
-  if (!hasBalance) throw new Error('Insufficient wallet balance. Please add funds.');
+  if (!hasBalance) throw new Error('Insufficient wallet balance. Minimum $5.00 required.');
+
+  // Ensure Vapi assistant is provisioned
+  if (!campaign.vapiAssistantId) {
+    try {
+      await createVapiAssistant(campaign);
+    } catch (err) {
+      throw new Error(
+        `Failed to provision AI assistant: ${err instanceof Error ? err.message : 'Unknown error'}`
+      );
+    }
+  }
 
   const result = await prisma.$queryRaw<AICampaign[]>`
     UPDATE ai_campaigns SET status = 'RUNNING', updated_at = NOW()
@@ -492,7 +722,29 @@ async function handleCallEnded(
   if (callRecords.length === 0) return;
 
   const callRecord = callRecords[0];
-  const vapiCost = call.cost ?? 0;
+
+  // Calculate cost: use template rate or Vapi cost, whichever is available
+  const durationMinutes = (call.duration ?? 0) / 60;
+  let vapiCost = call.cost ?? 0;
+
+  // If no Vapi cost reported, calculate from template rate
+  if (vapiCost === 0 && durationMinutes > 0) {
+    // Fetch the campaign's vertical to get the rate
+    const campaigns = await prisma.$queryRaw<Array<{ vertical: string }>>`
+      SELECT vertical FROM ai_campaigns WHERE id = ${callRecord.campaign_id}::uuid
+    `;
+    let costPerMinute = DEFAULT_COST_PER_MINUTE;
+    if (campaigns.length > 0) {
+      const templates = await prisma.$queryRaw<Array<{ cost_per_minute: number }>>`
+        SELECT cost_per_minute FROM vapi_templates WHERE vertical = ${campaigns[0].vertical}
+      `;
+      if (templates.length > 0) {
+        costPerMinute = Number(templates[0].cost_per_minute);
+      }
+    }
+    vapiCost = durationMinutes * costPerMinute;
+  }
+
   const billableAmount = vapiCost * COST_MARGIN_MULTIPLIER;
 
   // Update call record
@@ -521,7 +773,9 @@ async function handleCallEnded(
   `;
 
   // Deduct from wallet
-  await deductFromWallet(callRecord.tenant_id, billableAmount, callRecordId);
+  if (billableAmount > 0) {
+    await deductFromWallet(callRecord.tenant_id, billableAmount, callRecordId);
+  }
 }
 
 function extractKeyData(analysis: Record<string, unknown> | undefined): Record<string, unknown> {
@@ -541,7 +795,7 @@ function extractKeyData(analysis: Record<string, unknown> | undefined): Record<s
 async function checkWalletBalance(tenantId: string): Promise<boolean> {
   const prisma = getPrismaClient();
   const budget = await prisma.tenantBudget.findUnique({ where: { tenantId } });
-  if (!budget) return true;
+  if (!budget) return true; // No budget = no restriction
   const remaining = Number(budget.monthlyBudget ?? 0) - Number(budget.currentMonthSpend ?? 0);
   return remaining >= MINIMUM_WALLET_BALANCE;
 }
@@ -561,15 +815,18 @@ async function deductFromWallet(
     },
   });
 
+  // Check if balance is low — auto-pause campaigns
   const budget = await prisma.tenantBudget.findUnique({ where: { tenantId } });
   if (budget) {
     const remaining = Number(budget.monthlyBudget ?? 0) - Number(budget.currentMonthSpend ?? 0);
     if (remaining < MINIMUM_WALLET_BALANCE) {
-      // Auto-pause all running campaigns for this tenant
       await prisma.$executeRaw`
         UPDATE ai_campaigns SET status = 'PAUSED', updated_at = NOW()
         WHERE tenant_id = ${tenantId} AND status = 'RUNNING'
       `;
+      console.log(
+        `[Billing] Auto-paused campaigns for tenant ${tenantId} — low balance: $${remaining.toFixed(2)}`
+      );
     }
   }
 }
@@ -596,7 +853,6 @@ export interface CampaignStats {
 export async function getCampaignStats(campaignId: string): Promise<CampaignStats> {
   const prisma = getPrismaClient();
 
-  // Get contact stats
   const contactStats = await prisma.$queryRaw<Array<{ status: string; count: bigint }>>`
     SELECT status, COUNT(*) as count
     FROM ai_campaign_contacts
@@ -604,7 +860,6 @@ export async function getCampaignStats(campaignId: string): Promise<CampaignStat
     GROUP BY status
   `;
 
-  // Get call stats
   const callStats = await prisma.$queryRaw<Array<{ status: string; count: bigint }>>`
     SELECT status, COUNT(*) as count
     FROM ai_campaign_calls
@@ -612,7 +867,6 @@ export async function getCampaignStats(campaignId: string): Promise<CampaignStat
     GROUP BY status
   `;
 
-  // Get cost/duration stats
   const costStats = await prisma.$queryRaw<
     [
       {

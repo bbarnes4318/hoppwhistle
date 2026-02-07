@@ -42,14 +42,26 @@ export async function registerAICampaignRoutes(
     }
   });
 
+  // List available templates (for wizard vertical selection)
+  fastify.get('/api/v1/ai-campaigns/templates', async (_request, reply) => {
+    try {
+      const templates = await AICampaignService.listTemplates();
+      return reply.send({ data: templates });
+    } catch (error) {
+      console.error('Failed to list templates:', error);
+      return reply.status(500).send({ error: 'Failed to list templates' });
+    }
+  });
+
   // Create new campaign
   interface CreateCampaignBody {
     name: string;
     description?: string;
-    assistantName?: string;
-    voiceId?: string;
-    firstMessage?: string;
-    systemPrompt?: string;
+    vertical: string;
+    direction?: string;
+    agencyName: string;
+    transferNumber: string;
+    filters: Record<string, boolean>;
     phoneNumberId: string;
     maxConcurrent?: number;
     callsPerMinute?: number;
@@ -63,15 +75,24 @@ export async function registerAICampaignRoutes(
     const tenantId = request.user.tenantId;
     const body = request.body as CreateCampaignBody;
 
-    // Basic validation
-    if (!body.name || !body.phoneNumberId) {
-      return reply.status(400).send({ error: 'name and phoneNumberId are required' });
+    // Validation
+    if (
+      !body.name ||
+      !body.phoneNumberId ||
+      !body.vertical ||
+      !body.agencyName ||
+      !body.transferNumber
+    ) {
+      return reply.status(400).send({
+        error: 'name, vertical, agencyName, transferNumber, and phoneNumberId are required',
+      });
     }
 
     try {
       const campaign = await AICampaignService.createCampaign({
         ...body,
         tenantId,
+        filters: body.filters || {},
         scheduleStart: body.scheduleStart ? new Date(body.scheduleStart) : undefined,
         scheduleEnd: body.scheduleEnd ? new Date(body.scheduleEnd) : undefined,
       });

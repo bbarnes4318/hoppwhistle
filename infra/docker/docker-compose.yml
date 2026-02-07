@@ -196,6 +196,9 @@ services:
       - ANVEO_EMAIL=${ANVEO_EMAIL}
       - ANVEO_SECURE_PHRASE=${ANVEO_SECURE_PHRASE}
       - PUBLIC_IP=${PUBLIC_IP}
+      # Vapi AI Voice Integration
+      - VAPI_API_KEY=${VAPI_API_KEY}
+      - API_PUBLIC_URL=${API_PUBLIC_URL:-https://hopwhistle.com}
       # FronterBot Binding
       - SOCKET_LISTENER_HOST=0.0.0.0
       - SOCKET_LISTENER_PORT=8021
