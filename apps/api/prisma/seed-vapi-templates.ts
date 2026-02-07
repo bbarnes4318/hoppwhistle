@@ -3,12 +3,11 @@
  *
  * Run inside the API container:
  *   docker exec -it docker-api-1 npx tsx prisma/seed-vapi-templates.ts
- *
- * Or via raw SQL fallback if tsx is unavailable — see bottom of file.
  */
 
-import { getPrismaClient } from '../src/lib/prisma.js';
+import { PrismaClient } from '@prisma/client';
 
+const prisma = new PrismaClient();
 const templates = [
   {
     name: 'ACA Health',
@@ -74,8 +73,6 @@ DO NOT: Discuss specific pricing. Always say "affordable" and let the licensed a
 ];
 
 async function seed() {
-  const prisma = getPrismaClient();
-
   for (const t of templates) {
     // Upsert via raw SQL
     await prisma.$executeRaw`
