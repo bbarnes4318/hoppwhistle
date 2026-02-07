@@ -153,8 +153,8 @@ export interface VapiCallResponse {
 async function getTemplate(vertical: string): Promise<VapiTemplate> {
   const prisma = getPrismaClient();
   const results = await prisma.$queryRaw<VapiTemplate[]>`
-    SELECT id, name, vertical, base_prompt as "basePrompt", voice_id as "voiceId",
-           first_message as "firstMessage", cost_per_minute as "costPerMinute"
+    SELECT id, name, vertical, "basePrompt", "voiceId",
+           "firstMessage", "costPerMinute"
     FROM vapi_templates WHERE vertical = ${vertical}
   `;
   if (results.length === 0) {
@@ -169,8 +169,8 @@ async function getTemplate(vertical: string): Promise<VapiTemplate> {
 export async function listTemplates(): Promise<VapiTemplate[]> {
   const prisma = getPrismaClient();
   return prisma.$queryRaw<VapiTemplate[]>`
-    SELECT id, name, vertical, voice_id as "voiceId",
-           first_message as "firstMessage", cost_per_minute as "costPerMinute",
+    SELECT id, name, vertical, "voiceId",
+           "firstMessage", "costPerMinute",
            '' as "basePrompt"
     FROM vapi_templates ORDER BY name
   `;
@@ -282,7 +282,7 @@ async function createVapiAssistant(campaign: AICampaign): Promise<string> {
     },
     firstMessage,
     endCallMessage: 'Thank you for your time. Have a great day!',
-    serverUrl: `${process.env.API_PUBLIC_URL || 'https://hopwhistle.com'}/api/v1/vapi/webhook`,
+    serverUrl: `${process.env.API_PUBLIC_URL || 'https://hopwhistle.com'}/api/v1/webhooks/vapi`,
   };
 
   console.log(`[Vapi] Provisioning assistant for campaign ${campaign.id}...`);
@@ -308,7 +308,7 @@ async function createVapiAssistant(campaign: AICampaign): Promise<string> {
   // Store the assistant ID on the campaign
   const prisma = getPrismaClient();
   await prisma.$executeRaw`
-    UPDATE ai_campaigns SET vapi_assistant_id = ${result.id}, updated_at = NOW()
+    UPDATE ai_campaigns SET "vapiAssistantId" = ${result.id}, "updatedAt" = NOW()
     WHERE id = ${campaign.id}::uuid
   `;
 
@@ -342,11 +342,11 @@ export async function createCampaign(input: CreateCampaignInput): Promise<AICamp
   const filtersJson = JSON.stringify(input.filters || {});
   const result = await prisma.$queryRaw<AICampaign[]>`
     INSERT INTO ai_campaigns (
-      id, tenant_id, name, description, status, vertical, direction,
-      agency_name, transfer_number, filters,
-      phone_number_id, max_concurrent, calls_per_minute,
-      schedule_enabled, schedule_start, schedule_end, timezone,
-      created_at, updated_at
+      id, "tenantId", name, description, status, vertical, direction,
+      "agencyName", "transferNumber", filters,
+      "phoneNumberId", "maxConcurrent", "callsPerMinute",
+      "scheduleEnabled", "scheduleStart", "scheduleEnd", timezone,
+      "createdAt", "updatedAt"
     ) VALUES (
       gen_random_uuid(), ${input.tenantId}, ${input.name}, ${input.description ?? null},
       'DRAFT', ${input.vertical}, ${input.direction ?? 'OUTBOUND'},
@@ -381,7 +381,7 @@ export async function getCampaign(
   const prisma = getPrismaClient();
   const results = await prisma.$queryRaw<AICampaign[]>`
     SELECT * FROM ai_campaigns
-    WHERE id = ${campaignId}::uuid AND tenant_id = ${tenantId}
+    WHERE id = ${campaignId}::uuid AND "tenantId" = ${tenantId}
   `;
   return results[0] || null;
 }
@@ -400,12 +400,12 @@ export async function listCampaigns(
   const [campaigns, countResult] = await Promise.all([
     prisma.$queryRaw<AICampaign[]>`
       SELECT * FROM ai_campaigns
-      WHERE tenant_id = ${tenantId}
-      ORDER BY created_at DESC
+      WHERE "tenantId" = ${tenantId}
+      ORDER BY "createdAt" DESC
       LIMIT ${limit} OFFSET ${offset}
     `,
     prisma.$queryRaw<[{ count: bigint }]>`
-      SELECT COUNT(*) as count FROM ai_campaigns WHERE tenant_id = ${tenantId}
+      SELECT COUNT(*) as count FROM ai_campaigns WHERE "tenantId" = ${tenantId}
     `,
   ]);
 
@@ -446,8 +446,8 @@ export async function updateCampaign(
     UPDATE ai_campaigns SET
       name = COALESCE(${updates.name ?? null}, name),
       description = COALESCE(${updates.description ?? null}, description),
-      updated_at = NOW()
-    WHERE id = ${campaignId}::uuid AND tenant_id = ${tenantId}
+      "updatedAt" = NOW()
+    WHERE id = ${campaignId}::uuid AND "tenantId" = ${tenantId}
     RETURNING *
   `;
 
@@ -474,7 +474,7 @@ export async function deleteCampaign(campaignId: string, tenantId: string): Prom
   }
 
   await prisma.$executeRaw`
-    DELETE FROM ai_campaigns WHERE id = ${campaignId}::uuid AND tenant_id = ${tenantId}
+    DELETE FROM ai_campaigns WHERE id = ${campaignId}::uuid AND "tenantId" = ${tenantId}
   `;
 }
 
@@ -503,7 +503,7 @@ export async function uploadContacts(input: UploadContactsInput): Promise<{
     // Check for duplicates
     const existing = await prisma.$queryRaw<[{ count: bigint }]>`
       SELECT COUNT(*) as count FROM ai_campaign_contacts
-      WHERE campaign_id = ${input.campaignId}::uuid AND phone_number = ${normalized}
+      WHERE "campaignId" = ${input.campaignId}::uuid AND "phoneNumber" = ${normalized}
     `;
 
     if (Number(existing[0].count) > 0) {
@@ -514,7 +514,7 @@ export async function uploadContacts(input: UploadContactsInput): Promise<{
     const metadata = contact.metadata ? JSON.stringify(contact.metadata) : null;
     await prisma.$executeRaw`
       INSERT INTO ai_campaign_contacts (
-        id, campaign_id, phone_number, first_name, last_name, metadata, status, created_at
+        id, "campaignId", "phoneNumber", "firstName", "lastName", metadata, status, "createdAt"
       ) VALUES (
         gen_random_uuid(), ${input.campaignId}::uuid, ${normalized},
         ${contact.firstName ?? null}, ${contact.lastName ?? null},
@@ -527,7 +527,7 @@ export async function uploadContacts(input: UploadContactsInput): Promise<{
   // Auto-update status to READY if campaign has contacts and is in DRAFT
   if (imported > 0) {
     await prisma.$executeRaw`
-      UPDATE ai_campaigns SET status = 'READY', updated_at = NOW()
+      UPDATE ai_campaigns SET status = 'READY', "updatedAt" = NOW()
       WHERE id = ${input.campaignId}::uuid AND status = 'DRAFT'
     `;
   }
@@ -551,13 +551,13 @@ export async function getContacts(
     const [contacts, countResult] = await Promise.all([
       prisma.$queryRaw<AICampaignContact[]>`
         SELECT * FROM ai_campaign_contacts
-        WHERE campaign_id = ${campaignId}::uuid AND status = ${status}
-        ORDER BY created_at ASC
+        WHERE "campaignId" = ${campaignId}::uuid AND status = ${status}
+        ORDER BY "createdAt" ASC
         LIMIT ${limit} OFFSET ${offset}
       `,
       prisma.$queryRaw<[{ count: bigint }]>`
         SELECT COUNT(*) as count FROM ai_campaign_contacts
-        WHERE campaign_id = ${campaignId}::uuid AND status = ${status}
+        WHERE "campaignId" = ${campaignId}::uuid AND status = ${status}
       `,
     ]);
 
@@ -568,13 +568,13 @@ export async function getContacts(
   const [contacts, countResult] = await Promise.all([
     prisma.$queryRaw<AICampaignContact[]>`
       SELECT * FROM ai_campaign_contacts
-      WHERE campaign_id = ${campaignId}::uuid
-      ORDER BY created_at ASC
+      WHERE "campaignId" = ${campaignId}::uuid
+      ORDER BY "createdAt" ASC
       LIMIT ${limit} OFFSET ${offset}
     `,
     prisma.$queryRaw<[{ count: bigint }]>`
       SELECT COUNT(*) as count FROM ai_campaign_contacts
-      WHERE campaign_id = ${campaignId}::uuid
+      WHERE "campaignId" = ${campaignId}::uuid
     `,
   ]);
 
@@ -596,7 +596,7 @@ export async function startCampaign(campaignId: string, tenantId: string): Promi
   // Check for pending contacts
   const pendingCheck = await prisma.$queryRaw<[{ count: bigint }]>`
     SELECT COUNT(*) as count FROM ai_campaign_contacts
-    WHERE campaign_id = ${campaignId}::uuid AND status = 'PENDING'
+    WHERE "campaignId" = ${campaignId}::uuid AND status = 'PENDING'
   `;
 
   if (Number(pendingCheck[0].count) === 0) {
@@ -619,8 +619,8 @@ export async function startCampaign(campaignId: string, tenantId: string): Promi
   }
 
   const result = await prisma.$queryRaw<AICampaign[]>`
-    UPDATE ai_campaigns SET status = 'RUNNING', updated_at = NOW()
-    WHERE id = ${campaignId}::uuid AND tenant_id = ${tenantId}
+    UPDATE ai_campaigns SET status = 'RUNNING', "updatedAt" = NOW()
+    WHERE id = ${campaignId}::uuid AND "tenantId" = ${tenantId}
     RETURNING *
   `;
 
@@ -634,8 +634,8 @@ export async function pauseCampaign(campaignId: string, tenantId: string): Promi
   if (!campaign) throw new Error('Campaign not found');
 
   const result = await prisma.$queryRaw<AICampaign[]>`
-    UPDATE ai_campaigns SET status = 'PAUSED', updated_at = NOW()
-    WHERE id = ${campaignId}::uuid AND tenant_id = ${tenantId}
+    UPDATE ai_campaigns SET status = 'PAUSED', "updatedAt" = NOW()
+    WHERE id = ${campaignId}::uuid AND "tenantId" = ${tenantId}
     RETURNING *
   `;
 
@@ -711,11 +711,11 @@ async function handleCallEnded(
 
   // Get call record to find campaign for billing
   const callRecords = await prisma.$queryRaw<
-    Array<{ contact_id: string; campaign_id: string; tenant_id: string }>
+    Array<{ contactId: string; campaignId: string; tenantId: string }>
   >`
-    SELECT c.contact_id, c.campaign_id, camp.tenant_id
+    SELECT c."contactId", c."campaignId", camp."tenantId"
     FROM ai_campaign_calls c
-    JOIN ai_campaigns camp ON c.campaign_id = camp.id
+    JOIN ai_campaigns camp ON c."campaignId" = camp.id
     WHERE c.id = ${callRecordId}::uuid
   `;
 
@@ -731,15 +731,15 @@ async function handleCallEnded(
   if (vapiCost === 0 && durationMinutes > 0) {
     // Fetch the campaign's vertical to get the rate
     const campaigns = await prisma.$queryRaw<Array<{ vertical: string }>>`
-      SELECT vertical FROM ai_campaigns WHERE id = ${callRecord.campaign_id}::uuid
+      SELECT vertical FROM ai_campaigns WHERE id = ${callRecord.campaignId}::uuid
     `;
     let costPerMinute = DEFAULT_COST_PER_MINUTE;
     if (campaigns.length > 0) {
-      const templates = await prisma.$queryRaw<Array<{ cost_per_minute: number }>>`
-        SELECT cost_per_minute FROM vapi_templates WHERE vertical = ${campaigns[0].vertical}
+      const templates = await prisma.$queryRaw<Array<{ costPerMinute: number }>>`
+        SELECT "costPerMinute" FROM vapi_templates WHERE vertical = ${campaigns[0].vertical}
       `;
       if (templates.length > 0) {
-        costPerMinute = Number(templates[0].cost_per_minute);
+        costPerMinute = Number(templates[0].costPerMinute);
       }
     }
     vapiCost = durationMinutes * costPerMinute;
@@ -753,13 +753,13 @@ async function handleCallEnded(
       status = ${status},
       outcome = ${call.endedReason ?? null},
       duration = ${call.duration ?? null},
-      recording_url = ${call.recordingUrl ?? null},
+      "recordingUrl" = ${call.recordingUrl ?? null},
       transcript = ${call.transcript ?? null},
       analysis = ${JSON.stringify(call.analysis ?? {})}::jsonb,
       extraction = ${JSON.stringify(extractKeyData(call.analysis))}::jsonb,
       cost = ${vapiCost},
       billable = ${billableAmount},
-      ended_at = NOW()
+      "endedAt" = NOW()
     WHERE id = ${callRecordId}::uuid
   `;
 
@@ -769,12 +769,12 @@ async function handleCallEnded(
 
   await prisma.$executeRaw`
     UPDATE ai_campaign_contacts SET status = ${contactStatus}
-    WHERE id = ${callRecord.contact_id}::uuid
+    WHERE id = ${callRecord.contactId}::uuid
   `;
 
   // Deduct from wallet
   if (billableAmount > 0) {
-    await deductFromWallet(callRecord.tenant_id, billableAmount, callRecordId);
+    await deductFromWallet(callRecord.tenantId, billableAmount, callRecordId);
   }
 }
 
@@ -821,8 +821,8 @@ async function deductFromWallet(
     const remaining = Number(budget.monthlyBudget ?? 0) - Number(budget.currentMonthSpend ?? 0);
     if (remaining < MINIMUM_WALLET_BALANCE) {
       await prisma.$executeRaw`
-        UPDATE ai_campaigns SET status = 'PAUSED', updated_at = NOW()
-        WHERE tenant_id = ${tenantId} AND status = 'RUNNING'
+        UPDATE ai_campaigns SET status = 'PAUSED', "updatedAt" = NOW()
+        WHERE "tenantId" = ${tenantId} AND status = 'RUNNING'
       `;
       console.log(
         `[Billing] Auto-paused campaigns for tenant ${tenantId} — low balance: $${remaining.toFixed(2)}`
@@ -856,14 +856,14 @@ export async function getCampaignStats(campaignId: string): Promise<CampaignStat
   const contactStats = await prisma.$queryRaw<Array<{ status: string; count: bigint }>>`
     SELECT status, COUNT(*) as count
     FROM ai_campaign_contacts
-    WHERE campaign_id = ${campaignId}::uuid
+    WHERE "campaignId" = ${campaignId}::uuid
     GROUP BY status
   `;
 
   const callStats = await prisma.$queryRaw<Array<{ status: string; count: bigint }>>`
     SELECT status, COUNT(*) as count
     FROM ai_campaign_calls
-    WHERE campaign_id = ${campaignId}::uuid
+    WHERE "campaignId" = ${campaignId}::uuid
     GROUP BY status
   `;
 
@@ -883,7 +883,7 @@ export async function getCampaignStats(campaignId: string): Promise<CampaignStat
       AVG(duration) as avg_duration,
       COUNT(*) as total_calls
     FROM ai_campaign_calls
-    WHERE campaign_id = ${campaignId}::uuid
+    WHERE "campaignId" = ${campaignId}::uuid
   `;
 
   const contactCounts = contactStats.reduce(
@@ -936,13 +936,13 @@ export async function getCalls(
   const [calls, countResult] = await Promise.all([
     prisma.$queryRaw<AICampaignCall[]>`
       SELECT * FROM ai_campaign_calls
-      WHERE campaign_id = ${campaignId}::uuid
-      ORDER BY started_at DESC
+      WHERE "campaignId" = ${campaignId}::uuid
+      ORDER BY "startedAt" DESC
       LIMIT ${limit} OFFSET ${offset}
     `,
     prisma.$queryRaw<[{ count: bigint }]>`
       SELECT COUNT(*) as count FROM ai_campaign_calls
-      WHERE campaign_id = ${campaignId}::uuid
+      WHERE "campaignId" = ${campaignId}::uuid
     `,
   ]);
 

@@ -76,15 +76,15 @@ async function seed() {
   for (const t of templates) {
     // Upsert via raw SQL
     await prisma.$executeRaw`
-      INSERT INTO vapi_templates (id, name, vertical, base_prompt, voice_id, first_message, cost_per_minute, created_at, updated_at)
+      INSERT INTO vapi_templates (id, name, vertical, "basePrompt", "voiceId", "firstMessage", "costPerMinute", "createdAt", "updatedAt")
       VALUES (gen_random_uuid(), ${t.name}, ${t.vertical}, ${t.basePrompt}, ${t.voiceId}, ${t.firstMessage}, ${t.costPerMinute}, NOW(), NOW())
       ON CONFLICT (vertical) DO UPDATE SET
         name = EXCLUDED.name,
-        base_prompt = EXCLUDED.base_prompt,
-        voice_id = EXCLUDED.voice_id,
-        first_message = EXCLUDED.first_message,
-        cost_per_minute = EXCLUDED.cost_per_minute,
-        updated_at = NOW()
+        "basePrompt" = EXCLUDED."basePrompt",
+        "voiceId" = EXCLUDED."voiceId",
+        "firstMessage" = EXCLUDED."firstMessage",
+        "costPerMinute" = EXCLUDED."costPerMinute",
+        "updatedAt" = NOW()
     `;
     console.log(`✅ Seeded template: ${t.name} (${t.vertical})`);
   }
