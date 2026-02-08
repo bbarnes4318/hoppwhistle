@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hopwhistle | Music Industry Strategic Report</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        hop: {
+                            navy: '#0B2545',   /* Logo Text */
+                            orange: '#F97316', /* Logo Arc */
+                            teal: '#14B8A6',   /* Logo Dot */
+                            light: '#EEF2FF',  /* Light tint for backgrounds */
+                            gray: '#64748B'    /* Neutral text */
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        serif: ['Playfair Display', 'serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #F8FAFC; /* Very light slate/blue tint */
+            color: #0B2545;
+        }
+
+        h1, h2, h3, h4, .serif {
+            font-family: 'Playfair Display', serif;
+        }
+
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            margin: 0 auto;
+            height: 400px;
+            max-height: 500px;
+        }
+
+        .card {
+            background-color: #ffffff;
+            border: 1px solid #E2E8F0;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(11, 37, 69, 0.05), 0 2px 4px -1px rgba(11, 37, 69, 0.03);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .card:hover {
+            box-shadow: 0 10px 15px -3px rgba(11, 37, 69, 0.1), 0 4px 6px -2px rgba(11, 37, 69, 0.05);
+            transform: translateY(-2px);
+        }
+
+        .nav-item {
+            cursor: pointer;
+            padding-bottom: 2px;
+            border-bottom: 2px solid transparent;
+            transition: all 0.3s ease;
+            color: #64748B;
+        }
+
+        .nav-item.active {
+            border-bottom-color: #F97316; /* Hop Orange */
+            color: #0B2545; /* Hop Navy */
+            font-weight: 600;
+        }
+
+        .nav-item:hover {
+            color: #0B2545;
+        }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+
+        .transcript-bubble {
+            max-width: 85%;
+            padding: 14px 18px;
+            border-radius: 16px;
+            margin-bottom: 14px;
+            line-height: 1.6;
+            position: relative;
+            font-size: 0.95rem;
+        }
+        
+        .bubble-left {
+            background-color: #EEF2FF; /* Light Indigo/Navy tint */
+            color: #0B2545;
+            align-self: flex-start;
+            border-bottom-left-radius: 2px;
+            border: 1px solid #E0E7FF;
+        }
+        
+        .bubble-right {
+            background-color: #FFF7ED; /* Light Orange tint */
+            color: #431407;
+            border: 1px solid #FFEDD5;
+            align-self: flex-end;
+            border-bottom-right-radius: 2px;
+        }
+
+        .logo-img {
+            height: 40px; 
+            width: auto;
+        }
+        
+        .logo-resonate {
+            height: 32px;
+            width: auto;
+            opacity: 0.9;
+        }
+        
+        /* Audio Player Styling Override */
+        audio {
+            height: 36px;
+        }
+        audio::-webkit-media-controls-panel {
+            background-color: #F1F5F9;
+        }
+    </style>
+</head>
+<body class="antialiased min-h-screen flex flex-col">
+
+    <!-- Navigation -->
+    <nav class="bg-white border-b border-slate-200 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-20"> 
+                <div class="flex items-center">
+                    <img src="https://storage.googleapis.com/music-jck/Hopwhistle.png" alt="Hopwhistle" class="logo-img mr-3">
+                </div>
+                <div class="hidden md:flex space-x-8 items-center text-sm font-medium">
+                    <span class="nav-item active" onclick="scrollToSection('summary')">Executive Summary</span>
+                    <span class="nav-item" onclick="scrollToSection('tech')">The Engine</span>
+                    <span class="nav-item" onclick="scrollToSection('economics')">Unit Economics</span>
+                    <span class="nav-item" onclick="scrollToSection('campaign')">Artist ROI</span>
+                    <span class="nav-item" onclick="scrollToSection('experience')">The Experience</span>
+                </div>
+                <div class="flex items-center">
+                    <button class="bg-hop-orange text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-md hover:bg-orange-600 transition-colors flex items-center">
+                        Launch Campaign
+                        <i data-lucide="mic-2" class="h-4 w-4 ml-2"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="flex-grow">
+        
+        <!-- Section 1: Executive Summary -->
+        <section id="summary" class="py-20 bg-white border-b border-slate-100">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="lg:grid lg:grid-cols-2 lg:gap-16 items-center">
+                    <div>
+                        <!-- Updated Powered By Badge: Significantly Larger Logo -->
+                        <div class="inline-flex items-center px-6 py-4 rounded-full bg-slate-50 text-hop-navy text-xs font-bold uppercase tracking-wide mb-8 border border-slate-200 shadow-sm">
+                            <span class="text-slate-400 mr-5 text-sm font-semibold tracking-wider">Powered By</span>
+                            <img src="https://storage.googleapis.com/music-jck/resonate1.png" alt="Resonate" class="h-16 w-auto">
+                        </div>
+
+                        <h1 class="text-5xl sm:text-6xl font-bold text-hop-navy leading-tight mb-6">
+                            Scaling the Artist's <br/><span class="text-hop-teal">Personal Connection</span>.
+                        </h1>
+                        <p class="text-xl text-slate-600 mb-8 leading-relaxed">
+                            Social media algorithms bury your posts. Emails go unread. Hopwhistle leverages the <strong>Resonate Engine</strong> to bypass the noise and speak directly to fans. 
+                        </p>
+                        <p class="text-lg text-slate-500 mb-8 leading-relaxed">
+                             We enable artists to have millions of 1-on-1, "backstage-style" phone conversations simultaneously—driving streams, ticket sales, and lifelong fandom at a fraction of the cost of SaaS tools.
+                        </p>
+                        
+                        <div class="grid grid-cols-3 gap-6 mt-10">
+                            <div class="p-5 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-hop-teal transition-colors group">
+                                <div class="text-3xl font-bold text-hop-navy mb-1 group-hover:text-hop-teal transition-colors">&lt;500ms</div>
+                                <div class="text-sm text-slate-500 font-medium">Conversational Latency</div>
+                            </div>
+                            <div class="p-5 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-hop-teal transition-colors group">
+                                <div class="text-3xl font-bold text-hop-navy mb-1 group-hover:text-hop-teal transition-colors">$0.0074</div>
+                                <div class="text-sm text-slate-500 font-medium">Cost Per Minute</div>
+                            </div>
+                            <div class="p-5 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-hop-teal transition-colors group">
+                                <div class="text-3xl font-bold text-hop-navy mb-1 group-hover:text-hop-teal transition-colors">Direct</div>
+                                <div class="text-sm text-slate-500 font-medium">Artist-to-Fan Channel</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-12 lg:mt-0 relative">
+                        <!-- Technical Card -->
+                        <div class="bg-hop-navy rounded-2xl p-8 shadow-2xl text-white relative overflow-hidden">
+                            <!-- Decorative Circle from Logo -->
+                            <div class="absolute -top-10 -right-10 w-40 h-40 bg-hop-teal opacity-20 rounded-full blur-2xl"></div>
+                            <div class="absolute bottom-10 -left-10 w-40 h-40 bg-hop-orange opacity-10 rounded-full blur-2xl"></div>
+                            
+                            <div class="flex items-center justify-between mb-8 border-b border-slate-700 pb-6 relative z-10">
+                                <div class="flex items-center">
+                                    <i data-lucide="server" class="h-6 w-6 text-hop-orange mr-3"></i>
+                                    <h3 class="text-xl font-semibold tracking-wide">Infrastructure Stack</h3>
+                                </div>
+                                <div class="bg-white/10 px-4 py-2 rounded backdrop-blur-sm">
+                                    <!-- Inverted version for dark background (using CSS filter for simplicity) -->
+                                    <img src="https://storage.googleapis.com/music-jck/resonate1.png" alt="Resonate" class="h-10 w-auto filter brightness-0 invert opacity-90">
+                                </div>
+                            </div>
+                            <div class="space-y-6 relative z-10">
+                                <div class="flex justify-between items-center group">
+                                    <span class="text-slate-400 group-hover:text-white transition-colors">The Brain (Personality)</span>
+                                    <span class="font-mono text-hop-teal bg-teal-900/30 px-2 py-1 rounded">Llama-3.1-8B-FP8</span>
+                                </div>
+                                <div class="flex justify-between items-center group">
+                                    <span class="text-slate-400 group-hover:text-white transition-colors">The Voice (Style)</span>
+                                    <span class="font-mono text-hop-orange bg-orange-900/30 px-2 py-1 rounded">Kokoro v1.0 ONNX</span>
+                                </div>
+                                <div class="flex justify-between items-center group">
+                                    <span class="text-slate-400 group-hover:text-white transition-colors">The Ears (Listening)</span>
+                                    <span class="font-mono text-white">Faster-Whisper v3</span>
+                                </div>
+                                <div class="flex justify-between items-center group">
+                                    <span class="text-slate-400 group-hover:text-white transition-colors">The Delivery</span>
+                                    <span class="font-mono text-white">LiveKit SIP + Telnyx</span>
+                                </div>
+                            </div>
+                            <div class="mt-10 pt-6 border-t border-slate-700 relative z-10">
+                                <p class="text-sm text-slate-400 italic">"There are no limits to what we can develop. We build for the artists who need to cut through the noise."</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 2: Technology & Architecture -->
+        <section id="tech" class="py-20 bg-slate-50">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="text-center mb-16">
+                    <div class="inline-flex items-center mb-6 opacity-90 bg-white px-5 py-3 rounded-full border border-slate-200 shadow-sm">
+                         <img src="https://storage.googleapis.com/music-jck/resonate1.png" alt="Resonate" class="h-10 w-auto mr-4">
+                         <span class="text-xs font-bold uppercase tracking-widest text-slate-500 border-l border-slate-300 pl-4">Audio Pipeline</span>
+                    </div>
+                    <h2 class="text-4xl font-bold text-hop-navy mb-4">Rhythm is Everything</h2>
+                    <p class="text-slate-600 max-w-2xl mx-auto text-lg">
+                        In music, if you're off-beat, you lose the groove. In AI voice, if you have high latency, you lose the listener. Hopwhistle's <strong>Resonate Engine</strong> is tuned for musical timing.
+                    </p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8 relative">
+                    <!-- Connecting Line (Desktop) -->
+                    <div class="hidden md:block absolute top-1/2 left-0 w-full h-1 bg-gradient-to-r from-hop-navy via-hop-orange to-hop-teal opacity-20 transform -translate-y-1/2 z-0"></div>
+
+                    <!-- Step 1 -->
+                    <div class="card p-8 relative z-10 bg-white">
+                        <div class="h-14 w-14 bg-hop-light rounded-2xl flex items-center justify-center mb-6 border border-indigo-100">
+                            <i data-lucide="mic" class="h-7 w-7 text-hop-navy"></i>
+                        </div>
+                        <h3 class="text-xl font-bold mb-3 text-hop-navy">Ingestion & VAD</h3>
+                        <p class="text-sm text-slate-600 leading-relaxed">
+                            Silero VAD v5 detects speech in <span class="font-bold text-hop-teal">&lt;10ms</span>. It knows exactly when a fan stops talking or interrupts with excitement, ensuring the agent never "talks over" the applause.
+                        </p>
+                    </div>
+
+                    <!-- Step 2 -->
+                    <div class="card p-8 relative z-10 bg-white border-hop-orange border-2 shadow-xl transform md:-translate-y-4">
+                        <div class="absolute top-0 right-0 bg-hop-orange text-white text-xs font-bold px-3 py-1 rounded-bl-lg">CORE ENGINE</div>
+                        <div class="h-14 w-14 bg-orange-50 rounded-2xl flex items-center justify-center mb-6 border border-orange-100">
+                            <i data-lucide="brain-circuit" class="h-7 w-7 text-hop-orange"></i>
+                        </div>
+                        <h3 class="text-xl font-bold mb-3 text-hop-navy">Inference (vLLM)</h3>
+                        <p class="text-sm text-slate-600 leading-relaxed">
+                            The L40S GPU runs vLLM with FP8 quantization. The "Brain" and the "Mouth" share VRAM. Tokens are streamed speculatively, allowing the artist agent to improvise responses instantly.
+                        </p>
+                    </div>
+
+                    <!-- Step 3 -->
+                    <div class="card p-8 relative z-10 bg-white">
+                        <div class="h-14 w-14 bg-teal-50 rounded-2xl flex items-center justify-center mb-6 border border-teal-100">
+                            <i data-lucide="waves" class="h-7 w-7 text-hop-teal"></i>
+                        </div>
+                        <h3 class="text-xl font-bold mb-3 text-hop-navy">Streaming Synthesis</h3>
+                        <p class="text-sm text-slate-600 leading-relaxed">
+                            Kokoro ONNX synthesizes audio chunks instantly. By the time the LLM finishes a thought, the fan has already heard the hook. No buffering, just flow.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 3: Unit Economics -->
+        <section id="economics" class="py-20 bg-white border-y border-slate-200">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="mb-12">
+                    <h2 class="text-4xl font-bold text-hop-navy mb-4">The New Economics of Fandom</h2>
+                    <p class="text-slate-600 max-w-3xl text-lg">
+                        Street teams cost money. Social ads have diminishing returns. Our optimized self-hosted stack drives the cost of a 1-on-1 fan call down to <span class="text-hop-teal font-bold bg-teal-50 px-1">$0.007415/minute</span>.
+                    </p>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-10 items-start">
+                    <div class="lg:col-span-2">
+                        <div class="card p-8">
+                            <div class="flex justify-between items-center mb-6">
+                                <h3 class="text-lg font-bold text-hop-navy">Cost Per Minute Comparison ($)</h3>
+                                <div class="flex space-x-4 text-xs font-medium">
+                                    <div class="flex items-center"><span class="w-3 h-3 bg-slate-200 rounded-sm mr-2"></span> Telephony</div>
+                                    <div class="flex items-center"><span class="w-3 h-3 bg-hop-navy rounded-sm mr-2"></span> Hopwhistle</div>
+                                    <div class="flex items-center"><span class="w-3 h-3 bg-slate-400 rounded-sm mr-2"></span> Vapi.ai</div>
+                                </div>
+                            </div>
+                            <!-- Chart Container -->
+                            <div class="chart-container">
+                                <canvas id="costChart"></canvas>
+                            </div>
+                            <div class="mt-6 text-center text-xs text-slate-400 bg-slate-50 py-2 rounded">
+                                *Hopwhistle costs include L40S GPU amortization, electricity, and Telnyx SIP trunking.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="lg:col-span-1 space-y-6">
+                        <div class="bg-hop-navy text-white p-8 rounded-2xl shadow-xl border border-slate-800">
+                            <h3 class="text-hop-orange text-sm font-bold uppercase tracking-wider mb-2">The Hopwhistle Advantage</h3>
+                            <div class="text-5xl font-bold mb-1">92%</div>
+                            <div class="text-slate-400 text-sm mb-8">Savings vs. Standard SaaS Voicebots</div>
+                            
+                            <div class="space-y-6">
+                                <div>
+                                    <div class="flex justify-between text-sm mb-2 font-medium">
+                                        <span class="text-slate-300">Vapi.ai Est.</span>
+                                        <span class="font-mono text-white">$0.0900</span>
+                                    </div>
+                                    <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                                        <div class="bg-slate-500 h-2 rounded-full" style="width: 100%"></div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-sm mb-2 font-medium">
+                                        <span class="text-hop-teal">Hopwhistle Actual</span>
+                                        <span class="font-mono text-white">$0.0074</span>
+                                    </div>
+                                    <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                                        <div class="bg-hop-teal h-2 rounded-full shadow-[0_0_10px_rgba(20,184,166,0.5)]" style="width: 8%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="p-6 bg-orange-50 border border-orange-100 rounded-xl">
+                            <h4 class="font-bold text-orange-900 mb-2 flex items-center">
+                                <i data-lucide="trending-up" class="h-5 w-5 mr-2 text-hop-orange"></i> Scale Factor
+                            </h4>
+                            <p class="text-sm text-orange-900/80 leading-snug">
+                                At 50 million minutes per month, this efficiency saves <strong>~$4,129,000</strong>. That's pure budget back into tour production or marketing.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 4: Use Cases -->
+        <section id="use-cases" class="py-16 bg-white">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="text-center mb-12">
+                    <h2 class="text-3xl font-bold text-hop-navy">Applications for the Modern Industry</h2>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div class="bg-slate-50 rounded-xl p-6 border border-slate-100 hover:border-hop-orange transition-colors">
+                        <div class="h-10 w-10 bg-hop-orange text-white rounded-lg flex items-center justify-center mb-4"><i data-lucide="ticket" class="h-6 w-6"></i></div>
+                        <h3 class="font-bold text-hop-navy text-lg mb-2">Tour Support</h3>
+                        <p class="text-sm text-slate-600">Geo-targeted calls to fans in specific cities the day tickets go on sale. "Yo, we're hitting Chicago next week, grab your tix."</p>
+                    </div>
+                    <div class="bg-slate-50 rounded-xl p-6 border border-slate-100 hover:border-hop-orange transition-colors">
+                        <div class="h-10 w-10 bg-hop-navy text-white rounded-lg flex items-center justify-center mb-4"><i data-lucide="disc-2" class="h-6 w-6"></i></div>
+                        <h3 class="font-bold text-hop-navy text-lg mb-2">First Listens</h3>
+                        <p class="text-sm text-slate-600">Play unreleased demos to top 1% Spotify listeners for feedback. Create a "Secret Society" of superfans.</p>
+                    </div>
+                    <div class="bg-slate-50 rounded-xl p-6 border border-slate-100 hover:border-hop-orange transition-colors">
+                        <div class="h-10 w-10 bg-hop-teal text-white rounded-lg flex items-center justify-center mb-4"><i data-lucide="shopping-bag" class="h-6 w-6"></i></div>
+                        <h3 class="font-bold text-hop-navy text-lg mb-2">Merch Drops</h3>
+                        <p class="text-sm text-slate-600">Flash sales on limited vinyl runs. "I just put 50 signed copies up, wanted you to know first."</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 5: Campaign ROI Simulator -->
+        <section id="campaign" class="py-20 bg-slate-50">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="text-center mb-12">
+                    <h2 class="text-4xl font-bold text-hop-navy mb-4">Strategic Album Rollout</h2>
+                    <p class="text-slate-600 max-w-3xl mx-auto text-lg">
+                        We don't just call; we orchestrate release campaigns. Our data proves that high-frequency dialing on focused fan lists yields significantly higher engagement than "spray and pray."
+                    </p>
+                </div>
+
+                <div class="flex flex-col md:flex-row justify-center mb-10 space-y-4 md:space-y-0 md:space-x-4">
+                    <button id="btn-nonbranded" class="px-8 py-4 rounded-full bg-white border border-slate-200 text-slate-600 font-semibold hover:bg-slate-100 transition focus:outline-none flex items-center justify-center" onclick="toggleCampaign('nonbranded')">
+                        <i data-lucide="users" class="h-5 w-5 mr-2"></i>
+                        Protocol A: "Guerilla / Street Team"
+                    </button>
+                    <button id="btn-branded" class="px-8 py-4 rounded-full bg-hop-orange text-white font-bold shadow-lg shadow-orange-200 focus:outline-none flex items-center justify-center transform scale-105" onclick="toggleCampaign('branded')">
+                        <i data-lucide="check-circle-2" class="h-5 w-5 mr-2"></i>
+                        Protocol B: "Official Label Drop"
+                    </button>
+                </div>
+
+                <!-- Dashboard Container -->
+                <div class="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+                    <div class="grid grid-cols-1 lg:grid-cols-4 border-b border-slate-200 bg-slate-50">
+                        <div class="p-6 border-r border-slate-200">
+                            <div class="text-xs font-bold text-slate-400 uppercase tracking-wide">Total Fans</div>
+                            <div class="text-3xl font-bold text-hop-navy mt-2" id="stat-records">12.5M</div>
+                        </div>
+                        <div class="p-6 border-r border-slate-200">
+                            <div class="text-xs font-bold text-slate-400 uppercase tracking-wide">Total Dials</div>
+                            <div class="text-3xl font-bold text-hop-navy mt-2" id="stat-dials">43.7M</div>
+                        </div>
+                        <div class="p-6 border-r border-slate-200">
+                            <div class="text-xs font-bold text-slate-400 uppercase tracking-wide">Total Cost</div>
+                            <div class="text-3xl font-bold text-hop-navy mt-2" id="stat-cost">$354k</div>
+                        </div>
+                        <div class="p-6 bg-hop-navy text-white relative overflow-hidden">
+                            <div class="absolute right-0 top-0 h-full w-2 bg-hop-orange"></div>
+                            <div class="text-xs font-bold text-hop-teal uppercase tracking-wide">Cost Per Listen</div>
+                            <div class="text-4xl font-bold mt-2" id="stat-cpe">$0.88</div>
+                        </div>
+                    </div>
+
+                    <div class="p-8">
+                        <div class="lg:flex lg:space-x-10">
+                            <!-- Table -->
+                            <div class="lg:w-2/3 mb-8 lg:mb-0">
+                                <h4 class="text-lg font-bold mb-6 flex items-center text-hop-navy">
+                                    <i data-lucide="bar-chart-2" class="h-5 w-5 text-hop-orange mr-2"></i>
+                                    Campaign Waterfall
+                                </h4>
+                                <div class="overflow-hidden rounded-lg border border-slate-200">
+                                    <table class="w-full text-sm text-left">
+                                        <thead class="bg-slate-50 text-slate-500 font-semibold">
+                                            <tr>
+                                                <th class="px-5 py-4">Wave</th>
+                                                <th class="px-5 py-4">Dials</th>
+                                                <th class="px-5 py-4">Contacted</th>
+                                                <th class="px-5 py-4 text-hop-navy">Engaged (Listens)</th>
+                                                <th class="px-5 py-4 text-right">Est. Cost</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="campaign-table-body" class="divide-y divide-slate-100 bg-white">
+                                            <!-- JS Populated -->
+                                        </tbody>
+                                        <tfoot class="bg-orange-50 font-bold text-hop-navy">
+                                            <tr id="campaign-footer">
+                                                <!-- JS Populated -->
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Insight -->
+                            <div class="lg:w-1/3 bg-slate-50 rounded-2xl p-8 border border-slate-200 flex flex-col justify-center">
+                                <h4 class="text-lg font-bold mb-4 text-hop-navy" id="insight-title">Efficiency Analysis</h4>
+                                <p class="text-slate-600 mb-6 leading-relaxed" id="insight-text">
+                                    The non-branded approach saves $0.005 per call on carrier fees. While contact rates are lower, the sheer volume of 4x dialing drives a respectable Cost Per Engagement (CPE) of $0.88.
+                                </p>
+                                <div class="mt-auto pt-6 border-t border-slate-200">
+                                    <div class="flex items-center text-hop-navy font-bold">
+                                        <div class="bg-green-100 p-1 rounded-full mr-3">
+                                            <i data-lucide="check" class="h-4 w-4 text-green-600"></i>
+                                        </div>
+                                        <span id="insight-verdict">Cost Optimized Strategy</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 6: The Product Experience (Transcript) -->
+        <section id="experience" class="py-20 bg-white">
+            <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="text-center mb-12">
+                    <h2 class="text-4xl font-bold text-hop-navy mb-4">Human Parity Achieved</h2>
+                    <p class="text-slate-600 text-lg">
+                        Listen to "Kevin" from the band <em>Little Stranger</em> call a fan to preview a demo track. This is the new standard for parasocial interaction at scale.
+                    </p>
+                </div>
+
+                <div class="bg-white border border-slate-200 rounded-3xl p-6 md:p-10 max-h-[700px] overflow-y-auto shadow-2xl relative" id="transcript-container">
+                    <!-- Header -->
+                    <div class="sticky top-0 bg-white/95 backdrop-blur z-10 pb-4 border-b border-slate-100 mb-6">
+                        <div class="flex justify-between items-center mb-4">
+                            <div class="flex items-center space-x-3">
+                                <div class="h-10 w-10 rounded-full bg-hop-navy text-white flex items-center justify-center font-bold">K</div>
+                                <div>
+                                    <div class="text-sm font-bold text-hop-navy">Kevin (Little Stranger)</div>
+                                    <div class="text-xs text-green-500 flex items-center"><span class="w-1.5 h-1.5 bg-green-500 rounded-full mr-1"></span> Call Active</div>
+                                </div>
+                            </div>
+                            <div class="text-xs text-slate-400 font-mono">04:57 DURATION</div>
+                        </div>
+                        
+                        <!-- Audio Player Integration -->
+                        <div class="bg-slate-50 rounded-xl p-3 border border-slate-200 flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-3">
+                             <div class="flex items-center space-x-2 text-hop-orange whitespace-nowrap">
+                                <i data-lucide="play-circle" class="h-5 w-5"></i>
+                                <span class="text-xs font-bold uppercase tracking-wide">Play Demo Call</span>
+                            </div>
+                            <audio controls class="w-full h-8 focus:outline-none" style="filter: drop-shadow(0 1px 1px rgba(0,0,0,0.05));">
+                                <source src="https://storage.googleapis.com/music-jck/Little-Stranger_Busted-Brain_Demo.wav" type="audio/wav">
+                                Your browser does not support the audio element.
+                            </audio>
+                        </div>
+                    </div>
+
+                    <!-- Transcript Content -->
+                    <div class="flex flex-col space-y-2">
+                        
+                        <div class="transcript-bubble bubble-left">
+                            Yo, is this Jason?
+                        </div>
+
+                        <div class="transcript-bubble bubble-right">
+                            It is.
+                        </div>
+
+                        <div class="transcript-bubble bubble-left">
+                            Hey, okay, sick. Yo, I know this is random as hell, but this is actually Kevin from the band Little Stranger. Me and John are literally in the van right now... You got like 30 seconds to be the tiebreaker?
+                        </div>
+
+                        <div class="transcript-bubble bubble-right">
+                            Uh, yeah, I guess.
+                        </div>
+
+                        <div class="transcript-bubble bubble-left">
+                            My guy, I appreciate you. Turn the volume up. The bass is stupid on this one. All right, here we go.
+                        </div>
+
+                        <div class="p-5 my-6 bg-hop-navy/5 border border-hop-navy/10 rounded-xl flex items-center justify-center animate-pulse">
+                            <i data-lucide="music" class="h-6 w-6 text-hop-orange mr-3"></i>
+                            <div class="flex flex-col">
+                                <span class="text-sm font-bold text-hop-navy">Little Stranger - Unreleased Demo</span>
+                                <span class="text-xs text-hop-navy/60 font-mono">Audio Playing for Fan...</span>
+                            </div>
+                        </div>
+
+                        <div class="transcript-bubble bubble-right">
+                            Hello?
+                        </div>
+
+                        <div class="transcript-bubble bubble-left">
+                            Yo.
+                        </div>
+                        
+                         <div class="transcript-bubble bubble-left">
+                            Okay, be honest, my guy. One to ten. Does John have a point, or is that a straight banger?
+                        </div>
+                        
+                         <div class="transcript-bubble bubble-right">
+                            That song's hot, man. Whose song is that?
+                        </div>
+                        
+                         <div class="transcript-bubble bubble-left">
+                            Ha Ha, fair question. That's us. Little Stranger. Unreleased, joint, band fresh. But, yo, real quick, don't dodge me.
+                        </div>
+                        
+                        <div class="transcript-bubble bubble-right">
+                            Y'all got a manager?
+                        </div>
+                        
+                         <div class="transcript-bubble bubble-left">
+                            Ha ha, yeah, yeah. We got people, man. Some real adults involved. But listen, don't spin me. One to ten. Real talk. Is John tripping or nah?
+                        </div>
+                        
+                        <div class="transcript-bubble bubble-right">
+                            That's a good song, man. Send me the records.
+                        </div>
+
+                        <div class="transcript-bubble bubble-left border-l-4 border-l-hop-orange">
+                            <div class="text-xs text-hop-orange font-bold mb-1 uppercase tracking-wide">Sentiment: POSITIVE</div>
+                            Hey, let's go. That's what I'm talking about. That's like a solid nine energy right there. I knew it. I'm telling John he's bugging. I appreciate you, for real.
+                        </div>
+                        
+                        <div class="transcript-bubble bubble-right">
+                            My guy. John's trippin', bro. John's trippin'. Yeah, get that out. Put that out.
+                        </div>
+                        
+                        <div class="transcript-bubble bubble-left">
+                           But, listen, that's all I needed. You sealed it. John's cooked. We're putting that out ASAP. Appreciate you. For real. Much love. Peace.
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="bg-hop-navy text-slate-300 py-16">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center">
+                <div class="mb-8 md:mb-0 text-center md:text-left">
+                     <!-- White Logo for Footer -->
+                    <div class="flex items-center justify-center md:justify-start mb-4">
+                        <span class="serif text-3xl text-white font-bold mr-2">Hopwhistle</span>
+                        <div class="h-2 w-2 bg-hop-orange rounded-full"></div>
+                    </div>
+                    <p class="text-sm max-w-xs text-slate-400">Sovereign Voice Infrastructure designed for high-volume, low-latency Music Industry engagement.</p>
+                </div>
+                <div class="flex space-x-8 text-sm font-medium">
+                    <a href="#" class="hover:text-hop-orange transition-colors">Label Services</a>
+                    <a href="#" class="hover:text-hop-orange transition-colors">Tour Routing</a>
+                    <a href="#" class="hover:text-hop-orange transition-colors">Documentation</a>
+                    <a href="#" class="hover:text-hop-orange transition-colors">Contact</a>
+                </div>
+            </div>
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-12 pt-8 border-t border-slate-800 text-xs text-slate-500 flex justify-between">
+                 <span>&copy; 2026 Hopwhistle Inc. Internal Strategic Document.</span>
+                 <span>Knoxville, TN</span>
+            </div>
+        </footer>
+
+    </main>
+
+    <script>
+        // Initialize Lucide Icons
+        lucide.createIcons();
+
+        // Scroll Logic
+        function scrollToSection(id) {
+            const element = document.getElementById(id);
+            const offset = 100; // height of nav
+            const bodyRect = document.body.getBoundingClientRect().top;
+            const elementRect = element.getBoundingClientRect().top;
+            const elementPosition = elementRect - bodyRect;
+            const offsetPosition = elementPosition - offset;
+
+            window.scrollTo({
+                top: offsetPosition,
+                behavior: "smooth"
+            });
+            
+            // Update Active State
+            document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+            // This assumes the click event target is the nav item
+            if(event && event.target) {
+                event.target.classList.add('active');
+            }
+        }
+
+        // --- Chart.js Implementation: Unit Economics ---
+        const ctxCost = document.getElementById('costChart').getContext('2d');
+        const costChart = new Chart(ctxCost, {
+            type: 'bar',
+            data: {
+                labels: ['Vapi.ai (Standard SaaS)', 'Hopwhistle (Internal)'],
+                datasets: [
+                    {
+                        label: 'Telephony',
+                        data: [0.015, 0.0068], 
+                        backgroundColor: '#CBD5E1', // Slate 300
+                        hoverBackgroundColor: '#94A3B8',
+                        stack: 'Stack 0',
+                    },
+                    {
+                        label: 'Platform/Compute Fee',
+                        data: [0.09, 0.000615], 
+                        backgroundColor: (context) => {
+                            if (context.dataIndex === 0) return '#64748B'; // Slate 500 (Vapi/Gray)
+                            return '#0B2545'; // Hop Navy (Brand)
+                        },
+                        hoverBackgroundColor: (context) => {
+                            if (context.dataIndex === 0) return '#475569'; 
+                            return '#1e3a8a'; 
+                        },
+                        stack: 'Stack 0',
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: {
+                            font: { family: "'Inter', sans-serif", weight: '500' },
+                            color: '#64748B'
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Cost per Minute ($)',
+                            color: '#94A3B8'
+                        },
+                        grid: { color: '#F1F5F9' },
+                        ticks: { color: '#94A3B8' }
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        backgroundColor: '#0F172A',
+                        padding: 12,
+                        titleFont: { family: "'Inter', sans-serif", size: 13 },
+                        bodyFont: { family: "'Inter', sans-serif", size: 13 },
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.parsed.y !== null) {
+                                    label += new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 4 }).format(context.parsed.y);
+                                }
+                                return label;
+                            }
+                        }
+                    },
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            font: { family: "'Inter', sans-serif", size: 12 },
+                            usePointStyle: true,
+                            color: '#64748B'
+                        }
+                    },
+                    title: {
+                        display: true,
+                        text: 'Total Cost of Ownership Per Minute',
+                        font: { size: 16, family: "'Playfair Display', serif", weight: 'bold' },
+                        color: '#0B2545',
+                        padding: { bottom: 20 }
+                    }
+                }
+            }
+        });
+
+        // --- Campaign Data Logic ---
+        
+        const campaignData = {
+            nonbranded: {
+                name: "Guerilla / Street Team",
+                records: "12,500,000",
+                totalDials: "43,787,600",
+                totalCost: "$354,631",
+                totalEngaged: "403,361",
+                cpe: "$0.88",
+                insightTitle: "Volume & Velocity",
+                insightText: "The 'Guerilla' approach uses non-branded numbers to save $0.005 per call on carrier fees. While pickup rates are lower per dial, the sheer volume of 4x dialing drives a respectable Cost Per Listen (CPL) of $0.88. Ideal for cold fan acquisition.",
+                verdict: "Fan Acquisition Strategy",
+                rows: [
+                    { wave: "Wave 1", dials: "12,500,000", contacted: "750,000", engaged: "75,000", cost: "$98,249" },
+                    { wave: "Wave 2", dials: "11,750,000", contacted: "1,410,000", engaged: "141,000", cost: "$97,581" },
+                    { wave: "Wave 3", dials: "10,340,000", contacted: "1,137,400", engaged: "113,740", cost: "$85,105" },
+                    { wave: "Wave 4", dials: "9,202,600", contacted: "736,208", engaged: "73,621", cost: "$73,696" },
+                ],
+                footer: { dials: "43,787,600", contacted: "4,033,608", engaged: "403,361", cost: "$354,631" }
+            },
+            branded: {
+                name: "Official Label Drop",
+                records: "12,500,000",
+                totalDials: "34,605,200",
+                totalCost: "$610,367",
+                totalEngaged: "812,514",
+                cpe: "$0.75",
+                insightTitle: "Trust & Conversion",
+                insightText: "By displaying the Artist or Label name, trust skyrockets. Pickup rates double, and engagement deepens. Despite the higher per-call carrier fee (+$0.005), the Cost Per Listen drops to $0.75 because fewer dials are wasted. Ideal for album launches.",
+                verdict: "Superfan Strategy",
+                rows: [
+                    { wave: "Wave 1", dials: "12,500,000", contacted: "2,750,000", engaged: "275,000", cost: "$216,361" },
+                    { wave: "Wave 2", dials: "9,750,000", contacted: "2,730,000", engaged: "273,000", cost: "$181,775" },
+                    { wave: "Wave 3", dials: "7,020,000", contacted: "1,684,800", engaged: "168,480", cost: "$124,632" },
+                    { wave: "Wave 4", dials: "5,335,200", contacted: "960,336", engaged: "96,034", cost: "$87,599" },
+                ],
+                footer: { dials: "34,605,200", contacted: "8,125,136", engaged: "812,514", cost: "$610,367" }
+            }
+        };
+
+        function toggleCampaign(type) {
+            const data = campaignData[type];
+            
+            // Toggle Button Styles
+            const btnBranded = document.getElementById('btn-branded');
+            const btnNon = document.getElementById('btn-nonbranded');
+            
+            if (type === 'branded') {
+                btnBranded.className = "px-8 py-4 rounded-full bg-hop-orange text-white font-bold shadow-lg shadow-orange-200 focus:outline-none flex items-center justify-center transform scale-105 transition-all";
+                btnNon.className = "px-8 py-4 rounded-full bg-white border border-slate-200 text-slate-600 font-semibold hover:bg-slate-100 transition focus:outline-none flex items-center justify-center opacity-70";
+            } else {
+                btnNon.className = "px-8 py-4 rounded-full bg-hop-navy text-white font-bold shadow-lg shadow-slate-300 focus:outline-none flex items-center justify-center transform scale-105 transition-all";
+                btnBranded.className = "px-8 py-4 rounded-full bg-white border border-slate-200 text-slate-600 font-semibold hover:bg-slate-100 transition focus:outline-none flex items-center justify-center opacity-70";
+            }
+
+            // Update Header Stats
+            document.getElementById('stat-records').innerText = data.records;
+            document.getElementById('stat-dials').innerText = data.totalDials;
+            document.getElementById('stat-cost').innerText = data.totalCost;
+            document.getElementById('stat-cpe').innerText = data.cpe;
+
+            // Update Table Body
+            const tbody = document.getElementById('campaign-table-body');
+            tbody.innerHTML = '';
+            data.rows.forEach(row => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="px-5 py-4 font-medium text-hop-navy">${row.wave}</td>
+                    <td class="px-5 py-4 text-slate-600">${row.dials}</td>
+                    <td class="px-5 py-4 text-slate-600">${row.contacted}</td>
+                    <td class="px-5 py-4 text-hop-teal font-bold bg-teal-50/50">${row.engaged}</td>
+                    <td class="px-5 py-4 text-slate-600 text-right">${row.cost}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            // Update Footer
+            const tfoot = document.getElementById('campaign-footer');
+            tfoot.innerHTML = `
+                <td class="px-5 py-4">Totals</td>
+                <td class="px-5 py-4">${data.footer.dials}</td>
+                <td class="px-5 py-4">${data.footer.contacted}</td>
+                <td class="px-5 py-4 text-hop-navy bg-orange-100">${data.footer.engaged}</td>
+                <td class="px-5 py-4 text-right">${data.footer.cost}</td>
+            `;
+
+            // Update Insights
+            document.getElementById('insight-title').innerText = data.insightTitle;
+            document.getElementById('insight-text').innerText = data.insightText;
+            document.getElementById('insight-verdict').innerText = data.verdict;
+        }
+
+        // Initialize Default (Branded for visual pop)
+        toggleCampaign('branded');
+
+    </script>
+</body>
+</html>
