@@ -276,121 +276,127 @@
       <!-- Section 1: Executive Summary -->
       <section
         id="summary"
-        class="py-24 md:py-32 border-b border-white/5 relative overflow-hidden"
-        style="
-          background:
-            linear-gradient(
-              to bottom,
-              rgba(11, 15, 21, 0.9) 0%,
-              rgba(11, 15, 21, 0.6) 50%,
-              #0b0f15 100%
-            ),
-            url('/concert.png') center top / cover no-repeat;
-        "
+        class="py-20 lg:py-28 border-b border-white/5 relative overflow-hidden min-h-[85vh] flex items-center"
+        style="background: url('/concert.png') center top / cover no-repeat"
       >
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <!-- Center Stage: Hero Text -->
-          <div class="text-center max-w-4xl mx-auto mb-16">
-            <h1
-              class="text-5xl sm:text-6xl lg:text-7xl font-bold text-white leading-tight mb-6 drop-shadow-lg"
-              style="text-shadow: 0 2px 30px rgba(0, 0, 0, 0.6)"
-            >
-              Make Millions of Fans<br />
-              <span class="text-hop-teal">Feel Like The Only One</span>.
-            </h1>
-            <p class="text-xl md:text-2xl text-slate-300 mb-6 leading-relaxed drop-shadow-md">
-              Scaling the Artist's Personal Connection.
-            </p>
-            <p
-              class="text-lg text-slate-400 mb-10 leading-relaxed max-w-2xl mx-auto drop-shadow-sm"
-            >
-              While social platforms gatekeep your audience, Hopwhistle tears down the wall.
-              Leveraging the <strong class="text-white">Resonate Engine</strong>, we enable you to
-              call millions of fans simultaneously—personally and authentically. It's the intimacy
-              of a private phone call, scaled to the size of a stadium tour.
-            </p>
+        <!-- Horizontal Scrim: solid dark left, transparent right -->
+        <div
+          class="absolute inset-0 z-0"
+          style="
+            background: linear-gradient(
+              to right,
+              #0b0f15 0%,
+              rgba(11, 15, 21, 0.95) 40%,
+              rgba(11, 15, 21, 0.5) 70%,
+              rgba(11, 15, 21, 0.3) 100%
+            );
+          "
+        ></div>
+        <!-- Bottom fade to blend into next section -->
+        <div
+          class="absolute inset-x-0 bottom-0 h-32 z-0"
+          style="background: linear-gradient(to top, #0b0f15, transparent)"
+        ></div>
 
-            <!-- Stat Cards: Centered -->
-            <div class="grid grid-cols-3 gap-4 md:gap-6 max-w-xl mx-auto">
-              <div class="glass-card p-4 md:p-5 hover:border-hop-teal/40 transition-colors group">
-                <div
-                  class="text-2xl md:text-3xl font-bold text-hop-teal mb-1 transition-colors font-sans"
-                >
-                  &lt;500ms
+        <div class="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 relative z-10 w-full">
+          <div class="lg:grid lg:grid-cols-2 lg:gap-16 items-center">
+            <!-- Left Column: The Copy -->
+            <div class="py-8">
+              <h1
+                class="text-5xl sm:text-6xl font-bold text-white leading-tight mb-6 max-w-2xl"
+                style="text-shadow: 0 2px 30px rgba(0, 0, 0, 0.5)"
+              >
+                Make Millions of Fans<br />
+                <span class="text-hop-teal">Feel Like The Only One</span>.
+              </h1>
+              <p
+                class="text-xl text-slate-300 mb-8 leading-relaxed max-w-xl"
+                style="text-shadow: 0 1px 10px rgba(0, 0, 0, 0.3)"
+              >
+                Scaling the Artist's Personal Connection.
+              </p>
+              <p class="text-lg text-slate-400 mb-10 leading-relaxed max-w-xl">
+                While social platforms gatekeep your audience, Hopwhistle tears down the wall.
+                Leveraging the <strong class="text-white">Resonate Engine</strong>, we enable you to
+                call millions of fans simultaneously—personally and authentically.
+              </p>
+
+              <!-- Stat Cards -->
+              <div class="grid grid-cols-3 gap-4 max-w-md">
+                <div class="glass-card p-4 hover:border-hop-teal/40 transition-colors">
+                  <div class="text-2xl font-bold text-hop-teal mb-1 font-sans">&lt;500ms</div>
+                  <div class="text-xs text-slate-500 font-medium">Latency</div>
                 </div>
-                <div class="text-xs md:text-sm text-slate-500 font-medium">Latency</div>
-              </div>
-              <div class="glass-card p-4 md:p-5 hover:border-hop-teal/40 transition-colors group">
-                <div
-                  class="text-2xl md:text-3xl font-bold text-hop-teal mb-1 transition-colors font-sans"
-                >
-                  $0.0074
+                <div class="glass-card p-4 hover:border-hop-teal/40 transition-colors">
+                  <div class="text-2xl font-bold text-hop-teal mb-1 font-sans">$0.007</div>
+                  <div class="text-xs text-slate-500 font-medium">Per Minute</div>
                 </div>
-                <div class="text-xs md:text-sm text-slate-500 font-medium">Per Minute</div>
-              </div>
-              <div class="glass-card p-4 md:p-5 hover:border-hop-teal/40 transition-colors group">
-                <div
-                  class="text-2xl md:text-3xl font-bold text-hop-teal mb-1 transition-colors font-sans"
-                >
-                  Direct
+                <div class="glass-card p-4 hover:border-hop-teal/40 transition-colors">
+                  <div class="text-2xl font-bold text-hop-teal mb-1 font-sans">Direct</div>
+                  <div class="text-xs text-slate-500 font-medium">Fan Channel</div>
                 </div>
-                <div class="text-xs md:text-sm text-slate-500 font-medium">Fan Channel</div>
               </div>
             </div>
-          </div>
 
-          <!-- Infrastructure Card: Below hero, hidden on mobile -->
-          <div class="hidden lg:block max-w-3xl mx-auto animate-fade-in">
-            <div
-              class="bg-[#0d1520]/80 rounded-2xl p-8 text-white relative overflow-hidden border border-white/10 backdrop-blur-sm"
-            >
-              <!-- Decorative Circle from Logo -->
+            <!-- Right Column: Infrastructure Stack Card -->
+            <div class="hidden lg:flex items-center justify-center">
               <div
-                class="absolute -top-10 -right-10 w-40 h-40 bg-hop-teal opacity-15 rounded-full blur-2xl"
-              ></div>
-              <div
-                class="absolute bottom-10 -left-10 w-40 h-40 bg-hop-orange opacity-10 rounded-full blur-2xl"
-              ></div>
-
-              <div
-                class="flex items-center justify-between mb-8 border-b border-white/10 pb-6 relative z-10"
+                class="bg-[#0d1520]/70 rounded-2xl p-8 text-white relative overflow-hidden border border-white/10 backdrop-blur-md w-full max-w-lg animate-fade-in"
               >
-                <div class="flex items-center">
-                  <i data-lucide="server" class="h-6 w-6 text-hop-orange mr-3"></i>
-                  <h3 class="text-xl font-semibold tracking-wide">Infrastructure Stack</h3>
-                </div>
-                <div class="bg-white/5 px-4 py-2 rounded backdrop-blur-sm border border-white/5">
-                  <img
-                    src="https://storage.googleapis.com/music-jck/resonate1.png"
-                    alt="Resonate"
-                    class="h-10 w-auto filter brightness-0 invert opacity-90"
-                  />
-                </div>
-              </div>
-              <div class="grid grid-cols-2 md:grid-cols-4 gap-6 relative z-10">
-                <div class="group">
-                  <div class="text-slate-500 text-xs uppercase tracking-wider mb-1">The Brain</div>
-                  <div class="font-mono text-hop-teal bg-cyan-900/30 px-2 py-1 rounded text-sm">
-                    Llama-3.1-8B-FP8
+                <!-- Decorative Glows -->
+                <div
+                  class="absolute -top-10 -right-10 w-40 h-40 bg-hop-teal opacity-15 rounded-full blur-2xl"
+                ></div>
+                <div
+                  class="absolute bottom-10 -left-10 w-40 h-40 bg-hop-orange opacity-10 rounded-full blur-2xl"
+                ></div>
+
+                <div
+                  class="flex items-center justify-between mb-8 border-b border-white/10 pb-6 relative z-10"
+                >
+                  <div class="flex items-center">
+                    <i data-lucide="server" class="h-6 w-6 text-hop-orange mr-3"></i>
+                    <h3 class="text-xl font-semibold tracking-wide">Infrastructure Stack</h3>
+                  </div>
+                  <div class="bg-white/5 px-4 py-2 rounded backdrop-blur-sm border border-white/5">
+                    <img
+                      src="https://storage.googleapis.com/music-jck/resonate1.png"
+                      alt="Resonate"
+                      class="h-10 w-auto filter brightness-0 invert opacity-90"
+                    />
                   </div>
                 </div>
-                <div class="group">
-                  <div class="text-slate-500 text-xs uppercase tracking-wider mb-1">The Voice</div>
-                  <div class="font-mono text-hop-orange bg-orange-900/30 px-2 py-1 rounded text-sm">
-                    Kokoro v1.0 ONNX
+                <div class="space-y-5 relative z-10">
+                  <div class="flex justify-between items-center">
+                    <span class="text-slate-400">The Brain</span>
+                    <span class="font-mono text-hop-teal bg-cyan-900/30 px-2 py-1 rounded text-sm"
+                      >Llama-3.1-8B-FP8</span
+                    >
+                  </div>
+                  <div class="flex justify-between items-center">
+                    <span class="text-slate-400">The Voice</span>
+                    <span
+                      class="font-mono text-hop-orange bg-orange-900/30 px-2 py-1 rounded text-sm"
+                      >Kokoro v1.0 ONNX</span
+                    >
+                  </div>
+                  <div class="flex justify-between items-center">
+                    <span class="text-slate-400">The Ears</span>
+                    <span class="font-mono text-white bg-white/5 px-2 py-1 rounded text-sm"
+                      >Faster-Whisper v3</span
+                    >
+                  </div>
+                  <div class="flex justify-between items-center">
+                    <span class="text-slate-400">Delivery</span>
+                    <span class="font-mono text-white bg-white/5 px-2 py-1 rounded text-sm"
+                      >LiveKit + Telnyx</span
+                    >
                   </div>
                 </div>
-                <div class="group">
-                  <div class="text-slate-500 text-xs uppercase tracking-wider mb-1">The Ears</div>
-                  <div class="font-mono text-white bg-white/5 px-2 py-1 rounded text-sm">
-                    Faster-Whisper v3
-                  </div>
-                </div>
-                <div class="group">
-                  <div class="text-slate-500 text-xs uppercase tracking-wider mb-1">Delivery</div>
-                  <div class="font-mono text-white bg-white/5 px-2 py-1 rounded text-sm">
-                    LiveKit + Telnyx
-                  </div>
+                <div class="mt-8 pt-5 border-t border-white/10 relative z-10">
+                  <p class="text-sm text-slate-500 italic">
+                    "We build for the artists who need to cut through the noise."
+                  </p>
                 </div>
               </div>
             </div>
@@ -488,12 +494,12 @@
 
       <!-- Section 3: Unit Economics -->
       <section id="economics" class="py-20 border-y border-white/5 relative overflow-hidden">
-        <!-- Ambient Spotlight: Gold/Amber -->
+        <!-- Ambient Spotlight: Cyan behind chart -->
         <div
-          class="absolute top-1/3 right-0 w-[600px] h-[600px] bg-amber-500/[0.06] rounded-full blur-3xl pointer-events-none"
+          class="absolute top-1/3 left-1/3 w-[800px] h-[800px] bg-cyan-500/[0.10] rounded-full blur-3xl pointer-events-none"
         ></div>
         <div
-          class="absolute bottom-0 left-0 w-[400px] h-[400px] bg-amber-600/[0.04] rounded-full blur-3xl pointer-events-none"
+          class="absolute bottom-0 right-0 w-[500px] h-[500px] bg-amber-500/[0.06] rounded-full blur-3xl pointer-events-none"
         ></div>
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div class="mb-12">
@@ -631,7 +637,11 @@
       </section>
 
       <!-- Section 5: Campaign ROI Simulator -->
-      <section id="campaign" class="py-20">
+      <section id="campaign" class="py-20 relative overflow-hidden">
+        <!-- Ambient Spotlight: Amber behind table -->
+        <div
+          class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] bg-amber-500/[0.08] rounded-full blur-3xl pointer-events-none"
+        ></div>
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div class="text-center mb-12">
             <h2 class="text-4xl font-bold text-white mb-4">Strategic Album Rollout</h2>
