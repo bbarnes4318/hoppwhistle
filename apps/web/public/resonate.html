@@ -95,6 +95,19 @@
         transform-origin: bottom;
       }
 
+      /* Scroll Fade-In Animation */
+      .fade-in-up {
+        opacity: 0;
+        transform: translateY(20px);
+        transition:
+          opacity 0.6s ease-out,
+          transform 0.6s ease-out;
+      }
+      .fade-in-up.is-visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
       /* Primary CTA Button — Deep Blue */
       .primary-btn {
         background: #006aa9;
@@ -463,6 +476,88 @@
               </div>
             </div>
           </div>
+        </div>
+      </section>
+      <!-- Section 1.5: The Authority Manifesto -->
+      <section id="manifesto" class="py-32 bg-[#020408] relative overflow-hidden">
+        <!-- Subtle radial blue glow -->
+        <div
+          class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] rounded-full pointer-events-none"
+          style="background: radial-gradient(circle, rgba(0, 106, 169, 0.05) 0%, transparent 70%)"
+        ></div>
+
+        <div class="max-w-4xl mx-auto px-6 sm:px-8 lg:px-12 relative z-10 text-center">
+          <!-- A. Eyebrow -->
+          <p class="fade-in-up text-xs tracking-[0.2em] font-bold text-[#22AF8A] uppercase mb-6">
+            Access is the new advantage.
+          </p>
+
+          <!-- B. Headline -->
+          <h2
+            class="fade-in-up text-4xl sm:text-5xl font-bold text-white mb-8 leading-tight"
+            style="transition-delay: 0.1s"
+          >
+            Precision Fan Engagement.<br class="hidden sm:inline" />
+            At Cultural Scale<span class="text-[#22AF8A]">.</span>
+          </h2>
+
+          <!-- C. Narrative -->
+          <p
+            class="fade-in-up max-w-3xl mx-auto text-lg text-slate-300 leading-relaxed mb-16"
+            style="transition-delay: 0.2s"
+          >
+            Hopwhistle provides artists and labels with a direct, controlled channel to their
+            audience &mdash; bypassing algorithms, social feeds, and ad networks entirely. Every fan
+            receives a personal voice experience, delivered at scale, with measurable engagement
+            data flowing back in real time. This is the infrastructure layer the music industry has
+            been missing.
+          </p>
+
+          <!-- D. Pivot Divider -->
+          <div class="fade-in-up max-w-2xl mx-auto mb-16" style="transition-delay: 0.3s">
+            <hr class="border-slate-800 mb-10" />
+            <p class="text-xl font-semibold text-white">
+              This is not social engagement.<br />
+              This is <strong class="text-white">owned audience infrastructure</strong>.
+            </p>
+          </div>
+
+          <!-- E. Three Pillars Grid -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto mb-16">
+            <div
+              class="fade-in-up border-t border-slate-800 pt-8 text-left"
+              style="transition-delay: 0.3s"
+            >
+              <i data-lucide="bar-chart-3" class="h-7 w-7 text-[#22AF8A] mb-4"></i>
+              <p class="text-base text-slate-200 leading-relaxed">
+                Drive measurable lift in streaming activity.
+              </p>
+            </div>
+            <div
+              class="fade-in-up border-t border-slate-800 pt-8 text-left"
+              style="transition-delay: 0.4s"
+            >
+              <i data-lucide="ticket" class="h-7 w-7 text-[#22AF8A] mb-4"></i>
+              <p class="text-base text-slate-200 leading-relaxed">Accelerate ticket demand.</p>
+            </div>
+            <div
+              class="fade-in-up border-t border-slate-800 pt-8 text-left"
+              style="transition-delay: 0.5s"
+            >
+              <i data-lucide="target" class="h-7 w-7 text-[#22AF8A] mb-4"></i>
+              <p class="text-base text-slate-200 leading-relaxed">
+                Activate fans with intention &mdash; not probability.
+              </p>
+            </div>
+          </div>
+
+          <!-- F. Footer Tagline -->
+          <p
+            class="fade-in-up text-sm text-slate-500 font-mono uppercase tracking-wider mt-16"
+            style="transition-delay: 0.5s"
+          >
+            Private connection. Public scale. Institutional-grade performance.
+          </p>
         </div>
       </section>
 
@@ -1002,6 +1097,19 @@
     <script>
       // Initialize Lucide Icons
       lucide.createIcons();
+
+      // Scroll Fade-In Observer
+      const fadeObserver = new IntersectionObserver(
+        entries => {
+          entries.forEach(entry => {
+            if (entry.isIntersecting) {
+              entry.target.classList.add('is-visible');
+            }
+          });
+        },
+        { threshold: 0.15 }
+      );
+      document.querySelectorAll('.fade-in-up').forEach(el => fadeObserver.observe(el));
 
       // Scroll Logic
       function scrollToSection(id) {
