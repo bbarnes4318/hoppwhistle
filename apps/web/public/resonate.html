@@ -13,13 +13,13 @@
           extend: {
             colors: {
               hop: {
-                navy: '#0F1C2E',
+                navy: '#020408',
                 orange: '#F26522',
                 teal: '#00A99D',
-                light: '#1E293B',
+                light: '#0A0E14',
                 gray: '#94A3B8',
                 gold: '#F26522',
-                surface: '#142236',
+                surface: '#080C12',
               },
             },
             fontFamily: {
@@ -35,7 +35,7 @@
 
       body {
         font-family: 'Inter', sans-serif;
-        background: linear-gradient(180deg, #0f1c2e, #142236);
+        background: #020408;
         color: #e2e8f0;
       }
 
@@ -73,39 +73,19 @@
         transform: translateY(-2px);
       }
 
-      /* Glow Text for key numbers */
-      .glow-text {
-        text-shadow:
-          0 0 20px rgba(0, 169, 157, 0.5),
-          0 0 40px rgba(0, 169, 157, 0.25);
-      }
-
-      .glow-text-gold {
-        text-shadow:
-          0 0 20px rgba(242, 101, 34, 0.5),
-          0 0 40px rgba(242, 101, 34, 0.25);
-      }
-
-      /* Brand Gradient Button */
+      /* Primary CTA Button — Solid Brand Orange */
       .gold-btn {
-        background: linear-gradient(135deg, #00a99d 0%, #f2b522 50%, #f26522 100%);
+        background: #f26522;
         color: white;
         border: none;
-        box-shadow: 0 4px 20px rgba(242, 101, 34, 0.3);
+        box-shadow: 0 4px 15px rgba(242, 101, 34, 0.25);
         transition: all 0.3s ease;
       }
 
       .gold-btn:hover {
-        box-shadow: 0 6px 30px rgba(242, 101, 34, 0.5);
+        background: #ff7a3a;
+        box-shadow: 0 6px 25px rgba(242, 101, 34, 0.4);
         transform: translateY(-1px);
-      }
-
-      /* Brand Gradient Text */
-      .brand-gradient-text {
-        background: linear-gradient(135deg, #00a99d 0%, #f2b522 50%, #f26522 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
       }
 
       .nav-item {
@@ -117,7 +97,7 @@
       }
 
       .nav-item.active {
-        border-bottom-color: #f26522;
+        border-bottom-color: #00a99d;
         color: #e2e8f0;
         font-weight: 600;
       }
@@ -131,7 +111,7 @@
         width: 8px;
       }
       ::-webkit-scrollbar-track {
-        background: #0f1c2e;
+        background: #020408;
       }
       ::-webkit-scrollbar-thumb {
         background: #334155;
@@ -216,7 +196,7 @@
   </head>
   <body class="antialiased min-h-screen flex flex-col">
     <!-- Navigation -->
-    <nav class="bg-[#0F1C2E]/95 backdrop-blur-lg border-b border-white/5 sticky top-0 z-50">
+    <nav class="bg-[#020408]/95 backdrop-blur-lg border-b border-white/5 sticky top-0 z-50">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between h-16 items-center">
           <div class="flex items-center">
@@ -257,17 +237,17 @@
           style="
             background: linear-gradient(
               to right,
-              #0f1c2e 0%,
-              rgba(15, 28, 46, 0.95) 40%,
-              rgba(15, 28, 46, 0.5) 70%,
-              rgba(15, 28, 46, 0.3) 100%
+              #020408 0%,
+              rgba(2, 4, 8, 0.95) 40%,
+              rgba(2, 4, 8, 0.5) 70%,
+              rgba(2, 4, 8, 0.3) 100%
             );
           "
         ></div>
         <!-- Bottom fade to blend into next section -->
         <div
           class="absolute inset-x-0 bottom-0 h-32 z-0"
-          style="background: linear-gradient(to top, #0f1c2e, transparent)"
+          style="background: linear-gradient(to top, #020408, transparent)"
         ></div>
 
         <div class="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 relative z-10 w-full">
@@ -276,15 +256,12 @@
             <div class="lg:col-span-3 py-8">
               <h1
                 class="text-5xl sm:text-6xl font-bold text-white leading-tight mb-6 w-full"
-                style="text-shadow: 0 2px 30px rgba(0, 0, 0, 0.5); text-wrap: balance"
+                style="text-wrap: balance"
               >
                 Make Millions of Fans Feel Like
-                <span class="brand-gradient-text">They're the Only One</span>
+                <span class="text-[#F3F4F6]">They're the Only One</span>
               </h1>
-              <p
-                class="text-xl sm:text-2xl text-slate-200 mb-6 leading-relaxed italic font-light"
-                style="text-shadow: 0 1px 10px rgba(0, 0, 0, 0.3)"
-              >
+              <p class="text-xl sm:text-2xl text-slate-300 mb-6 leading-relaxed italic font-light">
                 Posts get scrolled. Calls get remembered.
               </p>
               <p class="text-lg text-slate-400 mb-8 leading-relaxed max-w-xl">
@@ -525,7 +502,7 @@
                 <h3 class="text-hop-gold text-sm font-bold uppercase tracking-wider mb-2">
                   The Hopwhistle Advantage
                 </h3>
-                <div class="text-5xl font-bold mb-1 text-hop-teal glow-text font-sans">92%</div>
+                <div class="text-5xl font-bold mb-1 text-hop-teal font-sans">92%</div>
                 <div class="text-slate-500 text-sm mb-8">Savings vs. Standard SaaS Voicebots</div>
 
                 <div class="space-y-6">
@@ -682,7 +659,7 @@
                 <div class="text-xs font-bold text-hop-teal uppercase tracking-wide">
                   Cost Per Listen
                 </div>
-                <div class="text-4xl font-bold mt-2 glow-text-gold font-sans" id="stat-cpe">
+                <div class="text-4xl font-bold mt-2 font-sans" id="stat-cpe">
                   $0.88
                 </div>
               </div>
@@ -1177,7 +1154,7 @@
                     <td class="px-5 py-4 font-medium text-white">${row.wave}</td>
                     <td class="px-5 py-4 text-slate-300">${row.dials}</td>
                     <td class="px-5 py-4 text-slate-300">${row.contacted}</td>
-                    <td class="px-5 py-4 text-hop-teal font-bold glow-text bg-teal-900/20">${row.engaged}</td>
+                    <td class="px-5 py-4 text-hop-teal font-bold bg-teal-900/20">${row.engaged}</td>
                     <td class="px-5 py-4 text-slate-300 text-right">${row.cost}</td>
                 `;
           tbody.appendChild(tr);
@@ -1189,7 +1166,7 @@
                 <td class="px-5 py-4">Totals</td>
                 <td class="px-5 py-4">${data.footer.dials}</td>
                 <td class="px-5 py-4">${data.footer.contacted}</td>
-                <td class="px-5 py-4 text-hop-teal glow-text bg-teal-900/20">${data.footer.engaged}</td>
+                <td class="px-5 py-4 text-hop-teal bg-teal-900/20">${data.footer.engaged}</td>
                 <td class="px-5 py-4 text-right">${data.footer.cost}</td>
             `;
 
