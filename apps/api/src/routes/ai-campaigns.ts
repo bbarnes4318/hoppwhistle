@@ -9,10 +9,10 @@ import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 
 import * as AICampaignService from '../services/ai-campaign-service.js';
 
-export function registerAICampaignRoutes(
+export async function registerAICampaignRoutes(
   fastify: FastifyInstance,
   _opts: FastifyPluginOptions
-): void {
+): Promise<void> {
   // Ensure auth for all routes
   fastify.addHook('preHandler', async (request, reply) => {
     if (!request.user?.tenantId) {
@@ -295,10 +295,10 @@ export function registerAICampaignRoutes(
 // Vapi Webhook Handler (separate - no auth required)
 // ============================================================================
 
-export function registerVapiWebhookRoutes(
+export async function registerVapiWebhookRoutes(
   fastify: FastifyInstance,
   _opts: FastifyPluginOptions
-): void {
+): Promise<void> {
   // Vapi webhook - no auth, called by Vapi directly
   fastify.post('/api/v1/webhooks/vapi', async (request, reply) => {
     try {
