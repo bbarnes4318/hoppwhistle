@@ -301,7 +301,7 @@ export default function BillingPage() {
 
           {/* Buyer Info */}
           {buyerInfo && (
-            <div className="flex items-center gap-6 mb-4 p-3 bg-muted/30 rounded-lg">
+            <div className="flex items-center gap-6 mb-4 p-3 bg-white/5 rounded-lg border border-white/10">
               <div>
                 <div className="text-sm text-muted-foreground">Buyer</div>
                 <div className="font-semibold">{buyerInfo.name}</div>
@@ -359,14 +359,14 @@ export default function BillingPage() {
                           {tx.type === 'CREDIT' ? (
                             <ArrowUpCircle className="h-4 w-4 text-emerald-500" />
                           ) : (
-                            <ArrowDownCircle className="h-4 w-4 text-red-500" />
+                            <ArrowDownCircle className="h-4 w-4 text-rose-500" />
                           )}
                           <Badge
                             variant="outline"
                             className={cn(
                               tx.type === 'CREDIT'
-                                ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
-                                : 'bg-red-500/10 text-red-600 border-red-500/20'
+                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
                             )}
                           >
                             {tx.type}
@@ -376,7 +376,7 @@ export default function BillingPage() {
                       <TableCell
                         className={cn(
                           'text-right font-mono font-semibold',
-                          tx.type === 'CREDIT' ? 'text-emerald-600' : 'text-red-600'
+                          tx.type === 'CREDIT' ? 'text-emerald-400' : 'text-rose-400'
                         )}
                       >
                         {tx.type === 'CREDIT' ? '+' : ''}

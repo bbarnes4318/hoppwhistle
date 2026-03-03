@@ -9,11 +9,12 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: 'bg-primary text-primary-foreground hover:bg-primary/90',
-        destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
-        outline: 'border border-input bg-background hover:bg-accent hover:text-accent-foreground',
-        secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
-        ghost: 'hover:bg-accent hover:text-accent-foreground',
+        default: 'bg-emerald-500 text-slate-950 font-bold tracking-wide hover:bg-emerald-400',
+        destructive: 'bg-rose-600 text-white font-bold hover:bg-rose-500',
+        outline:
+          'border border-white/10 bg-transparent text-slate-300 hover:bg-white/5 hover:text-white',
+        secondary: 'bg-slate-800 text-slate-300 hover:bg-slate-700',
+        ghost: 'hover:bg-white/5 hover:text-white text-slate-400',
         link: 'text-primary underline-offset-4 hover:underline',
       },
       size: {
@@ -47,4 +48,3 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 Button.displayName = 'Button';
 
 export { Button, buttonVariants };
-

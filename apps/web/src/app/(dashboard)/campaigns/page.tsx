@@ -73,9 +73,19 @@ function getCountryFlag(countryCode: string): string {
 // Status badge component
 function StatusBadge({ status }: { status: Campaign['status'] }) {
   const config = {
-    ACTIVE: { label: 'Live', bg: 'bg-green-100', text: 'text-green-700', dot: 'bg-green-500' },
-    PAUSED: { label: 'Paused', bg: 'bg-orange-100', text: 'text-orange-700', dot: 'bg-orange-500' },
-    ARCHIVED: { label: 'Setup', bg: 'bg-gray-100', text: 'text-gray-600', dot: 'bg-gray-400' },
+    ACTIVE: {
+      label: 'Live',
+      bg: 'bg-emerald-500/10',
+      text: 'text-emerald-400',
+      dot: 'bg-emerald-500',
+    },
+    PAUSED: { label: 'Paused', bg: 'bg-amber-500/10', text: 'text-amber-400', dot: 'bg-amber-500' },
+    ARCHIVED: {
+      label: 'Setup',
+      bg: 'bg-slate-500/10',
+      text: 'text-slate-400',
+      dot: 'bg-slate-500',
+    },
   };
   const c = config[status] || config.ARCHIVED;
   return (
@@ -242,8 +252,8 @@ export default function CampaignsPage() {
       </div>
 
       {/* Content */}
-      <Card className="flex-1 flex flex-col overflow-hidden min-h-0 border-gray-200">
-        <CardHeader className="flex-shrink-0 py-3 px-4 border-b bg-gray-50/50">
+      <Card className="flex-1 flex flex-col overflow-hidden min-h-0">
+        <CardHeader className="flex-shrink-0 py-3 px-4 border-b border-white/10">
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-base font-medium">Campaigns</CardTitle>
@@ -276,39 +286,39 @@ export default function CampaignsPage() {
         </CardHeader>
         <CardContent className="flex-1 overflow-y-auto min-h-0 p-0">
           <Table>
-            <TableHeader className="sticky top-0 bg-white z-10">
-              <TableRow className="border-b bg-gray-50/80">
-                <TableHead className="font-semibold text-xs uppercase text-gray-600 py-2 px-3">
+            <TableHeader className="sticky top-0 bg-slate-950 z-10">
+              <TableRow className="border-b border-white/10">
+                <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3">
                   Name
                 </TableHead>
-                <TableHead className="font-semibold text-xs uppercase text-gray-600 py-2 px-3">
+                <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3">
                   Status
                 </TableHead>
-                <TableHead className="font-semibold text-xs uppercase text-gray-600 py-2 px-3">
+                <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3">
                   Offer Name
                 </TableHead>
-                <TableHead className="font-semibold text-xs uppercase text-gray-600 py-2 px-3 text-center">
+                <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3 text-center">
                   Country
                 </TableHead>
-                <TableHead className="font-semibold text-xs uppercase text-gray-600 py-2 px-3 text-center">
+                <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3 text-center">
                   Recording
                 </TableHead>
-                <TableHead className="font-semibold text-xs uppercase text-gray-600 py-2 px-3 text-right">
+                <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3 text-right">
                   Live
                 </TableHead>
-                <TableHead className="font-semibold text-xs uppercase text-gray-600 py-2 px-3 text-right">
+                <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3 text-right">
                   Hour
                 </TableHead>
-                <TableHead className="font-semibold text-xs uppercase text-gray-600 py-2 px-3 text-right">
+                <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3 text-right">
                   Day
                 </TableHead>
-                <TableHead className="font-semibold text-xs uppercase text-gray-600 py-2 px-3 text-right">
+                <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3 text-right">
                   Month
                 </TableHead>
-                <TableHead className="font-semibold text-xs uppercase text-gray-600 py-2 px-3 text-right">
+                <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3 text-right">
                   Total
                 </TableHead>
-                <TableHead className="font-semibold text-xs uppercase text-gray-600 py-2 px-3 text-right">
+                <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3 text-right">
                   Actions
                 </TableHead>
               </TableRow>
@@ -335,13 +345,13 @@ export default function CampaignsPage() {
                   return (
                     <TableRow
                       key={campaign.id}
-                      className="hover:bg-gray-50/50 border-b border-gray-100"
+                      className="hover:bg-white/[0.02] border-b border-white/5"
                     >
                       {/* Name */}
                       <TableCell className="py-2 px-3">
                         <a
                           href={`/campaigns/${campaign.id}`}
-                          className="font-medium text-blue-600 hover:text-blue-800 hover:underline text-sm"
+                          className="font-medium text-emerald-400 hover:text-emerald-300 hover:underline text-sm"
                         >
                           {campaign.name}
                         </a>
@@ -353,7 +363,7 @@ export default function CampaignsPage() {
                       </TableCell>
 
                       {/* Offer Name */}
-                      <TableCell className="py-2 px-3 text-sm text-gray-700">
+                      <TableCell className="py-2 px-3 text-sm text-slate-400">
                         {campaign.offerName || '—'}
                       </TableCell>
 
@@ -363,12 +373,12 @@ export default function CampaignsPage() {
                       </TableCell>
 
                       {/* Recording */}
-                      <TableCell className="py-2 px-3 text-center text-sm text-gray-600">
+                      <TableCell className="py-2 px-3 text-center text-sm text-slate-400">
                         {campaign.recordingEnabled ? 'Yes' : 'No'}
                       </TableCell>
 
                       {/* Live */}
-                      <TableCell className="py-2 px-3 text-right text-sm tabular-nums font-medium text-green-600">
+                      <TableCell className="py-2 px-3 text-right text-sm tabular-nums font-medium text-emerald-400">
                         {campaignStats?.liveCount ?? 0}
                       </TableCell>
 
@@ -402,7 +412,7 @@ export default function CampaignsPage() {
                             onClick={() => (window.location.href = `/campaigns/${campaign.id}`)}
                             title="Edit"
                           >
-                            <Edit className="h-3.5 w-3.5 text-gray-500" />
+                            <Edit className="h-3.5 w-3.5 text-slate-500" />
                           </Button>
                           <Button
                             variant="ghost"
@@ -413,7 +423,7 @@ export default function CampaignsPage() {
                             }
                             title="View Reports"
                           >
-                            <BarChart3 className="h-3.5 w-3.5 text-gray-500" />
+                            <BarChart3 className="h-3.5 w-3.5 text-slate-500" />
                           </Button>
                           <Button
                             variant="ghost"
@@ -422,7 +432,7 @@ export default function CampaignsPage() {
                             onClick={() => handleDuplicate(campaign)}
                             title="Duplicate"
                           >
-                            <Copy className="h-3.5 w-3.5 text-gray-500" />
+                            <Copy className="h-3.5 w-3.5 text-slate-500" />
                           </Button>
                           <Button
                             variant="ghost"
@@ -444,7 +454,7 @@ export default function CampaignsPage() {
                             onClick={() => openDeleteDialog(campaign)}
                             title="Delete"
                           >
-                            <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                            <Trash2 className="h-3.5 w-3.5 text-rose-500" />
                           </Button>
                         </div>
                       </TableCell>

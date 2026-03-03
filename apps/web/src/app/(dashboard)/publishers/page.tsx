@@ -262,8 +262,8 @@ export default function PublishersPage() {
       </div>
 
       {/* Content */}
-      <Card className="flex-1 flex flex-col overflow-hidden min-h-0 border-gray-200">
-        <CardHeader className="flex-shrink-0 py-3 px-4 border-b bg-gray-50/50">
+      <Card className="flex-1 flex flex-col overflow-hidden min-h-0">
+        <CardHeader className="flex-shrink-0 py-3 px-4 border-b border-white/10">
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-base font-medium">Publishers</CardTitle>
@@ -298,30 +298,30 @@ export default function PublishersPage() {
         </CardHeader>
         <CardContent className="flex-1 overflow-y-auto min-h-0 p-0">
           <Table>
-            <TableHeader className="sticky top-0 bg-white z-10">
-              <TableRow className="border-b bg-gray-50/80">
-                <TableHead className="font-semibold text-xs uppercase text-gray-600 py-2 px-3">
+            <TableHeader className="sticky top-0 bg-slate-950 z-10">
+              <TableRow className="border-b border-white/10">
+                <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3">
                   Name
                 </TableHead>
-                <TableHead className="font-semibold text-xs uppercase text-gray-600 py-2 px-3">
+                <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3">
                   Publisher ID
                 </TableHead>
-                <TableHead className="font-semibold text-xs uppercase text-gray-600 py-2 px-3 text-right">
+                <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3 text-right">
                   Total Calls
                 </TableHead>
-                <TableHead className="font-semibold text-xs uppercase text-gray-600 py-2 px-3 text-right">
+                <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3 text-right">
                   Billable
                 </TableHead>
-                <TableHead className="font-semibold text-xs uppercase text-gray-600 py-2 px-3 text-right">
+                <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3 text-right">
                   Conversion %
                 </TableHead>
-                <TableHead className="font-semibold text-xs uppercase text-gray-600 py-2 px-3 text-right">
+                <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3 text-right">
                   Missed
                 </TableHead>
-                <TableHead className="font-semibold text-xs uppercase text-gray-600 py-2 px-3 text-center">
+                <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3 text-center">
                   Status
                 </TableHead>
-                <TableHead className="font-semibold text-xs uppercase text-gray-600 py-2 px-3 text-right">
+                <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3 text-right">
                   Actions
                 </TableHead>
               </TableRow>
@@ -345,13 +345,13 @@ export default function PublishersPage() {
                   return (
                     <TableRow
                       key={publisher.id}
-                      className="hover:bg-gray-50/50 border-b border-gray-100"
+                      className="hover:bg-white/[0.02] border-b border-white/5"
                     >
                       {/* Name */}
                       <TableCell className="py-2 px-3">
                         <button
                           onClick={() => openEditDialog(publisher)}
-                          className="font-medium text-blue-600 hover:text-blue-800 hover:underline text-sm"
+                          className="font-medium text-emerald-400 hover:text-emerald-300 hover:underline text-sm"
                         >
                           {publisher.name}
                         </button>
@@ -360,12 +360,12 @@ export default function PublishersPage() {
                       {/* Publisher ID (monospace, copyable) */}
                       <TableCell className="py-2 px-3">
                         <div className="flex items-center gap-1.5">
-                          <code className="font-mono text-xs text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded">
+                          <code className="font-mono text-xs text-slate-300 bg-white/5 px-1.5 py-0.5 rounded">
                             {publisher.code}
                           </code>
                           <button
                             onClick={() => copyToClipboard(publisher.code)}
-                            className="text-gray-400 hover:text-gray-600 transition-colors"
+                            className="text-slate-500 hover:text-slate-300 transition-colors"
                             title="Copy to clipboard"
                           >
                             {copiedId === publisher.code ? (
@@ -406,7 +406,7 @@ export default function PublishersPage() {
                               publisher.status === 'ACTIVE' ? 'bg-green-500' : 'bg-orange-400'
                             )}
                           />
-                          <span className="text-xs text-gray-600">
+                          <span className="text-xs text-slate-400">
                             {publisher.status === 'ACTIVE' ? 'Active' : 'Paused'}
                           </span>
                         </div>
@@ -422,7 +422,7 @@ export default function PublishersPage() {
                             onClick={() => openEditDialog(publisher)}
                             title="Edit"
                           >
-                            <Edit className="h-3.5 w-3.5 text-gray-500" />
+                            <Edit className="h-3.5 w-3.5 text-slate-500" />
                           </Button>
                           <Button
                             variant="ghost"
@@ -433,7 +433,7 @@ export default function PublishersPage() {
                             }
                             title="View Reports"
                           >
-                            <BarChart3 className="h-3.5 w-3.5 text-gray-500" />
+                            <BarChart3 className="h-3.5 w-3.5 text-slate-500" />
                           </Button>
                           <Button
                             variant="ghost"
@@ -455,7 +455,7 @@ export default function PublishersPage() {
                             onClick={() => openDeleteDialog(publisher)}
                             title="Delete"
                           >
-                            <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                            <Trash2 className="h-3.5 w-3.5 text-rose-500" />
                           </Button>
                         </div>
                       </TableCell>
@@ -595,7 +595,7 @@ export default function PublishersPage() {
               <div className="text-xs text-muted-foreground border-t pt-4 mt-2">
                 <p>
                   <strong>Publisher ID:</strong>{' '}
-                  <code className="font-mono bg-gray-100 px-1 rounded">
+                  <code className="font-mono bg-white/5 px-1 rounded text-slate-300">
                     {selectedPublisher.code}
                   </code>
                 </p>

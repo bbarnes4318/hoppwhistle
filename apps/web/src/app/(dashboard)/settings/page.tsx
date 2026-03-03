@@ -7,7 +7,6 @@ import { DemoToggle } from '@/components/demo/demo-toggle';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import {
   Table,
   TableBody,
@@ -34,7 +33,7 @@ export default function SettingsPage() {
   const [addWebhookOpen, setAddWebhookOpen] = useState(false);
 
   useEffect(() => {
-    loadWebhooks();
+    void loadWebhooks();
   }, []);
 
   const loadWebhooks = async () => {
@@ -59,7 +58,7 @@ export default function SettingsPage() {
     try {
       const response = await apiClient.delete(`/api/v1/webhooks/${webhookId}`);
       if (!response.error) {
-        loadWebhooks();
+        void loadWebhooks();
       } else {
         alert(`Failed to delete webhook: ${response.error.message}`);
       }
@@ -275,7 +274,7 @@ export default function SettingsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <a
                   href="/legal/privacy"
-                  className="flex items-center gap-3 p-4 rounded-lg border bg-card hover:bg-accent transition-colors"
+                  className="flex items-center gap-3 p-4 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition-colors"
                 >
                   <Shield className="h-5 w-5 text-muted-foreground" />
                   <div>
@@ -287,7 +286,7 @@ export default function SettingsPage() {
                 </a>
                 <a
                   href="/legal/terms"
-                  className="flex items-center gap-3 p-4 rounded-lg border bg-card hover:bg-accent transition-colors"
+                  className="flex items-center gap-3 p-4 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition-colors"
                 >
                   <FileText className="h-5 w-5 text-muted-foreground" />
                   <div>
@@ -299,7 +298,7 @@ export default function SettingsPage() {
                 </a>
                 <a
                   href="/legal/data-retention"
-                  className="flex items-center gap-3 p-4 rounded-lg border bg-card hover:bg-accent transition-colors"
+                  className="flex items-center gap-3 p-4 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition-colors"
                 >
                   <FileText className="h-5 w-5 text-muted-foreground" />
                   <div>
@@ -309,7 +308,7 @@ export default function SettingsPage() {
                 </a>
                 <a
                   href="/legal/call-recording"
-                  className="flex items-center gap-3 p-4 rounded-lg border bg-card hover:bg-accent transition-colors"
+                  className="flex items-center gap-3 p-4 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition-colors"
                 >
                   <FileText className="h-5 w-5 text-muted-foreground" />
                   <div>
@@ -321,7 +320,7 @@ export default function SettingsPage() {
                 </a>
                 <a
                   href="/legal/dpa"
-                  className="flex items-center gap-3 p-4 rounded-lg border bg-card hover:bg-accent transition-colors"
+                  className="flex items-center gap-3 p-4 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition-colors"
                 >
                   <Scale className="h-5 w-5 text-muted-foreground" />
                   <div>
