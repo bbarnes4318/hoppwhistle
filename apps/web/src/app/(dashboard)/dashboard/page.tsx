@@ -149,7 +149,7 @@ export default function CommandCenterPage() {
   const chartData = useMemo(() => liveChartData, [liveChartData]);
 
   return (
-    <div className="h-full overflow-auto">
+    <div className="space-y-6">
       {/* ── Header ─────────────────────────────────────────── */}
       <div className="mb-6 flex items-center justify-between border-b border-white/10 pb-4">
         <div>
