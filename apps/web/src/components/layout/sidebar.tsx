@@ -41,9 +41,9 @@ const navigation: NavItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   {
     name: 'AI Voice',
-    href: '/bot',
+    href: '/voice-agents',
     icon: Bot,
-    title: 'Outbound calling & live transfer orchestration',
+    title: 'AI voice agents & outbound campaigns',
   },
   {
     name: 'AI Campaigns',
