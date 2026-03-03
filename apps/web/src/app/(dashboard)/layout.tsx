@@ -30,9 +30,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // Standard dashboard layout with proper scrolling
   return (
     <PhoneProvider>
-      <div className="flex min-h-screen bg-slate-950 text-slate-200">
+      <div className="flex h-screen overflow-hidden bg-slate-950 text-slate-200">
         <Sidebar />
-        <div className="flex flex-1 flex-col min-h-screen">
+        <div className="flex flex-1 flex-col h-screen overflow-hidden">
           <Header />
           <main className="flex-1 overflow-y-auto bg-slate-950 p-6 pb-20">{children}</main>
           {/* Footer removed - legal links accessible via Settings page */}
