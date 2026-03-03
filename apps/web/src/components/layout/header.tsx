@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 
 export function Header() {
   return (
-    <header className="flex h-16 items-center justify-between border-b bg-card px-6">
+    <header className="flex h-16 items-center justify-between border-b border-white/10 bg-slate-900/40 backdrop-blur-md px-6">
       <div className="flex flex-1 items-center gap-4">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -33,4 +33,3 @@ export function Header() {
     </header>
   );
 }
-

@@ -38,7 +38,7 @@ interface NavItem {
 
 // Main navigation items
 const navigation: NavItem[] = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'Command Center', href: '/dashboard', icon: LayoutDashboard },
   {
     name: 'AI Voice',
     href: '/voice-agents',
@@ -64,9 +64,9 @@ const navigation: NavItem[] = [
     title: 'Integrated dialer with scripting & quoting',
   },
   { name: 'Numbers', href: '/numbers', icon: PhoneCall },
-  { name: 'Campaigns', href: '/campaigns', icon: Megaphone },
+  { name: 'Execution Matrix', href: '/campaigns', icon: Megaphone },
   { name: 'Flows', href: '/flows', icon: GitBranch },
-  { name: 'Calls', href: '/calls', icon: AudioLines },
+  { name: 'Global Telemetry', href: '/calls', icon: AudioLines },
   {
     name: 'Publishers',
     href: '/publishers',
@@ -95,7 +95,7 @@ const navigation: NavItem[] = [
     title: 'Track hours & view earnings',
     hideFromBuyerOnly: true,
   },
-  { name: 'Settings', href: '/settings', icon: Settings },
+  { name: 'Institutional Profile', href: '/settings', icon: Settings },
 ];
 
 const toolsNavigation: NavItem[] = [
@@ -146,8 +146,8 @@ export function Sidebar() {
   const visibleAdminNav = hasFullAccess ? adminNavigation : [];
 
   return (
-    <div className="flex h-full w-64 flex-col border-r bg-card">
-      <div className="flex h-16 items-center border-b px-6">
+    <div className="flex h-full w-64 flex-col border-r border-white/10 bg-slate-900/40 backdrop-blur-md">
+      <div className="flex h-16 items-center border-b border-white/10 px-6">
         <Image
           src="/hopwhistle.png"
           alt="Hopwhistle"
@@ -157,10 +157,10 @@ export function Sidebar() {
           priority
         />
       </div>
-      <nav className="flex-1 space-y-1 overflow-y-auto p-4">
+      <nav className="flex-1 space-y-0.5 overflow-y-auto p-4">
         {/* Buyer Portal indicator - only for buyer-only users */}
         {isBuyerOnly && (
-          <div className="mb-4 px-3 py-2 text-xs font-semibold uppercase text-primary bg-primary/10 rounded-md text-center">
+          <div className="mb-4 px-3 py-2 text-xs font-semibold uppercase tracking-widest text-emerald-400 bg-emerald-500/10 rounded-md text-center border border-emerald-500/20">
             Buyer Portal
           </div>
         )}
@@ -173,10 +173,10 @@ export function Sidebar() {
               href={item.href}
               title={item.title}
               className={cn(
-                'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150',
                 isActive
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                  ? 'bg-emerald-500/15 text-emerald-400 border-l-2 border-emerald-400'
+                  : 'text-slate-400 hover:bg-white/5 hover:text-slate-100'
               )}
             >
               <item.icon className="h-5 w-5" />
@@ -188,7 +188,7 @@ export function Sidebar() {
         {/* Tools Section */}
         {visibleToolsNav.length > 0 && (
           <div className="pt-4">
-            <div className="px-3 py-2 text-xs font-semibold uppercase text-muted-foreground">
+            <div className="px-3 py-2 text-xs font-semibold uppercase tracking-widest text-slate-500">
               Tools
             </div>
             {visibleToolsNav.map(item => {
@@ -198,10 +198,10 @@ export function Sidebar() {
                   key={item.name}
                   href={item.href}
                   className={cn(
-                    'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                    'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150',
                     isActive
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                      ? 'bg-emerald-500/15 text-emerald-400 border-l-2 border-emerald-400'
+                      : 'text-slate-400 hover:bg-white/5 hover:text-slate-100'
                   )}
                 >
                   <item.icon className="h-5 w-5" />
@@ -215,7 +215,7 @@ export function Sidebar() {
         {/* Admin Section - Only for ADMIN/OWNER */}
         {visibleAdminNav.length > 0 && (
           <div className="pt-4">
-            <div className="px-3 py-2 text-xs font-semibold uppercase text-muted-foreground">
+            <div className="px-3 py-2 text-xs font-semibold uppercase tracking-widest text-slate-500">
               Admin
             </div>
             {visibleAdminNav.map(item => {
@@ -226,10 +226,10 @@ export function Sidebar() {
                   href={item.href}
                   title={item.title}
                   className={cn(
-                    'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                    'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150',
                     isActive
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                      ? 'bg-emerald-500/15 text-emerald-400 border-l-2 border-emerald-400'
+                      : 'text-slate-400 hover:bg-white/5 hover:text-slate-100'
                   )}
                 >
                   <item.icon className="h-5 w-5" />

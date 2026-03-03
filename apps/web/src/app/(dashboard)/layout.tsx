@@ -19,7 +19,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   if (isCallCenterPage) {
     return (
       <PhoneProvider>
-        <div className="h-screen w-screen overflow-hidden bg-background">
+        <div className="h-screen w-screen overflow-hidden bg-slate-950 text-slate-200">
           {/* Full viewport lock - no scrollbars */}
           {children}
         </div>
@@ -30,11 +30,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // Standard dashboard layout with proper scrolling
   return (
     <PhoneProvider>
-      <div className="flex min-h-screen">
+      <div className="flex min-h-screen bg-slate-950 text-slate-200">
         <Sidebar />
         <div className="flex flex-1 flex-col min-h-screen">
           <Header />
-          <main className="flex-1 overflow-y-auto bg-background p-6 pb-20">{children}</main>
+          <main className="flex-1 overflow-y-auto bg-slate-950 p-6 pb-20">{children}</main>
           {/* Footer removed - legal links accessible via Settings page */}
         </div>
 
