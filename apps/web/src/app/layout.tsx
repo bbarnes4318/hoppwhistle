@@ -2,9 +2,9 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 
 import './globals.css';
-import { CustomerIntakeProvider } from '@/contexts/customer-intake-context';
 import { ThemeProvider } from '@/components/theme-provider';
 import { Toaster } from '@/components/ui/toaster';
+import { CustomerIntakeProvider } from '@/contexts/customer-intake-context';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -15,9 +15,9 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className={inter.className}>
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+    <html lang="en" className="dark" suppressHydrationWarning>
+      <body className={`${inter.className} bg-slate-950 text-slate-200`}>
+        <ThemeProvider attribute="class" defaultTheme="dark" forcedTheme="dark">
           <CustomerIntakeProvider>{children}</CustomerIntakeProvider>
           <Toaster />
         </ThemeProvider>
