@@ -21,9 +21,34 @@ const FREESWITCH_ESL_PASSWORD = process.env.FREESWITCH_ESL_PASSWORD || 'ClueCon'
 const MAX_CONCURRENT_CALLS = parseInt(process.env.MAX_CONCURRENT_CALLS || '10', 10);
 const DIALER_POLL_INTERVAL_MS = parseInt(process.env.DIALER_POLL_INTERVAL_MS || '1000', 10);
 const DIALER_BATCH_SIZE = parseInt(process.env.DIALER_BATCH_SIZE || '50', 10);
-const OUTBOUND_CALLER_ID = process.env.OUTBOUND_CALLER_ID || '+15551234567';
+const OUTBOUND_CALLER_ID = process.env.OUTBOUND_CALLER_ID || '+18652809894';
 const SOCKET_LISTENER_HOST = process.env.SOCKET_LISTENER_HOST || '127.0.0.1';
 const SOCKET_LISTENER_PORT = process.env.SOCKET_LISTENER_PORT || '8021';
+
+/** DID rotation pool - FracTEL numbers for outbound caller ID */
+const DID_POOL = [
+  '+12294222208',
+  '+12232331171',
+  '+12232331172',
+  '+12393999953',
+  '+12166678360',
+  '+14233398241',
+  '+14233434219',
+  '+18656000126',
+  '+18656000038',
+  '+18656000039',
+  '+18656000064',
+  '+18656000065',
+  '+18656000124',
+  '+18656000125',
+];
+let didRotationIndex = 0;
+
+function getNextCallerId(): string {
+  const did = DID_POOL[didRotationIndex % DID_POOL.length];
+  didRotationIndex++;
+  return did;
+}
 
 interface LeadToDial {
   id: string;
@@ -306,9 +331,10 @@ export class DialerWorker {
 
     // Build originate command with &socket() to hand off to FlowEngine
     // Format: originate {vars}sofia/gateway/external/+1XXXXXXXXXX &socket(host:port async full)
+    const callerId = getNextCallerId();
     const originateVars = [
       `ignore_early_media=true`,
-      `origination_caller_id_number=${OUTBOUND_CALLER_ID}`,
+      `origination_caller_id_number=${callerId}`,
       `origination_caller_id_name=Hopwhistle`,
       `hopwhistle_lead_id=${lead.id}`,
       `hopwhistle_campaign_id=${lead.campaignId}`,

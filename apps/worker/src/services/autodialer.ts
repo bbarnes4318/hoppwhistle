@@ -1,12 +1,13 @@
-import { PrismaClient } from '@prisma/client';
 import { Socket } from 'net';
+
+import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
 // CONFIGURATION
-const FREESWITCH_HOST = 'freeswitch'; 
-const FREESWITCH_PORT = 8021;        
-const FREESWITCH_PASS = 'ClueCon';   
+const FREESWITCH_HOST = 'freeswitch';
+const FREESWITCH_PORT = 8021;
+const FREESWITCH_PASS = 'ClueCon';
 
 export class Autodialer {
   private isRunning = false;
@@ -37,16 +38,16 @@ export class Autodialer {
   private async processCampaigns() {
     const campaigns = await prisma.campaign.findMany({
       where: { status: 'ACTIVE' },
-      include: { phoneNumbers: true }
+      include: { phoneNumbers: true },
     });
 
     for (const campaign of campaigns) {
       const leads = await prisma.lead.findMany({
-        where: { 
-          campaignId: campaign.id, 
-          status: 'NEW' 
+        where: {
+          campaignId: campaign.id,
+          status: 'NEW',
         },
-        take: 5 
+        take: 5,
       });
 
       for (const lead of leads) {
@@ -58,20 +59,39 @@ export class Autodialer {
   private async dialLead(lead: any, campaign: any) {
     console.log(`📞 Dialing ${lead.phoneNumber} for Campaign: ${campaign.name}`);
 
-    const callerId = campaign.phoneNumbers[0]?.number || process.env.OUTBOUND_CALLER_ID || '+17868404940';
-    
+    // DID rotation pool - FracTEL numbers
+    const DID_POOL = [
+      '+12294222208',
+      '+12232331171',
+      '+12232331172',
+      '+12393999953',
+      '+12166678360',
+      '+14233398241',
+      '+14233434219',
+      '+18656000126',
+      '+18656000038',
+      '+18656000039',
+      '+18656000064',
+      '+18656000065',
+      '+18656000124',
+      '+18656000125',
+    ];
+    const callerId =
+      campaign.phoneNumbers[0]?.number || DID_POOL[Math.floor(Math.random() * DID_POOL.length)];
+
     // 1. Send the Call Command
-    const fsCommand = `bgapi originate {origination_caller_id_number=${callerId},origination_caller_id_name=${callerId},ignore_early_media=true}sofia/gateway/telnyx/${lead.phoneNumber} &transfer(execute-flow XML default)`;
+    const destDigits = lead.phoneNumber.replace(/\D/g, '').slice(-10);
+    const fsCommand = `bgapi originate {origination_caller_id_number=${callerId},origination_caller_id_name=${callerId},ignore_early_media=true}sofia/gateway/didcentral/1${destDigits} &transfer(execute-flow XML default)`;
     await this.sendToFreeSwitch(fsCommand);
 
     // 2. Update Status (Use 'CONTACTED' instead of 'DIALING' to prevent crash)
     try {
-        await prisma.lead.update({
-          where: { id: lead.id },
-          data: { status: 'CONTACTED', lastContactedAt: new Date() }
-        });
+      await prisma.lead.update({
+        where: { id: lead.id },
+        data: { status: 'CONTACTED', lastContactedAt: new Date() },
+      });
     } catch (e) {
-        console.error("Failed to update lead status (ignoring to keep dialing):", e.message);
+      console.error('Failed to update lead status (ignoring to keep dialing):', e.message);
     }
   }
 
@@ -82,7 +102,7 @@ export class Autodialer {
         client.write(`auth ${FREESWITCH_PASS}\n\n`);
       });
 
-      client.on('data', (data) => {
+      client.on('data', data => {
         const response = data.toString();
         if (response.includes('Reply-Text: +OK accepted')) {
           client.write(`api ${cmd}\n\n`);
@@ -91,7 +111,7 @@ export class Autodialer {
         }
       });
 
-      client.on('error', (err) => {
+      client.on('error', err => {
         console.error('FS Connection Error:', err);
         reject(err);
       });
