@@ -315,7 +315,7 @@ export class DialerWorker {
       `hopwhistle_tenant_id=${lead.tenantId}`,
     ].join(',');
 
-    const dialString = `sofia/gateway/telnyx/${phoneNumber}`;
+    const dialString = `sofia/gateway/didcentral/${phoneNumber}`;
     const application = `&socket(${SOCKET_LISTENER_HOST}:${SOCKET_LISTENER_PORT} async full)`;
 
     const originateCmd = `originate {${originateVars}}${dialString} ${application}`;

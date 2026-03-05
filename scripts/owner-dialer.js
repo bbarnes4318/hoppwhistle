@@ -5,13 +5,16 @@
  * Owner Dialer — DID Rotation + 10 Concurrent + No Billing
  *
  * Strategy: Fire-and-backoff. For each contact, try to place the call.
- * If Vapi returns "Over Concurrency Limit", wait 20s and retry (up to 5 times).
+ * If Vapi returns "Over Concurrency Limit", wait and retry (up to 5 times).
  * This respects Vapi's internal concurrency tracker without needing to poll.
  *
+ * Resume support: Saves progress to .dialer-progress.json so restarts
+ * pick up where they left off. Use --fresh to start over.
+ *
  * Usage:
- *   node scripts/owner-dialer.js +18653969104
- *   node scripts/owner-dialer.js +18653969104 +15551234567
  *   node scripts/owner-dialer.js --file contacts.txt
+ *   node scripts/owner-dialer.js --file contacts.txt --fresh
+ *   node scripts/owner-dialer.js +18653969104
  *   node scripts/owner-dialer.js --provision-only
  */
 
@@ -33,6 +36,14 @@ const CONFIG = {
   SIP_PASSWORD: 'VapiFS_5070_StrongPass!9xQ2',
 
   DIDS: [
+    '+12294222208',
+    '+12232331171',
+    '+12232331172',
+    '+12393999953',
+    '+12166678360',
+    '+14233398241',
+    '+14233434219',
+    '+18656000126',
     '+18656000038',
     '+18656000039',
     '+18656000064',
@@ -56,7 +67,32 @@ let didIndex = 0;
 let totalDispatched = 0;
 let totalSuccess = 0;
 let totalFailed = 0;
+let totalSkipped = 0;
 const callResults = [];
+
+// Progress tracking file — lives next to the contacts file
+const PROGRESS_FILE = path.join(__dirname, '.dialer-progress.json');
+
+function loadProgress() {
+  try {
+    if (fs.existsSync(PROGRESS_FILE)) {
+      const data = JSON.parse(fs.readFileSync(PROGRESS_FILE, 'utf-8'));
+      return new Set(data.calledNumbers || []);
+    }
+  } catch {
+    // Corrupt file — start fresh
+  }
+  return new Set();
+}
+
+function saveProgress(calledNumbers) {
+  const data = {
+    calledNumbers: [...calledNumbers],
+    lastUpdated: new Date().toISOString(),
+    count: calledNumbers.size,
+  };
+  fs.writeFileSync(PROGRESS_FILE, JSON.stringify(data, null, 2));
+}
 
 // ============================================================================
 // Vapi API Helper
@@ -280,8 +316,11 @@ async function dialWithRetry(number, callNum) {
   }
 }
 
-async function runDialer(contacts) {
+async function runDialer(contacts, calledNumbers) {
   console.log(`\n[DIALER] Starting — ${contacts.length} contacts, ${didPool.length} DIDs`);
+  if (totalSkipped > 0) {
+    console.log(`  Resumed — ${totalSkipped} already called, ${contacts.length} remaining`);
+  }
   console.log(`  Concurrency: ${CONFIG.MAX_CONCURRENT} (managed by Vapi)`);
   console.log(
     `  Backoff: ${CONFIG.BACKOFF_MS / 1000}s on limit, up to ${CONFIG.MAX_RETRIES} retries`
@@ -290,7 +329,7 @@ async function runDialer(contacts) {
 
   for (let i = 0; i < contacts.length; i++) {
     totalDispatched++;
-    const callNum = totalDispatched;
+    const callNum = totalSkipped + totalDispatched;
 
     const result = await dialWithRetry(contacts[i], callNum);
 
@@ -299,6 +338,10 @@ async function runDialer(contacts) {
     } else {
       totalFailed++;
     }
+
+    // Track this number as called (regardless of outcome)
+    calledNumbers.add(contacts[i]);
+    saveProgress(calledNumbers);
 
     callResults.push({
       ...(result || { destination: contacts[i], error: 'max retries' }),
@@ -309,7 +352,7 @@ async function runDialer(contacts) {
     // Progress update every 50 calls
     if (callNum % 50 === 0) {
       console.log(
-        `\n  ── Progress: ${callNum}/${contacts.length} (${totalSuccess} ok, ${totalFailed} failed) ──\n`
+        `\n  ── Progress: ${callNum}/${totalSkipped + contacts.length} (${totalSuccess} ok, ${totalFailed} failed) ──\n`
       );
     }
 
@@ -364,14 +407,16 @@ function parseContacts(args) {
 async function main() {
   const args = process.argv.slice(2);
   const provisionOnly = args.includes('--provision-only');
+  const freshStart = args.includes('--fresh');
 
   if (args.length === 0) {
     console.log(`
-Owner Dialer — DID Rotation + ${CONFIG.MAX_CONCURRENT} Concurrent + No Billing
+Owner Dialer — DID Rotation + Resume Support
 
 Usage:
-  node scripts/owner-dialer.js <number> [number2] ...
   node scripts/owner-dialer.js --file contacts.txt
+  node scripts/owner-dialer.js --file contacts.txt --fresh   (start over)
+  node scripts/owner-dialer.js <number> [number2] ...
   node scripts/owner-dialer.js --provision-only
 
 DID Pool: ${CONFIG.DIDS.join(', ')}
@@ -382,7 +427,7 @@ Assistant: ${CONFIG.ASSISTANT_ID}
 
   console.log('═'.repeat(60));
   console.log('  OWNER DIALER');
-  console.log('  DID Rotation • 10 Concurrent • No Billing');
+  console.log('  DID Rotation • Resume Support • No Billing');
   console.log('═'.repeat(60));
   console.log(`  Assistant:  ${CONFIG.ASSISTANT_ID}`);
   console.log(`  DIDs:       ${CONFIG.DIDS.join(', ')}`);
@@ -408,26 +453,51 @@ Assistant: ${CONFIG.ASSISTANT_ID}
   }
 
   // Phase 2: Parse contacts
-  const contacts = parseContacts(args);
-  if (contacts.length === 0) {
+  let allContacts = parseContacts(args);
+  if (allContacts.length === 0) {
     console.error('\n✗ No valid contacts found.');
     process.exit(1);
   }
-  console.log(`\n[CONTACTS] ${contacts.length} unique number(s) to dial`);
+
+  // Phase 2.5: Resume — filter out already-called numbers
+  let calledNumbers;
+  if (freshStart) {
+    calledNumbers = new Set();
+    if (fs.existsSync(PROGRESS_FILE)) fs.unlinkSync(PROGRESS_FILE);
+    console.log(`\n[CONTACTS] ${allContacts.length} total — FRESH START (progress cleared)`);
+  } else {
+    calledNumbers = loadProgress();
+    if (calledNumbers.size > 0) {
+      const before = allContacts.length;
+      allContacts = allContacts.filter(n => !calledNumbers.has(n));
+      totalSkipped = before - allContacts.length;
+      console.log(`\n[RESUME] Found ${calledNumbers.size} already called`);
+      console.log(`  Skipping ${totalSkipped}, ${allContacts.length} remaining`);
+    } else {
+      console.log(`\n[CONTACTS] ${allContacts.length} unique number(s) to dial`);
+    }
+  }
+
+  if (allContacts.length === 0) {
+    console.log('\n✓ All contacts have already been called! Use --fresh to start over.');
+    process.exit(0);
+  }
 
   // Phase 3: Dial
   const startTime = Date.now();
-  await runDialer(contacts);
+  await runDialer(allContacts, calledNumbers);
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 
   // Phase 4: Summary
   console.log('\n' + '═'.repeat(60));
   console.log('  SUMMARY');
   console.log('═'.repeat(60));
-  console.log(`  Total dispatched: ${totalDispatched}`);
-  console.log(`  Success:          ${totalSuccess}`);
-  console.log(`  Failed:           ${totalFailed}`);
-  console.log(`  Elapsed:          ${elapsed}s`);
+  if (totalSkipped > 0) console.log(`  Resumed from: ${totalSkipped} (previously called)`);
+  console.log(`  Dispatched:   ${totalDispatched}`);
+  console.log(`  Success:      ${totalSuccess}`);
+  console.log(`  Failed:       ${totalFailed}`);
+  console.log(`  Total called: ${calledNumbers.size}`);
+  console.log(`  Elapsed:      ${elapsed}s`);
   console.log('═'.repeat(60));
 
   const resultsPath = path.join(__dirname, `dialer-results-${Date.now()}.json`);
