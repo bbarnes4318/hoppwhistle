@@ -462,7 +462,7 @@ export function PhoneProvider({
         const apiCallId = data.callId;
 
         // SIP INVITE - use server IP for the target domain (must match FreeSWITCH)
-        const sipTargetDomain = process.env.NEXT_PUBLIC_IP || '45.32.213.201';
+        const sipTargetDomain = process.env.NEXT_PUBLIC_IP || '3.214.60.13';
         const target = UserAgent.makeURI(`sip:${phoneNumber}@${sipTargetDomain}`);
         if (!target) throw new Error('Invalid target URI');
 
@@ -702,7 +702,7 @@ export function PhoneProvider({
     const sipUser = '1000';
     const sipPass = '1234';
     // SIP realm must match FreeSWITCH's configured domain (the server's public IP)
-    const sipDomain = process.env.NEXT_PUBLIC_IP || '45.32.213.201';
+    const sipDomain = process.env.NEXT_PUBLIC_IP || '3.214.60.13';
     // WebSocket host uses window hostname for SSL cert validation
     const wsHost = window.location.hostname;
     const isSecure = window.location.protocol === 'https:';
