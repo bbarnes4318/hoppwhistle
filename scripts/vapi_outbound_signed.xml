@@ -1,0 +1,47 @@
+<include>
+  <context name="vapi_outbound">
+
+    <!-- Main outbound routing for US numbers -->
+    <extension name="vapi-outbound-us">
+      <condition field="destination_number" expression="^\+?1?(\d{10})$">
+        <action application="log" data="INFO [VAPI] Outbound call to ${destination_number}"/>
+
+        <!-- Tag for tracking -->
+        <action application="set" data="accountcode=vapi"/>
+        <action application="set" data="sip_h_X-Provider=Vapi"/>
+        <action application="set" data="sip_h_X-Carrier=bulkvs"/>
+
+        <!-- Caller ID: MUST be a BulkVS DID for IP auth acceptance -->
+        <action application="set" data="effective_caller_id_number=12816991120"/>
+        <action application="set" data="effective_caller_id_name=PVN LLC"/>
+        <action application="set" data="outbound_caller_id_number=12816991120"/>
+        <action application="set" data="outbound_caller_id_name=PVN LLC"/>
+        <action application="export" data="nolocal:effective_caller_id_number=12816991120"/>
+        <action application="export" data="nolocal:origination_caller_id_number=12816991120"/>
+        <action application="export" data="nolocal:origination_caller_id_name=PVN LLC"/>
+        <action application="set" data="sip_from_user=12816991120"/>
+        <action application="set" data="sip_contact_user=12816991120"/>
+
+        <!-- Timeouts -->
+        <action application="set" data="progress_timeout=30"/>
+        <action application="set" data="originate_timeout=60"/>
+        <action application="set" data="hangup_after_bridge=true"/>
+
+        <!-- STIR/SHAKEN: Local A-attestation signing (BulkVS Option 3 passthrough) -->
+        <!-- Lua exports Identity to B-leg only via nolocal — no set needed here -->
+        <action application="lua" data="local_shaken.lua"/>
+
+        <!-- Bridge: BulkVS first, failover to DIDCentral -->
+        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC,call_timeout=60,originate_timeout=60}sofia/gateway/bulkvs/1$1|sofia/gateway/didcentral/1$1"/>
+      </condition>
+    </extension>
+
+    <!-- Fallback -->
+    <extension name="vapi-unmatched">
+      <condition field="destination_number" expression="^.*$">
+        <action application="hangup" data="NO_ROUTE_DESTINATION"/>
+      </condition>
+    </extension>
+
+  </context>
+</include>
