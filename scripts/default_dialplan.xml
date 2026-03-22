@@ -1,0 +1,37 @@
+<include>
+  <context name="default">
+    <!-- Outbound PSTN calls from web phone - route via BulkVS -->
+    <extension name="outbound-pstn">
+      <condition field="destination_number" expression="^\+?1?(\d{10})$">
+        <action application="log" data="INFO [WEBPHONE] Outbound call to ${destination_number}"/>
+
+        <!-- Caller ID -->
+        <action application="set" data="effective_caller_id_number=12816991120"/>
+        <action application="set" data="effective_caller_id_name=PVN LLC"/>
+        <action application="set" data="outbound_caller_id_number=12816991120"/>
+        <action application="set" data="outbound_caller_id_name=PVN LLC"/>
+        <action application="export" data="nolocal:effective_caller_id_number=12816991120"/>
+        <action application="export" data="nolocal:origination_caller_id_number=12816991120"/>
+        <action application="export" data="nolocal:origination_caller_id_name=PVN LLC"/>
+        <action application="set" data="sip_from_user=12816991120"/>
+        <action application="set" data="sip_contact_user=12816991120"/>
+
+        <!-- Timeouts -->
+        <action application="set" data="hangup_after_bridge=true"/>
+        <action application="set" data="call_timeout=60"/>
+        <action application="set" data="originate_timeout=60"/>
+
+        <!-- Bridge: BulkVS first, failover to DIDCentral -->
+        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC,call_timeout=60,originate_timeout=60}sofia/gateway/bulkvs/1$1|sofia/gateway/didcentral/1$1"/>
+      </condition>
+    </extension>
+
+    <!-- Fallback for any unmatched -->
+    <extension name="unmatched">
+      <condition field="destination_number" expression="^.+$">
+        <action application="log" data="WARNING Unmatched: ${destination_number}"/>
+        <action application="hangup" data="NO_ROUTE_DESTINATION"/>
+      </condition>
+    </extension>
+  </context>
+</include>

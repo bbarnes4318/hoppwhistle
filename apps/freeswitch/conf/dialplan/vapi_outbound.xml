@@ -1,83 +1,70 @@
 <include>
-  <!-- Vapi Outbound Context - ISOLATED from all other dialplans -->
+  <!-- Vapi Outbound Context — ISOLATED from all other dialplans -->
   <!-- Only handles calls from Vapi SIP profile on port 5070 -->
+  <!-- Calls are locally signed with STIR/SHAKEN (ES256) and routed via BulkVS -->
   <context name="vapi_outbound">
 
-    <!-- Rate limiting for Vapi calls only -->
+    <!-- Rate limiting for Vapi calls -->
     <extension name="vapi-rate-limit" continue="true">
       <condition field="destination_number" expression="^.*$">
-        <!-- Concurrent call limit: 10 (using hash backend which is always available) -->
+        <!-- Concurrent call limit: 10 (hash backend, always available) -->
         <action application="limit" data="hash vapi ${destination_number} 10 !CALL_REJECTED"/>
       </condition>
     </extension>
 
-    <!-- Main outbound routing for US E.164 numbers -->
+    <!-- US outbound: 10-digit numbers with optional +1 prefix -->
     <extension name="vapi-outbound-us">
       <condition field="destination_number" expression="^\+?1?(\d{10})$">
-        <action application="log" data="INFO [VAPI] Outbound call to ${destination_number}"/>
+        <action application="log" data="INFO [VAPI] Outbound US call to 1$1"/>
 
-        <!-- Tag for tracking -->
+        <!-- Tracking metadata -->
         <action application="set" data="accountcode=vapi"/>
         <action application="set" data="sip_h_X-Provider=Vapi"/>
         <action application="set" data="sip_h_X-Call-Source=vapi_profile"/>
 
-        <!-- STIR/SHAKEN attestation header for Vapi calls -->
-        <action application="set" data="sip_h_X-Attestation-Level=A"/>
-
-        <!-- Caller ID - use our Anveo DID -->
-        <action application="set" data="effective_caller_id_number=18652809894"/>
-        <action application="set" data="effective_caller_id_name=Vapi"/>
-        <action application="set" data="outbound_caller_id_number=18652809894"/>
-        <action application="set" data="outbound_caller_id_name=Vapi"/>
-
-        <!-- Hangup after bridge -->
+        <!-- Call control -->
         <action application="set" data="hangup_after_bridge=true"/>
         <action application="set" data="ignore_early_media=true"/>
+        <action application="set" data="progress_timeout=30"/>
+        <action application="set" data="originate_timeout=60"/>
 
-        <!-- Force PCMU for outbound leg (Anveo requires G.711, Vapi sends Opus) -->
+        <!-- Force PCMU/PCMA on B-leg (BulkVS expects G.711, Vapi sends Opus) -->
         <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
         <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
 
-        <!-- Store normalized destination with Anveo Tech Prefix -->
-        <!-- Format: 012345 (Tech Prefix) + 1 (Country) + XXXXXXXXXX (10-digit) -->
-        <action application="set" data="dest_digits=0123451$1"/>
+        <!-- Local STIR/SHAKEN signing: validates CID, signs PASSporT, sets Identity header -->
+        <action application="lua" data="local_shaken.lua"/>
 
-        <action application="log" data="INFO [VAPI] Bridging to Anveo via anveo_vapi gateway: ${dest_digits}"/>
-
-        <!-- Bridge via Vapi-specific Anveo gateway -->
-        <action application="bridge" data="sofia/gateway/anveo_vapi/${dest_digits}"/>
+        <!-- Bridge to BulkVS — Identity header is already set by local_shaken.lua -->
+        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC}sofia/gateway/bulkvs/1$1"/>
       </condition>
     </extension>
 
-    <!-- International E.164 numbers (11+ digits starting with +) -->
-    <extension name="vapi-outbound-intl">
-      <condition field="destination_number" expression="^\+(\d{11,15})$">
-        <action application="log" data="INFO [VAPI] Intl outbound call to ${destination_number}"/>
+    <!-- Vapi internal routing IDs (11+ digit strings) -->
+    <extension name="vapi-outbound-routing-id">
+      <condition field="destination_number" expression="^(\d{11,})$">
+        <action application="log" data="INFO [VAPI] Routing ID call to $1"/>
 
-        <!-- Tag for tracking -->
         <action application="set" data="accountcode=vapi"/>
         <action application="set" data="sip_h_X-Provider=Vapi"/>
         <action application="set" data="sip_h_X-Call-Source=vapi_profile"/>
 
-        <!-- STIR/SHAKEN attestation header -->
-        <action application="set" data="sip_h_X-Attestation-Level=A"/>
-
-        <!-- Caller ID -->
-        <action application="set" data="effective_caller_id_number=18652809894"/>
-        <action application="set" data="effective_caller_id_name=Vapi"/>
-        <action application="set" data="outbound_caller_id_number=18652809894"/>
-        <action application="set" data="outbound_caller_id_name=Vapi"/>
-
         <action application="set" data="hangup_after_bridge=true"/>
+        <action application="set" data="ignore_early_media=true"/>
+        <action application="set" data="progress_timeout=30"/>
+        <action application="set" data="originate_timeout=60"/>
 
-        <!-- Format: 012345 (Tech Prefix) + CountryCode + Number -->
-        <action application="set" data="dest_digits=012345$1"/>
+        <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
+        <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
 
-        <action application="bridge" data="sofia/gateway/anveo_vapi/${dest_digits}"/>
+        <!-- Local STIR/SHAKEN signing -->
+        <action application="lua" data="local_shaken.lua"/>
+
+        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC}sofia/gateway/bulkvs/$1"/>
       </condition>
     </extension>
 
-    <!-- Fallback - reject unmatched -->
+    <!-- Fallback — reject unmatched destinations -->
     <extension name="vapi-unmatched">
       <condition field="destination_number" expression="^.*$">
         <action application="log" data="WARNING [VAPI] Unmatched destination: ${destination_number}"/>

@@ -1,0 +1,50 @@
+﻿INVITE sip:15513326220@sip.bulkvs.com SIP/2.0
+Via: SIP/2.0/UDP 3.214.60.13:5080;rport;branch=z9hG4bKjNcBQtc4721BS
+Max-Forwards: 69
+From: "PVN LLC" <sip:12816991120@3.214.60.13>;tag=pFHaHcQFjjQtH
+To: <sip:15513326220@sip.bulkvs.com>
+Call-ID: c5b366cf-97ad-123f-b184-eebdc01fc292
+CSeq: 112049618 INVITE
+Identity: eyJhbGciOiJFUzI1NiIsInBwdCI6InNoYWtlbiIsInR5cCI6InBhc3Nwb3J0IiwieDV1IjoiaHR0cHM6Ly9ob3B3aGlzdGxlLmNvbS8ud2VsbC1rbm93bi9zdGlyLXNoYWtlbi8yNTJMLTIwMjUwNzEwLmNydCJ9.eyJhdHRlc3QiOiJBIiwiZGVzdCI6eyJ0biI6WyIrMTU1MTMzMjYyMjAiXX0sImlhdCI6MTc3MzIwNjgyMSwib3JpZyI6eyJ0biI6IisxMjgxNjk5MTEyMCJ9LCJvcmlnaWQiOiJEOTVGRTU4NS05MTE3LTRDNkItOEJDRS1COTk3NjIyOTExNkMifQ.MEUCIFHoKTMnstNM4DtL1FP6E2330QR-WsSMUDs8hdVuXjSUAiEAw7b0UvtB1Vnm7XJktglZQfdOQRxjtcLleouLPvlPTLI;info=<https://hopwhistle.com/.well-known/stir-shaken/252L-20250710.crt>;alg=ES256;ppt=shaken
+Identity: eyJhbGciOiJFUzI1NiIsInBwdCI6InNoYWtlbiIsInR5cCI6InBhc3Nwb3J0IiwieDV1IjoiaHR0cHM6Ly9ob3B3aGlzdGxlLmNvbS8ud2VsbC1rbm93bi9zdGlyLXNoYWtlbi8yNTJMLTIwMjUwNzEwLmNydCJ9.eyJhdHRlc3QiOiJBIiwiZGVzdCI6eyJ0biI6WyIrMTU1MTMzMjYyMjAiXX0sImlhdCI6MTc3MzIwNjgyMSwib3JpZyI6eyJ0biI6IisxMjgxNjk5MTEyMCJ9LCJvcmlnaWQiOiJEOTVGRTU4NS05MTE3LTRDNkItOEJDRS1COTk3NjIyOTExNkMifQ.MEUCIFHoKTMnstNM4DtL1FP6E2330QR-WsSMUDs8hdVuXjSUAiEAw7b0UvtB1Vnm7XJktglZQfdOQRxjtcLleouLPvlPTLI;info=<https://hopwhistle.com/.well-known/stir-shaken/252L-20250710.crt>;alg=ES256;ppt=shaken
+Contact: <sip:gw+bulkvs@3.214.60.13:5080;transport=udp;gw=bulkvs>
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Supported: timer, path, replaces
+Allow-Events: talk, hold, conference, refer
+Privacy: none
+Content-Type: application/sdp
+Content-Disposition: session
+Content-Length: 502
+X-Account-Sid: 47f3192e-01c5-4812-ada9-9e1c80f0f825
+X-Call-Sid: 2d7cefff-10d7-4f08-b715-14fb727c66de
+X-Provider: Vapi
+X-Carrier: bulkvs
+X-FS-Support: update_display,send_info
+P-Asserted-Identity: "PVN LLC" <sip:12816991120@3.214.60.13>
+
+v=0
+o=FreeSWITCH 1773190413 1773190414 IN IP4 3.214.60.13
+s=FreeSWITCH
+c=IN IP4 3.214.60.13
+t=0 0
+m=audio 16408 RTP/AVP 0 8 102 101 13 103 104
+a=rtpmap:0 PCMU/8000
+a=rtpmap:8 PCMA/8000
+a=rtpmap:102 opus/48000/2
+a=fmtp:102 useinbandfec=1; maxaveragebitrate=30000; maxplaybackrate=48000; ptime=20; minptime=10; maxptime=40; stereo=1
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=rtpmap:13 CN/8000
+a=rtpmap:103 telephone-event/48000
+a=fmtp:103 0-15
+a=rtpmap:104 CN/48000
+a=ptime:20
+
+[m[mnta.c:8441 outgoing_send() nta: sent INVITE (112049618) to udp/76.8.29.198:5060
+[m[mtport.c:4191 tport_pend() tport_pend(0x71ef28004ee0): pending 0x71ef2b2f3220 for udp/172.18.0.9:5080 (already 0)
+[m[mnua_session.c:4144 signal_call_state_change() nua(0x71ef3c0e4ed0): call state changed: init -> calling, sent offer
+[m[msoa.c:1268 soa_get_local_sdp() soa_get_local_sdp(static::0x71ef294fa410, [0x71ef47c75940], [0x71ef47c75948], [(nil)]) called
+[m[mnua_stack.c:299 nua_stack_event() nua(0x71ef3c0e4ed0): event i_state INVITE sent
+[m[mnua_stack.c:599 nua_stack_signal() nua(0x71ef288d6370): recv signal r_handle_unref
+[m[mnua_stack.c:599 nua_stack_signal() nua((nil)): recv signal r_unref

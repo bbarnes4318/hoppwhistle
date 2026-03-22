@@ -1,0 +1,21 @@
+﻿=================================================================================================
+Name             	internal
+Domain Name      	N/A
+Auto-NAT         	false
+DBName           	sofia_reg_internal
+Pres Hosts       	
+Dialplan         	XML
+Context          	default
+Challenge Realm  	auto_from
+RTP-IP           	172.18.0.9
+Ext-RTP-IP       	172.18.0.9
+SIP-IP           	172.18.0.9
+Ext-SIP-IP       	172.18.0.9
+URL              	sip:mod_sofia@172.18.0.9:5060
+BIND-URL         	sip:mod_sofia@172.18.0.9:5060;maddr=172.18.0.9;transport=udp,tcp
+WS-BIND-URL     	sip:mod_sofia@172.18.0.9:8083;transport=ws
+WSS-BIND-URL     	sips:mod_sofia@172.18.0.9:7443;transport=wss
+HOLD-MUSIC       	N/A
+OUTBOUND-PROXY   	N/A
+CODECS IN        	OPUS,G722,PCMU,PCMA
+===

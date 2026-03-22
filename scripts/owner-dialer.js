@@ -30,30 +30,32 @@ const CONFIG = {
   VAPI_API_TOKEN: process.env.VAPI_API_TOKEN || 'b8c9e434-32ca-4cbc-ae39-b6c4583622c2',
   ASSISTANT_ID: 'f6bcf4b4-8323-4bf8-a87d-a57d8dd9cd39',
 
-  FREESWITCH_HOST: '45.32.213.201',
+  FREESWITCH_HOST: '3.214.60.13',
   FREESWITCH_PORT: 5070,
   SIP_USERNAME: 'vapi',
   SIP_PASSWORD: 'VapiFS_5070_StrongPass!9xQ2',
 
   DIDS: [
-    '+12294222208',
-    '+12232331171',
-    '+12232331172',
-    '+12393999953',
-    '+12166678360',
-    '+14233398241',
-    '+14233434219',
-    '+18656000126',
-    '+18656000038',
-    '+18656000039',
-    '+18656000064',
-    '+18656000065',
-    '+18656000124',
-    '+18656000125',
+    '+12816989460',
+    '+12816989461',
+    '+14063165877',
+    '+14402992856',
+    '+14402992860',
+    '+16102819660',
+    '+16102819662',
+    '+17038313168',
+    '+17042283589',
+    '+17042286088',
+    '+18036135410',
+    '+18036135412',
+    '+19124185540',
+    '+19124185542',
+    '+19542083921',
+    '+19542083922',
   ],
 
-  MAX_CONCURRENT: 2,
-  DISPATCH_DELAY_MS: 8000, // 8s between dispatches — prevent Vapi 503 overflow
+  MAX_CONCURRENT: 1,
+  DISPATCH_DELAY_MS: 20000, // 20s between dispatches — let each call fully establish
   BACKOFF_MS: 45000, // 45s wait when concurrency-limited
   MAX_RETRIES: 5, // Retry up to 5 times per number
 };

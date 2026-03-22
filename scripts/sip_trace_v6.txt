@@ -1,0 +1,38 @@
+﻿+OK [Success]
+
+DEPLOYED V5
+  Total called: 1
+  Elapsed:      8.1s
+ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+
+  Results saved to: /tmp/dialer-results-1773208940598.json
+INVITE sip:15513326220@sip.bulkvs.com SIP/2.0
+Via: SIP/2.0/UDP 3.214.60.13:5080;rport;branch=z9hG4bKSSaQZ09g5jayQ
+Max-Forwards: 69
+From: "PVN LLC" <sip:12816991120@3.214.60.13>;tag=64ajcyScpaHZj
+To: <sip:15513326220@sip.bulkvs.com>
+Call-ID: b053a59f-97b2-123f-b184-eebdc01fc292
+CSeq: 112050674 INVITE
+Identity: eyJhbGciOiJFUzI1NiIsInBwdCI6InNoYWtlbiIsInR5cCI6InBhc3Nwb3J0IiwieDV1IjoiaHR0cHM6Ly9ob3B3aGlzdGxlLmNvbS8ud2VsbC1rbm93bi9zdGlyLXNoYWtlbi8yNTJMLTIwMjUwNzEwLmNydCJ9.eyJhdHRlc3QiOiJBIiwiZGVzdCI6eyJ0biI6WyIrMTU1MTMzMjYyMjAiXX0sImlhdCI6MTc3MzIwODkzMiwib3JpZyI6eyJ0biI6IisxMjgxNjk5MTEyMCJ9LCJvcmlnaWQiOiIyQTU1RUVDRS1BNDBBLTQyMkItQUM4QS0wOEQ0Q0YyN0ZCNTIifQ.MEUCIQD4nCbNf2s2nVG60i2TPRGIsC0vIUvc1Zlo834_r34gGAIgHJkyyTkbzHuo7Wob3AejgcvXGCRQdb8hYh-nx2tyuDY;info=<https://hopwhistle.com/.well-known/stir-shaken/252L-20250710.crt>;alg=ES256;ppt=shaken
+Identity: eyJhbGciOiJFUzI1NiIsInBwdCI6InNoYWtlbiIsInR5cCI6InBhc3Nwb3J0IiwieDV1IjoiaHR0cHM6Ly9ob3B3aGlzdGxlLmNvbS8ud2VsbC1rbm93bi9zdGlyLXNoYWtlbi8yNTJMLTIwMjUwNzEwLmNydCJ9.eyJhdHRlc3QiOiJBIiwiZGVzdCI6eyJ0biI6WyIrMTU1MTMzMjYyMjAiXX0sImlhdCI6MTc3MzIwODkzMiwib3JpZyI6eyJ0biI6IisxMjgxNjk5MTEyMCJ9LCJvcmlnaWQiOiIyQTU1RUVDRS1BNDBBLTQyMkItQUM4QS0wOEQ0Q0YyN0ZCNTIifQ.MEUCIQD4nCbNf2s2nVG60i2TPRGIsC0vIUvc1Zlo834_r34gGAIgHJkyyTkbzHuo7Wob3AejgcvXGCRQdb8hYh-nx2tyuDY;info=<https://hopwhistle.com/.well-known/stir-shaken/252L-20250710.crt>;alg=ES256;ppt=shaken
+Contact: <sip:gw+bulkvs@3.214.60.13:5080;transport=udp;gw=bulkvs>
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Supported: timer, path, replaces
+Allow-Events: talk, hold, conference, refer
+Privacy: none
+Content-Type: application/sdp
+Content-Disposition: session
+Content-Length: 502
+X-Account-Sid: 47f3192e-01c5-4812-ada9-9e1c80f0f825
+X-Call-Sid: 3ef43faf-c71a-4d8d-87a0-80db17427132
+X-Provider: Vapi
+X-Carrier: bulkvs
+X-FS-Support: update_display,send_info
+P-Asserted-Identity: "PVN LLC" <sip:12816991120@3.214.60.13>
+
+v=0
+o=FreeSWITCH 1773192488 1773192489 IN IP4 3.214.60.13
+s=FreeSWITCH
+c=IN IP4 3.214.60.13
+t=0 0

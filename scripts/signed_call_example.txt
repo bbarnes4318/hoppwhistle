@@ -1,0 +1,24 @@
+﻿=== DECODED HEADER (JSON) ===
+{"alg":"ES256","ppt":"shaken","typ":"passport","x5u":"https://hopwhistle.com/.well-known/stir-shaken/252L-20250710.crt"}
+
+=== DECODED PAYLOAD (JSON) ===
+{"attest":"A","dest":{"tn":["+19379775624"]},"iat":1772935603,"orig":{"tn":"+12816989460"},"origid":"03A61B6F-ED2D-41CB-9A0C-7DC010254533"}
+
+=== FULL SIP IDENTITY HEADER (exactly as injected on the wire) ===
+Identity: eyJhbGciOiJFUzI1NiIsInBwdCI6InNoYWtlbiIsInR5cCI6InBhc3Nwb3J0IiwieDV1IjoiaHR0cHM6Ly9ob3B3aGlzdGxlLmNvbS8ud2VsbC1rbm93bi9zdGlyLXNoYWtlbi8yNTJMLTIwMjUwNzEwLmNydCJ9.eyJhdHRlc3QiOiJBIiwiZGVzdCI6eyJ0biI6WyIrMTkzNzk3NzU2MjQiXX0sImlhdCI6MTc3MjkzNTYwMywib3JpZyI6eyJ0biI6IisxMjgxNjk4OTQ2MCJ9LCJvcmlnaWQiOiIwM0E2MUI2Ri1FRDJELTQxQ0ItOUEwQy03REMwMTAyNTQ1MzMifQ.MEUCIHD5djGvLAjS_IEZ9KRBJ_UPWczUwXGSSQEU29PtWfgfAiEAtKl5aUXOCMjIkB_W62gA7XrIZKkVGqZr79xb6tMqBNI;info=<https://hopwhistle.com/.well-known/stir-shaken/252L-20250710.crt>;alg=ES256;ppt=shaken
+
+=== CALL DETAILS ===
+From: +12816989460 (PVN LLC DID on BulkVS)
+To: +19379775624
+Timestamp (iat): 1772935603
+OrigID: 03A61B6F-ED2D-41CB-9A0C-7DC010254533
+Attestation: A (Full)
+Certificate: https://hopwhistle.com/.well-known/stir-shaken/252L-20250710.crt
+Key: /etc/freeswitch/stir-shaken/private.key (ES256/P-256)
+
+=== KEY AND CERT FILES ON DISK ===
+total 16
+drwxr-xr-x    2 0        0             4096 Mar  7 18:42 .
+drwxr-xr-x    5 0        0             4096 Mar  7 18:42 ..
+-rw-rw-r--    1 1000     1000          2128 Mar  5 04:46 cert.crt
+-rw-rw-r--    1 1000     1000           227 Mar  5 04:46 private.key

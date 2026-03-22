@@ -1,66 +1,57 @@
--- local_shaken.lua (optimized - single shell command)
--- Local STIR/SHAKEN signing using PVN LLC carrier keys (ES256/P-256)
--- Optimized: single io.popen call with shell pipeline
+-- local_shaken.lua
+-- Validates caller ID against BulkVS DID pool and forces correct outbound CID.
+-- BulkVS handles STIR/SHAKEN signing on their end — we do NOT add an Identity
+-- header because BulkVS adds their own, and duplicates cause 400 rejection.
 
-local PRIVATE_KEY = "/etc/freeswitch/stir-shaken/private.key"
-local CERT_URL = "https://hopwhistle.com/.well-known/stir-shaken/252L-20250710.crt"
+local DEFAULT_DID = "12816989460"
 
-local function sign_call()
+-- BulkVS DID pool — ONLY these numbers are valid for outbound caller ID
+local DID_POOL = {
+    ["12816989460"] = true, ["12816989461"] = true,
+    ["14063165877"] = true, ["14402992856"] = true,
+    ["14402992860"] = true, ["16102819660"] = true,
+    ["16102819662"] = true, ["17038313168"] = true,
+    ["17042283589"] = true, ["17042286088"] = true,
+    ["18036135410"] = true, ["18036135412"] = true,
+    ["19124185540"] = true, ["19124185542"] = true,
+    ["19542083921"] = true, ["19542083922"] = true,
+}
+
+local function fix_caller_id()
     if not session then return end
 
-    local caller = session:getVariable("effective_caller_id_number") or session:getVariable("caller_id_number")
-    local dest = session:getVariable("destination_number")
-    if not caller or not dest then return end
+    local caller = session:getVariable("effective_caller_id_number")
+                or session:getVariable("caller_id_number")
+    if not caller then return end
 
-    -- Format E.164
+    -- Strip to digits and normalize to 11-digit format
     caller = caller:gsub("[^%d]", "")
     if #caller == 10 then caller = "1" .. caller end
-    caller = "+" .. caller
 
-    dest = dest:gsub("[^%d]", "")
-    if #dest == 10 then dest = "1" .. dest end
-    dest = "+" .. dest
-
-    local iat = os.time()
-
-    -- Read UUID
-    local uf = io.open("/proc/sys/kernel/random/uuid", "r")
-    local origid = uf and uf:read("*l"):upper() or "00000000-0000-0000-0000-000000000000"
-    if uf then uf:close() end
-
-    freeswitch.consoleLog("INFO", "[SHAKEN] Signing: " .. caller .. " -> " .. dest .. "\n")
-
-    -- Build header and payload JSON
-    local header = '{"alg":"ES256","ppt":"shaken","typ":"passport","x5u":"' .. CERT_URL .. '"}'
-    local payload = '{"attest":"A","dest":{"tn":["' .. dest .. '"]},"iat":' .. iat .. ',"orig":{"tn":"' .. caller .. '"},"origid":"' .. origid .. '"}'
-
-    -- Single shell command: base64url encode header, payload, sign, base64url encode sig, output all
-    local cmd = string.format(
-        [[sh -c 'H=$(printf "%%s" %q | /usr/bin/openssl base64 -A | tr "+/" "-_" | tr -d "="); P=$(printf "%%s" %q | /usr/bin/openssl base64 -A | tr "+/" "-_" | tr -d "="); SIG=$(printf "%%s" "${H}.${P}" | /usr/bin/openssl dgst -sha256 -sign %s -binary | /usr/bin/openssl base64 -A | tr "+/" "-_" | tr -d "="); echo "${H}.${P}.${SIG}"' 2>/dev/null]],
-        header, payload, PRIVATE_KEY
-    )
-
-    local p = io.popen(cmd)
-    local result = p:read("*a")
-    p:close()
-
-    if not result or result == "" or not result:find("%..*%.") then
-        freeswitch.consoleLog("ERR", "[SHAKEN] Signing failed\n")
-        return
+    -- Validate caller is in our DID pool — if not, use default
+    if not DID_POOL[caller] then
+        freeswitch.consoleLog("WARNING",
+            "[CID] caller " .. caller .. " not in DID pool, using " .. DEFAULT_DID .. "\n")
+        caller = DEFAULT_DID
     end
 
-    result = result:gsub("%s+$", "")  -- trim trailing whitespace
+    -- Force all outbound caller ID fields
+    session:setVariable("effective_caller_id_number", caller)
+    session:setVariable("effective_caller_id_name", "PVN LLC")
+    session:setVariable("outbound_caller_id_number", caller)
+    session:setVariable("outbound_caller_id_name", "PVN LLC")
+    session:setVariable("sip_from_user", caller)
+    session:setVariable("sip_contact_user", caller)
 
-    -- Build Identity header
-    local identity = result .. ";info=<" .. CERT_URL .. ">;alg=ES256;ppt=shaken"
+    -- Export to B-leg so bridge inherits them
+    session:execute("export", "nolocal:effective_caller_id_number=" .. caller)
+    session:execute("export", "nolocal:outbound_caller_id_number=" .. caller)
+    session:execute("export", "nolocal:sip_from_user=" .. caller)
 
-    -- Export Identity ONLY to B-leg using nolocal (prevents A-leg duplication)
-    -- Do NOT use setVariable("sip_h_Identity") — that copies to both legs
-    session:execute("export", "nolocal:sip_h_Identity=" .. identity)
-    freeswitch.consoleLog("INFO", "[SHAKEN] SUCCESS signed (" .. #identity .. " bytes)\n")
+    freeswitch.consoleLog("INFO", "[CID] Set outbound CID=" .. caller .. "\n")
 end
 
-local ok, err = pcall(sign_call)
+local ok, err = pcall(fix_caller_id)
 if not ok then
-    freeswitch.consoleLog("ERR", "[SHAKEN] Error: " .. tostring(err) .. "\n")
+    freeswitch.consoleLog("ERR", "[CID] Error: " .. tostring(err) .. "\n")
 end
