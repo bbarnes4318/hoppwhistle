@@ -1,5 +1,14 @@
+# Stage 1: Get openssl CLI binary from matching Debian image
+# The safarov base already has libssl.so.3/libcrypto.so.3 — only the CLI is missing
+FROM debian:bookworm-slim AS openssl-donor
+RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
+
+# Stage 2: Build the FreeSWITCH image
 # Use safarov FreeSWITCH image which includes mod_verto for WebRTC
 FROM safarov/freeswitch:1.10.12
+
+# Graft openssl CLI binary for STIR/SHAKEN local signing
+COPY --from=openssl-donor /usr/bin/openssl /usr/bin/openssl
 
 # Create additional directories
 RUN mkdir -p /recordings
