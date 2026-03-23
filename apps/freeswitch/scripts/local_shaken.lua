@@ -115,11 +115,14 @@ local function sign_and_set_cid(session)
         "[SHAKEN] Signing: +" .. orig .. " -> +" .. dest .. " origid=" .. origid .. "\n")
 
     -- Single shell pipeline: base64url encode header + payload, then ES256 sign
-    -- Uses /usr/bin/openssl for all crypto operations in one io.popen() call
+    -- CRITICAL: openssl dgst -sign outputs DER-encoded ECDSA signatures, but JWS ES256
+    -- per RFC 7518 requires raw R||S concatenation (exactly 64 bytes for P-256).
+    -- der2raw.sh converts the DER output to the correct JWS format.
     local cmd = string.format(
         [[sh -c 'H=$(printf "%%s" %q | /usr/bin/openssl base64 -A | tr "+/" "-_" | tr -d "="); ]]
      .. [[P=$(printf "%%s" %q | /usr/bin/openssl base64 -A | tr "+/" "-_" | tr -d "="); ]]
      .. [[SIG=$(printf "%%s" "${H}.${P}" | /usr/bin/openssl dgst -sha256 -sign %s -binary ]]
+     .. [[| sh /usr/share/freeswitch/scripts/der2raw.sh ]]
      .. [[| /usr/bin/openssl base64 -A | tr "+/" "-_" | tr -d "="); ]]
      .. [[echo "${H}.${P}.${SIG}"' 2>/dev/null]],
         header, payload, PRIVATE_KEY
