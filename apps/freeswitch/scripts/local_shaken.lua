@@ -145,12 +145,13 @@ local function sign_and_set_cid(session)
     -- Build full Identity header value per RFC 8225
     local identity = token .. ";info=<" .. CERT_URL .. ">;alg=ES256;ppt=shaken"
 
-    -- Export Identity header to B-leg ONLY via nolocal — bridge sends it in the INVITE to BulkVS
-    -- Using export nolocal: ensures the header is scoped exclusively to the B-leg channel
-    session:execute("export", "nolocal:sip_h_Identity=" .. identity)
+    -- Set Identity header on the channel — bridge propagates sip_h_ variables to the B-leg INVITE
+    -- NOTE: Do NOT use export nolocal: here — it causes DUPLICATE Identity headers because
+    -- bridge also copies sip_h_ variables from the A-leg, resulting in BulkVS 400 rejection.
+    session:setVariable("sip_h_Identity", identity)
 
     freeswitch.consoleLog("INFO",
-        "[SHAKEN] Identity header SET via nolocal export (" .. #identity .. " chars) — call is signed\n")
+        "[SHAKEN] Identity header SET via setVariable (" .. #identity .. " chars) — call is signed\n")
 end
 
 -- Seed RNG for UUID generation
