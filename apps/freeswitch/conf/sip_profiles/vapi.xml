@@ -10,8 +10,8 @@
     <param name="sip-ip" value="$${local_ip_v4}"/>
     <param name="sip-port" value="5070"/>
     <param name="rtp-ip" value="$${local_ip_v4}"/>
-    <param name="ext-rtp-ip" value="45.32.213.201"/>
-    <param name="ext-sip-ip" value="45.32.213.201"/>
+    <param name="ext-rtp-ip" value="autonat:$${local_ip_v4}"/>
+    <param name="ext-sip-ip" value="autonat:$${local_ip_v4}"/>
 
     <!-- Dialplan - ONLY vapi_outbound context -->
     <param name="dialplan" value="XML"/>
@@ -48,6 +48,6 @@
     <param name="rtp-autofix-timing" value="true"/>
 
     <!-- User lookup for authentication -->
-    <param name="challenge-realm" value="45.32.213.201"/>
+    <param name="challenge-realm" value="auto_from"/>
   </settings>
 </profile>
