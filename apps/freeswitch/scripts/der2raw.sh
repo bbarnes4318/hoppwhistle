@@ -7,45 +7,53 @@
 #
 # Reads DER binary from stdin, writes 64-byte raw R||S to stdout
 
-# Read DER binary into hex
-HEX=$(od -An -tx1 | tr -d ' \n')
+# Save DER to temp file
+TMPDER=$(mktemp)
+TMPRAW=$(mktemp)
+cat > "$TMPDER"
 
-# Parse ASN.1 SEQUENCE
-# Skip: 30 <total_len> 02 <r_len>
-# Byte 0: 0x30 (SEQUENCE)
-# Byte 1: total length
-# Byte 2: 0x02 (INTEGER tag for R)
-# Byte 3: R length
-R_LEN_HEX=$(echo "$HEX" | cut -c7-8)
-R_LEN=$((16#$R_LEN_HEX))
+# Extract R and S using openssl asn1parse
+# The DER signature is: SEQUENCE { INTEGER R, INTEGER S }
+# We use dd to extract the raw bytes based on parsed offsets
 
-# R value starts at byte 4, length R_LEN
-R_START=9
-R_END=$((R_START + R_LEN * 2 - 1))
-R_HEX=$(echo "$HEX" | cut -c${R_START}-${R_END})
+# Get hex dump
+HEX=$(od -An -tx1 < "$TMPDER" | tr -d ' \n')
 
-# After R: 02 <s_len> <S>
-S_TAG_POS=$((R_END + 1))
-S_LEN_POS=$((S_TAG_POS + 2))
-S_LEN_END=$((S_LEN_POS + 1))
-S_LEN_HEX=$(echo "$HEX" | cut -c${S_LEN_POS}-${S_LEN_END})
-S_LEN=$((16#$S_LEN_HEX))
+# Parse: 30 <tlen> 02 <rlen> <R_bytes> 02 <slen> <S_bytes>
+# Positions in hex string (each byte = 2 hex chars)
+RLEN=$(printf '%d' "0x$(echo "$HEX" | cut -c7-8)")
 
-S_START=$((S_LEN_END + 1))
-S_END=$((S_START + S_LEN * 2 - 1))
-S_HEX=$(echo "$HEX" | cut -c${S_START}-${S_END})
+# R starts at position 9 (byte 5, 0-indexed byte 4)
+RSTART=9
+REND=$((RSTART + RLEN * 2 - 1))
+R=$(echo "$HEX" | cut -c${RSTART}-${REND})
 
-# If R or S has leading 00 padding (sign byte), strip it
-if [ $R_LEN -eq 33 ]; then
-    R_HEX=$(echo "$R_HEX" | cut -c3-)
-fi
-if [ $S_LEN -eq 33 ]; then
-    S_HEX=$(echo "$S_HEX" | cut -c3-)
-fi
+# S tag is right after R
+SPOS=$((REND + 1))
+# Skip 02 tag (2 chars), then read S length
+SLPOS=$((SPOS + 2))
+SLEND=$((SLPOS + 1))
+SLEN=$(printf '%d' "0x$(echo "$HEX" | cut -c${SLPOS}-${SLEND})")
+SSTART=$((SLEND + 1))
+SEND=$((SSTART + SLEN * 2 - 1))
+S=$(echo "$HEX" | cut -c${SSTART}-${SEND})
 
-# Pad R and S to exactly 32 bytes (64 hex chars) each
-while [ ${#R_HEX} -lt 64 ]; do R_HEX="00${R_HEX}"; done
-while [ ${#S_HEX} -lt 64 ]; do S_HEX="00${S_HEX}"; done
+# Strip leading 00 pad byte if present (DER uses it for sign bit)
+if [ "$RLEN" -eq 33 ]; then R=$(echo "$R" | cut -c3-); fi
+if [ "$SLEN" -eq 33 ]; then S=$(echo "$S" | cut -c3-); fi
 
-# Output 64 bytes of raw R||S binary
-printf '%s%s' "$R_HEX" "$S_HEX" | sed 's/../\\x&/g' | xargs printf
+# Zero-pad to exactly 64 hex chars (32 bytes) each
+while [ ${#R} -lt 64 ]; do R="00${R}"; done
+while [ ${#S} -lt 64 ]; do S="00${S}"; done
+
+# Convert hex to binary and write to stdout
+# Use printf with \x escapes - process 2 chars at a time
+COMBINED="${R}${S}"
+i=1
+while [ $i -le 128 ]; do
+    BYTE=$(echo "$COMBINED" | cut -c${i}-$((i+1)))
+    printf "\\x${BYTE}"
+    i=$((i + 2))
+done
+
+rm -f "$TMPDER" "$TMPRAW"
