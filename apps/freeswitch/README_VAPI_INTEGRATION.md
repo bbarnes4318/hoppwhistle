@@ -27,7 +27,7 @@ Vapi Cloud → FreeSWITCH (vapi profile :5070) → vapi_outbound dialplan → an
 | Vapi SIP Port           | `5070`                                 |
 | SIP Username            | `vapi`                                 |
 | SIP Password            | `VapiFS_5070_StrongPass!9xQ2`          |
-| Vapi Assistant ID       | `37e1c497-0d84-4b53-aac0-b95881714cbb` |
+| Vapi Assistant ID       | `f6bcf4b4-8323-4bf8-a87d-a57d8dd9cd39` |
 | From Number (Anveo DID) | `+18652809894`                         |
 | Carrier                 | Anveo Direct (`sbc.anveo.com:5060`)    |
 

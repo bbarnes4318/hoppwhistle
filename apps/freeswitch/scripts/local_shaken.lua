@@ -29,6 +29,18 @@ local DID_POOL = {
     ["19542083921"] = true, ["19542083922"] = true,
 }
 
+-- Ordered DID list for round-robin rotation
+local DID_LIST = {
+    "12816989460", "12816989461",
+    "14063165877", "14402992856",
+    "14402992860", "16102819660",
+    "16102819662", "17038313168",
+    "17042283589", "17042286088",
+    "18036135410", "18036135412",
+    "19124185540", "19124185542",
+    "19542083921", "19542083922",
+}
+
 -- === HELPERS ===
 
 local function generate_uuid()
@@ -37,6 +49,11 @@ local function generate_uuid()
         local v = (c == "x") and math.random(0, 15) or math.random(8, 11)
         return string.format("%x", v)
     end))
+end
+
+-- Pick a random DID from the pool for rotation
+local function pick_rotated_did()
+    return DID_LIST[math.random(1, #DID_LIST)]
 end
 
 -- Normalize to 11-digit US format (1 + 10 digits)
@@ -53,7 +70,7 @@ end
 local function sign_and_set_cid(session)
     if not session then return end
 
-    -- ── CID VALIDATION ──────────────────────────────────────────────
+    -- ── CID VALIDATION + DID ROTATION ──────────────────────────────
     local caller = session:getVariable("effective_caller_id_number")
                 or session:getVariable("caller_id_number")
     if not caller or caller == "" then caller = DEFAULT_DID end
@@ -62,9 +79,11 @@ local function sign_and_set_cid(session)
     if #caller == 10 then caller = "1" .. caller end
 
     if not DID_POOL[caller] then
-        freeswitch.consoleLog("WARNING",
-            "[SHAKEN] CID " .. caller .. " not in DID pool, forcing " .. DEFAULT_DID .. "\n")
-        caller = DEFAULT_DID
+        -- CID is not in pool (e.g. Vapi's own number) — rotate to a random DID
+        local rotated = pick_rotated_did()
+        freeswitch.consoleLog("INFO",
+            "[SHAKEN] CID " .. caller .. " not in DID pool, rotating to " .. rotated .. "\n")
+        caller = rotated
     end
 
     -- Force all outbound caller ID fields to the validated DID

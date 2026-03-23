@@ -23,7 +23,7 @@ const https = require('https');
 // Configuration
 const CONFIG = {
   VAPI_API_TOKEN: process.env.VAPI_API_TOKEN || 'b8c9e434-32ca-4cbc-ae39-b6c4583622c2',
-  VAPI_ASSISTANT_ID: '37e1c497-0d84-4b53-aac0-b95881714cbb',
+  VAPI_ASSISTANT_ID: 'f6bcf4b4-8323-4bf8-a87d-a57d8dd9cd39',
   VAPI_PHONE_NUMBER_ID: '2a20e3b4-651e-4c8e-bcc8-9d9dd884785f', // Pre-provisioned phone number ID
   VAPI_FROM_NUMBER: '+18652809894',
   FREESWITCH_HOST: '45.32.213.201',
