@@ -23,7 +23,7 @@
     <load module="mod_fsv"/>
     <load module="mod_httapi"/>
     <load module="mod_local_stream"/>
-    <!-- <load module="mod_lua"/> -->
+    <load module="mod_lua"/>
     <load module="mod_native_file"/>
     <load module="mod_opus"/>
     <load module="mod_png"/>
