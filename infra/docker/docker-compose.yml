@@ -131,7 +131,8 @@ services:
       - freeswitch_conf:/usr/local/freeswitch/conf
       # SSL certs for WSS (WebRTC) on port 7443
       - /etc/letsencrypt:/etc/letsencrypt:ro
-      - /etc/letsencrypt/live/hopwhistle.com:/etc/freeswitch/letsencrypt:ro
+      # Writable so entrypoint can generate combined wss.pem from fullchain+privkey
+      - /etc/letsencrypt/live/hopwhistle.com:/etc/freeswitch/letsencrypt
       # STIR/SHAKEN ES256 private key for local PASSporT signing (local_shaken.lua)
       - /opt/hopwhistle/252L-20250710.key:/etc/freeswitch/stir-shaken/private.key:ro
     depends_on:

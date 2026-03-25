@@ -55,7 +55,8 @@
     <!-- <load module="mod_verto"/> -->
 
     <!-- TLS/SRTP modules -->
-    <load module="mod_tls"/>
+    <!-- mod_tls does not exist in safarov/freeswitch image; mod_sofia handles WSS natively -->
+    <!-- <load module="mod_tls"/> -->
   </modules>
 </configuration>
 

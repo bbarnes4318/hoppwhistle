@@ -54,6 +54,16 @@ if [ -f "$SWITCH_CONF" ]; then
     echo "  RTP ports configured: 16384-16484"
 fi
 
+# Generate combined wss.pem for FreeSWITCH WSS binding (mod_sofia expects cert+key in one file)
+TLS_CERT_DIR="/etc/freeswitch/letsencrypt"
+if [ -f "$TLS_CERT_DIR/fullchain.pem" ] && [ -f "$TLS_CERT_DIR/privkey.pem" ]; then
+    echo "Generating combined wss.pem for WSS binding..."
+    cat "$TLS_CERT_DIR/fullchain.pem" "$TLS_CERT_DIR/privkey.pem" > "$TLS_CERT_DIR/wss.pem"
+    echo "  wss.pem created at $TLS_CERT_DIR/wss.pem"
+else
+    echo "WARNING: SSL cert files not found at $TLS_CERT_DIR — WSS on port 7443 will NOT work!"
+fi
+
 echo "Starting FreeSWITCH..."
 
 # Execute the main command

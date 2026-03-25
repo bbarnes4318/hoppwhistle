@@ -11,6 +11,9 @@ const inter = Inter({ subsets: ['latin'] });
 export const metadata: Metadata = {
   title: 'Hopwhistle',
   description: 'Production-grade telephony platform',
+  icons: {
+    icon: '/hopwhistle.png',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
