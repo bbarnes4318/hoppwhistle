@@ -54,14 +54,23 @@ if [ -f "$SWITCH_CONF" ]; then
     echo "  RTP ports configured: 16384-16484"
 fi
 
-# Generate combined wss.pem for FreeSWITCH WSS binding (mod_sofia expects cert+key in one file)
-TLS_CERT_DIR="/etc/freeswitch/letsencrypt"
-if [ -f "$TLS_CERT_DIR/fullchain.pem" ] && [ -f "$TLS_CERT_DIR/privkey.pem" ]; then
-    echo "Generating combined wss.pem for WSS binding..."
-    cat "$TLS_CERT_DIR/fullchain.pem" "$TLS_CERT_DIR/privkey.pem" > "$TLS_CERT_DIR/wss.pem"
-    echo "  wss.pem created at $TLS_CERT_DIR/wss.pem"
+# Generate combined wss.pem for FreeSWITCH WSS binding
+# Let's Encrypt live/ dir uses relative symlinks (../../archive/...) that break when
+# mounted at /etc/freeswitch/letsencrypt. Read directly from archive instead.
+LE_ARCHIVE="/etc/letsencrypt/archive/hopwhistle.com"
+FS_TLS_DIR="/etc/freeswitch/tls"
+FS_LE_DIR="/etc/freeswitch/letsencrypt"
+
+if [ -f "$LE_ARCHIVE/fullchain1.pem" ] && [ -f "$LE_ARCHIVE/privkey1.pem" ]; then
+    echo "Generating combined wss.pem from Let's Encrypt archive certs..."
+    cat "$LE_ARCHIVE/fullchain1.pem" "$LE_ARCHIVE/privkey1.pem" > "$FS_LE_DIR/wss.pem"
+    # Overwrite FreeSWITCH default self-signed certs
+    mkdir -p "$FS_TLS_DIR"
+    cp "$FS_LE_DIR/wss.pem" "$FS_TLS_DIR/wss.pem"
+    cp "$FS_LE_DIR/wss.pem" "$FS_TLS_DIR/dtls-srtp.pem"
+    echo "  Let's Encrypt wss.pem installed at $FS_TLS_DIR/wss.pem"
 else
-    echo "WARNING: SSL cert files not found at $TLS_CERT_DIR — WSS on port 7443 will NOT work!"
+    echo "WARNING: Let's Encrypt certs not found at $LE_ARCHIVE — WSS will use self-signed cert!"
 fi
 
 echo "Starting FreeSWITCH..."
