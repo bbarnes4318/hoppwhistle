@@ -33,9 +33,13 @@
         <action application="log" data="INFO [DEFAULT] Inbound call caught (dest=${destination_number}, sip_to=${sip_to_user}, from=${caller_id_number})"/>
         <action application="set" data="call_direction=inbound"/>
         <action application="set" data="hangup_after_bridge=true"/>
+        <!-- Immediately tell Anveo we're ringing so it doesn't time out -->
+        <action application="ring_ready"/>
         <!-- Send US ringback tone to caller while agent phone rings -->
         <action application="set" data="ringback=%(2000,4000,440,480)"/>
-        <action application="set" data="call_timeout=60"/>
+        <action application="set" data="instant_ringback=true"/>
+        <action application="set" data="call_timeout=120"/>
+        <action application="set" data="progress_timeout=30"/>
         <action application="bridge" data="${sofia_contact(internal/1000@3.214.60.13)}"/>
       </condition>
     </extension>
