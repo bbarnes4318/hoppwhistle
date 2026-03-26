@@ -32,21 +32,11 @@
       <condition field="destination_number" expression="^.+$">
         <action application="log" data="INFO [DEFAULT] Inbound call caught (dest=${destination_number}, sip_to=${sip_to_user}, from=${caller_id_number})"/>
         <action application="set" data="call_direction=inbound"/>
-        <action application="set" data="hangup_after_bridge=true"/>
-        <!-- Immediately tell Anveo we're ringing so it doesn't time out -->
+        <!-- Immediately tell Anveo we're ringing -->
         <action application="ring_ready"/>
-        <!-- Fix codec mismatch: Anveo=PCMU/PCMA, WebRTC=OPUS -->
-        <!-- Export so B-leg inherits; disable bypass_media to transcode -->
-        <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA,OPUS,G722"/>
-        <action application="set" data="bypass_media=false"/>
-        <action application="set" data="proxy_media=false"/>
-        <action application="set" data="inbound_codec_negotiation=generous"/>
-        <!-- Send US ringback tone to caller while agent phone rings -->
-        <action application="set" data="ringback=%(2000,4000,440,480)"/>
-        <action application="set" data="instant_ringback=true"/>
-        <action application="set" data="call_timeout=120"/>
-        <action application="set" data="progress_timeout=30"/>
-        <action application="bridge" data="{absolute_codec_string=PCMU^^:PCMA^^:OPUS^^:G722,ignore_early_media=false}${sofia_contact(internal/1000@3.214.60.13)}"/>
+        <!-- Re-route as a call to local extension 1000 -->
+        <action application="set" data="destination_number=1000"/>
+        <action application="transfer" data="1000 XML default"/>
       </condition>
     </extension>
 
