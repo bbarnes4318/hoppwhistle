@@ -143,6 +143,9 @@ export function CallCenterPortal(): JSX.Element {
   const [isIncomingCall, setIsIncomingCall] = useState(false);
   const [isCallActive, setIsCallActive] = useState(false);
   const [showDisposition, setShowDisposition] = useState(false);
+  const [dispositionSaving, setDispositionSaving] = useState(false);
+  const [dispositionSaved, setDispositionSaved] = useState(false);
+  const [dispositionError, setDispositionError] = useState<string | null>(null);
   const [incomingCallData, setIncomingCallData] = useState<ProspectData | null>(null);
   const [activeCallData, setActiveCallData] = useState<ProspectData | null>(null);
   const [activeCallView, setActiveCallView] = useState<ActiveCallView>('script');
@@ -170,6 +173,7 @@ export function CallCenterPortal(): JSX.Element {
   // Track disposition state to prevent duplicate prompts
   const dispositionHandledRef = useRef<boolean>(false);
   const callSessionIdRef = useRef<string | null>(null);
+  const callEndedTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Disposition
   const [selectedDisposition, setSelectedDisposition] = useState('');
@@ -211,19 +215,32 @@ export function CallCenterPortal(): JSX.Element {
     // Case 1: No active call from the SIP hook
     if (!currentCall) {
       // Only trigger disposition if we HAD an active call and haven't already handled it
+      // Use a debounce to avoid false triggers from SIP state flickers
       if (isCallActive && !dispositionHandledRef.current && callSessionIdRef.current) {
-        console.log('[CallCenter] Call ended - triggering disposition modal');
-        if (callTimerRef.current) clearInterval(callTimerRef.current);
-
-        // Mark disposition as handled for this call session
-        dispositionHandledRef.current = true;
-
-        setIsCallActive(false);
-        setShowDisposition(true);
-        setAgentStatus('available');
+        // Wait 2 seconds to confirm the call is truly ended (not a flicker)
+        if (!callEndedTimerRef.current) {
+          callEndedTimerRef.current = setTimeout(() => {
+            // Re-check conditions after debounce
+            if (!dispositionHandledRef.current && callSessionIdRef.current) {
+              console.log('[CallCenter] Call ended - triggering disposition modal');
+              if (callTimerRef.current) clearInterval(callTimerRef.current);
+              dispositionHandledRef.current = true;
+              setIsCallActive(false);
+              setShowDisposition(true);
+              setAgentStatus('available');
+            }
+            callEndedTimerRef.current = null;
+          }, 2000);
+        }
       }
       setIsIncomingCall(false);
       return;
+    }
+
+    // If call comes back (was just a flicker), cancel the debounce
+    if (callEndedTimerRef.current) {
+      clearTimeout(callEndedTimerRef.current);
+      callEndedTimerRef.current = null;
     }
 
     // Case 2: Incoming call ringing
@@ -510,46 +527,79 @@ export function CallCenterPortal(): JSX.Element {
     setThirdPartyNumber('');
   };
 
-  const handleSaveDisposition = () => {
-    if (selectedDisposition && activeCallData) {
-      const callRecord: CallRecord = {
-        id: 'record-' + Date.now(),
-        notificationId: 'pop-' + Date.now(),
-        prospect: activeCallData,
-        timestamp: new Date().toISOString(),
-        disposition: selectedDisposition,
-        dispositionDetails: callNotes,
-        callDuration: callTimer,
-        callEndTime: new Date().toISOString(),
-      };
-      setCallRecords(prev => [...prev, callRecord]);
+  const handleSaveDisposition = async () => {
+    if (!selectedDisposition) return;
+    
+    setDispositionSaving(true);
+    setDispositionError(null);
 
-      // Track Applications: 'Sale Made' or 'Application Submitted'
-      if (selectedDisposition === 'Sale Made' || selectedDisposition === 'Application Submitted') {
-        setSalesCount(prev => prev + 1);
-      }
+    const callRecord: CallRecord = {
+      id: 'record-' + Date.now(),
+      notificationId: 'pop-' + Date.now(),
+      prospect: activeCallData || {},
+      timestamp: new Date().toISOString(),
+      disposition: selectedDisposition,
+      dispositionDetails: callNotes,
+      callDuration: callTimer,
+      callEndTime: new Date().toISOString(),
+    };
 
-      // Track Follow-Ups: 'Callback Scheduled' or 'Follow-Up Scheduled'
-      if (selectedDisposition === 'Callback Scheduled' || selectedDisposition === 'Follow-Up Scheduled') {
-        setFollowUpCount(prev => prev + 1);
-      }
+    // Save to local state
+    setCallRecords(prev => [...prev, callRecord]);
+
+    // Track Applications: 'Sale Made' or 'Application Submitted'
+    if (selectedDisposition === 'Sale Made' || selectedDisposition === 'Application Submitted') {
+      setSalesCount(prev => prev + 1);
     }
-    setShowDisposition(false);
-    setSelectedDisposition('');
-    setSaleCarrier('');
-    setSalePlanType('');
-    setSaleAnnualPremium('');
-    setCallNotes('');
-    setCallTimer(0);
-    setActiveCallData(null);
 
-    // Reset call session tracking for next call
-    callSessionIdRef.current = null;
-    dispositionHandledRef.current = false;
+    // Track Follow-Ups: 'Callback Scheduled' or 'Follow-Up Scheduled'
+    if (selectedDisposition === 'Callback Scheduled' || selectedDisposition === 'Follow-Up Scheduled') {
+      setFollowUpCount(prev => prev + 1);
+    }
 
-    // Clear pre-injected lead data for next call
-    setPreInjectedData(null);
-    clearLead();
+    // Try to save to API (non-blocking — local save already done)
+    try {
+      await fetch('/api/v1/calls/disposition', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          callId: callSessionIdRef.current,
+          disposition: selectedDisposition,
+          notes: callNotes,
+          duration: callTimer,
+          callerNumber: activeCallData?.caller_id || activeCallData?.phone,
+          saleDetails: selectedDisposition === 'Sale Made' ? {
+            carrier: saleCarrier,
+            planType: salePlanType,
+            annualPremium: saleAnnualPremium,
+          } : undefined,
+        }),
+      });
+    } catch (err) {
+      console.log('[CallCenter] API disposition save failed (local save succeeded):', err);
+    }
+
+    setDispositionSaving(false);
+
+    // Show success confirmation
+    setDispositionSaved(true);
+
+    // After 2 seconds, reset everything and return to main screen
+    setTimeout(() => {
+      setDispositionSaved(false);
+      setShowDisposition(false);
+      setSelectedDisposition('');
+      setSaleCarrier('');
+      setSalePlanType('');
+      setSaleAnnualPremium('');
+      setCallNotes('');
+      setCallTimer(0);
+      setActiveCallData(null);
+      callSessionIdRef.current = null;
+      dispositionHandledRef.current = false;
+      setPreInjectedData(null);
+      clearLead();
+    }, 2000);
   };
 
   const startCallWithApplication = async (app: ApplicationData) => {
@@ -1081,95 +1131,131 @@ export function CallCenterPortal(): JSX.Element {
             {/* Disposition Panel */}
             {showDisposition && (
               <div className="flex-1 flex flex-col overflow-y-auto">
-                <h3 className="text-lg font-bold text-white mb-4">Call Disposition</h3>
-                <div className="space-y-2 mb-4">
-                  {DISPOSITIONS.map(disposition => (
-                    <button
-                      key={disposition}
-                      onClick={() => {
-                        setSelectedDisposition(disposition);
-                        if (disposition !== 'Sale Made') {
-                          setSaleCarrier('');
-                          setSalePlanType('');
-                          setSaleAnnualPremium('');
-                        }
-                      }}
-                      className={
-                        'w-full p-3 rounded-lg text-left text-sm transition-all ' +
-                        (selectedDisposition === disposition
-                          ? 'bg-cyan-500/30 border border-cyan-500 text-cyan-300'
-                          : 'bg-[#1e1e2e] border border-[#2e2e3e] text-gray-300 hover:border-gray-500')
-                      }
-                    >
-                      {disposition}
-                    </button>
-                  ))}
-                </div>
-
-                {selectedDisposition === 'Sale Made' && (
-                  <div className="bg-[#1e1e2e] border border-cyan-500/30 rounded-xl p-4 mb-4 space-y-3">
-                    <h4 className="text-sm font-bold text-cyan-400 mb-3">
-                      Sale Details (Required)
-                    </h4>
-                    <div>
-                      <label className="text-xs text-gray-400 mb-1 block">Carrier</label>
-                      <select
-                        value={saleCarrier}
-                        onChange={e => {
-                          setSaleCarrier(e.target.value);
-                          setSalePlanType('');
-                        }}
-                        className="w-full bg-[#13131a] border border-[#2e2e3e] rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500"
-                      >
-                        <option value="">Select Carrier...</option>
-                        {CARRIERS.map(carrier => (
-                          <option key={carrier} value={carrier}>
-                            {carrier}
-                          </option>
-                        ))}
-                      </select>
+                {/* Success confirmation overlay */}
+                {dispositionSaved ? (
+                  <div className="flex-1 flex flex-col items-center justify-center">
+                    <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mb-4 animate-pulse">
+                      <CheckCircle className="w-8 h-8 text-green-400" />
                     </div>
-                    {saleCarrier && (
-                      <div>
-                        <label className="text-xs text-gray-400 mb-1 block">Plan Type</label>
-                        <select
-                          value={salePlanType}
-                          onChange={e => setSalePlanType(e.target.value)}
-                          className="w-full bg-[#13131a] border border-[#2e2e3e] rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500"
-                        >
-                          <option value="">Select Plan Type...</option>
-                          {CARRIER_PLANS[saleCarrier]?.map(plan => (
-                            <option key={plan} value={plan}>
-                              {plan}
-                            </option>
-                          ))}
-                        </select>
+                    <h3 className="text-lg font-bold text-green-400 mb-2">Disposition Saved!</h3>
+                    <p className="text-sm text-gray-400">Returning to main screen...</p>
+                  </div>
+                ) : (
+                  <>
+                    <h3 className="text-lg font-bold text-white mb-4">Call Disposition</h3>
+                    {dispositionError && (
+                      <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-3 mb-4 text-red-300 text-sm">
+                        {dispositionError}
                       </div>
                     )}
-                    <div>
-                      <label className="text-xs text-gray-400 mb-1 block">Annual Premium ($)</label>
-                      <input
-                        type="number"
-                        value={saleAnnualPremium}
-                        onChange={e => setSaleAnnualPremium(e.target.value)}
-                        placeholder="e.g. 1200"
-                        className="w-full bg-[#13131a] border border-[#2e2e3e] rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500"
-                      />
+                    <div className="space-y-2 mb-4">
+                      {DISPOSITIONS.map(disposition => (
+                        <button
+                          key={disposition}
+                          onClick={() => {
+                            setSelectedDisposition(disposition);
+                            if (disposition !== 'Sale Made') {
+                              setSaleCarrier('');
+                              setSalePlanType('');
+                              setSaleAnnualPremium('');
+                            }
+                          }}
+                          className={
+                            'w-full p-3 rounded-lg text-left text-sm transition-all ' +
+                            (selectedDisposition === disposition
+                              ? 'bg-cyan-500/30 border border-cyan-500 text-cyan-300'
+                              : 'bg-[#1e1e2e] border border-[#2e2e3e] text-gray-300 hover:border-gray-500')
+                          }
+                        >
+                          {disposition}
+                        </button>
+                      ))}
                     </div>
-                  </div>
-                )}
 
-                <button
-                  onClick={handleSaveDisposition}
-                  disabled={
-                    !selectedDisposition ||
-                    (selectedDisposition === 'Sale Made' &&
-                      (!saleCarrier || !salePlanType || !saleAnnualPremium))
-                  }
-                  className="w-full py-3 bg-cyan-500 hover:bg-cyan-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium rounded-xl transition-colors"
-                >
-                  Save and Continue
-                </button>
+                    {selectedDisposition === 'Sale Made' && (
+                      <div className="bg-[#1e1e2e] border border-cyan-500/30 rounded-xl p-4 mb-4 space-y-3">
+                        <h4 className="text-sm font-bold text-cyan-400 mb-3">
+                          Sale Details (Required)
+                        </h4>
+                        <div>
+                          <label className="text-xs text-gray-400 mb-1 block">Carrier</label>
+                          <select
+                            value={saleCarrier}
+                            onChange={e => {
+                              setSaleCarrier(e.target.value);
+                              setSalePlanType('');
+                            }}
+                            className="w-full bg-[#13131a] border border-[#2e2e3e] rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500"
+                          >
+                            <option value="">Select Carrier...</option>
+                            {CARRIERS.map(carrier => (
+                              <option key={carrier} value={carrier}>
+                                {carrier}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        {saleCarrier && (
+                          <div>
+                            <label className="text-xs text-gray-400 mb-1 block">Plan Type</label>
+                            <select
+                              value={salePlanType}
+                              onChange={e => setSalePlanType(e.target.value)}
+                              className="w-full bg-[#13131a] border border-[#2e2e3e] rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500"
+                            >
+                              <option value="">Select Plan Type...</option>
+                              {CARRIER_PLANS[saleCarrier]?.map(plan => (
+                                <option key={plan} value={plan}>
+                                  {plan}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                        <div>
+                          <label className="text-xs text-gray-400 mb-1 block">Annual Premium ($)</label>
+                          <input
+                            type="number"
+                            value={saleAnnualPremium}
+                            onChange={e => setSaleAnnualPremium(e.target.value)}
+                            placeholder="e.g. 1200"
+                            className="w-full bg-[#13131a] border border-[#2e2e3e] rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={() => void handleSaveDisposition()}
+                      disabled={
+                        dispositionSaving ||
+                        !selectedDisposition ||
+                        (selectedDisposition === 'Sale Made' &&
+                          (!saleCarrier || !salePlanType || !saleAnnualPremium))
+                      }
+                      className="w-full py-3 bg-cyan-500 hover:bg-cyan-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium rounded-xl transition-colors"
+                    >
+                      {dispositionSaving ? 'Saving...' : 'Save and Continue'}
+                    </button>
+
+                    {/* Skip disposition button */}
+                    <button
+                      onClick={() => {
+                        setShowDisposition(false);
+                        setSelectedDisposition('');
+                        setCallTimer(0);
+                        setActiveCallData(null);
+                        callSessionIdRef.current = null;
+                        dispositionHandledRef.current = false;
+                        setPreInjectedData(null);
+                        clearLead();
+                      }}
+                      className="w-full py-2 mt-2 text-gray-500 hover:text-gray-300 text-sm transition-colors"
+                    >
+                      Skip
+                    </button>
+                  </>
+                )}
               </div>
             )}
 
