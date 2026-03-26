@@ -6,44 +6,33 @@
       <condition field="destination_number" expression="^(1[0-9]{3})$">
         <action application="log" data="INFO [DEFAULT] Local call to extension ${destination_number}"/>
         <action application="set" data="hangup_after_bridge=true"/>
+        <action application="set" data="inbound_codec_negotiation=generous"/>
+        <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA,OPUS,G722"/>
         <action application="bridge" data="${sofia_contact(internal/${destination_number}@3.214.60.13)}"/>
         <action application="hangup" data="NORMAL_CLEARING"/>
       </condition>
     </extension>
 
-    <!-- Outbound calls - use Anveo with tech prefix (NANP numbers only) -->
-    <extension name="outbound-to-anveo">
+    <!-- Outbound calls via BulkVS (NANP numbers only, registered users only) -->
+    <extension name="outbound-to-bulkvs">
+      <condition field="${sip_authorized}" expression="^true$"/>
       <condition field="destination_number" expression="^1?([2-9]\d{9})$">
-        <action application="log" data="INFO [DEFAULT] Outbound call to ${destination_number}"/>
-        <action application="set" data="effective_caller_id_number=18652809894"/>
+        <action application="log" data="INFO [DEFAULT] Outbound call to ${destination_number} via BulkVS"/>
+        <action application="set" data="effective_caller_id_number=12816991120"/>
         <action application="set" data="effective_caller_id_name=Hopwhistle"/>
         <action application="set" data="hangup_after_bridge=true"/>
         <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
         <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
-        <action application="bridge" data="sofia/gateway/anveo/0123451${destination_number}"/>
+        <action application="bridge" data="sofia/gateway/bulkvs/1${destination_number}"/>
         <action application="hangup" data="NORMAL_CLEARING"/>
       </condition>
     </extension>
 
-    <!-- Inbound catch-all: anything not matching above is inbound from carrier -->
-    <!-- IMPORTANT: hangup at end prevents dialplan re-entry loop -->
+    <!-- Catch-all: anything else that somehow lands in default from non-registered source -->
     <extension name="inbound-catch-all">
       <condition field="destination_number" expression="^.+$">
-        <action application="log" data="INFO [DEFAULT] Inbound call (dest=${destination_number}, from=${caller_id_number})"/>
-        <action application="ring_ready"/>
-        <action application="set" data="call_direction=inbound"/>
-        <action application="set" data="hangup_after_bridge=true"/>
-        <action application="set" data="continue_on_fail=false"/>
-        <!-- Codec negotiation for Anveo PCMU/PCMA <-> WebRTC OPUS -->
-        <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA,OPUS,G722"/>
-        <action application="set" data="inbound_codec_negotiation=generous"/>
-        <action application="set" data="bypass_media=false"/>
-        <action application="set" data="ringback=%(2000,4000,440,480)"/>
-        <action application="set" data="instant_ringback=true"/>
-        <action application="set" data="call_timeout=120"/>
-        <action application="bridge" data="${sofia_contact(internal/1000@3.214.60.13)}"/>
-        <!-- If bridge fails, hang up cleanly - DO NOT re-enter dialplan -->
-        <action application="hangup" data="NORMAL_CLEARING"/>
+        <action application="log" data="WARNING [DEFAULT] Catch-all hit (dest=${destination_number}, from=${caller_id_number})"/>
+        <action application="hangup" data="NO_ROUTE_DESTINATION"/>
       </condition>
     </extension>
 
