@@ -1,19 +1,18 @@
 <include>
   <context name="default">
-    <!-- Inbound from Anveo - DID 865-280-9894 arrives as 10001 in sip_to_user -->
-    <extension name="inbound-call-center">
-      <condition field="${sip_to_user}" expression="^(10001)$">
-        <action application="log" data="INFO [DEFAULT] Inbound call to Call Center DID (sip_to_user=${sip_to_user}, dest=${destination_number})"/>
-        <action application="set" data="call_direction=inbound"/>
-        <action application="set" data="hangup_after_bridge=true"/>
+
+    <!-- Local extension calls (agent-to-agent) -->
+    <extension name="local-extension">
+      <condition field="destination_number" expression="^(1[0-9]{3})$">
+        <action application="log" data="INFO [DEFAULT] Local call to extension ${destination_number}"/>
         <action application="answer"/>
-        <action application="bridge" data="user/1000@3.214.60.13"/>
+        <action application="bridge" data="user/${destination_number}@3.214.60.13"/>
       </condition>
     </extension>
 
-    <!-- Outbound calls - use Anveo with tech prefix -->
+    <!-- Outbound calls - use Anveo with tech prefix (10-11 digit NANP numbers) -->
     <extension name="outbound-to-anveo">
-      <condition field="destination_number" expression="^(\d{10,11})$">
+      <condition field="destination_number" expression="^1?([2-9]\d{9})$">
         <action application="log" data="INFO [DEFAULT] Outbound call to ${destination_number}"/>
         <action application="set" data="effective_caller_id_number=18652809894"/>
         <action application="set" data="effective_caller_id_name=Hopwhistle"/>
@@ -26,12 +25,18 @@
       </condition>
     </extension>
 
-    <!-- Fallback for any unmatched -->
-    <extension name="unmatched">
+    <!-- Inbound catch-all: any call NOT matching above patterns is inbound from carrier -->
+    <!-- Anveo sends DID calls with odd destination_numbers (their internal routing IDs) -->
+    <!-- These calls arrive on internal profile as 10001 but destination_number is garbage -->
+    <extension name="inbound-catch-all">
       <condition field="destination_number" expression="^.+$">
-        <action application="log" data="WARNING Unmatched: ${destination_number}"/>
-        <action application="hangup" data="NO_ROUTE_DESTINATION"/>
+        <action application="log" data="INFO [DEFAULT] Inbound call caught (dest=${destination_number}, sip_to=${sip_to_user}, from=${caller_id_number})"/>
+        <action application="set" data="call_direction=inbound"/>
+        <action application="set" data="hangup_after_bridge=true"/>
+        <action application="answer"/>
+        <action application="bridge" data="user/1000@3.214.60.13"/>
       </condition>
     </extension>
+
   </context>
 </include>
