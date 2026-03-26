@@ -9,10 +9,10 @@
     <extension name="inbound-call-center">
       <condition field="destination_number" expression="^(\+?1?8652809894)$">
         <action application="log" data="INFO [PUBLIC] Inbound call to Call Center DID"/>
-        <action application="set" data="domain_name=45.32.213.201"/>
+        <action application="set" data="domain_name=3.214.60.13"/>
         <action application="set" data="call_direction=inbound"/>
         <!-- Ring the Call Center agent via internal profile -->
-        <action application="bridge" data="${sofia_contact(internal/1000@45.32.213.201)}"/>
+        <action application="bridge" data="${sofia_contact(internal/1000@3.214.60.13)}"/>
       </condition>
     </extension>
 
