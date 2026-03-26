@@ -16,10 +16,8 @@ import {
   Pause,
   Play,
   Circle,
-  Users,
   UserPlus,
   FileText,
-  Bell,
   CheckCircle,
   RefreshCw,
   Headphones,
@@ -109,7 +107,9 @@ const CARRIERS = Object.keys(CARRIER_PLANS);
 
 const DISPOSITIONS = [
   'Sale Made',
+  'Application Submitted',
   'Callback Scheduled',
+  'Follow-Up Scheduled',
   'Left Voicemail',
   'No Answer',
   'Not Interested',
@@ -124,7 +124,6 @@ export function CallCenterPortal(): JSX.Element {
   const router = useRouter();
   const {
     currentCall,
-    agentStatus: phoneAgentStatus,
     makeCall,
     hangupCall,
     answerCall,
@@ -133,7 +132,7 @@ export function CallCenterPortal(): JSX.Element {
   } = usePhone();
 
   // Lead Injection - Pre-call data from webhooks
-  const { leadData, isConnected: leadStreamConnected, lookupLead, clearLead } = useLeadInjection();
+  const { leadData, lookupLead, clearLead } = useLeadInjection();
   const [preInjectedData, setPreInjectedData] = useState<ProspectData | null>(null);
 
   // State - Default directly to agentDashboard (skip role selection menu)
@@ -152,10 +151,15 @@ export function CallCenterPortal(): JSX.Element {
   const [isMuted, setIsMuted] = useState(false);
   const [isOnHold, setIsOnHold] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  const [thirdPartyNumber, setThirdPartyNumber] = useState('');
+  const [, setThirdPartyNumber] = useState('');
   const [thirdPartyConnected, setThirdPartyConnected] = useState(false);
   const [isAddingThirdParty, setIsAddingThirdParty] = useState(false);
   const [showTransferPanel, setShowTransferPanel] = useState(false);
+
+  // Ringtone Audio
+  const ringtoneRef = useRef<HTMLAudioElement | null>(null);
+  const [ringDuration, setRingDuration] = useState(0);
+  const ringTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Dialer
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -176,12 +180,13 @@ export function CallCenterPortal(): JSX.Element {
   // Applications & Records
   const [applications, setApplications] = useState<ApplicationData[]>([]);
   const [loadingApplications, setLoadingApplications] = useState(false);
-  const [callRecords, setCallRecords] = useState<CallRecord[]>([]);
+  const [, setCallRecords] = useState<CallRecord[]>([]);
 
   // User Settings & Stats
   const [showSettings, setShowSettings] = useState(false);
   const [salesCount, setSalesCount] = useState(0);
   const [totalCallsCount, setTotalCallsCount] = useState(0);
+  const [followUpCount, setFollowUpCount] = useState(0);
 
   // Script Selection - Default to Sales Script (Final Expense)
   const [selectedScript, setSelectedScript] = useState<SelectedScript>('sales');
@@ -194,7 +199,7 @@ export function CallCenterPortal(): JSX.Element {
     isAdminOrOwner,
   } = useScriptAccess();
 
-  // Calculate conversion rate: (Sales / Total Calls) * 100
+  // Calculate conversion rate: (Applications / Total Calls) * 100
   const conversionRate =
     totalCallsCount > 0 ? ((salesCount / totalCallsCount) * 100).toFixed(1) : '0.0';
 
@@ -237,8 +242,8 @@ export function CallCenterPortal(): JSX.Element {
     // Case 3: Call is active (connected)
     if (currentCall.state === 'active' || currentCall.state === 'connecting') {
       // New call session - reset disposition tracking
-      if (!callSessionIdRef.current || callSessionIdRef.current !== currentCall.id) {
-        callSessionIdRef.current = currentCall.id || `call-${Date.now()}`;
+      if (!callSessionIdRef.current || callSessionIdRef.current !== currentCall.callId) {
+        callSessionIdRef.current = currentCall.callId || `call-${Date.now()}`;
         dispositionHandledRef.current = false;
         console.log('[CallCenter] New call session started:', callSessionIdRef.current);
       }
@@ -382,6 +387,72 @@ export function CallCenterPortal(): JSX.Element {
   };
 
   // Call Handlers
+  // ─────────────────────────────────────────────────────────────────────────
+  // RINGTONE AUDIO - Play/stop ringtone on incoming call
+  // ─────────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (isIncomingCall) {
+      // Start ringtone
+      if (!ringtoneRef.current) {
+        ringtoneRef.current = new Audio('/sounds/ringtone.mp3');
+        ringtoneRef.current.loop = true;
+      }
+      ringtoneRef.current.play().catch(() => { /* ignore autoplay block */ });
+
+      // Start ring duration counter
+      setRingDuration(0);
+      ringTimerRef.current = setInterval(() => {
+        setRingDuration(prev => prev + 1);
+      }, 1000);
+    } else {
+      // Stop ringtone
+      if (ringtoneRef.current) {
+        ringtoneRef.current.pause();
+        ringtoneRef.current.currentTime = 0;
+      }
+      if (ringTimerRef.current) {
+        clearInterval(ringTimerRef.current);
+        ringTimerRef.current = null;
+      }
+      setRingDuration(0);
+    }
+
+    return () => {
+      if (ringtoneRef.current) {
+        ringtoneRef.current.pause();
+        ringtoneRef.current.currentTime = 0;
+      }
+      if (ringTimerRef.current) {
+        clearInterval(ringTimerRef.current);
+      }
+    };
+  }, [isIncomingCall]);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // KEYBOARD SHORTCUTS - A to answer, D to decline incoming calls
+  // ─────────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isIncomingCall) return;
+
+    const handleKeydown = (e: KeyboardEvent) => {
+      // Ignore if typing in an input/textarea
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+      if (e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        void handleAnswerCall();
+      } else if (e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        void handleDeclineCall();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeydown);
+    return () => window.removeEventListener('keydown', handleKeydown);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isIncomingCall]);
+
   const handleAnswerCall = async () => {
     try {
       await answerCall(); // Use hook's answer method for SIP
@@ -392,8 +463,13 @@ export function CallCenterPortal(): JSX.Element {
     setIsIncomingCall(false);
     setIsCallActive(true);
     setActiveCallData(incomingCallData);
+    setActiveCallView('script'); // Ensure script pops up immediately
     setAgentStatus('on_call');
     setCallTimer(0);
+
+    // Increment total calls on every answered call
+    setTotalCallsCount(prev => prev + 1);
+
     callTimerRef.current = setInterval(() => {
       setCallTimer(prev => prev + 1);
     }, 1000);
@@ -448,12 +524,14 @@ export function CallCenterPortal(): JSX.Element {
       };
       setCallRecords(prev => [...prev, callRecord]);
 
-      // Track stats for conversion calculation
-      setTotalCallsCount(prev => prev + 1);
-
-      // If "Sale Made" disposition, increment sales count
-      if (selectedDisposition === 'Sale Made') {
+      // Track Applications: 'Sale Made' or 'Application Submitted'
+      if (selectedDisposition === 'Sale Made' || selectedDisposition === 'Application Submitted') {
         setSalesCount(prev => prev + 1);
+      }
+
+      // Track Follow-Ups: 'Callback Scheduled' or 'Follow-Up Scheduled'
+      if (selectedDisposition === 'Callback Scheduled' || selectedDisposition === 'Follow-Up Scheduled') {
+        setFollowUpCount(prev => prev + 1);
       }
     }
     setShowDisposition(false);
@@ -479,6 +557,7 @@ export function CallCenterPortal(): JSX.Element {
     setIsCallActive(true);
     setAgentStatus('on_call');
     setCallTimer(0);
+    setTotalCallsCount(prev => prev + 1); // Count outbound application calls
     callTimerRef.current = setInterval(() => {
       setCallTimer(prev => prev + 1);
     }, 1000);
@@ -512,7 +591,7 @@ export function CallCenterPortal(): JSX.Element {
 
   useEffect(() => {
     if (currentView === 'agentDashboard') {
-      fetchApplications();
+      void fetchApplications();
     }
   }, [currentView, fetchApplications]);
 
@@ -637,7 +716,14 @@ export function CallCenterPortal(): JSX.Element {
     <div className="h-screen bg-[#0a0a0f] flex flex-col overflow-hidden">
       <style>
         {
-          '.pulse-glow { animation: pulse-glow 2s ease-in-out infinite; } @keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 5px currentColor, 0 0 10px currentColor; } 50% { box-shadow: 0 0 15px currentColor, 0 0 25px currentColor; } } .glass-panel { background: rgba(19, 19, 26, 0.8); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.1); }'
+          `.pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+          @keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 5px currentColor, 0 0 10px currentColor; } 50% { box-shadow: 0 0 15px currentColor, 0 0 25px currentColor; } }
+          .glass-panel { background: rgba(19, 19, 26, 0.8); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.1); }
+          @keyframes ring-pulse { 0% { transform: scale(0.8); opacity: 0.6; } 50% { transform: scale(1.2); opacity: 0; } 100% { transform: scale(1.4); opacity: 0; } }
+          @keyframes ring-pulse-slow { 0% { transform: scale(0.6); opacity: 0.4; } 50% { transform: scale(1.4); opacity: 0; } 100% { transform: scale(1.6); opacity: 0; } }
+          .ring-wave-1 { animation: ring-pulse 1.5s ease-out infinite; }
+          .ring-wave-2 { animation: ring-pulse-slow 2s ease-out infinite 0.4s; }
+          .ring-wave-3 { animation: ring-pulse 2.5s ease-out infinite 0.8s; }`
         }
       </style>
 
@@ -801,32 +887,81 @@ export function CallCenterPortal(): JSX.Element {
         {/* Left Column - Dialer */}
         <div className="w-80 flex-shrink-0 border-r border-[#1e1e2e] p-4 flex flex-col">
           <div className="glass-panel rounded-2xl p-4 flex-1 flex flex-col">
-            {/* Incoming Call State */}
+            {/* Incoming Call State - Enhanced Ringing UI */}
             {isIncomingCall && incomingCallData && (
-              <div className="flex-1 flex flex-col items-center justify-center space-y-6">
-                <div className="w-24 h-24 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-green-400">
-                  <PhoneIncoming className="w-12 h-12 text-white" />
+              <div className="flex-1 flex flex-col items-center justify-center space-y-5 relative">
+                {/* Animated Ring Waves */}
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ marginTop: '-40px' }}>
+                  <div className="w-32 h-32 rounded-full border-2 border-emerald-500/30 ring-wave-1" />
+                  <div className="absolute w-40 h-40 rounded-full border border-emerald-500/20 ring-wave-2" />
+                  <div className="absolute w-48 h-48 rounded-full border border-emerald-500/10 ring-wave-3" />
                 </div>
-                <div className="text-center">
+
+                {/* Ringing Badge */}
+                <div className="flex items-center gap-2 px-4 py-1.5 bg-emerald-500/10 rounded-full border border-emerald-500/30 z-10">
+                  <Phone className="w-4 h-4 text-emerald-400 animate-bounce" />
+                  <span className="text-emerald-400 text-sm font-medium">Incoming Call</span>
+                </div>
+
+                {/* Ring Duration */}
+                <p className="text-gray-500 text-xs z-10">
+                  {'Ringing for ' + Math.floor(ringDuration / 60).toString().padStart(2, '0') + ':' + (ringDuration % 60).toString().padStart(2, '0')}
+                </p>
+
+                {/* Caller Avatar */}
+                <div className="w-24 h-24 bg-gradient-to-br from-emerald-500/20 to-green-600/20 rounded-full flex items-center justify-center border-2 border-emerald-500/40 shadow-lg shadow-emerald-500/20 z-10">
+                  <PhoneIncoming className="w-12 h-12 text-emerald-400" />
+                </div>
+
+                {/* Caller Info */}
+                <div className="text-center z-10">
                   <p className="text-2xl font-bold text-white">
                     {incomingCallData.first_name} {incomingCallData.last_name}
                   </p>
-                  <p className="text-gray-400">{incomingCallData.caller_id}</p>
+                  <p className="text-gray-400 font-mono text-lg">{incomingCallData.caller_id}</p>
+                  {(incomingCallData.city || incomingCallData.state) && (
+                    <p className="text-cyan-400 text-sm mt-1">
+                      {[incomingCallData.city, incomingCallData.state].filter(Boolean).join(', ')}
+                    </p>
+                  )}
                 </div>
-                <div className="flex space-x-4">
+
+                {/* Lead Source / Campaign Badge */}
+                {(incomingCallData as Record<string, unknown>).lead_source && (
+                  <div className="flex items-center gap-1.5 px-3 py-1 bg-purple-500/10 rounded-full border border-purple-500/30 z-10">
+                    <span className="text-purple-400 text-xs">
+                      {String((incomingCallData as Record<string, unknown>).lead_source)}
+                    </span>
+                  </div>
+                )}
+
+                {/* Answer / Decline Buttons */}
+                <div className="flex items-center space-x-6 z-10 pt-2">
                   <button
-                    onClick={handleDeclineCall}
-                    className="w-16 h-16 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-colors shadow-lg shadow-red-500/30"
+                    onClick={() => void handleDeclineCall()}
+                    className="group flex flex-col items-center gap-1.5 transition-transform hover:scale-105 active:scale-95"
                   >
-                    <PhoneOff className="w-7 h-7 text-white" />
+                    <div className="w-16 h-16 bg-gradient-to-br from-red-500 to-red-600 rounded-full flex items-center justify-center shadow-lg shadow-red-500/30 group-hover:shadow-xl group-hover:shadow-red-500/40 transition-all">
+                      <PhoneOff className="w-7 h-7 text-white" />
+                    </div>
+                    <span className="text-gray-400 text-xs">Decline</span>
                   </button>
                   <button
-                    onClick={handleAnswerCall}
-                    className="w-16 h-16 bg-green-500 hover:bg-green-600 rounded-full flex items-center justify-center transition-colors shadow-lg shadow-green-500/30 pulse-glow text-green-400"
+                    onClick={() => void handleAnswerCall()}
+                    className="group flex flex-col items-center gap-1.5 transition-transform hover:scale-105 active:scale-95"
                   >
-                    <Phone className="w-7 h-7 text-white" />
+                    <div className="w-20 h-20 bg-gradient-to-br from-emerald-500 to-green-600 rounded-full flex items-center justify-center shadow-lg shadow-emerald-500/30 group-hover:shadow-xl group-hover:shadow-emerald-500/40 transition-all animate-pulse">
+                      <Phone className="w-9 h-9 text-white" />
+                    </div>
+                    <span className="text-gray-400 text-xs">Answer</span>
                   </button>
                 </div>
+
+                {/* Keyboard Hint */}
+                <p className="text-gray-600 text-xs z-10">
+                  Press <kbd className="px-1.5 py-0.5 bg-white/5 rounded text-gray-400 font-mono">A</kbd> to answer
+                  {' '}or <kbd className="px-1.5 py-0.5 bg-white/5 rounded text-gray-400 font-mono">D</kbd> to decline
+                </p>
               </div>
             )}
 
@@ -933,7 +1068,7 @@ export function CallCenterPortal(): JSX.Element {
                 {/* Hang Up */}
                 <div className="mt-auto">
                   <button
-                    onClick={handleHangup}
+                    onClick={() => void handleHangup()}
                     className="w-full py-3 bg-red-500 hover:bg-red-600 text-white font-medium rounded-xl flex items-center justify-center space-x-2 transition-colors shadow-lg shadow-red-500/30"
                   >
                     <PhoneOff className="w-5 h-5" />
@@ -1074,7 +1209,7 @@ export function CallCenterPortal(): JSX.Element {
                   </button>
                   <button
                     disabled={phoneNumber.replace(/\D/g, '').length !== 10}
-                    onClick={async () => {
+                    onClick={() => void (async () => {
                       const dialNumber = phoneNumber.replace(/\D/g, '');
                       if (dialNumber.length === 10) {
                         const callData = {
@@ -1087,6 +1222,7 @@ export function CallCenterPortal(): JSX.Element {
                         setIsCallActive(true);
                         setAgentStatus('on_call');
                         setCallTimer(0);
+                        setTotalCallsCount(prev => prev + 1); // Count outbound dialer calls
                         callTimerRef.current = setInterval(
                           () => setCallTimer(prev => prev + 1),
                           1000
@@ -1100,7 +1236,7 @@ export function CallCenterPortal(): JSX.Element {
                           if (callTimerRef.current) clearInterval(callTimerRef.current);
                         }
                       }
-                    }}
+                    })()}
                     className="flex-1 py-3 bg-green-500 hover:bg-green-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-xl transition-colors flex items-center justify-center space-x-2"
                   >
                     <Phone className="w-5 h-5" />
@@ -1163,7 +1299,7 @@ export function CallCenterPortal(): JSX.Element {
             </div>
           ) : (
             <div className="flex-1 flex flex-col gap-4 overflow-hidden">
-              {/* Stats Bar - Order: Total Calls | Applications | Conversion | Queue */}
+              {/* Stats Bar - Order: Total Calls | Applications | Conversion | Follow-Ups */}
               <div className="grid grid-cols-4 gap-4 flex-shrink-0">
                 {/* 1. Total Calls */}
                 <div className="glass-panel rounded-xl p-4">
@@ -1175,7 +1311,7 @@ export function CallCenterPortal(): JSX.Element {
                     <Phone className="w-8 h-8 text-blue-500" />
                   </div>
                 </div>
-                {/* 2. Applications (Sales) */}
+                {/* 2. Applications (Sale Made + Application Submitted) */}
                 <div className="glass-panel rounded-xl p-4">
                   <div className="flex items-center justify-between">
                     <div>
@@ -1195,16 +1331,14 @@ export function CallCenterPortal(): JSX.Element {
                     <CheckCircle className="w-8 h-8 text-green-500" />
                   </div>
                 </div>
-                {/* 4. Queue */}
+                {/* 4. Follow-Ups (Callback Scheduled + Follow-Up Scheduled) */}
                 <div className="glass-panel rounded-xl p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs text-gray-500">Queue</p>
-                      <p className="text-2xl font-bold text-yellow-400">
-                        {applications.filter(a => a.status === 'Submitted').length}
-                      </p>
+                      <p className="text-xs text-gray-500">Follow-Ups</p>
+                      <p className="text-2xl font-bold text-amber-400">{followUpCount}</p>
                     </div>
-                    <Bell className="w-8 h-8 text-yellow-500" />
+                    <Clock className="w-8 h-8 text-amber-500" />
                   </div>
                 </div>
               </div>
@@ -1213,7 +1347,7 @@ export function CallCenterPortal(): JSX.Element {
                 <div className="p-4 border-b border-[#2e2e3e] flex items-center justify-between">
                   <h2 className="text-lg font-bold text-white">Application Queue</h2>
                   <button
-                    onClick={fetchApplications}
+                    onClick={() => void fetchApplications()}
                     disabled={loadingApplications}
                     className="flex items-center space-x-2 px-3 py-1.5 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 rounded-lg text-sm transition-colors disabled:opacity-50"
                   >
@@ -1304,7 +1438,7 @@ export function CallCenterPortal(): JSX.Element {
                             </td>
                             <td className="px-4 py-3">
                               <button
-                                onClick={() => startCallWithApplication(app)}
+                                onClick={() => void startCallWithApplication(app)}
                                 className="flex items-center space-x-1 px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-lg text-xs font-medium transition-colors"
                               >
                                 <Phone className="w-3 h-3" />
