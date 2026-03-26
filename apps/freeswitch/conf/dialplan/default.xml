@@ -1,9 +1,9 @@
 <include>
   <context name="default">
-    <!-- Inbound from Anveo - DID 865-280-9894 arrives as 10001 -->
+    <!-- Inbound from Anveo - DID 865-280-9894 arrives as 10001 in sip_to_user -->
     <extension name="inbound-call-center">
-      <condition field="destination_number" expression="^(10001|8652809894|18652809894|\+?1?8652809894)$">
-        <action application="log" data="INFO [DEFAULT] Inbound call to Call Center DID (${destination_number})"/>
+      <condition field="${sip_to_user}" expression="^(10001)$">
+        <action application="log" data="INFO [DEFAULT] Inbound call to Call Center DID (sip_to_user=${sip_to_user}, dest=${destination_number})"/>
         <action application="set" data="call_direction=inbound"/>
         <action application="set" data="hangup_after_bridge=true"/>
         <action application="answer"/>
