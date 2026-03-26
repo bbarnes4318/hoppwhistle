@@ -35,6 +35,12 @@
         <action application="set" data="hangup_after_bridge=true"/>
         <!-- Immediately tell Anveo we're ringing so it doesn't time out -->
         <action application="ring_ready"/>
+        <!-- Fix codec mismatch: Anveo=PCMU/PCMA, WebRTC=OPUS -->
+        <action application="set" data="absolute_codec_string=PCMU,PCMA,OPUS,G722"/>
+        <action application="set" data="inherit_codec=true"/>
+        <action application="set" data="ep_codec_string=PCMU,PCMA,OPUS,G722"/>
+        <action application="set" data="inbound_codec_negotiation=generous"/>
+        <action application="set" data="codec_negotiation=generous"/>
         <!-- Send US ringback tone to caller while agent phone rings -->
         <action application="set" data="ringback=%(2000,4000,440,480)"/>
         <action application="set" data="instant_ringback=true"/>
