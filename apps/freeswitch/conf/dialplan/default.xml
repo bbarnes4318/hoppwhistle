@@ -6,7 +6,7 @@
       <condition field="destination_number" expression="^(1[0-9]{3})$">
         <action application="log" data="INFO [DEFAULT] Local call to extension ${destination_number}"/>
         <action application="answer"/>
-        <action application="bridge" data="user/${destination_number}@3.214.60.13"/>
+        <action application="bridge" data="${sofia_contact(internal/${destination_number}@3.214.60.13)}"/>
       </condition>
     </extension>
 
@@ -34,7 +34,7 @@
         <action application="set" data="call_direction=inbound"/>
         <action application="set" data="hangup_after_bridge=true"/>
         <action application="answer"/>
-        <action application="bridge" data="user/1000@3.214.60.13"/>
+        <action application="bridge" data="${sofia_contact(internal/1000@3.214.60.13)}"/>
       </condition>
     </extension>
 
