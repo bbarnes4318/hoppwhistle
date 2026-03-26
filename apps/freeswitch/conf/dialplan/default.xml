@@ -13,6 +13,44 @@
       </condition>
     </extension>
 
+    <!-- Inbound from BulkVS DID (281-699-1120) arriving on port 5060 -->
+    <!-- BulkVS defaults to port 5060, so calls arrive on internal profile -->
+    <!-- Must come BEFORE outbound to prevent calling the number back out -->
+    <extension name="inbound-bulkvs-did">
+      <condition field="destination_number" expression="^(\+?1?2816991120)$">
+        <action application="log" data="INFO [DEFAULT] BulkVS inbound to DID 281-699-1120 from ${caller_id_number}"/>
+        <action application="ring_ready"/>
+        <action application="set" data="call_direction=inbound"/>
+        <action application="set" data="hangup_after_bridge=true"/>
+        <action application="set" data="continue_on_fail=false"/>
+        <action application="set" data="bypass_media=false"/>
+        <action application="set" data="inbound_codec_negotiation=generous"/>
+        <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA,OPUS,G722"/>
+        <action application="set" data="ringback=%(2000,4000,440,480)"/>
+        <action application="set" data="instant_ringback=true"/>
+        <action application="set" data="call_timeout=120"/>
+        <action application="bridge" data="loopback/1000/default"/>
+        <action application="hangup" data="NORMAL_CLEARING"/>
+      </condition>
+    </extension>
+
+    <!-- Also match old Anveo DID on internal profile -->
+    <extension name="inbound-legacy-did">
+      <condition field="destination_number" expression="^(\+?1?8652809894)$">
+        <action application="log" data="INFO [DEFAULT] Legacy DID inbound from ${caller_id_number}"/>
+        <action application="ring_ready"/>
+        <action application="set" data="call_direction=inbound"/>
+        <action application="set" data="hangup_after_bridge=true"/>
+        <action application="set" data="inbound_codec_negotiation=generous"/>
+        <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA,OPUS,G722"/>
+        <action application="set" data="bypass_media=false"/>
+        <action application="set" data="ringback=%(2000,4000,440,480)"/>
+        <action application="set" data="call_timeout=120"/>
+        <action application="bridge" data="loopback/1000/default"/>
+        <action application="hangup" data="NORMAL_CLEARING"/>
+      </condition>
+    </extension>
+
     <!-- Outbound calls via BulkVS (NANP numbers only, registered users only) -->
     <extension name="outbound-to-bulkvs">
       <condition field="${sip_authorized}" expression="^true$"/>
@@ -28,10 +66,10 @@
       </condition>
     </extension>
 
-    <!-- Catch-all: anything else that somehow lands in default from non-registered source -->
-    <extension name="inbound-catch-all">
+    <!-- Catch-all: reject anything else -->
+    <extension name="catch-all-reject">
       <condition field="destination_number" expression="^.+$">
-        <action application="log" data="WARNING [DEFAULT] Catch-all hit (dest=${destination_number}, from=${caller_id_number})"/>
+        <action application="log" data="WARNING [DEFAULT] No route for dest=${destination_number} from ${caller_id_number}"/>
         <action application="hangup" data="NO_ROUTE_DESTINATION"/>
       </condition>
     </extension>
