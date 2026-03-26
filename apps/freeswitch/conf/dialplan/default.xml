@@ -1,42 +1,49 @@
 <include>
   <context name="default">
 
-    <!-- Local extension calls (agent-to-agent) -->
+    <!-- Local extension calls (agent-to-agent, 4 digits starting with 1) -->
     <extension name="local-extension">
       <condition field="destination_number" expression="^(1[0-9]{3})$">
         <action application="log" data="INFO [DEFAULT] Local call to extension ${destination_number}"/>
-        <action application="answer"/>
+        <action application="set" data="hangup_after_bridge=true"/>
         <action application="bridge" data="${sofia_contact(internal/${destination_number}@3.214.60.13)}"/>
+        <action application="hangup" data="NORMAL_CLEARING"/>
       </condition>
     </extension>
 
-    <!-- Outbound calls - use Anveo with tech prefix (10-11 digit NANP numbers) -->
+    <!-- Outbound calls - use Anveo with tech prefix (NANP numbers only) -->
     <extension name="outbound-to-anveo">
       <condition field="destination_number" expression="^1?([2-9]\d{9})$">
         <action application="log" data="INFO [DEFAULT] Outbound call to ${destination_number}"/>
         <action application="set" data="effective_caller_id_number=18652809894"/>
         <action application="set" data="effective_caller_id_name=Hopwhistle"/>
         <action application="set" data="hangup_after_bridge=true"/>
-        <!-- Force PSTN-compatible codecs for Anveo -->
         <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
         <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
-        <!-- Anveo requires tech prefix 012345 + country code + number -->
         <action application="bridge" data="sofia/gateway/anveo/0123451${destination_number}"/>
+        <action application="hangup" data="NORMAL_CLEARING"/>
       </condition>
     </extension>
 
-    <!-- Inbound catch-all: any call NOT matching above patterns is inbound from carrier -->
-    <!-- Anveo sends DID calls with odd destination_numbers (their internal routing IDs) -->
-    <!-- These calls arrive on internal profile as 10001 but destination_number is garbage -->
+    <!-- Inbound catch-all: anything not matching above is inbound from carrier -->
+    <!-- IMPORTANT: hangup at end prevents dialplan re-entry loop -->
     <extension name="inbound-catch-all">
       <condition field="destination_number" expression="^.+$">
-        <action application="log" data="INFO [DEFAULT] Inbound call caught (dest=${destination_number}, sip_to=${sip_to_user}, from=${caller_id_number})"/>
-        <action application="set" data="call_direction=inbound"/>
-        <!-- Immediately tell Anveo we're ringing -->
+        <action application="log" data="INFO [DEFAULT] Inbound call (dest=${destination_number}, from=${caller_id_number})"/>
         <action application="ring_ready"/>
-        <!-- Re-route as a call to local extension 1000 -->
-        <action application="set" data="destination_number=1000"/>
-        <action application="transfer" data="1000 XML default"/>
+        <action application="set" data="call_direction=inbound"/>
+        <action application="set" data="hangup_after_bridge=true"/>
+        <action application="set" data="continue_on_fail=false"/>
+        <!-- Codec negotiation for Anveo PCMU/PCMA <-> WebRTC OPUS -->
+        <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA,OPUS,G722"/>
+        <action application="set" data="inbound_codec_negotiation=generous"/>
+        <action application="set" data="bypass_media=false"/>
+        <action application="set" data="ringback=%(2000,4000,440,480)"/>
+        <action application="set" data="instant_ringback=true"/>
+        <action application="set" data="call_timeout=120"/>
+        <action application="bridge" data="${sofia_contact(internal/1000@3.214.60.13)}"/>
+        <!-- If bridge fails, hang up cleanly - DO NOT re-enter dialplan -->
+        <action application="hangup" data="NORMAL_CLEARING"/>
       </condition>
     </extension>
 
