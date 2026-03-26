@@ -2360,6 +2360,69 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
       ...result,
     };
   });
+
+  // ── Dashboard Stats (real aggregation from Call model) ──
+  fastify.get<{
+    Querystring: { startDate?: string; endDate?: string };
+  }>('/api/v1/dashboard/stats', async (request, _reply) => {
+    const tenantId = (request as AuthRequest).user?.tenantId || 'default';
+    const prisma = getPrismaClient();
+
+    // Parse date range — default to current month
+    const now = new Date();
+    const startDate = request.query.startDate
+      ? new Date(request.query.startDate)
+      : new Date(now.getFullYear(), now.getMonth(), 1);
+    const endDate = request.query.endDate
+      ? new Date(request.query.endDate)
+      : now;
+
+    const dateFilter = {
+      createdAt: { gte: startDate, lte: endDate },
+    };
+
+    const whereClause = { tenantId, ...dateFilter };
+
+    // Total calls in range
+    const totalCalls = await prisma.call.count({ where: whereClause });
+
+    // Quotes = calls where converted is true
+    const quotes = await prisma.call.count({
+      where: { ...whereClause, converted: true },
+    });
+
+    // Applications = calls where converted AND paidOut
+    const applications = await prisma.call.count({
+      where: { ...whereClause, converted: true, paidOut: true },
+    });
+
+    // Premium = sum of revenue from converted calls
+    const premiumAgg = await prisma.call.aggregate({
+      where: { ...whereClause, converted: true },
+      _sum: { revenue: true },
+    });
+    const premium = premiumAgg._sum.revenue
+      ? Number(premiumAgg._sum.revenue)
+      : 0;
+
+    // Conversion = applications / calls (safe divide)
+    const conversion =
+      totalCalls > 0
+        ? Math.round((applications / totalCalls) * 10000) / 100
+        : 0;
+
+    return {
+      calls: totalCalls,
+      quotes,
+      applications,
+      premium,
+      conversion,
+      dateRange: {
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+      },
+    };
+  });
 }
 
 // Public API - Billing

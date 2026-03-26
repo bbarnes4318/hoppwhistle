@@ -11,14 +11,11 @@ import {
   Headphones,
   LayoutDashboard,
   Megaphone,
-  Phone,
   PhoneCall,
   Receipt,
-  Send,
   Settings,
   Shield,
   Users,
-  Wallet,
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -38,24 +35,12 @@ interface NavItem {
 
 // Main navigation items
 const navigation: NavItem[] = [
-  { name: 'Command Center', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   {
     name: 'AI Voice',
     href: '/voice-agents',
     icon: Bot,
     title: 'AI voice agents & outbound campaigns',
-  },
-  {
-    name: 'AI Campaigns',
-    href: '/ai-campaigns',
-    icon: Megaphone,
-    title: 'Automated AI outbound calling campaigns',
-  },
-  {
-    name: 'Phone',
-    href: '/phone',
-    icon: Phone,
-    hideFromBuyerOnly: true,
   },
   {
     name: 'Call Center',
@@ -64,22 +49,9 @@ const navigation: NavItem[] = [
     title: 'Integrated dialer with scripting & quoting',
   },
   { name: 'Numbers', href: '/numbers', icon: PhoneCall },
-  { name: 'Execution Matrix', href: '/campaigns', icon: Megaphone },
+  { name: 'Campaigns', href: '/campaigns', icon: Megaphone },
   { name: 'Flows', href: '/flows', icon: GitBranch },
-  { name: 'Global Telemetry', href: '/calls', icon: AudioLines },
-  {
-    name: 'Publishers',
-    href: '/publishers',
-    icon: Send,
-    title: 'Manage publisher accounts',
-  },
-  {
-    name: 'Buyers',
-    href: '/buyers',
-    icon: Wallet,
-    title: 'Manage buyers & billing wallets',
-    hideFromBuyerOnly: true,
-  },
+  { name: 'Call Logs', href: '/calls', icon: AudioLines },
   {
     name: 'Retention',
     href: '/retention',

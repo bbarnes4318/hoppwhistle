@@ -1,46 +1,100 @@
 'use client';
 
-import { Search, Play } from 'lucide-react';
-import Link from 'next/link';
-import { useState } from 'react';
+import { Play, Search } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { formatPhoneNumber, formatDate, formatDuration } from '@/lib/utils';
+import { formatDuration, formatPhoneNumber } from '@/lib/utils';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
-// Mock data
-const mockCalls = [
-  {
-    id: 'call_1',
-    from: '+12125551234',
-    to: '+13105551234',
-    status: 'completed',
-    duration: 245,
-    asr: 0.65,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'call_2',
-    from: '+14155551234',
-    to: '+12125551234',
-    status: 'answered',
-    duration: 120,
-    asr: 0.58,
-    createdAt: new Date(Date.now() - 3600000).toISOString(),
-  },
-];
+interface CallRecord {
+  id: string;
+  callSid?: string;
+  callerId?: string;
+  did?: string;
+  toNumber?: string;
+  targetNumber?: string;
+  status: string;
+  duration?: number;
+  connectedDuration?: number;
+  converted?: boolean;
+  paidOut?: boolean;
+  missedCall?: boolean;
+  recordingUrl?: string | null;
+  createdAt: string;
+  campaign?: { name: string } | null;
+  fromNumber?: { number: string } | null;
+}
 
-export default function CallsPage() {
+function getCallResult(call: CallRecord): string {
+  if (call.converted && call.paidOut) return 'Application';
+  if (call.converted) return 'Quote';
+  if (call.missedCall) return 'Missed';
+  if (call.status === 'COMPLETED') return 'Completed';
+  if (call.status === 'NO_ANSWER') return 'No Answer';
+  if (call.status === 'BUSY') return 'Busy';
+  if (call.status === 'FAILED') return 'Failed';
+  return call.status || 'Unknown';
+}
+
+function getResultBadgeClass(result: string): string {
+  switch (result) {
+    case 'Application':
+      return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
+    case 'Quote':
+      return 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30';
+    case 'Completed':
+      return 'bg-blue-500/10 text-blue-400 border-blue-500/30';
+    case 'Missed':
+    case 'No Answer':
+      return 'bg-amber-500/10 text-amber-400 border-amber-500/30';
+    case 'Failed':
+    case 'Busy':
+      return 'bg-red-500/10 text-red-400 border-red-500/30';
+    default:
+      return 'bg-slate-500/10 text-slate-400 border-slate-500/30';
+  }
+}
+
+export default function CallLogsPage() {
+  const [calls, setCalls] = useState<CallRecord[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
-  const filteredCalls = mockCalls.filter(
-    (c) =>
-      c.from.includes(search) ||
-      c.to.includes(search) ||
+  const fetchCalls = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/v1/calls?page=${page}&limit=50`, {
+        credentials: 'include',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCalls(data.data || []);
+        setTotalPages(data.meta?.totalPages || 1);
+      }
+    } catch (error) {
+      console.error('Failed to fetch calls:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [page]);
+
+  useEffect(() => {
+    void fetchCalls();
+  }, [fetchCalls]);
+
+  const filteredCalls = calls.filter(
+    c =>
+      (c.callerId || '').includes(search) ||
+      (c.toNumber || '').includes(search) ||
+      (c.callSid || '').toLowerCase().includes(search.toLowerCase()) ||
       c.id.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -48,17 +102,19 @@ export default function CallsPage() {
     <div className="h-full flex flex-col overflow-hidden">
       <div className="flex items-center justify-between flex-shrink-0 mb-4">
         <div>
-          <h1 className="text-3xl font-bold">Calls</h1>
-          <p className="text-muted-foreground">View and manage call history</p>
+          <h1 className="text-2xl font-semibold">Call Logs</h1>
+          <p className="text-sm text-muted-foreground">
+            View call history and disposition outcomes
+          </p>
         </div>
         <div className="relative w-64">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            id="calls-search"
-            name="calls-search"
+            id="call-logs-search"
+            name="call-logs-search"
             placeholder="Search calls..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={e => setSearch(e.target.value)}
             className="pl-10"
           />
         </div>
@@ -67,50 +123,127 @@ export default function CallsPage() {
       <Card className="flex-1 flex flex-col overflow-hidden min-h-0">
         <CardHeader className="flex-shrink-0">
           <CardTitle>Call History</CardTitle>
-          <CardDescription>Recent calls and their details</CardDescription>
+          <CardDescription>Recent calls and disposition details</CardDescription>
         </CardHeader>
         <CardContent className="flex-1 overflow-y-auto min-h-0">
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Time</TableHead>
                 <TableHead>Call ID</TableHead>
                 <TableHead>From</TableHead>
                 <TableHead>To</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Duration</TableHead>
-                <TableHead>ASR</TableHead>
-                <TableHead>Time</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead>Result</TableHead>
+                <TableHead className="text-right">Recording</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredCalls.map((call) => (
-                <TableRow key={call.id}>
-                  <TableCell className="font-mono text-sm">{call.id}</TableCell>
-                  <TableCell>{formatPhoneNumber(call.from)}</TableCell>
-                  <TableCell>{formatPhoneNumber(call.to)}</TableCell>
-                  <TableCell>
-                    <Badge variant={call.status === 'completed' ? 'success' : 'warning'}>
-                      {call.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{formatDuration(call.duration)}</TableCell>
-                  <TableCell>{(call.asr * 100).toFixed(1)}%</TableCell>
-                  <TableCell>{formatDate(call.createdAt)}</TableCell>
-                  <TableCell className="text-right">
-                    <Link href={`/calls/${call.id}`}>
-                      <Button variant="ghost" size="sm">
-                        <Play className="h-4 w-4" />
-                      </Button>
-                    </Link>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+                    Loading calls...
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : filteredCalls.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+                    No calls found
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredCalls.map(call => {
+                  const result = getCallResult(call);
+                  return (
+                    <TableRow key={call.id}>
+                      <TableCell className="font-mono text-xs">
+                        {new Date(call.createdAt).toLocaleString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </TableCell>
+                      <TableCell className="font-mono text-sm">
+                        {call.callSid || call.id.slice(0, 12)}
+                      </TableCell>
+                      <TableCell>
+                        {formatPhoneNumber(call.callerId || call.fromNumber?.number || '—')}
+                      </TableCell>
+                      <TableCell>
+                        {formatPhoneNumber(call.toNumber || call.targetNumber || call.did || '—')}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={
+                            call.status === 'COMPLETED'
+                              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                              : call.status === 'IN_PROGRESS'
+                                ? 'bg-blue-500/10 text-blue-400 border-blue-500/30'
+                                : 'bg-slate-500/10 text-slate-400 border-slate-500/30'
+                          }
+                        >
+                          {call.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {call.duration ? formatDuration(call.duration) : '—'}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={getResultBadgeClass(result)}>
+                          {result}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {call.recordingUrl ? (
+                          <a
+                            href={call.recordingUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <Button variant="ghost" size="sm">
+                              <Play className="h-4 w-4" />
+                            </Button>
+                          </a>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
             </TableBody>
           </Table>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 py-3 border-t">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+              >
+                Previous
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                Page {page} of {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+              >
+                Next
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
   );
 }
-
