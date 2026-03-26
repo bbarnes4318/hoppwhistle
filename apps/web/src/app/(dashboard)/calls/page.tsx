@@ -8,9 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { apiClient } from '@/lib/api';
 import { formatDuration, formatPhoneNumber } from '@/lib/utils';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 interface CallRecord {
   id: string;
@@ -71,13 +70,12 @@ export default function CallLogsPage() {
   const fetchCalls = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/v1/calls?page=${page}&limit=50`, {
-        credentials: 'include',
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setCalls(data.data || []);
-        setTotalPages(data.meta?.totalPages || 1);
+      const response = await apiClient.get<{ data: CallRecord[]; meta: { totalPages: number } }>(
+        `/api/v1/calls?page=${page}&limit=50`
+      );
+      if (response.data) {
+        setCalls(response.data.data || []);
+        setTotalPages(response.data.meta?.totalPages || 1);
       }
     } catch (error) {
       console.error('Failed to fetch calls:', error);

@@ -24,9 +24,8 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { apiClient } from '@/lib/api';
 import { formatDuration, formatPhoneNumber } from '@/lib/utils';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 /* ─── Types ────────────────────────────────────────────────────── */
 interface DashboardStats {
@@ -227,13 +226,11 @@ export default function DashboardPage() {
           startDate = range.start.toISOString();
           endDate = range.end.toISOString();
         }
-        const res = await fetch(
-          `${API_URL}/api/v1/dashboard/stats?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`,
-          { credentials: 'include' }
+        const response = await apiClient.get<DashboardStats>(
+          `/api/v1/dashboard/stats?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`
         );
-        if (res.ok) {
-          const data: DashboardStats = await res.json();
-          setStats(data);
+        if (response.data) {
+          setStats(response.data);
         }
       } catch (error) {
         console.error('Failed to fetch dashboard stats:', error);
@@ -248,12 +245,11 @@ export default function DashboardPage() {
   const fetchCalls = useCallback(async () => {
     setCallsLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/v1/calls?limit=25`, {
-        credentials: 'include',
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setCalls(data.data || []);
+      const response = await apiClient.get<{ data: CallRecord[]; meta: { totalPages: number } }>(
+        '/api/v1/calls?limit=25'
+      );
+      if (response.data) {
+        setCalls(response.data.data || []);
       }
     } catch (error) {
       console.error('Failed to fetch calls:', error);
