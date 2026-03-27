@@ -527,11 +527,8 @@ export function CallCenterPortal(): JSX.Element {
     setThirdPartyNumber('');
   };
 
-  const handleSaveDisposition = async () => {
+  const handleSaveDisposition = () => {
     if (!selectedDisposition) return;
-    
-    setDispositionSaving(true);
-    setDispositionError(null);
 
     const callRecord: CallRecord = {
       id: 'record-' + Date.now(),
@@ -544,44 +541,33 @@ export function CallCenterPortal(): JSX.Element {
       callEndTime: new Date().toISOString(),
     };
 
-    // Save to local state
+    // Save to local state immediately
     setCallRecords(prev => [...prev, callRecord]);
 
-    // Track Applications: 'Sale Made' or 'Application Submitted'
+    // Track Applications
     if (selectedDisposition === 'Sale Made' || selectedDisposition === 'Application Submitted') {
       setSalesCount(prev => prev + 1);
     }
 
-    // Track Follow-Ups: 'Callback Scheduled' or 'Follow-Up Scheduled'
+    // Track Follow-Ups
     if (selectedDisposition === 'Callback Scheduled' || selectedDisposition === 'Follow-Up Scheduled') {
       setFollowUpCount(prev => prev + 1);
     }
 
-    // Try to save to API (non-blocking — local save already done)
-    try {
-      await fetch('/api/v1/calls/disposition', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          callId: callSessionIdRef.current,
-          disposition: selectedDisposition,
-          notes: callNotes,
-          duration: callTimer,
-          callerNumber: activeCallData?.caller_id || activeCallData?.phone,
-          saleDetails: selectedDisposition === 'Sale Made' ? {
-            carrier: saleCarrier,
-            planType: salePlanType,
-            annualPremium: saleAnnualPremium,
-          } : undefined,
-        }),
-      });
-    } catch (err) {
-      console.log('[CallCenter] API disposition save failed (local save succeeded):', err);
-    }
+    // Fire-and-forget API save (don't block UI)
+    fetch('/api/v1/calls/disposition', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        callId: callSessionIdRef.current,
+        disposition: selectedDisposition,
+        notes: callNotes,
+        duration: callTimer,
+        callerNumber: activeCallData?.caller_id || activeCallData?.phone,
+      }),
+    }).catch(() => { /* non-critical */ });
 
-    setDispositionSaving(false);
-
-    // Show success confirmation
+    // Show success confirmation immediately
     setDispositionSaved(true);
 
     // After 2 seconds, reset everything and return to main screen
@@ -1115,6 +1101,40 @@ export function CallCenterPortal(): JSX.Element {
                   </div>
                 )}
 
+                {/* Warm Transfer Panel */}
+                {showTransferPanel && (
+                  <div className="bg-[#1e1e2e] border border-blue-500/30 rounded-xl p-4 mb-4">
+                    <h4 className="text-sm font-bold text-blue-400 mb-3">Transfer Call</h4>
+                    <input
+                      type="tel"
+                      placeholder="Enter phone number to transfer..."
+                      className="w-full bg-[#13131a] border border-[#2e2e3e] rounded-lg px-3 py-2 text-white text-sm mb-3 focus:outline-none focus:border-blue-500"
+                      id="transfer-number-input"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          const input = document.getElementById('transfer-number-input') as HTMLInputElement;
+                          const num = input?.value?.replace(/\D/g, '');
+                          if (num && num.length >= 10) {
+                            void makeCall(num);
+                            setShowTransferPanel(false);
+                          }
+                        }}
+                        className="flex-1 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg transition-colors"
+                      >
+                        Transfer
+                      </button>
+                      <button
+                        onClick={() => setShowTransferPanel(false)}
+                        className="flex-1 py-2 bg-gray-600 hover:bg-gray-500 text-white text-sm font-medium rounded-lg transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Hang Up */}
                 <div className="mt-auto">
                   <button
@@ -1226,16 +1246,15 @@ export function CallCenterPortal(): JSX.Element {
                     )}
 
                     <button
-                      onClick={() => void handleSaveDisposition()}
+                      onClick={handleSaveDisposition}
                       disabled={
-                        dispositionSaving ||
                         !selectedDisposition ||
                         (selectedDisposition === 'Sale Made' &&
                           (!saleCarrier || !salePlanType || !saleAnnualPremium))
                       }
                       className="w-full py-3 bg-cyan-500 hover:bg-cyan-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium rounded-xl transition-colors"
                     >
-                      {dispositionSaving ? 'Saving...' : 'Save and Continue'}
+                      Save and Continue
                     </button>
 
                     {/* Skip disposition button */}
