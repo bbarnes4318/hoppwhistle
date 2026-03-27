@@ -128,7 +128,7 @@ services:
       - ENABLE_SRTP=${ENABLE_SRTP:-optional}
     volumes:
       - freeswitch_recordings:/recordings
-      - freeswitch_conf:/usr/local/freeswitch/conf
+      # NOTE: Do NOT mount freeswitch_conf here - config is baked into the image via Dockerfile
       # SSL certs for WSS (WebRTC) on port 7443
       - /etc/letsencrypt:/etc/letsencrypt:ro
       # Writable so entrypoint can generate combined wss.pem from fullchain+privkey
@@ -305,7 +305,6 @@ volumes:
   clickhouse_data:
   minio_data:
   freeswitch_recordings:
-  freeswitch_conf:
   kamailio_data:
 
 networks:

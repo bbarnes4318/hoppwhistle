@@ -369,16 +369,39 @@ export function PhoneProvider({
   );
 
   const setupRemoteAudio = (session: Session) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pc = (session.sessionDescriptionHandler as any)?.peerConnection as RTCPeerConnection | undefined;
+    if (!pc) {
+      console.warn('[Phone] No peerConnection found on session');
+      return;
+    }
+
     const stream = new MediaStream();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const pc = (session.sessionDescriptionHandler as any)?.peerConnection;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    pc?.getReceivers().forEach((receiver: any) => {
+
+    // Grab any tracks that are already present
+    pc.getReceivers().forEach((receiver) => {
       if (receiver.track) {
         stream.addTrack(receiver.track);
       }
     });
-    if (remoteAudioRef.current) {
+
+    // Listen for tracks that arrive AFTER this point (critical for inbound calls)
+    pc.ontrack = (event: RTCTrackEvent) => {
+      console.log('[Phone] ontrack fired:', event.track.kind, event.track.id);
+      if (remoteAudioRef.current) {
+        // Use the first stream from the event if available, otherwise add to our stream
+        if (event.streams?.[0]) {
+          remoteAudioRef.current.srcObject = event.streams[0];
+        } else {
+          stream.addTrack(event.track);
+          remoteAudioRef.current.srcObject = stream;
+        }
+        remoteAudioRef.current.play().catch(console.error);
+      }
+    };
+
+    // Attach whatever we have so far
+    if (remoteAudioRef.current && stream.getTracks().length > 0) {
       remoteAudioRef.current.srcObject = stream;
       remoteAudioRef.current.play().catch(console.error);
     }
@@ -521,15 +544,19 @@ export function PhoneProvider({
       sessionRef.current.state === SessionState.Initial &&
       sessionRef.current instanceof Invitation
     ) {
-      sessionRef.current
+      const invitation = sessionRef.current;
+      invitation
         .accept({
           sessionDescriptionHandlerOptions: {
             constraints: { audio: true, video: false },
           },
         })
         .then(() => {
-          console.log('[Phone] Call accepted');
-          // update API status?
+          console.log('[Phone] Call accepted — wiring remote audio');
+          // Re-run setupRemoteAudio after accept() resolves as a safety net.
+          // The ontrack listener set in the stateChange handler may already
+          // have fired, but if tracks arrived late this ensures we catch them.
+          setupRemoteAudio(invitation);
         })
         .catch(e => {
           console.error('Failed to accept', e);
