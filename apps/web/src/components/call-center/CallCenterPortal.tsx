@@ -143,9 +143,7 @@ export function CallCenterPortal(): JSX.Element {
   const [isIncomingCall, setIsIncomingCall] = useState(false);
   const [isCallActive, setIsCallActive] = useState(false);
   const [showDisposition, setShowDisposition] = useState(false);
-  const [dispositionSaving, setDispositionSaving] = useState(false);
   const [dispositionSaved, setDispositionSaved] = useState(false);
-  const [dispositionError, setDispositionError] = useState<string | null>(null);
   const [incomingCallData, setIncomingCallData] = useState<ProspectData | null>(null);
   const [activeCallData, setActiveCallData] = useState<ProspectData | null>(null);
   const [activeCallView, setActiveCallView] = useState<ActiveCallView>('script');
@@ -941,7 +939,7 @@ export function CallCenterPortal(): JSX.Element {
 
                 {/* Ring Duration */}
                 <p className="text-gray-500 text-xs z-10">
-                  {'Ringing for ' + Math.floor(ringDuration / 60).toString().padStart(2, '0') + ':' + (ringDuration % 60).toString().padStart(2, '0')}
+                  {`Ringing for ${String(Math.floor(Number(ringDuration) / 60)).padStart(2, '0')}:${String(Number(ringDuration) % 60).padStart(2, '0')}`}
                 </p>
 
                 {/* Caller Avatar */}
@@ -1163,11 +1161,6 @@ export function CallCenterPortal(): JSX.Element {
                 ) : (
                   <>
                     <h3 className="text-lg font-bold text-white mb-4">Call Disposition</h3>
-                    {dispositionError && (
-                      <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-3 mb-4 text-red-300 text-sm">
-                        {dispositionError}
-                      </div>
-                    )}
                     <div className="space-y-2 mb-4">
                       {DISPOSITIONS.map(disposition => (
                         <button
@@ -1175,9 +1168,51 @@ export function CallCenterPortal(): JSX.Element {
                           onClick={() => {
                             setSelectedDisposition(disposition);
                             if (disposition !== 'Sale Made') {
+                              // Auto-save immediately for non-Sale dispositions
                               setSaleCarrier('');
                               setSalePlanType('');
                               setSaleAnnualPremium('');
+                              // Inline save logic (same as handleSaveDisposition)
+                              const callRecord: CallRecord = {
+                                id: 'record-' + Date.now(),
+                                notificationId: 'pop-' + Date.now(),
+                                prospect: activeCallData || {},
+                                timestamp: new Date().toISOString(),
+                                disposition: disposition,
+                                dispositionDetails: callNotes,
+                                callDuration: callTimer,
+                                callEndTime: new Date().toISOString(),
+                              };
+                              setCallRecords(prev => [...prev, callRecord]);
+                              if (disposition === 'Application Submitted') {
+                                setSalesCount(prev => prev + 1);
+                              }
+                              if (disposition === 'Callback Scheduled' || disposition === 'Follow-Up Scheduled') {
+                                setFollowUpCount(prev => prev + 1);
+                              }
+                              fetch('/api/v1/calls/disposition', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  callId: callSessionIdRef.current,
+                                  disposition: disposition,
+                                  notes: callNotes,
+                                  duration: callTimer,
+                                }),
+                              }).catch(() => {});
+                              setDispositionSaved(true);
+                              setTimeout(() => {
+                                setDispositionSaved(false);
+                                setShowDisposition(false);
+                                setSelectedDisposition('');
+                                setCallNotes('');
+                                setCallTimer(0);
+                                setActiveCallData(null);
+                                callSessionIdRef.current = null;
+                                dispositionHandledRef.current = false;
+                                setPreInjectedData(null);
+                                clearLead();
+                              }, 2000);
                             }
                           }}
                           className={
