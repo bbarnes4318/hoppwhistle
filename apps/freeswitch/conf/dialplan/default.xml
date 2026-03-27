@@ -66,23 +66,12 @@
       </condition>
     </extension>
 
-    <!-- Catch-all: route ANY remaining inbound to agent 1000 -->
-    <!-- Carriers may send garbage destination_numbers (e.g. 10001) -->
-    <extension name="inbound-catch-all">
+    <!-- Catch-all: REJECT unknown destinations -->
+    <!-- BulkVS sends real DID which matches above; Anveo sends 10001 garbage which gets rejected -->
+    <extension name="catch-all-reject">
       <condition field="destination_number" expression="^.+$">
-        <action application="log" data="INFO [DEFAULT] Catch-all inbound (dest=${destination_number}, from=${caller_id_number})"/>
-        <action application="ring_ready"/>
-        <action application="set" data="call_direction=inbound"/>
-        <action application="set" data="hangup_after_bridge=true"/>
-        <action application="set" data="continue_on_fail=false"/>
-        <action application="set" data="bypass_media=false"/>
-        <action application="set" data="inbound_codec_negotiation=generous"/>
-        <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA,OPUS,G722"/>
-        <action application="set" data="ringback=%(2000,4000,440,480)"/>
-        <action application="set" data="instant_ringback=true"/>
-        <action application="set" data="call_timeout=120"/>
-        <action application="bridge" data="loopback/1000/default"/>
-        <action application="hangup" data="NORMAL_CLEARING"/>
+        <action application="log" data="WARNING [DEFAULT] Rejecting unknown dest=${destination_number} from ${caller_id_number}"/>
+        <action application="hangup" data="CALL_REJECTED"/>
       </condition>
     </extension>
 
