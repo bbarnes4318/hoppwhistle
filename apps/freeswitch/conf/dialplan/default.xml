@@ -34,9 +34,8 @@
       </condition>
     </extension>
 
-    <!-- Outbound calls via BulkVS (NANP numbers only, registered users only) -->
+    <!-- Outbound calls via BulkVS (NANP numbers only) -->
     <extension name="outbound-to-bulkvs">
-      <condition field="${sip_authorized}" expression="^true$"/>
       <condition field="destination_number" expression="^1?([2-9]\d{9})$">
         <action application="log" data="INFO [DEFAULT] Outbound call to ${destination_number} via BulkVS"/>
         <action application="set" data="effective_caller_id_number=12816991120"/>
