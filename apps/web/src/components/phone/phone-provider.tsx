@@ -725,6 +725,8 @@ export function PhoneProvider({
       },
       authorizationUsername: sipUser,
       authorizationPassword: sipPass,
+      reconnectionAttempts: 3,
+      reconnectionDelay: 4,
       delegate: {
         onConnect: () => {
           console.log('[Phone] SIP Transport Connected');
