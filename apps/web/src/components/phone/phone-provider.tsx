@@ -96,12 +96,12 @@ export interface PhoneContextType {
   togglePhonePanel: () => void;
   setDialerNumber: (number: string) => void; // Pre-fill dialer
   makeCall: (phoneNumber: string) => Promise<void>;
-  answerCall: () => Promise<void>;
-  hangupCall: () => Promise<void>;
+  answerCall: () => void;
+  hangupCall: () => void;
   toggleMute: () => void;
-  toggleHold: () => Promise<void>;
+  toggleHold: () => void;
   sendDTMF: (digit: string) => void;
-  transferCall: (destination: string, type: 'blind' | 'warm') => Promise<void>;
+  transferCall: (destination: string, type: 'blind' | 'warm') => void;
   addThirdParty: (phoneNumber: string) => Promise<void>;
   mergeCalls: () => Promise<void>;
   hasHeldCalls: boolean;
@@ -522,7 +522,11 @@ export function PhoneProvider({
       sessionRef.current instanceof Invitation
     ) {
       sessionRef.current
-        .accept()
+        .accept({
+          sessionDescriptionHandlerOptions: {
+            constraints: { audio: true, video: false },
+          },
+        })
         .then(() => {
           console.log('[Phone] Call accepted');
           // update API status?
