@@ -301,8 +301,20 @@ export function PhoneProvider({
    * Installs ontrack listener on a PeerConnection (idempotent).
    * Must be called as early as possible — ideally BEFORE accept() resolves.
    * Also picks up any tracks that are already on the receivers.
+   *
+   * Uses a WeakSet to guarantee it only runs ONCE per PeerConnection,
+   * preventing the play() AbortError from double srcObject assignment.
    */
+  const wiredPcsRef = useRef<WeakSet<RTCPeerConnection>>(new WeakSet());
+
   const wireRemoteAudio = useCallback((pc: RTCPeerConnection) => {
+    // Idempotency guard — never wire the same PC twice
+    if (wiredPcsRef.current.has(pc)) {
+      console.log('[Phone] wireRemoteAudio: already wired this PC, skipping');
+      return;
+    }
+    wiredPcsRef.current.add(pc);
+
     const audioEl = remoteAudioRef.current;
     if (!audioEl) {
       console.warn('[Phone] wireRemoteAudio: no audio element');
@@ -311,6 +323,12 @@ export function PhoneProvider({
 
     // Create a single MediaStream that accumulates tracks
     const stream = new MediaStream();
+
+    // Helper: attach stream/tracks to audio element and play
+    const attachAndPlay = (src: MediaStream) => {
+      audioEl.srcObject = src;
+      audioEl.play().catch((e) => console.warn('[Phone] audio.play() blocked:', e));
+    };
 
     // 1. Grab tracks already present on the receivers (covers late-call to this fn)
     pc.getReceivers().forEach((r) => {
@@ -325,19 +343,17 @@ export function PhoneProvider({
       console.log('[Phone] ontrack fired:', event.track.kind, event.track.id, 'readyState:', event.track.readyState);
       // Prefer the event's stream if available
       if (event.streams?.[0]) {
-        audioEl.srcObject = event.streams[0];
+        attachAndPlay(event.streams[0]);
       } else {
         stream.addTrack(event.track);
-        audioEl.srcObject = stream;
+        attachAndPlay(stream);
       }
-      audioEl.play().catch((e) => console.warn('[Phone] audio.play() blocked:', e));
     });
 
     // 3. Attach whatever we have immediately
     if (stream.getTracks().length > 0) {
       console.log('[Phone] wireRemoteAudio: attaching', stream.getTracks().length, 'existing tracks');
-      audioEl.srcObject = stream;
-      audioEl.play().catch((e) => console.warn('[Phone] audio.play() blocked:', e));
+      attachAndPlay(stream);
     }
   }, []);
 
