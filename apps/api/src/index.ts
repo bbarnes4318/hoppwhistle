@@ -38,7 +38,7 @@ async function buildServer() {
 
   const server = Fastify({
     logger: false, // We use pino instead
-    pluginTimeout: 120_000, // 120s — the server has 30+ plugins, EC2 needs time
+    pluginTimeout: 120000, // 120s — server has 30+ plugins, EC2 needs time
     requestIdLogLabel: 'requestId',
     genReqId: () => {
       return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
