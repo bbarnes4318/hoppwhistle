@@ -12,7 +12,7 @@ import { FastifyInstance } from 'fastify';
  *   POST /api/v1/recordings/uploaded   — Recording completion callback (canonical path)
  *   POST /api/v1/calls/:callId/recording-status — Recording state transitions
  */
-export function registerFreeSWITCHMockRoutes(fastify: FastifyInstance): void {
+export async function registerFreeSWITCHMockRoutes(fastify: FastifyInstance): Promise<void> {
   // Trunk authentication endpoint
   fastify.post('/api/v1/trunks/auth', async (request, reply) => {
     const { from, to, source_ip } = request.body as {
