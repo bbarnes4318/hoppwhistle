@@ -2,12 +2,40 @@ import type { Prisma } from '@prisma/client';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
-import { buyerBillingService } from '../services/buyer-billing-service.js';
 import { callStateService } from '../services/call-state.js';
 import { eventBus } from '../services/event-bus.js';
 import { freeswitchService } from '../services/freeswitch-service.js';
 import { leadService } from '../services/lead-service.js';
 import { getRedisClient } from '../services/redis.js';
+
+// ============================================================================
+// Recording Helpers
+// ============================================================================
+
+/**
+ * Determine whether a call should be recorded based on campaign settings.
+ * If no campaign is attached, recording defaults to ON (business requirement).
+ */
+async function shouldRecordCall(campaignId?: string | null): Promise<boolean> {
+  if (!campaignId) {
+    // No campaign attached → record by default
+    return true;
+  }
+
+  try {
+    const prisma = getPrismaClient();
+    const campaign = await prisma.campaign.findUnique({
+      where: { id: campaignId },
+      select: { recordingEnabled: true },
+    });
+
+    // If campaign not found, record by default
+    return campaign?.recordingEnabled ?? true;
+  } catch {
+    // If lookup fails, record by default (fail-safe)
+    return true;
+  }
+}
 
 /**
  * Agent Phone API Routes
@@ -188,6 +216,9 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       const callSid = `call_${Date.now()}_${Math.random().toString(36).substring(7)}`;
       const prisma = getPrismaClient();
 
+      // Determine recording intent from campaign settings
+      const recordingEnabled = await shouldRecordCall(campaignId);
+
       // Create call in PostgreSQL
       // Skip createdById for demo/unauthenticated requests to avoid FK constraint issues
       const isAuthenticatedUser = userId !== 'demo-agent';
@@ -200,10 +231,13 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
           status: 'INITIATED',
           ...(isAuthenticatedUser ? { createdById: userId } : {}),
           campaignId: campaignId ?? null,
+          // Recording lifecycle: mark intent at call creation
+          recordingStatus: recordingEnabled ? 'PENDING' : null,
           metadata: {
             callerId: callerId ?? null,
             agentId: userId,
             originatedBy: 'agent-phone',
+            recordingEnabled,
           } as Prisma.JsonObject,
           startedAt: new Date(),
         },
@@ -288,18 +322,46 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
         return { error: { code: 'CALL_NOT_FOUND', message: 'Call not found' } };
       }
 
+      // Check if recording should happen for this call
+      const callMetadata = (call.metadata as Prisma.JsonObject) ?? {};
+      const recordingEnabled = callMetadata.recordingEnabled !== false;
+
       // Update call in PostgreSQL
       await prisma.call.update({
         where: { id: callId },
         data: {
           status: 'ANSWERED',
           answeredAt: new Date(),
+          // If recording is enabled, transition from PENDING → RECORDING
+          ...(recordingEnabled && call.recordingStatus === 'PENDING'
+            ? {
+                recordingStatus: 'RECORDING',
+                recordingStartedAt: new Date(),
+              }
+            : {}),
           metadata: {
-            ...((call.metadata as Prisma.JsonObject) ?? {}),
+            ...callMetadata,
             answeredByAgentId: userId,
           } as Prisma.JsonObject,
         },
       });
+
+      // Auto-start server-side recording via FreeSWITCH ESL
+      // This is fire-and-forget - the call should proceed even if recording fails
+      if (recordingEnabled) {
+        freeswitchService.startRecording(call.callSid, callId).catch((err) => {
+          console.error(`[Recording] Failed to start recording for call ${callId}:`, err);
+          // Mark recording as failed so UI shows correct state
+          const prismaForError = getPrismaClient();
+          void prismaForError.call.update({
+            where: { id: callId },
+            data: {
+              recordingStatus: 'FAILED',
+              recordingError: err instanceof Error ? err.message : 'Recording start failed',
+            },
+          });
+        });
+      }
 
       // Update Redis state
       await callStateService.updateCallState(callId, { status: 'answered' });
@@ -318,6 +380,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
         data: {
           callId,
           agentId: userId,
+          recordingEnabled,
           timestamp: new Date().toISOString(),
         },
       });
@@ -326,6 +389,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
         callId,
         status: 'answered',
         answeredAt: new Date().toISOString(),
+        recordingEnabled,
       };
     }
   );
@@ -358,6 +422,13 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
         duration = Math.floor((endedAt.getTime() - call.answeredAt.getTime()) / 1000);
       }
 
+      // If recording was active, transition to PROCESSING
+      // (the actual file upload happens asynchronously via the FreeSWITCH hangup hook)
+      const recordingStatusUpdate: Record<string, unknown> = {};
+      if (call.recordingStatus === 'RECORDING') {
+        recordingStatusUpdate.recordingStatus = 'PROCESSING';
+      }
+
       // Update call in PostgreSQL
       await prisma.call.update({
         where: { id: callId },
@@ -365,6 +436,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
           status: 'COMPLETED',
           endedAt,
           duration,
+          ...recordingStatusUpdate,
         },
       });
 
@@ -704,8 +776,11 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       const queueName = body.queueName ?? '';
       const campaignId = body.campaignId ?? '';
 
-      // Create call in PostgreSQL
+      // Determine recording intent from campaign settings
       const prisma = getPrismaClient();
+      const recordingEnabled = await shouldRecordCall(campaignId || null);
+
+      // Create call in PostgreSQL
       const call = await prisma.call.create({
         data: {
           tenantId,
@@ -714,11 +789,14 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
           direction: 'INBOUND',
           status: 'RINGING',
           campaignId: campaignId || null,
+          // Recording lifecycle: mark intent at call creation
+          recordingStatus: recordingEnabled ? 'PENDING' : null,
           metadata: {
             callerName,
             queueName,
             screenPopData: screenPopData as Prisma.JsonObject,
             originatedBy: 'incoming-webhook',
+            recordingEnabled,
           } as Prisma.JsonObject,
           startedAt: new Date(),
         },

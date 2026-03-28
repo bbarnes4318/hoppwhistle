@@ -148,10 +148,8 @@ export function CallCenterPortal(): JSX.Element {
   const [activeCallData, setActiveCallData] = useState<ProspectData | null>(null);
   const [activeCallView, setActiveCallView] = useState<ActiveCallView>('script');
 
-  // Call Controls
   const [isMuted, setIsMuted] = useState(false);
   const [isOnHold, setIsOnHold] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
   const [, setThirdPartyNumber] = useState('');
   const [thirdPartyConnected, setThirdPartyConnected] = useState(false);
   const [isAddingThirdParty, setIsAddingThirdParty] = useState(false);
@@ -250,7 +248,7 @@ export function CallCenterPortal(): JSX.Element {
         last_name: 'Call',
         phone: currentCall.phoneNumber,
         ...currentCall.prospectData,
-      });
+      } as ProspectData);
       setAgentStatus('on_call');
     }
 
@@ -278,7 +276,7 @@ export function CallCenterPortal(): JSX.Element {
           last_name: 'Call',
           phone: currentCall.phoneNumber,
           ...currentCall.prospectData,
-        });
+        } as ProspectData);
       }
 
       // Start timer if not already running
@@ -325,7 +323,7 @@ export function CallCenterPortal(): JSX.Element {
             // Preserve any existing phone info
             caller_id: prev?.caller_id || leadData.caller_id,
             phone: prev?.phone || leadData.phone,
-          }));
+          } as ProspectData));
         }
       }
     }
@@ -354,7 +352,7 @@ export function CallCenterPortal(): JSX.Element {
           ...prev,
           ...preInjectedData,
           caller_id: prev?.caller_id, // Keep the original caller_id
-        }));
+        } as ProspectData));
       } else {
         // Try to lookup from the API
         lookupLead(callerPhone)
@@ -365,7 +363,7 @@ export function CallCenterPortal(): JSX.Element {
                 ...prev,
                 ...lead,
                 caller_id: prev?.caller_id,
-              }));
+              } as ProspectData));
             }
           })
           .catch(() => {
@@ -519,7 +517,6 @@ export function CallCenterPortal(): JSX.Element {
     setAgentStatus('available');
     setIsMuted(false);
     setIsOnHold(false);
-    setIsRecording(false);
     setThirdPartyConnected(false);
     setIsAddingThirdParty(false);
     setThirdPartyNumber('');
@@ -949,11 +946,11 @@ export function CallCenterPortal(): JSX.Element {
 
                 {/* Caller Info */}
                 <div className="text-center z-10">
-                  <p className="text-2xl font-bold text-white">
-                    {incomingCallData.first_name} {incomingCallData.last_name}
+                <p className="text-2xl font-bold text-white">
+                    {String(incomingCallData.first_name ?? '')} {String(incomingCallData.last_name ?? '')}
                   </p>
-                  <p className="text-gray-400 font-mono text-lg">{incomingCallData.caller_id}</p>
-                  {(incomingCallData.city || incomingCallData.state) && (
+                  <p className="text-gray-400 font-mono text-lg">{String(incomingCallData.caller_id ?? '')}</p>
+                  {!!(incomingCallData.city || incomingCallData.state) && (
                     <p className="text-cyan-400 text-sm mt-1">
                       {[incomingCallData.city, incomingCallData.state].filter(Boolean).join(', ')}
                     </p>
@@ -961,7 +958,7 @@ export function CallCenterPortal(): JSX.Element {
                 </div>
 
                 {/* Lead Source / Campaign Badge */}
-                {(incomingCallData as Record<string, unknown>).lead_source && (
+                {!!(incomingCallData as Record<string, unknown>).lead_source && (
                   <div className="flex items-center gap-1.5 px-3 py-1 bg-purple-500/10 rounded-full border border-purple-500/30 z-10">
                     <span className="text-purple-400 text-xs">
                       {String((incomingCallData as Record<string, unknown>).lead_source)}
@@ -1007,11 +1004,11 @@ export function CallCenterPortal(): JSX.Element {
                     <PhoneCall className="w-8 h-8 text-white" />
                   </div>
                   <p className="text-lg font-bold text-white">
-                    {activeCallData.first_name || activeCallData.firstName}{' '}
-                    {activeCallData.last_name || activeCallData.lastName}
+                    {String(activeCallData.first_name || activeCallData.firstName || '')}{' '}
+                    {String(activeCallData.last_name || activeCallData.lastName || '')}
                   </p>
                   <p className="text-sm text-gray-400">
-                    {activeCallData.caller_id || activeCallData.phone}
+                    {String(activeCallData.caller_id || activeCallData.phone || '')}
                   </p>
                   <div className="flex items-center justify-center space-x-2 mt-1">
                     <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
@@ -1059,24 +1056,20 @@ export function CallCenterPortal(): JSX.Element {
                     )}
                     <span className="text-xs text-gray-400 mt-1">Hold</span>
                   </button>
-                  <button
-                    onClick={() => setIsRecording(!isRecording)}
+                  <div
                     className={
-                      'p-3 rounded-xl flex flex-col items-center transition-all ' +
-                      (isRecording
-                        ? 'bg-red-500/30 border border-red-500'
-                        : 'bg-[#1e1e2e] hover:bg-[#2e2e3e] border border-[#2e2e3e]')
+                      'p-3 rounded-xl flex flex-col items-center transition-all cursor-default ' +
+                      'bg-red-500/20 border border-red-500/40'
                     }
+                    title="Recording is handled automatically by the server"
                   >
                     <Circle
-                      className={
-                        'w-5 h-5 ' + (isRecording ? 'text-red-400 fill-red-400' : 'text-gray-300')
-                      }
+                      className="w-5 h-5 text-red-400 fill-red-400 animate-pulse"
                     />
-                    <span className="text-xs text-gray-400 mt-1">
-                      {isRecording ? 'Recording' : 'Record'}
+                    <span className="text-xs text-red-300 mt-1">
+                      Auto-Rec
                     </span>
-                  </button>
+                  </div>
                 </div>
 
                 {/* 3-Way / Transfer Buttons */}
@@ -1423,14 +1416,14 @@ export function CallCenterPortal(): JSX.Element {
                     <RetentionScriptPanel
                       prospectData={activeCallData}
                       onDataUpdate={(data: Record<string, unknown>) =>
-                        setActiveCallData(prev => (prev ? { ...prev, ...data } : null))
+                        setActiveCallData(prev => (prev ? { ...prev, ...data } as ProspectData : null))
                       }
                     />
                   ) : (
                     <IntegratedScriptPanel
                       prospectData={activeCallData}
                       onDataUpdate={(data: Partial<ProspectData>) =>
-                        setActiveCallData(prev => (prev ? { ...prev, ...data } : null))
+                        setActiveCallData(prev => (prev ? { ...prev, ...data } as ProspectData : null))
                       }
                     />
                   )}

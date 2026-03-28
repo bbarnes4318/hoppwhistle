@@ -17,7 +17,14 @@ export class RecordingService {
   private prisma = getPrismaClient();
 
   /**
-   * Upload a recording from FreeSWITCH callback
+   * Upload a recording from FreeSWITCH callback.
+   * This is the CANONICAL ingestion path for all recordings.
+   *
+   * Lifecycle:
+   *   1. Upload file to S3
+   *   2. Create Recording row (status = COMPLETED)
+   *   3. Update Call row: primaryRecordingId, recordingStatus, recordingUrl, etc.
+   *   4. Emit recording.ready event for transcription / UI refresh
    */
   async uploadRecording(data: RecordingUploadData): Promise<{
     id: string;
@@ -43,7 +50,7 @@ export class RecordingService {
     // Get call to extract tenant ID
     const call = await this.prisma.call.findUnique({
       where: { id: data.callId },
-      select: { tenantId: true },
+      select: { tenantId: true, primaryRecordingId: true },
     });
 
     if (!call) {
@@ -63,20 +70,41 @@ export class RecordingService {
         checksum: uploadResult.checksum,
         duration: data.duration,
         status: 'COMPLETED',
-        metadata: data.metadata || {},
+        metadata: (data.metadata || {}) as import('@prisma/client').Prisma.InputJsonValue,
       },
     });
 
-    // Emit recording.ready event for transcription
+    // =========================================================================
+    // Update the Call row with recording info
+    // This bridges the Recording table to the Call.recordingUrl field that
+    // the /calls and /dashboard UIs already read.
+    // =========================================================================
+    // Build a secure internal playback URL instead of exposing raw S3 URLs
+    const playbackUrl = `/api/v1/recordings/${recording.id}/stream`;
+
+    await this.prisma.call.update({
+      where: { id: data.callId },
+      data: {
+        primaryRecordingId: recording.id,
+        recordingStatus: 'READY',
+        recordingCompletedAt: new Date(),
+        recordingUrl: playbackUrl,
+        recordingError: null, // Clear any previous error
+      },
+    });
+
+    // Emit recording.ready event for transcription and live UI refresh
     const { eventBus } = await import('./event-bus.js');
     const signedUrl = await storage.getSignedUrl(uploadResult.storageKey, 3600);
-    
+
     await eventBus.publish('recording.*', {
       event: 'recording.ready',
       tenantId: call.tenantId,
       data: {
         callId: data.callId,
+        recordingId: recording.id,
         recordingUrl: signedUrl,
+        playbackUrl,
         format,
         durationSec: data.duration,
         metadata: data.metadata || {},
@@ -89,6 +117,39 @@ export class RecordingService {
       size: uploadResult.size,
       checksum: uploadResult.checksum,
     };
+  }
+
+  /**
+   * Mark a call's recording as failed.
+   * Called when recording upload or processing fails.
+   */
+  async markRecordingFailed(callId: string, error: string): Promise<void> {
+    await this.prisma.call.update({
+      where: { id: callId },
+      data: {
+        recordingStatus: 'FAILED',
+        recordingError: error,
+      },
+    });
+
+    // Emit failure event so live UI can update
+    const call = await this.prisma.call.findUnique({
+      where: { id: callId },
+      select: { tenantId: true },
+    });
+
+    if (call) {
+      const { eventBus } = await import('./event-bus.js');
+      await eventBus.publish('recording.*', {
+        event: 'recording.failed',
+        tenantId: call.tenantId,
+        data: {
+          callId,
+          error,
+          timestamp: new Date().toISOString(),
+        },
+      });
+    }
   }
 
   /**
@@ -182,4 +243,3 @@ export class RecordingService {
     return processed;
   }
 }
-

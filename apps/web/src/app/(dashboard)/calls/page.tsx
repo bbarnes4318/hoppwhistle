@@ -25,6 +25,8 @@ interface CallRecord {
   paidOut?: boolean;
   missedCall?: boolean;
   recordingUrl?: string | null;
+  recordingStatus?: string | null;
+  primaryRecordingId?: string | null;
   createdAt: string;
   campaign?: { name: string } | null;
   fromNumber?: { number: string } | null;
@@ -195,7 +197,29 @@ export default function CallLogsPage() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        {call.recordingUrl ? (
+                        {call.recordingStatus === 'READY' && call.recordingUrl ? (
+                          <a
+                            href={call.recordingUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <Button variant="ghost" size="sm">
+                              <Play className="h-4 w-4" />
+                            </Button>
+                          </a>
+                        ) : call.recordingStatus === 'PENDING' || call.recordingStatus === 'RECORDING' || call.recordingStatus === 'PROCESSING' ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-xs text-amber-400">
+                            <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                            {call.recordingStatus === 'PENDING' ? 'Pending' : call.recordingStatus === 'RECORDING' ? 'Recording' : 'Processing'}
+                          </span>
+                        ) : call.recordingStatus === 'FAILED' ? (
+                          <span className="inline-flex items-center gap-1 rounded-md border border-red-500/30 bg-red-500/10 px-2 py-1 text-xs text-red-400" title="Recording failed">
+                            ✕ Failed
+                          </span>
+                        ) : call.recordingUrl ? (
                           <a
                             href={call.recordingUrl}
                             target="_blank"

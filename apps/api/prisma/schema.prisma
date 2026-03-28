@@ -852,7 +852,17 @@ model Call {
   connectedDuration          Int? // Connected duration in seconds
   durationFormatted          String? // Total duration as hh:mm:ss
   connectedDurationFormatted String? // Connected duration as hh:mm:ss
-  recordingUrl               String? // URL to call recording
+  recordingUrl               String? // URL to call recording (populated when recording is READY)
+
+  // ============================================================================
+  // Recording Lifecycle Fields
+  // ============================================================================
+  primaryRecordingId         String?           // ID of the canonical Recording row for this call
+  recordingStatus            String?           // PENDING | RECORDING | PROCESSING | READY | FAILED
+  recordingStartedAt         DateTime?         // When recording began
+  recordingCompletedAt       DateTime?         // When recording file was finalized
+  recordingError             String?           // Error message if recording failed
+
   callerZipCode              String? // 5-digit ZIP code for geo-routing
 
   // Financial Fields (Currency/Decimal)
@@ -903,6 +913,7 @@ model Call {
   @@index([converted])
   @@index([isDuplicate])
   @@index([callConnectedTimestamp])
+  @@index([recordingStatus])
   @@map("calls")
 }
 

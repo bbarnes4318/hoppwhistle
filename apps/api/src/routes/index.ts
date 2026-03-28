@@ -157,7 +157,7 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
         createdAt: dbNumber.createdAt.toISOString(),
         updatedAt: dbNumber.updatedAt.toISOString(),
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       void reply.code(400);
       return {
         error: {
@@ -193,6 +193,8 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
         mms?: boolean;
         fax?: boolean;
       };
+      poolType?: string;
+      poolStatus?: string;
     };
   }>('/api/v1/numbers/:numberId', async (request, reply) => {
     try {
@@ -239,7 +241,7 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
       }
 
       // Update number
-      const updateData: any = {};
+      const updateData: Record<string, unknown> = {};
       if (body.status !== undefined) {
         updateData.status = body.status;
       }
@@ -247,8 +249,7 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
         updateData.campaignId = body.campaignId;
       }
       if (body.capabilities !== undefined) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        updateData.capabilities = { ...(existingNumber.capabilities as any), ...body.capabilities };
+        updateData.capabilities = { ...(existingNumber.capabilities as Record<string, unknown> ?? {}), ...body.capabilities };
       }
       // RTB Pool fields
       if (body.poolType !== undefined) {
@@ -293,7 +294,7 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
         createdAt: updatedNumber.createdAt.toISOString(),
         updatedAt: updatedNumber.updatedAt.toISOString(),
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       void reply.code(400);
       return {
         error: {
@@ -476,8 +477,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
           status: body.status || 'ACTIVE',
           flowId: body.flowId || null,
           callerIdPoolId: body.callerIdPoolId || null,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          metadata: (body.metadata as any) || {},
+          metadata: (body.metadata as import('@prisma/client').Prisma.InputJsonValue) || {},
         },
       });
 
@@ -516,7 +516,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
         createdAt: campaign.createdAt.toISOString(),
         updatedAt: campaign.updatedAt.toISOString(),
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       void reply.code(400);
       return {
         error: {
@@ -1214,7 +1214,7 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
         createdAt: publisher.createdAt.toISOString(),
         updatedAt: publisher.updatedAt.toISOString(),
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       void reply.code(400);
       return {
         error: {
@@ -1298,7 +1298,7 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
         createdAt: publisher.createdAt.toISOString(),
         updatedAt: publisher.updatedAt.toISOString(),
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       void reply.code(400);
       return {
         error: {
@@ -1351,7 +1351,7 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
 
         void reply.code(204);
         return;
-      } catch (error: any) {
+      } catch (error: unknown) {
         void reply.code(400);
         return {
           error: {
@@ -1398,8 +1398,44 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
         prisma.call.count({ where: { tenantId } }),
       ]);
 
+      // Map calls to include recording fields that the UI expects
+      const mappedCalls = calls.map(call => ({
+        id: call.id,
+        tenantId: call.tenantId,
+        callSid: call.callSid,
+        externalId: call.externalId,
+        toNumber: call.toNumber,
+        direction: call.direction,
+        status: call.status,
+        duration: call.duration,
+        connectedDuration: call.connectedDuration,
+        cost: call.cost,
+        revenue: call.revenue,
+        callerId: call.callerId,
+        did: call.did,
+        targetNumber: call.targetNumber,
+        converted: call.converted,
+        paidOut: call.paidOut,
+        missedCall: call.missedCall,
+        blocked: call.blocked,
+        // Recording fields - the key bridge between Recording table and UI
+        recordingUrl: call.recordingUrl,
+        recordingStatus: call.recordingStatus,
+        primaryRecordingId: call.primaryRecordingId,
+        // Related entities
+        campaign: call.campaign ? { id: call.campaign.id, name: call.campaign.name } : null,
+        fromNumber: call.fromNumber ? { id: call.fromNumber.id, number: call.fromNumber.number } : null,
+        // Timestamps
+        createdAt: call.createdAt.toISOString(),
+        updatedAt: call.updatedAt.toISOString(),
+        startedAt: call.startedAt?.toISOString(),
+        answeredAt: call.answeredAt?.toISOString(),
+        endedAt: call.endedAt?.toISOString(),
+        metadata: call.metadata,
+      }));
+
       return {
-        data: calls,
+        data: mappedCalls,
         meta: {
           page,
           limit,
@@ -1571,6 +1607,11 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       connectedDuration: call.connectedDuration,
       connectedDurationFormatted: call.connectedDurationFormatted,
       recordingUrl: call.recordingUrl,
+      recordingStatus: call.recordingStatus,
+      primaryRecordingId: call.primaryRecordingId,
+      recordingStartedAt: call.recordingStartedAt,
+      recordingCompletedAt: call.recordingCompletedAt,
+      recordingError: call.recordingError,
 
       // Financials
       revenue: call.revenue,
@@ -1841,7 +1882,7 @@ export async function registerWebhookRoutes(fastify: FastifyInstance) {
       return { error: { code: 'NOT_FOUND', message: 'Webhook not found' } };
     }
 
-    const updateData: any = {};
+    const updateData: Record<string, unknown> = {};
     if (body.url !== undefined) {
       try {
         new URL(body.url);
@@ -2153,7 +2194,7 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
 
     // Get role ID for the requested role
     const roleRecord = await prisma.role.findUnique({
-      where: { name: requestedRole as any },
+      where: { name: requestedRole as string },
     });
 
     if (!roleRecord) {
@@ -2252,8 +2293,7 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     if (authHeader && authHeader.startsWith('Bearer ')) {
       try {
         const token = authHeader.substring(7);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const decoded = await (request as any).jwtVerify(token);
+        const decoded = await (request as unknown as { jwtVerify: (token: string) => Promise<AuthenticatedUser> }).jwtVerify(token);
         (request as AuthRequest).user = decoded as AuthenticatedUser;
       } catch (err) {
         // Ignore - will use default tenant
