@@ -293,6 +293,59 @@ export function PhoneProvider({
   // SIP / WebRTC Implementation
   // ============================================================================
 
+  // ============================================================================
+  // Remote Audio Setup — race-condition-proof implementation
+  // ============================================================================
+
+  /**
+   * Installs ontrack listener on a PeerConnection (idempotent).
+   * Must be called as early as possible — ideally BEFORE accept() resolves.
+   * Also picks up any tracks that are already on the receivers.
+   */
+  const wireRemoteAudio = useCallback((pc: RTCPeerConnection) => {
+    const audioEl = remoteAudioRef.current;
+    if (!audioEl) {
+      console.warn('[Phone] wireRemoteAudio: no audio element');
+      return;
+    }
+
+    // Create a single MediaStream that accumulates tracks
+    const stream = new MediaStream();
+
+    // 1. Grab tracks already present on the receivers (covers late-call to this fn)
+    pc.getReceivers().forEach((r) => {
+      if (r.track && r.track.readyState === 'live') {
+        console.log('[Phone] wireRemoteAudio: existing receiver track', r.track.kind, r.track.id);
+        stream.addTrack(r.track);
+      }
+    });
+
+    // 2. Install ontrack for any tracks that arrive later
+    pc.addEventListener('track', (event: RTCTrackEvent) => {
+      console.log('[Phone] ontrack fired:', event.track.kind, event.track.id, 'readyState:', event.track.readyState);
+      // Prefer the event's stream if available
+      if (event.streams?.[0]) {
+        audioEl.srcObject = event.streams[0];
+      } else {
+        stream.addTrack(event.track);
+        audioEl.srcObject = stream;
+      }
+      audioEl.play().catch((e) => console.warn('[Phone] audio.play() blocked:', e));
+    });
+
+    // 3. Attach whatever we have immediately
+    if (stream.getTracks().length > 0) {
+      console.log('[Phone] wireRemoteAudio: attaching', stream.getTracks().length, 'existing tracks');
+      audioEl.srcObject = stream;
+      audioEl.play().catch((e) => console.warn('[Phone] audio.play() blocked:', e));
+    }
+  }, []);
+
+  // Keep handleCallAnswered / handleCallEnded in refs so stateChange listeners
+  // always call the latest versions (avoids stale closures).
+  const handleCallAnsweredRef = useRef<() => void>(() => {});
+  const handleCallEndedRef = useRef<() => void>(() => {});
+
   const handleIncomingSipCall = useCallback(
     (invitation: Invitation) => {
       sessionRef.current = invitation;
@@ -354,57 +407,36 @@ export function PhoneProvider({
           });
       }
 
+      // Use refs for the callbacks to avoid stale closures in the listener
       invitation.stateChange.addListener(newState => {
         console.log('[Phone] Invitation state changed:', newState);
         if (newState === SessionState.Terminated) {
-          handleCallEnded();
+          handleCallEndedRef.current();
         } else if (newState === SessionState.Established) {
-          handleCallAnswered();
-          setupRemoteAudio(invitation);
+          handleCallAnsweredRef.current();
+          // Re-wire as a safety net — the primary wire is in answerCall
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const pc = (invitation.sessionDescriptionHandler as any)?.peerConnection as RTCPeerConnection | undefined;
+          if (pc) wireRemoteAudio(pc);
         }
       });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [playRingtone, normalizedApiUrl, getApiHeaders]
+    [playRingtone, normalizedApiUrl, getApiHeaders, wireRemoteAudio]
   );
 
+  /**
+   * Legacy compat wrapper — called from outbound (Inviter) flows.
+   * Delegates to the new wireRemoteAudio.
+   */
   const setupRemoteAudio = (session: Session) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const pc = (session.sessionDescriptionHandler as any)?.peerConnection as RTCPeerConnection | undefined;
     if (!pc) {
-      console.warn('[Phone] No peerConnection found on session');
+      console.warn('[Phone] setupRemoteAudio: no peerConnection on session');
       return;
     }
-
-    const stream = new MediaStream();
-
-    // Grab any tracks that are already present
-    pc.getReceivers().forEach((receiver) => {
-      if (receiver.track) {
-        stream.addTrack(receiver.track);
-      }
-    });
-
-    // Listen for tracks that arrive AFTER this point (critical for inbound calls)
-    pc.ontrack = (event: RTCTrackEvent) => {
-      console.log('[Phone] ontrack fired:', event.track.kind, event.track.id);
-      if (remoteAudioRef.current) {
-        // Use the first stream from the event if available, otherwise add to our stream
-        if (event.streams?.[0]) {
-          remoteAudioRef.current.srcObject = event.streams[0];
-        } else {
-          stream.addTrack(event.track);
-          remoteAudioRef.current.srcObject = stream;
-        }
-        remoteAudioRef.current.play().catch(console.error);
-      }
-    };
-
-    // Attach whatever we have so far
-    if (remoteAudioRef.current && stream.getTracks().length > 0) {
-      remoteAudioRef.current.srcObject = stream;
-      remoteAudioRef.current.play().catch(console.error);
-    }
+    wireRemoteAudio(pc);
   };
 
   const handleCallAnswered = useCallback(() => {
@@ -439,6 +471,10 @@ export function PhoneProvider({
     stopCallDurationTimer();
     sessionRef.current = null;
   }, [stopRingtone, stopCallDurationTimer]);
+
+  // Keep refs in sync so stateChange listeners always call latest versions
+  useEffect(() => { handleCallAnsweredRef.current = handleCallAnswered; }, [handleCallAnswered]);
+  useEffect(() => { handleCallEndedRef.current = handleCallEnded; }, [handleCallEnded]);
 
   // ============================================================================
   // Phone Actions
@@ -511,10 +547,10 @@ export function PhoneProvider({
         inviter.stateChange.addListener(newState => {
           console.log('[Phone] Session state:', newState);
           if (newState === SessionState.Established) {
-            handleCallAnswered();
+            handleCallAnsweredRef.current();
             setupRemoteAudio(inviter);
           } else if (newState === SessionState.Terminated) {
-            handleCallEnded();
+            handleCallEndedRef.current();
           }
         });
 
@@ -526,7 +562,7 @@ export function PhoneProvider({
           .catch(e => {
             console.error('[Phone] INVITE failed', e);
             setError('Call failed');
-            handleCallEnded();
+            handleCallEndedRef.current();
           });
       } catch (err) {
         console.error('[Phone] Call failed:', err);
@@ -535,7 +571,7 @@ export function PhoneProvider({
         setIsConnecting(false);
       }
     },
-    [normalizedApiUrl, getApiHeaders, handleCallAnswered, handleCallEnded, isRegistered]
+    [normalizedApiUrl, getApiHeaders, isRegistered]
   );
 
   const answerCall = useCallback(() => {
@@ -545,6 +581,9 @@ export function PhoneProvider({
       sessionRef.current instanceof Invitation
     ) {
       const invitation = sessionRef.current;
+      console.log('[Phone] Answering inbound call...');
+
+      // Accept with explicit media constraints to ensure mic capture
       invitation
         .accept({
           sessionDescriptionHandlerOptions: {
@@ -552,22 +591,26 @@ export function PhoneProvider({
           },
         })
         .then(() => {
-          console.log('[Phone] Call accepted — wiring remote audio');
-          // Re-run setupRemoteAudio after accept() resolves as a safety net.
-          // The ontrack listener set in the stateChange handler may already
-          // have fired, but if tracks arrived late this ensures we catch them.
-          setupRemoteAudio(invitation);
+          console.log('[Phone] Call accepted — wiring remote audio (post-accept safety net)');
+          // The stateChange → Established listener already calls wireRemoteAudio,
+          // but this is a belt-and-suspenders call. wireRemoteAudio uses
+          // addEventListener('track', ...) so duplicate installs are safe.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const pc = (invitation.sessionDescriptionHandler as any)?.peerConnection as RTCPeerConnection | undefined;
+          if (pc) {
+            wireRemoteAudio(pc);
+          } else {
+            console.error('[Phone] CRITICAL: No peerConnection after accept()');
+          }
         })
         .catch(e => {
-          console.error('Failed to accept', e);
+          console.error('[Phone] Failed to accept inbound call', e);
           setError('Failed to answer');
         });
     } else {
-      // Fallback to API answer logic if not SIP (or hybrid state)
-      // ... (preserving original API logic if needed?)
-      // For now, assuming SIP is primary.
+      console.warn('[Phone] answerCall called but no valid Invitation in Initial state');
     }
-  }, []);
+  }, [wireRemoteAudio]);
 
   const hangupCall = useCallback(() => {
     if (sessionRef.current) {
