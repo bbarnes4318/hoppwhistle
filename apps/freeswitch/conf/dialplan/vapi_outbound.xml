@@ -32,8 +32,9 @@
         <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
         <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
 
-        <!-- Local STIR/SHAKEN signing: validates CID, signs PASSporT, sets Identity header -->
-        <action application="lua" data="local_shaken.lua"/>
+        <!-- TEMPORARILY DISABLED: Identity header causes BulkVS cause=47 rejection -->
+        <!-- TODO: Fix Identity header format, then re-enable -->
+        <!-- <action application="lua" data="local_shaken.lua"/> -->
 
         <!-- Bridge to BulkVS — Identity header is already set by local_shaken.lua -->
         <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC}sofia/gateway/bulkvs/1$1"/>
@@ -57,8 +58,8 @@
         <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
         <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
 
-        <!-- Local STIR/SHAKEN signing -->
-        <action application="lua" data="local_shaken.lua"/>
+        <!-- TEMPORARILY DISABLED: same as above -->
+        <!-- <action application="lua" data="local_shaken.lua"/> -->
 
         <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC}sofia/gateway/bulkvs/$1"/>
       </condition>
