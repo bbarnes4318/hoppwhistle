@@ -59,6 +59,7 @@ export async function registerAICampaignRoutes(
     description?: string;
     vertical: string;
     direction?: string;
+    carrier?: 'bulkvs' | 'signalwire';
     agencyName: string;
     transferNumber: string;
     filters: Record<string, boolean>;

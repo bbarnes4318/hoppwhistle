@@ -1,34 +1,38 @@
 <include>
+  <!--
+    Vapi Outbound Signed — Per-Carrier Routing with STIR/SHAKEN
+    ============================================================
+    RULE: Each carrier signs ONLY its own calls.
+    - BulkVS:     bulkvs_shaken.lua → sofia/gateway/bulkvs
+    - DIDCentral: local_shaken.lua  → sofia/gateway/didcentral
+    - FracTEL:    local_shaken.lua  → sofia/gateway/fractel*
+    - SignalWire:  NO signing, NO FreeSWITCH — Vapi → SignalWire direct
+  -->
   <context name="vapi_outbound">
 
-    <!--
-      Vapi Outbound via BulkVS.
-      BulkVS handles STIR/SHAKEN signing — we only force the correct caller ID.
-      Lua validates CID against DID pool and forces it on the B-leg.
-    -->
-
-    <!-- Match regular US phone numbers -->
+    <!-- CARRIER: BulkVS (default) -->
     <extension name="vapi-outbound-us">
       <condition field="destination_number" expression="^\+?1?(\d{10})$">
-        <action application="log" data="INFO [VAPI] Outbound US call to 1$1"/>
+        <action application="log" data="INFO [VAPI] BulkVS signed outbound to 1$1"/>
         <action application="set" data="accountcode=vapi"/>
         <action application="set" data="progress_timeout=30"/>
         <action application="set" data="originate_timeout=60"/>
         <action application="set" data="hangup_after_bridge=true"/>
-        <action application="lua" data="local_shaken.lua"/>
+        <!-- BulkVS signs its own calls -->
+        <action application="lua" data="bulkvs_shaken.lua"/>
         <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC,call_timeout=60,originate_timeout=60}sofia/gateway/bulkvs/1$1"/>
       </condition>
     </extension>
 
-    <!-- Routing IDs from Vapi — bridge to BulkVS -->
+    <!-- Routing IDs -->
     <extension name="vapi-outbound-routing-id">
       <condition field="destination_number" expression="^(\d{11,})$">
-        <action application="log" data="INFO [VAPI] Routing ID call to $1"/>
+        <action application="log" data="INFO [VAPI] Routing ID to $1"/>
         <action application="set" data="accountcode=vapi"/>
         <action application="set" data="progress_timeout=30"/>
         <action application="set" data="originate_timeout=60"/>
         <action application="set" data="hangup_after_bridge=true"/>
-        <action application="lua" data="local_shaken.lua"/>
+        <action application="lua" data="bulkvs_shaken.lua"/>
         <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC,call_timeout=60,originate_timeout=60}sofia/gateway/bulkvs/$1"/>
       </condition>
     </extension>

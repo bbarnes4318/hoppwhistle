@@ -11,6 +11,7 @@
 import type { Prisma } from '@prisma/client';
 
 import { getPrismaClient } from '../lib/prisma.js';
+import type { VoipCarrier } from './vapi-carrier-service.js';
 
 // Vapi API configuration
 export const VapiConfig = {
@@ -47,6 +48,7 @@ interface AICampaign {
   status: AICampaignStatus;
   vertical: string;
   direction: string;
+  carrier: VoipCarrier;
   agencyName: string;
   transferNumber: string;
   filters: Prisma.JsonValue;
@@ -110,6 +112,7 @@ interface CreateCampaignInput {
   description?: string;
   vertical: string;
   direction?: string;
+  carrier?: VoipCarrier;
   agencyName: string;
   transferNumber: string;
   filters: Record<string, boolean>;
@@ -340,16 +343,17 @@ export async function createCampaign(input: CreateCampaignInput): Promise<AICamp
 
   // Create campaign record
   const filtersJson = JSON.stringify(input.filters || {});
+  const carrierValue = input.carrier ?? 'bulkvs';
   const result = await prisma.$queryRaw<AICampaign[]>`
     INSERT INTO ai_campaigns (
-      id, "tenantId", name, description, status, vertical, direction,
+      id, "tenantId", name, description, status, vertical, direction, carrier,
       "agencyName", "transferNumber", filters,
       "phoneNumberId", "maxConcurrent", "callsPerMinute",
       "scheduleEnabled", "scheduleStart", "scheduleEnd", timezone,
       "createdAt", "updatedAt"
     ) VALUES (
       gen_random_uuid(), ${input.tenantId}, ${input.name}, ${input.description ?? null},
-      'DRAFT', ${input.vertical}, ${input.direction ?? 'OUTBOUND'},
+      'DRAFT', ${input.vertical}, ${input.direction ?? 'OUTBOUND'}, ${carrierValue},
       ${input.agencyName}, ${input.transferNumber}, ${filtersJson}::jsonb,
       ${input.phoneNumberId}, ${input.maxConcurrent ?? 1}, ${input.callsPerMinute ?? 10},
       ${input.scheduleEnabled ?? false}, ${input.scheduleStart ?? null},

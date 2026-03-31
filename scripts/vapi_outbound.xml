@@ -1,43 +1,101 @@
 <include>
+  <!--
+    Vapi Outbound Context — Per-Carrier Routing & Signing
+    =====================================================
+    Each carrier signs ONLY its own calls:
+    - BulkVS:     bulkvs_shaken.lua signs → bridge to sofia/gateway/bulkvs
+    - DIDCentral: local_shaken.lua signs  → bridge to sofia/gateway/didcentral
+    - FracTEL:    local_shaken.lua signs  → bridge to sofia/gateway/fractel*
+    - SignalWire:  NO SIGNING — Vapi → SignalWire direct (never hits FreeSWITCH)
+
+    Carrier is determined by channel variable X-Carrier (set by Vapi/dialer).
+    If X-Carrier is not set, defaults to bulkvs.
+  -->
   <context name="vapi_outbound">
 
-    <!-- Main outbound routing for US numbers -->
-    <extension name="vapi-outbound-us">
-      <condition field="destination_number" expression="^\+?1?(\d{10})$">
-        <action application="log" data="INFO [VAPI] Outbound call to ${destination_number}"/>
+    <!-- Rate limiting -->
+    <extension name="vapi-rate-limit" continue="true">
+      <condition field="destination_number" expression="^.*$">
+        <action application="limit" data="hash vapi ${destination_number} 10 !CALL_REJECTED"/>
+      </condition>
+    </extension>
 
-        <!-- Tag for tracking -->
+    <!-- CARRIER: BulkVS (default — matches empty or "bulkvs") -->
+    <extension name="vapi-outbound-bulkvs">
+      <condition field="destination_number" expression="^\+?1?(\d{10})$"/>
+      <condition field="${sip_h_X-Carrier}" expression="^(bulkvs)?$" break="never">
+        <action application="log" data="INFO [VAPI] BulkVS outbound to 1$1"/>
         <action application="set" data="accountcode=vapi"/>
-        <action application="set" data="sip_h_X-Provider=Vapi"/>
         <action application="set" data="sip_h_X-Carrier=bulkvs"/>
-
-        <!-- Caller ID: MUST be a BulkVS DID for IP auth acceptance -->
-        <action application="set" data="effective_caller_id_number=12816989460"/>
-        <action application="set" data="effective_caller_id_name=PVN LLC"/>
-        <action application="set" data="outbound_caller_id_number=12816989460"/>
-        <action application="set" data="outbound_caller_id_name=PVN LLC"/>
-        <action application="export" data="nolocal:effective_caller_id_number=12816989460"/>
-        <action application="export" data="nolocal:origination_caller_id_number=12816989460"/>
-        <action application="export" data="nolocal:origination_caller_id_name=PVN LLC"/>
-        <action application="set" data="sip_from_user=12816989460"/>
-        <action application="set" data="sip_contact_user=12816989460"/>
-
-        <!-- Timeouts -->
+        <action application="set" data="hangup_after_bridge=true"/>
+        <action application="set" data="ignore_early_media=true"/>
         <action application="set" data="progress_timeout=30"/>
         <action application="set" data="originate_timeout=60"/>
+        <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
+        <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
+        <action application="lua" data="bulkvs_shaken.lua"/>
+        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC}sofia/gateway/bulkvs/1$1"/>
+      </condition>
+    </extension>
+
+    <!-- CARRIER: DIDCentral (local ES256 signing) -->
+    <extension name="vapi-outbound-didcentral">
+      <condition field="destination_number" expression="^\+?1?(\d{10})$"/>
+      <condition field="${sip_h_X-Carrier}" expression="^didcentral$" break="never">
+        <action application="log" data="INFO [VAPI] DIDCentral outbound to 1$1"/>
+        <action application="set" data="accountcode=vapi"/>
+        <action application="set" data="sip_h_X-Carrier=didcentral"/>
         <action application="set" data="hangup_after_bridge=true"/>
-
-        <!-- STIR/SHAKEN: Local A-attestation signing -->
+        <action application="set" data="ignore_early_media=true"/>
+        <action application="set" data="progress_timeout=30"/>
+        <action application="set" data="originate_timeout=60"/>
+        <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
+        <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
         <action application="lua" data="local_shaken.lua"/>
+        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC}sofia/gateway/didcentral/1$1"/>
+      </condition>
+    </extension>
 
-        <!-- Bridge: try BulkVS first, failover to DIDCentral -->
-        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC,call_timeout=60,originate_timeout=60}sofia/gateway/bulkvs/1$1|sofia/gateway/didcentral/1$1"/>
+    <!-- CARRIER: FracTEL (local ES256 signing, 6-SBC load balance) -->
+    <extension name="vapi-outbound-fractel">
+      <condition field="destination_number" expression="^\+?1?(\d{10})$"/>
+      <condition field="${sip_h_X-Carrier}" expression="^fractel$" break="never">
+        <action application="log" data="INFO [VAPI] FracTEL outbound to 1$1"/>
+        <action application="set" data="accountcode=vapi"/>
+        <action application="set" data="sip_h_X-Carrier=fractel"/>
+        <action application="set" data="hangup_after_bridge=true"/>
+        <action application="set" data="ignore_early_media=true"/>
+        <action application="set" data="progress_timeout=30"/>
+        <action application="set" data="originate_timeout=60"/>
+        <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
+        <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
+        <action application="lua" data="local_shaken.lua"/>
+        <action application="set" data="sip_h_X-Attestation-Level=A"/>
+        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC}sofia/gateway/fractel1/1$1|sofia/gateway/fractel2/1$1|sofia/gateway/fractel3/1$1|sofia/gateway/fractel4/1$1|sofia/gateway/fractel5/1$1|sofia/gateway/fractel6/1$1"/>
+      </condition>
+    </extension>
+
+    <!-- NOTE: SignalWire calls NEVER reach FreeSWITCH — Vapi sends direct -->
+
+    <!-- Routing IDs — default to BulkVS -->
+    <extension name="vapi-outbound-routing-id">
+      <condition field="destination_number" expression="^(\d{11,})$">
+        <action application="log" data="INFO [VAPI] Routing ID to $1"/>
+        <action application="set" data="accountcode=vapi"/>
+        <action application="set" data="hangup_after_bridge=true"/>
+        <action application="set" data="ignore_early_media=true"/>
+        <action application="set" data="progress_timeout=30"/>
+        <action application="set" data="originate_timeout=60"/>
+        <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
+        <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
+        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC}sofia/gateway/bulkvs/$1"/>
       </condition>
     </extension>
 
     <!-- Fallback -->
     <extension name="vapi-unmatched">
       <condition field="destination_number" expression="^.*$">
+        <action application="log" data="WARNING [VAPI] Unmatched: ${destination_number}"/>
         <action application="hangup" data="NO_ROUTE_DESTINATION"/>
       </condition>
     </extension>
