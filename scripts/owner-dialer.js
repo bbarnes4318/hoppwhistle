@@ -167,7 +167,7 @@ async function getOrCreateCredential() {
 
   if (existing) {
     console.log(`  ✓ Found existing credential: ${existing.id}`);
-    const gw = existing.gateways?.find(g => g.ip === CONFIG.FREESWITCH_HOST);
+    const gw = existing.gateways && existing.gateways.find(g => g.ip === CONFIG.FREESWITCH_HOST);
     if (gw && gw.inboundEnabled === false) {
       console.log('  ⚠ Fixing inboundEnabled=false...');
       await vapiRequest('PATCH', `/credential/${existing.id}`, {
@@ -227,7 +227,7 @@ async function getOrCreateSignalWireCredential() {
     ? credentials.find(c => {
         if (c.provider !== 'byo-sip-trunk') return false;
         if (c.name === 'SignalWire Outbound Trunk') return true;
-        return c.gateways?.some(g => g.ip === CONFIG.SIGNALWIRE_SIP_DOMAIN);
+        return c.gateways && c.gateways.some(g => g.ip === CONFIG.SIGNALWIRE_SIP_DOMAIN);
       })
     : null;
 
