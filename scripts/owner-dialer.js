@@ -23,8 +23,24 @@ const fs = require('fs');
 const path = require('path');
 
 // ============================================================================
-// Configuration
+// Load .env
 // ============================================================================
+function loadEnv() {
+  const envPath = path.resolve(__dirname, '..', '.env');
+  if (fs.existsSync(envPath)) {
+    const envContent = fs.readFileSync(envPath, 'utf-8');
+    envContent.split('\n').forEach(line => {
+      const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
+      if (match) {
+        const key = match[1];
+        let value = match[2] || '';
+        if (value.startsWith('"') && value.endsWith('"')) value = value.slice(1, -1);
+        process.env[key] = value;
+      }
+    });
+  }
+}
+loadEnv();
 
 const CONFIG = {
   VAPI_API_TOKEN: process.env.VAPI_API_TOKEN || 'b8c9e434-32ca-4cbc-ae39-b6c4583622c2',
@@ -56,14 +72,13 @@ const CONFIG = {
   ],
 
   // SignalWire carrier
-  SIGNALWIRE_SIP_DOMAIN: 'pvn-shanevici.sip.signalwire.com',
-  SIGNALWIRE_DIDS: [
-    '+18652679650',
-    '+17253022220',
-  ],
+  SIGNALWIRE_SIP_DOMAIN: process.env.SIGNALWIRE_OUTBOUND_PROXY || 'pvn-shanevici.sip.signalwire.com',
+  SIGNALWIRE_DIDS: (process.env.SIGNALWIRE_DIDS || '+18652679650,+17253022220').split(','),
+  SIGNALWIRE_PROJECT_ID: process.env.SIGNALWIRE_PROJECT_ID,
+  SIGNALWIRE_API_TOKEN: process.env.SIGNALWIRE_API_TOKEN || process.env.SIGNALWIRE_TOKEN,
 
-  MAX_CONCURRENT: 1,
-  DISPATCH_DELAY_MS: 20000, // 20s between dispatches — let each call fully establish
+  MAX_CONCURRENT: 5,
+  DISPATCH_DELAY_MS: 4000, // 4s between dispatches — steady pace for SignalWire
   BACKOFF_MS: 45000, // 45s wait when concurrency-limited
   MAX_RETRIES: 5, // Retry up to 5 times per number
 };
@@ -242,8 +257,8 @@ async function getOrCreateSignalWireCredential() {
     name: 'SignalWire Outbound Trunk',
     gateways: [
       {
-        ip: CONFIG.SIGNALWIRE_SIP_DOMAIN,
-        port: 5060,
+        ip: '3.214.60.13',
+        port: 5070,
         netmask: 32,
         inboundEnabled: false,
         outboundEnabled: true,
@@ -309,9 +324,7 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function placeCall(destinationNumber) {
-  const didEntry = getNextDID();
-
+async function placeCall(destinationNumber, didEntry) {
   try {
     const result = await vapiRequest('POST', '/call', {
       assistantId: CONFIG.ASSISTANT_ID,
@@ -341,19 +354,19 @@ async function placeCall(destinationNumber) {
   }
 }
 
-async function dialWithRetry(number, callNum) {
+async function dialWithRetry(number, callNum, didEntry) {
   for (let attempt = 1; attempt <= CONFIG.MAX_RETRIES; attempt++) {
-    const didPreview = didPool[didIndex % didPool.length];
-
     if (attempt === 1) {
-      console.log(`  [${callNum}] 📞 ${number} via ${didPreview.did}`);
+      console.log(`  [${callNum}] 📞 ${number} via ${didEntry.did}`);
     } else {
+      // On retry, rotate to a different DID
+      didEntry = didPool[(didPool.indexOf(didEntry) + attempt) % didPool.length];
       console.log(
-        `  [${callNum}] 🔄 Retry ${attempt}/${CONFIG.MAX_RETRIES} — ${number} via ${didPreview.did}`
+        `  [${callNum}] 🔄 Retry ${attempt}/${CONFIG.MAX_RETRIES} — ${number} via ${didEntry.did}`
       );
     }
 
-    const result = await placeCall(number);
+    const result = await placeCall(number, didEntry);
 
     if (result.success) {
       console.log(`  [${callNum}] ✓ ${result.callId} → ${result.status}`);
@@ -376,17 +389,36 @@ async function runDialer(contacts, calledNumbers) {
   if (totalSkipped > 0) {
     console.log(`  Resumed — ${totalSkipped} already called, ${contacts.length} remaining`);
   }
-  console.log(`  Concurrency: ${CONFIG.MAX_CONCURRENT} (managed by Vapi)`);
+  console.log(`  Concurrency: ${CONFIG.MAX_CONCURRENT} (TRUE PARALLEL)`);
+  console.log(`  Dispatch delay: ${CONFIG.DISPATCH_DELAY_MS / 1000}s between launches`);
   console.log(
     `  Backoff: ${CONFIG.BACKOFF_MS / 1000}s on limit, up to ${CONFIG.MAX_RETRIES} retries`
   );
   console.log('─'.repeat(60));
 
-  for (let i = 0; i < contacts.length; i++) {
-    totalDispatched++;
-    const callNum = totalSkipped + totalDispatched;
+  // ── True concurrent worker pool ──
+  let activeCount = 0;
+  let contactIdx = 0;
+  let resolveSlot = null; // resolver for waiting on a free slot
 
-    const result = await dialWithRetry(contacts[i], callNum);
+  function onSlotFreed() {
+    if (resolveSlot) {
+      const r = resolveSlot;
+      resolveSlot = null;
+      r();
+    }
+  }
+
+  function waitForSlot() {
+    if (activeCount < CONFIG.MAX_CONCURRENT) return Promise.resolve();
+    return new Promise(resolve => { resolveSlot = resolve; });
+  }
+
+  async function processContact(contact, idx, didEntry) {
+    const callNum = totalSkipped + idx + 1;
+    totalDispatched++;
+
+    const result = await dialWithRetry(contact, callNum, didEntry);
 
     if (result && result.success) {
       totalSuccess++;
@@ -394,28 +426,55 @@ async function runDialer(contacts, calledNumbers) {
       totalFailed++;
     }
 
-    // Track this number as called (regardless of outcome)
-    calledNumbers.add(contacts[i]);
+    // Track progress
+    calledNumbers.add(contact);
     saveProgress(calledNumbers);
 
     callResults.push({
-      ...(result || { destination: contacts[i], error: 'max retries' }),
+      ...(result || { destination: contact, error: 'max retries' }),
       callNum,
       timestamp: new Date().toISOString(),
     });
 
     // Progress update every 50 calls
-    if (callNum % 50 === 0) {
+    const totalProcessed = totalSuccess + totalFailed;
+    if (totalProcessed % 50 === 0) {
       console.log(
-        `\n  ── Progress: ${callNum}/${totalSkipped + contacts.length} (${totalSuccess} ok, ${totalFailed} failed) ──\n`
+        `\n  ── Progress: ${totalProcessed}/${contacts.length} (${totalSuccess} ok, ${totalFailed} failed, ${activeCount} in-flight) ──\n`
       );
     }
 
-    // Pace successful dispatches
-    if (result && result.success) {
+    // Free the slot
+    activeCount--;
+    onSlotFreed();
+  }
+
+  // Launch calls with staggered dispatch, up to MAX_CONCURRENT in parallel
+  const inflight = [];
+
+  while (contactIdx < contacts.length) {
+    // Wait until there's a free concurrency slot
+    await waitForSlot();
+
+    // Stagger launches so we don't hammer the API all at once
+    if (contactIdx > 0) {
       await sleep(CONFIG.DISPATCH_DELAY_MS);
     }
+
+    // Grab next contact and assign a DID (round-robin across pool)
+    const contact = contacts[contactIdx];
+    const idx = contactIdx;
+    const didEntry = didPool[contactIdx % didPool.length];
+    contactIdx++;
+    activeCount++;
+
+    // Fire-and-forget into the pool (don't await here — that's the whole point)
+    const task = processContact(contact, idx, didEntry);
+    inflight.push(task);
   }
+
+  // Wait for all remaining in-flight calls to finish
+  await Promise.all(inflight);
 }
 
 // ============================================================================

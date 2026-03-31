@@ -1,0 +1,70 @@
+<include>
+  <!-- Vapi Outbound Context — ISOLATED from all other dialplans -->
+  <!-- Only handles calls from Vapi SIP profile on port 5070 -->
+  <!-- Calls routed via SignalWire (handles its own STIR/SHAKEN) -->
+  <context name="vapi_outbound">
+
+    <!-- Rate limiting for Vapi calls -->
+    <extension name="vapi-rate-limit" continue="true">
+      <condition field="destination_number" expression="^.*$">
+        <action application="limit" data="hash vapi ${destination_number} 10 !CALL_REJECTED"/>
+      </condition>
+    </extension>
+
+    <!-- US outbound: 10-digit numbers with optional +1 prefix -->
+    <extension name="vapi-outbound-us">
+      <condition field="destination_number" expression="^\+?1?(\d{10})$">
+        <action application="log" data="INFO [VAPI] Outbound US call to 1$1 via SignalWire"/>
+
+        <!-- Tracking metadata -->
+        <action application="set" data="accountcode=vapi"/>
+        <action application="set" data="sip_h_X-Provider=Vapi"/>
+        <action application="set" data="sip_h_X-Call-Source=vapi_profile"/>
+        <action application="set" data="sip_h_X-Carrier=signalwire"/>
+
+        <!-- Call control -->
+        <action application="set" data="hangup_after_bridge=true"/>
+        <action application="set" data="ignore_early_media=true"/>
+        <action application="set" data="progress_timeout=30"/>
+        <action application="set" data="originate_timeout=60"/>
+
+        <!-- Force PCMU/PCMA on B-leg -->
+        <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
+        <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
+
+        <!-- Bridge to SignalWire -->
+        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC}sofia/gateway/signalwire/1$1"/>
+      </condition>
+    </extension>
+
+    <!-- Vapi internal routing IDs (11+ digit strings) -->
+    <extension name="vapi-outbound-routing-id">
+      <condition field="destination_number" expression="^(\d{11,})$">
+        <action application="log" data="INFO [VAPI] Routing ID call to $1 via SignalWire"/>
+
+        <action application="set" data="accountcode=vapi"/>
+        <action application="set" data="sip_h_X-Provider=Vapi"/>
+        <action application="set" data="sip_h_X-Call-Source=vapi_profile"/>
+
+        <action application="set" data="hangup_after_bridge=true"/>
+        <action application="set" data="ignore_early_media=true"/>
+        <action application="set" data="progress_timeout=30"/>
+        <action application="set" data="originate_timeout=60"/>
+
+        <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
+        <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
+
+        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC}sofia/gateway/signalwire/$1"/>
+      </condition>
+    </extension>
+
+    <!-- Fallback — reject unmatched destinations -->
+    <extension name="vapi-unmatched">
+      <condition field="destination_number" expression="^.*$">
+        <action application="log" data="WARNING [VAPI] Unmatched destination: ${destination_number}"/>
+        <action application="hangup" data="NO_ROUTE_DESTINATION"/>
+      </condition>
+    </extension>
+
+  </context>
+</include>
