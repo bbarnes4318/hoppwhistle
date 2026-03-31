@@ -2103,6 +2103,7 @@ model AICampaign {
   // Template-driven configuration
   vertical       String // "ACA", "FINAL_EXPENSE"
   direction      String @default("OUTBOUND") // "OUTBOUND" | "INBOUND"
+  carrier        String @default("bulkvs") // "bulkvs" | "signalwire"
   agencyName     String
   transferNumber String // E.164 format for live transfers
   filters        Json   @default("{}") // e.g. { "no_marketplace": true, "active_bank": true }

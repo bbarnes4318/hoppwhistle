@@ -30,6 +30,7 @@ const CONFIG = {
   VAPI_API_TOKEN: process.env.VAPI_API_TOKEN || 'b8c9e434-32ca-4cbc-ae39-b6c4583622c2',
   ASSISTANT_ID: 'f6bcf4b4-8323-4bf8-a87d-a57d8dd9cd39',
 
+  // BulkVS / FreeSWITCH carrier (default)
   FREESWITCH_HOST: '3.214.60.13',
   FREESWITCH_PORT: 5070,
   SIP_USERNAME: 'vapi',
@@ -52,6 +53,13 @@ const CONFIG = {
     '+19124185542',
     '+19542083921',
     '+19542083922',
+  ],
+
+  // SignalWire carrier
+  SIGNALWIRE_SIP_DOMAIN: 'pvn-shanevici.sip.signalwire.com',
+  SIGNALWIRE_DIDS: [
+    '+18652679650',
+    '+17253022220',
   ],
 
   MAX_CONCURRENT: 1,
@@ -202,7 +210,52 @@ async function getOrCreateCredential() {
   return result;
 }
 
-async function provisionDIDs(credentialId) {
+/**
+ * Get or create BYO SIP trunk credential for SignalWire.
+ * No STIR/SHAKEN signing — SignalWire handles everything.
+ */
+async function getOrCreateSignalWireCredential() {
+  console.log('\n[PROVISION] Checking SignalWire SIP trunk credentials...');
+  let credentials = [];
+  try {
+    credentials = await vapiRequest('GET', '/credential');
+  } catch (err) {
+    console.log('  Could not list credentials:', err.message);
+  }
+
+  const existing = Array.isArray(credentials)
+    ? credentials.find(c => {
+        if (c.provider !== 'byo-sip-trunk') return false;
+        if (c.name === 'SignalWire Outbound Trunk') return true;
+        return c.gateways?.some(g => g.ip === CONFIG.SIGNALWIRE_SIP_DOMAIN);
+      })
+    : null;
+
+  if (existing) {
+    console.log(`  ✓ Found existing SignalWire credential: ${existing.id}`);
+    return existing;
+  }
+
+  console.log('  Creating new SignalWire SIP trunk credential...');
+  const result = await vapiRequest('POST', '/credential', {
+    provider: 'byo-sip-trunk',
+    name: 'SignalWire Outbound Trunk',
+    gateways: [
+      {
+        ip: CONFIG.SIGNALWIRE_SIP_DOMAIN,
+        port: 5060,
+        netmask: 32,
+        inboundEnabled: false,
+        outboundEnabled: true,
+        outboundProtocol: 'udp',
+      },
+    ],
+  });
+  console.log(`  ✓ Created SignalWire credential: ${result.id}`);
+  return result;
+}
+
+async function provisionDIDs(credentialId, dids) {
   console.log('\n[PROVISION] Registering DID pool in Vapi...');
   let existingNumbers = [];
   try {
@@ -213,7 +266,7 @@ async function provisionDIDs(credentialId) {
   }
 
   const pool = [];
-  for (const did of CONFIG.DIDS) {
+  for (const did of dids) {
     const existing = existingNumbers.find(n => n.number === did);
     if (existing) {
       if (existing.credentialId !== credentialId) {
@@ -418,6 +471,7 @@ Owner Dialer — DID Rotation + Resume Support
 Usage:
   node scripts/owner-dialer.js --file contacts.txt
   node scripts/owner-dialer.js --file contacts.txt --fresh   (start over)
+  node scripts/owner-dialer.js --file contacts.txt --carrier signalwire
   node scripts/owner-dialer.js <number> [number2] ...
   node scripts/owner-dialer.js --provision-only
 
@@ -437,9 +491,27 @@ Assistant: ${CONFIG.ASSISTANT_ID}
   console.log(`  FreeSWITCH: ${CONFIG.FREESWITCH_HOST}:${CONFIG.FREESWITCH_PORT}`);
   console.log('═'.repeat(60));
 
+  // Determine carrier
+  const carrierIdx = args.indexOf('--carrier');
+  const carrier = carrierIdx !== -1 && args[carrierIdx + 1] ? args[carrierIdx + 1].toLowerCase() : 'bulkvs';
+  const isSignalWire = carrier === 'signalwire';
+
+  if (isSignalWire) {
+    console.log('\n  🔀 CARRIER: SignalWire (no STIR/SHAKEN signing)');
+  } else {
+    console.log('\n  🔀 CARRIER: BulkVS / FreeSWITCH (with STIR/SHAKEN signing)');
+  }
+
   // Phase 1: Provision
-  const credential = await getOrCreateCredential();
-  didPool = await provisionDIDs(credential.id);
+  let credential;
+  if (isSignalWire) {
+    credential = await getOrCreateSignalWireCredential();
+  } else {
+    credential = await getOrCreateCredential();
+  }
+
+  const activeDIDs = isSignalWire ? CONFIG.SIGNALWIRE_DIDS : CONFIG.DIDS;
+  didPool = await provisionDIDs(credential.id, activeDIDs);
 
   if (didPool.length === 0) {
     console.error('\n✗ No DIDs provisioned. Aborting.');

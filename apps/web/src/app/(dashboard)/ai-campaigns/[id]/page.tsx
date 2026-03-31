@@ -39,6 +39,7 @@ interface Campaign {
   status: 'DRAFT' | 'READY' | 'RUNNING' | 'PAUSED' | 'COMPLETED';
   vertical: string;
   direction: string;
+  carrier: string;
   agencyName: string;
   transferNumber: string;
   filters: Record<string, boolean>;
@@ -626,6 +627,19 @@ export default function CampaignDetailPage() {
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">Direction</label>
                   <p className="text-lg">{campaign.direction}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">VOIP Carrier</label>
+                  <p className="text-lg">
+                    <Badge
+                      variant="outline"
+                      className={campaign.carrier === 'signalwire'
+                        ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'
+                        : 'text-sm'}
+                    >
+                      {campaign.carrier === 'signalwire' ? 'SignalWire' : 'BulkVS / FreeSWITCH'}
+                    </Badge>
+                  </p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">Agency Name</label>

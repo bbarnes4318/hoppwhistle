@@ -8,8 +8,10 @@ import {
   Loader2,
   Megaphone,
   Phone,
+  Radio,
   Shield,
   Sparkles,
+  Wifi,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -42,6 +44,7 @@ interface PhoneNumber {
 }
 
 type Vertical = 'ACA' | 'FINAL_EXPENSE';
+type VoipCarrier = 'bulkvs' | 'signalwire';
 type WizardStep = 'vertical' | 'config' | 'filters';
 
 interface FilterConfig {
@@ -137,6 +140,22 @@ const VERTICAL_INFO: Record<
   },
 };
 
+const CARRIER_INFO: Record<
+  VoipCarrier,
+  { name: string; description: string; badge: string }
+> = {
+  bulkvs: {
+    name: 'BulkVS / FreeSWITCH',
+    description: 'Routes through FreeSWITCH with BulkVS STIR/SHAKEN signing → DIDCentral/FracTEL',
+    badge: 'Current Default',
+  },
+  signalwire: {
+    name: 'SignalWire',
+    description: 'Direct SIP trunk via SignalWire — no external signing needed',
+    badge: 'New',
+  },
+};
+
 // ============================================================================
 // Wizard Component
 // ============================================================================
@@ -156,6 +175,7 @@ export default function NewCampaignPage() {
   const [agencyName, setAgencyName] = useState('');
   const [transferNumber, setTransferNumber] = useState('');
   const [phoneNumberId, setPhoneNumberId] = useState('');
+  const [carrier, setCarrier] = useState<VoipCarrier>('bulkvs');
   const [maxConcurrent, setMaxConcurrent] = useState(1);
   const [callsPerMinute, setCallsPerMinute] = useState(10);
   const [filters, setFilters] = useState<FilterConfig>({});
@@ -249,6 +269,7 @@ export default function NewCampaignPage() {
         name: campaignName,
         vertical,
         direction: 'OUTBOUND',
+        carrier,
         agencyName,
         transferNumber: getE164(transferNumber),
         filters,
@@ -516,6 +537,65 @@ export default function NewCampaignPage() {
             </CardContent>
           </Card>
 
+          {/* VOIP Carrier Selection */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Wifi className="h-5 w-5" />
+                VOIP Carrier
+              </CardTitle>
+              <CardDescription>
+                Select which carrier will handle the outbound SIP traffic for this campaign
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {(Object.entries(CARRIER_INFO) as [VoipCarrier, typeof CARRIER_INFO.bulkvs][]).map(
+                  ([key, info]) => (
+                    <div
+                      key={key}
+                      className={`relative cursor-pointer p-4 rounded-lg border-2 transition-all ${
+                        carrier === key
+                          ? 'border-primary bg-primary/5 shadow-sm'
+                          : 'border-border hover:border-primary/30'
+                      }`}
+                      onClick={() => setCarrier(key)}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div
+                          className={`mt-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                            carrier === key
+                              ? 'border-primary bg-primary'
+                              : 'border-muted-foreground/40'
+                          }`}
+                        >
+                          {carrier === key && (
+                            <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold">{info.name}</span>
+                            <span
+                              className={`text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                                key === 'signalwire'
+                                  ? 'bg-emerald-500/10 text-emerald-600'
+                                  : 'bg-muted text-muted-foreground'
+                              }`}
+                            >
+                              {info.badge}
+                            </span>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">{info.description}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
           <div className="flex justify-end">
             <Button onClick={handleConfigNext} size="lg">
               Continue to Filters
@@ -598,6 +678,16 @@ export default function NewCampaignPage() {
                 <div className="text-muted-foreground">Active Filters</div>
                 <div className="font-medium">
                   {Object.values(filters).filter(Boolean).length} enabled
+                </div>
+
+                <div className="text-muted-foreground">VOIP Carrier</div>
+                <div className="font-medium flex items-center gap-1.5">
+                  {carrier === 'signalwire' ? (
+                    <Radio className="h-3.5 w-3.5 text-emerald-500" />
+                  ) : (
+                    <Radio className="h-3.5 w-3.5" />
+                  )}
+                  {CARRIER_INFO[carrier].name}
                 </div>
               </div>
             </CardContent>
