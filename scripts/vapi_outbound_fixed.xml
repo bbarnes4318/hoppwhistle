@@ -1,0 +1,55 @@
+<include>
+  <!-- Vapi Outbound Context — ISOLATED from all other dialplans -->
+  <!-- Only handles calls from Vapi SIP profile on port 5070 -->
+  <!-- Calls routed via SignalWire gateway -->
+  <context name="vapi_outbound">
+
+    <!-- Rate limiting for Vapi calls -->
+    <extension name="vapi-rate-limit" continue="true">
+      <condition field="destination_number" expression="^.*$">
+        <action application="limit" data="hash vapi ${destination_number} 10 !CALL_REJECTED"/>
+      </condition>
+    </extension>
+
+    <!-- Vapi assistant leg — Vapi calls back to our DID to set up AI audio -->
+    <!-- These are incoming calls TO our BYO DIDs, answer and park for bridge -->
+    <extension name="vapi-assistant-leg">
+      <condition field="destination_number" expression="^(\+?1?8652679650|\+?1?7253022220|\+?1?8047135855|\+?1?7705881246|\+?1?7705881235|\+?1?7572416989|\+?1?7572416943)$">
+        <action application="log" data="INFO [VAPI] Assistant leg connecting for DID: ${destination_number}"/>
+        <action application="set" data="accountcode=vapi"/>
+        <action application="answer"/>
+        <action application="park"/>
+      </condition>
+    </extension>
+
+    <!-- Outbound US call via SignalWire -->
+    <!-- Handles US numbers with varied Vapi prefixes (leading zeros, +1, or 1) -->
+    <extension name="vapi-outbound-us">
+      <condition field="destination_number" expression="^(?:\+?1|00001)?(\d{10})$">
+        <action application="log" data="INFO [VAPI] Outbound US call via SignalWire: $1"/>
+        <action application="set" data="accountcode=vapi"/>
+        <action application="set" data="sip_h_X-Attestation-Level=A"/>
+        <action application="set" data="sip_h_X-Provider=Vapi"/>
+        <action application="set" data="sip_h_X-Call-Source=vapi_profile"/>
+        <action application="set" data="hangup_after_bridge=true"/>
+        <action application="set" data="ignore_early_media=true"/>
+
+        <!-- Force PCMU for outbound leg (SignalWire expects G.711, Vapi sends Opus) -->
+        <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
+        <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
+
+        <!-- Bridge to SignalWire gateway with 1+10digit format -->
+        <action application="bridge" data="sofia/gateway/signalwire/1$1"/>
+      </condition>
+    </extension>
+
+    <!-- Fallback — reject unmatched destinations -->
+    <extension name="vapi-unmatched">
+      <condition field="destination_number" expression="^.*$">
+        <action application="log" data="WARNING [VAPI] Unmatched destination: ${destination_number}"/>
+        <action application="hangup" data="NO_ROUTE_DESTINATION"/>
+      </condition>
+    </extension>
+
+  </context>
+</include>

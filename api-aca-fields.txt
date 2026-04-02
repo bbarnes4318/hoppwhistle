@@ -1,0 +1,299 @@
+NTRO - pingPostLead
+This function has three modes.
+
+Ping mode: in "ping" mode you can submit partial lead information as defined in "Ping Required" column of the specification to check if lead can be matched.
+Post mode: Based on the "ping" response (matched, unmatched) you can then post the full lead info. Required fields are defined in "Post Required" column of the specification.
+Full mode: This mode can be used if one has the full lead and would like to submit it just once but system still does ping and then post steps internally. In this case the lead must contain all required values for ping and for post mode, except Lead_ID.
+
+Cost: optionally, a lead cost can be submitted in the ping request. It then overrides lead cost values in the system. Cost should be sent only in ping mode, in post mode it is ignored. It is also ignored if equal or less then zero value is sent.
+Its inputs depend on the lead type configuration. Click on the lead type link to view respective function specification.
+
+URLs
+URL HTTP Post
+
+Test:https://ameriquote.leadportal.com/new_api/api.php?Test_Lead=1
+Live:https://ameriquote.leadportal.com/new_api/api.php
+URL XML
+
+Test:https://ameriquote.leadportal.com/apiXML.php - Node:<Test_Lead>1</Test_Lead>
+Live:https://ameriquote.leadportal.com/apiXML.php
+URL JSON
+
+Test:https://ameriquote.leadportal.com/apiJSON.php - JSON:{ "Test_Lead": "1" }
+Live:https://ameriquote.leadportal.com/apiJSON.php
+Gateway URL for Get/Post methods:https://ameriquote.leadportal.com/new_api/api.php
+
+Spec URL:https://ameriquote.leadportal.com/new_api/index.php?action=detail&func=pingPostLead&TYPE=31 Provide this link to the Vendor
+
+When buying leads on a ping post basis you will need to provide the Vendor with the following in addition to these Specs:
+
+SRC: Source of the lead
+Vendor API Key: Identifies the Vendor passing the request
+Information on how to find or create each of these values can be found on this page: https://www.boberdoo.com/buying-ping-post-leads/.
+Parameters For Lead Type: 
+Health Insurance
+Field Name	Ping Required	Post Required	Values	Example
+Format	NO	NO	String. Format for response - JSON or XML. Default is XML.	JSON
+Key	YES	YES	Created under Settings > API Keys
+What is an API Key?	API_KEY
+API_Action	YES	YES	Name of the API function to call	pingPostLead
+Mode	YES	YES	String. Allowed values:
+ping
+post
+full	ping
+Lead_ID	NO	YES	Lead ID number received in response of "ping" mode.	1234
+Cost	NO	NO	Real number greater than 0	2.55
+Allowed_Times_Sold	NO	NO	Max. number of times a lead can be sold.	2
+Return_Hash_Type	NO	NO	Hashes of the matches sent back in response. Must be used together with Return_Hash_Value_Type
+
+Allowed values: sha1, md5, plain (*).
+(*) except email and phone	sha1
+Return_Hash_Value_Type	NO	NO	Hashes of the matches sent back in response. Must be used together with Return_Hash_Type
+
+Allowed values: email, phone, company, promotionCode, partnerGroup	email
+Skip_Partner_ID	NO	NO	List the partners to skip in processing (exclude from being matched). Comma delimited list of values.	142,1543,225
+Return_Best_Price	YES
+NO	1 (Only if vendor is on dynamic pricing)	1
+TYPE	YES	YES	31	31
+Test_Lead	NO	NO	1 (Only when testing)	1
+Skip_XSL	NO	NO	Do not include XSL path in XML response	1
+Match_With_Partner_ID	NO	NO	Comma separeated list with Buyer IDs to only match with	22,456
+Redirect_URL	NO	NO	Set your redirect URL.	https://www.yoursite.com
+Origin_Lead_Date	NO	NO	Valid datetime. m/d/Y H:i:s	12/23/1980 08:12:11
+Entry_Date	NO	NO	Valid date. m/d/Y	12/23/1980
+masked_cert_url	NO	NO	Varchar (300)	masked_cert_url
+SRC	YES	YES	Assigned by lead company	test
+Landing_Page	NO	YES	Site where lead form completed	landing
+Sub_ID	NO	NO	Varchar (100)	12
+Pub_ID	NO	NO	Varchar (100)	12345
+Recording_URL	NO	NO	Varchar (100)	Recording_URL
+IP_Address	NO	YES	Varchar (100)	75.2.92.149
+leadid_token	NO	NO	Varchar (100)	leadid_token
+Trusted_Form_URL	NO	NO	Varchar (300)	Trusted_Form_URL
+consent_language	NO	NO	Varchar (1000)	consent_language
+Address	NO	YES	Varchar (100)	123 Main St.
+Address_2	NO	NO	Varchar (100)	Address_2
+Age	YES	YES	Integer	6
+Birth_Date	YES	YES	Valid date. MM/DD/YYYY	09/16/1980
+Birth_Day	NO	NO	Integer	8
+Birth_Month	NO	NO	Integer	5
+Birth_Year	NO	NO	Integer	9
+BMI	NO	NO	Varchar (100)	BMI
+City	NO	YES	Varchar (100)	Chicago
+County	NO	NO	Varchar (100)	County
+Email	NO	YES	Valid email. Varchar (100)	test@nags.us
+Felony_Conviction	NO	NO	Set. Allowed values:
+Yes
+No
+Yes
+FirstName	NO	YES	Varchar (100)	FirstName
+Gender	NO	NO	Set. Allowed values:
+Male
+Female
+male
+female
+M
+F
+m
+f
+Non-binary
+Male
+Hazardous_Activities	NO	NO	Set. Allowed values:
+Yes
+No
+Yes
+Height_Feet	NO	YES	Integer	7
+Height_Inches	NO	YES	Integer	11
+isTest	NO	NO	Set. Allowed values:
+Yes
+No
+Yes
+LastName	NO	YES	Varchar (100)	LastName
+Major_Med_Conditions	NO	NO	Set. Allowed values:
+Yes
+No
+Yes
+Med_Conditions_Type	NO	NO	
+AIDS
+Primary_Phone	NO	YES	Valid phone. 10 digits	3125555597
+Private_Pilot	NO	NO	Set. Allowed values:
+Yes
+No
+Yes
+Secondary_Phone	NO	NO	Valid phone. 10 digits	3125559806
+Shared_Exclusive	NO	NO	Set. Allowed values:
+Shared
+Exclusive
+Shared
+Smoker	NO	NO	Set. Allowed values:
+Yes
+No
+Yes
+State	YES	YES	Valid US state abbreviation. Varchar (2)	IL
+SubSource	NO	NO	Varchar (100)	SubSource
+Weight	NO	YES	Varchar (100)	Weight
+ZipCode	YES	YES	Valid ZipCode. 5 digits	60610
+Household_Income	NO	NO	Integer	8
+People_In_Household	NO	NO	Integer	12
+Subsidy	NO	NO	Varchar (100)	Subsidy
+Coverage_Type	NO	NO	
+Variable Life
+Face_Amount	NO	NO	Integer	11
+Life_Type	NO	NO	Set. Allowed values:
+FE
+Traditional
+FE
+Risk_Type	NO	NO	Set. Allowed values:
+Standard
+Premium
+Standard
+insurance_type	NO	NO	Set. Allowed values:
+term
+medsup
+final expense
+whole
+term
+coverage_amount	NO	NO	Set. Allowed values:
+10000
+25000
+50000
+100000
+250000
+500000
+750000
+1000000
+10000
+coverage_years	NO	NO	Set. Allowed values:
+1
+5
+10
+15
+20
+25
+30
+1
+insured_timeframe	NO	NO	Set. Allowed values:
+Immediately
+Less than 6 months
+Not sure
+Immediately
+GET/POST Request Examples
+https://ameriquote.leadportal.com/new_api/api.php
+https://ameriquote.leadportal.com/api.php?Mode=full&Key=API_KEY&API_Action=pingPostLead&TYPE=31&SRC=test&Landing_Page=landing&IP_Address=75.2.92.149&Address=123+Main+St.&Age=6&Birth_Date=09%2F16%2F1980&City=Chicago&Email=test%40nags.us&FirstName=FirstName&Height_Feet=7&Height_Inches=11&LastName=LastName&Primary_Phone=3125555597&State=IL&Weight=Weight&ZipCode=60610
+Copy
+JSON Body Request Examples
+https://ameriquote.leadportal.com/apiJSON.php
+{
+    "Request": {
+        "Mode": "full",
+        "Key": "API_KEY",
+        "API_Action": "pingPostLead",
+        "TYPE": "31",
+        "SRC": "test",
+        "Landing_Page": "landing",
+        "IP_Address": "75.2.92.149",
+        "Address": "123 Main St.",
+        "Age": "6",
+        "Birth_Date": "09\/16\/1980",
+        "City": "Chicago",
+        "Email": "test@nags.us",
+        "FirstName": "FirstName",
+        "Height_Feet": "7",
+        "Height_Inches": "11",
+        "LastName": "LastName",
+        "Primary_Phone": "3125555597",
+        "State": "IL",
+        "Weight": "Weight",
+        "ZipCode": "60610"
+    }
+}
+Copy
+XML Body Request Examples
+https://ameriquote.leadportal.com/apiXML.php
+<?xml version="1.0" encoding="utf-8"?>
+<Request>
+  <Mode>full</Mode>
+  <Key>API_KEY</Key>
+  <API_Action>pingPostLead</API_Action>
+  <TYPE>31</TYPE>
+  <SRC>test</SRC>
+  <Landing_Page>landing</Landing_Page>
+  <IP_Address>75.2.92.149</IP_Address>
+  <Address>123 Main St.</Address>
+  <Age>6</Age>
+  <Birth_Date>09/16/1980</Birth_Date>
+  <City>Chicago</City>
+  <Email>test@nags.us</Email>
+  <FirstName>FirstName</FirstName>
+  <Height_Feet>7</Height_Feet>
+  <Height_Inches>11</Height_Inches>
+  <LastName>LastName</LastName>
+  <Primary_Phone>3125555597</Primary_Phone>
+  <State>IL</State>
+  <Weight>Weight</Weight>
+  <ZipCode>60610</ZipCode>
+</Request>
+Copy
+Response Matched Example
+{
+  "response": {
+    "status": "Matched",
+    "lead_id": "874",
+    "price": "25"
+  }
+}
+Copy
+Response Matched Example with Allowed_Times_Sold used
+{
+  "response": {
+    "status": "Matched",
+    "lead_id": "874",
+    "matches": "5"
+  }
+}
+Copy
+Response Matched Example with sent back hashes
+{
+  "response": {
+    "status": "Matched",
+    "lead_id": "348",
+    "hashes": {
+      "hash": [
+        {
+          "@HashType": "md5",
+          "@ValueType": "email",
+          "0": "8561c83bb23a3f77345fa2b6b50b1f4e"
+        },
+        {
+          "@HashType": "md5",
+          "@ValueType": "email",
+          "0": "8561c83bb23a3f77345fa2b6b50b1f4e"
+        }
+      ]
+    }
+  }
+}
+Copy
+Response Unmatched Example
+{
+  "response": {
+    "status": "Unmatched",
+    "lead_id": "874"
+  }
+}
+Copy
+Name	Description	Note
+status	Status	
+lead_id	ID number of successfully submitted lead	Returned on success
+price	The best price at which a lead can be accepted.	Returned on success and only if Return_Best_Price was submitted in "ping"
+Response - error
+{
+  "response": {
+    "status": "Error",
+    "error": "Required value First_Name is missing"
+  }
+}
+Copy
+Name	Description	Note
+error	Error message	Returned on error
+status	Status	

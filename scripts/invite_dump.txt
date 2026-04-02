@@ -1,0 +1,135 @@
+[m[mrecv 887 bytes from udp/[172.18.0.12]:5060 at 21:56:40.255742:
+------------------------------------------------------------------------
+INVITE sip:69500000441519471052@3.214.60.13:5060 SIP/2.0
+Via: SIP/2.0/UDP 3.214.60.13:5060;branch=z9hG4bK9e21.34acff4cfc83ba05ff436fa3408c9634.0;i=f222
+Via: SIP/2.0/TCP 127.0.0.1:5060;rport=53546;received=51.38.52.190;branch=z9hG4bK-gs95lzskbkc8t7lj
+Max-Forwards: 69
+From: <sip:10001:10001@3.214.60.13>;tag=oxht5mdsxe
+To: <sip:69500000441519471052@3.214.60.13>
+Call-ID: ov6er0w2bkbhhjdk3bqcergq@3.214.60.13
+CSeq: 1 INVITE
+Contact: <sip:10001:10001@127.0.0.1:5060;transport=tcp;alias=51.38.52.190~53546~2>
+User-Agent: Avaya One-X Deskphone Edition 6.2.2 (v01)
+Content-Type: application/sdp
+Content-Length: 264
+
+v=0
+o=10001:10001 1000 1000 IN IP4 127.0.0.1
+s=SOK3A-Core
+c=IN IP4 127.0.0.1
+t=0 0
+m=audio 4000 RTP/AVP 0 8 18 101
+a=rtpmap:0 PCMU/8000
+a=rtpmap:8 PCMA/8000
+a=rtpmap:18 G729/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=ptime:20
+a=sendrecv
+
+[m[mtport.c:3055 tport_deliver() tport_deliver(0x7e8dec0af880): msg 0x7e8dec082250 (887 bytes) from udp/172.18.0.12:5080/sip next=(nil)
+[m[mnta.c:2968 agent_recv_request() nta: received INVITE sip:69500000441519471052@3.214.60.13:5060 SIP/2.0 (CSeq 1) (load: 0 rps)
+[m[mnta.c:3265 agent_check_request_via() nta: Via check: received=172.18.0.12
+[m[mnta.c:3175 agent_recv_request() nta: INVITE (1) going to a default leg
+[m[mnta.c:1380 set_timeout() nta: timer shortened to 200 ms
+[m[mnua_server.c:102 nua_stack_process_request() nua: nua_stack_process_request: entering
+[m[mnua_stack.c:938 nh_create() nua: nh_create: entering
+[m[mnua_common.c:108 nh_create_handle() nua: nh_create_handle: entering
+[m[mnua_params.c:486 nua_stack_set_params() nua: nua_stack_set_params: entering
+[m[msoa.c:278 soa_clone() soa_clone(static::0x7e8dec0e2e40, 0x7e8dec0bd4c0, 0x7e8dec0baf40) called
+[m[msoa.c:402 soa_set_params() soa_set_params(static::0x7e8dec0b40e0, ...) called
+[m[mnta.c:4508 nta_leg_tcreate() nta_leg_tcreate(0x7e8dec0bbc20)
+[m[msoa.c:1301 soa_init_offer_answer() soa_init_offer_answer(static::0x7e8dec0b40e0) called
+[m[msoa.c:1170 soa_set_remote_sdp() soa_set_remote_sdp(static::0x7e8dec0b40e0, (nil), 0x7e8e101e39ef, 264) called
+[m[mnua_dialog.c:338 nua_dialog_usage_add() nua(0x7e8dec0baf40): adding session usage
+[m[mnua_stack.c:301 nua_stack_event() nua(0x7e8dec0baf40): event i_invite 100 Trying
+[m[mnua_session.c:4144 signal_call_state_change() nua(0x7e8dec0baf40): call state changed: init -> received, received offer
+[m[msoa.c:1096 soa_get_remote_sdp() soa_get_remote_sdp(static::0x7e8dec0b40e0, [0x7e8e14c275f0], [0x7e8e14c275f8], [(nil)]) called
+[m[mnua_stack.c:301 nua_stack_event() nua(0x7e8dec0baf40): event i_state 100 Trying
+[m[mnua_stack.c:389 nua_application_event() nua: nua_application_event: entering
+[m[mnua.c:341 nua_handle_bind() nua: nua_handle_bind: entering
+[m[36m2026-03-31 21:56:40.244966 81.17% [NOTICE] switch_channel.c:1142 New Channel sofia/external/10001@3.214.60.13 [e57b1aec-c2aa-4bcd-8999-0aaae7558ce0]
+[m[mnua.c:1170 nua_handle_unref_user() nua nua_handle_unref_user(0x7e8dec0baf40): entering
+[m[mnua_stack.c:558 nua_signal() nua(0x7e8dec0baf40): sent signal r_handle_unref
+[m[mnua.c:1157 nua_unref_user() nua: nua_unref_user: entering
+[m[mnua_stack.c:558 nua_signal() nua((nil)): sent signal r_unref
+[m[mnua_stack.c:389 nua_application_event() nua: nua_application_event: entering
+[m[mnua.c:1170 nua_handle_unref_user() nua nua_handle_unref_user(0x7e8dec0baf40): entering
+[m[mnua_stack.c:558 nua_signal() nua(0x7e8dec0baf40): sent signal r_handle_unref
+[m[mnua.c:1157 nua_unref_user() nua: nua_unref_user: entering
+[m[mnua_stack.c:558 nua_signal() nua((nil)): sent signal r_unref
+[m[33m2026-03-31 21:56:40.244966 81.17% [DEBUG] switch_core_state_machine.c:581 (sofia/external/10001@3.214.60.13) Running State Change CS_NEW (Cur 1 Tot 28067)
+[m[mnua_stack.c:599 nua_stack_signal() nua(0x7e8dec0baf40): recv signal r_handle_unref
+[m[mnua_stack.c:599 nua_stack_signal() nua((nil)): recv signal r_unref
+[m[mnua_stack.c:599 nua_stack_signal() nua(0x7e8dec0baf40): recv signal r_handle_unref
+[m[mnua_stack.c:599 nua_stack_signal() nua((nil)): recv signal r_unref
+[m[mnua.c:365 nua_handle_magic() nua: nua_handle_magic: entering
+[m[32m2026-03-31 21:56:40.244966 81.17% [INFO] sofia.c:10460 sofia/external/10001@3.214.60.13 receiving invite from 172.18.0.12:5060 version: 1.10.12 -release-10222002881-a88d069d6fgit a88d069 2024-08-02 21:02:27Z 64bit call-id: ov6er0w2bkbhhjdk3bqcergq@3.214.60.13
+[m[33m2026-03-31 21:56:40.244966 81.17% [DEBUG] sofia.c:11675 Setting NAT mode based on via received
+[m[mnua.c:365 nua_handle_magic() nua: nua_handle_magic: entering
+[m[mnua.c:1170 nua_handle_unref_user() nua nua_handle_unref_user(0x7e8dec0baf40): entering
+[m[mnua_stack.c:599 nua_stack_signal() nua(0x7e8dec0baf40): recv signal r_handle_unref
+[m[mnua_stack.c:558 nua_signal() nua(0x7e8dec0baf40): sent signal r_handle_unref
+[m[mnua.c:1157 nua_unref_user() nua: nua_unref_user: entering
+[m[mnua_stack.c:558 nua_signal() nua((nil)): sent signal r_unref
+[m[mnua.c:365 nua_handle_magic() nua: nua_handle_magic: entering
+[m[33m2026-03-31 21:56:40.244966 81.17% [DEBUG] sofia.c:7493 Channel sofia/external/10001@3.214.60.13 entering state [received][100]
+[m[33m2026-03-31 21:56:40.244966 81.17% [DEBUG] sofia.c:7503 Remote SDP:
+v=0
+o=10001:10001 1000 1000 IN IP4 127.0.0.1
+s=SOK3A-Core
+c=IN IP4 127.0.0.1
+--
+[m[msend 1172 bytes to udp/[159.65.244.171]:5060 at 21:56:40.262068:
+------------------------------------------------------------------------
+INVITE sip:69500000441519471052@pvn-shanevici.sip.signalwire.com SIP/2.0
+Via: SIP/2.0/UDP 3.214.60.13:5080;rport;branch=z9hG4bKv4ZS35eD4S3ge
+Max-Forwards: 68
+From: "PVN LLC" <sip:10001@3.214.60.13>;tag=tQe9cFXceZ8Fa
+To: <sip:69500000441519471052@pvn-shanevici.sip.signalwire.com>
+Call-ID: 56b91378-a7ef-123f-a1b9-2e276306cd8d
+CSeq: 112943308 INVITE
+Contact: <sip:gw+signalwire@3.214.60.13:5080;transport=udp;gw=signalwire>
+User-Agent: FreeSWITCH-mod_sofia/1.10.12-release-10222002881-a88d069d6f+git~20240802T210227Z~a88d069d6f~64bit
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY
+Supported: timer, path, replaces
+Allow-Events: talk, hold, conference, refer
+Privacy: none
+Content-Type: application/sdp
+Content-Disposition: session
+Content-Length: 266
+X-FS-Support: update_display,send_info
+P-Asserted-Identity: "PVN LLC" <sip:10001@3.214.60.13>
+
+v=0
+o=FreeSWITCH 1774977762 1774977763 IN IP4 3.214.60.13
+s=FreeSWITCH
+c=IN IP4 3.214.60.13
+t=0 0
+m=audio 16438 RTP/AVP 0 8 101 13
+a=rtpmap:0 PCMU/8000
+a=rtpmap:8 PCMA/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=rtpmap:13 CN/8000
+a=ptime:20
+
+[m[mnta.c:8441 outgoing_send() nta: sent INVITE (112943308) to UDP/159.65.244.171:5060
+[m[mtport.c:4191 tport_pend() tport_pend(0x7e8dec0af880): pending 0x7e8dec0e95a0 for udp/172.18.0.9:5080 (already 0)
+[m[mnua_session.c:4144 signal_call_state_change() nua(0x7e8e0c0113e0): call state changed: init -> calling, sent offer
+[m[msoa.c:1268 soa_get_local_sdp() soa_get_local_sdp(static::0x7e8dec0da2c0, [0x7e8e14c27940], [0x7e8e14c27948], [(nil)]) called
+[m[mnua_stack.c:299 nua_stack_event() nua(0x7e8e0c0113e0): event i_state INVITE sent
+[m[mnua_stack.c:389 nua_application_event() nua: nua_application_event: entering
+[m[mnua.c:1170 nua_handle_unref_user() nua nua_handle_unref_user(0x7e8e0c0113e0): entering
+[m[mnua_stack.c:558 nua_signal() nua(0x7e8e0c0113e0): sent signal r_handle_unref
+[m[mnua.c:365 nua_handle_magic() nua: nua_handle_magic: entering
+[m[mnua.c:1157 nua_unref_user() nua: nua_unref_user: entering
+[m[mnua_stack.c:558 nua_signal() nua((nil)): sent signal r_unref
+[m[33m2026-03-31 21:56:40.244966 81.17% [DEBUG] sofia.c:7493 Channel sofia/external/69500000441519471052 entering state [calling][0]
+[m[mnua.c:365 nua_handle_magic() nua: nua_handle_magic: entering
+[m[mnua.c:1170 nua_handle_unref_user() nua nua_handle_unref_user(0x7e8e0c0113e0): entering
+[m[mnua_stack.c:558 nua_signal() nua(0x7e8e0c0113e0): sent signal r_handle_unref
+[m[mnua.c:1157 nua_unref_user() nua: nua_unref_user: entering
+[m[mnua_stack.c:558 nua_signal() nua((nil)): sent signal r_unref
+[m[mnua_stack.c:599 nua_stack_signal() nua(0x7e8e0c0113e0): recv signal r_handle_unref
+[m[mnua_stack.c:599 nua_stack_signal() nua((nil)): recv signal r_unref

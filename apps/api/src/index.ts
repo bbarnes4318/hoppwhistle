@@ -80,8 +80,8 @@ async function buildServer() {
         const token = authHeader.substring(7);
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any
         const decoded = await (request as any).jwtVerify(token);
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any
-        (request as any).user = decoded;
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        request.user = decoded;
         return;
       } catch {
         // JWT failed, try API key
@@ -106,8 +106,7 @@ async function buildServer() {
         ) {
           const scopes =
             dbApiKey.scopes && Array.isArray(dbApiKey.scopes) ? (dbApiKey.scopes as string[]) : [];
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (request as any).user = {
+          request.user = {
             tenantId: dbApiKey.tenantId,
             apiKeyId: dbApiKey.id,
             scopes,
@@ -315,6 +314,14 @@ async function buildServer() {
   );
   await server.register(registerAICampaignRoutes);
   await server.register(registerVapiWebhookRoutes);
+
+  // Register SignalWire webhook routes (voice, SMS, status callbacks, RELAY events)
+  const { registerSignalWireWebhookRoutes } = await import('./routes/signalwire-webhooks.js');
+  await server.register(registerSignalWireWebhookRoutes);
+
+  // Register Insurance Lead Pipeline routes (inbound ingestion, CRM, Ameriquote routing)
+  const { registerInsuranceLeadRoutes } = await import('./routes/insurance-leads.js');
+  await server.register(registerInsuranceLeadRoutes);
 
   // Start Fronter Bot socket server (handles outbound call socket connections)
   const { fronterBotService } = await import('./services/fronter-bot.js');

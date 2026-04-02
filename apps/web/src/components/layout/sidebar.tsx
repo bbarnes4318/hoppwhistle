@@ -59,6 +59,13 @@ const navigation: NavItem[] = [
     title: 'Policy onboarding & retention queue',
     hideFromBuyerOnly: true,
   },
+  {
+    name: 'Insurance Leads',
+    href: '/insurance-leads',
+    icon: FileText,
+    title: 'ACA & FE lead ingestion pipeline',
+    hideFromBuyerOnly: true,
+  },
   { name: 'Billing', href: '/billing', icon: Receipt },
   {
     name: 'My Payroll',

@@ -56,6 +56,8 @@ model Tenant {
   tags                Tag[]
   leads               Lead[]
   retentionPolicies   RetentionPolicy[]
+  insuranceLeads           InsuranceLead[]
+  insuranceLeadSubmissions InsuranceLeadSubmission[]
 
   @@index([slug])
   @@index([status])
@@ -2219,4 +2221,141 @@ enum AICallStatus {
   NO_ANSWER // Not answered
   BUSY // Line busy
   VOICEMAIL // Went to voicemail
+}
+
+// ============================================================================
+// Insurance Lead Ingestion & Mini CRM
+// ============================================================================
+
+enum InsuranceVertical {
+  ACA
+  FE
+}
+
+enum InsuranceValidationStatus {
+  VALID
+  INVALID
+}
+
+enum InsurancePostStatus {
+  PENDING
+  SKIPPED
+  MATCHED
+  UNMATCHED
+  ERROR
+}
+
+enum InsuranceLeadMode {
+  TEST
+  LIVE
+}
+
+enum InsuranceLeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  CONVERTED
+  LOST
+}
+
+/// Master CRM record for insurance leads.
+/// Editable, searchable, holds the normalized contact entity.
+model InsuranceLead {
+  id       String            @id @default(uuid())
+  tenantId String
+  vertical InsuranceVertical
+
+  // Contact Information
+  firstName String?
+  lastName  String?
+  fullName  String?
+  email     String?
+  phone     String  // 10-digit normalized
+
+  // Address
+  address  String?
+  address2 String?
+  city     String?
+  county   String?
+  state    String? // 2-letter
+  zipCode  String? // 5-digit
+
+  // Demographics
+  birthDate String? // MM/DD/YYYY
+  age       Int?
+  gender    String?
+
+  // Lead metadata
+  source       String?
+  status       InsuranceLeadStatus @default(NEW)
+  customFields Json?
+  notes        String?
+  tags         String[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  tenant      Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  submissions InsuranceLeadSubmission[]
+
+  @@index([tenantId])
+  @@index([tenantId, vertical])
+  @@index([phone])
+  @@index([tenantId, phone, vertical])
+  @@index([tenantId, status])
+  @@index([createdAt])
+  @@map("insurance_leads")
+}
+
+/// Audit record for each inbound lead submission + delivery attempt.
+/// Preserves full lifecycle: raw → normalized → mapped → posted → response.
+model InsuranceLeadSubmission {
+  id              String            @id @default(uuid())
+  tenantId        String
+  insuranceLeadId String
+  vertical        InsuranceVertical
+  source          String?
+  receivedAt      DateTime          @default(now())
+
+  // Payload preservation
+  rawPayload            Json  // Original inbound JSON
+  normalizedPayload     Json? // After normalization
+  mappedOutboundPayload Json? // Final Ameriquote payload (secrets redacted)
+
+  // Validation
+  validationStatus InsuranceValidationStatus @default(INVALID)
+  validationErrors Json? // Structured Zod errors
+
+  // Posting
+  postStatus     InsurancePostStatus @default(PENDING)
+  postMode       InsuranceLeadMode   @default(TEST)
+
+  // Ameriquote response
+  ameriquoteResponseRaw    String? // Raw response body
+  ameriquoteResponseStatus String? // Matched | Unmatched | Error
+  ameriquoteLeadId         String? // lead_id from matched response
+  ameriquotePrice          String? // price from matched response
+  ameriquoteErrorMessage   String? // error message if Error
+
+  // Timing
+  postedAt      DateTime?
+  lastAttemptAt DateTime?
+  attemptCount  Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  insuranceLead InsuranceLead @relation(fields: [insuranceLeadId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([insuranceLeadId])
+  @@index([tenantId, vertical])
+  @@index([tenantId, postStatus])
+  @@index([tenantId, validationStatus])
+  @@index([tenantId, postMode])
+  @@index([receivedAt])
+  @@map("insurance_lead_submissions")
 }
