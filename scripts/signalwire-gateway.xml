@@ -2,7 +2,7 @@
   <gateway name="signalwire">
     <param name="realm" value="pvn-shanevici.sip.signalwire.com"/>
     <param name="proxy" value="pvn-shanevici.sip.signalwire.com"/>
-    <param name="username" value="jimbosky35"/>
+    <param name="username" value="fe"/>
     <param name="password" value="Thunder3560"/>
     <param name="register" value="false"/>
     <param name="caller-id-in-from" value="true"/>

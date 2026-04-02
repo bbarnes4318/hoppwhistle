@@ -1,7 +1,7 @@
 <include>
   <!-- Vapi Outbound Context — ISOLATED from all other dialplans -->
   <!-- Only handles calls from Vapi SIP profile on port 5070 -->
-  <!-- Calls routed via SignalWire (handles its own STIR/SHAKEN) -->
+  <!-- Calls routed via SignalWire gateway -->
   <context name="vapi_outbound">
 
     <!-- Rate limiting for Vapi calls -->
@@ -11,50 +11,35 @@
       </condition>
     </extension>
 
-    <!-- US outbound: 10-digit numbers with optional +1 prefix -->
-    <extension name="vapi-outbound-us">
-      <condition field="destination_number" expression="^\+?1?(\d{10})$">
-        <action application="log" data="INFO [VAPI] Outbound US call to 1$1 via SignalWire"/>
-
-        <!-- Tracking metadata -->
+    <!-- Vapi assistant leg — Vapi calls back to our DID to set up AI audio -->
+    <!-- These are incoming calls TO our BYO DIDs, answer and park for bridge -->
+    <extension name="vapi-assistant-leg">
+      <condition field="destination_number" expression="^(\+?1?8652679650|\+?1?7253022220|\+?1?8047135855|\+?1?7705881246|\+?1?7705881235|\+?1?7572416989|\+?1?7572416943)$">
+        <action application="log" data="INFO [VAPI] Assistant leg connecting for DID: ${destination_number}"/>
         <action application="set" data="accountcode=vapi"/>
-        <action application="set" data="sip_h_X-Provider=Vapi"/>
-        <action application="set" data="sip_h_X-Call-Source=vapi_profile"/>
-        <action application="set" data="sip_h_X-Carrier=signalwire"/>
-
-        <!-- Call control -->
-        <action application="set" data="hangup_after_bridge=true"/>
-        <action application="set" data="ignore_early_media=true"/>
-        <action application="set" data="progress_timeout=30"/>
-        <action application="set" data="originate_timeout=60"/>
-
-        <!-- Force PCMU/PCMA on B-leg -->
-        <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
-        <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
-
-        <!-- Bridge to SignalWire -->
-        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC}sofia/gateway/signalwire/1$1"/>
+        <action application="answer"/>
+        <action application="park"/>
       </condition>
     </extension>
 
-    <!-- Vapi internal routing IDs (11+ digit strings) -->
-    <extension name="vapi-outbound-routing-id">
-      <condition field="destination_number" expression="^(\d{11,})$">
-        <action application="log" data="INFO [VAPI] Routing ID call to $1 via SignalWire"/>
-
+    <!-- Outbound US call via SignalWire -->
+    <!-- Handles US numbers with varied Vapi prefixes (leading zeros, +1, or 1) -->
+    <extension name="vapi-outbound-us">
+      <condition field="destination_number" expression="^(?:\+?1|00001)?(\d{10})$">
+        <action application="log" data="INFO [VAPI] Outbound US call via SignalWire: $1"/>
         <action application="set" data="accountcode=vapi"/>
+        <action application="set" data="sip_h_X-Attestation-Level=A"/>
         <action application="set" data="sip_h_X-Provider=Vapi"/>
         <action application="set" data="sip_h_X-Call-Source=vapi_profile"/>
-
         <action application="set" data="hangup_after_bridge=true"/>
         <action application="set" data="ignore_early_media=true"/>
-        <action application="set" data="progress_timeout=30"/>
-        <action application="set" data="originate_timeout=60"/>
 
+        <!-- Force PCMU for outbound leg (SignalWire expects G.711, Vapi sends Opus) -->
         <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
         <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
 
-        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC}sofia/gateway/signalwire/$1"/>
+        <!-- Bridge to SignalWire gateway with 1+10digit format -->
+        <action application="bridge" data="sofia/gateway/signalwire/1$1"/>
       </condition>
     </extension>
 

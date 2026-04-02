@@ -226,11 +226,12 @@ async function getOrCreateCredential() {
 }
 
 /**
- * Get or create BYO SIP trunk credential for SignalWire.
- * No STIR/SHAKEN signing — SignalWire handles everything.
+ * Get the existing FreeSWITCH BYO SIP trunk credential for SignalWire routing.
+ * Calls go: Vapi → FreeSWITCH:5070 (vapi profile) → sofia/gateway/signalwire → PSTN
+ * Uses the same working credential that handles all BYO outbound calls.
  */
 async function getOrCreateSignalWireCredential() {
-  console.log('\n[PROVISION] Checking SignalWire SIP trunk credentials...');
+  console.log('\n[PROVISION] Checking FreeSWITCH SIP trunk for SignalWire routing...');
   let credentials = [];
   try {
     credentials = await vapiRequest('GET', '/credential');
@@ -238,35 +239,43 @@ async function getOrCreateSignalWireCredential() {
     console.log('  Could not list credentials:', err.message);
   }
 
+  // Use the existing working FreeSWITCH credential (routes to vapi profile on 5070)
   const existing = Array.isArray(credentials)
     ? credentials.find(c => {
         if (c.provider !== 'byo-sip-trunk') return false;
-        if (c.name === 'SignalWire Outbound Trunk') return true;
-        return c.gateways && c.gateways.some(g => g.ip === CONFIG.SIGNALWIRE_SIP_DOMAIN);
+        // Match the known working FreeSWITCH credential
+        if (c.name === 'FreeSWITCH AWS (3.214.60.13)') return true;
+        if (c.name === 'FreeSWITCH Vapi Trunk') return true;
+        // Fallback: any credential pointing to our FreeSWITCH on port 5070
+        return c.gateways && c.gateways.some(g => g.ip === '3.214.60.13' && g.port === 5070 && g.inboundEnabled === true);
       })
     : null;
 
   if (existing) {
-    console.log(`  ✓ Found existing SignalWire credential: ${existing.id}`);
+    console.log(`  ✓ Using FreeSWITCH credential: ${existing.id} (${existing.name})`);
     return existing;
   }
 
-  console.log('  Creating new SignalWire SIP trunk credential...');
+  // If somehow missing, create a new one matching the working config
+  console.log('  Creating new FreeSWITCH SIP trunk credential...');
   const result = await vapiRequest('POST', '/credential', {
     provider: 'byo-sip-trunk',
-    name: 'SignalWire Outbound Trunk',
+    name: 'FreeSWITCH AWS (3.214.60.13)',
     gateways: [
       {
         ip: '3.214.60.13',
         port: 5070,
         netmask: 32,
-        inboundEnabled: false,
+        inboundEnabled: true,
         outboundEnabled: true,
         outboundProtocol: 'udp',
       },
     ],
+    outboundAuthenticationPlan: {
+      authUsername: 'vapi',
+    },
   });
-  console.log(`  ✓ Created SignalWire credential: ${result.id}`);
+  console.log(`  ✓ Created FreeSWITCH credential: ${result.id}`);
   return result;
 }
 

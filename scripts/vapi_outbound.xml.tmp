@@ -1,0 +1,30 @@
+<include>
+  <context name="vapi_outbound">
+    <!-- 
+      Hybrid Routing: Vapi -> FreeSWITCH -> SignalWire
+      Triggered by X-Custom-Carrier: signalwire
+    -->
+    <extension name="vapi_signalwire">
+      <condition field="${sip_h_X-Custom-Carrier}" expression="^signalwire$"/>
+      <condition field="destination_number" expression="^\+?1?(\d{10})$">
+        <action application="log" data="INFO [VAPI] Routing to SignalWire: ${destination_number}"/>
+        <action application="bridge" data="sofia/gateway/signalwire/$1"/>
+      </condition>
+    </extension>
+
+    <!-- Support for other carriers if needed in the future -->
+    <extension name="vapi_bulkvs">
+      <condition field="${sip_h_X-Custom-Carrier}" expression="^bulkvs$">
+        <condition field="destination_number" expression="^\+?1?(\d{10})$">
+          <action application="bridge" data="sofia/gateway/bulkvs/$1"/>
+        </condition>
+      </condition>
+    </extension>
+
+    <extension name="vapi_fallback">
+      <condition field="destination_number" expression="^\+?1?(\d{10})$">
+        <action application="bridge" data="sofia/gateway/bulkvs/$1"/>
+      </condition>
+    </extension>
+  </context>
+</include>
