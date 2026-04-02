@@ -74,8 +74,8 @@ importers:
         specifier: ^8.4.0
         version: 8.5.0
       '@fastify/formbody':
-        specifier: ^8.0.2
-        version: 8.0.2
+        specifier: ^7.4.0
+        version: 7.4.0
       '@fastify/helmet':
         specifier: ^11.1.1
         version: 11.1.1
@@ -1965,11 +1965,11 @@ packages:
       fast-json-stringify: 5.16.1
     dev: false
 
-  /@fastify/formbody@8.0.2:
-    resolution: {integrity: sha512-84v5J2KrkXzjgBpYnaNRPqwgMsmY7ZDjuj0YVuMR3NXCJRCgKEZy/taSP1wUYGn0onfxJpLyRGDLa+NMaDJtnA==}
+  /@fastify/formbody@7.4.0:
+    resolution: {integrity: sha512-H3C6h1GN56/SMrZS8N2vCT2cZr7mIHzBHzOBa5OPpjfB/D6FzP9mMpE02ZzrFX0ANeh0BAJdoXKOF2e7IbV+Og==}
     dependencies:
       fast-querystring: 1.1.2
-      fastify-plugin: 5.1.0
+      fastify-plugin: 4.5.1
     dev: false
 
   /@fastify/helmet@11.1.1:
@@ -8902,10 +8902,6 @@ packages:
 
   /fastify-plugin@4.5.1:
     resolution: {integrity: sha512-stRHYGeuqpEZTL1Ef0Ovr2ltazUT9g844X5z/zEBFLG8RYlpDiOCIG+ATvYEp+/zmc7sN29mcIMp8gvYplYPIQ==}
-    dev: false
-
-  /fastify-plugin@5.1.0:
-    resolution: {integrity: sha512-FAIDA8eovSt5qcDgcBvDuX/v0Cjz0ohGhENZ/wpc3y+oZCY2afZ9Baqql3g/lC+OHRnciQol4ww7tuthOb9idw==}
     dev: false
 
   /fastify@4.29.1:
