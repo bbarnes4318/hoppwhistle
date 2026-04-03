@@ -23,7 +23,7 @@ function getTenantId(request: FastifyRequest): string | null {
   return demoTenantId || user?.tenantId || null;
 }
 
-export function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
+export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
   // -----------------------------------------------------------------------
   // POST /api/v1/insurance-leads/inbound/:vertical — Inbound webhook
   // -----------------------------------------------------------------------
