@@ -140,79 +140,47 @@ export async function ingestLead(
     },
   });
 
-  // 5. If valid, map and post
+  // 5. If valid, map the outbound payload for review — but do NOT post.
+  //    Posting to the buyer only happens via explicit manual trigger
+  //    (POST /api/v1/insurance-leads/:id/submissions/:submissionId/retry).
   if (validation.valid && validation.normalized) {
     try {
-      const { fullPayload, redactedPayload } = mapToAmeriquote(vertical, validation.normalized);
+      const { redactedPayload } = mapToAmeriquote(vertical, validation.normalized);
 
-      // Store mapped payload (redacted)
+      // Store mapped payload (redacted) so the user can review before sending
       await prisma.insuranceLeadSubmission.update({
         where: { id: submission.id },
         data: {
           mappedOutboundPayload: redactedPayload as unknown as Prisma.InputJsonValue,
-        },
-      });
-
-      // Post to Ameriquote
-      const result = await postToAmeriquote(fullPayload);
-
-      // Map response status to our enum
-      let postStatus = 'ERROR';
-      if (result.status === 'Matched') postStatus = 'MATCHED';
-      else if (result.status === 'Unmatched') postStatus = 'UNMATCHED';
-
-      // Update submission with result
-      await prisma.insuranceLeadSubmission.update({
-        where: { id: submission.id },
-        data: {
-          postStatus,
-          ameriquoteResponseRaw: result.rawBody || null,
-          ameriquoteResponseStatus: result.status,
-          ameriquoteLeadId: result.leadId || null,
-          ameriquotePrice: result.price || null,
-          ameriquoteErrorMessage: result.errorMessage || null,
-          postedAt: new Date(),
-          lastAttemptAt: new Date(),
-          attemptCount: 1,
+          postStatus: 'HOLD',   // Held until explicit send
         },
       });
 
       log.info({
-        msg: 'Lead posted to Ameriquote',
+        msg: 'Lead validated and held — NOT posted (auto-post disabled)',
         submissionId: submission.id,
-        status: result.status,
-        leadId: result.leadId,
+        vertical,
       });
 
       return {
         insuranceLeadId: insuranceLead.id,
         submissionId: submission.id,
         validationStatus: 'VALID',
-        postStatus,
+        postStatus: 'HOLD',
         postMode: mode,
-        ameriquoteStatus: result.status,
+        ameriquoteStatus: undefined,
       };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      log.error({ msg: 'Failed to post lead', submissionId: submission.id, error: message });
-
-      await prisma.insuranceLeadSubmission.update({
-        where: { id: submission.id },
-        data: {
-          postStatus: 'ERROR',
-          ameriquoteErrorMessage: message,
-          lastAttemptAt: new Date(),
-          attemptCount: 1,
-        },
-      });
+      log.error({ msg: 'Failed to map lead', submissionId: submission.id, error: message });
 
       return {
         insuranceLeadId: insuranceLead.id,
         submissionId: submission.id,
         validationStatus: 'VALID',
-        postStatus: 'ERROR',
+        postStatus: 'HOLD',
         postMode: mode,
-        ameriquoteStatus: 'Error',
+        ameriquoteStatus: undefined,
       };
     }
   }
