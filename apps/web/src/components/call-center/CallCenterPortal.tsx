@@ -7,46 +7,24 @@
 
 import {
  Phone,
- PhoneOff,
- PhoneIncoming,
- PhoneCall,
- PhoneForwarded,
- Mic,
- MicOff,
- Pause,
- Play,
- Circle,
- UserPlus,
  FileText,
- CheckCircle,
- RefreshCw,
  Headphones,
  LogIn,
  X,
- Settings,
- Clock,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 
+import { ActiveCallControls } from './ActiveCallControls';
+import { ApplicationQueue } from './ApplicationQueue';
+import { CallCenterHeader } from './CallCenterHeader';
+import { DialerPanel } from './DialerPanel';
+import { DispositionPanel } from './DispositionPanel';
+import { IncomingCallPanel } from './IncomingCallPanel';
 import IntegratedScriptPanel from './IntegratedScriptPanel';
 import RetentionScriptPanel from './RetentionScriptPanel';
-import { CallCenterHeader } from './CallCenterHeader';
 import { StatsStrip } from './StatsStrip';
-import { DialerPanel } from './DialerPanel';
-import { ActiveCallControls } from './ActiveCallControls';
-import { IncomingCallPanel } from './IncomingCallPanel';
-import { DispositionPanel } from './DispositionPanel';
-import { ApplicationQueue } from './ApplicationQueue';
 import { WorkspaceTabs } from './WorkspaceTabs';
-
-import { usePhone } from '@/components/phone/phone-provider';
-import { useLeadInjection } from '@/hooks/useLeadInjection';
-import { useScriptAccess } from '@/hooks/useUserRoles';
-
-// ============================================================================
-// TYPES
-// ============================================================================
 import type {
   ActiveCallView,
   AgentStatus,
@@ -57,36 +35,9 @@ import type {
   SelectedScript,
 } from './types';
 
-// ============================================================================
-// CARRIER/PLAN CONFIG
-// ============================================================================
-const CARRIER_PLANS: Record<string, string[]> = {
- Aetna: ['Level'],
- AHL: ['Level'],
- Aflac: ['Level', 'Modified'],
- 'American Amicable': ['Level', 'Graded', 'Return of Premium'],
- CICA: ['Level', 'Guaranteed Issue'],
- Corebridge: ['Level', 'Guaranteed Issue'],
- Gerber: ['Guaranteed Issue'],
- GTL: ['Graded'],
- 'Mutual of Omaha': ['Level', 'Guaranteed Issue'],
- SBLI: ['Level', 'Modified'],
- Securico: ['Level', 'Graded', 'Modified'],
- TransAmerica: ['Level', 'Graded'],
-};
-const CARRIERS = Object.keys(CARRIER_PLANS);
-
-const DISPOSITIONS = [
- 'Sale Made',
- 'Application Submitted',
- 'Callback Scheduled',
- 'Follow-Up Scheduled',
- 'Left Voicemail',
- 'No Answer',
- 'Not Interested',
- 'Wrong Number',
- 'Do Not Call',
-];
+import { usePhone } from '@/components/phone/phone-provider';
+import { useLeadInjection } from '@/hooks/useLeadInjection';
+import { useScriptAccess } from '@/hooks/useUserRoles';
 
 // ============================================================================
 // MAIN COMPONENT
@@ -121,10 +72,8 @@ export function CallCenterPortal(): JSX.Element {
 
  const [isMuted, setIsMuted] = useState(false);
  const [isOnHold, setIsOnHold] = useState(false);
- const [, setThirdPartyNumber] = useState('');
  const [thirdPartyConnected, setThirdPartyConnected] = useState(false);
  const [isAddingThirdParty, setIsAddingThirdParty] = useState(false);
- const [showTransferPanel, setShowTransferPanel] = useState(false);
 
  // Ringtone Audio
  const ringtoneRef = useRef<HTMLAudioElement | null>(null);
@@ -490,7 +439,6 @@ export function CallCenterPortal(): JSX.Element {
  setIsOnHold(false);
  setThirdPartyConnected(false);
  setIsAddingThirdParty(false);
- setThirdPartyNumber('');
  };
 
  const handleSaveDisposition = () => {
@@ -823,8 +771,8 @@ export function CallCenterPortal(): JSX.Element {
             <IncomingCallPanel
               incomingCallData={incomingCallData}
               ringDuration={ringDuration}
-              handleAnswerCall={handleAnswerCall}
-              handleDeclineCall={handleDeclineCall}
+              handleAnswerCall={() => { void handleAnswerCall(); }}
+              handleDeclineCall={() => { void handleDeclineCall(); }}
             />
           )}
 
@@ -838,7 +786,7 @@ export function CallCenterPortal(): JSX.Element {
               isAddingThirdParty={isAddingThirdParty}
               setIsAddingThirdParty={setIsAddingThirdParty}
               thirdPartyConnected={thirdPartyConnected}
-              handleHangup={handleHangup}
+              handleHangup={() => { void handleHangup(); }}
               makeCall={makeCall}
             />
           )}
