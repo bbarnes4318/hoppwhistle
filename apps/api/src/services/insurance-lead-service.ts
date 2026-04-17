@@ -11,6 +11,7 @@ import type { Prisma } from '@prisma/client';
 
 import { createServiceLogger } from '../lib/logger.js';
 import { getPrismaClient } from '../lib/prisma.js';
+
 import { getInsuranceLeadMode } from './insurance-lead-config.js';
 import { mapToAmeriquote } from './insurance-lead-mapper.js';
 import { postToAmeriquote } from './insurance-lead-poster.js';
@@ -55,8 +56,7 @@ export async function ingestLead(
   vertical: Vertical,
   rawPayload: Record<string, unknown>,
 ): Promise<IngestResult> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const prisma = getPrismaClient() as any;
+  const prisma = getPrismaClient();
   const mode = getInsuranceLeadMode();
 
   log.info({ msg: 'Ingesting insurance lead', tenantId, vertical, mode });
@@ -207,8 +207,7 @@ export async function ingestLead(
 // ---------------------------------------------------------------------------
 
 export async function getLeads(tenantId: string, filters: LeadFilters) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const prisma = getPrismaClient() as any;
+  const prisma = getPrismaClient();
   const page = filters.page || 1;
   const limit = Math.min(filters.limit || 25, 100);
   const skip = (page - 1) * limit;
@@ -308,8 +307,7 @@ export async function getLeads(tenantId: string, filters: LeadFilters) {
 }
 
 export async function getLeadById(tenantId: string, id: string) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const prisma = getPrismaClient() as any;
+  const prisma = getPrismaClient();
 
   const lead = await prisma.insuranceLead.findFirst({
     where: { id, tenantId },
@@ -347,8 +345,7 @@ export async function updateLead(
   id: string,
   updates: Record<string, unknown>,
 ) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const prisma = getPrismaClient() as any;
+  const prisma = getPrismaClient();
 
   const existing = await prisma.insuranceLead.findFirst({
     where: { id, tenantId },
@@ -394,8 +391,7 @@ export async function retrySubmission(
   leadId: string,
   submissionId: string,
 ) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const prisma = getPrismaClient() as any;
+  const prisma = getPrismaClient();
   const mode = getInsuranceLeadMode();
 
   const submission = await prisma.insuranceLeadSubmission.findFirst({
@@ -425,7 +421,7 @@ export async function retrySubmission(
 
     const result = await postToAmeriquote(fullPayload);
 
-    let postStatus = 'ERROR';
+    let postStatus: 'ERROR' | 'MATCHED' | 'UNMATCHED' = 'ERROR';
     if (result.status === 'Matched') postStatus = 'MATCHED';
     else if (result.status === 'Unmatched') postStatus = 'UNMATCHED';
 
@@ -468,8 +464,7 @@ export async function retrySubmission(
 // ---------------------------------------------------------------------------
 
 export async function getStats(tenantId: string) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const prisma = getPrismaClient() as any;
+  const prisma = getPrismaClient();
 
   const [
     totalLeads, acaLeads, feLeads,

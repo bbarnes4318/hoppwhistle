@@ -3,5 +3,6 @@
 import { CallCenterPortal } from '@/components/call-center/CallCenterPortal';
 
 export default function CallCenterPage(): JSX.Element {
-  return <CallCenterPortal />;
+ return <CallCenterPortal />;
 }
+

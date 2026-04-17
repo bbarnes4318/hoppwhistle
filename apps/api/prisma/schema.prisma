@@ -2239,6 +2239,7 @@ enum InsuranceValidationStatus {
 
 enum InsurancePostStatus {
   PENDING
+  HOLD
   SKIPPED
   MATCHED
   UNMATCHED

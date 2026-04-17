@@ -55,12 +55,6 @@ const config: Config = {
           '4': 'hsl(var(--chart-4))',
           '5': 'hsl(var(--chart-5))',
         },
-        // Hopwhistle brand colors
-        brand: {
-          navy: '#1E3A5F', // Deep Navy Blue - Main Text
-          green: '#00D084', // Electric Lime Green - First Accent
-          orange: '#FF6B35', // Bright Orange - Second Accent
-        },
       },
     },
   },
