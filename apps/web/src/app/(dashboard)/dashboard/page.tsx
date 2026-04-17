@@ -21,6 +21,7 @@ import {
  YAxis,
 } from 'recharts';
 
+import { KPICard } from '@/components/dashboard/kpi-card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -104,57 +105,20 @@ function getCallResult(call: CallRecord): string {
 function getResultColor(result: string): string {
  switch (result) {
  case 'Application':
- return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
+ return 'bg-emerald-500/5 text-emerald-400 border-emerald-500/20';
  case 'Quote':
- return 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30';
+ return 'bg-cyan-500/5 text-cyan-400 border-cyan-500/20';
  case 'Completed':
- return 'bg-blue-500/20 text-blue-300 border-blue-500/30';
+ return 'bg-blue-500/5 text-blue-400 border-blue-500/20';
  case 'Missed':
  case 'No Answer':
- return 'bg-amber-500/20 text-amber-300 border-amber-500/30';
+ return 'bg-amber-500/5 text-amber-400 border-amber-500/20';
  case 'Failed':
  case 'Busy':
- return 'bg-red-500/20 text-red-300 border-red-500/30';
+ return 'bg-red-500/5 text-red-400 border-red-500/20';
  default:
- return 'bg-slate-500/20 text-slate-300 border-slate-500/30';
+ return 'bg-transparent text-muted-foreground border-border';
  }
-}
-
-/* ─── Metric Card ──────────────────────────────────────────────── */
-function MetricCard({
- label,
- value,
- icon: Icon,
- accentColor = 'emerald',
-}: {
- label: string;
- value: string;
- icon: React.ComponentType<{ className?: string }>;
- accentColor?: 'emerald' | 'cyan' | 'amber' | 'violet' | 'rose';
-}) {
- const colorMap = {
- emerald: 'text-emerald-400',
- cyan: 'text-cyan-400',
- amber: 'text-amber-400',
- violet: 'text-violet-400',
- rose: 'text-rose-400',
- };
-
- return (
- <div className="relative overflow-hidden rounded-xl border bg-card text-card-foreground shadow-sm p-5 transition-all duration-300 hover:bg-accent/50 hover:border-border">
- <div className="flex items-start justify-between">
- <div className="space-y-2">
- <p className="text-xs font-medium uppercase tracking-widest text-slate-500">{label}</p>
- <p className={`font-mono text-2xl font-bold tracking-tight ${colorMap[accentColor]}`}>
- {value}
- </p>
- </div>
- <div className="rounded-md border border-white/10 bg-white/5 p-2">
- <Icon className={`h-4 w-4 ${colorMap[accentColor]}`} />
- </div>
- </div>
- </div>
- );
 }
 
 /* ─── Chart Tooltip ────────────────────────────────────────────── */
@@ -173,9 +137,7 @@ function ChartTooltip({
  <p className="mb-2 font-mono text-xs text-muted-foreground">{label}</p>
  {payload.map(entry => (
  <p key={entry.dataKey} className="font-mono text-sm">
- <span
- className={entry.dataKey === 'outbound' ? 'text-cyan-400' : 'text-emerald-400'}
- >
+ <span className="text-muted-foreground uppercase text-xs">
  {entry.dataKey === 'outbound' ? 'Outbound' : 'Inbound'}
  </span>
  <span className="ml-3 text-slate-200">{entry.value.toLocaleString()}</span>
@@ -201,14 +163,10 @@ export default function DashboardPage() {
  useEffect(() => {
  const tick = () => {
  const now = new Date();
- setLiveClock(
- now.toLocaleTimeString('en-US', { hour12: false }) +
- '.' +
- now.getMilliseconds().toString().padStart(3, '0')
- );
+ setLiveClock(now.toLocaleTimeString('en-US', { hour12: false }));
  };
  tick();
- const id = setInterval(tick, 67);
+ const id = setInterval(tick, 1000);
  return () => clearInterval(id);
  }, []);
 
@@ -323,12 +281,11 @@ export default function DashboardPage() {
  </p>
  </div>
  <div className="flex items-center gap-3">
- <div className="flex items-center gap-2 rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-1.5">
+ <div className="flex items-center gap-2 rounded-md border bg-card px-3 py-1.5">
  <span className="relative flex h-2 w-2">
- <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
- <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+ <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500/80" />
  </span>
- <span className="font-mono text-xs text-emerald-400">LIVE</span>
+ <span className="font-mono text-xs text-muted-foreground uppercase tracking-widest">Live Connect</span>
  </div>
  <div className="rounded-md border bg-card px-3 py-1.5 font-mono text-xs text-muted-foreground">
  {liveClock}
@@ -383,35 +340,36 @@ export default function DashboardPage() {
 
  {/* ── Metric Cards ──────────────────────────────────────── */}
  <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
- <MetricCard
- label="Calls"
- value={loading ? '—' : stats?.calls.toLocaleString() || '0'}
+ <KPICard
+ title="Calls"
+ value={stats?.calls || 0}
  icon={Phone}
- accentColor="emerald"
+ loading={loading}
  />
- <MetricCard
- label="Quotes"
- value={loading ? '—' : stats?.quotes.toLocaleString() || '0'}
+ <KPICard
+ title="Quotes"
+ value={stats?.quotes || 0}
  icon={FileText}
- accentColor="cyan"
+ loading={loading}
  />
- <MetricCard
- label="Applications"
- value={loading ? '—' : stats?.applications.toLocaleString() || '0'}
+ <KPICard
+ title="Applications"
+ value={stats?.applications || 0}
  icon={Headphones}
- accentColor="violet"
+ loading={loading}
  />
- <MetricCard
- label="Conversion"
- value={loading ? '—' : `${stats?.conversion || 0}%`}
+ <KPICard
+ title="Conversion"
+ value={stats?.conversion || 0}
+ unit="%"
  icon={Activity}
- accentColor="amber"
+ loading={loading}
  />
- <MetricCard
- label="Premium"
- value={loading ? '—' : `$${(stats?.premium || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+ <KPICard
+ title="Premium"
+ value={`$${(stats?.premium || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
  icon={DollarSign}
- accentColor="rose"
+ loading={loading}
  />
  </div>
 
@@ -543,7 +501,7 @@ export default function DashboardPage() {
  key={call.id}
  className="transition-colors duration-150 hover:bg-white/[0.02]"
  >
- <td className="py-3 pr-4 font-mono text-xs text-slate-400">
+ <td className="py-1.5 pr-4 font-mono text-xs text-muted-foreground">
  {new Date(call.createdAt).toLocaleString('en-US', {
  month: 'short',
  day: 'numeric',
@@ -551,49 +509,49 @@ export default function DashboardPage() {
  minute: '2-digit',
  })}
  </td>
- <td className="py-3 pr-4 font-mono text-xs text-slate-300">
+ <td className="py-1.5 pr-4 font-mono text-xs text-foreground">
  {call.callSid || call.id.slice(0, 12)}
  </td>
- <td className="py-3 pr-4 text-sm text-slate-300">
+ <td className="py-1.5 pr-4 font-mono text-xs text-foreground">
  {formatPhoneNumber(call.callerId || call.fromNumber?.number || '—')}
  </td>
- <td className="py-3 pr-4 text-sm text-slate-300">
+ <td className="py-1.5 pr-4 font-mono text-xs text-foreground">
  {formatPhoneNumber(call.toNumber || call.targetNumber || call.did || '—')}
  </td>
- <td className="py-3 pr-4">
+ <td className="py-1.5 pr-4">
  <Badge
  variant="outline"
  className={
  call.status === 'COMPLETED'
- ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+ ? 'bg-emerald-500/5 text-emerald-400 border-emerald-500/20'
  : call.status === 'IN_PROGRESS'
- ? 'bg-blue-500/10 text-blue-400 border-blue-500/30'
- : 'bg-slate-500/10 text-slate-400 border-slate-500/30'
+ ? 'bg-blue-500/5 text-blue-400 border-blue-500/20'
+ : 'bg-transparent text-muted-foreground border-border'
  }
  >
  {call.status}
  </Badge>
  </td>
- <td className="py-3 pr-4 font-mono text-xs text-slate-400">
+ <td className="py-1.5 pr-4 font-mono text-xs text-muted-foreground">
  {call.duration ? formatDuration(call.duration) : '—'}
  </td>
- <td className="py-3 pr-4">
+ <td className="py-1.5 pr-4">
  <Badge variant="outline" className={getResultColor(result)}>
  {result}
  </Badge>
  </td>
- <td className="py-3 text-right">
+ <td className="py-1.5 text-right">
  {call.recordingStatus === 'READY' && call.recordingUrl ? (
  <a
  href={call.recordingUrl}
  target="_blank"
  rel="noopener noreferrer"
- className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+ className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-xs text-muted-foreground hover:bg-accent transition-colors"
  >
  <Play className="h-3 w-3" /> Play
  </a>
  ) : call.recordingStatus === 'PENDING' || call.recordingStatus === 'RECORDING' || call.recordingStatus === 'PROCESSING' ? (
- <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-xs text-amber-400">
+ <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 text-xs text-muted-foreground">
  <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
@@ -601,7 +559,7 @@ export default function DashboardPage() {
  {call.recordingStatus === 'PENDING' ? 'Pending' : call.recordingStatus === 'RECORDING' ? 'Recording' : 'Processing'}
  </span>
  ) : call.recordingStatus === 'FAILED' ? (
- <span className="inline-flex items-center gap-1 rounded-md border border-red-500/30 bg-red-500/10 px-2 py-1 text-xs text-red-400">
+ <span className="inline-flex items-center gap-1 rounded-md border border-red-500/20 bg-red-500/5 px-2 py-1 text-xs text-red-400">
  ✕ Failed
  </span>
  ) : call.recordingUrl ? (

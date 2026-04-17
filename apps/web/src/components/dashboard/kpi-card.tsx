@@ -35,9 +35,9 @@ export function KPICard({
 
  const variantStyles = {
  default: 'bg-card border-border',
- revenue: 'bg-primary border-emerald-500/20',
- conversion: 'bg-primary border-blue-500/20',
- warning: 'bg-amber-500 border-amber-500/20',
+ revenue: 'bg-card border-emerald-500/30',
+ conversion: 'bg-card border-cyan-500/30',
+ warning: 'bg-card border-amber-500/30',
  };
 
  return (
@@ -51,23 +51,17 @@ export function KPICard({
  }
  }}
  className={cn(
- 'relative overflow-hidden rounded-xl border p-5 transition-all duration-200',
+ 'relative overflow-hidden rounded-xl border p-5 transition-colors duration-200',
  variantStyles[variant],
- onClick && 'cursor-pointer hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]',
+ onClick && 'cursor-pointer hover:bg-white/[0.02]',
  className
  )}
  >
- {/* Background accent */}
- {Icon && (
- <div className="absolute -right-4 -top-4 opacity-5">
- <Icon className="h-24 w-24" />
- </div>
- )}
 
  <div className="relative z-10 space-y-3">
  {/* Title */}
  <div className="flex items-center justify-between">
- <span className="text-sm font-medium text-muted-foreground">{title}</span>
+ <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{title}</span>
  {Icon && <Icon className="h-4 w-4 text-muted-foreground" />}
  </div>
 
@@ -77,10 +71,10 @@ export function KPICard({
  <div className="h-9 w-24 animate-pulse rounded bg-muted" />
  ) : (
  <>
- <span className="text-3xl font-bold tracking-tight text-foreground">
+ <span className="font-mono text-3xl font-bold tracking-tight text-foreground">
  {typeof value === 'number' ? value.toLocaleString() : value}
  </span>
- {unit && <span className="text-sm font-medium text-muted-foreground">{unit}</span>}
+ {unit && <span className="font-mono text-sm font-medium text-muted-foreground">{unit}</span>}
  </>
  )}
  </div>
