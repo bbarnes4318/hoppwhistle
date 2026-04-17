@@ -4,6 +4,7 @@ import { Send, RotateCcw, GitCompare } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api';
 
 interface FlowVersion {
@@ -19,15 +20,15 @@ interface VersionControlsProps {
 
 export function VersionControls({ flowId, onVersionChange }: VersionControlsProps) {
  const [versions, setVersions] = useState<FlowVersion[]>([]);
- const [selectedVersion, setSelectedVersion] = useState<string | null>(null);
- const [diffVersion, setDiffVersion] = useState<string | null>(null);
- const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
 
- useEffect(() => {
- if (flowId) {
- loadVersions();
- }
- }, [flowId]);
+  useEffect(() => {
+    if (flowId) {
+      void loadVersions();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flowId]);
 
  const loadVersions = async () => {
  if (!flowId) return;
@@ -51,13 +52,21 @@ export function VersionControls({ flowId, onVersionChange }: VersionControlsProp
  `/api/v1/flows/${flowId}/versions/${version}/publish`
  );
  if (response.data) {
- await loadVersions();
- alert('Flow published successfully!');
- } else {
- alert(`Error: ${response.error?.message || 'Failed to publish'}`);
- }
- } catch (error) {
- alert(`Error: ${error instanceof Error ? error.message : 'Failed to publish'}`);
+          await loadVersions();
+          toast({ title: 'Success', description: 'Flow published successfully!' });
+        } else {
+          toast({
+            title: 'Error',
+            description: response.error?.message || 'Failed to publish',
+            variant: 'destructive',
+          });
+        }
+      } catch (error) {
+        toast({
+          title: 'Error',
+          description: error instanceof Error ? error.message : 'Failed to publish',
+          variant: 'destructive',
+        });
  } finally {
  setLoading(false);
  }
@@ -70,25 +79,36 @@ export function VersionControls({ flowId, onVersionChange }: VersionControlsProp
  try {
  const response = await apiClient.post(`/api/v1/flows/${flowId}/rollback`, { version });
  if (response.data) {
- await loadVersions();
- alert('Flow rolled back successfully!');
- onVersionChange?.(version);
- } else {
- alert(`Error: ${response.error?.message || 'Failed to rollback'}`);
- }
- } catch (error) {
- alert(`Error: ${error instanceof Error ? error.message : 'Failed to rollback'}`);
+          await loadVersions();
+          toast({ title: 'Success', description: 'Flow rolled back successfully!' });
+          onVersionChange?.(version);
+        } else {
+          toast({
+            title: 'Error',
+            description: response.error?.message || 'Failed to rollback',
+            variant: 'destructive',
+          });
+        }
+      } catch (error) {
+        toast({
+          title: 'Error',
+          description: error instanceof Error ? error.message : 'Failed to rollback',
+          variant: 'destructive',
+        });
  } finally {
  setLoading(false);
  }
  };
 
- const handleShowDiff = async (version: string) => {
- if (!flowId) return;
- setDiffVersion(version);
- // TODO: Implement diff view
- alert(`Diff view for version ${version} (to be implemented)`);
- };
+  const handleShowDiff = (version: string) => {
+    if (!flowId) return;
+    // setDiffVersion(version);
+    // TODO: Implement diff view
+    toast({
+      title: 'Info',
+      description: `Diff view for version ${version} (to be implemented)`,
+    });
+  };
 
  if (!flowId) {
  return null;
@@ -114,23 +134,23 @@ export function VersionControls({ flowId, onVersionChange }: VersionControlsProp
  )}
  </span>
  {!v.published && (
- <Button
- size="sm"
- variant="outline"
- onClick={() => handlePublish(v.version)}
- disabled={loading}
- >
+               <Button
+                 size="sm"
+                 variant="outline"
+                 onClick={() => { void handlePublish(v.version); }}
+                 disabled={loading}
+               >
  <Send className="mr-1 h-3 w-3" />
  Publish
  </Button>
  )}
  {v.published && (
- <Button
- size="sm"
- variant="outline"
- onClick={() => handleRollback(v.version)}
- disabled={loading}
- >
+               <Button
+                 size="sm"
+                 variant="outline"
+                 onClick={() => { void handleRollback(v.version); }}
+                 disabled={loading}
+               >
  <RotateCcw className="mr-1 h-3 w-3" />
  Rollback
  </Button>

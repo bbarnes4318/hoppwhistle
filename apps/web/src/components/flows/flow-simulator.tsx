@@ -1,11 +1,12 @@
 'use client';
 
 import type { Node, Edge } from '@xyflow/react';
-import { X, Play, Pause, RotateCcw } from 'lucide-react';
+import { X, Play, RotateCcw } from 'lucide-react';
 import { useState, useCallback, useMemo } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { useToast } from '@/components/ui/use-toast';
 
 interface FlowSimulatorProps {
  nodes: Node[];
@@ -21,7 +22,8 @@ interface SimulationState {
 }
 
 export function FlowSimulator({ nodes, edges, onClose }: FlowSimulatorProps) {
- const [isRunning, setIsRunning] = useState(false);
+  const { toast } = useToast();
+  const [isRunning, setIsRunning] = useState(false);
  const [simulationState, setSimulationState] = useState<SimulationState>({
  currentNodeId: null,
  path: [],
@@ -52,18 +54,18 @@ export function FlowSimulator({ nodes, edges, onClose }: FlowSimulatorProps) {
  }, [edges]);
 
  const handleStartSimulation = useCallback(() => {
- if (!entryNode) {
- alert('No entry node found');
- return;
- }
+    if (!entryNode) {
+      toast({ title: 'Error', description: 'No entry node found', variant: 'destructive' });
+      return;
+    }
 
- const target = (entryNode.data.config?.target as string) || '';
+  const target = ((entryNode.data.config as Record<string, string>)?.target) || '';
  const firstNodeId = target || edges.find((e) => e.source === entryNode.id)?.target;
 
- if (!firstNodeId) {
- alert('No target node found from entry');
- return;
- }
+    if (!firstNodeId) {
+      toast({ title: 'Error', description: 'No target node found from entry', variant: 'destructive' });
+      return;
+    }
 
  setIsRunning(true);
  setSimulationState({
@@ -82,7 +84,8 @@ export function FlowSimulator({ nodes, edges, onClose }: FlowSimulatorProps) {
  },
  ],
  });
- }, [entryNode, edges]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entryNode, edges]);
 
  const handleInjectEvent = useCallback(
  (eventType: string, eventData?: unknown) => {
@@ -121,10 +124,11 @@ export function FlowSimulator({ nodes, edges, onClose }: FlowSimulatorProps) {
  ...simulationState,
  events: newEvents,
  });
- }
- },
- [simulationState, nodeMap, edgeMap]
- );
+    }
+  },
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [simulationState, nodeMap, edgeMap]
+  );
 
  const handleReset = useCallback(() => {
  setIsRunning(false);
@@ -168,7 +172,7 @@ export function FlowSimulator({ nodes, edges, onClose }: FlowSimulatorProps) {
 
  {currentNode && (
  <div className="rounded border bg-muted p-4">
- <div className="font-semibold">Current Node: {currentNode.data.label}</div>
+  <div className="font-semibold">Current Node: {String(currentNode.data.label)}</div>
  <div className="text-sm text-muted-foreground">ID: {currentNode.id}</div>
  <div className="mt-2 text-sm">Type: {currentNode.type}</div>
  </div>
@@ -188,7 +192,7 @@ export function FlowSimulator({ nodes, edges, onClose }: FlowSimulatorProps) {
  : 'bg-background'
  }`}
  >
- {node?.data.label || nodeId}
+  {String(node?.data.label || nodeId)}
  {index < simulationState.path.length - 1 && (
  <span className="ml-2">→</span>
  )}
@@ -202,8 +206,8 @@ export function FlowSimulator({ nodes, edges, onClose }: FlowSimulatorProps) {
  <div className="rounded border bg-muted p-4">
  <div className="mb-2 font-semibold">Inject Event</div>
  <div className="flex flex-wrap gap-2">
- {getAvailableEvents(currentNode.type).map((eventType) => (
- <Button
+  {getAvailableEvents(currentNode.type || 'entry').map((eventType) => (
+  <Button
  key={eventType}
  size="sm"
  variant="outline"
@@ -225,11 +229,11 @@ export function FlowSimulator({ nodes, edges, onClose }: FlowSimulatorProps) {
  {new Date(event.timestamp).toLocaleTimeString()}
  </span>
  : <span className="font-semibold">{event.type}</span>
- {event.data && (
- <span className="ml-2 text-muted-foreground">
- {JSON.stringify(event.data)}
- </span>
- )}
+  {event.data ? (
+  <span className="ml-2 text-muted-foreground">
+  {JSON.stringify(event.data)}
+  </span>
+  ) : null}
  </div>
  ))}
  </div>

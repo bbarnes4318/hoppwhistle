@@ -27,16 +27,18 @@ import { NodePalette } from './node-palette';
 import { VersionControls } from './version-controls';
 
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
- Select,
- SelectContent,
- SelectItem,
- SelectTrigger,
- SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { useToast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api';
-
 
 const nodeTypes: NodeTypes = {
  entry: CustomNode,
@@ -71,7 +73,8 @@ interface FlowListItem {
 }
 
 export function FlowBuilder() {
- const reactFlowWrapper = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
+  const reactFlowWrapper = useRef<HTMLDivElement>(null);
  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
  const [selectedNode, setSelectedNode] = useState<Node | null>(null);
@@ -247,12 +250,19 @@ export function FlowBuilder() {
  setFlowName(response.data.flow.name || 'Unnamed Flow');
  setFlowVersion(response.data.version);
  setSelectedFlowId(flowIdToLoad);
- } else {
- alert(`Error: ${response.error?.message || 'Failed to load flow'}`);
- }
- } catch (error) {
- alert(`Error: ${error instanceof Error ? error.message : 'Failed to load flow'}`);
- } finally {
+        toast({
+          title: 'Error',
+          description: response.error?.message || 'Failed to load flow',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to load flow',
+        variant: 'destructive',
+      });
+    } finally {
  setLoading(false);
  }
  };
@@ -267,29 +277,37 @@ export function FlowBuilder() {
  };
 
  const handleSaveFlow = useCallback(async () => {
- if (!flowName.trim()) {
- alert('Please enter a flow name');
- return;
- }
+    if (!flowName.trim()) {
+      toast({ title: 'Error', description: 'Please enter a flow name', variant: 'destructive' });
+      return;
+    }
 
- setSaving(true);
- const serializer = new FlowSerializer();
- const flow = serializer.serializeToFlow(nodes, edges, flowName, flowVersion, flowId);
- 
- try {
- const response = await apiClient.post<{ flowId: string; version: string; id: string }>('/api/v1/flows', flow);
- 
- if (response.data) {
- setFlowId(response.data.flowId);
- setSelectedFlowId(response.data.flowId);
- await loadFlows(); // Refresh flows list
- alert('Flow saved successfully!');
- } else {
- alert(`Error: ${response.error?.message || 'Failed to save flow'}`);
- }
- } catch (error) {
- alert(`Error: ${error instanceof Error ? error.message : 'Failed to save flow'}`);
- } finally {
+    setSaving(true);
+    const serializer = new FlowSerializer();
+    const flow = serializer.serializeToFlow(nodes, edges, flowName, flowVersion, flowId);
+
+    try {
+      const response = await apiClient.post<{ flowId: string; version: string; id: string }>('/api/v1/flows', flow);
+
+      if (response.data) {
+        setFlowId(response.data.flowId);
+        setSelectedFlowId(response.data.flowId);
+        await loadFlows(); // Refresh flows list
+        toast({ title: 'Success', description: 'Flow saved successfully!' });
+      } else {
+        toast({
+          title: 'Error',
+          description: response.error?.message || 'Failed to save flow',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to save flow',
+        variant: 'destructive',
+      });
+    } finally {
  setSaving(false);
  }
  }, [nodes, edges, flowName, flowVersion, flowId]);
@@ -338,18 +356,16 @@ export function FlowBuilder() {
  </SelectContent>
  </Select>
  </div>
- <input
- type="text"
+ <Input
  value={flowName}
  onChange={(e) => setFlowName(e.target.value)}
- className="rounded border px-2 py-1 h-8 text-sm w-40"
+ className="h-8 w-48 text-sm"
  placeholder="Flow Name"
  />
- <input
- type="text"
+ <Input
  value={flowVersion}
  onChange={(e) => setFlowVersion(e.target.value)}
- className="rounded border px-2 py-1 h-8 w-20 text-sm"
+ className="h-8 w-24 text-sm font-mono"
  placeholder="Version"
  />
  </div>
@@ -383,9 +399,13 @@ export function FlowBuilder() {
  fitView
  className="h-full w-full"
  >
- <Background />
- <Controls />
- <MiniMap />
+ <Background color="#3f3f46" gap={16} />
+ <Controls className="border-border bg-card fill-muted-foreground" />
+ <MiniMap 
+ maskColor="rgba(0, 0, 0, 0.6)"
+ nodeColor="#3f3f46"
+ className="bg-card border-border border"
+ />
  </ReactFlow>
  </div>
  <div className="w-80 border-l bg-card p-4 overflow-y-auto flex-shrink-0 h-full">
@@ -451,201 +471,227 @@ function NodeConfigPanel({
 }
 
 function NodeConfigForm({
- nodeType,
- config,
- onChange,
+  nodeType,
+  config,
+  onChange,
 }: {
- nodeType: string;
- config: Record<string, unknown>;
- onChange: (key: string, value: unknown) => void;
+  nodeType: string;
+  config: Record<string, unknown>;
+  onChange: (key: string, value: unknown) => void;
 }) {
- switch (nodeType) {
- case 'entry':
- return (
- <div className="space-y-2">
- <label className="text-sm font-medium">Target Node ID</label>
- <input
- type="text"
- value={(config.target as string) || ''}
- onChange={(e) => onChange('target', e.target.value)}
- className="w-full rounded border px-2 py-1"
- />
- </div>
- );
- case 'ivr':
- return (
- <div className="space-y-2">
- <label className="text-sm font-medium">Prompt</label>
- <input
- type="text"
- value={(config.prompt as string) || ''}
- onChange={(e) => onChange('prompt', e.target.value)}
- className="w-full rounded border px-2 py-1"
- placeholder="Audio URL or text"
- />
- <label className="text-sm font-medium">Timeout (seconds)</label>
- <input
- type="number"
- value={(config.timeout as number) || 10}
- onChange={(e) => onChange('timeout', parseInt(e.target.value))}
- className="w-full rounded border px-2 py-1"
- />
- <label className="text-sm font-medium">Max Digits</label>
- <input
- type="number"
- value={(config.maxDigits as number) || 1}
- onChange={(e) => onChange('maxDigits', parseInt(e.target.value))}
- className="w-full rounded border px-2 py-1"
- />
- </div>
- );
- case 'if':
- return (
- <div className="space-y-2">
- <label className="text-sm font-medium">Condition</label>
- <textarea
- value={(config.condition as string) || ''}
- onChange={(e) => onChange('condition', e.target.value)}
- className="w-full rounded border px-2 py-1"
- placeholder='e.g., ${caller.number == "+1234567890"}'
- rows={3}
- />
- </div>
- );
- case 'queue':
- return (
- <div className="space-y-2">
- <label className="text-sm font-medium">Queue ID</label>
- <input
- type="text"
- value={(config.queueId as string) || ''}
- onChange={(e) => onChange('queueId', e.target.value)}
- className="w-full rounded border px-2 py-1"
- />
- <label className="text-sm font-medium">Timeout (seconds)</label>
- <input
- type="number"
- value={(config.timeout as number) || 60}
- onChange={(e) => onChange('timeout', parseInt(e.target.value))}
- className="w-full rounded border px-2 py-1"
- />
- </div>
- );
- case 'buyer':
- return (
- <div className="space-y-2">
- <label className="text-sm font-medium">Strategy</label>
- <select
- value={(config.strategy as string) || 'round-robin'}
- onChange={(e) => onChange('strategy', e.target.value)}
- className="w-full rounded border px-2 py-1"
- >
- <option value="round-robin">Round Robin</option>
- <option value="weighted">Weighted</option>
- <option value="least-calls">Least Calls</option>
- </select>
- </div>
- );
- case 'record':
- return (
- <div className="space-y-2">
- <label className="text-sm font-medium">Format</label>
- <select
- value={(config.format as string) || 'wav'}
- onChange={(e) => onChange('format', e.target.value)}
- className="w-full rounded border px-2 py-1"
- >
- <option value="wav">WAV</option>
- <option value="mp3">MP3</option>
- </select>
- </div>
- );
- case 'tag':
- return (
- <div className="space-y-2">
- <label className="text-sm font-medium">Tags (JSON)</label>
- <textarea
- value={JSON.stringify(config.tags || {}, null, 2)}
- onChange={(e) => {
- try {
- onChange('tags', JSON.parse(e.target.value));
- } catch {
- // Invalid JSON, ignore
- }
- }}
- className="w-full rounded border px-2 py-1 font-mono text-xs"
- rows={5}
- />
- </div>
- );
- case 'whisper':
- return (
- <div className="space-y-2">
- <label className="text-sm font-medium">Caller Prompt</label>
- <input
- type="text"
- value={(config.callerPrompt as string) || ''}
- onChange={(e) => onChange('callerPrompt', e.target.value)}
- className="w-full rounded border px-2 py-1"
- />
- <label className="text-sm font-medium">Callee Prompt</label>
- <input
- type="text"
- value={(config.calleePrompt as string) || ''}
- onChange={(e) => onChange('calleePrompt', e.target.value)}
- className="w-full rounded border px-2 py-1"
- />
- </div>
- );
- case 'timeout':
- return (
- <div className="space-y-2">
- <label className="text-sm font-medium">Duration (seconds)</label>
- <input
- type="number"
- value={(config.duration as number) || 0}
- onChange={(e) => onChange('duration', parseInt(e.target.value))}
- className="w-full rounded border px-2 py-1"
- />
- </div>
- );
- case 'fallback':
- return (
- <div className="space-y-2">
- <label className="text-sm font-medium">Target Node IDs (comma-separated)</label>
- <input
- type="text"
- value={((config.targets as string[]) || []).join(', ')}
- onChange={(e) =>
- onChange(
- 'targets',
- e.target.value.split(',').map((s) => s.trim()).filter(Boolean)
- )
- }
- className="w-full rounded border px-2 py-1"
- />
- </div>
- );
- case 'hangup':
- return (
- <div className="space-y-2">
- <label className="text-sm font-medium">Reason</label>
- <select
- value={(config.reason as string) || 'normal'}
- onChange={(e) => onChange('reason', e.target.value)}
- className="w-full rounded border px-2 py-1"
- >
- <option value="normal">Normal</option>
- <option value="busy">Busy</option>
- <option value="rejected">Rejected</option>
- <option value="timeout">Timeout</option>
- <option value="error">Error</option>
- </select>
- </div>
- );
- default:
- return <div>No configuration available</div>;
- }
+  const labelClass = "text-[10px] font-semibold tracking-wider text-muted-foreground uppercase";
+  const str = (val: unknown) => (val as string) || '';
+  const num = (val: unknown, def: number) => (val as number) || def;
+
+  switch (nodeType) {
+    case 'entry':
+      return (
+        <div className="space-y-1.5">
+          <Label className={labelClass}>Target Node ID</Label>
+          <Input
+            value={str(config.target)}
+            onChange={(e) => onChange('target', e.target.value)}
+            className="h-8 font-mono"
+          />
+        </div>
+      );
+    case 'ivr':
+      return (
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label className={labelClass}>Prompt</Label>
+            <Input
+              value={str(config.prompt)}
+              onChange={(e) => onChange('prompt', e.target.value)}
+              className="h-8"
+              placeholder="Audio URL or text"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1.5">
+              <Label className={labelClass}>Timeout (s)</Label>
+              <Input
+                type="number"
+                value={num(config.timeout, 10)}
+                onChange={(e) => onChange('timeout', parseInt(e.target.value))}
+                className="h-8 font-mono"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className={labelClass}>Max Digits</Label>
+              <Input
+                type="number"
+                value={num(config.maxDigits, 1)}
+                onChange={(e) => onChange('maxDigits', parseInt(e.target.value))}
+                className="h-8 font-mono"
+              />
+            </div>
+          </div>
+        </div>
+      );
+    case 'if':
+      return (
+        <div className="space-y-1.5">
+          <Label className={labelClass}>Condition</Label>
+          <Textarea
+            value={str(config.condition)}
+            onChange={(e) => onChange('condition', e.target.value)}
+            className="font-mono text-xs"
+            placeholder='e.g., ${caller.number == "+1234567890"}'
+            rows={3}
+          />
+        </div>
+      );
+    case 'queue':
+      return (
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label className={labelClass}>Queue ID</Label>
+            <Input
+              value={str(config.queueId)}
+              onChange={(e) => onChange('queueId', e.target.value)}
+              className="h-8 font-mono"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className={labelClass}>Timeout (s)</Label>
+            <Input
+              type="number"
+              value={num(config.timeout, 60)}
+              onChange={(e) => onChange('timeout', parseInt(e.target.value))}
+              className="h-8 font-mono"
+            />
+          </div>
+        </div>
+      );
+    case 'buyer':
+      return (
+        <div className="space-y-1.5">
+          <Label className={labelClass}>Strategy</Label>
+          <Select
+            value={str(config.strategy) || 'round-robin'}
+            onValueChange={(val) => onChange('strategy', val)}
+          >
+            <SelectTrigger className="h-8">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="round-robin">Round Robin</SelectItem>
+              <SelectItem value="weighted">Weighted</SelectItem>
+              <SelectItem value="least-calls">Least Calls</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      );
+    case 'record':
+      return (
+        <div className="space-y-1.5">
+          <Label className={labelClass}>Format</Label>
+          <Select
+            value={str(config.format) || 'wav'}
+            onValueChange={(val) => onChange('format', val)}
+          >
+            <SelectTrigger className="h-8">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="wav">WAV</SelectItem>
+              <SelectItem value="mp3">MP3</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      );
+    case 'tag':
+      return (
+        <div className="space-y-1.5">
+          <Label className={labelClass}>Tags (JSON)</Label>
+          <Textarea
+            value={JSON.stringify(config.tags || {}, null, 2)}
+            onChange={(e) => {
+              try {
+                onChange('tags', JSON.parse(e.target.value));
+              } catch {
+                // Ignore invalid JSON parsing while user types
+              }
+            }}
+            className="font-mono text-xs"
+            rows={5}
+          />
+        </div>
+      );
+    case 'whisper':
+      return (
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label className={labelClass}>Caller Prompt</Label>
+            <Input
+              value={str(config.callerPrompt)}
+              onChange={(e) => onChange('callerPrompt', e.target.value)}
+              className="h-8"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className={labelClass}>Callee Prompt</Label>
+            <Input
+              value={str(config.calleePrompt)}
+              onChange={(e) => onChange('calleePrompt', e.target.value)}
+              className="h-8"
+            />
+          </div>
+        </div>
+      );
+    case 'timeout':
+      return (
+        <div className="space-y-1.5">
+          <Label className={labelClass}>Duration (s)</Label>
+          <Input
+            type="number"
+            value={num(config.duration, 0)}
+            onChange={(e) => onChange('duration', parseInt(e.target.value))}
+            className="h-8 font-mono"
+          />
+        </div>
+      );
+    case 'fallback':
+      return (
+        <div className="space-y-1.5">
+          <Label className={labelClass}>Target Node IDs (comma-separated)</Label>
+          <Input
+            value={((config.targets as string[]) || []).join(', ')}
+            onChange={(e) =>
+              onChange(
+                'targets',
+                e.target.value.split(',').map((s) => s.trim()).filter(Boolean)
+              )
+            }
+            className="h-8 font-mono"
+          />
+        </div>
+      );
+    case 'hangup':
+      return (
+        <div className="space-y-1.5">
+          <Label className={labelClass}>Reason</Label>
+          <Select
+            value={str(config.reason) || 'normal'}
+            onValueChange={(val) => onChange('reason', val)}
+          >
+            <SelectTrigger className="h-8">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="normal">Normal</SelectItem>
+              <SelectItem value="busy">Busy</SelectItem>
+              <SelectItem value="rejected">Rejected</SelectItem>
+              <SelectItem value="timeout">Timeout</SelectItem>
+              <SelectItem value="error">Error</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      );
+    default:
+      return <div className="text-sm text-muted-foreground">No configuration available</div>;
+  }
 }
 
 function getDefaultConfig(nodeType: string): Record<string, unknown> {
