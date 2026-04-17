@@ -2,6 +2,7 @@
 
 import { Plus, Trash2, Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { toast } from '@/components/ui/use-toast';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -53,10 +54,10 @@ export default function WebhooksPage() {
  if (!response.error) {
  loadWebhooks();
  } else {
- alert(`Failed to delete webhook: ${response.error.message}`);
+ toast({ variant: 'destructive', title: 'Error', description: `Failed to delete webhook: ${response.error.message}` });
  }
  } catch (err) {
- alert(`Failed to delete webhook: ${err instanceof Error ? err.message : 'Unknown error'}`);
+ toast({ variant: 'destructive', title: 'Error', description: `Failed to delete webhook: ${err instanceof Error ? err.message : 'Unknown error'}` });
  }
  };
 

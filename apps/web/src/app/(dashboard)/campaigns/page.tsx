@@ -83,7 +83,7 @@ function StatusBadge({ status }: { status: Campaign['status'] }) {
  ARCHIVED: {
  label: 'Setup',
  bg: 'bg-slate-500/10',
- text: 'text-slate-400',
+ text: 'text-muted-foreground',
  dot: 'bg-slate-500',
  },
  };
@@ -253,7 +253,7 @@ export default function CampaignsPage() {
 
  {/* Content */}
  <Card className="flex-1 flex flex-col overflow-hidden min-h-0">
- <CardHeader className="flex-shrink-0 py-3 px-4 border-b border-white/10">
+ <CardHeader className="flex-shrink-0 py-3 px-4 border-b border-border">
  <div className="flex items-center justify-between">
  <div>
  <CardTitle className="text-base font-medium">Campaigns</CardTitle>
@@ -286,39 +286,39 @@ export default function CampaignsPage() {
  </CardHeader>
  <CardContent className="flex-1 overflow-y-auto min-h-0 p-0">
  <Table>
- <TableHeader className="sticky top-0 bg-slate-950 z-10">
- <TableRow className="border-b border-white/10">
- <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3">
+ <TableHeader className="sticky top-0 bg-background z-10">
+ <TableRow className="border-b border-border">
+ <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3">
  Name
  </TableHead>
- <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3">
+ <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3">
  Status
  </TableHead>
- <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3">
+ <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3">
  Offer Name
  </TableHead>
- <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3 text-center">
+ <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-center">
  Country
  </TableHead>
- <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3 text-center">
+ <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-center">
  Recording
  </TableHead>
- <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3 text-right">
+ <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
  Live
  </TableHead>
- <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3 text-right">
+ <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
  Hour
  </TableHead>
- <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3 text-right">
+ <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
  Day
  </TableHead>
- <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3 text-right">
+ <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
  Month
  </TableHead>
- <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3 text-right">
+ <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
  Total
  </TableHead>
- <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3 text-right">
+ <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
  Actions
  </TableHead>
  </TableRow>
@@ -345,7 +345,7 @@ export default function CampaignsPage() {
  return (
  <TableRow
  key={campaign.id}
- className="hover:bg-white/[0.02] border-b border-white/5"
+ className="hover:bg-muted/50 border-b border-border"
  >
  {/* Name */}
  <TableCell className="py-2 px-3">
@@ -363,7 +363,7 @@ export default function CampaignsPage() {
  </TableCell>
 
  {/* Offer Name */}
- <TableCell className="py-2 px-3 text-sm text-slate-400">
+ <TableCell className="py-2 px-3 text-sm text-muted-foreground">
  {campaign.offerName || '—'}
  </TableCell>
 
@@ -373,7 +373,7 @@ export default function CampaignsPage() {
  </TableCell>
 
  {/* Recording */}
- <TableCell className="py-2 px-3 text-center text-sm text-slate-400">
+ <TableCell className="py-2 px-3 text-center text-sm text-muted-foreground">
  {campaign.recordingEnabled ? 'Yes' : 'No'}
  </TableCell>
 
@@ -412,7 +412,7 @@ export default function CampaignsPage() {
  onClick={() => (window.location.href = `/campaigns/${campaign.id}`)}
  title="Edit"
  >
- <Edit className="h-3.5 w-3.5 text-slate-500" />
+ <Edit className="h-3.5 w-3.5 text-muted-foreground" />
  </Button>
  <Button
  variant="ghost"
@@ -423,7 +423,7 @@ export default function CampaignsPage() {
  }
  title="View Reports"
  >
- <BarChart3 className="h-3.5 w-3.5 text-slate-500" />
+ <BarChart3 className="h-3.5 w-3.5 text-muted-foreground" />
  </Button>
  <Button
  variant="ghost"
@@ -432,7 +432,7 @@ export default function CampaignsPage() {
  onClick={() => handleDuplicate(campaign)}
  title="Duplicate"
  >
- <Copy className="h-3.5 w-3.5 text-slate-500" />
+ <Copy className="h-3.5 w-3.5 text-muted-foreground" />
  </Button>
  <Button
  variant="ghost"

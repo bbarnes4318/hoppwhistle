@@ -1,13 +1,12 @@
 'use client';
 
-import { Eye, EyeOff, Loader2, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, Loader2, XCircle, AlertCircle } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import Script from 'next/script';
 import { useState, useCallback, useEffect, type ChangeEvent, type FormEvent } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
@@ -225,93 +224,87 @@ export default function AuthPage() {
 
  <div className="min-h-screen flex">
  {/* Left Panel - Brand */}
- <div className="hidden lg:flex lg:w-1/2 bg-slate-900 border-r border-border relative overflow-hidden">
- {/* Flat pattern overlay */}
- <div className="absolute inset-0 opacity-5">
- <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-white/10 to-transparent" />
- </div>
+ <div className="hidden lg:flex lg:w-1/2 bg-zinc-950 border-r border-border relative overflow-hidden flex-col justify-between p-12">
+ {/* System Grid Overlay */}
+ <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]"></div>
 
- <div className="relative z-10 flex flex-col justify-center items-center w-full p-12 text-white">
+ {/* Top Logotype */}
+ <div className="relative z-10 flex items-center justify-start">
  <Image
  src="/hopwhistle.png"
  alt="Hopwhistle"
- width={280}
- height={93}
- className="mb-8"
+ width={200}
+ height={66}
  priority
  />
- <h1 className="text-4xl font-bold text-center mb-4">Enterprise Call Tracking</h1>
- <p className="text-xl text-white/80 text-center max-w-md">
- Advanced lead distribution, real-time analytics, and intelligent call routing at
- scale.
- </p>
+ </div>
 
- {/* Feature highlights */}
- <div className="mt-12 space-y-4 w-full max-w-sm">
- <div className="flex items-center gap-3 text-white/90">
- <CheckCircle2 className="h-5 w-5 text-primary" />
- <span>Real-time call analytics</span>
+ {/* Center Content / Core Value */}
+ <div className="relative z-10 space-y-6">
+ <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-sm">
+ <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+ <span className="text-[10px] font-mono text-zinc-400 font-semibold tracking-widest uppercase">System Operational</span>
  </div>
- <div className="flex items-center gap-3 text-white/90">
- <CheckCircle2 className="h-5 w-5 text-primary" />
- <span>Intelligent buyer routing</span>
+ <h1 className="text-4xl font-semibold tracking-tight text-zinc-50">
+ Secure Authentication Gateway
+ </h1>
+ <p className="text-lg text-zinc-400 max-w-md leading-relaxed">
+ Access the institutional telephony command center. Real-time media routing, deterministic node orchestration, and multi-tenant ledger management.
+ </p>
  </div>
- <div className="flex items-center gap-3 text-white/90">
- <CheckCircle2 className="h-5 w-5 text-primary" />
- <span>Multi-tenant architecture</span>
+
+ {/* Bottom System Stats */}
+ <div className="relative z-10 border-t border-zinc-800/50 pt-8 mt-12 grid grid-cols-2 gap-6 w-full max-w-md">
+ <div className="space-y-1.5">
+ <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-semibold">Network Status</p>
+ <p className="text-sm font-medium text-zinc-300">Optimal (0ms jitter)</p>
  </div>
+ <div className="space-y-1.5">
+ <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-semibold">Authentication</p>
+ <p className="text-sm font-medium text-zinc-300">Zero-Trust Enforced</p>
+ </div>
+ <div className="space-y-1.5">
+ <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-semibold">Active Nodes</p>
+ <p className="text-sm font-medium text-zinc-300">14 (us-east-1)</p>
+ </div>
+ <div className="space-y-1.5">
+ <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-semibold">Protocol</p>
+ <p className="text-sm font-medium text-zinc-300">SIP/TLS Active</p>
  </div>
  </div>
  </div>
 
  {/* Right Panel - Auth Form */}
- <div className="flex-1 flex items-center justify-center p-8 bg-background">
- <div className="w-full max-w-md">
+ <div className="flex-1 flex flex-col justify-center px-4 py-12 sm:px-6 lg:flex-none lg:px-20 xl:px-24 bg-background">
+ <div className="mx-auto w-full max-w-sm">
  {/* Mobile logo */}
- <div className="lg:hidden flex justify-center mb-8">
- <Image src="/hopwhistle.png" alt="Hopwhistle" width={200} height={67} priority />
+ <div className="lg:hidden flex justify-center mb-10">
+ <Image src="/hopwhistle.png" alt="Hopwhistle" width={180} height={60} priority />
  </div>
 
- <Card className="border-0 shadow-sm">
- <CardHeader className="space-y-1 pb-4">
- <CardTitle className="text-2xl font-bold text-center">
- {activeTab === 'signin' ? 'Welcome back' : 'Create an account'}
- </CardTitle>
- <CardDescription className="text-center">
+ <div className="space-y-8">
+ <div className="space-y-2">
+ <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+ {activeTab === 'signin' ? 'Portal Access' : 'Provision Identity'}
+ </h2>
+ <p className="text-sm text-muted-foreground">
  {activeTab === 'signin'
- ? 'Sign in to your Hopwhistle account'
- : 'Get started with Hopwhistle today'}
- </CardDescription>
- </CardHeader>
-
- <CardContent className="space-y-4">
- {/* Google Sign In Button */}
- <div id="google-signin-button" className="w-full flex justify-center" />
-
- {/* Divider */}
- <div className="relative">
- <div className="absolute inset-0 flex items-center">
- <span className="w-full border-t" />
- </div>
- <div className="relative flex justify-center text-xs uppercase">
- <span className="bg-card px-2 text-muted-foreground">
- or continue with email
- </span>
- </div>
+ ? 'Enter your operational credentials to access the secure command center.'
+ : 'Register a new institutional identity to access the network.'}
+ </p>
  </div>
 
  {/* Error Alert */}
  {error && (
- <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 text-destructive text-sm">
- <AlertCircle className="h-4 w-4 flex-shrink-0" />
- <span>{error}</span>
- <button onClick={clearError} className="ml-auto hover:opacity-70">
+ <div className="flex items-center gap-3 p-4 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-sm font-medium shadow-sm">
+ <AlertCircle className="h-5 w-5 flex-shrink-0" />
+ <span className="flex-1">{error}</span>
+ <button onClick={clearError} className="flex-shrink-0 hover:opacity-70 transition-opacity">
  <XCircle className="h-4 w-4" />
  </button>
  </div>
  )}
 
- {/* Tabs */}
  <Tabs
  value={activeTab}
  onValueChange={v => {
@@ -320,32 +313,50 @@ export default function AuthPage() {
  }}
  className="w-full"
  >
- <TabsList className="grid w-full grid-cols-2">
- <TabsTrigger value="signin">Sign In</TabsTrigger>
- <TabsTrigger value="signup">Sign Up</TabsTrigger>
+ <TabsList className="grid w-full grid-cols-2 h-10 mb-8 bg-muted/50 rounded-md">
+ <TabsTrigger value="signin" className="text-xs font-medium">Authenticate</TabsTrigger>
+ <TabsTrigger value="signup" className="text-xs font-medium">Provision</TabsTrigger>
  </TabsList>
 
  {/* Sign In Form */}
- <TabsContent value="signin" className="mt-4">
- <form onSubmit={e => void handleLogin(e)} className="space-y-4">
- <div className="space-y-2">
- <label htmlFor="signin-email" className="text-sm font-medium">
- Email
+ <TabsContent value="signin" className="space-y-6 outline-none">
+ {/* Google Sign In Button */}
+ <div id="google-signin-button" className="w-full flex justify-center" />
+
+ {/* Divider */}
+ <div className="relative my-8">
+ <div className="absolute inset-0 flex items-center">
+ <span className="w-full border-t border-border" />
+ </div>
+ <div className="relative flex justify-center">
+ <span className="bg-background px-3 text-[10px] uppercase tracking-widest font-mono text-muted-foreground font-semibold">
+ Or authenticate via email
+ </span>
+ </div>
+ </div>
+
+ <form onSubmit={e => void handleLogin(e)} className="space-y-5">
+ <div className="space-y-1.5">
+ <label htmlFor="signin-email" className="text-[10px] font-mono font-semibold tracking-widest text-muted-foreground uppercase">
+ Email Address
  </label>
  <Input
  id="signin-email"
  type="email"
- placeholder="you@example.com"
+ placeholder="operator@domain.com"
  value={email}
  onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
  required
  autoComplete="email"
+ className="h-10 font-mono text-sm shadow-none"
  />
  </div>
- <div className="space-y-2">
- <label htmlFor="signin-password" className="text-sm font-medium">
- Password
+ <div className="space-y-1.5">
+ <div className="flex items-center justify-between">
+ <label htmlFor="signin-password" className="text-[10px] font-mono font-semibold tracking-widest text-muted-foreground uppercase">
+ Passphrase
  </label>
+ </div>
  <div className="relative">
  <Input
  id="signin-password"
@@ -356,7 +367,7 @@ export default function AuthPage() {
  }
  required
  autoComplete="current-password"
- className="pr-10"
+ className="h-10 pr-10 font-mono text-sm shadow-none"
  />
  <button
  type="button"
@@ -371,65 +382,68 @@ export default function AuthPage() {
  </button>
  </div>
  </div>
- <Button type="submit" className="w-full" disabled={isLoading}>
+ <Button type="submit" className="w-full h-10 font-medium shadow-none mt-2" disabled={isLoading}>
  {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
- Sign In
+ Authenticate Session
  </Button>
  </form>
  </TabsContent>
 
  {/* Sign Up Form */}
- <TabsContent value="signup" className="mt-4">
- <form onSubmit={e => void handleRegister(e)} className="space-y-4">
+ <TabsContent value="signup" className="space-y-6 outline-none">
+ <form onSubmit={e => void handleRegister(e)} className="space-y-5">
  <div className="grid grid-cols-2 gap-4">
- <div className="space-y-2">
- <label htmlFor="signup-firstname" className="text-sm font-medium">
+ <div className="space-y-1.5">
+ <label htmlFor="signup-firstname" className="text-[10px] font-mono font-semibold tracking-widest text-muted-foreground uppercase">
  First Name
  </label>
  <Input
  id="signup-firstname"
  type="text"
- placeholder="John"
+ placeholder="Node"
  value={firstName}
  onChange={(e: ChangeEvent<HTMLInputElement>) =>
  setFirstName(e.target.value)
  }
  autoComplete="given-name"
+ className="h-10 text-sm shadow-none"
  />
  </div>
- <div className="space-y-2">
- <label htmlFor="signup-lastname" className="text-sm font-medium">
+ <div className="space-y-1.5">
+ <label htmlFor="signup-lastname" className="text-[10px] font-mono font-semibold tracking-widest text-muted-foreground uppercase">
  Last Name
  </label>
  <Input
  id="signup-lastname"
  type="text"
- placeholder="Doe"
+ placeholder="Operator"
  value={lastName}
  onChange={(e: ChangeEvent<HTMLInputElement>) =>
  setLastName(e.target.value)
  }
  autoComplete="family-name"
+ className="h-10 text-sm shadow-none"
  />
  </div>
  </div>
- <div className="space-y-2">
- <label htmlFor="signup-email" className="text-sm font-medium">
- Email
+ <div className="space-y-1.5">
+ <label htmlFor="signup-email" className="text-[10px] font-mono font-semibold tracking-widest text-muted-foreground uppercase">
+ Email Address
  </label>
  <Input
  id="signup-email"
  type="email"
- placeholder="you@example.com"
+ placeholder="operator@domain.com"
  value={email}
  onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
  required
  autoComplete="email"
+ className="h-10 font-mono text-sm shadow-none"
  />
  </div>
- <div className="space-y-2">
- <label htmlFor="signup-password" className="text-sm font-medium">
- Password
+ <div className="space-y-1.5">
+ <label htmlFor="signup-password" className="text-[10px] font-mono font-semibold tracking-widest text-muted-foreground uppercase">
+ Passphrase
  </label>
  <div className="relative">
  <Input
@@ -441,7 +455,7 @@ export default function AuthPage() {
  }
  required
  autoComplete="new-password"
- className="pr-10"
+ className="pr-10 h-10 font-mono text-sm shadow-none"
  />
  <button
  type="button"
@@ -458,28 +472,28 @@ export default function AuthPage() {
 
  {/* Password Strength Indicator */}
  {password && (
- <div className="space-y-2 mt-2">
- <div className="flex gap-1">
+ <div className="space-y-2 mt-3 pt-1">
+ <div className="flex gap-1.5">
  <div
- className={`h-1 flex-1 rounded-full transition-colors ${passwordStrength.score >= 1 ? 'bg-destructive' : 'bg-muted'}`}
+ className={`h-0.5 flex-1 rounded-full transition-colors ${passwordStrength.score >= 1 ? 'bg-destructive' : 'bg-muted'}`}
  />
  <div
- className={`h-1 flex-1 rounded-full transition-colors ${passwordStrength.score >= 2 ? 'bg-yellow-500' : 'bg-muted'}`}
+ className={`h-0.5 flex-1 rounded-full transition-colors ${passwordStrength.score >= 2 ? 'bg-yellow-500' : 'bg-muted'}`}
  />
  <div
- className={`h-1 flex-1 rounded-full transition-colors ${passwordStrength.score >= 3 ? 'bg-green-500' : 'bg-muted'}`}
+ className={`h-0.5 flex-1 rounded-full transition-colors ${passwordStrength.score >= 3 ? 'bg-emerald-500' : 'bg-muted'}`}
  />
  </div>
- <div className="text-xs space-y-1 text-muted-foreground">
- <div className={passwordStrength.hasLength ? 'text-green-600' : ''}>
+ <div className="text-[10px] uppercase font-mono tracking-wider space-y-1 pt-1">
+ <div className={passwordStrength.hasLength ? 'text-emerald-500' : 'text-muted-foreground'}>
  {passwordStrength.hasLength ? '✓' : '○'} At least 8 characters
  </div>
  <div
- className={passwordStrength.hasUppercase ? 'text-green-600' : ''}
+ className={passwordStrength.hasUppercase ? 'text-emerald-500' : 'text-muted-foreground'}
  >
- {passwordStrength.hasUppercase ? '✓' : '○'} One uppercase letter
+ {passwordStrength.hasUppercase ? '✓' : '○'} One uppercase
  </div>
- <div className={passwordStrength.hasNumber ? 'text-green-600' : ''}>
+ <div className={passwordStrength.hasNumber ? 'text-emerald-500' : 'text-muted-foreground'}>
  {passwordStrength.hasNumber ? '✓' : '○'} One number
  </div>
  </div>
@@ -488,29 +502,24 @@ export default function AuthPage() {
  </div>
  <Button
  type="submit"
- className="w-full"
+ className="w-full h-10 font-medium mt-4 shadow-none"
  disabled={isLoading || passwordStrength.score < 3}
  >
  {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
- Create Account
+ Provision Identity
  </Button>
  </form>
  </TabsContent>
  </Tabs>
 
  {/* Terms */}
- <p className="text-xs text-muted-foreground text-center pt-4">
- By continuing, you agree to our{' '}
- <a href="/legal/terms" className="underline hover:text-foreground">
- Terms of Service
- </a>{' '}
- and{' '}
- <a href="/legal/privacy" className="underline hover:text-foreground">
- Privacy Policy
+ <p className="text-[10px] uppercase tracking-widest font-mono text-muted-foreground text-center pt-8">
+ By continuing, you enforce our{' '}
+ <a href="/legal/terms" className="underline underline-offset-2 hover:text-foreground transition-colors">
+ Security Protocol
  </a>
  </p>
- </CardContent>
- </Card>
+ </div>
  </div>
  </div>
  </div>

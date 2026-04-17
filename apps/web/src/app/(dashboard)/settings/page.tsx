@@ -2,6 +2,7 @@
 
 import { Plus, Copy, Trash2, Loader2, Shield, Scale, FileText } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { toast } from '@/components/ui/use-toast';
 
 import { DemoToggle } from '@/components/demo/demo-toggle';
 import { Badge } from '@/components/ui/badge';
@@ -60,10 +61,10 @@ export default function SettingsPage() {
  if (!response.error) {
  void loadWebhooks();
  } else {
- alert(`Failed to delete webhook: ${response.error.message}`);
+ toast({ variant: 'destructive', title: 'Error', description: `Failed to delete webhook: ${response.error.message}` });
  }
  } catch (err) {
- alert(`Failed to delete webhook: ${err instanceof Error ? err.message : 'Unknown error'}`);
+ toast({ variant: 'destructive', title: 'Error', description: `Failed to delete webhook: ${err instanceof Error ? err.message : 'Unknown error'}` });
  }
  };
 
@@ -274,7 +275,7 @@ export default function SettingsPage() {
  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
  <a
  href="/legal/privacy"
- className="flex items-center gap-3 p-4 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition-colors"
+ className="flex items-center gap-3 p-4 rounded-lg border border-border bg-card hover:bg-muted transition-colors"
  >
  <Shield className="h-5 w-5 text-muted-foreground" />
  <div>
@@ -286,7 +287,7 @@ export default function SettingsPage() {
  </a>
  <a
  href="/legal/terms"
- className="flex items-center gap-3 p-4 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition-colors"
+ className="flex items-center gap-3 p-4 rounded-lg border border-border bg-card hover:bg-muted transition-colors"
  >
  <FileText className="h-5 w-5 text-muted-foreground" />
  <div>
@@ -298,7 +299,7 @@ export default function SettingsPage() {
  </a>
  <a
  href="/legal/data-retention"
- className="flex items-center gap-3 p-4 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition-colors"
+ className="flex items-center gap-3 p-4 rounded-lg border border-border bg-card hover:bg-muted transition-colors"
  >
  <FileText className="h-5 w-5 text-muted-foreground" />
  <div>
@@ -308,7 +309,7 @@ export default function SettingsPage() {
  </a>
  <a
  href="/legal/call-recording"
- className="flex items-center gap-3 p-4 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition-colors"
+ className="flex items-center gap-3 p-4 rounded-lg border border-border bg-card hover:bg-muted transition-colors"
  >
  <FileText className="h-5 w-5 text-muted-foreground" />
  <div>
@@ -320,7 +321,7 @@ export default function SettingsPage() {
  </a>
  <a
  href="/legal/dpa"
- className="flex items-center gap-3 p-4 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition-colors"
+ className="flex items-center gap-3 p-4 rounded-lg border border-border bg-card hover:bg-muted transition-colors"
  >
  <Scale className="h-5 w-5 text-muted-foreground" />
  <div>

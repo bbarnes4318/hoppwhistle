@@ -1,5 +1,3 @@
-'use client';
-
 import type { Node, Edge } from '@xyflow/react';
 import { X, Play, RotateCcw } from 'lucide-react';
 import { useState, useCallback, useMemo } from 'react';

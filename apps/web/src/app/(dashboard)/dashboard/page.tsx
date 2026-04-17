@@ -295,7 +295,7 @@ export default function DashboardPage() {
 
  {/* ── Date Range Filters ─────────────────────────────────── */}
  <div className="flex flex-wrap items-center gap-2">
- <Calendar className="h-4 w-4 text-slate-500" />
+ <Calendar className="h-4 w-4 text-muted-foreground" />
  {presets.map(p => (
  <Button
  key={p.key}
@@ -456,28 +456,28 @@ export default function DashboardPage() {
  <table className="w-full">
  <thead>
  <tr className="border-b border-border">
- <th className="pb-3 text-left text-xs font-semibold uppercase tracking-widest text-slate-500">
+ <th className="pb-3 text-left text-xs font-semibold uppercase tracking-widest text-muted-foreground">
  Time
  </th>
- <th className="pb-3 text-left text-xs font-semibold uppercase tracking-widest text-slate-500">
+ <th className="pb-3 text-left text-xs font-semibold uppercase tracking-widest text-muted-foreground">
  Call ID
  </th>
- <th className="pb-3 text-left text-xs font-semibold uppercase tracking-widest text-slate-500">
+ <th className="pb-3 text-left text-xs font-semibold uppercase tracking-widest text-muted-foreground">
  From
  </th>
- <th className="pb-3 text-left text-xs font-semibold uppercase tracking-widest text-slate-500">
+ <th className="pb-3 text-left text-xs font-semibold uppercase tracking-widest text-muted-foreground">
  To
  </th>
- <th className="pb-3 text-left text-xs font-semibold uppercase tracking-widest text-slate-500">
+ <th className="pb-3 text-left text-xs font-semibold uppercase tracking-widest text-muted-foreground">
  Status
  </th>
- <th className="pb-3 text-left text-xs font-semibold uppercase tracking-widest text-slate-500">
+ <th className="pb-3 text-left text-xs font-semibold uppercase tracking-widest text-muted-foreground">
  Duration
  </th>
- <th className="pb-3 text-left text-xs font-semibold uppercase tracking-widest text-slate-500">
+ <th className="pb-3 text-left text-xs font-semibold uppercase tracking-widest text-muted-foreground">
  Result
  </th>
- <th className="pb-3 text-right text-xs font-semibold uppercase tracking-widest text-slate-500">
+ <th className="pb-3 text-right text-xs font-semibold uppercase tracking-widest text-muted-foreground">
  Recording
  </th>
  </tr>
@@ -485,13 +485,13 @@ export default function DashboardPage() {
  <tbody className="divide-y divide-border">
  {callsLoading ? (
  <tr>
- <td colSpan={8} className="py-12 text-center text-sm text-slate-500">
+ <td colSpan={8} className="py-12 text-center text-sm text-muted-foreground">
  Loading calls...
  </td>
  </tr>
  ) : calls.length === 0 ? (
  <tr>
- <td colSpan={8} className="py-12 text-center text-sm text-slate-500">
+ <td colSpan={8} className="py-12 text-center text-sm text-muted-foreground">
  No calls found for this period.
  </td>
  </tr>

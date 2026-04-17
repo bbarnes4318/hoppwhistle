@@ -58,7 +58,7 @@ function getResultBadgeClass(result: string): string {
  case 'Busy':
  return 'bg-red-500/10 text-red-400 border-red-500/30';
  default:
- return 'bg-slate-500/10 text-slate-400 border-slate-500/30';
+ return 'bg-secondary text-muted-foreground border-border';
  }
 }
 
@@ -182,7 +182,7 @@ export default function CallLogsPage() {
  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
  : call.status === 'IN_PROGRESS'
  ? 'bg-blue-500/10 text-blue-400 border-blue-500/30'
- : 'bg-slate-500/10 text-slate-400 border-slate-500/30'
+ : 'bg-secondary text-muted-foreground border-border'
  }
  >
  {call.status}

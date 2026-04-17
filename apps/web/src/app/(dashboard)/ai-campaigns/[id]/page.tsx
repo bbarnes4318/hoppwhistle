@@ -86,7 +86,7 @@ interface CallRecord {
 }
 
 const statusColors: Record<string, string> = {
-  DRAFT: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
+  DRAFT: 'bg-secondary text-muted-foreground border-border',
   READY: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
   RUNNING: 'bg-green-500/20 text-green-400 border-green-500/30 animate-pulse',
   PAUSED: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
@@ -94,11 +94,11 @@ const statusColors: Record<string, string> = {
 };
 
 const contactStatusColors: Record<string, string> = {
-  PENDING: 'bg-slate-500/20 text-slate-400',
+  PENDING: 'bg-secondary text-muted-foreground',
   CALLING: 'bg-blue-500/20 text-blue-400 animate-pulse',
   COMPLETED: 'bg-green-500/20 text-green-400',
   FAILED: 'bg-red-500/20 text-red-400',
-  SKIPPED: 'bg-gray-500/20 text-gray-400',
+  SKIPPED: 'bg-secondary text-muted-foreground',
   NO_ANSWER: 'bg-yellow-500/20 text-yellow-400',
 };
 
@@ -398,7 +398,7 @@ export default function CampaignDetailPage() {
 
       {/* Progress Bar */}
       {stats && stats.totalContacts > 0 && (
-        <Card className="bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20">
+        <Card className="bg-card border-primary/20">
           <CardContent className="py-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium">Campaign Progress</span>
@@ -424,7 +424,7 @@ export default function CampaignDetailPage() {
             <CardTitle className="text-2xl">{stats?.totalContacts || 0}</CardTitle>
           </CardHeader>
         </Card>
-        <Card className="bg-gradient-to-br from-green-500/5 to-green-500/10 border-green-500/20">
+        <Card className="bg-card border-green-500/20">
           <CardHeader className="pb-2">
             <CardDescription className="flex items-center gap-2">
               <Phone className="h-4 w-4" />

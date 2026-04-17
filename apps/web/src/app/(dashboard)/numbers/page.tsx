@@ -2,6 +2,7 @@
 
 import { Plus, Search, Download, Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { toast } from '@/components/ui/use-toast';
 
 import { AnveoPurchaseDialog } from '@/components/numbers/anveo-purchase-dialog';
 import { EditNumberDialog } from '@/components/numbers/edit-number-dialog';
@@ -75,7 +76,7 @@ export default function NumbersPage() {
  const file = (e.target as HTMLInputElement).files?.[0];
  if (file) {
  // TODO: Implement actual import logic
- alert(`Import functionality coming soon. Selected file: ${file.name}`);
+ toast({ title: 'Feature Coming Soon', description: `Import functionality coming soon. Selected file: ${file.name}` });
  }
  };
  input.click();

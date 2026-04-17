@@ -300,28 +300,28 @@ export default function PublishersPage() {
  <Table>
  <TableHeader className="sticky top-0 bg-slate-950 z-10">
  <TableRow className="border-b border-white/10">
- <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3">
+ <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3">
  Name
  </TableHead>
- <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3">
+ <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3">
  Publisher ID
  </TableHead>
- <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3 text-right">
+ <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
  Total Calls
  </TableHead>
- <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3 text-right">
+ <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
  Billable
  </TableHead>
- <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3 text-right">
+ <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
  Conversion %
  </TableHead>
- <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3 text-right">
+ <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
  Missed
  </TableHead>
- <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3 text-center">
+ <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-center">
  Status
  </TableHead>
- <TableHead className="font-semibold text-xs uppercase tracking-widest text-slate-500 py-2 px-3 text-right">
+ <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3 text-right">
  Actions
  </TableHead>
  </TableRow>
@@ -364,8 +364,8 @@ export default function PublishersPage() {
  {publisher.code}
  </code>
  <button
- onClick={() => copyToClipboard(publisher.code)}
- className="text-slate-500 hover:text-slate-300 transition-colors"
+ onClick={() => { void copyToClipboard(publisher.code); }}
+ className="text-muted-foreground hover:text-slate-300 transition-colors"
  title="Copy to clipboard"
  >
  {copiedId === publisher.code ? (
@@ -422,7 +422,7 @@ export default function PublishersPage() {
  onClick={() => openEditDialog(publisher)}
  title="Edit"
  >
- <Edit className="h-3.5 w-3.5 text-slate-500" />
+ <Edit className="h-3.5 w-3.5 text-muted-foreground" />
  </Button>
  <Button
  variant="ghost"
@@ -433,7 +433,7 @@ export default function PublishersPage() {
  }
  title="View Reports"
  >
- <BarChart3 className="h-3.5 w-3.5 text-slate-500" />
+ <BarChart3 className="h-3.5 w-3.5 text-muted-foreground" />
  </Button>
  <Button
  variant="ghost"

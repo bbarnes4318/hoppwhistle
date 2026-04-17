@@ -24,7 +24,6 @@ import { EdgeConfigPanel } from './edge-config-panel';
 import { FlowSerializer } from './flow-serializer';
 import { FlowSimulator } from './flow-simulator';
 import { NodePalette } from './node-palette';
-import { VersionControls } from './version-controls';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -214,7 +213,7 @@ export function FlowBuilder() {
 
  // Load flows list on mount
  useEffect(() => {
- loadFlows();
+ void loadFlows();
  }, []);
 
  const loadFlows = async () => {
@@ -238,7 +237,7 @@ export function FlowBuilder() {
  ? `/api/v1/flows/${flowIdToLoad}/versions/${version}`
  : `/api/v1/flows/${flowIdToLoad}`;
  
- const response = await apiClient.get<{ flow: any; version: string; flowId: string }>(url);
+ const response = await apiClient.get<{ flow: { name?: string; [key: string]: unknown }; version: string; flowId: string }>(url);
  
  if (response.data?.flow) {
  const serializer = new FlowSerializer();
@@ -310,7 +309,7 @@ export function FlowBuilder() {
     } finally {
  setSaving(false);
  }
- }, [nodes, edges, flowName, flowVersion, flowId]);
+ }, [nodes, edges, flowName, flowVersion, flowId, toast]);
 
  const handleExportFlow = useCallback(() => {
  const serializer = new FlowSerializer();
@@ -338,7 +337,7 @@ export function FlowBuilder() {
  if (value === 'new') {
  handleNewFlow();
  } else {
- loadFlow(value);
+ void loadFlow(value);
  }
  }}
  disabled={loading}
@@ -456,7 +455,7 @@ function NodeConfigPanel({
  return (
  <div className="space-y-4">
  <div className="flex items-center justify-between">
- <h3 className="text-lg font-semibold">{node.data.label}</h3>
+ <h3 className="text-lg font-semibold">{node.data.label as string}</h3>
  <Button
  onClick={() => onDelete(node.id)}
  variant="destructive"
@@ -465,7 +464,7 @@ function NodeConfigPanel({
  Delete
  </Button>
  </div>
- <NodeConfigForm nodeType={node.data.nodeType} config={config} onChange={handleConfigChange} />
+ <NodeConfigForm nodeType={node.data.nodeType as string} config={config} onChange={handleConfigChange} />
  </div>
  );
 }

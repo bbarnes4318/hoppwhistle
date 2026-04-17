@@ -52,7 +52,7 @@ function FilterPill({
  <select
  value={value}
  onChange={(e) => onChange(e.target.value)}
- className="rounded-md border border-white/10 bg-slate-900/50 px-2.5 py-1.5 text-xs text-slate-300
+ className="rounded-md border border-border bg-card px-2.5 py-1.5 text-xs text-foreground
  outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors
  appearance-none cursor-pointer"
  aria-label={label}
@@ -74,7 +74,8 @@ function FilterPill({
 export default function InsuranceLeadsPage() {
  // State
  const [leads, setLeads] = useState<InsuranceLeadSummary[]>([]);
- const [stats, setStats] = useState<InsuranceLeadStats | null>(null);
+ // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+  const [stats, setStats] = useState<InsuranceLeadStats | null>(null);
  const [totalLeads, setTotalLeads] = useState(0);
  const [totalPages, setTotalPages] = useState(1);
  const [page, setPage] = useState(1);
@@ -84,7 +85,8 @@ export default function InsuranceLeadsPage() {
 
  // Detail sheet
  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
- const [selectedLead, setSelectedLead] = useState<InsuranceLeadDetail | null>(null);
+ // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+  const [selectedLead, setSelectedLead] = useState<InsuranceLeadDetail | null>(null);
  const [detailLoading, setDetailLoading] = useState(false);
 
  // Active filters count
@@ -183,8 +185,8 @@ export default function InsuranceLeadsPage() {
  <div className="space-y-5">
  {/* Page Header */}
  <div>
- <h1 className="text-xl font-semibold text-slate-100">Insurance Leads</h1>
- <p className="mt-0.5 text-sm text-slate-500">
+ <h1 className="text-xl font-semibold text-foreground">Insurance Leads</h1>
+ <p className="mt-0.5 text-sm text-muted-foreground">
  Manage inbound ACA and Final Expense leads · Ameriquote / Boberdoo integration
  </p>
  </div>
@@ -207,7 +209,7 @@ export default function InsuranceLeadsPage() {
  className={`rounded-md px-4 py-1.5 text-xs font-medium transition-colors ${
  filters.vertical === tab.value
  ? 'bg-emerald-500/15 text-emerald-400'
- : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+ : 'text-muted-foreground hover:bg-muted hover:text-foreground'
  }`}
  >
  {tab.label}
@@ -219,13 +221,13 @@ export default function InsuranceLeadsPage() {
  <div className="flex items-center gap-2">
  {/* Search */}
  <div className="relative">
- <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+ <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
  <input
  type="text"
  placeholder="Search name, phone, email, zip…"
  value={filters.search}
  onChange={(e) => handleFilterChange('search', e.target.value)}
- className="w-56 rounded-md border border-white/10 bg-slate-900/50 pl-8 pr-3 py-1.5 text-xs text-slate-200
+ className="w-56 rounded-md border border-border bg-card pl-8 pr-3 py-1.5 text-xs text-foreground
  placeholder-slate-600 outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
  />
  </div>
@@ -267,7 +269,7 @@ export default function InsuranceLeadsPage() {
  <button
  onClick={handleClearFilters}
  className="flex items-center gap-1 rounded-md px-2 py-1.5 text-[10px] font-medium uppercase tracking-wider
- text-slate-400 hover:bg-white/5 hover:text-slate-200 transition-colors"
+ text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
  >
  <X className="h-3 w-3" />
  Clear ({activeFilterCount})
@@ -282,23 +284,23 @@ export default function InsuranceLeadsPage() {
  {/* Pagination */}
  {totalPages > 1 && (
  <div className="flex items-center justify-between">
- <div className="text-xs text-slate-500">
+ <div className="text-xs text-muted-foreground">
  Page {page} of {totalPages} · {totalLeads.toLocaleString()} leads
  </div>
  <div className="flex items-center gap-1">
  <button
  onClick={() => setPage((p) => Math.max(1, p - 1))}
  disabled={page <= 1}
- className="rounded-md border border-white/10 bg-slate-900/50 px-3 py-1 text-xs text-slate-300
- hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+ className="rounded-md border border-border bg-card px-3 py-1 text-xs text-foreground
+ hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
  >
  Prev
  </button>
  <button
  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
  disabled={page >= totalPages}
- className="rounded-md border border-white/10 bg-slate-900/50 px-3 py-1 text-xs text-slate-300
- hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+ className="rounded-md border border-border bg-card px-3 py-1 text-xs text-foreground
+ hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
  >
  Next
  </button>

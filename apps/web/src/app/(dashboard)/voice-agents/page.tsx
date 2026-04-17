@@ -553,7 +553,7 @@ export default function VoiceAgentsPage() {
  <PhoneOff className="h-3.5 w-3.5" />
  No Answer
  </CardDescription>
- <CardTitle className="text-2xl text-slate-400">{stats.noAnswer}</CardTitle>
+ <CardTitle className="text-2xl text-muted-foreground">{stats.noAnswer}</CardTitle>
  </CardHeader>
  </Card>
  <Card className="bg-amber-500 border-yellow-500/20">
@@ -777,7 +777,7 @@ export default function VoiceAgentsPage() {
  variant="outline"
  className={
  call.status === 'ended'
- ? 'bg-slate-500/10 text-slate-400'
+ ? 'bg-slate-500/10 text-muted-foreground'
  : 'bg-blue-500/10 text-blue-400'
  }
  >

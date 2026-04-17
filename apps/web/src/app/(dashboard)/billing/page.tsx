@@ -301,7 +301,7 @@ export default function BillingPage() {
 
  {/* Buyer Info */}
  {buyerInfo && (
- <div className="flex items-center gap-6 mb-4 p-3 bg-white/5 rounded-lg border border-white/10">
+ <div className="flex items-center gap-6 mb-4 p-3 bg-muted rounded-md border border-border">
  <div>
  <div className="text-sm text-muted-foreground">Buyer</div>
  <div className="font-semibold">{buyerInfo.name}</div>

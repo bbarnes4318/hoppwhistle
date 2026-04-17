@@ -2,6 +2,7 @@
 
 import { Plus, Upload, Trash2, Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { toast } from '@/components/ui/use-toast';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -50,7 +51,7 @@ export default function DncPage() {
  const file = (e.target as HTMLInputElement).files?.[0];
  if (file) {
  // TODO: Implement actual upload logic
- alert(`DNC list upload functionality coming soon. Selected file: ${file.name}`);
+ toast({ title: 'Feature Coming Soon', description: `DNC list upload functionality coming soon. Selected file: ${file.name}` });
  }
  };
  input.click();
@@ -66,10 +67,10 @@ export default function DncPage() {
  if (!response.error) {
  loadDncLists();
  } else {
- alert(`Failed to delete DNC list: ${response.error.message}`);
+ toast({ variant: 'destructive', title: 'Error', description: `Failed to delete DNC list: ${response.error.message}` });
  }
  } catch (err) {
- alert(`Failed to delete DNC list: ${err instanceof Error ? err.message : 'Unknown error'}`);
+ toast({ variant: 'destructive', title: 'Error', description: `Failed to delete DNC list: ${err instanceof Error ? err.message : 'Unknown error'}` });
  }
  };
 
