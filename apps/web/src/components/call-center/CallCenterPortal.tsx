@@ -906,7 +906,6 @@ export function CallCenterPortal(): JSX.Element {
             />
           )}
         </div>
- </div>
 
  {/* Center/Right Column - Script or Queue */}
  <div className="flex-1 p-4 overflow-hidden flex flex-col">
@@ -950,12 +949,10 @@ export function CallCenterPortal(): JSX.Element {
             />
           </div>
         )}
- </div>
- )}
- </div>
- </div>
- </div>
- );
+      </div>
+    </div>
+  </div>
+  );
 }
 
 export default CallCenterPortal;
