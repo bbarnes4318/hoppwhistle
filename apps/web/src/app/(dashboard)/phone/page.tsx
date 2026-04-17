@@ -1,8 +1,9 @@
 'use client';
 
-import { Clock, Phone, PhoneCall, PhoneIncoming, PhoneOutgoing, Settings } from 'lucide-react';
+import { Activity, Clock, FileText, Phone, PhoneIncoming, PhoneOutgoing, Settings } from 'lucide-react';
 import { useState } from 'react';
 
+import { KPICard } from '@/components/dashboard/kpi-card';
 import { usePhone, type CallInfo } from '@/components/phone';
 import { AgentStatusSelector } from '@/components/phone/agent-status-selector';
 import { DialPad } from '@/components/phone/dial-pad';
@@ -50,27 +51,21 @@ export default function PhonePage(): JSX.Element {
  {showSettings && <ScreenPopSettings onClose={() => setShowSettings(false)} />}
 
  {/* Header */}
- <div className="flex items-center justify-between flex-shrink-0 mb-6">
+ <div className="flex items-center justify-between flex-shrink-0 mb-6 border-b border-border pb-4">
  <div className="flex items-center gap-4">
- <div
- className={cn(
- 'w-12 h-12 rounded-xl flex items-center justify-center',
- 'bg-primary',
- 'border border-cyan-500/30'
- )}
- >
- <Phone className="w-6 h-6 text-cyan-400" />
+ <div className="w-10 h-10 rounded border border-border bg-card flex items-center justify-center">
+ <Phone className="w-5 h-5 text-muted-foreground" />
  </div>
  <div>
- <h1 className="text-3xl font-bold tracking-tight">Agent Phone</h1>
+ <h1 className="text-2xl font-bold tracking-tight uppercase">Agent Console</h1>
  <div className="flex items-center gap-3 mt-1">
- <span className="text-muted-foreground">Status:</span>
+ <span className="text-xs uppercase tracking-widest text-muted-foreground">Status:</span>
  <AgentStatusSelector />
  </div>
  </div>
  </div>
 
- <Button variant="outline" onClick={() => setShowSettings(true)} className="gap-2">
+ <Button variant="secondary" onClick={() => setShowSettings(true)} className="gap-2 rounded-sm border">
  <Settings className="w-4 h-4" />
  Screen Pop Settings
  </Button>
@@ -81,9 +76,9 @@ export default function PhonePage(): JSX.Element {
  {/* Left Column - Dial Pad */}
  <Card className="lg:row-span-2">
  <CardHeader className="pb-4">
- <CardTitle className="flex items-center gap-2">
- <Phone className="w-5 h-5 text-cyan-500" />
- Make a Call
+ <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+ <Phone className="w-4 h-4" />
+ Command Line
  </CardTitle>
  </CardHeader>
  <CardContent>
@@ -92,108 +87,82 @@ export default function PhonePage(): JSX.Element {
  </Card>
 
  {/* Stats Cards */}
- <Card>
- <CardHeader className="pb-3">
- <CardTitle className="text-sm font-medium text-muted-foreground">
- Today&apos;s Calls
- </CardTitle>
- </CardHeader>
- <CardContent>
- <div className="flex items-baseline gap-4">
- <span className="text-4xl font-bold">{todaysCalls.length}</span>
- <div className="flex items-center gap-3 text-sm text-muted-foreground">
- <span className="flex items-center gap-1">
- <PhoneIncoming className="w-4 h-4 text-cyan-500" />
- {inboundCalls}
- </span>
- <span className="flex items-center gap-1">
- <PhoneOutgoing className="w-4 h-4 text-blue-500" />
- {outboundCalls}
- </span>
+ <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
+ <KPICard
+ title="Volume Today"
+ value={todaysCalls.length}
+ icon={Activity}
+ trendLabel={`${inboundCalls} INBOARD / ${outboundCalls} OUTBOUND`}
+ />
+ <KPICard
+ title="Talk Time"
+ value={formatDuration(totalDuration)}
+ icon={Clock}
+ />
  </div>
- </div>
- </CardContent>
- </Card>
-
- <Card>
- <CardHeader className="pb-3">
- <CardTitle className="text-sm font-medium text-muted-foreground">
- Talk Time Today
- </CardTitle>
- </CardHeader>
- <CardContent>
- <div className="flex items-baseline gap-2">
- <span className="text-4xl font-bold">{formatDuration(totalDuration)}</span>
- </div>
- </CardContent>
- </Card>
 
  {/* Call History */}
- <Card className="lg:col-span-2">
- <CardHeader className="pb-4">
- <CardTitle className="flex items-center gap-2">
- <Clock className="w-5 h-5 text-cyan-500" />
- Recent Calls
+ <Card className="lg:col-span-2 flex flex-col min-h-0">
+ <CardHeader className="pb-4 border-b border-border">
+ <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+ <FileText className="w-4 h-4" />
+ Operation Log
  </CardTitle>
  </CardHeader>
- <CardContent>
+ <CardContent className="p-0 overflow-auto flex-1">
  {callHistory.length === 0 ? (
  <div className="text-center py-12">
- <PhoneCall className="w-12 h-12 mx-auto mb-4 text-muted-foreground/30" />
- <p className="text-muted-foreground">No recent calls</p>
+ <Activity className="w-12 h-12 mx-auto mb-4 text-muted-foreground/30" />
+ <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">No operations recorded</p>
  <p className="text-sm text-muted-foreground/70 mt-1">
  Your call history will appear here
  </p>
  </div>
  ) : (
- <div className="space-y-2 max-h-[400px] overflow-y-auto">
+ <table className="w-full text-left">
+ <tbody className="divide-y divide-border">
  {callHistory.slice(0, 20).map((call: CallInfo, index: number) => (
- <div
+ <tr
  key={`${call.callId}-${index}`}
- className={cn(
- 'flex items-center gap-4 p-4 rounded-xl',
- 'bg-muted/30 hover:bg-muted/50 transition-colors'
- )}
+ className="transition-colors hover:bg-muted/50"
  >
- <div
- className={cn(
- 'w-10 h-10 rounded-full flex items-center justify-center',
- call.direction === 'inbound'
- ? 'bg-cyan-500/10 text-cyan-500'
- : 'bg-blue-500/10 text-blue-500'
- )}
- >
+ <td className="py-2 pl-4 pr-3">
+ <div className="flex items-center gap-1.5">
  {call.direction === 'inbound' ? (
- <PhoneIncoming className="w-5 h-5" />
+ <PhoneIncoming className="w-3.5 h-3.5 text-muted-foreground" />
  ) : (
- <PhoneOutgoing className="w-5 h-5" />
+ <PhoneOutgoing className="w-3.5 h-3.5 text-muted-foreground" />
  )}
+ <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground w-6">
+ {call.direction === 'inbound' ? 'IN' : 'OUT'}
+ </span>
  </div>
-
- <div className="flex-1 min-w-0">
- <p className="font-medium truncate">{call.callerName ?? call.phoneNumber}</p>
- <p className="text-sm text-muted-foreground">
- {call.direction === 'inbound' ? 'Incoming' : 'Outgoing'}
- {call.duration > 0 && ` • ${formatDuration(call.duration)}`}
- </p>
- </div>
-
- <div className="text-right">
- <p className="text-sm text-muted-foreground">{formatTime(call.startTime)}</p>
- <p
+ </td>
+ <td className="py-2 px-3 font-mono text-xs text-foreground truncate max-w-[150px]">
+ {call.callerName ?? call.phoneNumber}
+ </td>
+ <td className="py-2 px-3 font-mono text-xs text-muted-foreground">
+ {call.duration > 0 ? formatDuration(call.duration) : '—'}
+ </td>
+ <td className="py-2 px-3 font-mono text-xs text-muted-foreground text-right">
+ {formatTime(call.startTime)}
+ </td>
+ <td className="py-2 pl-3 pr-4 text-right">
+ <span
  className={cn(
- 'text-xs',
+ 'font-mono text-xs',
  call.state === 'ended' && call.duration > 0
- ? 'text-emerald-500'
- : 'text-muted-foreground'
+ ? 'text-primary'
+ : 'text-muted-foreground/60'
  )}
  >
- {call.state === 'ended' && call.duration > 0 ? 'Completed' : 'Missed'}
- </p>
- </div>
- </div>
+ {call.state === 'ended' && call.duration > 0 ? 'COMPLETED' : 'MISSED'}
+ </span>
+ </td>
+ </tr>
  ))}
- </div>
+ </tbody>
+ </table>
  )}
  </CardContent>
  </Card>

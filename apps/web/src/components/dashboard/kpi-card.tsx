@@ -53,7 +53,7 @@ export function KPICard({
  className={cn(
  'relative overflow-hidden rounded-xl border p-5 transition-colors duration-200',
  variantStyles[variant],
- onClick && 'cursor-pointer hover:bg-white/[0.02]',
+ onClick && 'cursor-pointer hover:bg-muted/50',
  className
  )}
  >

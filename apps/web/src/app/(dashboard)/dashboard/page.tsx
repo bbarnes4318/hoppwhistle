@@ -303,8 +303,8 @@ export default function DashboardPage() {
  size="sm"
  className={
  activePreset === p.key
- ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-500'
- : 'border-white/10 text-slate-400 hover:text-white hover:bg-white/5'
+ ? 'bg-primary text-primary-foreground border-primary hover:bg-primary/90'
+ : 'border-border text-muted-foreground hover:text-foreground hover:bg-accent'
  }
  onClick={() => handlePresetChange(p.key)}
  >
@@ -318,20 +318,20 @@ export default function DashboardPage() {
  type="date"
  value={customFrom}
  onChange={e => setCustomFrom(e.target.value)}
- className="h-8 w-36 text-xs border-white/10 bg-slate-900/40"
+ className="h-8 w-36 text-xs border-border bg-background"
  id="custom-from"
  name="custom-from"
  />
- <span className="text-xs text-slate-500">to</span>
+ <span className="text-xs text-muted-foreground">to</span>
  <Input
  type="date"
  value={customTo}
  onChange={e => setCustomTo(e.target.value)}
- className="h-8 w-36 text-xs border-white/10 bg-slate-900/40"
+ className="h-8 w-36 text-xs border-border bg-background"
  id="custom-to"
  name="custom-to"
  />
- <Button size="sm" variant="outline" onClick={handleCustomApply} className="h-8 text-xs border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10">
+ <Button size="sm" variant="outline" onClick={handleCustomApply} className="h-8 text-xs border-border text-muted-foreground hover:bg-accent">
  Apply
  </Button>
  </div>
@@ -398,46 +398,48 @@ export default function DashboardPage() {
  <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
  <defs>
  <linearGradient id="outboundGrad" x1="0" y1="0" x2="0" y2="1">
- <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3} />
- <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
+ <stop offset="5%" stopColor="currentColor" stopOpacity={0.05} />
+ <stop offset="95%" stopColor="currentColor" stopOpacity={0} />
  </linearGradient>
  <linearGradient id="inboundGrad" x1="0" y1="0" x2="0" y2="1">
- <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
- <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+ <stop offset="5%" stopColor="currentColor" stopOpacity={0.15} />
+ <stop offset="95%" stopColor="currentColor" stopOpacity={0} />
  </linearGradient>
  </defs>
- <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+ <CartesianGrid vertical={false} stroke="hsl(var(--border))" strokeDasharray="4 4" />
  <XAxis
  dataKey="time"
- tick={{ fill: '#64748b', fontSize: 11, fontFamily: 'monospace' }}
- axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
+ tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10, fontFamily: 'monospace' }}
+ axisLine={false}
  tickLine={false}
+ tickMargin={10}
  />
  <YAxis
- tick={{ fill: '#64748b', fontSize: 11, fontFamily: 'monospace' }}
- axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
+ tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10, fontFamily: 'monospace' }}
+ axisLine={false}
  tickLine={false}
- width={55}
+ width={40}
  allowDecimals={false}
+ tickMargin={10}
  />
- <Tooltip content={<ChartTooltip />} />
+ <Tooltip content={<ChartTooltip />} cursor={{ fill: 'hsl(var(--border))', opacity: 0.1 }} />
  <Area
- type="monotone"
+ type="step"
  dataKey="outbound"
- stroke="#06b6d4"
- strokeWidth={2}
+ stroke="hsl(var(--border))"
+ strokeWidth={1}
  fill="url(#outboundGrad)"
  dot={false}
- activeDot={{ r: 4, fill: '#06b6d4', stroke: '#0e1629', strokeWidth: 2 }}
+ activeDot={{ r: 3, fill: 'hsl(var(--background))', stroke: 'hsl(var(--border))', strokeWidth: 1 }}
  />
  <Area
- type="monotone"
+ type="step"
  dataKey="inbound"
- stroke="#10b981"
+ stroke="hsl(var(--muted-foreground))"
  strokeWidth={2}
  fill="url(#inboundGrad)"
  dot={false}
- activeDot={{ r: 4, fill: '#10b981', stroke: '#0e1629', strokeWidth: 2 }}
+ activeDot={{ r: 3, fill: 'hsl(var(--background))', stroke: 'hsl(var(--muted-foreground))', strokeWidth: 2 }}
  />
  </AreaChart>
  </ResponsiveContainer>
@@ -453,7 +455,7 @@ export default function DashboardPage() {
  <div className="overflow-x-auto">
  <table className="w-full">
  <thead>
- <tr className="border-b border-white/10">
+ <tr className="border-b border-border">
  <th className="pb-3 text-left text-xs font-semibold uppercase tracking-widest text-slate-500">
  Time
  </th>
@@ -480,7 +482,7 @@ export default function DashboardPage() {
  </th>
  </tr>
  </thead>
- <tbody className="divide-y divide-white/5">
+ <tbody className="divide-y divide-border">
  {callsLoading ? (
  <tr>
  <td colSpan={8} className="py-12 text-center text-sm text-slate-500">
@@ -499,7 +501,7 @@ export default function DashboardPage() {
  return (
  <tr
  key={call.id}
- className="transition-colors duration-150 hover:bg-white/[0.02]"
+ className="transition-colors duration-150 hover:bg-muted/50"
  >
  <td className="py-1.5 pr-4 font-mono text-xs text-muted-foreground">
  {new Date(call.createdAt).toLocaleString('en-US', {
@@ -567,12 +569,12 @@ export default function DashboardPage() {
  href={call.recordingUrl}
  target="_blank"
  rel="noopener noreferrer"
- className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+ className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-xs text-muted-foreground hover:bg-accent transition-colors"
  >
  <Play className="h-3 w-3" /> Play
  </a>
  ) : (
- <span className="text-xs text-slate-600">—</span>
+ <span className="text-xs text-muted-foreground/50">—</span>
  )}
  </td>
  </tr>

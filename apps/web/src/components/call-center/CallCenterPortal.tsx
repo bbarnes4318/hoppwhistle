@@ -31,6 +31,14 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 import IntegratedScriptPanel from './IntegratedScriptPanel';
 import RetentionScriptPanel from './RetentionScriptPanel';
+import { CallCenterHeader } from './CallCenterHeader';
+import { StatsStrip } from './StatsStrip';
+import { DialerPanel } from './DialerPanel';
+import { ActiveCallControls } from './ActiveCallControls';
+import { IncomingCallPanel } from './IncomingCallPanel';
+import { DispositionPanel } from './DispositionPanel';
+import { ApplicationQueue } from './ApplicationQueue';
+import { WorkspaceTabs } from './WorkspaceTabs';
 
 import { usePhone } from '@/components/phone/phone-provider';
 import { useLeadInjection } from '@/hooks/useLeadInjection';
@@ -39,52 +47,15 @@ import { useScriptAccess } from '@/hooks/useUserRoles';
 // ============================================================================
 // TYPES
 // ============================================================================
-type CurrentView = 'roleSelect' | 'agentDashboard' | 'publisherSetup' | 'crmDashboard';
-type AgentStatus = 'available' | 'away' | 'on_call';
-type ActiveCallView = 'script' | 'data';
-type SelectedScript = 'sales' | 'retention';
-
-interface ProspectData {
- lead_token?: string;
- caller_id?: string;
- first_name?: string;
- last_name?: string;
- firstName?: string;
- lastName?: string;
- email?: string;
- phone?: string;
- city?: string;
- state?: string;
- zip?: string;
- dob?: string;
- age?: number;
- gender?: string;
- coverage_amount?: number;
- faceAmount?: number;
- premium?: string;
- monthlyPremium?: string;
- carrier?: string;
- beneficiary?: string;
- [key: string]: unknown;
-}
-
-interface ApplicationData extends ProspectData {
- id: string;
- name?: string;
- status: string;
- planType?: string;
-}
-
-interface CallRecord {
- id: string;
- notificationId: string;
- prospect: ProspectData;
- timestamp: string;
- disposition: string;
- dispositionDetails: string | object;
- callDuration?: number;
- callEndTime: string;
-}
+import type {
+  ActiveCallView,
+  AgentStatus,
+  ApplicationData,
+  CallRecord,
+  CurrentView,
+  ProspectData,
+  SelectedScript,
+} from './types';
 
 // ============================================================================
 // CARRIER/PLAN CONFIG
@@ -745,83 +716,27 @@ export function CallCenterPortal(): JSX.Element {
  // =========================================================================
  return (
  <div className="h-screen bg-background flex flex-col overflow-hidden">
- {/* Header */}
- <div className="bg-card border-b border-border px-6 py-3 flex-shrink-0">
- <div className="flex items-center justify-between">
- <div className="flex items-center space-x-4">
- <div className="flex items-center space-x-2">
- <Headphones className="w-6 h-6 text-cyan-400" />
- <h1 className="text-lg font-bold text-white">Agent Dashboard</h1>
- </div>
-
- <select
- value={agentStatus}
- onChange={e => setAgentStatus(e.target.value as AgentStatus)}
- disabled={isCallActive || isIncomingCall}
- className="appearance-none bg-muted text-white text-sm pl-3 pr-8 py-1.5 rounded-lg border border-border focus:border-cyan-500 focus:outline-none cursor-pointer disabled:opacity-50"
- >
- <option value="available">Available</option>
- <option value="away">Away</option>
- <option value="on_call">On Call</option>
- </select>
-
- {/* User Role Badge (from database) */}
- <span
- className={`px-3 py-1.5 text-sm rounded-lg ${
- isAdminOrOwner
- ? 'bg-purple-500/20 text-purple-300 border border-purple-500/50'
- : 'bg-slate-500/20 text-slate-300 border border-slate-500/50'
- }`}
- >
- {rolesLoading ? '...' : derivedJobTitle}
- </span>
-
- {/* Script Selector - Dropdown for admins, static badge for regular users */}
- {canAccessRetentionScript ? (
- <select
- value={selectedScript}
- onChange={e => setSelectedScript(e.target.value as SelectedScript)}
- className="appearance-none bg-purple-500/20 text-purple-300 text-sm pl-3 pr-8 py-1.5 rounded-lg border border-purple-500/50 focus:border-purple-400 focus:outline-none cursor-pointer hover:bg-purple-500/30 transition-colors"
- title="Select call script"
- >
- <option value="sales">📋 Final Expense Sales</option>
- <option value="retention">🎯 Retention Script</option>
- </select>
- ) : (
- <span className="px-2 py-1 text-xs rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/50">
- Sales Script
- </span>
- )}
- </div>
-
- <div className="flex items-center space-x-4">
- {isCallActive && (
- <div className="flex items-center space-x-2 px-3 py-1 bg-red-500/20 border border-red-500/50 rounded-lg">
- <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
- <span className="text-red-400 font-mono text-sm">{formatTime(callTimer)}</span>
- </div>
- )}
- <button
- onClick={() => setShowSettings(true)}
- className="p-2 bg-muted hover:bg-muted rounded-lg border border-border transition-colors"
- title="Settings"
- >
- <Settings className="w-4 h-4 text-muted-foreground" />
- </button>
- <button
- onClick={() => router.push('/dashboard')}
- className="text-sm text-muted-foreground hover:text-white transition-colors"
- >
- ← Exit
- </button>
- </div>
- </div>
- </div>
+        <CallCenterHeader
+          agentStatus={agentStatus}
+          setAgentStatus={setAgentStatus}
+          isCallActive={isCallActive}
+          isIncomingCall={isIncomingCall}
+          isAdminOrOwner={isAdminOrOwner}
+          rolesLoading={rolesLoading}
+          derivedJobTitle={derivedJobTitle}
+          canAccessRetentionScript={canAccessRetentionScript}
+          selectedScript={selectedScript}
+          setSelectedScript={setSelectedScript}
+          callTimer={callTimer}
+          formatTime={formatTime}
+          setShowSettings={setShowSettings}
+          onExit={() => router.push('/dashboard')}
+        />
 
  {/* Settings Modal */}
  {showSettings && (
  <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
- <div className="bg-card rounded-2xl border border-border w-full max-w-md shadow-sm">
+ <div className="bg-card rounded-xl border border-border w-full max-w-md shadow-sm">
  <div className="p-4 border-b border-border flex items-center justify-between">
  <h2 className="text-lg font-bold text-white">User Settings</h2>
  <button
@@ -902,676 +817,139 @@ export function CallCenterPortal(): JSX.Element {
 
  {/* Main Content - 3 Column Layout */}
  <div className="flex-1 flex overflow-hidden">
- {/* Left Column - Dialer */}
- <div className="w-80 flex-shrink-0 border-r border-border p-4 flex flex-col">
- <div className="glass-panel rounded-2xl p-4 flex-1 flex flex-col">
- {/* Incoming Call State - Enhanced Ringing UI */}
- {isIncomingCall && incomingCallData && (
- <div className="flex-1 flex flex-col items-center justify-center space-y-5 relative">
- {/* Animated Ring Waves */}
- <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ marginTop: '-40px' }}>
- <div className="w-32 h-32 rounded-full border-2 border-emerald-500/30 ring-wave-1" />
- <div className="absolute w-40 h-40 rounded-full border border-emerald-500/20 ring-wave-2" />
- <div className="absolute w-48 h-48 rounded-full border border-emerald-500/10 ring-wave-3" />
- </div>
+        {/* Left Column - Dialer */}
+        <div className="w-80 flex-shrink-0 border-r border-border flex flex-col bg-card">
+          {isIncomingCall && incomingCallData && (
+            <IncomingCallPanel
+              incomingCallData={incomingCallData}
+              ringDuration={ringDuration}
+              handleAnswerCall={handleAnswerCall}
+              handleDeclineCall={handleDeclineCall}
+            />
+          )}
 
- {/* Ringing Badge */}
- <div className="flex items-center gap-2 px-4 py-1.5 bg-emerald-500/10 rounded-full border border-emerald-500/30 z-10">
- <Phone className="w-4 h-4 text-emerald-400 animate-bounce" />
- <span className="text-emerald-400 text-sm font-medium">Incoming Call</span>
- </div>
+          {isCallActive && activeCallData && !showDisposition && (
+            <ActiveCallControls
+              activeCallData={activeCallData}
+              isMuted={isMuted}
+              isOnHold={isOnHold}
+              toggleMute={toggleMute}
+              toggleHold={toggleHold}
+              isAddingThirdParty={isAddingThirdParty}
+              setIsAddingThirdParty={setIsAddingThirdParty}
+              thirdPartyConnected={thirdPartyConnected}
+              handleHangup={handleHangup}
+              makeCall={makeCall}
+            />
+          )}
 
- {/* Ring Duration */}
- <p className="text-muted-foreground text-xs z-10">
- {`Ringing for ${String(Math.floor(Number(ringDuration) / 60)).padStart(2, '0')}:${String(Number(ringDuration) % 60).padStart(2, '0')}`}
- </p>
+          {showDisposition && (
+            <DispositionPanel
+              dispositionSaved={dispositionSaved}
+              selectedDisposition={selectedDisposition}
+              setSelectedDisposition={setSelectedDisposition}
+              saleCarrier={saleCarrier}
+              setSaleCarrier={setSaleCarrier}
+              salePlanType={salePlanType}
+              setSalePlanType={setSalePlanType}
+              saleAnnualPremium={saleAnnualPremium}
+              setSaleAnnualPremium={setSaleAnnualPremium}
+              handleSaveDisposition={handleSaveDisposition}
+              onDispositionSelect={() => {}}
+              handleSkipDisposition={() => {
+                setShowDisposition(false);
+                setSelectedDisposition('');
+                setCallTimer(0);
+                setActiveCallData(null);
+                callSessionIdRef.current = null;
+                dispositionHandledRef.current = false;
+                setPreInjectedData(null);
+                clearLead();
+              }}
+            />
+          )}
 
- {/* Caller Avatar */}
- <div className="w-24 h-24 bg-primary rounded-full flex items-center justify-center border-2 border-emerald-500/40 shadow-lg z-10">
- <PhoneIncoming className="w-12 h-12 text-emerald-400" />
- </div>
-
- {/* Caller Info */}
- <div className="text-center z-10">
- <p className="text-2xl font-bold text-white">
- {String(incomingCallData.first_name ?? '')} {String(incomingCallData.last_name ?? '')}
- </p>
- <p className="text-muted-foreground font-mono text-lg">{String(incomingCallData.caller_id ?? '')}</p>
- {!!(incomingCallData.city || incomingCallData.state) && (
- <p className="text-cyan-400 text-sm mt-1">
- {[incomingCallData.city, incomingCallData.state].filter(Boolean).join(', ')}
- </p>
- )}
- </div>
-
- {/* Lead Source / Campaign Badge */}
- {!!(incomingCallData as Record<string, unknown>).lead_source && (
- <div className="flex items-center gap-1.5 px-3 py-1 bg-purple-500/10 rounded-full border border-purple-500/30 z-10">
- <span className="text-purple-400 text-xs">
- {String((incomingCallData as Record<string, unknown>).lead_source)}
- </span>
- </div>
- )}
-
- {/* Answer / Decline Buttons */}
- <div className="flex items-center space-x-6 z-10 pt-2">
- <button
- onClick={() => void handleDeclineCall()}
- className="group flex flex-col items-center gap-1.5 transition-transform hover:scale-105 active:scale-95"
- >
- <div className="w-16 h-16 bg-destructive rounded-full flex items-center justify-center shadow-lg group-hover:shadow-sm group-hover: transition-all">
- <PhoneOff className="w-7 h-7 text-white" />
- </div>
- <span className="text-muted-foreground text-xs">Decline</span>
- </button>
- <button
- onClick={() => void handleAnswerCall()}
- className="group flex flex-col items-center gap-1.5 transition-transform hover:scale-105 active:scale-95"
- >
- <div className="w-20 h-20 bg-primary rounded-full flex items-center justify-center shadow-lg group-hover:shadow-sm group-hover: transition-all animate-pulse">
- <Phone className="w-9 h-9 text-white" />
- </div>
- <span className="text-muted-foreground text-xs">Answer</span>
- </button>
- </div>
-
- {/* Keyboard Hint */}
- <p className="text-gray-600 text-xs z-10">
- Press <kbd className="px-1.5 py-0.5 bg-white/5 rounded text-muted-foreground font-mono">A</kbd> to answer
- {' '}or <kbd className="px-1.5 py-0.5 bg-white/5 rounded text-muted-foreground font-mono">D</kbd> to decline
- </p>
- </div>
- )}
-
- {/* Active Call State */}
- {isCallActive && activeCallData && !showDisposition && (
- <div className="flex-1 flex flex-col">
- <div className="text-center mb-4">
- <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center mx-auto mb-2">
- <PhoneCall className="w-8 h-8 text-white" />
- </div>
- <p className="text-lg font-bold text-white">
- {String(activeCallData.first_name || activeCallData.firstName || '')}{' '}
- {String(activeCallData.last_name || activeCallData.lastName || '')}
- </p>
- <p className="text-sm text-muted-foreground">
- {String(activeCallData.caller_id || activeCallData.phone || '')}
- </p>
- <div className="flex items-center justify-center space-x-2 mt-1">
- <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
- <span className="text-green-400 text-sm">Connected</span>
- </div>
- </div>
-
- {/* Call Controls */}
- <div className="grid grid-cols-3 gap-3 mb-4">
- <button
- onClick={() => {
- toggleMute();
- setIsMuted(!isMuted);
- }}
- className={
- 'p-3 rounded-xl flex flex-col items-center transition-all ' +
- (isMuted
- ? 'bg-red-500/30 border border-red-500'
- : 'bg-muted hover:bg-muted border border-border')
- }
- >
- {isMuted ? (
- <MicOff className="w-5 h-5 text-red-400" />
- ) : (
- <Mic className="w-5 h-5 text-muted-foreground" />
- )}
- <span className="text-xs text-muted-foreground mt-1">Mute</span>
- </button>
- <button
- onClick={() => {
- toggleHold();
- setIsOnHold(!isOnHold);
- }}
- className={
- 'p-3 rounded-xl flex flex-col items-center transition-all ' +
- (isOnHold
- ? 'bg-yellow-500/30 border border-yellow-500'
- : 'bg-muted hover:bg-muted border border-border')
- }
- >
- {isOnHold ? (
- <Play className="w-5 h-5 text-yellow-400" />
- ) : (
- <Pause className="w-5 h-5 text-muted-foreground" />
- )}
- <span className="text-xs text-muted-foreground mt-1">Hold</span>
- </button>
- <div
- className={
- 'p-3 rounded-xl flex flex-col items-center transition-all cursor-default ' +
- 'bg-red-500/20 border border-red-500/40'
- }
- title="Recording is handled automatically by the server"
- >
- <Circle
- className="w-5 h-5 text-red-400 fill-red-400 animate-pulse"
- />
- <span className="text-xs text-red-300 mt-1">
- Auto-Rec
- </span>
- </div>
- </div>
-
- {/* 3-Way / Transfer Buttons */}
- {!isAddingThirdParty && !thirdPartyConnected && (
- <div className="grid grid-cols-2 gap-3 mb-4">
- <button
- onClick={() => setIsAddingThirdParty(true)}
- className="p-3 rounded-xl bg-purple-500/20 border border-purple-500/50 hover:bg-purple-500/30 flex flex-col items-center transition-all"
- >
- <UserPlus className="w-5 h-5 text-purple-400" />
- <span className="text-xs text-purple-300 mt-1">Add 3rd Party</span>
- </button>
- <button
- onClick={() => setShowTransferPanel(!showTransferPanel)}
- className="p-3 rounded-xl bg-blue-500/20 border border-blue-500/50 hover:bg-blue-500/30 flex flex-col items-center transition-all"
- >
- <PhoneForwarded className="w-5 h-5 text-blue-400" />
- <span className="text-xs text-blue-300 mt-1">Warm Transfer</span>
- </button>
- </div>
- )}
-
- {/* Warm Transfer Panel */}
- {showTransferPanel && (
- <div className="bg-muted border border-blue-500/30 rounded-xl p-4 mb-4">
- <h4 className="text-sm font-bold text-blue-400 mb-3">Transfer Call</h4>
- <input
- type="tel"
- placeholder="Enter phone number to transfer..."
- className="w-full bg-card border border-border rounded-lg px-3 py-2 text-white text-sm mb-3 focus:outline-none focus:border-blue-500"
- id="transfer-number-input"
- />
- <div className="flex gap-2">
- <button
- onClick={() => {
- const input = document.getElementById('transfer-number-input') as HTMLInputElement;
- const num = input?.value?.replace(/\D/g, '');
- if (num && num.length >= 10) {
- void makeCall(num);
- setShowTransferPanel(false);
- }
- }}
- className="flex-1 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg transition-colors"
- >
- Transfer
- </button>
- <button
- onClick={() => setShowTransferPanel(false)}
- className="flex-1 py-2 bg-gray-600 hover:bg-gray-500 text-white text-sm font-medium rounded-lg transition-colors"
- >
- Cancel
- </button>
- </div>
- </div>
- )}
-
- {/* Hang Up */}
- <div className="mt-auto">
- <button
- onClick={() => void handleHangup()}
- className="w-full py-3 bg-red-500 hover:bg-red-600 text-white font-medium rounded-xl flex items-center justify-center space-x-2 transition-colors shadow-lg "
- >
- <PhoneOff className="w-5 h-5" />
- <span>End Call</span>
- </button>
- </div>
- </div>
- )}
-
- {/* Disposition Panel */}
- {showDisposition && (
- <div className="flex-1 flex flex-col overflow-y-auto">
- {/* Success confirmation overlay */}
- {dispositionSaved ? (
- <div className="flex-1 flex flex-col items-center justify-center">
- <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mb-4 animate-pulse">
- <CheckCircle className="w-8 h-8 text-green-400" />
- </div>
- <h3 className="text-lg font-bold text-green-400 mb-2">Disposition Saved!</h3>
- <p className="text-sm text-muted-foreground">Returning to main screen...</p>
- </div>
- ) : (
- <>
- <h3 className="text-lg font-bold text-white mb-4">Call Disposition</h3>
- <div className="space-y-2 mb-4">
- {DISPOSITIONS.map(disposition => (
- <button
- key={disposition}
- onClick={() => {
- setSelectedDisposition(disposition);
- if (disposition !== 'Sale Made') {
- // Auto-save immediately for non-Sale dispositions
- setSaleCarrier('');
- setSalePlanType('');
- setSaleAnnualPremium('');
- // Inline save logic (same as handleSaveDisposition)
- const callRecord: CallRecord = {
- id: 'record-' + Date.now(),
- notificationId: 'pop-' + Date.now(),
- prospect: activeCallData || {},
- timestamp: new Date().toISOString(),
- disposition: disposition,
- dispositionDetails: callNotes,
- callDuration: callTimer,
- callEndTime: new Date().toISOString(),
- };
- setCallRecords(prev => [...prev, callRecord]);
- if (disposition === 'Application Submitted') {
- setSalesCount(prev => prev + 1);
- }
- if (disposition === 'Callback Scheduled' || disposition === 'Follow-Up Scheduled') {
- setFollowUpCount(prev => prev + 1);
- }
- fetch('/api/v1/calls/disposition', {
- method: 'POST',
- headers: { 'Content-Type': 'application/json' },
- body: JSON.stringify({
- callId: callSessionIdRef.current,
- disposition: disposition,
- notes: callNotes,
- duration: callTimer,
- }),
- }).catch(() => {});
- setDispositionSaved(true);
- setTimeout(() => {
- setDispositionSaved(false);
- setShowDisposition(false);
- setSelectedDisposition('');
- setCallNotes('');
- setCallTimer(0);
- setActiveCallData(null);
- callSessionIdRef.current = null;
- dispositionHandledRef.current = false;
- setPreInjectedData(null);
- clearLead();
- }, 2000);
- }
- }}
- className={
- 'w-full p-3 rounded-lg text-left text-sm transition-all ' +
- (selectedDisposition === disposition
- ? 'bg-cyan-500/30 border border-cyan-500 text-cyan-300'
- : 'bg-muted border border-border text-muted-foreground hover:border-gray-500')
- }
- >
- {disposition}
- </button>
- ))}
- </div>
-
- {selectedDisposition === 'Sale Made' && (
- <div className="bg-muted border border-cyan-500/30 rounded-xl p-4 mb-4 space-y-3">
- <h4 className="text-sm font-bold text-cyan-400 mb-3">
- Sale Details (Required)
- </h4>
- <div>
- <label className="text-xs text-muted-foreground mb-1 block">Carrier</label>
- <select
- value={saleCarrier}
- onChange={e => {
- setSaleCarrier(e.target.value);
- setSalePlanType('');
- }}
- className="w-full bg-card border border-border rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500"
- >
- <option value="">Select Carrier...</option>
- {CARRIERS.map(carrier => (
- <option key={carrier} value={carrier}>
- {carrier}
- </option>
- ))}
- </select>
- </div>
- {saleCarrier && (
- <div>
- <label className="text-xs text-muted-foreground mb-1 block">Plan Type</label>
- <select
- value={salePlanType}
- onChange={e => setSalePlanType(e.target.value)}
- className="w-full bg-card border border-border rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500"
- >
- <option value="">Select Plan Type...</option>
- {CARRIER_PLANS[saleCarrier]?.map(plan => (
- <option key={plan} value={plan}>
- {plan}
- </option>
- ))}
- </select>
- </div>
- )}
- <div>
- <label className="text-xs text-muted-foreground mb-1 block">Annual Premium ($)</label>
- <input
- type="number"
- value={saleAnnualPremium}
- onChange={e => setSaleAnnualPremium(e.target.value)}
- placeholder="e.g. 1200"
- className="w-full bg-card border border-border rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500"
- />
- </div>
- </div>
- )}
-
- <button
- onClick={handleSaveDisposition}
- disabled={
- !selectedDisposition ||
- (selectedDisposition === 'Sale Made' &&
- (!saleCarrier || !salePlanType || !saleAnnualPremium))
- }
- className="w-full py-3 bg-cyan-500 hover:bg-cyan-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium rounded-xl transition-colors"
- >
- Save and Continue
- </button>
-
- {/* Skip disposition button */}
- <button
- onClick={() => {
- setShowDisposition(false);
- setSelectedDisposition('');
- setCallTimer(0);
- setActiveCallData(null);
- callSessionIdRef.current = null;
- dispositionHandledRef.current = false;
- setPreInjectedData(null);
- clearLead();
- }}
- className="w-full py-2 mt-2 text-muted-foreground hover:text-muted-foreground text-sm transition-colors"
- >
- Skip
- </button>
- </>
- )}
- </div>
- )}
-
- {/* Idle State - Keypad */}
- {!isIncomingCall && !isCallActive && !showDisposition && (
- <div className="flex-1 flex flex-col">
- <div className="mb-4">
- <input
- type="text"
- value={phoneNumber}
- onChange={e =>
- setPhoneNumber(formatPhoneNumber(e.target.value.replace(/\D/g, '')))
- }
- placeholder="(555) 123-4567"
- className="w-full bg-transparent text-2xl text-white text-center font-mono py-3 border-b border-border focus:border-cyan-500 focus:outline-none transition-colors"
- />
- </div>
-
- <div className="grid grid-cols-3 gap-2 mb-4">
- {['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'].map(key => (
- <button
- key={key}
- onClick={() => handleKeypadPress(key)}
- className="aspect-square bg-muted hover:bg-muted rounded-xl flex items-center justify-center text-xl text-white font-medium transition-colors border border-border"
- >
- {key}
- </button>
- ))}
- </div>
-
- <div className="flex space-x-3 mt-auto">
- <button
- onClick={() => setPhoneNumber('')}
- className="flex-1 py-3 bg-muted hover:bg-muted text-muted-foreground rounded-xl transition-colors border border-border"
- >
- Clear
- </button>
- <button
- disabled={phoneNumber.replace(/\D/g, '').length !== 10}
- onClick={() => void (async () => {
- const dialNumber = phoneNumber.replace(/\D/g, '');
- if (dialNumber.length === 10) {
- const callData = {
- caller_id: dialNumber,
- first_name: 'Outbound',
- last_name: 'Call',
- phone: dialNumber,
- };
- setActiveCallData(callData);
- setIsCallActive(true);
- setAgentStatus('on_call');
- setCallTimer(0);
- setTotalCallsCount(prev => prev + 1); // Count outbound dialer calls
- callTimerRef.current = setInterval(
- () => setCallTimer(prev => prev + 1),
- 1000
- );
- try {
- await makeCall(dialNumber);
- } catch (e) {
- console.error(e);
- setIsCallActive(false);
- setAgentStatus('available');
- if (callTimerRef.current) clearInterval(callTimerRef.current);
- }
- }
- })()}
- className="flex-1 py-3 bg-green-500 hover:bg-green-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-xl transition-colors flex items-center justify-center space-x-2"
- >
- <Phone className="w-5 h-5" />
- <span>Call</span>
- </button>
- </div>
- </div>
- )}
- </div>
+          {!isIncomingCall && !isCallActive && !showDisposition && (
+            <DialerPanel
+              phoneNumber={phoneNumber}
+              setPhoneNumber={setPhoneNumber}
+              formatPhoneNumber={formatPhoneNumber}
+              handleKeypadPress={handleKeypadPress}
+              disabled={false}
+              onDial={() => {
+                void (async () => {
+                  const dialNumber = phoneNumber.replace(/\D/g, '');
+                  if (dialNumber.length === 10) {
+                    const callData = {
+                      caller_id: dialNumber,
+                      first_name: 'Outbound',
+                      last_name: 'Call',
+                      phone: dialNumber,
+                    };
+                    setActiveCallData(callData);
+                    setIsCallActive(true);
+                    setAgentStatus('on_call');
+                    setCallTimer(0);
+                    setTotalCallsCount((prev) => prev + 1);
+                    callTimerRef.current = setInterval(() => setCallTimer((prev) => prev + 1), 1000);
+                    try {
+                      await makeCall(dialNumber);
+                    } catch (e) {
+                      console.error(e);
+                      setIsCallActive(false);
+                      setAgentStatus('available');
+                      if (callTimerRef.current) clearInterval(callTimerRef.current);
+                    }
+                  }
+                })();
+              }}
+            />
+          )}
+        </div>
  </div>
 
  {/* Center/Right Column - Script or Queue */}
  <div className="flex-1 p-4 overflow-hidden flex flex-col">
- {isCallActive && activeCallData ? (
- <div className="flex-1 flex flex-col overflow-hidden gap-2">
- <div className="flex items-center gap-2 flex-shrink-0">
- <button
- onClick={() => setActiveCallView('script')}
- className={
- 'px-4 py-2 rounded-lg font-medium text-sm transition-all ' +
- (activeCallView === 'script'
- ? 'bg-primary text-white shadow-lg '
- : 'bg-muted text-muted-foreground hover:text-white border border-border')
- }
- >
- Script and Call Guide
- </button>
- <button
- onClick={() => setActiveCallView('data')}
- className={
- 'px-4 py-2 rounded-lg font-medium text-sm transition-all ' +
- (activeCallView === 'data'
- ? 'bg-accent text-white shadow-lg '
- : 'bg-muted text-muted-foreground hover:text-white border border-border')
- }
- >
- Customer Data
- </button>
- </div>
+        {isCallActive && activeCallData ? (
+          <div className="flex-1 flex flex-col overflow-hidden gap-2">
+            <WorkspaceTabs activeCallView={activeCallView} setActiveCallView={setActiveCallView} />
 
- {activeCallView === 'script' && (
- <div className="flex-1 overflow-hidden">
- {selectedScript === 'retention' && canAccessRetentionScript ? (
- <RetentionScriptPanel
- prospectData={activeCallData}
- onDataUpdate={(data: Record<string, unknown>) =>
- setActiveCallData(prev => (prev ? { ...prev, ...data } as ProspectData : null))
- }
- />
- ) : (
- <IntegratedScriptPanel
- prospectData={activeCallData}
- onDataUpdate={(data: Partial<ProspectData>) =>
- setActiveCallData(prev => (prev ? { ...prev, ...data } as ProspectData : null))
- }
- />
- )}
- </div>
- )}
- </div>
- ) : (
- <div className="flex-1 flex flex-col gap-4 overflow-hidden">
- {/* Stats Bar - Order: Total Calls | Applications | Conversion | Follow-Ups */}
- <div className="grid grid-cols-4 gap-4 flex-shrink-0">
- {/* 1. Total Calls */}
- <div className="glass-panel rounded-xl p-4">
- <div className="flex items-center justify-between">
- <div>
- <p className="text-xs text-muted-foreground">Total Calls</p>
- <p className="text-2xl font-bold text-white">{totalCallsCount}</p>
- </div>
- <Phone className="w-8 h-8 text-blue-500" />
- </div>
- </div>
- {/* 2. Applications (Sale Made + Application Submitted) */}
- <div className="glass-panel rounded-xl p-4">
- <div className="flex items-center justify-between">
- <div>
- <p className="text-xs text-muted-foreground">Applications</p>
- <p className="text-2xl font-bold text-white">{salesCount}</p>
- </div>
- <FileText className="w-8 h-8 text-cyan-500" />
- </div>
- </div>
- {/* 3. Conversion - (Applications / Total Calls) * 100 */}
- <div className="glass-panel rounded-xl p-4">
- <div className="flex items-center justify-between">
- <div>
- <p className="text-xs text-muted-foreground">Conversion</p>
- <p className="text-2xl font-bold text-green-400">{conversionRate}%</p>
- </div>
- <CheckCircle className="w-8 h-8 text-green-500" />
- </div>
- </div>
- {/* 4. Follow-Ups (Callback Scheduled + Follow-Up Scheduled) */}
- <div className="glass-panel rounded-xl p-4">
- <div className="flex items-center justify-between">
- <div>
- <p className="text-xs text-muted-foreground">Follow-Ups</p>
- <p className="text-2xl font-bold text-amber-400">{followUpCount}</p>
- </div>
- <Clock className="w-8 h-8 text-amber-500" />
- </div>
- </div>
- </div>
-
- <div className="flex-1 glass-panel rounded-2xl overflow-hidden flex flex-col">
- <div className="p-4 border-b border-border flex items-center justify-between">
- <h2 className="text-lg font-bold text-white">Application Queue</h2>
- <button
- onClick={() => void fetchApplications()}
- disabled={loadingApplications}
- className="flex items-center space-x-2 px-3 py-1.5 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 rounded-lg text-sm transition-colors disabled:opacity-50"
- >
- <RefreshCw
- className={'w-4 h-4 ' + (loadingApplications ? 'animate-spin' : '')}
- />
- <span>Refresh</span>
- </button>
- </div>
- <div className="flex-1 overflow-y-auto">
- {loadingApplications ? (
- <div className="flex items-center justify-center h-full">
- <div className="text-center">
- <RefreshCw className="w-12 h-12 text-cyan-500 mx-auto mb-3 animate-spin" />
- <p className="text-muted-foreground">Loading applications...</p>
- </div>
- </div>
- ) : applications.length === 0 ? (
- <div className="flex items-center justify-center h-full">
- <div className="text-center">
- <FileText className="w-12 h-12 text-gray-600 mx-auto mb-3" />
- <p className="text-muted-foreground">No applications in queue</p>
- </div>
- </div>
- ) : (
- <table className="w-full">
- <thead className="bg-muted sticky top-0">
- <tr>
- <th className="text-left text-xs text-muted-foreground font-medium px-4 py-3">
- Customer
- </th>
- <th className="text-left text-xs text-muted-foreground font-medium px-4 py-3">
- Phone
- </th>
- <th className="text-left text-xs text-muted-foreground font-medium px-4 py-3">
- Carrier
- </th>
- <th className="text-left text-xs text-muted-foreground font-medium px-4 py-3">
- Face Amount
- </th>
- <th className="text-left text-xs text-muted-foreground font-medium px-4 py-3">
- Status
- </th>
- <th className="text-left text-xs text-muted-foreground font-medium px-4 py-3">
- Action
- </th>
- </tr>
- </thead>
- <tbody className="divide-y divide-border">
- {applications.map(app => (
- <tr key={app.id} className="hover:bg-muted/50 transition-colors">
- <td className="px-4 py-3">
- <div className="flex items-center space-x-3">
- <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
- <span className="text-xs font-bold text-white">
- {(app.firstName || app.name?.split(' ')[0] || '?')[0]}
- {(app.lastName || app.name?.split(' ')[1] || '')[0]}
- </span>
- </div>
- <div>
- <span className="text-white text-sm font-medium block">
- {app.name || (app.firstName || '') + ' ' + (app.lastName || '')}
- </span>
- <span className="text-muted-foreground text-xs">{app.state}</span>
- </div>
- </div>
- </td>
- <td className="px-4 py-3 text-muted-foreground text-sm font-mono">
- {app.phone || 'N/A'}
- </td>
- <td className="px-4 py-3 text-white text-sm">{app.carrier || 'N/A'}</td>
- <td className="px-4 py-3 text-emerald-400 text-sm font-bold">
- ${(app.faceAmount || 0).toLocaleString()}
- </td>
- <td className="px-4 py-3">
- <span
- className={
- 'px-2 py-1 rounded-full text-xs font-medium ' +
- (app.status === 'Submitted'
- ? 'bg-blue-500/20 text-blue-400'
- : app.status === 'Issued'
- ? 'bg-green-500/20 text-green-400'
- : 'bg-gray-500/20 text-muted-foreground')
- }
- >
- {app.status}
- </span>
- </td>
- <td className="px-4 py-3">
- <button
- onClick={() => void startCallWithApplication(app)}
- className="flex items-center space-x-1 px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-lg text-xs font-medium transition-colors"
- >
- <Phone className="w-3 h-3" />
- <span>Call</span>
- </button>
- </td>
- </tr>
- ))}
- </tbody>
- </table>
- )}
- </div>
- </div>
+            {activeCallView === 'script' && (
+              <div className="flex-1 overflow-hidden">
+                {selectedScript === 'retention' && canAccessRetentionScript ? (
+                  <RetentionScriptPanel
+                    prospectData={activeCallData}
+                    onDataUpdate={(data: Record<string, unknown>) =>
+                      setActiveCallData((prev) => (prev ? ({ ...prev, ...data } as ProspectData) : null))
+                    }
+                  />
+                ) : (
+                  <IntegratedScriptPanel
+                    prospectData={activeCallData}
+                    onDataUpdate={(data: Partial<ProspectData>) =>
+                      setActiveCallData((prev) => (prev ? ({ ...prev, ...data } as ProspectData) : null))
+                    }
+                  />
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex-1 flex flex-col gap-4 overflow-hidden">
+            <StatsStrip 
+              totalCallsCount={totalCallsCount}
+              salesCount={salesCount}
+              conversionRate={conversionRate}
+              followUpCount={followUpCount}
+            />
+            <ApplicationQueue
+              applications={applications}
+              loadingApplications={loadingApplications}
+              fetchApplications={fetchApplications}
+              startCallWithApplication={startCallWithApplication}
+            />
+          </div>
+        )}
  </div>
  )}
  </div>
