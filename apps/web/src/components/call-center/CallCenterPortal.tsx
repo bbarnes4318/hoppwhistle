@@ -24,7 +24,6 @@ import { IncomingCallPanel } from './IncomingCallPanel';
 import IntegratedScriptPanel from './IntegratedScriptPanel';
 import RetentionScriptPanel from './RetentionScriptPanel';
 import { StatsStrip } from './StatsStrip';
-import { WorkspaceTabs } from './WorkspaceTabs';
 import type {
   ActiveCallView,
   AgentStatus,
@@ -34,6 +33,7 @@ import type {
   ProspectData,
   SelectedScript,
 } from './types';
+import { WorkspaceTabs } from './WorkspaceTabs';
 
 import { usePhone } from '@/components/phone/phone-provider';
 import { useLeadInjection } from '@/hooks/useLeadInjection';
