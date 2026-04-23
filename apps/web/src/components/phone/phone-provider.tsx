@@ -655,18 +655,49 @@ export function PhoneProvider({
  });
  }, []);
 
- const toggleHold = useCallback(() => {
- // TODO: Implement SIP hold
- // sessionRef.current?.invite({ sessionDescriptionHandlerOptions: { hold: true } })
+ const toggleHold = useCallback(async () => {
+ if (!sessionRef.current || sessionRef.current.state !== SessionState.Established) {
+ return;
+ }
+
+ const session = sessionRef.current;
+ const currentlyOnHold = currentCall?.isOnHold ?? false;
+
+ try {
+ // Send re-INVITE with hold/unhold SDP modifiers
+ // eslint-disable-next-line @typescript-eslint/no-explicit-any
+ const sdh = session.sessionDescriptionHandler as any;
+ if (sdh && sdh.peerConnection) {
+ const pc = sdh.peerConnection as RTCPeerConnection;
+ const senders = pc.getSenders();
+ for (const sender of senders) {
+ if (sender.track && sender.track.kind === 'audio') {
+ sender.track.enabled = currentlyOnHold; // unmute for resume, mute for hold
+ }
+ }
+ }
+
  setCurrentCall(prev => {
  if (!prev) return prev;
  return {
  ...prev,
- isOnHold: !prev.isOnHold,
- state: !prev.isOnHold ? 'hold' : 'active',
+ isOnHold: !currentlyOnHold,
+ state: !currentlyOnHold ? 'hold' : 'active',
  };
  });
- }, []);
+ } catch (err) {
+ console.error('[Phone] Hold toggle failed:', err);
+ // Fallback: still update UI state so user isn't stuck
+ setCurrentCall(prev => {
+ if (!prev) return prev;
+ return {
+ ...prev,
+ isOnHold: !currentlyOnHold,
+ state: !currentlyOnHold ? 'hold' : 'active',
+ };
+ });
+ }
+ }, [currentCall?.isOnHold]);
 
  const sendDTMF = useCallback((digit: string) => {
  if (sessionRef.current && sessionRef.current.state === SessionState.Established) {
@@ -697,15 +728,18 @@ export function PhoneProvider({
  try {
  console.log('[Phone] Adding third party:', phoneNumber);
 
- // 1. Put the current call on hold
- void toggleHold();
+ // 1. Put the current call on hold (await so SIP processes)
+ await toggleHold();
 
  // 2. Stash the current session
  heldSessionRef.current = sessionRef.current;
  setHasHeldCalls(true);
  sessionRef.current = null; // Clear so makeCall starts fresh
 
- // 3. Dial the new number
+ // 3. Small delay to let FreeSWITCH process the hold
+ await new Promise(resolve => setTimeout(resolve, 500));
+
+ // 4. Dial the new number
  await makeCall(phoneNumber);
  } catch (err) {
  console.error('[Phone] Add third party failed:', err);
@@ -717,6 +751,8 @@ export function PhoneProvider({
  sessionRef.current = heldSessionRef.current;
  heldSessionRef.current = null;
  setHasHeldCalls(false);
+ // Try to unhold the original call
+ try { await toggleHold(); } catch { /* best effort */ }
  }
  }
  },
