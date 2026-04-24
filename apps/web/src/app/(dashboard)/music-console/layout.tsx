@@ -1,3 +1,4 @@
+import { MusicConsoleNav } from '@/features/music/components/music-console-nav';
 import '@/features/music/styles/music-theme.css';
 
 /**
@@ -11,8 +12,11 @@ export default function MusicConsoleLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="music-console m-grid-bg">
-      {children}
+    <div className="music-console m-grid-bg flex flex-col min-h-screen">
+      <MusicConsoleNav />
+      <div className="flex-1 relative">
+        {children}
+      </div>
     </div>
   );
 }
