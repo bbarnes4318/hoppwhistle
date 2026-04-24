@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Settings as SettingsIcon, Save, Building, ShieldCheck, ShieldAlert, Target, Bell, Link2 } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Building, ShieldCheck, ShieldAlert, Target, Bell, Link2, Upload } from 'lucide-react';
 import { defaultMusicSettings } from '@/features/music/data/demo-music-data';
 
 export default function MusicSettingsPage() {
