@@ -22,6 +22,16 @@ import { formatCurrency, outcomeLabel, segmentLabel } from '@/features/music/lib
 import { ProofRecord } from '@/features/music/types';
 import { cn } from '@/lib/utils';
 
+function getWaveformHeight(id: string, index: number): number {
+  const val = Math.sin((id.charCodeAt(id.length - 1) + index) * 127.1 + 311.7) * 43758.5453;
+  return (val - Math.floor(val)) * 80 + 20;
+}
+
+function getJitter(id: string): number {
+  const val = Math.sin(id.charCodeAt(0) * 127.1 + 311.7) * 43758.5453;
+  return Math.floor((val - Math.floor(val)) * 5) + 1;
+}
+
 export default function MusicProofPage() {
   const [selectedProof, setSelectedProof] = useState<ProofRecord>();
   
@@ -237,7 +247,7 @@ export default function MusicProofPage() {
                         </button>
                         <div className="m-waveform flex-1">
                           {Array.from({ length: 30 }).map((_, i) => (
-                            <div key={i} className="m-waveform-bar" style={{ height: `${Math.random() * 80 + 20}%` }} />
+                            <div key={i} className="m-waveform-bar" style={{ height: `${getWaveformHeight(selectedProof.id, i)}%` }} />
                           ))}
                         </div>
                       </div>
@@ -282,7 +292,7 @@ export default function MusicProofPage() {
                   <h3 className="m-section-title">
                     <FileText className="!text-[var(--m-accent-2)]" /> Verbatim Transcript
                   </h3>
-                  <button className="m-btn m-btn--ghost">
+                  <button className="m-btn m-btn--ghost" onClick={() => alert('Exporting transcript to CSV...')}>
                     <Download className="h-3 w-3" /> Export
                   </button>
                 </div>
@@ -337,7 +347,7 @@ export default function MusicProofPage() {
                   <div className="space-y-2 text-xs">
                     <div className="flex justify-between"><span className="m-text-dim">SIP Response</span><span className="m-font-mono">{selectedProof.status === 'completed' ? '200 OK' : selectedProof.status === 'no_answer' ? '408 Request Timeout' : '486 Busy Here'}</span></div>
                     <div className="flex justify-between"><span className="m-text-dim">Network Route</span><span>DIDCentral → US-East-1</span></div>
-                    <div className="flex justify-between"><span className="m-text-dim">Avg Jitter</span><span className="m-font-mono">{Math.floor(Math.random() * 5) + 1}ms</span></div>
+                    <div className="flex justify-between"><span className="m-text-dim">Avg Jitter</span><span className="m-font-mono">{getJitter(selectedProof.id)}ms</span></div>
                     <div className="flex justify-between"><span className="m-text-dim">STIR/SHAKEN</span><span className="m-text-accent-2 flex items-center gap-1"><Check className="h-3 w-3" /> A-Attest</span></div>
                   </div>
                 </div>

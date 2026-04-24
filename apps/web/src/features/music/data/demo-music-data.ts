@@ -124,7 +124,7 @@ const SNIPPETS = [
   "AI: VIP upgrades are available for your upcoming show. Want to hear more?\nFan: Definitely, how much is it?",
 ];
 
-export const proofRecords: ProofRecord[] = Array.from({ length: 15 }, (_, i) => {
+export const proofRecords: ProofRecord[] = Array.from({ length: 300 }, (_, i) => {
   const status = pick(STATUSES, i * 7);
   const isCompleted = status === 'completed';
   const camp = fanCampaigns[i % fanCampaigns.length];

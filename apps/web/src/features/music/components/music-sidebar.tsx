@@ -37,7 +37,7 @@ export function MusicSidebar() {
     <div className="flex h-full w-64 flex-col border-r border-[var(--m-border-2)] m-bg-surface z-20">
       <div className="flex h-16 items-center px-6 border-b border-[var(--m-border-2)]">
         <Link href="/music-console" className="flex items-center gap-2">
-          <Disc3 className="h-6 w-6 m-text-accent animate-[spin_4s_linear_infinite]" />
+          <Disc3 className="h-6 w-6 m-text-accent" />
           <span className="text-sm font-bold tracking-[0.2em] m-text-text uppercase">
             Music Console
           </span>

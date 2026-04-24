@@ -24,6 +24,7 @@ import type { FanProfile } from '../types';
 export function FanDatabaseTable() {
   const [search, setSearch] = useState('');
   const [selectedFan, setSelectedFan] = useState<FanProfile | null>(null);
+  const [showFullPhone, setShowFullPhone] = useState(false);
 
   const filteredFans = fans.filter(f => 
     f.name.toLowerCase().includes(search.toLowerCase()) || 
@@ -73,15 +74,15 @@ export function FanDatabaseTable() {
               className="w-full bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md pl-9 pr-4 py-2 text-sm text-[var(--m-text)] focus:border-[var(--m-accent)] focus:outline-none transition-colors"
             />
           </div>
-          <button className="flex items-center gap-2 px-3 py-2 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md text-sm font-medium hover:bg-[var(--m-border-2)] transition-colors">
+          <button className="flex items-center gap-2 px-3 py-2 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md text-sm font-medium hover:bg-[var(--m-border-2)] transition-colors" onClick={() => alert('Opening filters panel...')}>
             <Filter className="h-4 w-4" /> Filters
           </button>
         </div>
         <div className="flex items-center gap-3 w-full sm:w-auto">
-          <button className="flex items-center gap-2 px-3 py-2 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md text-sm font-medium hover:bg-[var(--m-border-2)] transition-colors">
+          <button className="flex items-center gap-2 px-3 py-2 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md text-sm font-medium hover:bg-[var(--m-border-2)] transition-colors" onClick={() => alert('Opening import modal...')}>
             <Upload className="h-4 w-4" /> Import
           </button>
-          <button className="flex items-center gap-2 px-3 py-2 bg-[var(--m-accent)] text-white rounded-md text-sm font-medium hover:bg-violet-600 transition-colors">
+          <button className="flex items-center gap-2 px-3 py-2 bg-[var(--m-accent)] text-white rounded-md text-sm font-medium hover:bg-violet-600 transition-colors" onClick={() => alert('Exporting segment to CSV...')}>
             <Download className="h-4 w-4" /> Export Segment
           </button>
         </div>
@@ -141,7 +142,7 @@ export function FanDatabaseTable() {
                   )}
                 </td>
                 <td className="px-4 py-3">
-                  <button className="p-1 hover:bg-[var(--m-surface-2)] rounded m-text-muted hover:text-[var(--m-text)] transition-colors" onClick={(e) => { e.stopPropagation(); setSelectedFan(fan); }}>
+                  <button className="p-1 hover:bg-[var(--m-surface-2)] rounded m-text-muted hover:text-[var(--m-text)] transition-colors" onClick={(e) => { e.stopPropagation(); setSelectedFan(fan); setShowFullPhone(false); }}>
                     <MoreVertical className="h-4 w-4" />
                   </button>
                 </td>
@@ -164,7 +165,10 @@ export function FanDatabaseTable() {
                 <div className="flex items-center gap-2 text-sm m-text-dim mt-1">
                   <span className="font-mono">{selectedFan.id}</span>
                   <span>•</span>
-                  <span>{selectedFan.phone}</span>
+                  <span>{showFullPhone ? selectedFan.phone : `+1 XXX-XXX-${selectedFan.phone.slice(-4)}`}</span>
+                  {!showFullPhone && (
+                    <button onClick={() => setShowFullPhone(true)} className="ml-2 text-xs text-[var(--m-accent)] hover:underline border border-[var(--m-border-2)] px-2 py-0.5 rounded">Reveal</button>
+                  )}
                 </div>
               </div>
               <button onClick={() => setSelectedFan(null)} className="p-2 hover:bg-[var(--m-border-2)] rounded-full transition-colors">
@@ -246,7 +250,7 @@ export function FanDatabaseTable() {
               <div className="bg-[var(--m-accent)]/10 border border-[var(--m-accent)]/30 rounded-lg p-4">
                 <div className="text-sm font-bold text-[var(--m-accent)] mb-1">Recommended Next Action</div>
                 <div className="text-sm m-text-text">Add to <span className="font-semibold">Early Access VIP Waitlist</span> based on consistent engagement and recent ticket intent verification.</div>
-                <button className="mt-3 w-full py-2 bg-[var(--m-accent)] text-white rounded text-sm font-semibold hover:bg-violet-600 transition-colors">
+                <button className="mt-3 w-full py-2 bg-[var(--m-accent)] text-white rounded text-sm font-semibold hover:bg-violet-600 transition-colors" onClick={() => alert('Triggering SMS flow...')}>
                   Trigger VIP SMS Follow-Up
                 </button>
               </div>

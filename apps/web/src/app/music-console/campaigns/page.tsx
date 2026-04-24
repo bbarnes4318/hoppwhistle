@@ -23,6 +23,7 @@ import { fanCampaigns } from '@/features/music/data/demo-music-data';
 import { campaignTypeLabel, formatCompactNumber, formatCurrency, segmentLabel } from '@/features/music/lib/utils';
 import { cn } from '@/lib/utils';
 import type { FanCampaign } from '@/features/music/types';
+import Link from 'next/link';
 
 export default function MusicCampaignsPage() {
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
@@ -49,7 +50,7 @@ export default function MusicCampaignsPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button className="flex items-center gap-2 px-4 py-2 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md text-sm font-medium hover:bg-[var(--m-border-2)] transition-colors">
+          <button className="flex items-center gap-2 px-4 py-2 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md text-sm font-medium hover:bg-[var(--m-border-2)] transition-colors" onClick={() => alert('Opening filters panel...')}>
             <ListFilter className="h-4 w-4" /> Filter
           </button>
           <button 
@@ -228,18 +229,18 @@ export default function MusicCampaignsPage() {
 
               {/* Actions */}
               <div className="flex flex-col gap-3 pt-4 border-t border-[var(--m-border-2)]">
-                <button className="w-full py-2 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded text-sm font-semibold hover:bg-[var(--m-border-2)] transition-colors">
+                <Link href="/music-console/reports" className="flex items-center justify-center w-full py-2 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded text-sm font-semibold hover:bg-[var(--m-border-2)] transition-colors">
                   View Full Report
-                </button>
-                <button className="w-full py-2 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded text-sm font-semibold hover:bg-[var(--m-border-2)] transition-colors">
+                </Link>
+                <button className="w-full py-2 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded text-sm font-semibold hover:bg-[var(--m-border-2)] transition-colors" onClick={() => alert('Exporting proof log to CSV...')}>
                   Export Proof Log (.csv)
                 </button>
                 {selectedCampaign.status === 'active' ? (
-                  <button className="w-full py-2 bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded text-sm font-semibold hover:bg-amber-500/20 transition-colors">
+                  <button className="w-full py-2 bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded text-sm font-semibold hover:bg-amber-500/20 transition-colors" onClick={() => alert('Pausing campaign...')}>
                     Pause Campaign
                   </button>
                 ) : (
-                  <button className="w-full py-2 bg-[var(--m-accent)] text-white rounded text-sm font-semibold hover:bg-violet-600 transition-colors">
+                  <button className="w-full py-2 bg-[var(--m-accent)] text-white rounded text-sm font-semibold hover:bg-violet-600 transition-colors" onClick={() => alert('Resuming campaign...')}>
                     Resume Campaign
                   </button>
                 )}

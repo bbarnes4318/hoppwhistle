@@ -467,6 +467,7 @@
 }
 
 /* ── Utility: Accent Colors (inline-friendly) ───────────────── */
+.m-text-text     { color: var(--m-text); }
 .m-text-accent   { color: var(--m-accent); }
 .m-text-accent-2 { color: var(--m-accent-2); }
 .m-text-muted    { color: var(--m-muted); }
