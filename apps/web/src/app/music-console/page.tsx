@@ -7,12 +7,12 @@ import {
   FileText,
   Headphones,
   Mic,
-  Play,
   ShieldCheck,
   TrendingUp,
   Users,
+  ArrowRight,
 } from 'lucide-react';
-import { useState } from 'react';
+import Link from 'next/link';
 import {
   Area,
   AreaChart,
@@ -35,13 +35,11 @@ import { formatCompactNumber, formatCurrency, outcomeLabel, segmentLabel } from 
 import { cn } from '@/lib/utils';
 
 export default function MusicConsolePage() {
-  const [expandedRow, setExpandedRow] = useState<string | null>(null);
-
   return (
     <div className="relative z-10 p-6 md:p-8 space-y-8">
       
       {/* ─── Header ─── */}
-      <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+      <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-[var(--m-border-2)] pb-6">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Music Console</h1>
           <p className="mt-1 text-sm m-text-muted max-w-xl">
@@ -216,13 +214,18 @@ export default function MusicConsolePage() {
         </div>
       </section>
 
-      {/* ─── Bottom Row: Proof Log ─── */}
-      <section className="m-card overflow-hidden">
-        <div className="p-6 border-b border-[var(--m-border-2)]">
-          <h2 className="m-section-title">
-            <ShieldCheck /> Fan Proof Log
-          </h2>
-          <p className="m-section-subtitle">Immutable record of every fan interaction, sentiment, and verified outcome.</p>
+      {/* ─── Bottom Row: Proof Log (Compact) ─── */}
+      <section className="m-card overflow-hidden flex flex-col">
+        <div className="p-6 border-b border-[var(--m-border-2)] flex items-center justify-between">
+          <div>
+            <h2 className="m-section-title">
+              <ShieldCheck /> Fan Proof Log
+            </h2>
+            <p className="m-section-subtitle">Recent immutable interaction records.</p>
+          </div>
+          <Link href="/music-console/proof" className="flex items-center gap-2 px-4 py-2 bg-[var(--m-surface-2)] hover:bg-[var(--m-border-2)] border border-[var(--m-border)] rounded-md text-xs font-semibold transition-colors">
+            View Full Log <ArrowRight className="h-3 w-3" />
+          </Link>
         </div>
         
         <div className="overflow-x-auto">
@@ -233,32 +236,33 @@ export default function MusicConsolePage() {
                 <th>Fan</th>
                 <th>Campaign</th>
                 <th>Segment</th>
-                <th>Interaction</th>
                 <th className="text-center">Sentiment</th>
                 <th className="text-center">Intent</th>
                 <th>Outcome</th>
                 <th className="text-center">Proof</th>
               </tr>
             </thead>
-            <tbody>
-              {proofRecords.map((r) => (
-                <tr 
-                  key={r.id}
-                  onClick={() => r.hasTranscript && setExpandedRow(expandedRow === r.id ? null : r.id)}
-                  className={cn(r.hasTranscript && "cursor-pointer")}
-                >
+            <tbody className="divide-y divide-[var(--m-border-2)]">
+              {proofRecords.slice(0, 6).map((r) => (
+                <tr key={r.id}>
                   <td className="m-font-mono text-[10px] m-text-dim">{new Date(r.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
                   <td className="font-medium text-[var(--m-text)]">{r.fanName}</td>
-                  <td className="m-text-muted">{r.campaignName}</td>
+                  <td className="m-text-muted truncate max-w-[150px]">{r.campaignName}</td>
                   <td className="m-text-muted text-[11px]">{segmentLabel(r.segment)}</td>
-                  <td className="capitalize">{r.status.replace('_', ' ')}</td>
                   <td className="text-center">
                     <span className={cn(
                       "inline-flex h-2 w-2 rounded-full",
                       r.sentiment === 'positive' ? 'bg-[var(--m-accent-2)]' : r.sentiment === 'negative' ? 'bg-[var(--m-danger)]' : 'bg-[var(--m-dim)]'
                     )} />
                   </td>
-                  <td className="text-center capitalize m-text-muted">{r.intent}</td>
+                  <td className="text-center">
+                    <span className={cn(
+                      "text-[10px] font-bold uppercase tracking-wider",
+                      r.intent === 'high' ? 'm-text-accent-2' : r.intent === 'medium' ? 'm-text-warning' : 'm-text-dim'
+                    )}>
+                      {r.intent}
+                    </span>
+                  </td>
                   <td>
                     <span className={cn("m-badge", r.verifiedAction ? "m-badge--verified" : "m-badge--neutral")}>
                       {outcomeLabel(r.outcome)}
@@ -266,8 +270,8 @@ export default function MusicConsolePage() {
                   </td>
                   <td>
                     <div className="flex items-center justify-center gap-3">
-                      {r.hasRecording ? <Mic className="h-3.5 w-3.5 m-text-accent" /> : <span className="h-3.5 w-3.5" />}
-                      {r.hasTranscript ? <FileText className="h-3.5 w-3.5 m-text-accent-2" /> : <span className="h-3.5 w-3.5" />}
+                      {r.hasRecording ? <Mic className="h-3.5 w-3.5 m-text-accent" /> : <span className="h-3.5 w-3.5 m-text-dim opacity-30" />}
+                      {r.hasTranscript ? <FileText className="h-3.5 w-3.5 m-text-accent-2" /> : <span className="h-3.5 w-3.5 m-text-dim opacity-30" />}
                     </div>
                   </td>
                 </tr>
@@ -275,38 +279,6 @@ export default function MusicConsolePage() {
             </tbody>
           </table>
         </div>
-
-        {/* Expanded Transcript Row */}
-        {expandedRow && (() => {
-          const r = proofRecords.find(p => p.id === expandedRow);
-          if (!r || !r.transcriptSnippet) return null;
-          return (
-            <div className="border-t border-[var(--m-border-2)] p-6 m-bg-surface-2">
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-[10px] font-bold m-text-dim uppercase tracking-widest flex items-center gap-2">
-                  <FileText className="h-3 w-3" /> Fan Transcript
-                </span>
-                <button className="m-btn m-btn--ghost">
-                  <Play className="h-3 w-3" /> Play Audio
-                </button>
-              </div>
-              <div className="m-transcript max-w-4xl">
-                {r.transcriptSnippet.split('\n').map((line, i) => {
-                  const isAI = line.startsWith('AI:');
-                  const content = line.replace(/^(AI|Fan):\s*/, '');
-                  return (
-                    <div key={i} className={cn("m-transcript-line", isAI && "m-transcript-line--ai")}>
-                      <div className={cn("m-transcript-speaker", isAI ? "m-transcript-speaker--ai" : "m-transcript-speaker--fan")}>
-                        {isAI ? 'AI Agent' : 'Fan'}
-                      </div>
-                      <div className="m-transcript-text">{content}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })()}
       </section>
 
     </div>

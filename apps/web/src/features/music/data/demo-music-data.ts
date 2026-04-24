@@ -8,6 +8,10 @@ import type {
   InteractionStatus,
   Sentiment,
   IntentLevel,
+  FanProfile,
+  MusicSettings,
+  FanSource,
+  FanSegment
 } from '../types';
 
 // ── Seeded PRNG
@@ -200,3 +204,68 @@ export const campaignTimeSeries: CampaignTimeSeriesPoint[] = Array.from({ length
   verifiedEngagements: range(i * 107, 200, 600),
   preSaves: range(i * 109, 100, 400),
 }));
+
+// ── Fans Database ──
+const FAN_SOURCES: FanSource[] = ['fan_club', 'pre_save_page', 'merch_checkout', 'ticketing_partner', 'qr_code', 'sms_opt_in', 'vip_waitlist'];
+const FAN_SEGMENTS: FanSegment[] = ['superfan', 'vip_list', 'previous_merch', 'tour_city', 'stream_save', 'fan_club_inactive', 'festival_audience'];
+const CITIES = ['Los Angeles', 'New York', 'Chicago', 'Austin', 'Nashville', 'London', 'Toronto', 'Miami'];
+const CONSENT_STATUSES = ['opted_in', 'opted_in', 'opted_in', 'opted_out', 'pending'];
+
+export const fans: FanProfile[] = Array.from({ length: 45 }, (_, i) => {
+  return {
+    id: `fan-${i}`,
+    name: pick(FAN_NAMES, i * 11) + (i > 10 ? ` ${i}` : ''),
+    phone: `+1 ${range(i*100, 200, 999)}-${range(i*200, 200, 999)}-${range(i*300, 1000, 9999)}`,
+    city: pick(CITIES, i * 17),
+    segment: pick(FAN_SEGMENTS, i * 19),
+    source: pick(FAN_SOURCES, i * 23),
+    engagementScore: range(i * 31, 10, 99),
+    lastInteraction: `2026-04-${String(range(i * 37, 10, 24)).padStart(2, '0')}T14:30:00Z`,
+    verifiedActions: range(i * 41, 0, 5),
+    preSaves: range(i * 43, 0, 3),
+    favoriteArtist: pick(['Nova Ray', 'Jace Vale', 'Luma District', 'Aria Stone', 'The Afterhours'], i * 47),
+    consentStatus: pick(CONSENT_STATUSES, i * 53) as any,
+    totalInteractions: range(i * 59, 1, 12),
+  };
+});
+
+// ── Default Settings ──
+export const defaultMusicSettings: MusicSettings = {
+  organizationName: 'Demo Label',
+  defaultAiVoice: 'Luna — Warm & Conversational',
+  timezone: 'America/New_York',
+  complianceMode: 'tcpa_strict',
+  recordAllInteractions: true,
+  transcribeAllInteractions: true,
+  optOutThreshold: 5,
+  notificationsEnabled: true,
+  emailReports: true,
+  reportFrequency: 'weekly',
+  
+  defaultArtist: 'Nova Ray',
+  defaultCampaignOwner: 'Marketing Team',
+  reportingCurrency: 'USD',
+  approvedVoicePersona: 'Artist-Approved Promo',
+  artistSafeMode: true,
+  requireScriptApproval: true,
+  allowFreeformAi: false,
+  boundedScriptMode: true,
+  maxCallDuration: 180,
+  brandSafetyNotes: 'Do not use profanity. Always mention the tour dates.',
+  requireOptInConsent: true,
+  consentSourceRequired: true,
+  optOutHandling: 'auto_blacklist',
+  recordingDisclosure: 'single_party',
+  tcpaConsentMode: 'strict',
+  dataRetentionWindow: '90_days',
+  defaultCampaignType: 'album_presave',
+  defaultGoal: 'Maximize Pre-Saves',
+  defaultCpaTarget: 1.50,
+  defaultAttributionWindow: '7_days',
+  alertCampaignLaunch: true,
+  alertCpaThreshold: true,
+  alertOptOutSpike: true,
+  alertHighIntent: true,
+  weeklyExecutiveReport: true,
+};
+

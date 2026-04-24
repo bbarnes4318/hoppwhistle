@@ -4,7 +4,17 @@ export type FanSegment =
   | 'previous_merch'
   | 'tour_city'
   | 'stream_save'
-  | 'fan_club_inactive';
+  | 'fan_club_inactive'
+  | 'festival_audience';
+
+export type FanSource =
+  | 'fan_club'
+  | 'pre_save_page'
+  | 'merch_checkout'
+  | 'ticketing_partner'
+  | 'qr_code'
+  | 'sms_opt_in'
+  | 'vip_waitlist';
 
 export type FanOutcome =
   | 'pre_saved'
@@ -101,4 +111,59 @@ export interface CampaignTimeSeriesPoint {
   humanAnswers: number;
   verifiedEngagements: number;
   preSaves: number;
+}
+
+export interface FanProfile {
+  id: string;
+  name: string;
+  phone: string;
+  city: string;
+  segment: FanSegment;
+  source: FanSource;
+  engagementScore: number;
+  lastInteraction: string;
+  verifiedActions: number;
+  preSaves: number;
+  favoriteArtist: string;
+  consentStatus: 'opted_in' | 'opted_out' | 'pending';
+  totalInteractions: number;
+}
+
+export interface MusicSettings {
+  organizationName: string;
+  defaultAiVoice: string;
+  timezone: string;
+  complianceMode: 'tcpa_strict' | 'tcpa_standard';
+  recordAllInteractions: boolean;
+  transcribeAllInteractions: boolean;
+  optOutThreshold: number;
+  notificationsEnabled: boolean;
+  emailReports: boolean;
+  reportFrequency: 'daily' | 'weekly' | 'monthly';
+  
+  defaultArtist: string;
+  defaultCampaignOwner: string;
+  reportingCurrency: string;
+  approvedVoicePersona: string;
+  artistSafeMode: boolean;
+  requireScriptApproval: boolean;
+  allowFreeformAi: boolean;
+  boundedScriptMode: boolean;
+  maxCallDuration: number;
+  brandSafetyNotes: string;
+  requireOptInConsent: boolean;
+  consentSourceRequired: boolean;
+  optOutHandling: string;
+  recordingDisclosure: string;
+  tcpaConsentMode: string;
+  dataRetentionWindow: string;
+  defaultCampaignType: MusicCampaignType;
+  defaultGoal: string;
+  defaultCpaTarget: number;
+  defaultAttributionWindow: string;
+  alertCampaignLaunch: boolean;
+  alertCpaThreshold: boolean;
+  alertOptOutSpike: boolean;
+  alertHighIntent: boolean;
+  weeklyExecutiveReport: boolean;
 }

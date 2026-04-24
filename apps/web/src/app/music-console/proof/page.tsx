@@ -10,6 +10,7 @@ import {
   Megaphone,
   Mic,
   Play,
+  Search,
   ShieldCheck,
   User,
   X,
@@ -23,6 +24,30 @@ import { cn } from '@/lib/utils';
 
 export default function MusicProofPage() {
   const [selectedProof, setSelectedProof] = useState<ProofRecord>();
+  
+  // Filter States
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterOutcome, setFilterOutcome] = useState('All Outcomes');
+  const [filterIntent, setFilterIntent] = useState('All Intents');
+  const [requireRecording, setRequireRecording] = useState(false);
+
+  const filteredRecords = proofRecords.filter(r => {
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      if (!r.fanName.toLowerCase().includes(q) && !r.campaignName.toLowerCase().includes(q) && !r.artist.toLowerCase().includes(q)) return false;
+    }
+    if (filterOutcome !== 'All Outcomes') {
+      const isVerified = filterOutcome === 'Verified';
+      if (r.verifiedAction !== isVerified) return false;
+    }
+    if (filterIntent !== 'All Intents') {
+      if (r.intent.toLowerCase() !== filterIntent.replace('Intent: ', '').toLowerCase()) return false;
+    }
+    if (requireRecording && !r.hasRecording) {
+      return false;
+    }
+    return true;
+  });
 
   const renderTranscript = (snippet: string) => {
     if (!snippet) return null;
@@ -57,29 +82,48 @@ export default function MusicProofPage() {
       </header>
 
       {/* ─── Filters ─── */}
-      <div className="flex flex-wrap gap-3">
-        {[
-          { label: 'Campaign', val: 'All Campaigns' },
-          { label: 'Artist', val: 'All Artists' },
-          { label: 'Segment', val: 'All Segments' },
-          { label: 'Outcome', val: 'All Outcomes' },
-          { label: 'Sentiment', val: 'All' },
-          { label: 'Intent', val: 'All' },
-          { label: 'Date', val: 'Last 30 Days', icon: Calendar },
-        ].map(f => (
-          <div key={f.label} className="m-filter-pill">
-            <span className="m-filter-pill-label">{f.label}:</span>
-            <span className="font-medium flex items-center gap-1">
-              {f.icon && <f.icon className="h-3 w-3" />} {f.val}
-            </span>
-          </div>
-        ))}
-        <div className="flex items-center gap-4 ml-4">
-          <label className="flex items-center gap-2 text-xs m-text-muted cursor-pointer">
-            <input type="checkbox" className="accent-[var(--m-accent)] h-3.5 w-3.5" /> Recording
-          </label>
-          <label className="flex items-center gap-2 text-xs m-text-muted cursor-pointer">
-            <input type="checkbox" className="accent-[var(--m-accent)] h-3.5 w-3.5" /> Transcript
+      <div className="flex flex-col md:flex-row gap-4 items-start md:items-center bg-[var(--m-surface-2)] border border-[var(--m-border)] p-4 rounded-lg">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 m-text-dim" />
+          <input 
+            type="text" 
+            placeholder="Search fans, artists, campaigns..." 
+            className="w-full pl-9 pr-4 py-2 bg-[var(--m-bg)] border border-[var(--m-border)] rounded-md text-sm focus:outline-none focus:border-[var(--m-accent)] text-[var(--m-text)]"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+        
+        <div className="flex flex-wrap items-center gap-3">
+          <select 
+            className="bg-[var(--m-bg)] border border-[var(--m-border)] rounded-md px-3 py-2 text-sm text-[var(--m-text)] focus:outline-none focus:border-[var(--m-accent)] appearance-none cursor-pointer"
+            value={filterOutcome}
+            onChange={(e) => setFilterOutcome(e.target.value)}
+          >
+            <option>All Outcomes</option>
+            <option>Verified</option>
+            <option>Neutral</option>
+          </select>
+          
+          <select 
+            className="bg-[var(--m-bg)] border border-[var(--m-border)] rounded-md px-3 py-2 text-sm text-[var(--m-text)] focus:outline-none focus:border-[var(--m-accent)] appearance-none cursor-pointer"
+            value={filterIntent}
+            onChange={(e) => setFilterIntent(e.target.value)}
+          >
+            <option>All Intents</option>
+            <option>High</option>
+            <option>Medium</option>
+            <option>Low</option>
+          </select>
+
+          <label className="flex items-center gap-2 text-sm m-text-text cursor-pointer ml-2">
+            <input 
+              type="checkbox" 
+              className="accent-[var(--m-accent)] h-4 w-4" 
+              checked={requireRecording}
+              onChange={(e) => setRequireRecording(e.target.checked)}
+            /> 
+            Has Recording
           </label>
         </div>
       </div>
@@ -104,7 +148,7 @@ export default function MusicProofPage() {
               </tr>
             </thead>
             <tbody>
-              {proofRecords.map((r) => (
+              {filteredRecords.map((r) => (
                 <tr 
                   key={r.id} 
                   onClick={() => setSelectedProof(r)}
@@ -263,7 +307,7 @@ export default function MusicProofPage() {
               </div>
 
               {/* Attribution & Compliance */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-4">
                   <h3 className="m-kpi-label border-b border-[var(--m-border-2)] pb-2">Campaign Attribution</h3>
                   <div className="space-y-2 text-xs">
@@ -285,6 +329,16 @@ export default function MusicProofPage() {
                     <div className="flex justify-between"><span className="m-text-dim">Consent Source</span><span>{selectedProof.consentSource}</span></div>
                     <div className="flex justify-between"><span className="m-text-dim">DNC Check</span><span className="m-text-accent-2 flex items-center gap-1"><Check className="h-3 w-3" /> Passed</span></div>
                     <div className="flex justify-between"><span className="m-text-dim">AI Disclosure</span><span className="m-text-accent-2 flex items-center gap-1"><Check className="h-3 w-3" /> Delivered</span></div>
+                  </div>
+                </div>
+                
+                <div className="space-y-4">
+                  <h3 className="m-kpi-label border-b border-[var(--m-border-2)] pb-2">Carrier Telemetry</h3>
+                  <div className="space-y-2 text-xs">
+                    <div className="flex justify-between"><span className="m-text-dim">SIP Response</span><span className="m-font-mono">{selectedProof.status === 'completed' ? '200 OK' : selectedProof.status === 'no_answer' ? '408 Request Timeout' : '486 Busy Here'}</span></div>
+                    <div className="flex justify-between"><span className="m-text-dim">Network Route</span><span>DIDCentral → US-East-1</span></div>
+                    <div className="flex justify-between"><span className="m-text-dim">Avg Jitter</span><span className="m-font-mono">{Math.floor(Math.random() * 5) + 1}ms</span></div>
+                    <div className="flex justify-between"><span className="m-text-dim">STIR/SHAKEN</span><span className="m-text-accent-2 flex items-center gap-1"><Check className="h-3 w-3" /> A-Attest</span></div>
                   </div>
                 </div>
               </div>

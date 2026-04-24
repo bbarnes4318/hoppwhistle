@@ -15,9 +15,19 @@ import {
   ShieldCheck,
   Target,
   Users,
+  Activity,
 } from 'lucide-react';
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 
-import { funnelData, topSegmentsData } from '@/features/music/data/demo-music-data';
+import { campaignTimeSeries, defaultMusicSettings, funnelData, topSegmentsData } from '@/features/music/data/demo-music-data';
 import { formatCompactNumber, formatCurrency } from '@/features/music/lib/utils';
 
 export default function MusicReportsPage() {
@@ -37,11 +47,11 @@ export default function MusicReportsPage() {
       <header className="flex flex-col md:flex-row md:items-start justify-between gap-4 border-b border-[var(--m-border-2)] pb-6 mb-8">
         <div>
           <div className="flex items-center gap-2 m-text-dim text-xs font-medium uppercase tracking-widest mb-2">
-            <Music className="h-4 w-4 m-text-accent" /> Executive Report
+            <Music className="h-4 w-4 m-text-accent" /> {defaultMusicSettings.organizationName} — Executive Report
           </div>
           <h1 className="text-3xl font-bold tracking-tight">Midnight Signal Pre-Save</h1>
           <p className="mt-1 text-sm m-text-muted">
-            Nova Ray • April 10 – April 24, 2026
+            {defaultMusicSettings.defaultArtist} • April 10 – April 24, 2026
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -86,6 +96,39 @@ export default function MusicReportsPage() {
                   <div className="m-kpi-value text-xl">{metric.value}</div>
                 </div>
               ))}
+            </div>
+          </section>
+
+          {/* 1.5 Timeline Chart */}
+          <section>
+            <h2 className="m-section-title mb-4 mt-8">
+              <Activity className="!text-[var(--m-accent)]" /> Campaign Timeline
+            </h2>
+            <div className="m-card p-6 h-[250px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={campaignTimeSeries} margin={{ top: 5, right: 0, left: -25, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorAnswersRep" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#7C5CFF" stopOpacity={0.25}/>
+                      <stop offset="95%" stopColor="#7C5CFF" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="colorVerifiedRep" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#18D6A3" stopOpacity={0.25}/>
+                      <stop offset="95%" stopColor="#18D6A3" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148,163,184,0.06)" />
+                  <XAxis dataKey="date" stroke="rgba(148,163,184,0.2)" tick={{ fontSize: 10, fill: '#475569' }} axisLine={false} tickLine={false} />
+                  <YAxis stroke="rgba(148,163,184,0.2)" tick={{ fontSize: 10, fill: '#475569' }} axisLine={false} tickLine={false} />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#06080D', border: '1px solid rgba(148,163,184,0.1)', borderRadius: '6px' }}
+                    itemStyle={{ fontSize: '12px' }}
+                    labelStyle={{ fontSize: '10px', color: '#9AA8BD', marginBottom: '4px' }}
+                  />
+                  <Area type="monotone" dataKey="humanAnswers" name="Human Answers" stroke="#7C5CFF" strokeWidth={2} fillOpacity={1} fill="url(#colorAnswersRep)" />
+                  <Area type="monotone" dataKey="verifiedEngagements" name="Verified Actions" stroke="#18D6A3" strokeWidth={2} fillOpacity={1} fill="url(#colorVerifiedRep)" />
+                </AreaChart>
+              </ResponsiveContainer>
             </div>
           </section>
 
@@ -170,6 +213,31 @@ export default function MusicReportsPage() {
                 <br /><br />
                 <strong>Recommended Next Action:</strong> Target the highly-engaged <span className="underline decoration-white/20 underline-offset-4">Tour City audience</span> with the secondary VIP Upsell flow ahead of Friday&apos;s general on-sale.&rdquo;
               </p>
+            </div>
+          </section>
+
+          {/* Configuration Settings Overview */}
+          <section>
+            <h2 className="m-section-title mb-4 mt-8">
+              <ShieldCheck /> Campaign Configuration
+            </h2>
+            <div className="m-card p-5 space-y-3 text-sm">
+              <div className="flex justify-between items-center border-b border-[var(--m-border-2)] pb-2">
+                <span className="m-text-dim">Voice Persona</span>
+                <span className="font-medium m-text-text">{defaultMusicSettings.defaultAiVoice}</span>
+              </div>
+              <div className="flex justify-between items-center border-b border-[var(--m-border-2)] pb-2">
+                <span className="m-text-dim">Compliance Mode</span>
+                <span className="font-medium m-text-accent uppercase text-xs">{defaultMusicSettings.complianceMode.replace('_', ' ')}</span>
+              </div>
+              <div className="flex justify-between items-center border-b border-[var(--m-border-2)] pb-2">
+                <span className="m-text-dim">Interaction Recording</span>
+                <span className="font-medium m-text-text">{defaultMusicSettings.recordAllInteractions ? 'Enabled (All)' : 'Disabled'}</span>
+              </div>
+              <div className="flex justify-between items-center pb-1">
+                <span className="m-text-dim">Script Mode</span>
+                <span className="font-medium m-text-accent-2">{defaultMusicSettings.boundedScriptMode ? 'Strictly Bounded' : 'Freeform'}</span>
+              </div>
             </div>
           </section>
 
