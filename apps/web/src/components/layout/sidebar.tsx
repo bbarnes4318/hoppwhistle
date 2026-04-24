@@ -5,6 +5,7 @@ import {
  Bot,
  ClipboardCheck,
  Clock,
+ Disc3,
  DollarSign,
  FileText,
  GitBranch,
@@ -75,6 +76,12 @@ const navigation: NavItem[] = [
  hideFromBuyerOnly: true,
  },
  { name: 'Institutional Profile', href: '/settings', icon: Settings },
+ {
+   name: 'Music Console',
+   href: '/music-console',
+   icon: Disc3,
+   title: 'Music industry streaming analytics & campaigns',
+ },
 ];
 
 const toolsNavigation: NavItem[] = [
