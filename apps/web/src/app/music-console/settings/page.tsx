@@ -1,21 +1,33 @@
 'use client';
 
-import { useState } from 'react';
 import { Settings as SettingsIcon, Save, Building, ShieldCheck, ShieldAlert, Target, Bell, Link2, Upload } from 'lucide-react';
+import { useState, useEffect } from 'react';
+
 import { defaultMusicSettings } from '@/features/music/data/demo-music-data';
+import type { MusicCampaignType } from '@/features/music/types';
 
 export default function MusicSettingsPage() {
   const [settings, setSettings] = useState(defaultMusicSettings);
   const [isSaving, setIsSaving] = useState(false);
 
+  useEffect(() => {
+    const saved = localStorage.getItem('musicSettings');
+    if (saved) {
+      try {
+        setSettings(JSON.parse(saved));
+      } catch (e) {}
+    }
+  }, []);
+
   const handleSave = () => {
     setIsSaving(true);
+    localStorage.setItem('musicSettings', JSON.stringify(settings));
     setTimeout(() => setIsSaving(false), 800);
   };
 
   return (
-    <div className="space-y-6 pb-20">
-      <header className="border-b border-[var(--m-border-2)] pb-6 flex items-center justify-between">
+    <div className="space-y-5">
+      <header className="flex items-end justify-between gap-4 border-b border-[var(--m-border-2)] pb-4">
         <div>
           <h1 className="text-[28px] font-bold tracking-tight flex items-center gap-3 m-text-text">
             <SettingsIcon className="h-7 w-7 m-text-accent" /> Platform Settings
@@ -182,7 +194,7 @@ export default function MusicSettingsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-semibold m-text-muted mb-2">Default Campaign Type</label>
-                <select className="w-full bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded p-2.5 text-sm m-text-text capitalize" value={settings.defaultCampaignType} onChange={e => setSettings({...settings, defaultCampaignType: e.target.value as any})}>
+                <select className="w-full bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded p-2.5 text-sm m-text-text capitalize" value={settings.defaultCampaignType} onChange={e => setSettings({...settings, defaultCampaignType: e.target.value as MusicCampaignType})}>
                   <option value="album_presave">Album Pre-Save</option>
                   <option value="tour_onsale">Tour On-Sale</option>
                   <option value="merch_drop">Merch Drop</option>

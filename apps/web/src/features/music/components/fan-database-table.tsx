@@ -25,6 +25,19 @@ export function FanDatabaseTable() {
   const [search, setSearch] = useState('');
   const [selectedFan, setSelectedFan] = useState<FanProfile | null>(null);
   const [showFullPhone, setShowFullPhone] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+
+  const handleExport = () => {
+    const csvContent = 'data:text/csv;charset=utf-8,Name,Phone,City,Segment,Source\n' + 
+      filteredFans.map(f => `${f.name},${f.phone},${f.city},${f.segment},${f.source}`).join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', 'fan_export.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const filteredFans = fans.filter(f => 
     f.name.toLowerCase().includes(search.toLowerCase()) || 
@@ -74,19 +87,47 @@ export function FanDatabaseTable() {
               className="w-full bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md pl-9 pr-4 py-2 text-sm text-[var(--m-text)] focus:border-[var(--m-accent)] focus:outline-none transition-colors"
             />
           </div>
-          <button className="flex items-center gap-2 px-3 py-2 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md text-sm font-medium hover:bg-[var(--m-border-2)] transition-colors" onClick={() => alert('Opening filters panel...')}>
+          <button 
+            className="flex items-center gap-2 px-3 py-2 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md text-sm font-medium hover:bg-[var(--m-border-2)] transition-colors" 
+            onClick={() => setShowFilters(!showFilters)}
+          >
             <Filter className="h-4 w-4" /> Filters
           </button>
         </div>
         <div className="flex items-center gap-3 w-full sm:w-auto">
-          <button className="flex items-center gap-2 px-3 py-2 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md text-sm font-medium hover:bg-[var(--m-border-2)] transition-colors" onClick={() => alert('Opening import modal...')}>
+          <label className="flex items-center gap-2 px-3 py-2 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md text-sm font-medium hover:bg-[var(--m-border-2)] transition-colors cursor-pointer">
             <Upload className="h-4 w-4" /> Import
-          </button>
-          <button className="flex items-center gap-2 px-3 py-2 bg-[var(--m-accent)] text-white rounded-md text-sm font-medium hover:bg-violet-600 transition-colors" onClick={() => alert('Exporting segment to CSV...')}>
+            <input type="file" className="hidden" accept=".csv" onChange={() => {}} />
+          </label>
+          <button 
+            className="flex items-center gap-2 px-3 py-2 bg-[var(--m-accent)] text-white rounded-md text-sm font-medium hover:bg-violet-600 transition-colors" 
+            onClick={handleExport}
+          >
             <Download className="h-4 w-4" /> Export Segment
           </button>
         </div>
       </div>
+
+      {showFilters && (
+        <div className="p-4 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-lg grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-xs font-semibold m-text-muted mb-2 uppercase tracking-wider">Segment</label>
+            <select className="w-full bg-[var(--m-bg)] border border-[var(--m-border)] rounded p-2 text-sm text-[var(--m-text)] focus:outline-none focus:border-[var(--m-accent)]">
+              <option>All Segments</option>
+              <option>Superfan</option>
+              <option>Casual</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold m-text-muted mb-2 uppercase tracking-wider">Source</label>
+            <select className="w-full bg-[var(--m-bg)] border border-[var(--m-border)] rounded p-2 text-sm text-[var(--m-text)] focus:outline-none focus:border-[var(--m-accent)]">
+              <option>All Sources</option>
+              <option>Spotify Presave</option>
+              <option>Merch Checkout</option>
+            </select>
+          </div>
+        </div>
+      )}
 
       {/* Table */}
       <div className="m-card overflow-x-auto">
@@ -250,7 +291,15 @@ export function FanDatabaseTable() {
               <div className="bg-[var(--m-accent)]/10 border border-[var(--m-accent)]/30 rounded-lg p-4">
                 <div className="text-sm font-bold text-[var(--m-accent)] mb-1">Recommended Next Action</div>
                 <div className="text-sm m-text-text">Add to <span className="font-semibold">Early Access VIP Waitlist</span> based on consistent engagement and recent ticket intent verification.</div>
-                <button className="mt-3 w-full py-2 bg-[var(--m-accent)] text-white rounded text-sm font-semibold hover:bg-violet-600 transition-colors" onClick={() => alert('Triggering SMS flow...')}>
+                <button 
+                  className="mt-3 w-full py-2 bg-[var(--m-accent)] text-white rounded text-sm font-semibold hover:bg-violet-600 transition-colors disabled:opacity-50"
+                  onClick={() => {
+                    const btn = document.getElementById('sms-btn-vip');
+                    if (btn) btn.innerText = 'Sent!';
+                    setTimeout(() => { if (btn) btn.innerText = 'Trigger VIP SMS Follow-Up'; }, 2000);
+                  }}
+                  id="sms-btn-vip"
+                >
                   Trigger VIP SMS Follow-Up
                 </button>
               </div>

@@ -36,10 +36,10 @@ import { cn } from '@/lib/utils';
 
 export default function MusicConsolePage() {
   return (
-    <div className="relative z-10 p-6 md:p-8 space-y-8">
+    <div className="space-y-5">
       
       {/* ─── Header ─── */}
-      <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-[var(--m-border-2)] pb-6">
+      <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-[var(--m-border-2)] pb-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Music Console</h1>
           <p className="mt-1 text-sm m-text-muted max-w-xl">

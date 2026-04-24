@@ -5,8 +5,8 @@ import { FanDatabaseTable } from '@/features/music/components/fan-database-table
 
 export default function MusicFansPage() {
   return (
-    <div className="space-y-6">
-      <header className="border-b border-[var(--m-border-2)] pb-6">
+    <div className="space-y-5">
+      <header className="border-b border-[var(--m-border-2)] pb-4">
         <h1 className="text-[28px] font-bold tracking-tight flex items-center gap-3 m-text-text">
           <Users className="h-7 w-7 m-text-accent" /> Fan Database
         </h1>

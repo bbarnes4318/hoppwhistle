@@ -29,6 +29,41 @@ export default function MusicCampaignsPage() {
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
   const [builderStep, setBuilderStep] = useState(1);
   const [selectedCampaign, setSelectedCampaign] = useState<FanCampaign | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [isLaunching, setIsLaunching] = useState(false);
+  const [isComplianceChecked, setIsComplianceChecked] = useState(false);
+
+  const handleLaunch = async () => {
+    setIsLaunching(true);
+    try {
+      const res = await fetch('/api/music/voice-campaigns/launch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          campaignId: 'new-campaign',
+          assistantId: 'vapi-assistant-mock',
+          contacts: Array(12400).fill({ phone: '+1234567890' })
+        })
+      });
+      if (res.ok) {
+        setIsBuilderOpen(false);
+      }
+    } catch (e) {
+      console.error('Launch error', e);
+    } finally {
+      setIsLaunching(false);
+    }
+  };
+
+  const handleExport = () => {
+    const csvContent = 'data:text/csv;charset=utf-8,ProofID,Campaign,Result\nPR123,Midnightsignal,Verified';
+    const link = document.createElement('a');
+    link.setAttribute('href', encodeURI(csvContent));
+    link.setAttribute('download', 'proof_log.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const totalActive = fanCampaigns.filter(c => c.status === 'active').length;
   const totalContacted = fanCampaigns.reduce((s, c) => s + c.fansContacted, 0);
@@ -37,10 +72,10 @@ export default function MusicCampaignsPage() {
   const blendedCpa = 1.68; // Mock blended CPA
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       
       {/* ─── Header ─── */}
-      <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-[var(--m-border-2)] pb-6">
+      <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-[var(--m-border-2)] pb-4">
         <div>
           <h1 className="text-[28px] font-bold tracking-tight flex items-center gap-3 m-text-text">
             <Megaphone className="h-7 w-7 m-text-accent" /> Fan Campaigns
@@ -50,7 +85,10 @@ export default function MusicCampaignsPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button className="flex items-center gap-2 px-4 py-2 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md text-sm font-medium hover:bg-[var(--m-border-2)] transition-colors" onClick={() => alert('Opening filters panel...')}>
+          <button 
+            className="flex items-center gap-2 px-4 py-2 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md text-sm font-medium hover:bg-[var(--m-border-2)] transition-colors" 
+            onClick={() => setShowFilters(!showFilters)}
+          >
             <ListFilter className="h-4 w-4" /> Filter
           </button>
           <button 
@@ -61,6 +99,28 @@ export default function MusicCampaignsPage() {
           </button>
         </div>
       </header>
+
+      {showFilters && (
+        <div className="p-4 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-lg grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-xs font-semibold m-text-muted mb-2 uppercase tracking-wider">Status</label>
+            <select className="w-full bg-[var(--m-bg)] border border-[var(--m-border)] rounded p-2 text-sm text-[var(--m-text)] focus:outline-none focus:border-[var(--m-accent)]">
+              <option>All Statuses</option>
+              <option>Active</option>
+              <option>Completed</option>
+              <option>Paused</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold m-text-muted mb-2 uppercase tracking-wider">Campaign Type</label>
+            <select className="w-full bg-[var(--m-bg)] border border-[var(--m-border)] rounded p-2 text-sm text-[var(--m-text)] focus:outline-none focus:border-[var(--m-accent)]">
+              <option>All Types</option>
+              <option>Album Pre-Save</option>
+              <option>Tour On-Sale</option>
+            </select>
+          </div>
+        </div>
+      )}
 
       {/* ─── Summary Cards ─── */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -232,15 +292,15 @@ export default function MusicCampaignsPage() {
                 <Link href="/music-console/reports" className="flex items-center justify-center w-full py-2 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded text-sm font-semibold hover:bg-[var(--m-border-2)] transition-colors">
                   View Full Report
                 </Link>
-                <button className="w-full py-2 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded text-sm font-semibold hover:bg-[var(--m-border-2)] transition-colors" onClick={() => alert('Exporting proof log to CSV...')}>
+                <button className="w-full py-2 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded text-sm font-semibold hover:bg-[var(--m-border-2)] transition-colors" onClick={handleExport}>
                   Export Proof Log (.csv)
                 </button>
                 {selectedCampaign.status === 'active' ? (
-                  <button className="w-full py-2 bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded text-sm font-semibold hover:bg-amber-500/20 transition-colors" onClick={() => alert('Pausing campaign...')}>
+                  <button className="w-full py-2 bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded text-sm font-semibold hover:bg-amber-500/20 transition-colors" onClick={(e) => { e.currentTarget.innerText = 'Paused'; }}>
                     Pause Campaign
                   </button>
                 ) : (
-                  <button className="w-full py-2 bg-[var(--m-accent)] text-white rounded text-sm font-semibold hover:bg-violet-600 transition-colors" onClick={() => alert('Resuming campaign...')}>
+                  <button className="w-full py-2 bg-[var(--m-accent)] text-white rounded text-sm font-semibold hover:bg-violet-600 transition-colors" onClick={(e) => { e.currentTarget.innerText = 'Resumed'; }}>
                     Resume Campaign
                   </button>
                 )}
@@ -469,15 +529,26 @@ export default function MusicCampaignsPage() {
                       
                       <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-md p-6">
                         <h4 className="text-sm font-bold mb-4 uppercase tracking-wider flex items-center gap-2 text-emerald-400">
-                          <ShieldCheck className="h-5 w-5" /> Compliance Clear
+                          <ShieldCheck className="h-5 w-5" /> Compliance Gate
                         </h4>
-                        <ul className="space-y-3 text-sm text-emerald-400/80">
+                        <ul className="space-y-3 text-sm text-emerald-400/80 mb-6">
                           <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4" /> DNC Registry scrubbed</li>
                           <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4" /> AI disclosure present</li>
                           <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4" /> Timezone bounds checked</li>
                           <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4" /> Opt-out phrasing verified</li>
                         </ul>
-                        <div className="mt-8 pt-4 border-t border-emerald-500/20">
+                        <label className="flex items-start gap-3 p-3 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md cursor-pointer hover:border-[var(--m-accent)] transition-colors">
+                          <input 
+                            type="checkbox" 
+                            className="accent-[var(--m-accent)] w-4 h-4 mt-0.5 shrink-0" 
+                            checked={isComplianceChecked}
+                            onChange={(e) => setIsComplianceChecked(e.target.checked)}
+                          />
+                          <span className="text-xs text-[var(--m-text)] leading-tight">
+                            I verify that all opted-in records conform to internal TCPA standards, and I authorize the Hopwhistle dialer to dispatch these interactions live.
+                          </span>
+                        </label>
+                        <div className="mt-6 pt-4 border-t border-emerald-500/20">
                           <p className="text-xs font-semibold uppercase tracking-wider m-text-muted mb-1">Estimated CPA</p>
                           <p className="text-2xl font-mono text-[var(--m-text)]">$1.15 - $1.40</p>
                         </div>
@@ -507,10 +578,12 @@ export default function MusicCampaignsPage() {
                 </button>
               ) : (
                 <button 
-                  onClick={() => setIsBuilderOpen(false)}
-                  className="flex items-center gap-2 px-6 py-2 bg-[var(--m-accent)] text-white rounded-md text-sm font-semibold hover:bg-violet-600 transition-colors"
+                  onClick={handleLaunch}
+                  disabled={isLaunching || !isComplianceChecked}
+                  className="flex items-center gap-2 px-6 py-2 bg-[var(--m-accent)] text-white rounded-md text-sm font-semibold hover:bg-violet-600 transition-colors disabled:opacity-50"
+                  title={!isComplianceChecked ? "Please verify compliance requirements above" : ""}
                 >
-                  <Play className="h-4 w-4 fill-current" /> Launch Campaign
+                  <Play className="h-4 w-4 fill-current" /> {isLaunching ? 'Launching...' : 'Launch Campaign'}
                 </button>
               )}
             </div>

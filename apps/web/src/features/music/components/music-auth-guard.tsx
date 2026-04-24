@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
+
 import { useAuth } from '@/hooks/use-auth';
 
 export function MusicAuthGuard({ children }: { children: React.ReactNode }) {

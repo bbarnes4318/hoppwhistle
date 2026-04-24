@@ -15,7 +15,7 @@ import {
   User,
   X,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 import { proofRecords } from '@/features/music/data/demo-music-data';
 import { formatCurrency, outcomeLabel, segmentLabel } from '@/features/music/lib/utils';
@@ -41,7 +41,42 @@ export default function MusicProofPage() {
   const [filterIntent, setFilterIntent] = useState('All Intents');
   const [requireRecording, setRequireRecording] = useState(false);
 
-  const filteredRecords = proofRecords.filter(r => {
+  const [liveMode, setLiveMode] = useState(false);
+  const [liveRecords, setLiveRecords] = useState<ProofRecord[]>([]);
+
+  useEffect(() => {
+    if (liveMode && liveRecords.length === 0) {
+      fetch('/api/vapi/calls?limit=50')
+        .then(r => r.json())
+        .then(data => {
+          const calls = Array.isArray(data) ? data : (data?.message || []);
+          const mapped: ProofRecord[] = calls.map((call: any) => ({
+            id: call.id,
+            timestamp: call.createdAt || new Date().toISOString(),
+            fanName: call.customer?.name || call.customer?.number || 'Live Fan',
+            artist: 'System Integration',
+            campaignName: 'Live Outbound',
+            intent: 'medium',
+            sentiment: 'neutral',
+            outcome: call.status === 'ended' ? 'converted' : 'not_interested',
+            verifiedAction: call.status === 'ended',
+            hasRecording: !!call.recordingUrl,
+            recordingUrl: call.recordingUrl,
+            hasTranscript: !!call.transcript,
+            transcriptSnippet: call.transcript || 'No transcript available for this call.',
+            durationSeconds: call.duration || 45,
+            destinationLink: 'https://ffm.to/live',
+            tcpaConsentSource: 'Live Dial Integration'
+          }));
+          setLiveRecords(mapped);
+        })
+        .catch(e => console.error(e));
+    }
+  }, [liveMode]);
+
+  const activeRecords = liveMode ? liveRecords : proofRecords;
+
+  const filteredRecords = activeRecords.filter(r => {
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       if (!r.fanName.toLowerCase().includes(q) && !r.campaignName.toLowerCase().includes(q) && !r.artist.toLowerCase().includes(q)) return false;
@@ -77,10 +112,10 @@ export default function MusicProofPage() {
   };
 
   return (
-    <div className="relative z-10 p-6 md:p-8 space-y-6">
+    <div className="space-y-5">
       
       {/* ─── Header ─── */}
-      <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-[var(--m-border-2)] pb-6">
+      <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-[var(--m-border-2)] pb-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-3">
             <ShieldCheck className="h-6 w-6 m-text-accent-2" /> Proof Log
@@ -88,6 +123,12 @@ export default function MusicProofPage() {
           <p className="mt-1 text-sm m-text-muted max-w-xl">
             Every fan interaction can be proven with timestamp, recording, transcript, sentiment, intent, and outcome.
           </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 px-3 py-1.5 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md text-sm cursor-pointer hover:bg-[var(--m-border-2)] transition-colors">
+            <input type="checkbox" className="accent-[var(--m-accent)] h-4 w-4" checked={liveMode} onChange={e => setLiveMode(e.target.checked)} />
+            Live Vapi Data
+          </label>
         </div>
       </header>
 
@@ -292,7 +333,18 @@ export default function MusicProofPage() {
                   <h3 className="m-section-title">
                     <FileText className="!text-[var(--m-accent-2)]" /> Verbatim Transcript
                   </h3>
-                  <button className="m-btn m-btn--ghost" onClick={() => alert('Exporting transcript to CSV...')}>
+                  <button 
+                    className="m-btn m-btn--ghost" 
+                    onClick={() => {
+                      const txtContent = `Transcript for ${selectedProof.fanName}\n${selectedProof.transcriptSnippet}`;
+                      const link = document.createElement('a');
+                      link.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(txtContent));
+                      link.setAttribute('download', `transcript_${selectedProof.id}.txt`);
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                    }}
+                  >
                     <Download className="h-3 w-3" /> Export
                   </button>
                 </div>

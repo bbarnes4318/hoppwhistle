@@ -41,10 +41,10 @@ export default function MusicReportsPage() {
   ];
 
   return (
-    <div className="relative z-10 p-6 md:p-8">
+    <div className="space-y-5">
       
       {/* ─── Header & Toolbar ─── */}
-      <header className="flex flex-col md:flex-row md:items-start justify-between gap-4 border-b border-[var(--m-border-2)] pb-6 mb-8">
+      <header className="flex flex-col md:flex-row md:items-start justify-between gap-4 border-b border-[var(--m-border-2)] pb-4">
         <div>
           <div className="flex items-center gap-2 m-text-dim text-xs font-medium uppercase tracking-widest mb-2">
             <Music className="h-4 w-4 m-text-accent" /> {defaultMusicSettings.organizationName} — Executive Report
