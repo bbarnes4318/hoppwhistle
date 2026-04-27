@@ -73,6 +73,7 @@ interface VapiCall {
  customer?: { number?: string };
  phoneNumber?: { number?: string };
  assistantId?: string;
+ recordingUrl?: string;
 }
 
 interface CampaignState {
@@ -197,6 +198,14 @@ function getOutcomeBadge(reason?: string) {
  }
 }
 
+function getCallDuration(call: VapiCall): number {
+  if (typeof call.duration === 'number' && call.duration > 0) return Math.round(call.duration);
+  if (call.startedAt && call.endedAt) {
+    return Math.max(0, Math.round((new Date(call.endedAt).getTime() - new Date(call.startedAt).getTime()) / 1000));
+  }
+  return 0;
+}
+
 // ─── Main Component ──────────────────────────────────────────
 export default function VoiceAgentsPage() {
  const { toast } = useToast();
@@ -235,7 +244,7 @@ export default function VoiceAgentsPage() {
  // ─── Fetch assistants ───
  const fetchAssistants = useCallback(async () => {
  try {
- const res = await fetch('/api/vapi/assistants');
+ const res = await fetch('/vapi-proxy/assistants');
  if (!res.ok) throw new Error('Failed to fetch');
  const data = await res.json();
  setAssistants(Array.isArray(data) ? data : []);
@@ -257,7 +266,7 @@ export default function VoiceAgentsPage() {
  const fetchCalls = useCallback(async (assistantId?: string) => {
  try {
  setRefreshing(true);
- let url = '/api/vapi/calls?limit=100';
+ let url = '/vapi-proxy/calls?limit=100';
  if (assistantId) url += `&assistantId=${assistantId}`;
  const res = await fetch(url);
  if (!res.ok) throw new Error('Failed to fetch calls');
@@ -305,9 +314,9 @@ export default function VoiceAgentsPage() {
  ).length,
  avgDuration:
  recentCalls
- .filter(c => c.duration && c.duration > 0)
- .reduce((sum, c) => sum + (c.duration || 0), 0) /
- Math.max(1, recentCalls.filter(c => c.duration && c.duration > 0).length),
+ .filter(c => getCallDuration(c) > 0)
+ .reduce((sum, c) => sum + getCallDuration(c), 0) /
+ Math.max(1, recentCalls.filter(c => getCallDuration(c) > 0).length),
  };
 
  // ─── Handle file upload ───
@@ -360,7 +369,7 @@ export default function VoiceAgentsPage() {
  backchannelingEnabled: true,
  firstMessageMode: 'assistant-waits-for-user',
  };
- const res = await fetch('/api/vapi/assistants', {
+ const res = await fetch('/vapi-proxy/assistants', {
  method: 'POST',
  headers: { 'Content-Type': 'application/json' },
  body: JSON.stringify(body),
@@ -393,7 +402,7 @@ export default function VoiceAgentsPage() {
  const handleDeleteAgent = async (id: string) => {
  if (!confirm('Delete this voice agent? This cannot be undone.')) return;
  try {
- const res = await fetch(`/api/vapi/assistants/${id}`, { method: 'DELETE' });
+ const res = await fetch(`/vapi-proxy/assistants/${id}`, { method: 'DELETE' });
  if (!res.ok) throw new Error('Failed to delete');
  toast({ title: 'Agent Deleted' });
  if (selectedAgent?.id === id) setSelectedAgent(null);
@@ -427,7 +436,7 @@ export default function VoiceAgentsPage() {
       const didEntry = activeDIDs[i % activeDIDs.length];
 
       try {
-        const res = await fetch('/api/vapi/calls', {
+        const res = await fetch('/vapi-proxy/calls', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -858,12 +867,14 @@ export default function VoiceAgentsPage() {
  <th className="text-left py-2 font-medium">Phone</th>
  <th className="text-left py-2 font-medium">Status</th>
  <th className="text-left py-2 font-medium">Outcome</th>
+ <th className="text-left py-2 font-medium">Recording</th>
  <th className="text-right py-2 font-medium">Duration</th>
  </tr>
  </thead>
  <tbody>
  {recentCalls.slice(0, 25).map(call => {
  const outcome = getOutcomeBadge(call.endedReason);
+ const duration = getCallDuration(call);
  return (
  <tr key={call.id} className="border-b border-border/50 hover:bg-muted/30">
  <td className="py-2 font-mono text-xs">
@@ -886,8 +897,15 @@ export default function VoiceAgentsPage() {
  {outcome.label}
  </Badge>
  </td>
+ <td className="py-2">
+ {call.recordingUrl ? (
+ <audio controls src={call.recordingUrl} className="h-8 w-40" />
+ ) : (
+ <span className="text-xs text-muted-foreground">—</span>
+ )}
+ </td>
  <td className="py-2 text-right text-xs text-muted-foreground">
- {call.duration ? `${call.duration}s` : '—'}
+ {duration > 0 ? `${duration}s` : '—'}
  </td>
  </tr>
  );
