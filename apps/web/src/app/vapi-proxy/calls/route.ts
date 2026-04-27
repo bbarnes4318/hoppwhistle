@@ -29,7 +29,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const res = await fetch(`${VAPI_BASE}/call`, {
+    const res = await fetch(`${VAPI_BASE}/call/phone`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${VAPI_API_KEY}`,
