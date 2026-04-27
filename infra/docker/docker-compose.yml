@@ -279,6 +279,7 @@ services:
       - NEXT_PUBLIC_API_KEY=${API_KEY:-demo-key}
       - NEXTAUTH_URL=https://hopwhistle.com
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-change-me}
+      - VAPI_API_KEY=${VAPI_API_KEY}
     depends_on:
       api:
         condition: service_healthy

@@ -29,6 +29,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+    console.log('[Vapi Proxy] POST payload:', JSON.stringify(body, null, 2));
+
     const res = await fetch(`${VAPI_BASE}/call/phone`, {
       method: 'POST',
       headers: {
@@ -37,8 +39,12 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify(body),
     });
+
     if (!res.ok) {
-      const err = await res.json();
+      const text = await res.text();
+      console.error('[Vapi Proxy] Vapi API Error Response:', text);
+      let err;
+      try { err = JSON.parse(text); } catch (e) { err = { message: text }; }
       throw new Error(err.message || `Vapi API error: ${res.status}`);
     }
     const data = await res.json();
