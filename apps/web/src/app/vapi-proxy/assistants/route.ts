@@ -3,10 +3,13 @@ import { NextResponse } from 'next/server';
 const VAPI_API_KEY = process.env.VAPI_API_KEY || 'b8c9e434-32ca-4cbc-ae39-b6c4583622c2';
 const VAPI_BASE = 'https://api.vapi.ai';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const res = await fetch(`${VAPI_BASE}/assistant`, {
       headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
+      cache: 'no-store',
     });
     if (!res.ok) throw new Error(`Vapi API error: ${res.status}`);
     const data = await res.json();
