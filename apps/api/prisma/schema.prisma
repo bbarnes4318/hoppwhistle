@@ -58,6 +58,7 @@ model Tenant {
   retentionPolicies   RetentionPolicy[]
   insuranceLeads           InsuranceLead[]
   insuranceLeadSubmissions InsuranceLeadSubmission[]
+  didRoutes                DidRoute[]
 
   @@index([slug])
   @@index([status])
@@ -318,6 +319,7 @@ model PhoneNumber {
   callLegs       CallLeg[]
   pingRequests   PingRequest[] // Numbers assigned via RTB Post
   aiCampaigns    AICampaign[] // AI outbound campaigns using this number
+  didRoutes      DidRoute[]   // Inbound routing: DID → buyer destination
 
   @@unique([tenantId, number])
   @@index([tenantId, number])
@@ -329,6 +331,47 @@ model PhoneNumber {
   @@index([poolType, poolStatus]) // For pool queries
   @@index([poolStatus, lastAssignedAt]) // For reaper cleanup
   @@map("phone_numbers")
+}
+
+// ============================================================================
+// DID Routing — Inbound Call Forwarding to Buyer Destinations
+// ============================================================================
+
+model DidRoute {
+  id              String         @id @default(uuid())
+  tenantId        String
+  phoneNumberId   String         // FK to PhoneNumber (the tracking DID)
+  did             String         // E.164 DID number (denormalized for fast lookup)
+  destination     String         // Buyer's forwarding phone number (E.164)
+  buyerId         String?        // Optional: link to a Buyer entity
+  campaignId      String?        // Optional: link to a Campaign
+  label           String?        // Friendly label e.g. "Medicare Q1 — John Smith"
+  recordingEnabled Boolean       @default(true)
+  status          DidRouteStatus @default(ACTIVE)
+  totalCalls      Int            @default(0)
+  totalDuration   Int            @default(0) // Seconds
+  lastCallAt      DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  // Relations
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  phoneNumber PhoneNumber  @relation(fields: [phoneNumberId], references: [id])
+  buyer       Buyer?       @relation(fields: [buyerId], references: [id])
+  campaign    Campaign?    @relation(fields: [campaignId], references: [id])
+
+  @@unique([tenantId, did]) // One route per DID per tenant
+  @@index([did])            // Fast lookup by DID (FreeSWITCH uses this)
+  @@index([tenantId])
+  @@index([buyerId])
+  @@index([status])
+  @@map("did_routes")
+}
+
+enum DidRouteStatus {
+  ACTIVE
+  PAUSED     // Temporarily disabled
+  INACTIVE   // Permanently disabled
 }
 
 enum PhoneNumberStatus {
@@ -482,6 +525,7 @@ model Campaign {
   phoneNumbers PhoneNumber[]
   calls        Call[]
   leads        Lead[]
+  didRoutes    DidRoute[]
 
   @@index([tenantId])
   @@index([publisherId])
@@ -559,6 +603,7 @@ model Buyer {
   endpoints    BuyerEndpoint[]
   calls        Call[]
   transactions BuyerTransaction[]
+  didRoutes    DidRoute[]
   stats        BuyerStats?
   bids         BuyerBid[]
 

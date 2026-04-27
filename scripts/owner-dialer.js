@@ -44,7 +44,7 @@ loadEnv();
 
 const CONFIG = {
   VAPI_API_TOKEN: process.env.VAPI_API_TOKEN || 'b8c9e434-32ca-4cbc-ae39-b6c4583622c2',
-  ASSISTANT_ID: 'f6bcf4b4-8323-4bf8-a87d-a57d8dd9cd39',
+  ASSISTANT_ID: '1fc88d85-4c44-4399-9345-f601628e64fb',
 
   // BulkVS / FreeSWITCH carrier (default)
   FREESWITCH_HOST: '3.214.60.13',
@@ -52,7 +52,12 @@ const CONFIG = {
   SIP_USERNAME: 'vapi',
   SIP_PASSWORD: 'VapiFS_5070_StrongPass!9xQ2',
 
+  // Merged DID pool — SignalWire DIDs first, then BulkVS DIDs for rotation
   DIDS: [
+    // SignalWire DIDs
+    '+18652679650',
+    '+17253022220',
+    // BulkVS DIDs
     '+12816989460',
     '+12816989461',
     '+14063165877',
@@ -561,7 +566,7 @@ Assistant: ${CONFIG.ASSISTANT_ID}
 
   // Determine carrier
   const carrierIdx = args.indexOf('--carrier');
-  const carrier = carrierIdx !== -1 && args[carrierIdx + 1] ? args[carrierIdx + 1].toLowerCase() : 'bulkvs';
+  const carrier = carrierIdx !== -1 && args[carrierIdx + 1] ? args[carrierIdx + 1].toLowerCase() : 'signalwire';
   const isSignalWire = carrier === 'signalwire';
 
   if (isSignalWire) {

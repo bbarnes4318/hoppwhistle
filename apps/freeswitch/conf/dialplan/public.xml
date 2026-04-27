@@ -1,7 +1,16 @@
 <include>
   <context name="public">
 
-    <!-- Inbound from BulkVS to Call Center DID (281-699-1120) -->
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         Dynamic Inbound DID Routing (Ringba-style)
+
+         Any inbound call to a 10/11-digit number that isn't matched by a
+         hardcoded extension below will be handled by the Lua routing script.
+         The script calls the API to look up the destination, starts recording,
+         bridges to the buyer's phone, and posts CDR on hangup.
+         ═══════════════════════════════════════════════════════════════════════ -->
+
+    <!-- Hardcoded: Call Center DID (281-699-1120) → WebRTC Agent -->
     <extension name="inbound-call-center">
       <condition field="destination_number" expression="^(\+?1?2816991120)$">
         <action application="log" data="INFO [PUBLIC] Inbound call to BulkVS DID 281-699-1120 from ${caller_id_number}"/>
@@ -38,6 +47,21 @@
         <action application="set" data="call_timeout=120"/>
         <action application="bridge" data="${sofia_contact(internal/1000@3.214.60.13)}"/>
         <action application="hangup" data="NORMAL_CLEARING"/>
+      </condition>
+    </extension>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         Dynamic Routing via Lua — ALL OTHER INBOUND DIDs
+         
+         This catches any 10-digit or 11-digit (1+10) inbound number that 
+         wasn't matched above. The Lua script does an HTTP lookup to find
+         the buyer destination, records the call, and bridges.
+         ═══════════════════════════════════════════════════════════════════════ -->
+    <extension name="inbound-dynamic-route">
+      <condition field="destination_number" expression="^(\+?1?[2-9]\d{9})$">
+        <action application="log" data="INFO [PUBLIC] Dynamic inbound routing for ${destination_number} from ${caller_id_number}"/>
+        <action application="set" data="domain_name=3.214.60.13"/>
+        <action application="lua" data="inbound_route.lua"/>
       </condition>
     </extension>
 

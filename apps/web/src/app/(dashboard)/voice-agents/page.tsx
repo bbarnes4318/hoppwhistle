@@ -6,6 +6,7 @@ import {
  Heart,
  Landmark,
  Cross,
+ Pause,
  Plus,
  Play,
  Square,
@@ -76,9 +77,10 @@ interface VapiCall {
 
 interface CampaignState {
  running: boolean;
+ paused: boolean;
  dispatched: number;
  total: number;
- intervalRef: NodeJS.Timeout | null;
+ errors: number;
 }
 
 // ─── Constants ───────────────────────────────────────────────
@@ -125,14 +127,34 @@ const CATEGORY_MAP: Record<string, string> = {
  Medicare: 'medicare',
 };
 
+// Default Vapi Assistant ID for outbound calls
+const DEFAULT_ASSISTANT_ID = '1fc88d85-4c44-4399-9345-f601628e64fb';
+
+// Merged DID pool — SignalWire DIDs first, then BulkVS DIDs for rotation
 const AVAILABLE_DIDS = [
- '+18656000038',
- '+18656000039',
- '+18656000064',
- '+18656000065',
- '+18656000124',
- '+18656000125',
+  // SignalWire DIDs
+  '+18652679650',
+  '+17253022220',
+  // BulkVS DIDs
+  '+12816989460',
+  '+12816989461',
+  '+14063165877',
+  '+14402992856',
+  '+14402992860',
+  '+16102819660',
+  '+16102819662',
+  '+17038313168',
+  '+17042283589',
+  '+17042286088',
+  '+18036135410',
+  '+18036135412',
+  '+19124185540',
+  '+19124185542',
+  '+19542083921',
+  '+19542083922',
 ];
+
+const DISPATCH_DELAY_MS = 4000; // 4s between call dispatches
 
 const VOICE_OPTIONS = [
  { id: 'sarah', name: 'Sarah', provider: '11labs', desc: 'Warm, professional female' },
@@ -185,10 +207,14 @@ export default function VoiceAgentsPage() {
  const [selectedAgent, setSelectedAgent] = useState<VapiAssistant | null>(null);
  const [campaign, setCampaign] = useState<CampaignState>({
  running: false,
+ paused: false,
  dispatched: 0,
  total: 0,
- intervalRef: null,
+ errors: 0,
  });
+ const [dispatching, setDispatching] = useState(false);
+ const cancelRef = useRef(false);
+ const pauseRef = useRef(false);
  const [contacts, setContacts] = useState<string[]>([]);
  const [selectedDIDs, setSelectedDIDs] = useState<string[]>(AVAILABLE_DIDS);
  const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -377,32 +403,103 @@ export default function VoiceAgentsPage() {
  }
  };
 
- // ─── Start/Stop campaign (placeholder — actual dialer is CLI) ───
- const handleStartCampaign = () => {
- if (!selectedAgent) {
- toast({ title: 'Error', description: 'Select a voice agent first', variant: 'destructive' });
- return;
- }
- if (contacts.length === 0) {
- toast({
- title: 'Error',
- description: 'Upload a contacts file first',
- variant: 'destructive',
- });
- return;
- }
- setCampaign(prev => ({ ...prev, running: true, total: contacts.length, dispatched: 0 }));
- toast({
- title: 'Campaign Started',
- description: `Dialing ${contacts.length} contacts with ${selectedAgent.name}`,
- });
- };
+  // ─── Dispatch engine — fire-and-backoff ───
+  const dispatchCalls = useCallback(async (contactList: string[], agentId: string) => {
+    setDispatching(true);
+    cancelRef.current = false;
+    pauseRef.current = false;
+    let dispatched = 0;
+    let errors = 0;
+    const activeDIDs = selectedDIDs.length > 0 ? selectedDIDs : AVAILABLE_DIDS;
 
- const handleStopCampaign = () => {
- if (campaign.intervalRef) clearInterval(campaign.intervalRef);
- setCampaign({ running: false, dispatched: 0, total: 0, intervalRef: null });
- toast({ title: 'Campaign Stopped' });
- };
+    setCampaign({ running: true, paused: false, dispatched: 0, total: contactList.length, errors: 0 });
+
+    for (let i = 0; i < contactList.length; i++) {
+      if (cancelRef.current) break;
+
+      // Pause loop — wait until unpaused or cancelled
+      while (pauseRef.current && !cancelRef.current) {
+        await new Promise(r => setTimeout(r, 500));
+      }
+      if (cancelRef.current) break;
+
+      const phone = contactList[i];
+      const didEntry = activeDIDs[i % activeDIDs.length];
+
+      try {
+        const res = await fetch('/api/vapi/calls', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            assistantId: agentId,
+            phoneNumberId: didEntry,
+            customer: { number: phone },
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          const msg = (err as { error?: string }).error || `HTTP ${res.status}`;
+          if (msg.includes('oncurrency') || msg.includes('capacity')) {
+            toast({ title: 'At capacity', description: 'Waiting 30s for slots...' });
+            await new Promise(r => setTimeout(r, 30000));
+            i--; // Retry this contact
+            continue;
+          }
+          errors++;
+        } else {
+          dispatched++;
+        }
+      } catch {
+        errors++;
+      }
+
+      setCampaign(prev => ({ ...prev, dispatched, errors }));
+
+      // Stagger dispatches
+      if (i < contactList.length - 1 && !cancelRef.current) {
+        await new Promise(r => setTimeout(r, DISPATCH_DELAY_MS));
+      }
+    }
+
+    setCampaign(prev => ({ ...prev, running: false, paused: false }));
+    setDispatching(false);
+    toast({
+      title: cancelRef.current ? 'Campaign Stopped' : 'Campaign Complete',
+      description: `${dispatched} dispatched, ${errors} errors`,
+    });
+    if (selectedAgent) void fetchCalls(selectedAgent.id);
+  }, [selectedDIDs, toast, fetchCalls, selectedAgent]);
+
+  const handleStartCampaign = () => {
+    if (!selectedAgent) {
+      toast({ title: 'Error', description: 'Select a voice agent first', variant: 'destructive' });
+      return;
+    }
+    if (contacts.length === 0) {
+      toast({ title: 'Error', description: 'Upload a contacts file first', variant: 'destructive' });
+      return;
+    }
+    void dispatchCalls(contacts, selectedAgent.id || DEFAULT_ASSISTANT_ID);
+  };
+
+  const handlePauseCampaign = () => {
+    pauseRef.current = true;
+    setCampaign(prev => ({ ...prev, paused: true }));
+    toast({ title: 'Campaign Paused', description: 'Active calls will finish. Resume to continue.' });
+  };
+
+  const handleResumeCampaign = () => {
+    pauseRef.current = false;
+    setCampaign(prev => ({ ...prev, paused: false }));
+    toast({ title: 'Campaign Resumed' });
+  };
+
+  const handleStopCampaign = () => {
+    cancelRef.current = true;
+    pauseRef.current = false;
+    setCampaign(prev => ({ ...prev, running: false, paused: false }));
+    toast({ title: 'Campaign Stopped', description: 'Active calls will finish naturally.' });
+  };
 
  // ─── Render ────────────────────────────────────────────────
  return (
@@ -855,8 +952,8 @@ export default function VoiceAgentsPage() {
  <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
  Caller IDs ({selectedDIDs.length}/{AVAILABLE_DIDS.length})
  </Label>
- <div className="space-y-1">
- {AVAILABLE_DIDS.map(did => (
+ <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
+ {AVAILABLE_DIDS.map((did, idx) => (
  <label
  key={did}
  className="flex items-center gap-2 text-xs cursor-pointer hover:bg-accent/30 rounded px-2 py-1"
@@ -871,6 +968,9 @@ export default function VoiceAgentsPage() {
  }}
  />
  <span className="font-mono">{did}</span>
+ {idx < 2 && (
+ <Badge variant="outline" className="text-[9px] px-1 py-0 ml-auto">SW</Badge>
+ )}
  </label>
  ))}
  </div>
@@ -878,39 +978,72 @@ export default function VoiceAgentsPage() {
 
  <Separator />
 
- {/* Start/Stop Button */}
+ {/* Start / Pause / Resume / Stop Controls */}
  {campaign.running ? (
  <div className="space-y-3">
  <div className="flex items-center justify-between text-sm">
  <span className="text-muted-foreground">Progress</span>
+ <div className="flex items-center gap-2">
+ {campaign.paused && (
+ <Badge variant="outline" className="text-amber-500 border-amber-500/50 text-[10px]">PAUSED</Badge>
+ )}
  <span className="font-mono text-xs">
  {campaign.dispatched}/{campaign.total}
+ {campaign.errors > 0 && (
+ <span className="text-destructive ml-1">({campaign.errors} err)</span>
+ )}
  </span>
+ </div>
  </div>
  <div className="h-2 bg-muted rounded-full overflow-hidden">
  <div
- className="h-full bg-primary rounded-full transition-all"
+ className={`h-full rounded-full transition-all ${campaign.paused ? 'bg-amber-500' : 'bg-primary'}`}
  style={{
  width: `${campaign.total > 0 ? (campaign.dispatched / campaign.total) * 100 : 0}%`,
  }}
  />
  </div>
+ <div className="flex gap-2">
+ {campaign.paused ? (
+ <Button
+ variant="outline"
+ className="flex-1 gap-2 border-primary/50 text-primary"
+ onClick={handleResumeCampaign}
+ >
+ <Play className="h-4 w-4" />
+ Resume
+ </Button>
+ ) : (
+ <Button
+ variant="outline"
+ className="flex-1 gap-2 border-amber-500/50 text-amber-600"
+ onClick={handlePauseCampaign}
+ >
+ <Pause className="h-4 w-4" />
+ Pause
+ </Button>
+ )}
  <Button
  variant="destructive"
- className="w-full gap-2"
+ className="flex-1 gap-2"
  onClick={handleStopCampaign}
  >
  <Square className="h-4 w-4" />
- Stop Campaign
+ Stop
  </Button>
+ </div>
  </div>
  ) : (
  <Button
  className="w-full gap-2"
- disabled={!selectedAgent || contacts.length === 0}
+ disabled={!selectedAgent || contacts.length === 0 || dispatching}
  onClick={handleStartCampaign}
  >
+ {dispatching ? (
+ <Loader2 className="h-4 w-4 animate-spin" />
+ ) : (
  <Play className="h-4 w-4" />
+ )}
  Start Campaign
  {contacts.length > 0 && (
  <Badge variant="secondary" className="ml-1">

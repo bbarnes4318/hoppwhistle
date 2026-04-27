@@ -111,10 +111,32 @@
     </extension>
 
     <!-- ================================================================ -->
-    <!-- NOTE: SignalWire calls NEVER hit FreeSWITCH. -->
-    <!-- Vapi sends them directly to SignalWire's SIP domain. -->
-    <!-- No STIR/SHAKEN signing is needed for SignalWire. -->
+    <!-- CARRIER: SignalWire -->
+    <!-- No STIR/SHAKEN signing — SignalWire handles attestation internally -->
+    <!-- Routes through the signalwire gateway defined in external/ -->
     <!-- ================================================================ -->
+    <extension name="vapi-outbound-signalwire">
+      <condition field="destination_number" expression="^\+?1?(\d{10})$"/>
+      <condition field="${sip_h_X-Carrier}" expression="^signalwire$" break="never">
+        <action application="log" data="INFO [VAPI] SignalWire outbound to 1$1"/>
+
+        <action application="set" data="accountcode=vapi"/>
+        <action application="set" data="sip_h_X-Provider=Vapi"/>
+        <action application="set" data="sip_h_X-Carrier=signalwire"/>
+
+        <action application="set" data="hangup_after_bridge=true"/>
+        <action application="set" data="ignore_early_media=true"/>
+        <action application="set" data="progress_timeout=30"/>
+        <action application="set" data="originate_timeout=60"/>
+
+        <!-- Force G.711 for SignalWire PSTN termination -->
+        <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
+        <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
+
+        <!-- Bridge to SignalWire gateway — no signing needed -->
+        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC}sofia/gateway/signalwire/1$1"/>
+      </condition>
+    </extension>
 
     <!-- Vapi internal routing IDs (11+ digit strings) — route through default carrier -->
     <extension name="vapi-outbound-routing-id">

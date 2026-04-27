@@ -319,6 +319,10 @@ async function buildServer() {
   const { registerSignalWireWebhookRoutes } = await import('./routes/signalwire-webhooks.js');
   await server.register(registerSignalWireWebhookRoutes);
 
+  // Register DID routing routes (inbound call forwarding, FreeSWITCH lookup, CDR)
+  const { registerDidRouteRoutes } = await import('./routes/did-routes.js');
+  await server.register(registerDidRouteRoutes);
+
   // Register Insurance Lead Pipeline routes (inbound ingestion, CRM, Ameriquote routing)
   const { registerInsuranceLeadRoutes } = await import('./routes/insurance-leads.js');
   await server.register(registerInsuranceLeadRoutes);

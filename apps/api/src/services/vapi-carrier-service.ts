@@ -68,7 +68,29 @@ const FREESWITCH_CONFIG = {
  */
 const SIGNALWIRE_CONFIG = {
   sipUri: process.env.SIGNALWIRE_SIP_URI || 'sip:fe@pvn-shanevici.sip.signalwire.com',
-  dids: ['+18652679650', '+17253022220'],
+  // Merged DID pool — SignalWire DIDs first, then BulkVS DIDs for unified rotation
+  dids: [
+    // SignalWire DIDs
+    '+18652679650',
+    '+17253022220',
+    // BulkVS DIDs
+    '+12816989460',
+    '+12816989461',
+    '+14063165877',
+    '+14402992856',
+    '+14402992860',
+    '+16102819660',
+    '+16102819662',
+    '+17038313168',
+    '+17042283589',
+    '+17042286088',
+    '+18036135410',
+    '+18036135412',
+    '+19124185540',
+    '+19124185542',
+    '+19542083921',
+    '+19542083922',
+  ],
 };
 
 // ============================================================================
