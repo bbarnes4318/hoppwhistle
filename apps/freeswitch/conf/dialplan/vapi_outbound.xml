@@ -3,13 +3,17 @@
     Vapi Outbound Context — Per-Carrier Routing & Signing
     =====================================================
     Each carrier signs ONLY its own calls:
-    - BulkVS:     local_shaken.lua signs → bridge to sofia/gateway/bulkvs
+    - BulkVS:     bridge to sofia/gateway/bulkvs (no local signing — BulkVS handles STIR/SHAKEN)
     - DIDCentral: local_shaken.lua signs → bridge to sofia/gateway/didcentral
     - FracTEL:    local_shaken.lua signs → bridge to sofia/gateway/fractel*
     - SignalWire:  NO SIGNING — traffic goes Vapi → SignalWire direct (never hits FS)
 
     Carrier is determined by channel variable X-Carrier (set by Vapi/dialer).
     If X-Carrier is not set, defaults to bulkvs.
+
+    IMPORTANT: In multi-condition extensions, $1 refers to the LAST condition's
+    capture group. We use the first condition to set ${vapi_dest} explicitly so
+    the phone number is available in bridge actions regardless of condition nesting.
   -->
   <context name="vapi_outbound">
 
@@ -22,12 +26,14 @@
 
     <!-- ================================================================ -->
     <!-- CARRIER: BulkVS (default) -->
-    <!-- Signs with BulkVS STIR/SHAKEN, routes to BulkVS gateway -->
+    <!-- Routes to BulkVS gateway; BulkVS handles STIR/SHAKEN internally -->
     <!-- ================================================================ -->
     <extension name="vapi-outbound-bulkvs">
-      <condition field="destination_number" expression="^\+?1?(\d{10})$"/>
+      <condition field="destination_number" expression="^\+?1?(\d{10})$">
+        <action application="set" data="vapi_dest=$1" inline="true"/>
+      </condition>
       <condition field="${sip_h_X-Carrier}" expression="^(bulkvs)?$" break="never">
-        <action application="log" data="INFO [VAPI] BulkVS outbound to 1$1"/>
+        <action application="log" data="INFO [VAPI] BulkVS outbound to 1${vapi_dest}"/>
 
         <action application="set" data="accountcode=vapi"/>
         <action application="set" data="sip_h_X-Provider=Vapi"/>
@@ -42,11 +48,8 @@
         <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
         <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
 
-        <!-- BulkVS STIR/SHAKEN signing (signs with BulkVS API) -->
-        <action application="lua" data="bulkvs_shaken.lua"/>
-
         <!-- Bridge to BulkVS ONLY — no cross-carrier failover -->
-        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC}sofia/gateway/bulkvs/1$1"/>
+        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC}sofia/gateway/bulkvs/1${vapi_dest}"/>
       </condition>
     </extension>
 
@@ -56,9 +59,11 @@
     <!-- DIDCentral requires pre-tokenized calls with Identity header -->
     <!-- ================================================================ -->
     <extension name="vapi-outbound-didcentral">
-      <condition field="destination_number" expression="^\+?1?(\d{10})$"/>
+      <condition field="destination_number" expression="^\+?1?(\d{10})$">
+        <action application="set" data="vapi_dest=$1" inline="true"/>
+      </condition>
       <condition field="${sip_h_X-Carrier}" expression="^didcentral$" break="never">
-        <action application="log" data="INFO [VAPI] DIDCentral outbound to 1$1"/>
+        <action application="log" data="INFO [VAPI] DIDCentral outbound to 1${vapi_dest}"/>
 
         <action application="set" data="accountcode=vapi"/>
         <action application="set" data="sip_h_X-Provider=Vapi"/>
@@ -76,7 +81,7 @@
         <action application="lua" data="local_shaken.lua"/>
 
         <!-- Bridge to DIDCentral ONLY -->
-        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC}sofia/gateway/didcentral/1$1"/>
+        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC}sofia/gateway/didcentral/1${vapi_dest}"/>
       </condition>
     </extension>
 
@@ -85,9 +90,11 @@
     <!-- Signs with local STIR/SHAKEN (ES256), load-balances across 6 SBCs -->
     <!-- ================================================================ -->
     <extension name="vapi-outbound-fractel">
-      <condition field="destination_number" expression="^\+?1?(\d{10})$"/>
+      <condition field="destination_number" expression="^\+?1?(\d{10})$">
+        <action application="set" data="vapi_dest=$1" inline="true"/>
+      </condition>
       <condition field="${sip_h_X-Carrier}" expression="^fractel$" break="never">
-        <action application="log" data="INFO [VAPI] FracTEL outbound to 1$1"/>
+        <action application="log" data="INFO [VAPI] FracTEL outbound to 1${vapi_dest}"/>
 
         <action application="set" data="accountcode=vapi"/>
         <action application="set" data="sip_h_X-Provider=Vapi"/>
@@ -106,7 +113,7 @@
         <action application="set" data="sip_h_X-Attestation-Level=A"/>
 
         <!-- Bridge to FracTEL — load-balanced across all 6 SBCs -->
-        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC}sofia/gateway/fractel1/1$1|sofia/gateway/fractel2/1$1|sofia/gateway/fractel3/1$1|sofia/gateway/fractel4/1$1|sofia/gateway/fractel5/1$1|sofia/gateway/fractel6/1$1"/>
+        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC}sofia/gateway/fractel1/1${vapi_dest}|sofia/gateway/fractel2/1${vapi_dest}|sofia/gateway/fractel3/1${vapi_dest}|sofia/gateway/fractel4/1${vapi_dest}|sofia/gateway/fractel5/1${vapi_dest}|sofia/gateway/fractel6/1${vapi_dest}"/>
       </condition>
     </extension>
 
@@ -116,9 +123,11 @@
     <!-- Routes through the signalwire gateway defined in external/ -->
     <!-- ================================================================ -->
     <extension name="vapi-outbound-signalwire">
-      <condition field="destination_number" expression="^\+?1?(\d{10})$"/>
+      <condition field="destination_number" expression="^\+?1?(\d{10})$">
+        <action application="set" data="vapi_dest=$1" inline="true"/>
+      </condition>
       <condition field="${sip_h_X-Carrier}" expression="^signalwire$" break="never">
-        <action application="log" data="INFO [VAPI] SignalWire outbound to 1$1"/>
+        <action application="log" data="INFO [VAPI] SignalWire outbound to 1${vapi_dest}"/>
 
         <action application="set" data="accountcode=vapi"/>
         <action application="set" data="sip_h_X-Provider=Vapi"/>
@@ -134,7 +143,7 @@
         <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
 
         <!-- Bridge to SignalWire gateway — no signing needed -->
-        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC}sofia/gateway/signalwire/1$1"/>
+        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC}sofia/gateway/signalwire/1${vapi_dest}"/>
       </condition>
     </extension>
 
