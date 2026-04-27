@@ -31,6 +31,26 @@ export async function POST(request: Request) {
     const body = await request.json();
     console.log('[Vapi Proxy] POST payload:', JSON.stringify(body, null, 2));
 
+    // Convert raw phone number to Vapi phoneNumberId UUID
+    let finalPhoneNumberId = body.phoneNumberId;
+    if (finalPhoneNumberId && finalPhoneNumberId.startsWith('+')) {
+      const pnRes = await fetch(`${VAPI_BASE}/phone-number`, {
+        headers: { Authorization: `Bearer ${VAPI_API_KEY}` }
+      });
+      if (pnRes.ok) {
+        const phoneNumbers = await pnRes.json();
+        const matched = phoneNumbers.find((pn: any) => pn.number === finalPhoneNumberId);
+        if (matched) {
+          const original = finalPhoneNumberId;
+          finalPhoneNumberId = matched.id;
+          body.phoneNumberId = finalPhoneNumberId;
+          console.log(`[Vapi Proxy] Mapped ${original} to UUID ${matched.id}`);
+        } else {
+          throw new Error(`Phone number ${finalPhoneNumberId} not found in Vapi account.`);
+        }
+      }
+    }
+
     const res = await fetch(`${VAPI_BASE}/call/phone`, {
       method: 'POST',
       headers: {
