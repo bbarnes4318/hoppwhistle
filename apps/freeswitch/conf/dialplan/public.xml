@@ -65,6 +65,26 @@
       </condition>
     </extension>
 
+    <!-- Vapi internal routing IDs (BYOC outbound calls hitting port 5080 instead of 5070) -->
+    <extension name="vapi-outbound-routing-id-public">
+      <condition field="destination_number" expression="^(\d{11,})$">
+        <!-- Also verify the caller ID is an internal ID to prevent open relay abuse -->
+        <condition field="caller_id_number" expression="^(\d{11,})$">
+          <action application="log" data="INFO [VAPI-PUBLIC] Routing ID call to $1 from ${caller_id_number}"/>
+          <action application="set" data="accountcode=vapi"/>
+          <action application="set" data="sip_h_X-Provider=Vapi"/>
+          <action application="set" data="sip_h_X-Call-Source=public_profile"/>
+          <action application="set" data="hangup_after_bridge=true"/>
+          <action application="set" data="ignore_early_media=true"/>
+          <action application="set" data="progress_timeout=30"/>
+          <action application="set" data="originate_timeout=60"/>
+          <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
+          <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
+          <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC}sofia/gateway/bulkvs/$1"/>
+        </condition>
+      </condition>
+    </extension>
+
     <!-- Default: reject unknown inbound -->
     <extension name="unmatched-inbound">
       <condition field="destination_number" expression="^.+$">
