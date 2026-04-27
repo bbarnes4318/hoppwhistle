@@ -326,12 +326,21 @@ export default function VoiceAgentsPage() {
  const reader = new FileReader();
  reader.onload = ev => {
  const text = ev.target?.result as string;
- const lines = text
+ const parsedNumbers = text
  .split('\n')
- .map(l => l.trim())
- .filter(l => /^\+?\d{10,}$/.test(l.replace(/[^+\d]/g, '')));
- setContacts(lines);
- toast({ title: 'Contacts Loaded', description: `${lines.length} phone numbers ready` });
+ .map(l => {
+ // Strip out anything that isn't a digit or plus sign
+ const cleaned = l.replace(/[^+\d]/g, '');
+ // Automatically format US numbers to E.164 if they are missing the country code
+ if (cleaned.length === 10 && !cleaned.startsWith('+')) return `+1${cleaned}`;
+ if (cleaned.length === 11 && cleaned.startsWith('1')) return `+${cleaned}`;
+ if (cleaned.startsWith('+') && cleaned.length >= 11) return cleaned;
+ return null;
+ })
+ .filter((n): n is string => n !== null);
+ 
+ setContacts(parsedNumbers);
+ toast({ title: 'Contacts Loaded', description: `${parsedNumbers.length} valid phone numbers parsed and ready` });
  };
  reader.readAsText(file);
  };
