@@ -27,15 +27,49 @@ interface CallRecord {
  recordingUrl?: string | null;
  recordingStatus?: string | null;
  primaryRecordingId?: string | null;
+ disposition?: string | null;
+ dispositionNotes?: string | null;
+ callSource?: string | null;
+ followUpAt?: string | null;
+ followUpStatus?: string | null;
  createdAt: string;
  campaign?: { name: string } | null;
  fromNumber?: { number: string } | null;
 }
 
+const DISPOSITION_LABELS: Record<string, string> = {
+ SET_APPOINTMENT: 'Set Appointment',
+ SET_CALLBACK: 'Set Callback',
+ FOLLOW_UP: 'Follow-Up',
+ NOT_INTERESTED: 'Not Interested',
+ NOT_QUALIFIED: 'Not Qualified',
+ NO_ANSWER: 'No Answer',
+ WRONG_NUMBER: 'Wrong Number',
+ DISCONNECTED: 'Disconnected',
+};
+
+const DISPOSITION_BADGE_COLORS: Record<string, string> = {
+ SET_APPOINTMENT: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+ SET_CALLBACK: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30',
+ FOLLOW_UP: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
+ NOT_INTERESTED: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+ NOT_QUALIFIED: 'bg-orange-500/10 text-orange-400 border-orange-500/30',
+ NO_ANSWER: 'bg-slate-500/10 text-slate-400 border-slate-500/30',
+ WRONG_NUMBER: 'bg-red-500/10 text-red-400 border-red-500/30',
+ DISCONNECTED: 'bg-red-500/10 text-red-300 border-red-500/20',
+};
+
+const CALL_SOURCE_LABELS: Record<string, string> = {
+ CALL_CENTER: 'Call Center',
+ SOFTPHONE: 'Softphone',
+ AI_VOICE: 'AI Voice',
+};
+
 function getCallResult(call: CallRecord): string {
- if (call.converted && call.paidOut) return 'Application';
- if (call.converted) return 'Quote';
- if (call.missedCall) return 'Missed';
+ if (call.disposition) {
+ return DISPOSITION_LABELS[call.disposition] || call.disposition;
+ }
+ if (call.missedCall) return 'No Answer';
  if (call.status === 'COMPLETED') return 'Completed';
  if (call.status === 'NO_ANSWER') return 'No Answer';
  if (call.status === 'BUSY') return 'Busy';
@@ -43,19 +77,15 @@ function getCallResult(call: CallRecord): string {
  return call.status || 'Unknown';
 }
 
-function getResultBadgeClass(result: string): string {
- switch (result) {
- case 'Application':
- return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
- case 'Quote':
- return 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30';
- case 'Completed':
+function getResultBadgeClass(call: CallRecord): string {
+ if (call.disposition && DISPOSITION_BADGE_COLORS[call.disposition]) {
+ return DISPOSITION_BADGE_COLORS[call.disposition];
+ }
+ switch (call.status) {
+ case 'COMPLETED':
  return 'bg-blue-500/10 text-blue-400 border-blue-500/30';
- case 'Missed':
- case 'No Answer':
- return 'bg-amber-500/10 text-amber-400 border-amber-500/30';
- case 'Failed':
- case 'Busy':
+ case 'FAILED':
+ case 'BUSY':
  return 'bg-red-500/10 text-red-400 border-red-500/30';
  default:
  return 'bg-secondary text-muted-foreground border-border';
@@ -135,20 +165,21 @@ export default function CallLogsPage() {
  <TableHead>To</TableHead>
  <TableHead>Status</TableHead>
  <TableHead>Duration</TableHead>
- <TableHead>Result</TableHead>
+ <TableHead>Disposition</TableHead>
+ <TableHead>Source</TableHead>
  <TableHead className="text-right">Recording</TableHead>
  </TableRow>
  </TableHeader>
  <TableBody>
  {loading ? (
  <TableRow>
- <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+ <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
  Loading calls...
  </TableCell>
  </TableRow>
  ) : filteredCalls.length === 0 ? (
  <TableRow>
- <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+ <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
  No calls found
  </TableCell>
  </TableRow>
@@ -192,9 +223,18 @@ export default function CallLogsPage() {
  {call.duration ? formatDuration(call.duration) : '—'}
  </TableCell>
  <TableCell>
- <Badge variant="outline" className={getResultBadgeClass(result)}>
+ <Badge variant="outline" className={getResultBadgeClass(call)}>
  {result}
  </Badge>
+ </TableCell>
+ <TableCell>
+ {call.callSource ? (
+ <span className="text-xs font-mono text-muted-foreground uppercase tracking-widest">
+ {CALL_SOURCE_LABELS[call.callSource] || call.callSource}
+ </span>
+ ) : (
+ <span className="text-xs text-muted-foreground/50">—</span>
+ )}
  </TableCell>
  <TableCell className="text-right">
  {call.recordingStatus === 'READY' && call.recordingUrl ? (

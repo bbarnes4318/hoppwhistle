@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation';
 
 import { Header } from '@/components/layout/header';
 import { Sidebar } from '@/components/layout/sidebar';
-import { AgentPhonePanel, PhoneProvider } from '@/components/phone';
+import { AgentPhonePanel, GlobalDispositionModal, PhoneProvider } from '@/components/phone';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }): JSX.Element {
  const pathname = usePathname();
@@ -40,6 +40,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
  {/* Agent Phone Panel - Floating softphone (hidden on call center page) */}
  {showFloatingDialer && <AgentPhonePanel />}
+
+ {/* Global Disposition Modal - triggers when softphone call ends outside call center */}
+ <GlobalDispositionModal />
  </div>
  </PhoneProvider>
  );

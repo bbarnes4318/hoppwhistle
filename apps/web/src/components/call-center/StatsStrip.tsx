@@ -3,15 +3,15 @@ import { KPICard } from '@/components/dashboard/kpi-card';
 
 interface StatsStripProps {
   totalCallsCount: number;
-  salesCount: number;
-  conversionRate: string;
+  appointmentsCount: number;
+  appointmentRate: string;
   followUpCount: number;
 }
 
 export function StatsStrip({
   totalCallsCount,
-  salesCount,
-  conversionRate,
+  appointmentsCount,
+  appointmentRate,
   followUpCount,
 }: StatsStripProps) {
   return (
@@ -21,12 +21,12 @@ export function StatsStrip({
         value={totalCallsCount}
       />
       <KPICard
-        title="Applications"
-        value={salesCount}
+        title="Appointments"
+        value={appointmentsCount}
       />
       <KPICard
-        title="Conversion"
-        value={`${conversionRate}%`}
+        title="Appt. Rate"
+        value={`${appointmentRate}%`}
       />
       <KPICard
         title="Follow-Ups"

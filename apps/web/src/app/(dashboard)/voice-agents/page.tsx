@@ -87,26 +87,26 @@ interface CampaignState {
 // ─── Constants ───────────────────────────────────────────────
 const CATEGORIES = [
  {
- key: 'final-expense',
- label: 'Final Expense',
+ key: 'roofing',
+ label: 'Roofing',
  icon: Landmark,
  color: ' border-amber-500/30',
  },
  {
- key: 'aca-health',
- label: 'ACA Health',
+ key: 'siding',
+ label: 'Siding',
  icon: Heart,
  color: ' border-rose-500/30',
  },
  {
- key: 'auto-insurance',
- label: 'Auto Insurance',
+ key: 'windows',
+ label: 'Windows',
  icon: Car,
  color: ' border-blue-500/30',
  },
  {
- key: 'medicare',
- label: 'Medicare',
+ key: 'gutters',
+ label: 'Gutters',
  icon: Cross,
  color: ' border-emerald-500/30',
  },
@@ -120,12 +120,12 @@ const CATEGORIES = [
 
 // Map known assistants to categories
 const CATEGORY_MAP: Record<string, string> = {
- 'FE-outbound': 'final-expense',
- 'Final Expense': 'final-expense',
- ACA: 'aca-health',
- Health: 'aca-health',
- Auto: 'auto-insurance',
- Medicare: 'medicare',
+ 'FE-outbound': 'roofing',
+ 'Final Expense': 'roofing',
+ Roofing: 'roofing',
+ Siding: 'siding',
+ Windows: 'windows',
+ Gutters: 'gutters',
 };
 
 // Default Vapi Assistant ID for outbound calls
@@ -212,7 +212,7 @@ export default function VoiceAgentsPage() {
  const [assistants, setAssistants] = useState<VapiAssistant[]>([]);
  const [calls, setCalls] = useState<VapiCall[]>([]);
  const [loading, setLoading] = useState(true);
- const [activeCategory, setActiveCategory] = useState('final-expense');
+ const [activeCategory, setActiveCategory] = useState('roofing');
  const [selectedAgent, setSelectedAgent] = useState<VapiAssistant | null>(null);
  const [campaign, setCampaign] = useState<CampaignState>({
  running: false,
@@ -251,7 +251,7 @@ export default function VoiceAgentsPage() {
  // Auto-select first matching agent
  if (!selectedAgent && data.length > 0) {
  const fe = data.find(
- (a: VapiAssistant) => getCategoryForAssistant(a.name) === 'final-expense'
+ (a: VapiAssistant) => getCategoryForAssistant(a.name) === 'roofing'
  );
  setSelectedAgent(fe || data[0]);
  }
@@ -550,7 +550,7 @@ export default function VoiceAgentsPage() {
  <Label htmlFor="agent-name">Agent Name</Label>
  <Input
  id="agent-name"
- placeholder="e.g. Medicare Q1 Outbound"
+ placeholder="e.g. Roofing Q1 Outbound"
  value={newAgent.name}
  onChange={e => setNewAgent(prev => ({ ...prev, name: e.target.value }))}
  />
@@ -589,7 +589,7 @@ export default function VoiceAgentsPage() {
  <Label htmlFor="system-prompt">System Prompt (agent instructions)</Label>
  <Textarea
  id="system-prompt"
- placeholder="You are an insurance agent calling about..."
+ placeholder="You are a contractor rep calling about..."
  rows={6}
  value={newAgent.systemPrompt}
  onChange={e => setNewAgent(prev => ({ ...prev, systemPrompt: e.target.value }))}

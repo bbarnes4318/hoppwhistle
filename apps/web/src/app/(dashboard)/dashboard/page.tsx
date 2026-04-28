@@ -3,11 +3,13 @@
 import {
  Activity,
  Calendar,
+ CalendarCheck,
  ChevronDown,
- DollarSign,
+ ClipboardCheck,
  FileText,
  Headphones,
  Phone,
+ PhoneIncoming,
  Play,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -30,13 +32,38 @@ import { formatDuration, formatPhoneNumber } from '@/lib/utils';
 
 /* ─── Types ────────────────────────────────────────────────────── */
 interface DashboardStats {
- calls: number;
- quotes: number;
- applications: number;
- premium: number;
- conversion: number;
+ totalCalls: number;
+ connectedCalls: number;
+ appointmentsSet: number;
+ callbacksScheduled: number;
+ followUpsDue: number;
+ appointmentRate: number;
+ dispositions: Record<string, number>;
  dateRange: { startDate: string; endDate: string };
 }
+
+/** Disposition label map (canonical → display) */
+const DISPOSITION_LABELS: Record<string, string> = {
+ SET_APPOINTMENT: 'Set Appointment',
+ SET_CALLBACK: 'Set Callback',
+ FOLLOW_UP: 'Follow-Up',
+ NOT_INTERESTED: 'Not Interested',
+ NOT_QUALIFIED: 'Not Qualified',
+ NO_ANSWER: 'No Answer',
+ WRONG_NUMBER: 'Wrong Number',
+ DISCONNECTED: 'Disconnected',
+};
+
+const DISPOSITION_COLORS: Record<string, string> = {
+ SET_APPOINTMENT: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+ SET_CALLBACK: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30',
+ FOLLOW_UP: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
+ NOT_INTERESTED: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+ NOT_QUALIFIED: 'bg-orange-500/10 text-orange-400 border-orange-500/30',
+ NO_ANSWER: 'bg-slate-500/10 text-slate-400 border-slate-500/30',
+ WRONG_NUMBER: 'bg-red-500/10 text-red-400 border-red-500/30',
+ DISCONNECTED: 'bg-red-500/10 text-red-300 border-red-500/20',
+};
 
 interface CallRecord {
  id: string;
@@ -55,6 +82,11 @@ interface CallRecord {
  recordingStatus?: string | null;
  primaryRecordingId?: string | null;
  revenue?: number;
+ disposition?: string | null;
+ dispositionNotes?: string | null;
+ callSource?: string | null;
+ followUpAt?: string | null;
+ followUpStatus?: string | null;
  createdAt: string;
  campaign?: { name: string } | null;
  fromNumber?: { number: string } | null;
@@ -92,9 +124,12 @@ function getDateRange(preset: DatePreset): { start: Date; end: Date } {
 }
 
 function getCallResult(call: CallRecord): string {
- if (call.converted && call.paidOut) return 'Application';
- if (call.converted) return 'Quote';
- if (call.missedCall) return 'Missed';
+ // Prefer disposition field from the database
+ if (call.disposition) {
+ return DISPOSITION_LABELS[call.disposition] || call.disposition;
+ }
+ // Fallback to status-based inference
+ if (call.missedCall) return 'No Answer';
  if (call.status === 'COMPLETED') return 'Completed';
  if (call.status === 'NO_ANSWER') return 'No Answer';
  if (call.status === 'BUSY') return 'Busy';
@@ -103,18 +138,17 @@ function getCallResult(call: CallRecord): string {
 }
 
 function getResultColor(result: string): string {
+ // Check if it's a known disposition with a mapped color
+ for (const [key, label] of Object.entries(DISPOSITION_LABELS)) {
+ if (label === result) {
+ return DISPOSITION_COLORS[key] || 'bg-transparent text-muted-foreground border-border';
+ }
+ }
  switch (result) {
- case 'Application':
- return 'bg-emerald-500/5 text-emerald-400 border-emerald-500/20';
- case 'Quote':
- return 'bg-cyan-500/5 text-cyan-400 border-cyan-500/20';
  case 'Completed':
  return 'bg-blue-500/5 text-blue-400 border-blue-500/20';
- case 'Missed':
- case 'No Answer':
- return 'bg-amber-500/5 text-amber-400 border-amber-500/20';
- case 'Failed':
  case 'Busy':
+ case 'Failed':
  return 'bg-red-500/5 text-red-400 border-red-500/20';
  default:
  return 'bg-transparent text-muted-foreground border-border';
@@ -339,39 +373,63 @@ export default function DashboardPage() {
  </div>
 
  {/* ── Metric Cards ──────────────────────────────────────── */}
- <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+ <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6">
  <KPICard
- title="Calls"
- value={stats?.calls || 0}
+ title="Total Calls"
+ value={stats?.totalCalls || 0}
  icon={Phone}
  loading={loading}
  />
  <KPICard
- title="Quotes"
- value={stats?.quotes || 0}
- icon={FileText}
+ title="Connected"
+ value={stats?.connectedCalls || 0}
+ icon={PhoneIncoming}
  loading={loading}
  />
  <KPICard
- title="Applications"
- value={stats?.applications || 0}
+ title="Appointments"
+ value={stats?.appointmentsSet || 0}
+ icon={CalendarCheck}
+ loading={loading}
+ />
+ <KPICard
+ title="Callbacks"
+ value={stats?.callbacksScheduled || 0}
  icon={Headphones}
  loading={loading}
  />
  <KPICard
- title="Conversion"
- value={stats?.conversion || 0}
+ title="Follow-Ups Due"
+ value={stats?.followUpsDue || 0}
+ icon={ClipboardCheck}
+ loading={loading}
+ />
+ <KPICard
+ title="Appt. Rate"
+ value={stats?.appointmentRate || 0}
  unit="%"
  icon={Activity}
  loading={loading}
  />
- <KPICard
- title="Premium"
- value={`$${(stats?.premium || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
- icon={DollarSign}
- loading={loading}
- />
  </div>
+
+ {/* ── Disposition Breakdown ──────────────────────────────── */}
+ {stats?.dispositions && Object.keys(stats.dispositions).length > 0 && (
+ <div className="mb-6 rounded-xl border bg-card text-card-foreground p-6 shadow-sm">
+ <div className="mb-4">
+ <h2 className="text-lg font-semibold text-foreground">Disposition Breakdown</h2>
+ <p className="text-xs text-muted-foreground">Call outcomes for the selected period</p>
+ </div>
+ <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+ {Object.entries(stats.dispositions).map(([key, count]) => (
+ <div key={key} className={`flex items-center justify-between rounded-lg border px-4 py-3 ${DISPOSITION_COLORS[key] || 'border-border'}`}>
+ <span className="text-xs font-mono uppercase tracking-widest">{DISPOSITION_LABELS[key] || key}</span>
+ <span className="text-sm font-bold font-mono">{count}</span>
+ </div>
+ ))}
+ </div>
+ </div>
+ )}
 
  {/* ── Call Activity Chart ─────────────────────────────────── */}
  <div className="mb-6 rounded-xl border bg-card text-card-foreground p-6 shadow-sm">

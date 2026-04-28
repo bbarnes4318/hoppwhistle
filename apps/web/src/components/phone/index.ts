@@ -1,5 +1,6 @@
 // Phone Components - Barrel Export
 export { AgentPhonePanel } from './agent-phone-panel';
+export { GlobalDispositionModal } from './global-disposition-modal';
 export { AgentStatusSelector } from './agent-status-selector';
 export { CallControls } from './call-controls';
 export { CallTransferDialog } from './call-transfer-dialog';

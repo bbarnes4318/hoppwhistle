@@ -1398,7 +1398,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
         prisma.call.count({ where: { tenantId } }),
       ]);
 
-      // Map calls to include recording fields that the UI expects
+      // Map calls to include recording + contractor disposition fields
       const mappedCalls = calls.map(call => ({
         id: call.id,
         tenantId: call.tenantId,
@@ -1418,10 +1418,16 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
         paidOut: call.paidOut,
         missedCall: call.missedCall,
         blocked: call.blocked,
-        // Recording fields - the key bridge between Recording table and UI
+        // Recording fields
         recordingUrl: call.recordingUrl,
         recordingStatus: call.recordingStatus,
         primaryRecordingId: call.primaryRecordingId,
+        // Contractor Call Intelligence fields
+        disposition: call.disposition,
+        dispositionNotes: call.dispositionNotes,
+        callSource: call.callSource,
+        followUpAt: call.followUpAt?.toISOString() ?? null,
+        followUpStatus: call.followUpStatus,
         // Related entities
         campaign: call.campaign ? { id: call.campaign.id, name: call.campaign.name } : null,
         fromNumber: call.fromNumber ? { id: call.fromNumber.id, number: call.fromNumber.number } : null,
@@ -1633,6 +1639,13 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       blockReason: call.blockReason,
       previouslyConnectedTarget: call.previouslyConnectedTarget,
 
+      // Contractor Call Intelligence
+      disposition: call.disposition,
+      dispositionNotes: call.dispositionNotes,
+      callSource: call.callSource,
+      followUpAt: call.followUpAt?.toISOString() ?? null,
+      followUpStatus: call.followUpStatus,
+
       // Related entities
       campaign: call.campaign,
       publisher: call.publisher,
@@ -1640,6 +1653,240 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       fromNumber: call.fromNumber,
       recordings: call.recordings,
       transcriptions: call.transcriptions,
+    };
+  });
+
+  // ── Disposition POST — Save/update disposition for a call ──
+  const VALID_DISPOSITIONS = [
+    'SET_APPOINTMENT', 'SET_CALLBACK', 'FOLLOW_UP', 'NOT_INTERESTED',
+    'NOT_QUALIFIED', 'NO_ANSWER', 'WRONG_NUMBER', 'DISCONNECTED',
+  ];
+  const VALID_CALL_SOURCES = ['CALL_CENTER', 'SOFTPHONE', 'AI_VOICE'];
+  const VALID_FOLLOW_UP_STATUSES = ['PENDING', 'COMPLETED', 'CANCELLED'];
+
+  fastify.post<{
+    Body: {
+      callId?: string;
+      callSid?: string;
+      disposition: string;
+      notes?: string;
+      duration?: number;
+      callerNumber?: string;
+      callSource?: string;
+      followUpAt?: string;
+    };
+  }>('/api/v1/calls/disposition', async (request, reply) => {
+    const user = (request as AuthRequest).user;
+    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+    const tenantId = demoTenantId || user?.tenantId;
+
+    if (!tenantId) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+    }
+
+    const { callId, callSid, disposition, notes, duration, callerNumber, callSource, followUpAt } = request.body;
+
+    // Validate disposition
+    if (!disposition || !VALID_DISPOSITIONS.includes(disposition)) {
+      void reply.code(400);
+      return {
+        error: {
+          code: 'INVALID_DISPOSITION',
+          message: `Disposition must be one of: ${VALID_DISPOSITIONS.join(', ')}`,
+        },
+      };
+    }
+
+    // Validate callSource if provided
+    if (callSource && !VALID_CALL_SOURCES.includes(callSource)) {
+      void reply.code(400);
+      return {
+        error: {
+          code: 'INVALID_CALL_SOURCE',
+          message: `Call source must be one of: ${VALID_CALL_SOURCES.join(', ')}`,
+        },
+      };
+    }
+
+    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+
+    // Find the call by callId or callSid (idempotent — supports repeated saves)
+    let call = null;
+    if (callId) {
+      call = await prisma.call.findFirst({
+        where: { id: callId, tenantId },
+      });
+    }
+    if (!call && callSid) {
+      call = await prisma.call.findFirst({
+        where: { callSid, tenantId },
+      });
+    }
+
+    // Build update data
+    const updateData: Record<string, unknown> = {
+      disposition,
+      dispositionNotes: notes || null,
+    };
+    if (callSource) updateData.callSource = callSource;
+    if (duration !== undefined) updateData.duration = duration;
+    if (followUpAt) {
+      updateData.followUpAt = new Date(followUpAt);
+      updateData.followUpStatus = 'PENDING';
+    }
+
+    if (call) {
+      // Update existing call record (idempotent upsert pattern)
+      const updated = await prisma.call.update({
+        where: { id: call.id },
+        data: updateData,
+      });
+      return {
+        id: updated.id,
+        callSid: updated.callSid,
+        disposition: updated.disposition,
+        dispositionNotes: updated.dispositionNotes,
+        callSource: updated.callSource,
+        followUpAt: updated.followUpAt?.toISOString() ?? null,
+        followUpStatus: updated.followUpStatus,
+        updatedAt: updated.updatedAt.toISOString(),
+      };
+    } else {
+      // Create a new call record if none exists (e.g. softphone call not yet tracked)
+      const newCall = await prisma.call.create({
+        data: {
+          tenantId,
+          callSid: callSid || `disp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          toNumber: callerNumber || 'unknown',
+          status: 'COMPLETED',
+          direction: 'OUTBOUND',
+          createdById: user?.userId || null,
+          ...updateData,
+        },
+      });
+      void reply.code(201);
+      return {
+        id: newCall.id,
+        callSid: newCall.callSid,
+        disposition: newCall.disposition,
+        dispositionNotes: newCall.dispositionNotes,
+        callSource: newCall.callSource,
+        followUpAt: newCall.followUpAt?.toISOString() ?? null,
+        followUpStatus: newCall.followUpStatus,
+        createdAt: newCall.createdAt.toISOString(),
+      };
+    }
+  });
+
+  // ── Disposition PATCH — Update disposition after the fact ──
+  fastify.patch<{
+    Params: { callId: string };
+    Body: {
+      disposition?: string;
+      notes?: string;
+      followUpAt?: string;
+      followUpStatus?: string;
+    };
+  }>('/api/v1/calls/:callId/disposition', async (request, reply) => {
+    const user = (request as AuthRequest).user;
+    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+    const tenantId = demoTenantId || user?.tenantId;
+
+    if (!tenantId) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+    }
+
+    const { callId } = request.params;
+    const { disposition, notes, followUpAt, followUpStatus } = request.body;
+
+    if (disposition && !VALID_DISPOSITIONS.includes(disposition)) {
+      void reply.code(400);
+      return { error: { code: 'INVALID_DISPOSITION', message: `Invalid disposition value` } };
+    }
+
+    if (followUpStatus && !VALID_FOLLOW_UP_STATUSES.includes(followUpStatus)) {
+      void reply.code(400);
+      return { error: { code: 'INVALID_STATUS', message: `Follow-up status must be one of: ${VALID_FOLLOW_UP_STATUSES.join(', ')}` } };
+    }
+
+    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+    const call = await prisma.call.findFirst({ where: { id: callId, tenantId } });
+    if (!call) {
+      void reply.code(404);
+      return { error: { code: 'NOT_FOUND', message: 'Call not found' } };
+    }
+
+    const updateData: Record<string, unknown> = {};
+    if (disposition !== undefined) updateData.disposition = disposition;
+    if (notes !== undefined) updateData.dispositionNotes = notes;
+    if (followUpAt !== undefined) updateData.followUpAt = followUpAt ? new Date(followUpAt) : null;
+    if (followUpStatus !== undefined) updateData.followUpStatus = followUpStatus;
+
+    const updated = await prisma.call.update({
+      where: { id: callId },
+      data: updateData,
+    });
+
+    return {
+      id: updated.id,
+      disposition: updated.disposition,
+      dispositionNotes: updated.dispositionNotes,
+      followUpAt: updated.followUpAt?.toISOString() ?? null,
+      followUpStatus: updated.followUpStatus,
+      updatedAt: updated.updatedAt.toISOString(),
+    };
+  });
+
+  // ── Follow-Ups GET — List upcoming and overdue follow-ups ──
+  fastify.get<{
+    Querystring: { status?: string; limit?: string };
+  }>('/api/v1/calls/follow-ups', async (request, reply) => {
+    const user = (request as AuthRequest).user;
+    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+    const tenantId = demoTenantId || user?.tenantId;
+
+    if (!tenantId) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+    }
+
+    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+    const limit = parseInt(request.query.limit || '50');
+    const statusFilter = request.query.status || 'PENDING';
+
+    const followUps = await prisma.call.findMany({
+      where: {
+        tenantId,
+        followUpAt: { not: null },
+        followUpStatus: statusFilter,
+      },
+      orderBy: { followUpAt: 'asc' },
+      take: limit,
+      select: {
+        id: true,
+        callSid: true,
+        callerId: true,
+        toNumber: true,
+        disposition: true,
+        dispositionNotes: true,
+        callSource: true,
+        followUpAt: true,
+        followUpStatus: true,
+        duration: true,
+        createdAt: true,
+      },
+    });
+
+    const now = new Date();
+    return {
+      data: followUps.map(f => ({
+        ...f,
+        followUpAt: f.followUpAt?.toISOString() ?? null,
+        createdAt: f.createdAt.toISOString(),
+        isOverdue: f.followUpAt ? f.followUpAt < now : false,
+      })),
     };
   });
 }
@@ -2401,7 +2648,7 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     };
   });
 
-  // ── Dashboard Stats (real aggregation from Call model) ──
+  // ── Dashboard Stats (contractor KPIs from Call model) ──
   fastify.get<{
     Querystring: { startDate?: string; endDate?: string };
   }>('/api/v1/dashboard/stats', async (request, _reply) => {
@@ -2423,40 +2670,81 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
 
     const whereClause = { tenantId, ...dateFilter };
 
-    // Total calls in range
-    const totalCalls = await prisma.call.count({ where: whereClause });
+    // Non-connected dispositions (excluded from connected count)
+    const nonConnectedDispositions = ['NO_ANSWER', 'WRONG_NUMBER', 'DISCONNECTED'];
 
-    // Quotes = calls where converted is true
-    const quotes = await prisma.call.count({
-      where: { ...whereClause, converted: true },
-    });
+    // Run all aggregations in parallel
+    const [
+      totalCalls,
+      appointmentsSet,
+      callbacksScheduled,
+      followUpsDue,
+      connectedCalls,
+      dispositionBreakdown,
+    ] = await Promise.all([
+      // Total calls in range
+      prisma.call.count({ where: whereClause }),
 
-    // Applications = calls where converted AND paidOut
-    const applications = await prisma.call.count({
-      where: { ...whereClause, converted: true, paidOut: true },
-    });
+      // Appointments set
+      prisma.call.count({
+        where: { ...whereClause, disposition: 'SET_APPOINTMENT' },
+      }),
 
-    // Premium = sum of revenue from converted calls
-    const premiumAgg = await prisma.call.aggregate({
-      where: { ...whereClause, converted: true },
-      _sum: { revenue: true },
-    });
-    const premium = premiumAgg._sum.revenue
-      ? Number(premiumAgg._sum.revenue)
-      : 0;
+      // Callbacks scheduled
+      prisma.call.count({
+        where: { ...whereClause, disposition: 'SET_CALLBACK' },
+      }),
 
-    // Conversion = applications / calls (safe divide)
-    const conversion =
-      totalCalls > 0
-        ? Math.round((applications / totalCalls) * 10000) / 100
+      // Follow-ups due (pending, followUpAt in the future or overdue)
+      prisma.call.count({
+        where: {
+          tenantId,
+          followUpStatus: 'PENDING',
+          followUpAt: { not: null },
+        },
+      }),
+
+      // Connected calls = total minus non-connected dispositions
+      prisma.call.count({
+        where: {
+          ...whereClause,
+          OR: [
+            { disposition: { notIn: nonConnectedDispositions } },
+            { disposition: null }, // Calls without disposition are counted as connected
+          ],
+        },
+      }),
+
+      // Disposition breakdown
+      prisma.call.groupBy({
+        by: ['disposition'],
+        where: { ...whereClause, disposition: { not: null } },
+        _count: { id: true },
+      }),
+    ]);
+
+    // Appointment Rate = appointments / connected calls
+    const appointmentRate =
+      connectedCalls > 0
+        ? Math.round((appointmentsSet / connectedCalls) * 10000) / 100
         : 0;
 
+    // Build disposition breakdown map
+    const dispositions: Record<string, number> = {};
+    for (const entry of dispositionBreakdown) {
+      if (entry.disposition) {
+        dispositions[entry.disposition] = entry._count.id;
+      }
+    }
+
     return {
-      calls: totalCalls,
-      quotes,
-      applications,
-      premium,
-      conversion,
+      totalCalls,
+      connectedCalls,
+      appointmentsSet,
+      callbacksScheduled,
+      followUpsDue,
+      appointmentRate,
+      dispositions,
       dateRange: {
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),

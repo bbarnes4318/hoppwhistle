@@ -931,6 +931,15 @@ model Call {
   blockReason               String? // Reason call was blocked
   previouslyConnectedTarget String? // Previous target info
 
+  // ============================================================================
+  // Contractor Call Intelligence Fields
+  // ============================================================================
+  disposition         String?   // Canonical: SET_APPOINTMENT, SET_CALLBACK, FOLLOW_UP, NOT_INTERESTED, NOT_QUALIFIED, NO_ANSWER, WRONG_NUMBER, DISCONNECTED
+  dispositionNotes    String?   // Free-text agent notes on the call
+  callSource          String?   // CALL_CENTER | SOFTPHONE | AI_VOICE
+  followUpAt          DateTime? // Scheduled follow-up or callback timestamp
+  followUpStatus      String?   // PENDING | COMPLETED | CANCELLED
+
   // Relations
   tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   campaign          Campaign?          @relation(fields: [campaignId], references: [id])
@@ -961,6 +970,11 @@ model Call {
   @@index([isDuplicate])
   @@index([callConnectedTimestamp])
   @@index([recordingStatus])
+  @@index([disposition])
+  @@index([callSource])
+  @@index([followUpAt])
+  @@index([followUpStatus])
+  @@index([createdById])
   @@map("calls")
 }
 

@@ -15,15 +15,12 @@ export interface ProspectData {
   city?: string;
   state?: string;
   zip?: string;
-  dob?: string;
-  age?: number;
-  gender?: string;
-  coverage_amount?: number;
-  faceAmount?: number;
-  premium?: string;
-  monthlyPremium?: string;
-  carrier?: string;
-  beneficiary?: string;
+  // Contractor-specific fields
+  propertyAddress?: string;
+  roofAge?: string;
+  damageType?: string;
+  insuranceClaim?: string;
+  projectDetails?: string;
   [key: string]: unknown;
 }
 
@@ -31,7 +28,6 @@ export interface ApplicationData extends ProspectData {
   id: string;
   name?: string;
   status: string;
-  planType?: string;
 }
 
 export interface CallRecord {
@@ -40,7 +36,11 @@ export interface CallRecord {
   prospect: ProspectData;
   timestamp: string;
   disposition: string;
-  dispositionDetails: string | object;
+  dispositionNotes?: string;
+  dispositionDetails?: string | object;
   callDuration?: number;
   callEndTime: string;
+  callSource?: string;
+  followUpAt?: string;
+  followUpStatus?: string;
 }

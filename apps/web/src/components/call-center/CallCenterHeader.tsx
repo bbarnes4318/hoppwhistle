@@ -68,7 +68,7 @@ export function CallCenterHeader({
               className="appearance-none bg-muted text-foreground text-xs uppercase tracking-widest pl-3 pr-8 py-1.5 rounded border border-border focus:border-primary focus:outline-none cursor-pointer"
               title="Select call script"
             >
-              <option value="sales">Final Expense</option>
+              <option value="sales">Contractor</option>
               <option value="retention">Retention</option>
             </select>
           ) : (

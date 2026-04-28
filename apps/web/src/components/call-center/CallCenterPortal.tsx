@@ -93,22 +93,21 @@ export function CallCenterPortal(): JSX.Element {
 
  // Disposition
  const [selectedDisposition, setSelectedDisposition] = useState('');
- const [saleCarrier, setSaleCarrier] = useState('');
- const [salePlanType, setSalePlanType] = useState('');
- const [saleAnnualPremium, setSaleAnnualPremium] = useState('');
+ const [followUpDate, setFollowUpDate] = useState('');
+ const [followUpTime, setFollowUpTime] = useState('');
 
- // Applications & Records
+ // Leads & Records
  const [applications, setApplications] = useState<ApplicationData[]>([]);
  const [loadingApplications, setLoadingApplications] = useState(false);
  const [, setCallRecords] = useState<CallRecord[]>([]);
 
  // User Settings & Stats
  const [showSettings, setShowSettings] = useState(false);
- const [salesCount, setSalesCount] = useState(0);
+ const [appointmentsCount, setAppointmentsCount] = useState(0);
  const [totalCallsCount, setTotalCallsCount] = useState(0);
  const [followUpCount, setFollowUpCount] = useState(0);
 
- // Script Selection - Default to Sales Script (Final Expense)
+ // Script Selection - Default to Contractor Sales Script
  const [selectedScript, setSelectedScript] = useState<SelectedScript>('sales');
 
  // Database-driven role and script access
@@ -119,9 +118,9 @@ export function CallCenterPortal(): JSX.Element {
  isAdminOrOwner,
  } = useScriptAccess();
 
- // Calculate conversion rate: (Applications / Total Calls) * 100
- const conversionRate =
- totalCallsCount > 0 ? ((salesCount / totalCallsCount) * 100).toFixed(1) : '0.0';
+ // Calculate appointment rate: (Appointments / Total Calls) * 100
+ const appointmentRate =
+ totalCallsCount > 0 ? ((appointmentsCount / totalCallsCount) * 100).toFixed(1) : '0.0';
 
  // ─────────────────────────────────────────────────────────────────────────
  // SYNC WITH PHONE HOOK - React to incoming/active calls from sip.js
@@ -444,27 +443,37 @@ export function CallCenterPortal(): JSX.Element {
  const handleSaveDisposition = () => {
  if (!selectedDisposition) return;
 
+ // Build follow-up ISO timestamp if date/time are set
+ let followUpAt: string | undefined;
+ if (followUpDate && followUpTime) {
+ followUpAt = new Date(`${followUpDate}T${followUpTime}`).toISOString();
+ } else if (followUpDate) {
+ followUpAt = new Date(`${followUpDate}T09:00:00`).toISOString();
+ }
+
  const callRecord: CallRecord = {
  id: 'record-' + Date.now(),
  notificationId: 'pop-' + Date.now(),
  prospect: activeCallData || {},
  timestamp: new Date().toISOString(),
  disposition: selectedDisposition,
- dispositionDetails: callNotes,
+ dispositionNotes: callNotes,
  callDuration: callTimer,
  callEndTime: new Date().toISOString(),
+ callSource: 'CALL_CENTER',
+ followUpAt,
  };
 
  // Save to local state immediately
  setCallRecords(prev => [...prev, callRecord]);
 
- // Track Applications
- if (selectedDisposition === 'Sale Made' || selectedDisposition === 'Application Submitted') {
- setSalesCount(prev => prev + 1);
+ // Track Appointments
+ if (selectedDisposition === 'SET_APPOINTMENT') {
+ setAppointmentsCount(prev => prev + 1);
  }
 
- // Track Follow-Ups
- if (selectedDisposition === 'Callback Scheduled' || selectedDisposition === 'Follow-Up Scheduled') {
+ // Track Follow-Ups & Callbacks
+ if (selectedDisposition === 'SET_CALLBACK' || selectedDisposition === 'FOLLOW_UP') {
  setFollowUpCount(prev => prev + 1);
  }
 
@@ -478,6 +487,8 @@ export function CallCenterPortal(): JSX.Element {
  notes: callNotes,
  duration: callTimer,
  callerNumber: activeCallData?.caller_id || activeCallData?.phone,
+ callSource: 'CALL_CENTER',
+ followUpAt,
  }),
  }).catch(() => { /* non-critical */ });
 
@@ -489,9 +500,8 @@ export function CallCenterPortal(): JSX.Element {
  setDispositionSaved(false);
  setShowDisposition(false);
  setSelectedDisposition('');
- setSaleCarrier('');
- setSalePlanType('');
- setSaleAnnualPremium('');
+ setFollowUpDate('');
+ setFollowUpTime('');
  setCallNotes('');
  setCallTimer(0);
  setActiveCallData(null);
@@ -714,7 +724,7 @@ export function CallCenterPortal(): JSX.Element {
  <label className="block text-sm text-muted-foreground mb-2">Script Access</label>
  <div className="p-3 bg-muted rounded-lg border border-border">
  <div className="flex items-center justify-between mb-2">
- <span className="text-sm text-white">📋 Final Expense Sales Script</span>
+ <span className="text-sm text-white">📋 Contractor Sales Script</span>
  <span
  className={`text-xs ${selectedScript === 'sales' ? 'text-green-400' : 'text-muted-foreground'}`}
  >
@@ -796,17 +806,19 @@ export function CallCenterPortal(): JSX.Element {
               dispositionSaved={dispositionSaved}
               selectedDisposition={selectedDisposition}
               setSelectedDisposition={setSelectedDisposition}
-              saleCarrier={saleCarrier}
-              setSaleCarrier={setSaleCarrier}
-              salePlanType={salePlanType}
-              setSalePlanType={setSalePlanType}
-              saleAnnualPremium={saleAnnualPremium}
-              setSaleAnnualPremium={setSaleAnnualPremium}
+              callNotes={callNotes}
+              setCallNotes={setCallNotes}
+              followUpDate={followUpDate}
+              setFollowUpDate={setFollowUpDate}
+              followUpTime={followUpTime}
+              setFollowUpTime={setFollowUpTime}
               handleSaveDisposition={handleSaveDisposition}
               onDispositionSelect={() => {}}
               handleSkipDisposition={() => {
                 setShowDisposition(false);
                 setSelectedDisposition('');
+                setFollowUpDate('');
+                setFollowUpTime('');
                 setCallTimer(0);
                 setActiveCallData(null);
                 callSessionIdRef.current = null;
@@ -885,8 +897,8 @@ export function CallCenterPortal(): JSX.Element {
           <div className="flex-1 flex flex-col gap-4 overflow-hidden">
             <StatsStrip 
               totalCallsCount={totalCallsCount}
-              salesCount={salesCount}
-              conversionRate={conversionRate}
+              appointmentsCount={appointmentsCount}
+              appointmentRate={appointmentRate}
               followUpCount={followUpCount}
             />
             <ApplicationQueue
