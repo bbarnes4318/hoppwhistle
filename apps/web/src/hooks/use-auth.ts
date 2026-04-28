@@ -24,6 +24,8 @@ interface UseAuthReturn {
   isAgent: boolean;
   /** User has ADMIN or OWNER (full access) */
   hasFullAccess: boolean;
+  /** New signup with no roles assigned — gets restricted nav */
+  isNewUser: boolean;
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
@@ -98,6 +100,9 @@ export function useAuth(): UseAuthReturn {
   // isBuyerOnly = has BUYER role but NOT admin/owner (restricted view)
   const isBuyerOnly = isBuyer && !hasFullAccess;
 
+  // New user = authenticated but has zero roles (new signup, not yet assigned any role)
+  const isNewUser = !!user && userRoles.length === 0;
+
   return {
     user,
     userRoles,
@@ -107,6 +112,7 @@ export function useAuth(): UseAuthReturn {
     isOwner,
     isAgent,
     hasFullAccess,
+    isNewUser,
     loading,
     error,
     refetch: fetchUser,

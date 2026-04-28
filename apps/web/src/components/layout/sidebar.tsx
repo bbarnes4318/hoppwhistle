@@ -118,29 +118,28 @@ const adminNavigation: NavItem[] = [
 
 export function Sidebar() {
  const pathname = usePathname();
- const { hasFullAccess, isBuyerOnly } = useAuth();
+ const { hasFullAccess, isBuyerOnly, isNewUser } = useAuth();
 
  // Filter navigation items based on user access level
  const filterNavItems = (items: NavItem[]): NavItem[] => {
- // ADMIN/OWNER sees EVERYTHING - no filtering
- if (hasFullAccess) {
- return items;
+ // New signups (no roles assigned): restricted nav — hide adminOnly items
+ if (isNewUser) {
+ return items.filter(item => !item.adminOnly);
  }
 
- // Non-admin users: filter out adminOnly items first, then buyerOnly items
- let filtered = items.filter(item => !item.adminOnly);
-
+ // Buyer-only users: filter out items marked hideFromBuyerOnly
  if (isBuyerOnly) {
- filtered = filtered.filter(item => !item.hideFromBuyerOnly);
+ return items.filter(item => !item.hideFromBuyerOnly);
  }
 
- return filtered;
+ // Everyone else (existing users with any role): sees EVERYTHING
+ return items;
  };
 
  const visibleNavigation = filterNavItems(navigation);
  const visibleToolsNav = filterNavItems(toolsNavigation);
- // Admin section: only show to users with full access (ADMIN/OWNER)
- const visibleAdminNav = hasFullAccess ? adminNavigation : [];
+ // Admin section: only show to users with full access (ADMIN/OWNER) — not new users
+ const visibleAdminNav = (hasFullAccess && !isNewUser) ? adminNavigation : [];
 
  return (
  <div className="flex h-full w-64 flex-col border-r border-border bg-card">
