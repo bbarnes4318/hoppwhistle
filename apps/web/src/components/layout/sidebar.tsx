@@ -30,8 +30,10 @@ interface NavItem {
  href: string;
  icon: React.ComponentType<{ className?: string }>;
  title?: string;
- // If set, hide from BUYER-ONLY users (those without ADMIN/OWNER)
+ /** If set, hide from BUYER-ONLY users (those without ADMIN/OWNER) */
  hideFromBuyerOnly?: boolean;
+ /** If set, only visible to ADMIN/OWNER users */
+ adminOnly?: boolean;
 }
 
 // Main navigation items
@@ -42,6 +44,7 @@ const navigation: NavItem[] = [
  href: '/voice-agents',
  icon: Bot,
  title: 'AI voice agents & outbound campaigns',
+ adminOnly: true,
  },
  {
  name: 'Call Center',
@@ -49,9 +52,9 @@ const navigation: NavItem[] = [
  icon: Headphones,
  title: 'Integrated dialer with scripting & quoting',
  },
- { name: 'Numbers', href: '/numbers', icon: PhoneCall },
- { name: 'Campaigns', href: '/campaigns', icon: Megaphone },
- { name: 'Flows', href: '/flows', icon: GitBranch },
+ { name: 'Numbers', href: '/numbers', icon: PhoneCall, adminOnly: true },
+ { name: 'Campaigns', href: '/campaigns', icon: Megaphone, adminOnly: true },
+ { name: 'Flows', href: '/flows', icon: GitBranch, adminOnly: true },
  { name: 'Call Logs', href: '/calls', icon: AudioLines },
  {
   name: 'Contacts',
@@ -71,7 +74,7 @@ const navigation: NavItem[] = [
  href: '/insurance-leads',
  icon: FileText,
  title: 'ACA & FE lead ingestion pipeline',
- hideFromBuyerOnly: true,
+ adminOnly: true,
  },
  { name: 'Billing', href: '/billing', icon: Receipt },
  {
@@ -79,7 +82,7 @@ const navigation: NavItem[] = [
  href: '/payroll',
  icon: Clock,
  title: 'Track hours & view earnings',
- hideFromBuyerOnly: true,
+ adminOnly: true,
  },
  { name: 'Institutional Profile', href: '/settings', icon: Settings },
  {
@@ -87,11 +90,12 @@ const navigation: NavItem[] = [
    href: '/music-console',
    icon: Disc3,
    title: 'Music industry streaming analytics & campaigns',
+   adminOnly: true,
  },
 ];
 
 const toolsNavigation: NavItem[] = [
- { name: 'Recording Analyzer', href: '/tools/recording-analyzer', icon: AudioLines },
+ { name: 'Recording Analyzer', href: '/tools/recording-analyzer', icon: AudioLines, adminOnly: true },
 ];
 
 // Admin section - only visible to ADMIN/OWNER
@@ -123,13 +127,14 @@ export function Sidebar() {
  return items;
  }
 
- // Buyer-only users: filter out items marked hideFromBuyerOnly
+ // Non-admin users: filter out adminOnly items first, then buyerOnly items
+ let filtered = items.filter(item => !item.adminOnly);
+
  if (isBuyerOnly) {
- return items.filter(item => !item.hideFromBuyerOnly);
+ filtered = filtered.filter(item => !item.hideFromBuyerOnly);
  }
 
- // Default: show all
- return items;
+ return filtered;
  };
 
  const visibleNavigation = filterNavItems(navigation);
@@ -233,4 +238,3 @@ export function Sidebar() {
  </div>
  );
 }
-
