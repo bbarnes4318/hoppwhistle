@@ -4,8 +4,11 @@
     <param name="proxy" value="$${signalwire_proxy}"/>
     <param name="username" value="$${signalwire_user}"/>
     <param name="password" value="$${signalwire_pass}"/>
-    <param name="register" value="false"/>
+    <param name="register" value="true"/>
+    <param name="from-domain" value="$${signalwire_domain}"/>
     <param name="caller-id-in-from" value="true"/>
     <param name="ping" value="25"/>
+    <param name="retry-seconds" value="30"/>
+    <param name="expire-seconds" value="600"/>
   </gateway>
 </include>
