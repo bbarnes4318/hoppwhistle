@@ -6,7 +6,7 @@
     <param name="password" value="not-used"/>
     <param name="register" value="false"/>
     <param name="from-domain" value="pvn-dana.dapp.signalwire.com"/>
-    <param name="caller-id-in-from" value="true"/>
+    <param name="caller-id-in-from" value="false"/>
     <param name="ping" value="25"/>
   </gateway>
 </include>
