@@ -1,66 +1,68 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { usePhone } from './phone-provider';
+import {
+  DISPOSITIONS,
+  DISPOSITION_LABELS,
+  DISPOSITION_COLORS,
+  FOLLOW_UP_DISPOSITIONS,
+  type DispositionValue,
+} from '@hopwhistle/shared';
 
-// ─── Canonical Disposition Values ────────────────────────────────────────────
-const DISPOSITIONS = [
-  { value: 'SET_APPOINTMENT', label: 'Set Appointment' },
-  { value: 'SET_CALLBACK', label: 'Set Callback' },
-  { value: 'FOLLOW_UP', label: 'Follow-Up' },
-  { value: 'NOT_INTERESTED', label: 'Not Interested' },
-  { value: 'NOT_QUALIFIED', label: 'Not Qualified' },
-  { value: 'NO_ANSWER', label: 'No Answer' },
-  { value: 'WRONG_NUMBER', label: 'Wrong Number' },
-  { value: 'DISCONNECTED', label: 'Disconnected' },
-] as const;
+// Build button list from shared constants
+const DISPOSITION_BUTTONS = DISPOSITIONS.map(value => ({
+  value,
+  label: DISPOSITION_LABELS[value],
+}));
 
-const FOLLOW_UP_DISPOSITIONS = ['SET_APPOINTMENT', 'SET_CALLBACK', 'FOLLOW_UP'];
-
-const DISPOSITION_COLORS: Record<string, string> = {
-  SET_APPOINTMENT: 'bg-emerald-500/10 border-emerald-500/40 text-emerald-400',
-  SET_CALLBACK: 'bg-cyan-500/10 border-cyan-500/40 text-cyan-400',
-  FOLLOW_UP: 'bg-blue-500/10 border-blue-500/40 text-blue-400',
-  NOT_INTERESTED: 'bg-amber-500/10 border-amber-500/40 text-amber-400',
-  NOT_QUALIFIED: 'bg-orange-500/10 border-orange-500/40 text-orange-400',
-  NO_ANSWER: 'bg-slate-500/10 border-slate-500/40 text-slate-400',
-  WRONG_NUMBER: 'bg-red-500/10 border-red-500/40 text-red-400',
-  DISCONNECTED: 'bg-red-500/10 border-red-400/30 text-red-300',
-};
+// Button-specific colors (slightly different border weight for modal buttons)
+const MODAL_DISPOSITION_COLORS: Record<string, string> = Object.fromEntries(
+  DISPOSITIONS.map(d => [
+    d,
+    DISPOSITION_COLORS[d].replace(/border-\S+\/30/g, m => m.replace('/30', '/40')),
+  ])
+);
 
 /**
  * Global Disposition Modal — renders as a fixed overlay when a softphone call
- * ends OUTSIDE of the Call Center Portal.  The CallCenterPortal has its own
- * inline DispositionPanel; this modal prevents the need for duplicate logic.
+ * ends OUTSIDE of the Call Center Portal. Uses pendingDispositionCall from
+ * PhoneProvider (not currentCall, which is cleared immediately on call end).
  */
 export function GlobalDispositionModal() {
   const pathname = usePathname();
-  const { currentCall } = usePhone();
+  const { pendingDispositionCall, clearPendingDispositionCall } = usePhone();
 
   const [open, setOpen] = useState(false);
-  const [lastCallId, setLastCallId] = useState<string | null>(null);
   const [selectedDisposition, setSelectedDisposition] = useState('');
   const [notes, setNotes] = useState('');
   const [followUpDate, setFollowUpDate] = useState('');
   const [followUpTime, setFollowUpTime] = useState('');
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
-  // Detect call ended → show modal if not already on Call Center Portal
+  // Track the last handled call to prevent duplicate prompts
+  const handledCallIdsRef = useRef<Set<string>>(new Set());
+
+  // Detect pending disposition → show modal if not on Call Center Portal
   useEffect(() => {
     const isOnCallCenter = pathname?.includes('/call-center');
     if (
-      currentCall?.state === 'ended' &&
-      currentCall.callId !== lastCallId &&
-      !isOnCallCenter
+      pendingDispositionCall &&
+      !isOnCallCenter &&
+      !handledCallIdsRef.current.has(pendingDispositionCall.callId)
     ) {
-      setLastCallId(currentCall.callId);
       setOpen(true);
     }
-  }, [currentCall?.state, currentCall?.callId, lastCallId, pathname]);
+  }, [pendingDispositionCall, pathname]);
 
-  const handleSave = useCallback(() => {
-    if (!selectedDisposition) return;
+  const handleSave = useCallback(async () => {
+    if (!selectedDisposition || !pendingDispositionCall) return;
+
+    setSaving(true);
+    setSaveError(null);
 
     let followUpAt: string | undefined;
     if (followUpDate && followUpTime) {
@@ -69,26 +71,47 @@ export function GlobalDispositionModal() {
       followUpAt = new Date(`${followUpDate}T09:00:00`).toISOString();
     }
 
-    // Fire-and-forget
-    fetch('/api/v1/calls/disposition', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        callId: lastCallId,
-        disposition: selectedDisposition,
-        notes,
-        duration: currentCall?.duration || 0,
-        callerNumber: currentCall?.phoneNumber,
-        callSource: 'SOFTPHONE',
-        followUpAt,
-      }),
-    }).catch(() => {});
+    try {
+      const response = await fetch('/api/v1/calls/disposition', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          callId: pendingDispositionCall.callId,
+          disposition: selectedDisposition,
+          notes,
+          duration: pendingDispositionCall.duration || 0,
+          callerNumber: pendingDispositionCall.phoneNumber,
+          direction: pendingDispositionCall.direction?.toUpperCase(),
+          callSource: 'SOFTPHONE',
+          followUpAt,
+        }),
+      });
 
-    setSaved(true);
-    setTimeout(() => {
-      resetAndClose();
-    }, 1500);
-  }, [selectedDisposition, notes, followUpDate, followUpTime, lastCallId, currentCall]);
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error?.message || `Save failed (HTTP ${response.status})`);
+      }
+
+      // Mark as handled so it doesn't re-prompt
+      handledCallIdsRef.current.add(pendingDispositionCall.callId);
+
+      setSaved(true);
+      setTimeout(() => {
+        resetAndClose();
+      }, 1500);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save disposition');
+    } finally {
+      setSaving(false);
+    }
+  }, [selectedDisposition, notes, followUpDate, followUpTime, pendingDispositionCall]);
+
+  const handleSkip = useCallback(() => {
+    if (pendingDispositionCall) {
+      handledCallIdsRef.current.add(pendingDispositionCall.callId);
+    }
+    resetAndClose();
+  }, [pendingDispositionCall]);
 
   const resetAndClose = () => {
     setOpen(false);
@@ -97,11 +120,14 @@ export function GlobalDispositionModal() {
     setFollowUpDate('');
     setFollowUpTime('');
     setSaved(false);
+    setSaving(false);
+    setSaveError(null);
+    clearPendingDispositionCall();
   };
 
-  if (!open) return null;
+  if (!open || !pendingDispositionCall) return null;
 
-  const needsFollowUp = FOLLOW_UP_DISPOSITIONS.includes(selectedDisposition);
+  const needsFollowUp = (FOLLOW_UP_DISPOSITIONS as readonly string[]).includes(selectedDisposition);
   const isRequired = selectedDisposition === 'SET_CALLBACK' || selectedDisposition === 'FOLLOW_UP';
   const canSave = !!selectedDisposition && (!isRequired || (!!followUpDate && !!followUpTime));
 
@@ -125,21 +151,30 @@ export function GlobalDispositionModal() {
                 Call Disposition
               </h2>
               <p className="text-xs text-muted-foreground mt-1">
-                Log the outcome of the call before continuing.
+                {pendingDispositionCall.phoneNumber} &bull;{' '}
+                {pendingDispositionCall.direction === 'inbound' ? 'Inbound' : 'Outbound'} &bull;{' '}
+                {pendingDispositionCall.duration}s
               </p>
             </div>
 
             <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+              {/* Error banner */}
+              {saveError && (
+                <div className="bg-red-500/10 border border-red-500/30 rounded p-3 text-xs text-red-400 font-mono">
+                  ✕ {saveError}
+                </div>
+              )}
+
               {/* Disposition buttons */}
               <div className="space-y-2">
-                {DISPOSITIONS.map(({ value, label }) => (
+                {DISPOSITION_BUTTONS.map(({ value, label }) => (
                   <button
                     key={value}
                     onClick={() => setSelectedDisposition(value)}
                     className={
                       'w-full p-3 rounded text-left text-xs font-mono uppercase tracking-widest transition-all border ' +
                       (selectedDisposition === value
-                        ? (DISPOSITION_COLORS[value] || 'bg-primary/10 border-primary text-primary')
+                        ? (MODAL_DISPOSITION_COLORS[value] || 'bg-primary/10 border-primary text-primary')
                         : 'bg-background border-border text-muted-foreground hover:bg-muted')
                     }
                   >
@@ -206,13 +241,14 @@ export function GlobalDispositionModal() {
             <div className="px-6 py-4 border-t border-border space-y-2">
               <button
                 onClick={handleSave}
-                disabled={!canSave}
+                disabled={!canSave || saving}
                 className="w-full py-3 bg-primary hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed text-primary-foreground font-mono uppercase tracking-widest text-xs rounded transition-colors"
               >
-                Save Disposition
+                {saving ? 'Saving...' : 'Save Disposition'}
               </button>
               <button
-                onClick={resetAndClose}
+                onClick={handleSkip}
+                disabled={saving}
                 className="w-full py-2 text-muted-foreground font-mono uppercase tracking-widest text-xs hover:text-foreground transition-colors"
               >
                 Skip

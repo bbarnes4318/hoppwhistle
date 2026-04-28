@@ -1367,7 +1367,7 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
 // Public API - Calls
 export async function registerCallRoutes(fastify: FastifyInstance) {
   await Promise.resolve();
-  fastify.get<{ Querystring: { page?: string; limit?: string } }>(
+  fastify.get<{ Querystring: { page?: string; limit?: string; phone?: string } }>(
     '/api/v1/calls',
     async (request, reply) => {
       const user = (request as AuthRequest).user;
@@ -1383,19 +1383,32 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       const page = parseInt(request.query.page || '1');
       const limit = parseInt(request.query.limit || '20');
       const skip = (page - 1) * limit;
+      const phone = request.query.phone;
+
+      // Build where clause — optionally filter by phone number
+      const where: Record<string, unknown> = { tenantId };
+      if (phone) {
+        where.OR = [
+          { toNumber: phone },
+          { callerId: phone },
+          { toNumber: phone.replace(/^\+1/, '') },
+          { callerId: phone.replace(/^\+1/, '') },
+        ];
+      }
 
       const [calls, total] = await Promise.all([
         prisma.call.findMany({
-          where: { tenantId },
+          where,
           take: limit,
           skip,
           orderBy: { createdAt: 'desc' },
           include: {
             campaign: true,
             fromNumber: true,
+            createdBy: { select: { firstName: true, lastName: true } },
           },
         }),
-        prisma.call.count({ where: { tenantId } }),
+        prisma.call.count({ where }),
       ]);
 
       // Map calls to include recording + contractor disposition fields
@@ -1431,6 +1444,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
         // Related entities
         campaign: call.campaign ? { id: call.campaign.id, name: call.campaign.name } : null,
         fromNumber: call.fromNumber ? { id: call.fromNumber.id, number: call.fromNumber.number } : null,
+        createdBy: call.createdBy ? { firstName: call.createdBy.firstName, lastName: call.createdBy.lastName } : null,
         // Timestamps
         createdAt: call.createdAt.toISOString(),
         updatedAt: call.updatedAt.toISOString(),
@@ -1673,6 +1687,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       duration?: number;
       callerNumber?: string;
       callSource?: string;
+      direction?: string;
       followUpAt?: string;
     };
   }>('/api/v1/calls/disposition', async (request, reply) => {
@@ -1685,7 +1700,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
     }
 
-    const { callId, callSid, disposition, notes, duration, callerNumber, callSource, followUpAt } = request.body;
+    const { callId, callSid, disposition, notes, duration, callerNumber, callSource, direction, followUpAt } = request.body;
 
     // Validate disposition
     if (!disposition || !VALID_DISPOSITIONS.includes(disposition)) {
@@ -1754,13 +1769,15 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       };
     } else {
       // Create a new call record if none exists (e.g. softphone call not yet tracked)
+      // Use actual direction from the payload instead of hardcoding OUTBOUND
+      const callDirection = direction === 'INBOUND' ? 'INBOUND' : 'OUTBOUND';
       const newCall = await prisma.call.create({
         data: {
           tenantId,
           callSid: callSid || `disp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
           toNumber: callerNumber || 'unknown',
           status: 'COMPLETED',
-          direction: 'OUTBOUND',
+          direction: callDirection,
           createdById: user?.userId || null,
           ...updateData,
         },

@@ -440,77 +440,70 @@ export function CallCenterPortal(): JSX.Element {
  setIsAddingThirdParty(false);
  };
 
- const handleSaveDisposition = () => {
- if (!selectedDisposition) return;
-
- // Build follow-up ISO timestamp if date/time are set
- let followUpAt: string | undefined;
- if (followUpDate && followUpTime) {
- followUpAt = new Date(`${followUpDate}T${followUpTime}`).toISOString();
- } else if (followUpDate) {
- followUpAt = new Date(`${followUpDate}T09:00:00`).toISOString();
- }
-
- const callRecord: CallRecord = {
- id: 'record-' + Date.now(),
- notificationId: 'pop-' + Date.now(),
- prospect: activeCallData || {},
- timestamp: new Date().toISOString(),
- disposition: selectedDisposition,
- dispositionNotes: callNotes,
- callDuration: callTimer,
- callEndTime: new Date().toISOString(),
- callSource: 'CALL_CENTER',
- followUpAt,
- };
-
- // Save to local state immediately
- setCallRecords(prev => [...prev, callRecord]);
-
- // Track Appointments
- if (selectedDisposition === 'SET_APPOINTMENT') {
- setAppointmentsCount(prev => prev + 1);
- }
-
- // Track Follow-Ups & Callbacks
- if (selectedDisposition === 'SET_CALLBACK' || selectedDisposition === 'FOLLOW_UP') {
- setFollowUpCount(prev => prev + 1);
- }
-
- // Fire-and-forget API save (don't block UI)
- fetch('/api/v1/calls/disposition', {
- method: 'POST',
- headers: { 'Content-Type': 'application/json' },
- body: JSON.stringify({
- callId: callSessionIdRef.current,
- disposition: selectedDisposition,
- notes: callNotes,
- duration: callTimer,
- callerNumber: activeCallData?.caller_id || activeCallData?.phone,
- callSource: 'CALL_CENTER',
- followUpAt,
- }),
- }).catch(() => { /* non-critical */ });
-
- // Show success confirmation immediately
- setDispositionSaved(true);
-
- // After 2 seconds, reset everything and return to main screen
- setTimeout(() => {
- setDispositionSaved(false);
- setShowDisposition(false);
- setSelectedDisposition('');
- setFollowUpDate('');
- setFollowUpTime('');
- setCallNotes('');
- setCallTimer(0);
- setActiveCallData(null);
- callSessionIdRef.current = null;
- dispositionHandledRef.current = false;
- setPreInjectedData(null);
- clearLead();
- }, 2000);
- };
+  const handleSaveDisposition = async () => {
+  if (!selectedDisposition) return;
+  let followUpAt: string | undefined;
+  if (followUpDate && followUpTime) {
+  followUpAt = new Date(`${followUpDate}T${followUpTime}`).toISOString();
+  } else if (followUpDate) {
+  followUpAt = new Date(`${followUpDate}T09:00:00`).toISOString();
+  }
+  const callRecord: CallRecord = {
+  id: 'record-' + Date.now(),
+  notificationId: 'pop-' + Date.now(),
+  prospect: activeCallData || {},
+  timestamp: new Date().toISOString(),
+  disposition: selectedDisposition,
+  dispositionNotes: callNotes,
+  callDuration: callTimer,
+  callEndTime: new Date().toISOString(),
+  callSource: 'CALL_CENTER',
+  followUpAt,
+  };
+  setCallRecords(prev => [...prev, callRecord]);
+  if (selectedDisposition === 'SET_APPOINTMENT') {
+  setAppointmentsCount(prev => prev + 1);
+  }
+  if (selectedDisposition === 'SET_CALLBACK' || selectedDisposition === 'FOLLOW_UP') {
+  setFollowUpCount(prev => prev + 1);
+  }
+  try {
+  const response = await fetch('/api/v1/calls/disposition', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+  callId: callSessionIdRef.current,
+  disposition: selectedDisposition,
+  notes: callNotes,
+  duration: callTimer,
+  callerNumber: activeCallData?.caller_id || activeCallData?.phone,
+  direction: 'OUTBOUND',
+  callSource: 'CALL_CENTER',
+  followUpAt,
+  }),
+  });
+  if (!response.ok) {
+  console.error('[CallCenter] Disposition save failed:', response.status);
+  }
+  } catch (err) {
+  console.error('[CallCenter] Disposition save error:', err);
+  }
+  setDispositionSaved(true);
+  setTimeout(() => {
+  setDispositionSaved(false);
+  setShowDisposition(false);
+  setSelectedDisposition('');
+  setFollowUpDate('');
+  setFollowUpTime('');
+  setCallNotes('');
+  setCallTimer(0);
+  setActiveCallData(null);
+  callSessionIdRef.current = null;
+  dispositionHandledRef.current = false;
+  setPreInjectedData(null);
+  clearLead();
+  }, 2000);
+  };
 
  const startCallWithApplication = async (app: ApplicationData) => {
  setActiveCallData(app);

@@ -37,33 +37,12 @@ interface CallRecord {
  fromNumber?: { number: string } | null;
 }
 
-const DISPOSITION_LABELS: Record<string, string> = {
- SET_APPOINTMENT: 'Set Appointment',
- SET_CALLBACK: 'Set Callback',
- FOLLOW_UP: 'Follow-Up',
- NOT_INTERESTED: 'Not Interested',
- NOT_QUALIFIED: 'Not Qualified',
- NO_ANSWER: 'No Answer',
- WRONG_NUMBER: 'Wrong Number',
- DISCONNECTED: 'Disconnected',
-};
-
-const DISPOSITION_BADGE_COLORS: Record<string, string> = {
- SET_APPOINTMENT: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
- SET_CALLBACK: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30',
- FOLLOW_UP: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
- NOT_INTERESTED: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
- NOT_QUALIFIED: 'bg-orange-500/10 text-orange-400 border-orange-500/30',
- NO_ANSWER: 'bg-slate-500/10 text-slate-400 border-slate-500/30',
- WRONG_NUMBER: 'bg-red-500/10 text-red-400 border-red-500/30',
- DISCONNECTED: 'bg-red-500/10 text-red-300 border-red-500/20',
-};
-
-const CALL_SOURCE_LABELS: Record<string, string> = {
- CALL_CENTER: 'Call Center',
- SOFTPHONE: 'Softphone',
- AI_VOICE: 'AI Voice',
-};
+import {
+  DISPOSITION_LABELS,
+  DISPOSITION_COLORS,
+  CALL_SOURCE_LABELS,
+  getDispositionLabel,
+} from '@hopwhistle/shared';
 
 function getCallResult(call: CallRecord): string {
  if (call.disposition) {
@@ -78,8 +57,8 @@ function getCallResult(call: CallRecord): string {
 }
 
 function getResultBadgeClass(call: CallRecord): string {
- if (call.disposition && DISPOSITION_BADGE_COLORS[call.disposition]) {
- return DISPOSITION_BADGE_COLORS[call.disposition];
+ if (call.disposition && DISPOSITION_COLORS[call.disposition as keyof typeof DISPOSITION_COLORS]) {
+ return DISPOSITION_COLORS[call.disposition as keyof typeof DISPOSITION_COLORS];
  }
  switch (call.status) {
  case 'COMPLETED':

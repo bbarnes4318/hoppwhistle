@@ -1,31 +1,16 @@
-import React, { useState } from 'react';
+import React from 'react';
+import {
+  DISPOSITIONS,
+  DISPOSITION_LABELS,
+  DISPOSITION_COLORS,
+  FOLLOW_UP_DISPOSITIONS,
+} from '@hopwhistle/shared';
 
-// ─── Canonical Disposition Values ────────────────────────────────────────────
-const DISPOSITIONS = [
-  { value: 'SET_APPOINTMENT', label: 'Set Appointment' },
-  { value: 'SET_CALLBACK', label: 'Set Callback' },
-  { value: 'FOLLOW_UP', label: 'Follow-Up' },
-  { value: 'NOT_INTERESTED', label: 'Not Interested' },
-  { value: 'NOT_QUALIFIED', label: 'Not Qualified' },
-  { value: 'NO_ANSWER', label: 'No Answer' },
-  { value: 'WRONG_NUMBER', label: 'Wrong Number' },
-  { value: 'DISCONNECTED', label: 'Disconnected' },
-] as const;
-
-/** Dispositions that require or strongly prompt for a follow-up date/time */
-const FOLLOW_UP_DISPOSITIONS = ['SET_APPOINTMENT', 'SET_CALLBACK', 'FOLLOW_UP'];
-
-// ─── Badge Colors ────────────────────────────────────────────────────────────
-const DISPOSITION_COLORS: Record<string, string> = {
-  SET_APPOINTMENT: 'bg-emerald-500/10 border-emerald-500/40 text-emerald-400',
-  SET_CALLBACK: 'bg-cyan-500/10 border-cyan-500/40 text-cyan-400',
-  FOLLOW_UP: 'bg-blue-500/10 border-blue-500/40 text-blue-400',
-  NOT_INTERESTED: 'bg-amber-500/10 border-amber-500/40 text-amber-400',
-  NOT_QUALIFIED: 'bg-orange-500/10 border-orange-500/40 text-orange-400',
-  NO_ANSWER: 'bg-slate-500/10 border-slate-500/40 text-slate-400',
-  WRONG_NUMBER: 'bg-red-500/10 border-red-500/40 text-red-400',
-  DISCONNECTED: 'bg-red-500/10 border-red-400/30 text-red-300',
-};
+// Build button list from shared constants
+const DISPOSITION_BUTTONS = DISPOSITIONS.map(value => ({
+  value,
+  label: DISPOSITION_LABELS[value],
+}));
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
@@ -71,7 +56,7 @@ export function DispositionPanel({
     );
   }
 
-  const needsFollowUp = FOLLOW_UP_DISPOSITIONS.includes(selectedDisposition);
+  const needsFollowUp = (FOLLOW_UP_DISPOSITIONS as readonly string[]).includes(selectedDisposition);
   const isFollowUpRequired = selectedDisposition === 'SET_CALLBACK' || selectedDisposition === 'FOLLOW_UP';
 
   // Validate save: disposition required, follow-up date required for callback/follow-up
@@ -87,7 +72,7 @@ export function DispositionPanel({
 
       {/* Disposition buttons */}
       <div className="space-y-2 mb-4">
-        {DISPOSITIONS.map(({ value, label }) => (
+        {DISPOSITION_BUTTONS.map(({ value, label }) => (
           <button
             key={value}
             onClick={() => {
@@ -97,7 +82,7 @@ export function DispositionPanel({
             className={
               'w-full p-3 rounded text-left text-xs font-mono uppercase tracking-widest transition-all border ' +
               (selectedDisposition === value
-                ? (DISPOSITION_COLORS[value] || 'bg-primary/10 border-primary text-primary')
+                ? (DISPOSITION_COLORS[value as keyof typeof DISPOSITION_COLORS] || 'bg-primary/10 border-primary text-primary')
                 : 'bg-card border-border text-muted-foreground hover:bg-muted')
             }
           >

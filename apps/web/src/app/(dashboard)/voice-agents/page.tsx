@@ -93,22 +93,28 @@ const CATEGORIES = [
  color: ' border-amber-500/30',
  },
  {
- key: 'siding',
- label: 'Siding',
+ key: 'storm-damage',
+ label: 'Storm Damage',
  icon: Heart,
  color: ' border-rose-500/30',
  },
  {
- key: 'windows',
- label: 'Windows',
+ key: 'gutters-siding',
+ label: 'Gutters & Siding',
  icon: Car,
  color: ' border-blue-500/30',
  },
  {
- key: 'gutters',
- label: 'Gutters',
+ key: 'windows-exterior',
+ label: 'Windows & Exterior',
  icon: Cross,
  color: ' border-emerald-500/30',
+ },
+ {
+ key: 'solar',
+ label: 'Solar',
+ icon: TrendingUp,
+ color: ' border-yellow-500/30',
  },
  {
  key: 'custom',
@@ -123,9 +129,13 @@ const CATEGORY_MAP: Record<string, string> = {
  'FE-outbound': 'roofing',
  'Final Expense': 'roofing',
  Roofing: 'roofing',
- Siding: 'siding',
- Windows: 'windows',
- Gutters: 'gutters',
+ 'Storm Damage': 'storm-damage',
+ Storm: 'storm-damage',
+ Gutters: 'gutters-siding',
+ Siding: 'gutters-siding',
+ Windows: 'windows-exterior',
+ Exterior: 'windows-exterior',
+ Solar: 'solar',
 };
 
 // Default Vapi Assistant ID for outbound calls

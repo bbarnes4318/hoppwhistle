@@ -13,6 +13,7 @@ export {
   type CallDirection,
   type CallInfo,
   type CallState,
+  type PendingDispositionCall,
   type PhoneContextType,
   type ProspectData,
   type ScreenPopField,

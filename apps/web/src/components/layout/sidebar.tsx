@@ -54,6 +54,12 @@ const navigation: NavItem[] = [
  { name: 'Flows', href: '/flows', icon: GitBranch },
  { name: 'Call Logs', href: '/calls', icon: AudioLines },
  {
+  name: 'Contacts',
+  href: '/contacts',
+  icon: Users,
+  title: 'Prospect lookup & call history',
+  },
+ {
  name: 'Retention',
  href: '/retention',
  icon: ClipboardCheck,

@@ -29,6 +29,18 @@ export type CallDirection = 'inbound' | 'outbound';
 
 export type CallState = 'idle' | 'ringing' | 'connecting' | 'active' | 'hold' | 'ended';
 
+/** Preserved call data for post-call disposition when currentCall is cleared */
+export interface PendingDispositionCall {
+  callId: string;
+  direction: CallDirection;
+  phoneNumber: string;
+  callerName?: string;
+  duration: number;
+  startTime?: Date;
+  endTime: Date;
+  prospectData?: ProspectData;
+}
+
 export interface ScreenPopField {
  id: string;
  label: string;
@@ -88,6 +100,7 @@ export interface PhoneContextType {
  error: string | null;
  isRegistered: boolean; // SIP Registration status
  dialerNumber: string; // Pre-filled dialer number
+ pendingDispositionCall: PendingDispositionCall | null; // Post-call disposition data
 
  // Actions
  setAgentStatus: (status: AgentStatus) => void;
@@ -109,6 +122,7 @@ export interface PhoneContextType {
  setAudioOutput: (deviceId: string) => void;
  updateScreenPopFields: (fields: ScreenPopField[]) => void;
  clearError: () => void;
+ clearPendingDispositionCall: () => void;
 }
 
 // ============================================================================
@@ -213,6 +227,7 @@ export function PhoneProvider({
  return defaultScreenPopFields;
  });
  const [error, setError] = useState<string | null>(null);
+ const [pendingDispositionCall, setPendingDispositionCall] = useState<PendingDispositionCall | null>(null);
  const [dialerNumber, setDialerNumber] = useState<string>('');
 
  // Refs
@@ -478,6 +493,17 @@ export function PhoneProvider({
  endTime: new Date(),
  };
  setCallHistory(history => [completedCall, ...history].slice(0, 50));
+ // Preserve call data for disposition modal
+ setPendingDispositionCall({
+ callId: prev.callId,
+ direction: prev.direction,
+ phoneNumber: prev.phoneNumber,
+ callerName: prev.callerName,
+ duration: prev.duration,
+ startTime: prev.startTime,
+ endTime: new Date(),
+ prospectData: prev.prospectData,
+ });
  }
  return null;
  });
@@ -819,6 +845,7 @@ export function PhoneProvider({
  }, []);
 
  const clearError = useCallback(() => setError(null), []);
+ const clearPendingDispositionCall = useCallback(() => setPendingDispositionCall(null), []);
 
  // Main SIP Initialization - Moved to bottom to satisfy dependencies
  useEffect(() => {
@@ -914,6 +941,7 @@ export function PhoneProvider({
  error,
  isRegistered, // Exported for UI
  dialerNumber, // Pre-filled dialer number
+ pendingDispositionCall, // Post-call disposition data
  setAgentStatus,
  openPhonePanel,
  closePhonePanel,
@@ -933,10 +961,10 @@ export function PhoneProvider({
  setAudioOutput,
  updateScreenPopFields,
  clearError,
+ clearPendingDispositionCall,
  };
 
  return <PhoneContext.Provider value={value}>{children}</PhoneContext.Provider>;
 }
 
 export default PhoneProvider;
-
