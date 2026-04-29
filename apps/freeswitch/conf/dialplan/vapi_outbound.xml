@@ -54,7 +54,7 @@
         <action application="set" data="origination_caller_id_number=18652679650"/>
 
         <!-- Bridge to SignalWire — origination CID must be in {} for B-leg -->
-        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC,origination_caller_id_number=18652679650,sip_from_user=18652679650}sofia/gateway/signalwire/1${vapi_dest}"/>
+        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC,origination_caller_id_number=18652679650,sip_from_user=18652679650}sofia/gateway/signalwire/+1${vapi_dest}"/>
       </condition>
     </extension>
 
@@ -175,7 +175,7 @@
         <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
 
         <!-- Bridge to SignalWire gateway — no signing needed -->
-        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC}sofia/gateway/signalwire/1${vapi_dest}"/>
+        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC}sofia/gateway/signalwire/+1${vapi_dest}"/>
       </condition>
     </extension>
 
