@@ -52,9 +52,22 @@ if not string.match(did_normalized, "^%+") then
   end
 end
 
+-- Normalize caller number for TCPA lookup
+local caller_normalized = caller_number
+if caller_normalized ~= "unknown" and not string.match(caller_normalized, "^%+") then
+  if string.len(caller_normalized) == 10 then
+    caller_normalized = "+1" .. caller_normalized
+  elseif string.len(caller_normalized) == 11 and string.sub(caller_normalized, 1, 1) == "1" then
+    caller_normalized = "+" .. caller_normalized
+  end
+end
+
 -- ── Step 1: Lookup route via API ────────────────────────────────────────────
 local api = freeswitch.API()
 local lookup_url = API_URL .. "/api/v1/freeswitch/lookup?did=" .. did_normalized
+if caller_normalized ~= "unknown" then
+  lookup_url = lookup_url .. "&caller=" .. caller_normalized
+end
 log("INFO", "Looking up route: " .. lookup_url)
 
 local curl_cmd = "curl -s -m 5 '" .. lookup_url .. "'"
@@ -77,6 +90,15 @@ local tenant_id       = json_value(response_body, "tenantId")
 local buyer_id        = json_value(response_body, "buyerId")
 local campaign_id     = json_value(response_body, "campaignId")
 local recording_flag  = json_value(response_body, "recordingEnabled")
+
+-- ── TCPA Litigator Check ──────────────────────────────────────────────────
+local reject_flag = json_value(response_body, "reject")
+if reject_flag == "true" then
+  local reject_reason = json_value(response_body, "reason") or "BLOCKED"
+  log("WARNING", "TCPA BLOCK: caller " .. caller_number .. " on DID " .. did_normalized .. " — reason: " .. reject_reason)
+  session:hangup("CALL_REJECTED")
+  return
+end
 
 if not destination or destination == "" then
   log("WARNING", "No route found for DID: " .. did_normalized .. " — rejecting call")
