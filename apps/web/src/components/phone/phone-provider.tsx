@@ -616,43 +616,57 @@ export function PhoneProvider({
  [normalizedApiUrl, getApiHeaders, isRegistered]
  );
 
- const answerCall = useCallback(() => {
- if (
- sessionRef.current &&
- sessionRef.current.state === SessionState.Initial &&
- sessionRef.current instanceof Invitation
- ) {
- const invitation = sessionRef.current;
- console.log('[Phone] Answering inbound call...');
+  const answerCall = useCallback(() => {
+    if (
+      sessionRef.current &&
+      sessionRef.current.state === SessionState.Initial &&
+      sessionRef.current instanceof Invitation
+    ) {
+      const invitation = sessionRef.current;
+      console.log('[Phone] Answering inbound call...');
 
- // Accept with explicit media constraints to ensure mic capture
- invitation
- .accept({
- sessionDescriptionHandlerOptions: {
- constraints: { audio: true, video: false },
- },
- })
- .then(() => {
- console.log('[Phone] Call accepted — wiring remote audio (post-accept safety net)');
- // The stateChange → Established listener already calls wireRemoteAudio,
- // but this is a belt-and-suspenders call. wireRemoteAudio uses
- // addEventListener('track', ...) so duplicate installs are safe.
- // eslint-disable-next-line @typescript-eslint/no-explicit-any
- const pc = (invitation.sessionDescriptionHandler as any)?.peerConnection as RTCPeerConnection | undefined;
- if (pc) {
- wireRemoteAudio(pc);
- } else {
- console.error('[Phone] CRITICAL: No peerConnection after accept()');
- }
- })
- .catch(e => {
- console.error('[Phone] Failed to accept inbound call', e);
- setError('Failed to answer');
- });
- } else {
- console.warn('[Phone] answerCall called but no valid Invitation in Initial state');
- }
- }, [wireRemoteAudio]);
+      // Immediately provide UI feedback that the call is answering
+      stopRingtone();
+      setCurrentCall(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          state: 'connecting',
+        };
+      });
+
+      // Accept with explicit media constraints to ensure mic capture
+      invitation
+        .accept({
+          sessionDescriptionHandlerOptions: {
+            constraints: { audio: true, video: false },
+          },
+        })
+        .then(() => {
+          console.log('[Phone] Call accepted — wiring remote audio (post-accept safety net)');
+          // The stateChange → Established listener already calls wireRemoteAudio,
+          // but this is a belt-and-suspenders call. wireRemoteAudio uses
+          // addEventListener('track', ...) so duplicate installs are safe.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const pc = (invitation.sessionDescriptionHandler as any)?.peerConnection as RTCPeerConnection | undefined;
+          if (pc) {
+            wireRemoteAudio(pc);
+          } else {
+            console.error('[Phone] CRITICAL: No peerConnection after accept()');
+          }
+        })
+        .catch(e => {
+          console.error('[Phone] Failed to accept inbound call', e);
+          setError('Failed to answer');
+          setCurrentCall(prev => {
+            if (!prev) return prev;
+            return { ...prev, state: 'ended' };
+          });
+        });
+    } else {
+      console.warn('[Phone] answerCall called but no valid Invitation in Initial state');
+    }
+  }, [wireRemoteAudio, stopRingtone]);
 
  const hangupCall = useCallback(() => {
  if (sessionRef.current) {
