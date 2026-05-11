@@ -71,6 +71,8 @@ interface CallRecord {
  followUpAt?: string | null;
  followUpStatus?: string | null;
  createdAt: string;
+ answeredAt?: string | null;
+ endedAt?: string | null;
  campaign?: { name: string } | null;
  fromNumber?: { number: string } | null;
 }
@@ -495,47 +497,41 @@ export default function DashboardPage() {
  </div>
  <div className="overflow-x-auto">
  <table className="w-full">
- <thead>
- <tr className="border-b border-border">
- <th className="pb-3 text-left text-xs font-semibold uppercase tracking-widest text-muted-foreground">
- Time
- </th>
- <th className="pb-3 text-left text-xs font-semibold uppercase tracking-widest text-muted-foreground">
- Call ID
- </th>
- <th className="pb-3 text-left text-xs font-semibold uppercase tracking-widest text-muted-foreground">
- From
- </th>
- <th className="pb-3 text-left text-xs font-semibold uppercase tracking-widest text-muted-foreground">
- To
- </th>
- <th className="pb-3 text-left text-xs font-semibold uppercase tracking-widest text-muted-foreground">
- Status
- </th>
- <th className="pb-3 text-left text-xs font-semibold uppercase tracking-widest text-muted-foreground">
- Duration
- </th>
- <th className="pb-3 text-left text-xs font-semibold uppercase tracking-widest text-muted-foreground">
- Result
- </th>
- <th className="pb-3 text-right text-xs font-semibold uppercase tracking-widest text-muted-foreground">
- Recording
- </th>
- </tr>
- </thead>
+  <thead>
+  <tr className="border-b border-border">
+  <th className="pb-3 text-left text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+  Time
+  </th>
+  <th className="pb-3 text-left text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+  From
+  </th>
+  <th className="pb-3 text-left text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+  To
+  </th>
+  <th className="pb-3 text-left text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+  Duration
+  </th>
+  <th className="pb-3 text-left text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+  Result
+  </th>
+  <th className="pb-3 text-right text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+  Recording
+  </th>
+  </tr>
+  </thead>
  <tbody className="divide-y divide-border">
  {callsLoading ? (
- <tr>
- <td colSpan={8} className="py-12 text-center text-sm text-muted-foreground">
- Loading calls...
- </td>
- </tr>
+  <tr>
+  <td colSpan={6} className="py-12 text-center text-sm text-muted-foreground">
+  Loading calls...
+  </td>
+  </tr>
  ) : calls.length === 0 ? (
- <tr>
- <td colSpan={8} className="py-12 text-center text-sm text-muted-foreground">
- No calls found for this period.
- </td>
- </tr>
+  <tr>
+  <td colSpan={6} className="py-12 text-center text-sm text-muted-foreground">
+  No calls found for this period.
+  </td>
+  </tr>
  ) : (
  calls.map(call => {
  const result = getCallResult(call);
@@ -553,30 +549,21 @@ export default function DashboardPage() {
  })}
  </td>
  <td className="py-1.5 pr-4 font-mono text-xs text-foreground">
- {call.callSid || call.id.slice(0, 12)}
- </td>
- <td className="py-1.5 pr-4 font-mono text-xs text-foreground">
  {formatPhoneNumber(call.callerId || call.fromNumber?.number || '—')}
  </td>
  <td className="py-1.5 pr-4 font-mono text-xs text-foreground">
  {formatPhoneNumber(call.toNumber || call.targetNumber || call.did || '—')}
  </td>
- <td className="py-1.5 pr-4">
- <Badge
- variant="outline"
- className={
- call.status === 'COMPLETED'
- ? 'bg-emerald-500/5 text-emerald-400 border-emerald-500/20'
- : call.status === 'IN_PROGRESS'
- ? 'bg-blue-500/5 text-blue-400 border-blue-500/20'
- : 'bg-transparent text-muted-foreground border-border'
- }
- >
- {call.status}
- </Badge>
- </td>
  <td className="py-1.5 pr-4 font-mono text-xs text-muted-foreground">
- {call.duration ? formatDuration(call.duration) : '—'}
+ {(() => {
+  const dur = call.connectedDuration || call.duration;
+  if (dur) return formatDuration(dur);
+  if (call.answeredAt && call.endedAt) {
+  const secs = Math.floor((new Date(call.endedAt).getTime() - new Date(call.answeredAt).getTime()) / 1000);
+  return secs > 0 ? formatDuration(secs) : '—';
+  }
+  return '—';
+  })()}
  </td>
  <td className="py-1.5 pr-4">
  <Badge variant="outline" className={getResultColor(result)}>
@@ -584,40 +571,36 @@ export default function DashboardPage() {
  </Badge>
  </td>
  <td className="py-1.5 text-right">
- {call.recordingStatus === 'READY' && call.recordingUrl ? (
- <a
- href={call.recordingUrl}
- target="_blank"
- rel="noopener noreferrer"
- className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-xs text-muted-foreground hover:bg-accent transition-colors"
- >
- <Play className="h-3 w-3" /> Play
- </a>
- ) : call.recordingStatus === 'PENDING' || call.recordingStatus === 'RECORDING' || call.recordingStatus === 'PROCESSING' ? (
- <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 text-xs text-muted-foreground">
- <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
- <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
- <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
- </svg>
- {call.recordingStatus === 'PENDING' ? 'Pending' : call.recordingStatus === 'RECORDING' ? 'Recording' : 'Processing'}
- </span>
- ) : call.recordingStatus === 'FAILED' ? (
- <span className="inline-flex items-center gap-1 rounded-md border border-red-500/20 bg-red-500/5 px-2 py-1 text-xs text-red-400">
- ✕ Failed
- </span>
- ) : call.recordingUrl ? (
- <a
- href={call.recordingUrl}
- target="_blank"
- rel="noopener noreferrer"
- className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-xs text-muted-foreground hover:bg-accent transition-colors"
- >
- <Play className="h-3 w-3" /> Play
- </a>
- ) : (
- <span className="text-xs text-muted-foreground/50">—</span>
- )}
- </td>
+  {(() => {
+    const recUrl = call.recordingUrl || (call.primaryRecordingId ? `/api/v1/recordings/${call.primaryRecordingId}/stream` : null);
+    if ((call.recordingStatus === 'READY' || !call.recordingStatus) && recUrl) {
+      return (
+        <a href={recUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-xs text-muted-foreground hover:bg-accent transition-colors">
+          <Play className="h-3 w-3" /> Play
+        </a>
+      );
+    }
+    if (call.recordingStatus === 'PENDING' || call.recordingStatus === 'RECORDING' || call.recordingStatus === 'PROCESSING') {
+      return (
+        <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 text-xs text-muted-foreground">
+          <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          {call.recordingStatus === 'PENDING' ? 'Pending' : call.recordingStatus === 'RECORDING' ? 'Recording' : 'Processing'}
+        </span>
+      );
+    }
+    if (call.recordingStatus === 'FAILED') {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-md border border-red-500/20 bg-red-500/5 px-2 py-1 text-xs text-red-400">
+          ✕ Failed
+        </span>
+      );
+    }
+    return <span className="text-xs text-muted-foreground/50">—</span>;
+  })()}
+  </td>
  </tr>
  );
  })

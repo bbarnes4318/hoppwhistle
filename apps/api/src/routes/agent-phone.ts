@@ -7,6 +7,7 @@ import { eventBus } from '../services/event-bus.js';
 import { freeswitchService } from '../services/freeswitch-service.js';
 import { leadService } from '../services/lead-service.js';
 import { getRedisClient } from '../services/redis.js';
+import { tcpaValidationService } from '../services/tcpa-validation-service.js';
 
 // ============================================================================
 // Recording Helpers
@@ -775,6 +776,50 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       const screenPopData = body.screenPopData ?? body.prospectData ?? {};
       const queueName = body.queueName ?? '';
       const campaignId = body.campaignId ?? '';
+
+      // ── TCPA Litigator Check ─────────────────────────────────────────
+      // Block known TCPA litigators BEFORE creating any call record
+      if (callerNumber) {
+        try {
+          const tcpaResult = await tcpaValidationService.validateNumber(callerNumber);
+          if (tcpaResult.isLitigator) {
+            console.log(`[TCPA-BLOCK] Blocking litigator ${callerNumber} (cached=${tcpaResult.cached})`);
+
+            // Create a blocked call record for audit trail
+            const prismaBlock = getPrismaClient();
+            await prismaBlock.call.create({
+              data: {
+                tenantId,
+                callSid,
+                toNumber: callerNumber,
+                direction: 'INBOUND',
+                status: 'FAILED',
+                blocked: true,
+                blockReason: 'TCPA_LITIGATOR',
+                campaignId: campaignId || null,
+                metadata: {
+                  callerName,
+                  queueName,
+                  tcpaResult,
+                  blockedAt: new Date().toISOString(),
+                } as Prisma.JsonObject,
+                startedAt: new Date(),
+                endedAt: new Date(),
+              },
+            });
+
+            void reply.code(403);
+            return {
+              blocked: true,
+              reason: 'TCPA_LITIGATOR',
+              message: 'Call blocked: caller is a known TCPA litigator',
+            };
+          }
+        } catch (err) {
+          // Fail-open: if TCPA check itself errors, let the call through
+          console.error('[TCPA] Validation error (fail-open):', err);
+        }
+      }
 
       // Determine recording intent from campaign settings
       const prisma = getPrismaClient();

@@ -13,6 +13,7 @@
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { getPrismaClient } from '../lib/prisma.js';
+import { tcpaValidationService } from '../services/tcpa-validation-service.js';
 
 export async function registerDidRouteRoutes(server: FastifyInstance) {
   const prisma = getPrismaClient();
@@ -200,11 +201,51 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
   // Returns destination number + recording config. ~5ms p99 with index.
   // ────────────────────────────────────────────────────────────────────────────
   server.get('/api/v1/freeswitch/lookup', async (request: FastifyRequest, reply: FastifyReply) => {
-    const query = request.query as { did?: string };
+    const query = request.query as { did?: string; caller?: string };
     const did = query.did?.replace(/[^\d+]/g, '') || '';
+    const caller = query.caller?.replace(/[^\d+]/g, '') || '';
 
     if (!did) {
       return reply.code(400).send({ error: 'did parameter required' });
+    }
+
+    // ── TCPA Litigator Check (before any routing) ──────────────────────
+    if (caller) {
+      try {
+        const tcpaResult = await tcpaValidationService.validateNumber(caller);
+        if (tcpaResult.isLitigator) {
+          console.log(`[TCPA-BLOCK][FS-LOOKUP] Blocking litigator ${caller} on DID ${did} (cached=${tcpaResult.cached})`);
+
+          // Create blocked call record for audit trail
+          try {
+            await prisma.call.create({
+              data: {
+                tenantId: 'default',
+                callSid: `fs_blocked_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+                toNumber: did,
+                callerId: caller,
+                direction: 'INBOUND',
+                status: 'FAILED',
+                blocked: true,
+                blockReason: 'TCPA_LITIGATOR',
+                startedAt: new Date(),
+                endedAt: new Date(),
+                metadata: { tcpaResult, source: 'freeswitch' } as Record<string, unknown>,
+              },
+            });
+          } catch (dbErr) {
+            console.error('[TCPA-BLOCK] Failed to create blocked call record:', dbErr);
+          }
+
+          return reply.send({
+            reject: true,
+            reason: 'TCPA_LITIGATOR',
+            message: 'Caller is a known TCPA litigator',
+          });
+        }
+      } catch (err) {
+        console.error('[TCPA] FreeSWITCH lookup validation error (fail-open):', err);
+      }
     }
 
     // Normalize: ensure +1 prefix

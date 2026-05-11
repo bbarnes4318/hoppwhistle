@@ -12,29 +12,31 @@ import { apiClient } from '@/lib/api';
 import { formatDuration, formatPhoneNumber } from '@/lib/utils';
 
 interface CallRecord {
- id: string;
- callSid?: string;
- callerId?: string;
- did?: string;
- toNumber?: string;
- targetNumber?: string;
- status: string;
- duration?: number;
- connectedDuration?: number;
- converted?: boolean;
- paidOut?: boolean;
- missedCall?: boolean;
- recordingUrl?: string | null;
- recordingStatus?: string | null;
- primaryRecordingId?: string | null;
- disposition?: string | null;
- dispositionNotes?: string | null;
- callSource?: string | null;
- followUpAt?: string | null;
- followUpStatus?: string | null;
- createdAt: string;
- campaign?: { name: string } | null;
- fromNumber?: { number: string } | null;
+  id: string;
+  callSid?: string;
+  callerId?: string;
+  did?: string;
+  toNumber?: string;
+  targetNumber?: string;
+  status: string;
+  duration?: number;
+  connectedDuration?: number;
+  converted?: boolean;
+  paidOut?: boolean;
+  missedCall?: boolean;
+  recordingUrl?: string | null;
+  recordingStatus?: string | null;
+  primaryRecordingId?: string | null;
+  disposition?: string | null;
+  dispositionNotes?: string | null;
+  callSource?: string | null;
+  followUpAt?: string | null;
+  followUpStatus?: string | null;
+  createdAt: string;
+  answeredAt?: string | null;
+  endedAt?: string | null;
+  campaign?: { name: string } | null;
+  fromNumber?: { number: string } | null;
 }
 
 import {
@@ -139,10 +141,8 @@ export default function CallLogsPage() {
  <TableHeader>
  <TableRow>
  <TableHead>Time</TableHead>
- <TableHead>Call ID</TableHead>
  <TableHead>From</TableHead>
  <TableHead>To</TableHead>
- <TableHead>Status</TableHead>
  <TableHead>Duration</TableHead>
  <TableHead>Disposition</TableHead>
  <TableHead>Source</TableHead>
@@ -152,13 +152,13 @@ export default function CallLogsPage() {
  <TableBody>
  {loading ? (
  <TableRow>
- <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
+ <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
  Loading calls...
  </TableCell>
  </TableRow>
  ) : filteredCalls.length === 0 ? (
  <TableRow>
- <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
+ <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
  No calls found
  </TableCell>
  </TableRow>
@@ -175,31 +175,22 @@ export default function CallLogsPage() {
  minute: '2-digit',
  })}
  </TableCell>
- <TableCell className="font-mono text-sm">
- {call.callSid || call.id.slice(0, 12)}
- </TableCell>
  <TableCell>
  {formatPhoneNumber(call.callerId || call.fromNumber?.number || '—')}
  </TableCell>
  <TableCell>
  {formatPhoneNumber(call.toNumber || call.targetNumber || call.did || '—')}
  </TableCell>
- <TableCell>
- <Badge
- variant="outline"
- className={
- call.status === 'COMPLETED'
- ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
- : call.status === 'IN_PROGRESS'
- ? 'bg-blue-500/10 text-blue-400 border-blue-500/30'
- : 'bg-secondary text-muted-foreground border-border'
+ <TableCell className="font-mono text-xs">
+ {(() => {
+ const dur = call.connectedDuration || call.duration;
+ if (dur) return formatDuration(dur);
+ if (call.answeredAt && call.endedAt) {
+ const secs = Math.floor((new Date(call.endedAt).getTime() - new Date(call.answeredAt).getTime()) / 1000);
+ return secs > 0 ? formatDuration(secs) : '—';
  }
- >
- {call.status}
- </Badge>
- </TableCell>
- <TableCell>
- {call.duration ? formatDuration(call.duration) : '—'}
+ return '—';
+ })()}
  </TableCell>
  <TableCell>
  <Badge variant="outline" className={getResultBadgeClass(call)}>
@@ -216,17 +207,17 @@ export default function CallLogsPage() {
  )}
  </TableCell>
  <TableCell className="text-right">
- {call.recordingStatus === 'READY' && call.recordingUrl ? (
- <a
- href={call.recordingUrl}
- target="_blank"
- rel="noopener noreferrer"
- >
- <Button variant="ghost" size="sm">
- <Play className="h-4 w-4" />
- </Button>
+ {(() => {
+ const recUrl = call.recordingUrl || (call.primaryRecordingId ? `/api/v1/recordings/${call.primaryRecordingId}/stream` : null);
+ if ((call.recordingStatus === 'READY' || !call.recordingStatus) && recUrl) {
+ return (
+ <a href={recUrl} target="_blank" rel="noopener noreferrer">
+ <Button variant="ghost" size="sm"><Play className="h-4 w-4" /></Button>
  </a>
- ) : call.recordingStatus === 'PENDING' || call.recordingStatus === 'RECORDING' || call.recordingStatus === 'PROCESSING' ? (
+ );
+ }
+ if (call.recordingStatus === 'PENDING' || call.recordingStatus === 'RECORDING' || call.recordingStatus === 'PROCESSING') {
+ return (
  <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-xs text-amber-400">
  <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -234,23 +225,17 @@ export default function CallLogsPage() {
  </svg>
  {call.recordingStatus === 'PENDING' ? 'Pending' : call.recordingStatus === 'RECORDING' ? 'Recording' : 'Processing'}
  </span>
- ) : call.recordingStatus === 'FAILED' ? (
+ );
+ }
+ if (call.recordingStatus === 'FAILED') {
+ return (
  <span className="inline-flex items-center gap-1 rounded-md border border-red-500/30 bg-red-500/10 px-2 py-1 text-xs text-red-400" title="Recording failed">
  ✕ Failed
  </span>
- ) : call.recordingUrl ? (
- <a
- href={call.recordingUrl}
- target="_blank"
- rel="noopener noreferrer"
- >
- <Button variant="ghost" size="sm">
- <Play className="h-4 w-4" />
- </Button>
- </a>
- ) : (
- <span className="text-xs text-muted-foreground">—</span>
- )}
+ );
+ }
+ return <span className="text-xs text-muted-foreground">—</span>;
+ })()}
  </TableCell>
  </TableRow>
  );

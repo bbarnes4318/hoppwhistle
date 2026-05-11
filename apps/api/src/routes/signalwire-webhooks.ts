@@ -16,6 +16,9 @@
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 
+import { tcpaValidationService } from '../services/tcpa-validation-service.js';
+import { getPrismaClient } from '../lib/prisma.js';
+
 // ── In-memory ring buffer for recent events (debug aid) ──────────────────────
 const MAX_EVENTS = 200;
 const recentEvents: Array<{
@@ -64,16 +67,53 @@ export async function registerSignalWireWebhookRoutes(server: FastifyInstance) {
     console.log('[SignalWire][VOICE]', JSON.stringify(payload, null, 2));
     pushEvent('/api/signalwire/voice', ct, payload);
 
-    // Respond with LaML — default: ring then answer
-    // Customize this to route calls, play messages, connect to FreeSWITCH, etc.
     const callStatus = (payload.CallStatus as string) || '';
     const from = (payload.From as string) || 'unknown';
     const to = (payload.To as string) || 'unknown';
 
     console.log(`[SignalWire][VOICE] ${callStatus} | ${from} → ${to}`);
 
-    // Default: Answer and say a message, then hangup
-    // Replace with your own LaML logic (e.g., <Dial>, <Connect>, <Stream>)
+    // ── TCPA Litigator Check ───────────────────────────────────────────
+    if (from && from !== 'unknown') {
+      try {
+        const tcpaResult = await tcpaValidationService.validateNumber(from);
+        if (tcpaResult.isLitigator) {
+          console.log(`[TCPA-BLOCK][SignalWire] Blocking litigator ${from} (cached=${tcpaResult.cached})`);
+
+          // Create blocked call record for audit trail
+          try {
+            const prisma = getPrismaClient();
+            await prisma.call.create({
+              data: {
+                tenantId: 'default',
+                callSid: (payload.CallSid as string) || `sw_blocked_${Date.now()}`,
+                toNumber: to,
+                callerId: from,
+                direction: 'INBOUND',
+                status: 'FAILED',
+                blocked: true,
+                blockReason: 'TCPA_LITIGATOR',
+                startedAt: new Date(),
+                endedAt: new Date(),
+                metadata: { tcpaResult, source: 'signalwire' } as Record<string, unknown>,
+              },
+            });
+          } catch (dbErr) {
+            console.error('[TCPA-BLOCK] Failed to create blocked call record:', dbErr);
+          }
+
+          const rejectLaml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Reject reason="busy"/>
+</Response>`;
+          return reply.code(200).header('Content-Type', 'application/xml').send(rejectLaml);
+        }
+      } catch (err) {
+        console.error('[TCPA] SignalWire validation error (fail-open):', err);
+      }
+    }
+
+    // Default: Answer and connect to FreeSWITCH
     const laml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="alice">This number is managed by Hopwhistle. Please hold while we connect you.</Say>
