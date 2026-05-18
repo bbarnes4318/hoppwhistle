@@ -118,85 +118,7 @@ export async function registerBulkvsProcurementRoutes(fastify: FastifyInstance):
         }
       );
 
-      // The provisioning service creates the PhoneNumber record, but we need to create billing
-      
-      // Step 2: Create billing record
-      const setupPriceCents = 100; // Example: $1.00 setup
-      const monthlyPriceCents = 150; // Example: $1.50 monthly
-      const totalCents = setupPriceCents + monthlyPriceCents;
-      const totalDollars = totalCents / 100;
-
-      // Find or create billing account for tenant
-      let billingAccount = await prisma.billingAccount.findFirst({
-        where: { tenantId },
-      });
-
-      if (!billingAccount) {
-        billingAccount = await prisma.billingAccount.create({
-          data: {
-            tenantId,
-            name: 'Default Billing Account',
-            currency: 'USD',
-          },
-        });
-      }
-
-      // Create invoice for this purchase
-      const invoiceNumber = `INV-${Date.now()}-${phoneNumber.id.slice(0, 8)}`;
-      const now = new Date();
-      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-
-      const invoice = await prisma.invoice.create({
-        data: {
-          billingAccountId: billingAccount.id,
-          invoiceNumber,
-          status: 'SENT', // Ready for payment
-          periodStart: now,
-          periodEnd: endOfMonth,
-          subtotal: totalDollars,
-          tax: 0,
-          total: totalDollars,
-          dueDate: endOfMonth,
-          metadata: {
-            phoneNumberId: phoneNumber.id,
-            e164: phoneNumber.number,
-            purchasedBy: user?.userId,
-          },
-          lines: {
-            create: [
-              {
-                description: `New Number Provisioning: ${phoneNumber.number}`,
-                quantity: 1,
-                unitPrice: setupPriceCents / 100,
-                total: setupPriceCents / 100,
-                metadata: { type: 'setup_fee' },
-              },
-              {
-                description: `Monthly Service: ${phoneNumber.number}`,
-                quantity: 1,
-                unitPrice: monthlyPriceCents / 100,
-                total: monthlyPriceCents / 100,
-                metadata: { type: 'monthly_fee', prorated: true },
-              },
-            ],
-          },
-        },
-        include: {
-          lines: true,
-        },
-      });
-
-      // Update the phone number metadata with invoice details
-      await prisma.phoneNumber.update({
-        where: { id: phoneNumber.id },
-        data: {
-          metadata: {
-            ...(phoneNumber.metadata as Record<string, unknown> || {}),
-            invoiceId: invoice.id,
-            totalCharged: totalDollars,
-          }
-        }
-      });
+      // The provisioning service creates the PhoneNumber record
 
       if (request.body.destination) {
         await prisma.didRoute.create({
@@ -213,11 +135,9 @@ export async function registerBulkvsProcurementRoutes(fastify: FastifyInstance):
       }
 
       logger.info({
-        msg: 'DID purchased and provisioned successfully from BulkVS',
+        msg: 'DID provisioned successfully from BulkVS',
         phoneNumberId: phoneNumber.id,
         number: phoneNumber.number,
-        invoiceId: invoice.id,
-        totalCharged: totalDollars,
         routeCreated: !!request.body.destination,
       });
 
@@ -231,15 +151,6 @@ export async function registerBulkvsProcurementRoutes(fastify: FastifyInstance):
             provider: phoneNumber.provider,
             status: phoneNumber.status,
             purchasedAt: phoneNumber.purchasedAt?.toISOString(),
-          },
-          billing: {
-            invoiceId: invoice.id,
-            invoiceNumber: invoice.invoiceNumber,
-            setupFee: setupPriceCents / 100,
-            monthlyFee: monthlyPriceCents / 100,
-            total: totalDollars,
-            status: invoice.status,
-            dueDate: invoice.dueDate.toISOString(),
           },
         },
       };

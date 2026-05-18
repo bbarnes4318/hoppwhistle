@@ -36,22 +36,15 @@ interface BulkvsNumber {
   };
 }
 
-interface PurchaseResult {
+interface AddResult {
   phoneNumber: {
     id: string;
     number: string;
     status: string;
   };
-  billing: {
-    invoiceId: string;
-    invoiceNumber: string;
-    setupFee: number;
-    monthlyFee: number;
-    total: number;
-  };
 }
 
-interface BulkvsPurchaseDialogProps {
+interface BulkvsAddDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
@@ -59,7 +52,7 @@ interface BulkvsPurchaseDialogProps {
 
 type Step = 'search' | 'confirm' | 'success';
 
-export function BulkvsPurchaseDialog({ open, onOpenChange, onSuccess }: BulkvsPurchaseDialogProps) {
+export function BulkvsPurchaseDialog({ open, onOpenChange, onSuccess }: BulkvsAddDialogProps) {
   const [step, setStep] = useState<Step>('search');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,11 +62,7 @@ export function BulkvsPurchaseDialog({ open, onOpenChange, onSuccess }: BulkvsPu
   const [selectedNumber, setSelectedNumber] = useState<BulkvsNumber | null>(null);
   const [destination, setDestination] = useState('');
 
-  const [purchaseResult, setPurchaseResult] = useState<PurchaseResult | null>(null);
-
-  // Pricing constants based on our route implementation
-  const SETUP_FEE = 1.00;
-  const MONTHLY_FEE = 1.50;
+  const [addResult, setAddResult] = useState<AddResult | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -83,7 +72,7 @@ export function BulkvsPurchaseDialog({ open, onOpenChange, onSuccess }: BulkvsPu
       setNumbers([]);
       setSelectedNumber(null);
       setDestination('');
-      setPurchaseResult(null);
+      setAddResult(null);
     }
   }, [open]);
 
@@ -121,7 +110,7 @@ export function BulkvsPurchaseDialog({ open, onOpenChange, onSuccess }: BulkvsPu
     setStep('confirm');
   };
 
-  const handlePurchase = async () => {
+  const handleAdd = async () => {
     if (!selectedNumber) return;
 
     setLoading(true);
@@ -129,27 +118,25 @@ export function BulkvsPurchaseDialog({ open, onOpenChange, onSuccess }: BulkvsPu
     try {
       const response = await apiClient.post<{
         success: boolean;
-        data: PurchaseResult;
+        data: AddResult;
       }>('/api/v1/bulkvs/purchase', {
         areaCode: selectedNumber.metadata?.npa || areaCode,
         destination: destination ? destination.trim() : undefined,
       });
 
       if (response.data?.success) {
-        setPurchaseResult(response.data.data);
+        setAddResult(response.data.data);
         setStep('success');
         onSuccess?.();
       } else {
-        throw new Error('Purchase failed');
+        throw new Error('Action failed');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to purchase number');
+      setError(err instanceof Error ? err.message : 'Failed to add number');
     } finally {
       setLoading(false);
     }
   };
-
-  const formatPrice = (price: number) => `$${price.toFixed(2)}`;
 
   const renderStep = () => {
     switch (step) {
@@ -202,13 +189,6 @@ export function BulkvsPurchaseDialog({ open, onOpenChange, onSuccess }: BulkvsPu
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <div className="text-right text-xs text-muted-foreground">
-                        <div>Setup: {formatPrice(SETUP_FEE)}</div>
-                        <div>Monthly: {formatPrice(MONTHLY_FEE)}</div>
-                      </div>
-                      <ShoppingCart className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </div>
                   </button>
                 ))}
               </div>
@@ -231,7 +211,7 @@ export function BulkvsPurchaseDialog({ open, onOpenChange, onSuccess }: BulkvsPu
             </Button>
 
             <div className="border rounded-lg p-6 space-y-4 bg-card">
-              <h3 className="font-semibold text-lg">Order Summary</h3>
+              <h3 className="font-semibold text-lg">Number Summary</h3>
 
               <div className="space-y-3">
                 <div className="flex justify-between">
@@ -246,26 +226,10 @@ export function BulkvsPurchaseDialog({ open, onOpenChange, onSuccess }: BulkvsPu
                     {selectedNumber?.metadata?.rateCenter}, {selectedNumber?.metadata?.state}
                   </span>
                 </div>
-                <div className="border-t pt-3 space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span>Setup Fee</span>
-                    <span>{formatPrice(SETUP_FEE)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span>Monthly Fee (prorated)</span>
-                    <span>{formatPrice(MONTHLY_FEE)}</span>
-                  </div>
-                  <div className="flex justify-between font-semibold text-lg border-t pt-2">
-                    <span>Total Due Today</span>
-                    <span className="text-primary">
-                      {formatPrice(SETUP_FEE + MONTHLY_FEE)}
-                    </span>
-                  </div>
-                </div>
               </div>
 
               <div className="bg-muted/50 p-3 rounded-md text-sm text-muted-foreground">
-                <DollarSign className="h-4 w-4 inline mr-1" />
+                <CheckCircle className="h-4 w-4 inline mr-1" />
                 Your number will be immediately provisioned and routed to your account.
               </div>
 
@@ -298,23 +262,10 @@ export function BulkvsPurchaseDialog({ open, onOpenChange, onSuccess }: BulkvsPu
               </div>
             </div>
             <div>
-              <h3 className="text-xl font-semibold mb-2">Number Purchased!</h3>
+              <h3 className="text-xl font-semibold mb-2">Number Added!</h3>
               <p className="text-2xl font-mono text-primary">
-                {purchaseResult ? formatPhoneNumber(purchaseResult.phoneNumber.number) : ''}
+                {addResult ? formatPhoneNumber(addResult.phoneNumber.number) : ''}
               </p>
-            </div>
-
-            <div className="border rounded-lg p-4 text-left space-y-2 bg-card">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Invoice</span>
-                <span className="font-mono">{purchaseResult?.billing.invoiceNumber}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Total Charged</span>
-                <span className="font-medium text-primary">
-                  {formatPrice(purchaseResult?.billing.total || 0)}
-                </span>
-              </div>
             </div>
 
             <p className="text-sm text-muted-foreground">
@@ -330,12 +281,12 @@ export function BulkvsPurchaseDialog({ open, onOpenChange, onSuccess }: BulkvsPu
       <DialogContent className="sm:max-w-[600px] max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>
-            {step === 'success' ? 'Purchase Complete' : 'Purchase Phone Number (BulkVS)'}
+            {step === 'success' ? 'Number Added' : 'Add Phone Number (BulkVS)'}
           </DialogTitle>
           <DialogDescription>
             {step === 'success'
               ? 'Your new number is ready to use'
-              : 'Search and purchase numbers from the BulkVS inventory.'}
+              : 'Search and add numbers from the BulkVS inventory.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -351,9 +302,9 @@ export function BulkvsPurchaseDialog({ open, onOpenChange, onSuccess }: BulkvsPu
               <Button variant="outline" onClick={() => setStep('search')} disabled={loading}>
                 Back
               </Button>
-              <Button onClick={handlePurchase} disabled={loading}>
+              <Button onClick={handleAdd} disabled={loading}>
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Confirm Purchase
+                Confirm Number
               </Button>
             </>
           ) : step === 'success' ? (
