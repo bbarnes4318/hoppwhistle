@@ -2,7 +2,9 @@
 
 import {
   CheckCircle,
+  DollarSign,
   Loader2,
+  MapPin,
   Phone,
   Search,
   ShoppingCart,
@@ -145,38 +147,6 @@ export function BulkvsPurchaseDialog({ open, onOpenChange, onSuccess }: BulkvsAd
           <div className="space-y-4">
             <div className="text-sm text-muted-foreground mb-4">
               Enter a 3-digit area code to search for available BulkVS numbers.
-            </div>
-
-            <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 flex items-center justify-between mb-4 shadow-sm">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Phone className="h-5 w-5 text-primary" />
-                </div>
-                <div className="text-left">
-                  <div className="font-semibold text-foreground">Featured Phone Number</div>
-                  <div className="font-mono text-sm text-primary font-bold">281-699-1120</div>
-                </div>
-              </div>
-              <Button 
-                onClick={() => {
-                  setSelectedNumber({
-                    id: '2816991120',
-                    number: '2816991120',
-                    metadata: {
-                      npa: '281',
-                      rateCenter: 'HOUSTON',
-                      state: 'TX',
-                      tier: 'standard'
-                    }
-                  });
-                  setStep('confirm');
-                }}
-                size="sm"
-                className="gap-2"
-              >
-                <ShoppingCart className="h-4 w-4" />
-                Quick Claim
-              </Button>
             </div>
             
             <div className="flex gap-2">

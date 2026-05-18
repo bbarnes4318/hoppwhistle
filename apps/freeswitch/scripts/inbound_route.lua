@@ -158,14 +158,15 @@ local function split(s, delimiter)
     return result
 end
 
-local did_stripped = string.gsub(did_normalized, "^%+", "")
+session:setVariable("continue_on_fail", "true")
+session:setVariable("hangup_after_bridge", "true")
+
 local failover_steps = split(destination, "|")
-local bridge_groups = {}
 
 for i, step in ipairs(failover_steps) do
     if step and step ~= "" then
         local parallel_destinations = split(step, ",")
-        local group_components = {}
+        local bridge_components = {}
         
         for j, p_dest in ipairs(parallel_destinations) do
             -- Strip whitespace
@@ -177,39 +178,38 @@ for i, step in ipairs(failover_steps) do
                     local contact = api:execute("sofia_contact", "internal/" .. p_dest .. "@3.214.60.13") or ""
                     if contact ~= "" and not string.match(contact, "^error") then
                         log("INFO", "Extension " .. p_dest .. " registered: " .. contact)
-                        table.insert(group_components, contact)
+                        table.insert(bridge_components, contact)
                     else
                         log("WARNING", "Extension " .. p_dest .. " NOT registered — skipping")
                     end
                 else
                     -- Strip leading + for external dialing
                     local dest_stripped = string.gsub(p_dest, "^%+", "")
-                    -- Inject DID as caller ID for external failover via SignalWire
-                    local leg = "[origination_caller_id_number=" .. did_stripped
-                        .. ",origination_caller_id_name=" .. did_stripped
-                        .. ",sip_from_user=" .. did_stripped
-                        .. ",sip_cid_type=pid"
-                        .. ",call_timeout=60"
-                        .. "]sofia/gateway/signalwire/+" .. dest_stripped
-                    table.insert(group_components, leg)
+                    table.insert(bridge_components, "sofia/gateway/bulkvs/" .. dest_stripped)
                 end
             end
         end
         
-        if #group_components > 0 then
-            table.insert(bridge_groups, table.concat(group_components, ","))
+        if #bridge_components > 0 then
+            if not session:ready() then
+                log("WARNING", "Session no longer active, aborting failover loop")
+                break
+            end
+            local bridge_string = table.concat(bridge_components, ",")
+            log("INFO", "Bridging to failover step " .. tostring(i) .. ": " .. bridge_string)
+            session:execute("bridge", bridge_string)
+            
+            if session:answered() then
+                log("INFO", "Call answered on step " .. tostring(i) .. ", exiting failover loop")
+                break
+            else
+                local cause = session:getVariable("originate_disposition") or session:getVariable("endpoint_disposition") or "UNKNOWN"
+                log("INFO", "Step " .. tostring(i) .. " failed to answer (" .. cause .. "), continuing to next step")
+            end
+        else
+            log("WARNING", "Step " .. tostring(i) .. " has no reachable destinations — skipping to next")
         end
     end
-end
-
-if #bridge_groups > 0 then
-    session:setVariable("continue_on_fail", "true")
-    session:setVariable("hangup_after_bridge", "true")
-    local full_bridge = table.concat(bridge_groups, "|")
-    log("INFO", "Executing native bridge: " .. full_bridge)
-    session:execute("bridge", full_bridge)
-else
-    log("WARNING", "No reachable destinations for any failover step")
 end
 
 -- ── Step 5: Call ended — collect CDR and report ─────────────────────────────
