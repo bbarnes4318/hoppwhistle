@@ -70,7 +70,7 @@ if caller_normalized ~= "unknown" then
 end
 log("INFO", "Looking up route: " .. lookup_url)
 
-local response_body = api:execute("curl", lookup_url .. " timeout 5 get") or ""
+local response_body = api:execute("curl", lookup_url .. " timeout 15 get") or ""
 
 log("INFO", "Lookup response: " .. response_body)
 

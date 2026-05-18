@@ -6,11 +6,15 @@ export function getRedisClient(): Redis {
   if (!redisClient) {
     const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
     redisClient = new Redis(redisUrl, {
-      maxRetriesPerRequest: 3,
+      maxRetriesPerRequest: 1,
+      connectTimeout: 2000,
+      commandTimeout: 2000,
       retryStrategy: (times) => {
-        const delay = Math.min(times * 50, 2000);
+        if (times > 3) return null; // stop reconnecting after 3 attempts
+        const delay = Math.min(times * 50, 500);
         return delay;
       },
+      lazyConnect: true,
     });
 
     redisClient.on('error', (err) => {
