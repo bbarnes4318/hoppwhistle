@@ -150,8 +150,8 @@ export default function NumbersPage() {
  );
 
  return (
- <div className="h-full flex flex-col overflow-hidden">
- <div className="flex items-center justify-between flex-shrink-0 mb-4">
+ <div className="space-y-6">
+ <div className="flex items-center justify-between mb-4">
  <div>
  <h1 className="text-3xl font-bold">Numbers & Routing</h1>
  <p className="text-muted-foreground">Manage your phone numbers and inbound call routes</p>
@@ -182,15 +182,15 @@ export default function NumbersPage() {
  </div>
  </div>
 
- <Tabs defaultValue="numbers" className="flex-1 flex flex-col overflow-hidden">
+ <Tabs defaultValue="numbers" className="w-full">
  <TabsList className="mb-4">
  <TabsTrigger value="numbers">Phone Numbers</TabsTrigger>
  <TabsTrigger value="routing">Inbound Routes</TabsTrigger>
  </TabsList>
 
- <TabsContent value="numbers" className="flex-1 flex flex-col min-h-0 m-0">
- <Card className="flex-1 flex flex-col overflow-hidden min-h-0">
- <CardHeader className="flex-shrink-0">
+ <TabsContent value="numbers" className="m-0">
+ <Card>
+ <CardHeader>
  <div className="flex items-center justify-between">
  <div>
  <CardTitle>Phone Numbers</CardTitle>
@@ -209,7 +209,7 @@ export default function NumbersPage() {
  </div>
  </div>
  </CardHeader>
- <CardContent className="flex-1 overflow-y-auto min-h-0">
+ <CardContent>
  {loading ? (
  <div className="flex items-center justify-center py-12">
  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -264,9 +264,9 @@ export default function NumbersPage() {
  </Card>
  </TabsContent>
 
- <TabsContent value="routing" className="flex-1 flex flex-col min-h-0 m-0">
- <Card className="flex-1 flex flex-col overflow-hidden min-h-0">
- <CardHeader className="flex-shrink-0">
+ <TabsContent value="routing" className="m-0">
+ <Card>
+ <CardHeader>
  <div className="flex items-center justify-between">
  <div>
  <CardTitle>Inbound Routes</CardTitle>
@@ -291,7 +291,7 @@ export default function NumbersPage() {
  </div>
  </div>
  </CardHeader>
- <CardContent className="flex-1 overflow-y-auto min-h-0">
+ <CardContent>
  {loadingRoutes ? (
  <div className="flex items-center justify-center py-12">
  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
