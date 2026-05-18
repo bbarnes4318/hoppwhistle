@@ -70,16 +70,7 @@ if caller_normalized ~= "unknown" then
 end
 log("INFO", "Looking up route: " .. lookup_url)
 
-local curl_cmd = "curl -s -m 5 '" .. lookup_url .. "'"
-local response = api:execute("system", curl_cmd)
-
--- Try using curl via Lua
-local handle = io.popen(curl_cmd, "r")
-local response_body = ""
-if handle then
-  response_body = handle:read("*a") or ""
-  handle:close()
-end
+local response_body = api:execute("curl", lookup_url .. " timeout 5 get") or ""
 
 log("INFO", "Lookup response: " .. response_body)
 
@@ -183,7 +174,14 @@ for i, step in ipairs(failover_steps) do
             if p_dest ~= "" then
                 -- Check if it's a short extension (e.g. 1000)
                 if string.match(p_dest, "^%d%d%d%d$") then
-                    table.insert(bridge_components, "${sofia_contact(internal/" .. p_dest .. "@3.214.60.13)}")
+                    -- Pre-resolve the contact to check if registered
+                    local contact = api:execute("sofia_contact", "internal/" .. p_dest .. "@3.214.60.13") or ""
+                    if contact ~= "" and not string.match(contact, "^error") then
+                        log("INFO", "Extension " .. p_dest .. " registered: " .. contact)
+                        table.insert(bridge_components, contact)
+                    else
+                        log("WARNING", "Extension " .. p_dest .. " NOT registered — skipping")
+                    end
                 else
                     -- Strip leading + for external dialing
                     local dest_stripped = string.gsub(p_dest, "^%+", "")
@@ -193,6 +191,10 @@ for i, step in ipairs(failover_steps) do
         end
         
         if #bridge_components > 0 then
+            if not session:ready() then
+                log("WARNING", "Session no longer active, aborting failover loop")
+                break
+            end
             local bridge_string = table.concat(bridge_components, ",")
             log("INFO", "Bridging to failover step " .. tostring(i) .. ": " .. bridge_string)
             session:execute("bridge", bridge_string)
@@ -204,6 +206,8 @@ for i, step in ipairs(failover_steps) do
                 local cause = session:getVariable("originate_disposition") or session:getVariable("endpoint_disposition") or "UNKNOWN"
                 log("INFO", "Step " .. tostring(i) .. " failed to answer (" .. cause .. "), continuing to next step")
             end
+        else
+            log("WARNING", "Step " .. tostring(i) .. " has no reachable destinations — skipping to next")
         end
     end
 end
@@ -255,17 +259,14 @@ local cdr_json = string.format(
 -- POST CDR to API
 local cdr_url = API_URL .. "/api/v1/freeswitch/cdr"
 local cdr_cmd = string.format(
-  "curl -s -m 10 -X POST '%s' -H 'Content-Type: application/json' -d '%s'",
+  "%s content-type application/json timeout 10 post '%s'",
   cdr_url,
   cdr_json
 )
 
 log("INFO", "Posting CDR to: " .. cdr_url)
-local cdr_handle = io.popen(cdr_cmd, "r")
-if cdr_handle then
-  local cdr_response = cdr_handle:read("*a") or ""
-  cdr_handle:close()
-  log("INFO", "CDR response: " .. cdr_response)
+local cdr_response = api:execute("curl", cdr_cmd) or ""
+log("INFO", "CDR response: " .. cdr_response)
 
   -- Parse the call ID from response for recording upload
   local db_call_id = json_value(cdr_response, "callId")
@@ -281,6 +282,5 @@ if cdr_handle then
     log("INFO", "Kicking off recording upload: " .. upload_cmd)
     os.execute(upload_cmd)
   end
-end
 
 log("INFO", "Inbound call processing complete for UUID: " .. call_uuid)
