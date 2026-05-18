@@ -6,9 +6,18 @@ import { toast } from '@/components/ui/use-toast';
 
 import { AnveoPurchaseDialog } from '@/components/numbers/anveo-purchase-dialog';
 import { EditNumberDialog } from '@/components/numbers/edit-number-dialog';
+import { BulkvsPurchaseDialog } from '@/components/numbers/bulkvs-purchase-dialog';
 import { CreateRouteDialog } from '@/components/numbers/create-route-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
@@ -53,7 +62,8 @@ interface DidRoute {
 
 export default function NumbersPage() {
  const [search, setSearch] = useState('');
- const [purchaseDialogOpen, setPurchaseDialogOpen] = useState(false);
+ const [anveoPurchaseDialogOpen, setAnveoPurchaseDialogOpen] = useState(false);
+ const [bulkvsPurchaseDialogOpen, setBulkvsPurchaseDialogOpen] = useState(false);
  const [editDialogOpen, setEditDialogOpen] = useState(false);
  const [createRouteOpen, setCreateRouteOpen] = useState(false);
  const [selectedNumber, setSelectedNumber] = useState<PhoneNumber | null>(null);
@@ -114,8 +124,12 @@ export default function NumbersPage() {
  input.click();
  };
 
- const handleBuyNumber = () => {
- setPurchaseDialogOpen(true);
+ const handleBuyAnveoNumber = () => {
+ setAnveoPurchaseDialogOpen(true);
+ };
+
+ const handleBuyBulkvsNumber = () => {
+ setBulkvsPurchaseDialogOpen(true);
  };
 
  const handlePurchaseSuccess = () => {
@@ -147,10 +161,24 @@ export default function NumbersPage() {
  <Download className="mr-2 h-4 w-4" />
  Import
  </Button>
- <Button onClick={handleBuyNumber}>
+ <DropdownMenu>
+ <DropdownMenuTrigger asChild>
+ <Button>
  <Plus className="mr-2 h-4 w-4" />
  Buy Number
  </Button>
+ </DropdownMenuTrigger>
+ <DropdownMenuContent align="end">
+ <DropdownMenuLabel>Select Provider</DropdownMenuLabel>
+ <DropdownMenuSeparator />
+ <DropdownMenuItem onClick={handleBuyAnveoNumber}>
+ Buy from Anveo Direct
+ </DropdownMenuItem>
+ <DropdownMenuItem onClick={handleBuyBulkvsNumber}>
+ Buy from BulkVS
+ </DropdownMenuItem>
+ </DropdownMenuContent>
+ </DropdownMenu>
  </div>
  </div>
 
@@ -314,8 +342,14 @@ export default function NumbersPage() {
  </Tabs>
 
  <AnveoPurchaseDialog
- open={purchaseDialogOpen}
- onOpenChange={setPurchaseDialogOpen}
+ open={anveoPurchaseDialogOpen}
+ onOpenChange={setAnveoPurchaseDialogOpen}
+ onSuccess={handlePurchaseSuccess}
+ />
+
+ <BulkvsPurchaseDialog
+ open={bulkvsPurchaseDialogOpen}
+ onOpenChange={setBulkvsPurchaseDialogOpen}
  onSuccess={handlePurchaseSuccess}
  />
 

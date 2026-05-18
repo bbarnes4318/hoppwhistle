@@ -62,14 +62,16 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
       return reply.code(400).send({ error: 'phoneNumberId and destination are required' });
     }
 
-    // Validate destination is E.164
-    const destClean = body.destination.replace(/\D/g, '');
-    if (destClean.length < 10 || destClean.length > 15) {
-      return reply.code(400).send({ error: 'destination must be a valid phone number' });
+    // Validate destination is E.164 unless it contains commas or pipes or is a short extension
+    let destination = body.destination.trim();
+    if (!destination.includes(',') && !destination.includes('|') && destination.replace(/\D/g, '').length >= 10) {
+      const destClean = destination.replace(/\D/g, '');
+      destination = destClean.startsWith('1') && destClean.length === 11
+        ? `+${destClean}`
+        : `+1${destClean}`;
+    } else if (!destination) {
+      return reply.code(400).send({ error: 'destination is required' });
     }
-    const destination = destClean.startsWith('1') && destClean.length === 11
-      ? `+${destClean}`
-      : `+1${destClean}`;
 
     // Lookup the phone number to get the DID
     const phoneNumber = await prisma.phoneNumber.findUnique({
@@ -138,10 +140,13 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
       // Normalize destination if provided
       let destination = existing.destination;
       if (body.destination) {
-        const destClean = body.destination.replace(/\D/g, '');
-        destination = destClean.startsWith('1') && destClean.length === 11
-          ? `+${destClean}`
-          : `+1${destClean}`;
+        destination = body.destination.trim();
+        if (!destination.includes(',') && !destination.includes('|') && destination.replace(/\D/g, '').length >= 10) {
+          const destClean = destination.replace(/\D/g, '');
+          destination = destClean.startsWith('1') && destClean.length === 11
+            ? `+${destClean}`
+            : `+1${destClean}`;
+        }
       }
 
       const route = await prisma.didRoute.update({

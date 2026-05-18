@@ -156,16 +156,57 @@ if recording_enabled then
 end
 
 -- ── Step 4: Bridge to buyer ─────────────────────────────────────────────────
--- Strip + from destination for gateway dialing
-local dest_stripped = string.gsub(destination, "^%+", "")
-local bridge_string = "sofia/gateway/bulkvs/" .. dest_stripped
-
-log("INFO", "Bridging to: " .. bridge_string)
-
 local start_epoch = os.time()
 session:setVariable("x_started_at", os.date("!%Y-%m-%dT%H:%M:%SZ", start_epoch))
 
-session:execute("bridge", bridge_string)
+local function split(s, delimiter)
+    local result = {}
+    for match in (s..delimiter):gmatch("(.-)"..delimiter) do
+        table.insert(result, match)
+    end
+    return result
+end
+
+session:setVariable("continue_on_fail", "true")
+session:setVariable("hangup_after_bridge", "true")
+
+local failover_steps = split(destination, "|")
+
+for i, step in ipairs(failover_steps) do
+    if step and step ~= "" then
+        local parallel_destinations = split(step, ",")
+        local bridge_components = {}
+        
+        for j, p_dest in ipairs(parallel_destinations) do
+            -- Strip whitespace
+            p_dest = string.gsub(p_dest, "^%s*(.-)%s*$", "%1")
+            if p_dest ~= "" then
+                -- Check if it's a short extension (e.g. 1000)
+                if string.match(p_dest, "^%d%d%d%d$") then
+                    table.insert(bridge_components, "${sofia_contact(internal/" .. p_dest .. "@3.214.60.13)}")
+                else
+                    -- Strip leading + for external dialing
+                    local dest_stripped = string.gsub(p_dest, "^%+", "")
+                    table.insert(bridge_components, "sofia/gateway/bulkvs/" .. dest_stripped)
+                end
+            end
+        end
+        
+        if #bridge_components > 0 then
+            local bridge_string = table.concat(bridge_components, ",")
+            log("INFO", "Bridging to failover step " .. tostring(i) .. ": " .. bridge_string)
+            session:execute("bridge", bridge_string)
+            
+            if session:answered() then
+                log("INFO", "Call answered on step " .. tostring(i) .. ", exiting failover loop")
+                break
+            else
+                local cause = session:getVariable("originate_disposition") or session:getVariable("endpoint_disposition") or "UNKNOWN"
+                log("INFO", "Step " .. tostring(i) .. " failed to answer (" .. cause .. "), continuing to next step")
+            end
+        end
+    end
+end
 
 -- ── Step 5: Call ended — collect CDR and report ─────────────────────────────
 local end_epoch = os.time()

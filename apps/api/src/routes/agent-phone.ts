@@ -693,9 +693,13 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
     async (request: FastifyRequest, _reply: FastifyReply) => {
       const { userId, tenantId } = getUser(request);
 
-      // Generate temporary credentials
-      const username = `${userId}@${tenantId}`;
-      const password = Buffer.from(`${userId}:${Date.now()}`).toString('base64').slice(0, 16);
+      const prisma = getPrismaClient();
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      const extension = (user?.metadata as any)?.extension;
+
+      // Generate temporary credentials or use static extension mapping
+      const username = extension ? `${extension}@${tenantId}` : `${userId}@${tenantId}`;
+      const password = extension ? '1234' : Buffer.from(`${userId}:${Date.now()}`).toString('base64').slice(0, 16);
       const expiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
 
       // Build Verto WebSocket URL

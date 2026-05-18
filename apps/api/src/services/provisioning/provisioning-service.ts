@@ -4,6 +4,7 @@ import { auditCreate, auditUpdate } from '../audit.js';
 
 import { AnveoAdapter } from './adapters/anveo-adapter.js';
 import { BandwidthAdapter } from './adapters/bandwidth-adapter.js';
+import { BulkvsAdapter } from './adapters/bulkvs-adapter.js';
 import { LocalAdapter } from './adapters/local-adapter.js';
 import { SignalWireAdapter } from './adapters/signalwire-adapter.js';
 import { TelnyxAdapter } from './adapters/telnyx-adapter.js';
@@ -19,7 +20,7 @@ import type {
 } from './types.js';
 
 // Default priority order for provider selection
-const DEFAULT_PROVIDER_ORDER: Provider[] = ['anveo', 'signalwire', 'telnyx', 'bandwidth'];
+const DEFAULT_PROVIDER_ORDER: Provider[] = ['anveo', 'bulkvs', 'signalwire', 'telnyx', 'bandwidth'];
 
 interface TenantMetadata {
   defaultProvider?: Provider;
@@ -78,6 +79,15 @@ export class ProvisioningService {
       }
     } catch (error) {
       logger.warn('Anveo adapter not configured, skipping');
+    }
+
+    try {
+      const bulkvs = new BulkvsAdapter();
+      if (bulkvs.isConfigured()) {
+        this.adapters.set('bulkvs', bulkvs);
+      }
+    } catch (error) {
+      logger.warn('BulkVS adapter not configured, skipping');
     }
   }
 

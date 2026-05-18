@@ -2,7 +2,7 @@
  * Provisioning service types and interfaces
  */
 
-export type Provider = 'local' | 'signalwire' | 'telnyx' | 'bandwidth' | 'clec' | 'anveo';
+export type Provider = 'local' | 'signalwire' | 'telnyx' | 'bandwidth' | 'clec' | 'anveo' | 'bulkvs';
 
 export type NumberStatus = 'available' | 'assigned' | 'released' | 'pending' | 'failed';
 

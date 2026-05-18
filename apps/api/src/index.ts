@@ -308,6 +308,9 @@ async function buildServer() {
   const { registerAnveoProcurementRoutes } = await import('./routes/anveo-procurement.js');
   await server.register(registerAnveoProcurementRoutes);
 
+  const { registerBulkvsProcurementRoutes } = await import('./routes/bulkvs-procurement.js');
+  await server.register(registerBulkvsProcurementRoutes);
+
   // Register AI Campaign routes (AI outbound calling - Vapi integration hidden from UI)
   const { registerAICampaignRoutes, registerVapiWebhookRoutes } = await import(
     './routes/ai-campaigns.js'
