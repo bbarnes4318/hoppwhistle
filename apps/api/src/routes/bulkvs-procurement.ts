@@ -71,6 +71,7 @@ export async function registerBulkvsProcurementRoutes(fastify: FastifyInstance):
   fastify.post<{
     Body: {
       areaCode: string;
+      number?: string;
       title?: string;
       destination?: string;
     };
@@ -84,14 +85,14 @@ export async function registerBulkvsProcurementRoutes(fastify: FastifyInstance):
       return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
     }
 
-    const { areaCode, title } = request.body;
+    const { areaCode, number, title } = request.body;
 
-    if (!areaCode) {
+    if (!areaCode && !number) {
       void reply.code(400);
       return {
         error: {
           code: 'VALIDATION_ERROR',
-          message: 'areaCode is required',
+          message: 'areaCode or number is required',
         },
       };
     }
@@ -104,12 +105,13 @@ export async function registerBulkvsProcurementRoutes(fastify: FastifyInstance):
         tenantId,
         userId: user?.userId,
         areaCode,
+        number,
       });
 
       // 1. Purchase the number (ProvisioningService handles calling adapter and creating DB entry)
       const phoneNumber = await provisioningService.purchaseNumber(
         'bulkvs',
-        { areaCode },
+        { areaCode, number },
         {
           tenantId,
           userId: user?.userId,

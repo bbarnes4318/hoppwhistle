@@ -63,30 +63,30 @@ export function EditNumberDialog({
  const [loadingCampaigns, setLoadingCampaigns] = useState(false);
  const [error, setError] = useState<string | null>(null);
  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
- const caps = currentCapabilities || {};
+ const caps = typeof currentCapabilities === 'string' ? JSON.parse(currentCapabilities as string) : (currentCapabilities || {});
  const [formData, setFormData] = useState({
- status: (currentStatus || 'ACTIVE').toUpperCase() as 'ACTIVE' | 'INACTIVE' | 'SUSPENDED',
- campaignId: currentCampaignId || '',
+ status: (currentStatus || 'ACTIVE').toString().toUpperCase() as 'ACTIVE' | 'INACTIVE' | 'SUSPENDED',
+ campaignId: currentCampaignId || 'none',
  capabilities: {
- voice: caps.voice ?? true,
- sms: caps.sms ?? false,
- mms: caps.mms ?? false,
- fax: caps.fax ?? false,
+ voice: caps?.voice ?? true,
+ sms: caps?.sms ?? false,
+ mms: caps?.mms ?? false,
+ fax: caps?.fax ?? false,
  },
  rtbPoolEnabled: currentPoolType === 'POOL',
  });
 
  useEffect(() => {
  if (open) {
- const caps = currentCapabilities || {};
+ const caps = typeof currentCapabilities === 'string' ? JSON.parse(currentCapabilities as string) : (currentCapabilities || {});
  setFormData({
- status: (currentStatus || 'ACTIVE').toUpperCase() as 'ACTIVE' | 'INACTIVE' | 'SUSPENDED',
- campaignId: currentCampaignId || '',
+ status: (currentStatus || 'ACTIVE').toString().toUpperCase() as 'ACTIVE' | 'INACTIVE' | 'SUSPENDED',
+ campaignId: currentCampaignId || 'none',
  capabilities: {
- voice: caps.voice ?? true,
- sms: caps.sms ?? false,
- mms: caps.mms ?? false,
- fax: caps.fax ?? false,
+ voice: caps?.voice ?? true,
+ sms: caps?.sms ?? false,
+ mms: caps?.mms ?? false,
+ fax: caps?.fax ?? false,
  },
  rtbPoolEnabled: currentPoolType === 'POOL',
  });
@@ -111,7 +111,7 @@ export function EditNumberDialog({
  const handleRtbToggle = (enabled: boolean) => {
  if (enabled) {
  // Mutual exclusivity: Clear campaign when enabling RTB
- setFormData({ ...formData, rtbPoolEnabled: true, campaignId: '' });
+ setFormData({ ...formData, rtbPoolEnabled: true, campaignId: 'none' });
  } else {
  setFormData({ ...formData, rtbPoolEnabled: false });
  }
@@ -129,7 +129,7 @@ export function EditNumberDialog({
  campaign: { id: string; name: string } | null;
  }>(`/api/v1/numbers/${numberId}`, {
  status: formData.status,
- campaignId: formData.rtbPoolEnabled ? null : formData.campaignId || null,
+ campaignId: formData.rtbPoolEnabled || formData.campaignId === 'none' ? null : formData.campaignId,
  capabilities: formData.capabilities,
  poolType: formData.rtbPoolEnabled ? 'POOL' : 'STATIC',
  poolStatus: formData.rtbPoolEnabled ? 'AVAILABLE' : null,
@@ -187,8 +187,8 @@ export function EditNumberDialog({
  )}
  </Label>
  <Select
- value={formData.campaignId || undefined}
- onValueChange={value => setFormData({ ...formData, campaignId: value || '' })}
+ value={formData.campaignId}
+ onValueChange={value => setFormData({ ...formData, campaignId: value })}
  disabled={loading || loadingCampaigns || formData.rtbPoolEnabled}
  >
  <SelectTrigger id="campaign" className={formData.rtbPoolEnabled ? 'opacity-50' : ''}>
@@ -199,6 +199,7 @@ export function EditNumberDialog({
  />
  </SelectTrigger>
  <SelectContent>
+ <SelectItem value="none">None</SelectItem>
  {campaigns.map(campaign => (
  <SelectItem key={campaign.id} value={campaign.id}>
  {campaign.name}

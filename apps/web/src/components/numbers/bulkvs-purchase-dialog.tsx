@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { formatPhoneNumber } from '@/lib/utils';
@@ -120,6 +121,7 @@ export function BulkvsPurchaseDialog({ open, onOpenChange, onSuccess }: BulkvsAd
         success: boolean;
         data: AddResult;
       }>('/api/v1/bulkvs/purchase', {
+        number: selectedNumber.id, // Add specific number to purchase (id holds the provider ID/raw TN)
         areaCode: selectedNumber.metadata?.npa || areaCode,
         destination: destination ? destination.trim() : undefined,
       });
@@ -170,28 +172,32 @@ export function BulkvsPurchaseDialog({ open, onOpenChange, onSuccess }: BulkvsAd
                 <p className="text-sm text-muted-foreground">Searching inventory...</p>
               </div>
             ) : numbers.length > 0 ? (
-              <div className="space-y-2 max-h-[300px] overflow-y-auto mt-4 pr-2">
-                {numbers.map(num => (
-                  <button
-                    key={num.id}
-                    onClick={() => handleSelect(num)}
-                    className={cn(
-                      'w-full flex items-center justify-between p-3 rounded-md border transition-all',
-                      'hover:bg-accent hover:border-primary group'
-                    )}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Phone className="h-5 w-5 text-muted-foreground" />
-                      <div className="text-left">
-                        <div className="font-medium">{formatPhoneNumber(num.number)}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {num.metadata?.rateCenter}, {num.metadata?.state}
+              <ScrollArea className="h-[300px] mt-4 pr-4">
+                <div className="space-y-2">
+                  {numbers.map(num => (
+                    <button
+                      key={num.id}
+                      onClick={() => handleSelect(num)}
+                      className={cn(
+                        'w-full flex items-center justify-between p-4 rounded-xl border border-border bg-card transition-all',
+                        'hover:bg-accent hover:border-primary/50 group shadow-sm'
+                      )}
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                          <Phone className="h-5 w-5 text-primary" />
+                        </div>
+                        <div className="text-left">
+                          <div className="font-mono text-lg font-semibold tracking-tight">{formatPhoneNumber(num.number)}</div>
+                          <div className="text-xs text-muted-foreground mt-0.5 font-medium uppercase tracking-wider">
+                            {num.metadata?.rateCenter}, {num.metadata?.state}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
+                    </button>
+                  ))}
+                </div>
+              </ScrollArea>
             ) : areaCode.length === 3 && !error && !loading ? (
               <div className="text-center py-8 text-muted-foreground">
                 No numbers available in this area code.

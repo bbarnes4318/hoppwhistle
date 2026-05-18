@@ -1,6 +1,6 @@
 'use client';
 
-import { Plus, Search, Download, Loader2, ArrowRightLeft } from 'lucide-react';
+import { ArrowRightLeft, Download, Edit2, Loader2, Plus, Search } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { toast } from '@/components/ui/use-toast';
 
@@ -20,14 +20,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import {
- Table,
- TableBody,
- TableCell,
- TableHead,
- TableHeader,
- TableRow,
-} from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { apiClient } from '@/lib/api';
 import { formatPhoneNumber } from '@/lib/utils';
@@ -217,48 +209,50 @@ export default function NumbersPage() {
  ) : filteredNumbers.length === 0 ? (
  <div className="text-center py-12 text-muted-foreground">No phone numbers found</div>
  ) : (
- <Table>
- <TableHeader>
- <TableRow>
- <TableHead>Number</TableHead>
- <TableHead>Status</TableHead>
- <TableHead>RTB Pool</TableHead>
- <TableHead>Campaign</TableHead>
- <TableHead>Purchased</TableHead>
- <TableHead className="text-right">Actions</TableHead>
- </TableRow>
- </TableHeader>
- <TableBody>
+ <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
  {filteredNumbers.map(number => (
- <TableRow key={number.id}>
- <TableCell className="font-mono">{formatPhoneNumber(number.number)}</TableCell>
- <TableCell>
- <Badge variant={number.status === 'ACTIVE' ? 'success' : 'secondary'}>
- {number.status.toLowerCase()}
+ <div
+ key={number.id}
+ className="flex flex-col rounded-xl border border-border bg-card p-5 transition-all hover:border-primary/50 hover:shadow-sm"
+ >
+ <div className="flex items-start justify-between mb-4">
+ <div className="space-y-1">
+ <div className="font-mono text-lg font-semibold tracking-tight">
+ {formatPhoneNumber(number.number)}
+ </div>
+ <div className="flex items-center gap-2">
+ <Badge variant={number.status === 'ACTIVE' ? 'success' : 'secondary'} className="text-[10px] px-1.5 py-0">
+ {number.status}
  </Badge>
- </TableCell>
- <TableCell>
- {number.poolType === 'POOL' ? (
- <Badge variant={number.poolStatus === 'AVAILABLE' ? 'success' : 'warning'}>
- {number.poolStatus === 'AVAILABLE' ? '✓ Available' : 'Assigned'}
+ {number.poolType === 'POOL' && (
+ <Badge variant={number.poolStatus === 'AVAILABLE' ? 'success' : 'warning'} className="text-[10px] px-1.5 py-0">
+ RTB: {number.poolStatus === 'AVAILABLE' ? 'AVAIL' : 'ASSIGNED'}
  </Badge>
- ) : (
- <span className="text-muted-foreground text-sm">Static</span>
  )}
- </TableCell>
- <TableCell>{number.campaign?.name || '-'}</TableCell>
- <TableCell>
- {number.purchasedAt ? new Date(number.purchasedAt).toLocaleDateString() : '-'}
- </TableCell>
- <TableCell className="text-right">
- <Button variant="ghost" size="sm" onClick={() => handleEdit(number)}>
- Edit
+ </div>
+ </div>
+ <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={() => handleEdit(number)}>
+ <Edit2 className="h-4 w-4" />
  </Button>
- </TableCell>
- </TableRow>
+ </div>
+
+ <div className="mt-auto grid grid-cols-2 gap-4 text-sm border-t border-border/50 pt-4">
+ <div>
+ <div className="text-muted-foreground text-xs uppercase tracking-wider mb-1">Campaign</div>
+ <div className="font-medium truncate" title={number.campaign?.name || 'Unassigned'}>
+ {number.campaign?.name || 'Unassigned'}
+ </div>
+ </div>
+ <div>
+ <div className="text-muted-foreground text-xs uppercase tracking-wider mb-1">Purchased</div>
+ <div className="font-medium">
+ {number.purchasedAt ? new Date(number.purchasedAt).toLocaleDateString() : 'N/A'}
+ </div>
+ </div>
+ </div>
+ </div>
  ))}
- </TableBody>
- </Table>
+ </div>
  )}
  </CardContent>
  </Card>
@@ -299,42 +293,56 @@ export default function NumbersPage() {
  ) : filteredRoutes.length === 0 ? (
  <div className="text-center py-12 text-muted-foreground">No routing rules found</div>
  ) : (
- <Table>
- <TableHeader>
- <TableRow>
- <TableHead>DID (Inbound)</TableHead>
- <TableHead>Destination (Buyer)</TableHead>
- <TableHead>Label / Buyer</TableHead>
- <TableHead>Status</TableHead>
- <TableHead>Recording</TableHead>
- <TableHead>Created</TableHead>
- </TableRow>
- </TableHeader>
- <TableBody>
+ <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
  {filteredRoutes.map(route => (
- <TableRow key={route.id}>
- <TableCell className="font-mono">{formatPhoneNumber(route.did)}</TableCell>
- <TableCell className="font-mono text-muted-foreground">{formatPhoneNumber(route.destination)}</TableCell>
- <TableCell>{route.label || route.buyer?.name || '-'}</TableCell>
- <TableCell>
- <Badge variant={route.status === 'ACTIVE' ? 'success' : 'secondary'}>
- {route.status.toLowerCase()}
+ <div
+ key={route.id}
+ className="flex flex-col rounded-xl border border-border bg-card p-5 transition-all hover:border-primary/50 hover:shadow-sm"
+ >
+ <div className="flex items-start justify-between mb-4">
+ <div className="space-y-1">
+ <div className="font-mono text-lg font-semibold tracking-tight text-primary">
+ {formatPhoneNumber(route.did)}
+ </div>
+ <div className="flex items-center gap-2">
+ <Badge variant={route.status === 'ACTIVE' ? 'success' : 'secondary'} className="text-[10px] px-1.5 py-0">
+ {route.status}
  </Badge>
- </TableCell>
- <TableCell>
- {route.recordingEnabled ? (
- <Badge variant="outline" className="bg-blue-500/10 text-blue-400">Enabled</Badge>
- ) : (
- <span className="text-muted-foreground text-sm">Disabled</span>
+ {route.recordingEnabled && (
+ <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-blue-500/30 text-blue-400 bg-blue-500/10">
+ REC
+ </Badge>
  )}
- </TableCell>
- <TableCell>
- {route.createdAt ? new Date(route.createdAt).toLocaleDateString() : '-'}
- </TableCell>
- </TableRow>
+ </div>
+ </div>
+ </div>
+
+ <div className="space-y-4 border-t border-border/50 pt-4 text-sm mt-auto">
+ <div>
+ <div className="text-muted-foreground text-xs uppercase tracking-wider mb-1 flex items-center gap-1">
+ <ArrowRightLeft className="h-3 w-3" /> Destination
+ </div>
+ <div className="font-mono text-base">{formatPhoneNumber(route.destination)}</div>
+ </div>
+
+ <div className="grid grid-cols-2 gap-4">
+ <div>
+ <div className="text-muted-foreground text-xs uppercase tracking-wider mb-1">Label / Buyer</div>
+ <div className="font-medium truncate" title={route.label || route.buyer?.name || 'Unassigned'}>
+ {route.label || route.buyer?.name || 'Unassigned'}
+ </div>
+ </div>
+ <div>
+ <div className="text-muted-foreground text-xs uppercase tracking-wider mb-1">Created</div>
+ <div className="font-medium">
+ {route.createdAt ? new Date(route.createdAt).toLocaleDateString() : 'N/A'}
+ </div>
+ </div>
+ </div>
+ </div>
+ </div>
  ))}
- </TableBody>
- </Table>
+ </div>
  )}
  </CardContent>
  </Card>

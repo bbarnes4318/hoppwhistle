@@ -14,6 +14,7 @@ export interface NumberFeatures {
 }
 
 export interface PurchaseNumberRequest {
+  number?: string; // Specific number to purchase
   areaCode?: string;
   features?: NumberFeatures;
   country?: string; // ISO country code, default 'US'

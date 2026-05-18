@@ -121,7 +121,15 @@ export class BulkvsAdapter implements ProvisioningAdapter {
     }
 
     // According to plan, GET request to https://portal.bulkvs.com/api/v1.0/orderTn
-    const response = await this.request<any>('GET', '/orderTn', params);
+    let response;
+    try {
+      response = await this.request<any>('GET', '/orderTn', params);
+    } catch (error) {
+      if (error instanceof Error && (error.message.includes('404') || error.message.includes('No telephone numbers'))) {
+        return [];
+      }
+      throw error;
+    }
 
     // The actual response format might vary, assuming an array of objects or an object containing an array.
     // Assuming response is an array of objects or has a specific wrapper.
@@ -137,7 +145,13 @@ export class BulkvsAdapter implements ProvisioningAdapter {
     }
 
     return items.map((item: any) => {
-      const did = item.Tn || item.tn || item.number || item.did;
+      const did = item.TN || item.Tn || item.tn || item.number || item.did;
+      
+      // Fallback in case `did` is still somehow undefined to prevent client crash
+      if (!did) {
+        return null;
+      }
+
       return {
         id: did,
         number: did.startsWith('+') ? did : `+1${did.replace(/^1/, '')}`,
@@ -147,49 +161,32 @@ export class BulkvsAdapter implements ProvisioningAdapter {
         providerId: did,
         metadata: {
           npa: item.Npa || item.npa,
-          rateCenter: item.RateCenter || item.rateCenter,
+          rateCenter: item['Rate Center'] || item.RateCenter || item.rateCenter,
           state: item.State || item.state,
           tier: item.Tier || item.tier,
         },
       };
-    });
+    }).filter(Boolean) as ProvisionedNumber[];
   }
 
   /**
    * Purchase a DID from BulkVS
    */
   async purchaseNumber(request: PurchaseNumberRequest): Promise<ProvisionedNumber> {
-    const params: Record<string, string | number | string[]> = {};
+    let tnToOrder = request.number;
 
-    // For POST /orderTn, typically the payload expects an array of TNs or similar.
-    // However, the plan specifies: Handle `purchaseNumber` by making a `POST` request to `https://portal.bulkvs.com/api/v1.0/orderTn`.
-    // We assume the user has selected a specific TN, wait, the request object might not have the TN, wait!
-    // The PurchaseNumberRequest interface does NOT have the actual number to purchase, it only has areaCode and region,
-    // Wait, Anveo implementation above orders ANY DID in the area code.
-    // Anveo:
-    // if (request.areaCode) params.npa = request.areaCode;
-    // await this.request('POST', '/v1/dids', params); -> Anveo auto-selects a DID.
+    if (!tnToOrder) {
+      if (!request.areaCode) {
+        throw new Error('Area code or specific number is required to purchase a BulkVS number');
+      }
 
-    // If BulkVS requires a specific TN, maybe we need to fetch one first and then order it.
-    // Let's implement it by trying to pass the TN if available in metadata or fetch first.
-    // Wait, PurchaseNumberRequest interface doesn't have `number` field. 
-    // Wait, looking at types.ts:
-    // export interface PurchaseNumberRequest {
-    //   areaCode?: string;
-    //   features?: NumberFeatures;
-    //   country?: string; // ISO country code, default 'US'
-    //   region?: string; // State/region code
-    // }
-    // It doesn't have a specific number. Let's do a search first, get the first number, and order it.
-    
-    let tnToOrder = '';
-
-    const searchResponse = await this.listNumbers({ areaCode: request.areaCode });
-    if (searchResponse.length === 0) {
-      throw new Error(`No BulkVS numbers available for area code ${request.areaCode}`);
+      const searchResponse = await this.listNumbers({ areaCode: request.areaCode });
+      if (searchResponse.length === 0) {
+        throw new Error(`No BulkVS numbers available for area code ${request.areaCode}`);
+      }
+      
+      tnToOrder = searchResponse[0].providerId!;
     }
-    
-    tnToOrder = searchResponse[0].providerId!;
 
     // Make POST to orderTn
     // Based on typical API, the payload could be: { "Tns": ["1234567890"] } or { "tn": "1234567890" }
