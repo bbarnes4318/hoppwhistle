@@ -63,28 +63,30 @@ export function EditNumberDialog({
  const [loadingCampaigns, setLoadingCampaigns] = useState(false);
  const [error, setError] = useState<string | null>(null);
  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+ const caps = currentCapabilities || {};
  const [formData, setFormData] = useState({
- status: currentStatus.toUpperCase() as 'ACTIVE' | 'INACTIVE' | 'SUSPENDED',
+ status: (currentStatus || 'ACTIVE').toUpperCase() as 'ACTIVE' | 'INACTIVE' | 'SUSPENDED',
  campaignId: currentCampaignId || '',
  capabilities: {
- voice: currentCapabilities.voice ?? true,
- sms: currentCapabilities.sms ?? false,
- mms: currentCapabilities.mms ?? false,
- fax: currentCapabilities.fax ?? false,
+ voice: caps.voice ?? true,
+ sms: caps.sms ?? false,
+ mms: caps.mms ?? false,
+ fax: caps.fax ?? false,
  },
  rtbPoolEnabled: currentPoolType === 'POOL',
  });
 
  useEffect(() => {
  if (open) {
+ const caps = currentCapabilities || {};
  setFormData({
- status: currentStatus.toUpperCase() as 'ACTIVE' | 'INACTIVE' | 'SUSPENDED',
+ status: (currentStatus || 'ACTIVE').toUpperCase() as 'ACTIVE' | 'INACTIVE' | 'SUSPENDED',
  campaignId: currentCampaignId || '',
  capabilities: {
- voice: currentCapabilities.voice ?? true,
- sms: currentCapabilities.sms ?? false,
- mms: currentCapabilities.mms ?? false,
- fax: currentCapabilities.fax ?? false,
+ voice: caps.voice ?? true,
+ sms: caps.sms ?? false,
+ mms: caps.mms ?? false,
+ fax: caps.fax ?? false,
  },
  rtbPoolEnabled: currentPoolType === 'POOL',
  });
