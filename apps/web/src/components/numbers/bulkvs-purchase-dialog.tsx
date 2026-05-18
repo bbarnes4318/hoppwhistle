@@ -1,14 +1,6 @@
 'use client';
 
-import {
-  CheckCircle,
-  DollarSign,
-  Loader2,
-  MapPin,
-  Phone,
-  Search,
-  ShoppingCart,
-} from 'lucide-react';
+import { CheckCircle, Loader2, Phone, Search } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -21,10 +13,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { apiClient } from '@/lib/api';
-import { cn } from '@/lib/utils';
-import { formatPhoneNumber } from '@/lib/utils';
+import { cn, formatPhoneNumber } from '@/lib/utils';
 
 interface BulkvsNumber {
   id: string;
@@ -148,7 +138,7 @@ export function BulkvsPurchaseDialog({ open, onOpenChange, onSuccess }: BulkvsAd
             <div className="text-sm text-muted-foreground mb-4">
               Enter a 3-digit area code to search for available BulkVS numbers.
             </div>
-            
+
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -172,7 +162,7 @@ export function BulkvsPurchaseDialog({ open, onOpenChange, onSuccess }: BulkvsAd
                 <p className="text-sm text-muted-foreground">Searching inventory...</p>
               </div>
             ) : numbers.length > 0 ? (
-              <ScrollArea className="h-[300px] mt-4 pr-4">
+              <div className="h-[300px] mt-4 pr-4 overflow-y-auto">
                 <div className="space-y-2">
                   {numbers.map(num => (
                     <button
@@ -188,7 +178,9 @@ export function BulkvsPurchaseDialog({ open, onOpenChange, onSuccess }: BulkvsAd
                           <Phone className="h-5 w-5 text-primary" />
                         </div>
                         <div className="text-left">
-                          <div className="font-mono text-lg font-semibold tracking-tight">{formatPhoneNumber(num.number)}</div>
+                          <div className="font-mono text-lg font-semibold tracking-tight">
+                            {formatPhoneNumber(num.number)}
+                          </div>
                           <div className="text-xs text-muted-foreground mt-0.5 font-medium uppercase tracking-wider">
                             {num.metadata?.rateCenter}, {num.metadata?.state}
                           </div>
@@ -197,7 +189,7 @@ export function BulkvsPurchaseDialog({ open, onOpenChange, onSuccess }: BulkvsAd
                     </button>
                   ))}
                 </div>
-              </ScrollArea>
+              </div>
             ) : areaCode.length === 3 && !error && !loading ? (
               <div className="text-center py-8 text-muted-foreground">
                 No numbers available in this area code.
@@ -241,14 +233,17 @@ export function BulkvsPurchaseDialog({ open, onOpenChange, onSuccess }: BulkvsAd
 
               <div className="space-y-4 border-t pt-4 mt-4">
                 <div className="space-y-2">
-                  <label htmlFor="destination" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                  <label
+                    htmlFor="destination"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  >
                     Forwarding Destination (Optional)
                   </label>
                   <Input
                     id="destination"
                     placeholder="+1234567890 or 1000,1001|+15555555555"
                     value={destination}
-                    onChange={(e) => setDestination(e.target.value)}
+                    onChange={e => setDestination(e.target.value)}
                   />
                   <p className="text-[0.8rem] text-muted-foreground">
                     Where should inbound calls be routed? Leave blank to configure later.
