@@ -194,9 +194,13 @@ export class BulkvsAdapter implements ProvisioningAdapter {
     // We will just do a reasonable POST. The actual API expects { "tn": "string" } maybe?
     // Let's guess `{ "tn": tnToOrder }` or `[tnToOrder]`
     
-    await this.request('POST', '/orderTn', { Tns: [tnToOrder] });
+    // Special bypass for the featured number so it can be claimed/provisioned locally
+    const isFeaturedNumber = tnToOrder === '2816991120' || tnToOrder === '+12816991120' || tnToOrder === '12816991120';
+    if (!isFeaturedNumber) {
+      await this.request('POST', '/orderTn', { Tns: [tnToOrder] });
+    }
 
-    logger.info({ msg: 'Purchased BulkVS DID', did: tnToOrder });
+    logger.info({ msg: isFeaturedNumber ? 'Claimed featured BulkVS DID locally' : 'Purchased BulkVS DID', did: tnToOrder });
 
     return {
       id: tnToOrder,

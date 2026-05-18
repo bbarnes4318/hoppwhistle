@@ -18,6 +18,8 @@ import {
  Invitation,
  UserAgentOptions,
 } from 'sip.js';
+import { useAuth } from '@/hooks/use-auth';
+
 
 // ============================================================================
 // Types & Interfaces
@@ -182,8 +184,11 @@ export function PhoneProvider({
  children,
  apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001',
 }: PhoneProviderProps): JSX.Element {
+ const { user, loading: authLoading } = useAuth();
+
  // Normalize apiUrl to just be the base (remove trailing /api/v1 if present)
  const normalizedApiUrl = apiUrl.replace(/\/api\/v1\/?$/, '');
+
 
  // API key for authenticated requests
  const apiKey = process.env.NEXT_PUBLIC_API_KEY || '';
@@ -695,8 +700,8 @@ export function PhoneProvider({
  });
  }, []);
 
- const toggleHold = useCallback(async () => {
- if (!sessionRef.current || sessionRef.current.state !== SessionState.Established) {
+  const toggleHold = useCallback(() => {
+    if (!sessionRef.current || sessionRef.current.state !== SessionState.Established) {
  return;
  }
 
@@ -851,96 +856,113 @@ export function PhoneProvider({
  setSelectedAudioOutput(deviceId);
  }, []);
 
- const updateScreenPopFields = useCallback((fields: ScreenPopField[]) => {
- setScreenPopFields(fields);
- if (typeof window !== 'undefined') {
- localStorage.setItem('screenPopFields', JSON.stringify(fields));
- }
- }, []);
+  const updateScreenPopFields = useCallback((fields: ScreenPopField[]) => {
+    setScreenPopFields(fields);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('screenPopFields', JSON.stringify(fields));
+    }
+  }, []);
 
- const clearError = useCallback(() => setError(null), []);
- const clearPendingDispositionCall = useCallback(() => setPendingDispositionCall(null), []);
+  const clearError = useCallback(() => setError(null), []);
+  const clearPendingDispositionCall = useCallback(() => setPendingDispositionCall(null), []);
 
  // Main SIP Initialization - Moved to bottom to satisfy dependencies
  useEffect(() => {
- if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined') return;
+    if (authLoading || !user) {
+      console.log('[Phone] Waiting for user authentication to resolve SIP extension...');
+      return;
+    }
 
- // SIP credentials (matches FreeSWITCH directory: /etc/freeswitch/directory/default/1000.xml)
- const sipUser = '1000';
- const sipPass = '1234';
- // SIP realm must match FreeSWITCH's configured domain (the server's public IP)
- const sipDomain = process.env.NEXT_PUBLIC_IP || '3.214.60.13';
- // WebSocket host uses window hostname for SSL cert validation
- const wsHost = window.location.hostname;
- const isSecure = window.location.protocol === 'https:';
- // Port 7443: FreeSWITCH native WSS (requires valid SSL certs)
- // Port 8083: Direct WS for local/dev
- const sipWsUrl = isSecure ? `wss://${wsHost}:7443` : `ws://${sipDomain}:8083`;
+    // Resolve SIP extension and password based on user email
+    let sipUser = 'demo-agent';
+    let sipPass = '1';
+    
+    const email = user.email.toLowerCase();
+    if (email === 'cpolewaylcd@gmail.com') {
+      sipUser = '1000';
+      sipPass = '1234';
+    } else if (email === 'cpoleway@dbmgconsulting.com') {
+      sipUser = '1001';
+      sipPass = '1234';
+    } else if (email === 'jimbosky35@gmail.com') {
+      sipUser = '1002';
+      sipPass = '1234';
+    }
 
- console.log('[Phone] Initializing SIP UA:', { sipUser, sipDomain, sipWsUrl });
+    // SIP realm must match FreeSWITCH's configured domain (the server's public IP)
+    const sipDomain = process.env.NEXT_PUBLIC_IP || '3.214.60.13';
+    // WebSocket host uses window hostname for SSL cert validation
+    const wsHost = window.location.hostname;
+    const isSecure = window.location.protocol === 'https:';
+    // Port 7443: FreeSWITCH native WSS (requires valid SSL certs)
+    // Port 8083: Direct WS for local/dev
+    const sipWsUrl = isSecure ? `wss://${wsHost}:7443` : `ws://${sipDomain}:8083`;
 
- const uri = UserAgent.makeURI(`sip:${sipUser}@${sipDomain}`);
- if (!uri) {
- setError('Invalid SIP URI');
- return;
- }
+    console.log('[Phone] Initializing SIP UA:', { sipUser, sipDomain, sipWsUrl });
 
- const options: UserAgentOptions = {
- uri,
- transportOptions: {
- server: sipWsUrl,
- },
- authorizationUsername: sipUser,
- authorizationPassword: sipPass,
- reconnectionAttempts: 3,
- reconnectionDelay: 4,
- delegate: {
- onConnect: () => {
- console.log('[Phone] SIP Transport Connected');
- setError(null);
- },
- onDisconnect: error => {
- console.log('[Phone] SIP Transport Disconnected', error);
- setIsRegistered(false);
- if (error) setError('SIP connection lost');
- },
- onInvite: (invitation: Invitation) => {
- console.log('[Phone] Incoming SIP Invite');
- handleIncomingSipCall(invitation);
- },
- },
- };
+    const uri = UserAgent.makeURI(`sip:${sipUser}@${sipDomain}`);
+    if (!uri) {
+      setError('Invalid SIP URI');
+      return;
+    }
 
- const ua = new UserAgent(options);
- userAgentRef.current = ua;
+    const options: UserAgentOptions = {
+      uri,
+      transportOptions: {
+        server: sipWsUrl,
+      },
+      authorizationUsername: sipUser,
+      authorizationPassword: sipPass,
+      reconnectionAttempts: 3,
+      reconnectionDelay: 4,
+      delegate: {
+        onConnect: () => {
+          console.log('[Phone] SIP Transport Connected');
+          setError(null);
+        },
+        onDisconnect: error => {
+          console.log('[Phone] SIP Transport Disconnected', error);
+          setIsRegistered(false);
+          if (error) setError('SIP connection lost');
+        },
+        onInvite: (invitation: Invitation) => {
+          console.log('[Phone] Incoming SIP Invite');
+          handleIncomingSipCall(invitation);
+        },
+      },
+    };
 
- ua.start()
- .then(() => {
- console.log('[Phone] SIP UA Started');
- const registerer = new Registerer(ua);
- registerer
- .register()
- .then(() => {
- console.log('[Phone] SIP Registered');
- setIsRegistered(true);
- setAgentStatusState('available');
- })
- .catch(e => {
- console.error('[Phone] SIP Registration Failed', e);
- setError('Registration failed');
- });
- })
- .catch(e => {
- console.error('[Phone] SIP UA Start Failed', e);
- setError('Phone initialization failed');
- });
+    const ua = new UserAgent(options);
+    userAgentRef.current = ua;
 
- return () => {
- if (ua) {
- void ua.stop();
- }
- };
- }, [handleIncomingSipCall]);
+    ua.start()
+      .then(() => {
+        console.log('[Phone] SIP UA Started');
+        const registerer = new Registerer(ua);
+        registerer
+          .register()
+          .then(() => {
+            console.log('[Phone] SIP Registered');
+            setIsRegistered(true);
+            setAgentStatusState('available');
+          })
+          .catch(e => {
+            console.error('[Phone] SIP Registration Failed', e);
+            setError('Registration failed');
+          });
+      })
+      .catch(e => {
+        console.error('[Phone] SIP UA Start Failed', e);
+        setError('Phone initialization failed');
+      });
+
+    return () => {
+      if (ua) {
+        void ua.stop();
+      }
+    };
+  }, [handleIncomingSipCall, user, authLoading]);
 
  const value: PhoneContextType = {
  agentStatus,
