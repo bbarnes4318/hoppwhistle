@@ -10,28 +10,7 @@
          bridges to the buyer's phone, and posts CDR on hangup.
          ═══════════════════════════════════════════════════════════════════════ -->
 
-    <!-- Hardcoded: Call Center DID (281-699-1120) → WebRTC Agent -->
-    <extension name="inbound-call-center">
-      <condition field="destination_number" expression="^(\+?1?2816991120)$">
-        <action application="log" data="INFO [PUBLIC] Inbound call to BulkVS DID 281-699-1120 from ${caller_id_number}"/>
-        <action application="set" data="domain_name=3.214.60.13"/>
-        <action application="set" data="call_direction=inbound"/>
-        <action application="ring_ready"/>
-        <action application="set" data="hangup_after_bridge=true"/>
-        <action application="set" data="continue_on_fail=false"/>
-        <!-- Codec negotiation: BulkVS PCMU/PCMA <-> WebRTC OPUS -->
-        <action application="set" data="inbound_codec_negotiation=generous"/>
-        <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA,OPUS,G722"/>
-        <action application="set" data="bypass_media=false"/>
-        <action application="set" data="ringback=%(2000,4000,440,480)"/>
-        <action application="set" data="instant_ringback=true"/>
-        <action application="set" data="call_timeout=120"/>
-        <!-- Bridge to registered WebRTC agent at extension 1000 -->
-        <action application="bridge" data="${sofia_contact(internal/1000@3.214.60.13)}"/>
-        <action application="hangup" data="NORMAL_CLEARING"/>
-      </condition>
-    </extension>
-
+    <!-- Hardcoded Call Center DID removed to allow dynamic routing via Lua -->
     <!-- Legacy: keep old Anveo DID just in case -->
     <extension name="inbound-legacy-anveo">
       <condition field="destination_number" expression="^(\+?1?8652809894)$">
