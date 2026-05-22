@@ -38,6 +38,11 @@
 - `SMTP_PASSWORD` - SMTP password
 - `SMTP_FROM` - Email from address (default: `noreply@hopwhistle.com`)
 
+#### BulkVS (Required for phone number provisioning):
+- `BULKVS_USERNAME` - BulkVS API Username (from BulkVS Portal → API → API Credentials)
+- `BULKVS_PASSWORD` - BulkVS API Password (from BulkVS Portal → API → API Credentials)
+- `BULKVS_TRUNK_GROUP` - BulkVS Trunk Group name for routing (from BulkVS Portal → Trunk Groups)
+
 ### Web Service
 
 #### Required:

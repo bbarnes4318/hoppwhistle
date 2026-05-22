@@ -129,6 +129,15 @@ services:
       - key: DEFAULT_TENANT_ID
         scope: RUN_TIME
         type: SECRET
+      - key: BULKVS_USERNAME
+        scope: RUN_TIME
+        type: SECRET
+      - key: BULKVS_PASSWORD
+        scope: RUN_TIME
+        type: SECRET
+      - key: BULKVS_TRUNK_GROUP
+        scope: RUN_TIME
+        type: SECRET
     build_command: |
       corepack enable
       corepack prepare pnpm@8.15.0 --activate
