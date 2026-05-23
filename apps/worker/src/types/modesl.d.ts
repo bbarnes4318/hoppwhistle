@@ -37,7 +37,7 @@ declare module 'modesl' {
     getHeader(name: string): string | undefined;
     getBody(): string | undefined;
   }
-
+  export class Event {
     type: string;
     headers?: Record<string, string>;
     body?: string;
