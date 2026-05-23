@@ -156,7 +156,7 @@ export function BulkvsPurchaseDialog({ open, onOpenChange, onSuccess }: BulkvsAd
         return (
           <div className="space-y-4">
             <div className="text-sm text-muted-foreground mb-4">
-              Enter a 3-digit area code to search for available BulkVS numbers.
+              Enter a 3-digit area code to search for available Hopwhistle numbers.
             </div>
 
             <div className="flex gap-2">
@@ -302,12 +302,12 @@ export function BulkvsPurchaseDialog({ open, onOpenChange, onSuccess }: BulkvsAd
       <DialogContent className="sm:max-w-[600px] max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>
-            {step === 'success' ? 'Number Added' : 'Add Phone Number (BulkVS)'}
+            {step === 'success' ? 'Number Added' : 'Add Phone Number (Hopwhistle)'}
           </DialogTitle>
           <DialogDescription>
             {step === 'success'
               ? 'Your new number is ready to use'
-              : 'Search and add numbers from the BulkVS inventory.'}
+              : 'Search and add numbers from the Hopwhistle inventory.'}
           </DialogDescription>
         </DialogHeader>
 
