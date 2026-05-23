@@ -161,6 +161,13 @@ end
 session:setVariable("continue_on_fail", "true")
 session:setVariable("hangup_after_bridge", "true")
 
+-- Clear any incoming Identity/STIR-SHAKEN headers from the A-leg to prevent
+-- downstream carrier (BulkVS) rejection due to mismatched destination TN
+session:execute("unset", "sip_h_Identity")
+session:execute("unset", "sip_h_Identity-Info")
+session:setVariable("sip_h_Identity", nil)
+session:setVariable("sip_h_Identity-Info", nil)
+
 local failover_steps = split(destination, "|")
 
 for i, step in ipairs(failover_steps) do
