@@ -46,7 +46,7 @@ export class BulkvsAdapter implements ProvisioningAdapter {
 
   /**
    * Make authenticated request to BulkVS API
-   * 
+   *
    * Uses HTTP Basic Auth per the BulkVS API documentation.
    */
   private async request<T>(
@@ -106,7 +106,7 @@ export class BulkvsAdapter implements ProvisioningAdapter {
       if (!response.ok) {
         let errorData: { message?: string } = {};
         try {
-          errorData = JSON.parse(responseText);
+          errorData = JSON.parse(responseText) as { message?: string };
         } catch {
           errorData = { message: responseText };
         }
@@ -120,7 +120,9 @@ export class BulkvsAdapter implements ProvisioningAdapter {
         });
 
         if (response.status === 401 || response.status === 403) {
-          throw new Error('BulkVS authentication failed. Check API credentials in BulkVS Portal → API → API Credentials.');
+          throw new Error(
+            'BulkVS authentication failed. Check API credentials in BulkVS Portal → API → API Credentials.'
+          );
         }
 
         throw new Error(
@@ -134,8 +136,8 @@ export class BulkvsAdapter implements ProvisioningAdapter {
       }
 
       try {
-        const data = JSON.parse(responseText);
-        return data as T;
+        const data = JSON.parse(responseText) as T;
+        return data;
       } catch {
         // If response is not JSON, return as-is wrapped
         return { raw: responseText } as T;
@@ -160,11 +162,14 @@ export class BulkvsAdapter implements ProvisioningAdapter {
     const queryParams: Record<string, string> = {};
 
     if (options?.areaCode) {
-      // BulkVS supports both 3-digit NPA and 6-digit NPANXX
-      if (options.areaCode.length <= 3) {
-        queryParams.npa = options.areaCode;
+      const cleanAreaCode = options.areaCode.replace(/\D/g, '');
+      if (cleanAreaCode.length >= 3) {
+        queryParams.Npa = cleanAreaCode.substring(0, 3);
+        if (cleanAreaCode.length > 3) {
+          queryParams.Nxx = cleanAreaCode.substring(3, 6);
+        }
       } else {
-        queryParams.npanxx = options.areaCode;
+        queryParams.Npa = cleanAreaCode;
       }
     }
 
@@ -192,20 +197,20 @@ export class BulkvsAdapter implements ProvisioningAdapter {
     //   - Object with array in a known field
     let items: Record<string, unknown>[] = [];
     if (Array.isArray(response)) {
-      items = response;
+      items = response as Record<string, unknown>[];
     } else if (response && typeof response === 'object') {
       const resp = response as Record<string, unknown>;
       // Try common wrapper field names
       if (Array.isArray(resp.data)) {
-        items = resp.data;
+        items = resp.data as Record<string, unknown>[];
       } else if (Array.isArray(resp.records)) {
-        items = resp.records;
+        items = resp.records as Record<string, unknown>[];
       } else if (Array.isArray(resp.tns)) {
-        items = resp.tns;
+        items = resp.tns as Record<string, unknown>[];
       } else if (Array.isArray(resp.TNs)) {
-        items = resp.TNs;
+        items = resp.TNs as Record<string, unknown>[];
       } else if (Array.isArray(resp.Results)) {
-        items = resp.Results;
+        items = resp.Results as Record<string, unknown>[];
       } else {
         // If the response is a single object, it might be a single result
         // or the whole response is the result set — log and return empty
@@ -246,7 +251,10 @@ export class BulkvsAdapter implements ProvisioningAdapter {
           features: { voice: true, sms: false },
           providerId: cleanDid,
           metadata: {
-            npa: (item.Npa as string) || (item.npa as string) || cleanDid.substring(cleanDid.length === 11 ? 1 : 0, cleanDid.length === 11 ? 4 : 3),
+            npa:
+              (item.Npa as string) ||
+              (item.npa as string) ||
+              cleanDid.substring(cleanDid.length === 11 ? 1 : 0, cleanDid.length === 11 ? 4 : 3),
             rateCenter:
               (item.RateCenter as string) ||
               (item['Rate Center'] as string) ||
@@ -287,7 +295,12 @@ export class BulkvsAdapter implements ProvisioningAdapter {
     // Strip any non-digit characters and ensure 10 or 11 digit format
     const cleanTn = tnToOrder.replace(/\D/g, '');
     // BulkVS typically expects 10-digit or 11-digit (with leading 1) TN
-    const tn = cleanTn.length === 11 && cleanTn.startsWith('1') ? cleanTn : cleanTn.length === 10 ? `1${cleanTn}` : cleanTn;
+    const tn =
+      cleanTn.length === 11 && cleanTn.startsWith('1')
+        ? cleanTn
+        : cleanTn.length === 10
+          ? `1${cleanTn}`
+          : cleanTn;
 
     // Build the order payload per BulkVS API docs
     const orderPayload: Record<string, unknown> = {
@@ -296,7 +309,7 @@ export class BulkvsAdapter implements ProvisioningAdapter {
 
     // Include trunk group if configured
     if (this.trunkGroup) {
-      orderPayload.trunkGroup = this.trunkGroup;
+      orderPayload['Trunk Group'] = this.trunkGroup;
     }
 
     logger.info({
@@ -331,7 +344,7 @@ export class BulkvsAdapter implements ProvisioningAdapter {
   async releaseNumber(providerId: string): Promise<void> {
     const cleanTn = providerId.replace(/\D/g, '');
 
-    await this.request('DELETE', '/tnRecord', undefined, { TN: cleanTn });
+    await this.request('DELETE', '/tnRecord', undefined, { Number: cleanTn });
 
     logger.info({ msg: 'Released BulkVS DID', providerId: cleanTn });
   }
@@ -345,12 +358,9 @@ export class BulkvsAdapter implements ProvisioningAdapter {
     const cleanTn = providerId.replace(/\D/g, '');
 
     try {
-      const response = await this.request<Record<string, unknown>>(
-        'GET',
-        '/tnRecord',
-        undefined,
-        { TN: cleanTn }
-      );
+      const response = await this.request<Record<string, unknown>>('GET', '/tnRecord', undefined, {
+        Number: cleanTn,
+      });
 
       const e164 = cleanTn.startsWith('1') ? `+${cleanTn}` : `+1${cleanTn}`;
 
@@ -389,7 +399,7 @@ export class BulkvsAdapter implements ProvisioningAdapter {
 
     // If trunk group is configured, set routing
     if (this.trunkGroup) {
-      updatePayload.trunkGroup = this.trunkGroup;
+      updatePayload['Trunk Group'] = this.trunkGroup;
     }
 
     try {
