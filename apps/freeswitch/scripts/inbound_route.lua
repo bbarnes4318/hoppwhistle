@@ -119,6 +119,8 @@ session:setVariable("instant_ringback", "true")
 -- Set caller ID on the outbound leg to be the original caller
 session:setVariable("effective_caller_id_number", caller_number)
 session:setVariable("effective_caller_id_name", caller_number)
+session:setVariable("origination_caller_id_number", caller_number)
+session:setVariable("origination_caller_id_name", caller_number)
 
 -- Store metadata in channel variables for CDR
 session:setVariable("x_route_id", route_id or "")
@@ -202,7 +204,11 @@ for i, step in ipairs(failover_steps) do
                 log("WARNING", "Session no longer active, aborting failover loop")
                 break
             end
-            local bridge_string = table.concat(bridge_components, ",")
+            local bridge_vars = string.format(
+                "{origination_caller_id_number=%s,origination_caller_id_name=%s,effective_caller_id_number=%s,effective_caller_id_name=%s}",
+                caller_number, caller_number, caller_number, caller_number
+            )
+            local bridge_string = bridge_vars .. table.concat(bridge_components, ",")
             log("INFO", "Bridging to failover step " .. tostring(i) .. ": " .. bridge_string)
             session:execute("bridge", bridge_string)
             
