@@ -284,16 +284,9 @@ log("INFO", "CDR response: " .. cdr_response)
   -- Parse the call ID from response for recording upload
   local db_call_id = json_value(cdr_response, "callId")
 
-  -- ── Step 6: Upload recording to S3 ────────────────────────────────────
-  if recording_enabled and recording_path ~= "" and db_call_id then
-    local upload_cmd = string.format(
-      "%s '%s' '%s' &",
-      UPLOAD_SCRIPT,
-      recording_path,
-      db_call_id
-    )
-    log("INFO", "Kicking off recording upload: " .. upload_cmd)
-    os.execute(upload_cmd)
-  end
+  -- Note: Recording upload is handled automatically by the API service 
+  -- after receiving the CDR webhook, via shared volume access.
+  log("INFO", "Recording upload will be handled by API for call ID: " .. (db_call_id or "nil"))
+
 
 log("INFO", "Inbound call processing complete for UUID: " .. call_uuid)

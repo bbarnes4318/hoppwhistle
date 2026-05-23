@@ -127,6 +127,9 @@ services:
         condition: service_healthy
     networks:
       - hopwhistle-network
+    volumes:
+      - freeswitch_recordings:/recordings:ro
+
 
   web:
     build:
