@@ -1,6 +1,7 @@
 import 'dotenv-flow/config';
 import { join } from 'path';
 
+import multipart from '@fastify/multipart';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import Fastify from 'fastify';
@@ -60,6 +61,9 @@ async function buildServer() {
 
   // Register authentication
   await registerAuth(server);
+
+  // Register multipart for file uploads (must be before routes)
+  await server.register(multipart);
 
   // Global API key authentication for /api/v1/* routes
   const { createHash } = await import('crypto');
@@ -346,9 +350,6 @@ async function buildServer() {
       },
     });
   });
-
-  // Register multipart for file uploads
-  await server.register(import('@fastify/multipart'));
 
   // Graceful shutdown
   server.addHook('onClose', async () => {
