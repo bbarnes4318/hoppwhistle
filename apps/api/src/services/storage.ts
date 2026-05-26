@@ -33,7 +33,7 @@ export class StorageService {
   private bucket: string;
   private config: StorageConfig;
   private isLocal = false;
-  private localDir = 'uploads';
+  private localDir = process.env.LOCAL_STORAGE_DIR || '/tmp/uploads';
 
   constructor(config: StorageConfig) {
     this.config = config;

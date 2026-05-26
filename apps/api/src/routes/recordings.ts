@@ -350,7 +350,8 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
 
       const fs = await import('fs');
       const path = await import('path');
-      const localFilePath = path.join('uploads', storageKey);
+      const localDir = process.env.LOCAL_STORAGE_DIR || '/tmp/uploads';
+      const localFilePath = path.join(localDir, storageKey);
 
       if (!fs.existsSync(localFilePath)) {
         reply.code(404);
