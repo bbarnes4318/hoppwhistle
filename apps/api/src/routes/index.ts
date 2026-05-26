@@ -25,7 +25,16 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
       const limit = parseInt(request.query.limit || '20');
       const skip = (page - 1) * limit;
 
-      const isAdminOrOwner = user?.roles?.some(role => role === 'ADMIN' || role === 'OWNER');
+      let userRoles: string[] = [];
+      if (user?.userId) {
+        const userRecord = await prisma.user.findUnique({
+          where: { id: user.userId },
+          include: { roles: { include: { role: true } } },
+        });
+        userRoles = userRecord?.roles.map(ur => ur.role.name) || [];
+      }
+      const isAdminOrOwner = userRoles.some(role => role === 'ADMIN' || role === 'OWNER');
+
       const where: Record<string, any> = { tenantId };
       if (!isAdminOrOwner && user?.userId) {
         where.userId = user.userId;
@@ -259,7 +268,10 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
         updateData.userId = body.userId;
       }
       if (body.capabilities !== undefined) {
-        updateData.capabilities = { ...(existingNumber.capabilities as Record<string, unknown> ?? {}), ...body.capabilities };
+        updateData.capabilities = {
+          ...((existingNumber.capabilities as Record<string, unknown>) ?? {}),
+          ...body.capabilities,
+        };
       }
       // RTB Pool fields
       if (body.poolType !== undefined) {
@@ -1395,10 +1407,19 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       const skip = (page - 1) * limit;
       const phone = request.query.phone;
 
+      let userRoles: string[] = [];
+      if (user?.userId) {
+        const userRecord = await prisma.user.findUnique({
+          where: { id: user.userId },
+          include: { roles: { include: { role: true } } },
+        });
+        userRoles = userRecord?.roles.map(ur => ur.role.name) || [];
+      }
+      const isAdminOrOwner = userRoles.some(role => role === 'ADMIN' || role === 'OWNER');
+
       // Build where clause — optionally filter by phone number
       const where: Record<string, any> = { tenantId };
-      const isAdminOrOwner = user?.roles?.some(role => role === 'ADMIN' || role === 'OWNER');
-      
+
       if (!isAdminOrOwner && user?.userId) {
         // Fetch user phone numbers
         const userNumbers = await prisma.phoneNumber.findMany({
@@ -1428,12 +1449,12 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
           }
         }
 
-        where.OR = [
+        const orClause = [
           { createdById: user.userId },
           { fromNumber: { userId: user.userId } },
           { callerId: { in: numberFormats } },
           { toNumber: { in: numberFormats } },
-          { did: { in: numberFormats } }
+          { did: { in: numberFormats } },
         ];
 
         if (phone) {
@@ -1443,11 +1464,9 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
             { toNumber: phone.replace(/^\+1/, '') },
             { callerId: phone.replace(/^\+1/, '') },
           ];
-          where.AND = [
-            { OR: where.OR },
-            { OR: phoneFilter }
-          ];
-          delete where.OR;
+          where.AND = [{ OR: orClause }, { OR: phoneFilter }];
+        } else {
+          where.OR = orClause;
         }
       } else if (phone) {
         where.OR = [
@@ -1505,8 +1524,12 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
         followUpStatus: call.followUpStatus,
         // Related entities
         campaign: call.campaign ? { id: call.campaign.id, name: call.campaign.name } : null,
-        fromNumber: call.fromNumber ? { id: call.fromNumber.id, number: call.fromNumber.number } : null,
-        createdBy: call.createdBy ? { firstName: call.createdBy.firstName, lastName: call.createdBy.lastName } : null,
+        fromNumber: call.fromNumber
+          ? { id: call.fromNumber.id, number: call.fromNumber.number }
+          : null,
+        createdBy: call.createdBy
+          ? { firstName: call.createdBy.firstName, lastName: call.createdBy.lastName }
+          : null,
         // Timestamps
         createdAt: call.createdAt.toISOString(),
         updatedAt: call.updatedAt.toISOString(),
@@ -1734,8 +1757,14 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
 
   // ── Disposition POST — Save/update disposition for a call ──
   const VALID_DISPOSITIONS = [
-    'SET_APPOINTMENT', 'SET_CALLBACK', 'FOLLOW_UP', 'NOT_INTERESTED',
-    'NOT_QUALIFIED', 'NO_ANSWER', 'WRONG_NUMBER', 'DISCONNECTED',
+    'SET_APPOINTMENT',
+    'SET_CALLBACK',
+    'FOLLOW_UP',
+    'NOT_INTERESTED',
+    'NOT_QUALIFIED',
+    'NO_ANSWER',
+    'WRONG_NUMBER',
+    'DISCONNECTED',
   ];
   const VALID_CALL_SOURCES = ['CALL_CENTER', 'SOFTPHONE', 'AI_VOICE'];
   const VALID_FOLLOW_UP_STATUSES = ['PENDING', 'COMPLETED', 'CANCELLED'];
@@ -1762,7 +1791,17 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
     }
 
-    const { callId, callSid, disposition, notes, duration, callerNumber, callSource, direction, followUpAt } = request.body;
+    const {
+      callId,
+      callSid,
+      disposition,
+      notes,
+      duration,
+      callerNumber,
+      callSource,
+      direction,
+      followUpAt,
+    } = request.body;
 
     // Validate disposition
     if (!disposition || !VALID_DISPOSITIONS.includes(disposition)) {
@@ -1887,7 +1926,12 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
 
     if (followUpStatus && !VALID_FOLLOW_UP_STATUSES.includes(followUpStatus)) {
       void reply.code(400);
-      return { error: { code: 'INVALID_STATUS', message: `Follow-up status must be one of: ${VALID_FOLLOW_UP_STATUSES.join(', ')}` } };
+      return {
+        error: {
+          code: 'INVALID_STATUS',
+          message: `Follow-up status must be one of: ${VALID_FOLLOW_UP_STATUSES.join(', ')}`,
+        },
+      };
     }
 
     const prisma = (await import('../lib/prisma.js')).getPrismaClient();
@@ -2520,7 +2564,7 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
 
     // Get role ID for the requested role
     const roleRecord = await prisma.role.findUnique({
-      where: { name: requestedRole as string },
+      where: { name: requestedRole },
     });
 
     if (!roleRecord) {
@@ -2619,8 +2663,10 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     if (authHeader && authHeader.startsWith('Bearer ')) {
       try {
         const token = authHeader.substring(7);
-        const decoded = await (request as unknown as { jwtVerify: (token: string) => Promise<AuthenticatedUser> }).jwtVerify(token);
-        (request as AuthRequest).user = decoded as AuthenticatedUser;
+        const decoded = await (
+          request as unknown as { jwtVerify: (token: string) => Promise<AuthenticatedUser> }
+        ).jwtVerify(token);
+        (request as AuthRequest).user = decoded;
       } catch (err) {
         // Ignore - will use default tenant
       }
@@ -2739,9 +2785,7 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     const startDate = request.query.startDate
       ? new Date(request.query.startDate)
       : new Date(now.getFullYear(), now.getMonth(), 1);
-    const endDate = request.query.endDate
-      ? new Date(request.query.endDate)
-      : now;
+    const endDate = request.query.endDate ? new Date(request.query.endDate) : now;
 
     const dateFilter = {
       createdAt: { gte: startDate, lte: endDate },
@@ -2804,9 +2848,7 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
 
     // Appointment Rate = appointments / connected calls
     const appointmentRate =
-      connectedCalls > 0
-        ? Math.round((appointmentsSet / connectedCalls) * 10000) / 100
-        : 0;
+      connectedCalls > 0 ? Math.round((appointmentsSet / connectedCalls) * 10000) / 100 : 0;
 
     // Build disposition breakdown map
     const dispositions: Record<string, number> = {};
