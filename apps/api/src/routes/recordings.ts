@@ -297,4 +297,36 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
       }
     }
   );
+
+  // Local stream for development / when S3 is disabled
+  fastify.get(
+    '/api/v1/recordings/local-stream/*',
+    async (request, reply) => {
+      const tenantId = (request as any).user?.tenantId;
+      if (!tenantId) {
+        reply.code(401);
+        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      }
+
+      const params = request.params as Record<string, string>;
+      const storageKey = params['*'];
+      if (!storageKey) {
+        reply.code(400);
+        return { error: { code: 'BAD_REQUEST', message: 'Missing storage key' } };
+      }
+
+      const fs = await import('fs');
+      const path = await import('path');
+      const localFilePath = path.join('uploads', storageKey);
+
+      if (!fs.existsSync(localFilePath)) {
+        reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Local recording file not found' } };
+      }
+
+      const stream = fs.createReadStream(localFilePath);
+      void reply.type('audio/wav');
+      return reply.send(stream);
+    }
+  );
 }

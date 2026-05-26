@@ -1,5 +1,7 @@
 import { createHash } from 'crypto';
 import { Readable } from 'stream';
+import * as fs from 'fs';
+import * as path from 'path';
 
 import {
   S3Client,
@@ -27,13 +29,24 @@ export interface UploadResult {
 }
 
 export class StorageService {
-  private s3Client: S3Client;
+  private s3Client?: S3Client;
   private bucket: string;
   private config: StorageConfig;
+  private isLocal = false;
+  private localDir = 'uploads';
 
   constructor(config: StorageConfig) {
     this.config = config;
     this.bucket = config.bucket;
+
+    if (!config.accessKeyId || !config.secretAccessKey) {
+      this.isLocal = true;
+      // Ensure local directory exists
+      if (!fs.existsSync(this.localDir)) {
+        fs.mkdirSync(this.localDir, { recursive: true });
+      }
+      return;
+    }
 
     this.s3Client = new S3Client({
       endpoint: config.endpoint,
@@ -74,6 +87,22 @@ export class StorageService {
     // Calculate checksum (from buffer)
     const checksum = this.calculateBufferChecksum(body);
 
+    if (this.isLocal) {
+      const filePath = path.join(this.localDir, storageKey);
+      const parentDir = path.dirname(filePath);
+      if (!fs.existsSync(parentDir)) {
+        fs.mkdirSync(parentDir, { recursive: true });
+      }
+      fs.writeFileSync(filePath, body);
+
+      return {
+        storageKey,
+        size: BigInt(body.length),
+        checksum,
+        url: `/api/v1/recordings/local-stream/${encodeURIComponent(storageKey)}`,
+      };
+    }
+
     // Upload to S3
     const command = new PutObjectCommand({
       Bucket: this.bucket,
@@ -83,6 +112,10 @@ export class StorageService {
       Metadata: metadata || {},
       ChecksumSHA256: checksum,
     });
+
+    if (!this.s3Client) {
+      throw new Error('S3 Client not initialized');
+    }
 
     await this.s3Client.send(command);
 
@@ -110,6 +143,14 @@ export class StorageService {
     storageKey: string,
     expiresIn: number = 3600 // Default 1 hour
   ): Promise<string> {
+    if (this.isLocal) {
+      return `/api/v1/recordings/local-stream/${encodeURIComponent(storageKey)}`;
+    }
+
+    if (!this.s3Client) {
+      throw new Error('S3 Client not initialized');
+    }
+
     const command = new GetObjectCommand({
       Bucket: this.bucket,
       Key: storageKey,
@@ -128,6 +169,14 @@ export class StorageService {
     metadata?: Record<string, string>;
     expiresInSec?: number;
   }): Promise<string> {
+    if (this.isLocal) {
+      return `/api/v1/recordings/local-stream/${encodeURIComponent(args.storageKey)}`;
+    }
+
+    if (!this.s3Client) {
+      throw new Error('S3 Client not initialized');
+    }
+
     const { storageKey, contentType, metadata, expiresInSec } = args;
 
     const command = new PutObjectCommand({
@@ -153,6 +202,14 @@ export class StorageService {
    * Check if a recording exists
    */
   async exists(storageKey: string): Promise<boolean> {
+    if (this.isLocal) {
+      return fs.existsSync(path.join(this.localDir, storageKey));
+    }
+
+    if (!this.s3Client) {
+      throw new Error('S3 Client not initialized');
+    }
+
     try {
       const command = new HeadObjectCommand({
         Bucket: this.bucket,
@@ -178,6 +235,24 @@ export class StorageService {
     lastModified: Date;
     checksum?: string;
   }> {
+    if (this.isLocal) {
+      const filePath = path.join(this.localDir, storageKey);
+      if (!fs.existsSync(filePath)) {
+        throw new Error('Recording file not found locally');
+      }
+      const stat = fs.statSync(filePath);
+      return {
+        size: BigInt(stat.size),
+        contentType: this.getContentType(path.extname(storageKey).slice(1)),
+        lastModified: stat.mtime,
+        checksum: this.calculateBufferChecksum(fs.readFileSync(filePath)),
+      };
+    }
+
+    if (!this.s3Client) {
+      throw new Error('S3 Client not initialized');
+    }
+
     const command = new HeadObjectCommand({
       Bucket: this.bucket,
       Key: storageKey,
@@ -197,26 +272,38 @@ export class StorageService {
    * Move recording to warm storage (different storage class)
    */
   async moveToWarmStorage(storageKey: string): Promise<void> {
-    // Copy object with new storage class
-    // Note: S3 doesn't support moving, so we copy and delete
-    // For simplicity, we'll use metadata to track tier
-    // In production, use S3 lifecycle policies or copy with different storage class
+    if (this.isLocal) {
+      return;
+    }
+
+    if (!this.s3Client) {
+      throw new Error('S3 Client not initialized');
+    }
+
     const command = new HeadObjectCommand({
       Bucket: this.bucket,
       Key: storageKey,
     });
 
     await this.s3Client.send(command);
-
-    // Update metadata to mark as warm
-    // In production, use S3 copy with storage class change
-    // For now, we'll track this in the database
   }
 
   /**
    * Delete a recording
    */
   async deleteRecording(storageKey: string): Promise<void> {
+    if (this.isLocal) {
+      const filePath = path.join(this.localDir, storageKey);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+      return;
+    }
+
+    if (!this.s3Client) {
+      throw new Error('S3 Client not initialized');
+    }
+
     const command = new DeleteObjectCommand({
       Bucket: this.bucket,
       Key: storageKey,
@@ -282,10 +369,6 @@ export function getStorageService(): StorageService {
       secretAccessKey: process.env.S3_SECRET_KEY || '',
       forcePathStyle: process.env.S3_FORCE_PATH_STYLE !== 'false',
     };
-
-    if (!config.accessKeyId || !config.secretAccessKey) {
-      throw new Error('S3 credentials not configured');
-    }
 
     storageService = new StorageService(config);
   }

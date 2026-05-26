@@ -18,7 +18,7 @@
 -- ── Configuration ───────────────────────────────────────────────────────────
 local API_URL      = os.getenv("API_URL") or "http://127.0.0.1:3001"
 local RECORDING_DIR = os.getenv("RECORDING_DIR") or "/recordings"
-local UPLOAD_SCRIPT = "/usr/local/freeswitch/scripts/upload-recording.sh"
+local UPLOAD_SCRIPT = "/usr/share/freeswitch/scripts/upload-recording.sh"
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
 local function log(level, msg)

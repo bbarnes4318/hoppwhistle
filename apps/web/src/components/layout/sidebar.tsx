@@ -52,7 +52,7 @@ const navigation: NavItem[] = [
  icon: Headphones,
  title: 'Integrated dialer with scripting & quoting',
  },
- { name: 'Numbers', href: '/numbers', icon: PhoneCall, adminOnly: true },
+ { name: 'Numbers', href: '/numbers', icon: PhoneCall },
  { name: 'Campaigns', href: '/campaigns', icon: Megaphone, adminOnly: true },
  { name: 'Flows', href: '/flows', icon: GitBranch, adminOnly: true },
  { name: 'Call Logs', href: '/calls', icon: AudioLines },
