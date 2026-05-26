@@ -13,6 +13,8 @@ interface ActiveCallControlsProps {
   thirdPartyConnected: boolean;
   handleHangup: () => void;
   makeCall: (num: string) => Promise<void>;
+  callNotes: string;
+  setCallNotes: (notes: string) => void;
 }
 
 export function ActiveCallControls({
@@ -26,12 +28,14 @@ export function ActiveCallControls({
   thirdPartyConnected,
   handleHangup,
   makeCall,
+  callNotes,
+  setCallNotes,
 }: ActiveCallControlsProps) {
   const [showTransferPanel, setShowTransferPanel] = useState(false);
   const [transferNumber, setTransferNumber] = useState('');
 
   return (
-    <div className="flex-1 flex flex-col pt-4 border-t border-border mt-4">
+    <div className="flex-1 flex flex-col pt-4 border-t border-border mt-4 overflow-y-auto">
       <div className="text-center mb-6">
         <p className="text-xl font-bold uppercase tracking-widest text-foreground truncate">
           {String(activeCallData?.first_name || activeCallData?.firstName || '')}{' '}
@@ -116,7 +120,7 @@ export function ActiveCallControls({
           <input
             type="tel"
             value={transferNumber}
-            onChange={(e) => setTransferNumber(e.target.value.replace(/\\D/g, ''))}
+            onChange={(e) => setTransferNumber(e.target.value.replace(/\D/g, ''))}
             placeholder="Phone number..."
             className="w-full bg-card border border-border rounded px-2 py-1.5 text-foreground font-mono text-sm mb-3 focus:outline-none focus:border-primary"
           />
@@ -143,8 +147,38 @@ export function ActiveCallControls({
         </div>
       )}
 
+      {/* Agent & Agency Info Card */}
+      <div className="bg-muted/40 border border-border/60 rounded p-3 mb-4 flex-shrink-0">
+        <h4 className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-2">Agent & Agency Info</h4>
+        <div className="text-xs space-y-1">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Agency:</span>
+            <span className="text-white font-medium">American Beneficiary LLC</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Agent:</span>
+            <span className="text-white font-medium">Yazzyl Vasquez</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Agent ID:</span>
+            <span className="text-white font-mono font-medium">MLSR181715</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Live Call Notes Section */}
+      <div className="flex-1 flex flex-col min-h-[140px] mb-4 flex-shrink-0">
+        <h4 className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-2">Live Call Notes</h4>
+        <textarea
+          value={callNotes}
+          onChange={(e) => setCallNotes(e.target.value)}
+          placeholder="Type call notes here..."
+          className="flex-1 w-full bg-card border border-border rounded p-2 text-sm text-white placeholder:text-muted-foreground/30 resize-none focus:outline-none focus:border-primary"
+        />
+      </div>
+
       {/* Hang Up */}
-      <div className="mt-auto">
+      <div className="mt-auto flex-shrink-0">
         <button
           onClick={handleHangup}
           className="w-full py-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-500 font-mono uppercase tracking-widest text-sm rounded flex items-center justify-center space-x-2 transition-colors"

@@ -146,19 +146,20 @@ export default function CallLogsPage() {
  <TableHead>Duration</TableHead>
  <TableHead>Disposition</TableHead>
  <TableHead>Source</TableHead>
+ <TableHead>Notes</TableHead>
  <TableHead className="text-right">Recording</TableHead>
  </TableRow>
  </TableHeader>
  <TableBody>
  {loading ? (
  <TableRow>
- <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+ <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
  Loading calls...
  </TableCell>
  </TableRow>
  ) : filteredCalls.length === 0 ? (
  <TableRow>
- <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+ <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
  No calls found
  </TableCell>
  </TableRow>
@@ -205,6 +206,9 @@ export default function CallLogsPage() {
  ) : (
  <span className="text-xs text-muted-foreground/50">—</span>
  )}
+ </TableCell>
+ <TableCell className="max-w-[200px] truncate text-xs text-muted-foreground font-sans" title={call.dispositionNotes || ''}>
+ {call.dispositionNotes || '—'}
  </TableCell>
  <TableCell className="text-right">
  {(() => {

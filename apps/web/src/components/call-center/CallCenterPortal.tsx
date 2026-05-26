@@ -23,6 +23,7 @@ import { DispositionPanel } from './DispositionPanel';
 import { IncomingCallPanel } from './IncomingCallPanel';
 import IntegratedScriptPanel from './IntegratedScriptPanel';
 import RetentionScriptPanel from './RetentionScriptPanel';
+import UnderwritingScriptPanel from './UnderwritingScriptPanel';
 import { StatsStrip } from './StatsStrip';
 import type {
   ActiveCallView,
@@ -791,6 +792,8 @@ export function CallCenterPortal(): JSX.Element {
               thirdPartyConnected={thirdPartyConnected}
               handleHangup={() => { void handleHangup(); }}
               makeCall={makeCall}
+              callNotes={callNotes}
+              setCallNotes={setCallNotes}
             />
           )}
 
@@ -870,6 +873,13 @@ export function CallCenterPortal(): JSX.Element {
               <div className="flex-1 overflow-hidden">
                 {selectedScript === 'retention' && canAccessRetentionScript ? (
                   <RetentionScriptPanel
+                    prospectData={activeCallData}
+                    onDataUpdate={(data: Record<string, unknown>) =>
+                      setActiveCallData((prev) => (prev ? ({ ...prev, ...data } as ProspectData) : null))
+                    }
+                  />
+                ) : selectedScript === 'underwriting' ? (
+                  <UnderwritingScriptPanel
                     prospectData={activeCallData}
                     onDataUpdate={(data: Record<string, unknown>) =>
                       setActiveCallData((prev) => (prev ? ({ ...prev, ...data } as ProspectData) : null))

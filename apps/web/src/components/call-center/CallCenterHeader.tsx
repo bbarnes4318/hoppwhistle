@@ -61,21 +61,16 @@ export function CallCenterHeader({
           </span>
 
           {/* Script Selector */}
-          {canAccessRetentionScript ? (
-            <select
-              value={selectedScript}
-              onChange={(e) => setSelectedScript(e.target.value as SelectedScript)}
-              className="appearance-none bg-muted text-foreground text-xs uppercase tracking-widest pl-3 pr-8 py-1.5 rounded border border-border focus:border-primary focus:outline-none cursor-pointer"
-              title="Select call script"
-            >
-              <option value="sales">Contractor</option>
-              <option value="retention">Retention</option>
-            </select>
-          ) : (
-            <span className="px-2 py-1 text-xs uppercase tracking-widest bg-muted border border-border text-foreground rounded">
-              Sales Script
-            </span>
-          )}
+          <select
+            value={selectedScript}
+            onChange={(e) => setSelectedScript(e.target.value as SelectedScript)}
+            className="appearance-none bg-muted text-foreground text-xs uppercase tracking-widest pl-3 pr-8 py-1.5 rounded border border-border focus:border-primary focus:outline-none cursor-pointer"
+            title="Select call script"
+          >
+            <option value="sales">Contractor</option>
+            {canAccessRetentionScript && <option value="retention">Retention</option>}
+            <option value="underwriting">Underwriting</option>
+          </select>
         </div>
 
         <div className="flex items-center space-x-4">
