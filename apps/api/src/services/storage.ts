@@ -113,27 +113,45 @@ export class StorageService {
       ChecksumSHA256: checksum,
     });
 
-    if (!this.s3Client) {
-      throw new Error('S3 Client not initialized');
+    try {
+      if (!this.s3Client) {
+        throw new Error('S3 Client not initialized');
+      }
+
+      await this.s3Client.send(command);
+
+      // Get file size
+      const headCommand = new HeadObjectCommand({
+        Bucket: this.bucket,
+        Key: storageKey,
+      });
+
+      const headResult = await this.s3Client.send(headCommand);
+      const size = BigInt(headResult.ContentLength || 0);
+
+      return {
+        storageKey,
+        size,
+        checksum,
+        url: this.getPublicUrl(storageKey),
+      };
+    } catch (s3Error) {
+      console.warn('S3 upload failed, falling back to local storage:', s3Error);
+
+      const filePath = path.join(this.localDir, storageKey);
+      const parentDir = path.dirname(filePath);
+      if (!fs.existsSync(parentDir)) {
+        fs.mkdirSync(parentDir, { recursive: true });
+      }
+      fs.writeFileSync(filePath, body);
+
+      return {
+        storageKey,
+        size: BigInt(body.length),
+        checksum,
+        url: `/api/v1/recordings/local-stream/${encodeURIComponent(storageKey)}`,
+      };
     }
-
-    await this.s3Client.send(command);
-
-    // Get file size
-    const headCommand = new HeadObjectCommand({
-      Bucket: this.bucket,
-      Key: storageKey,
-    });
-
-    const headResult = await this.s3Client.send(headCommand);
-    const size = BigInt(headResult.ContentLength || 0);
-
-    return {
-      storageKey,
-      size,
-      checksum,
-      url: this.getPublicUrl(storageKey),
-    };
   }
 
   /**

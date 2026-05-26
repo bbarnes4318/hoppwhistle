@@ -1498,6 +1498,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
         tenantId: call.tenantId,
         callSid: call.callSid,
         externalId: call.externalId,
+        createdById: call.createdById,
         toNumber: call.toNumber,
         direction: call.direction,
         status: call.status,
@@ -1672,6 +1673,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       tenantId: call.tenantId,
       callSid: call.callSid,
       externalId: call.externalId,
+      createdById: call.createdById,
       status: call.status,
       direction: call.direction,
 
