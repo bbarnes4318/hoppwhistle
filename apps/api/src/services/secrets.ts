@@ -80,6 +80,9 @@ export class SecretsManager {
       'SIGNALWIRE_PROJECT_ID',
       'SIGNALWIRE_API_TOKEN',
       'SIGNALWIRE_SPACE_URL',
+      'BULKVS_USERNAME',
+      'BULKVS_PASSWORD',
+      'BULKVS_TRUNK_GROUP',
     ];
 
     secretKeys.forEach(key => {

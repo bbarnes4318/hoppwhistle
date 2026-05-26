@@ -119,6 +119,8 @@ session:setVariable("instant_ringback", "true")
 -- Set caller ID on the outbound leg to be the original caller
 session:setVariable("effective_caller_id_number", caller_number)
 session:setVariable("effective_caller_id_name", caller_number)
+session:setVariable("origination_caller_id_number", caller_number)
+session:setVariable("origination_caller_id_name", caller_number)
 
 -- Store metadata in channel variables for CDR
 session:setVariable("x_route_id", route_id or "")
@@ -161,6 +163,13 @@ end
 session:setVariable("continue_on_fail", "true")
 session:setVariable("hangup_after_bridge", "true")
 
+-- Clear any incoming Identity/STIR-SHAKEN headers from the A-leg to prevent
+-- downstream carrier (BulkVS) rejection due to mismatched destination TN
+session:execute("unset", "sip_h_Identity")
+session:execute("unset", "sip_h_Identity-Info")
+session:setVariable("sip_h_Identity", nil)
+session:setVariable("sip_h_Identity-Info", nil)
+
 local failover_steps = split(destination, "|")
 
 for i, step in ipairs(failover_steps) do
@@ -195,7 +204,11 @@ for i, step in ipairs(failover_steps) do
                 log("WARNING", "Session no longer active, aborting failover loop")
                 break
             end
-            local bridge_string = table.concat(bridge_components, ",")
+            local bridge_vars = string.format(
+                "{origination_caller_id_number=%s,origination_caller_id_name=%s,effective_caller_id_number=%s,effective_caller_id_name=%s}",
+                caller_number, caller_number, caller_number, caller_number
+            )
+            local bridge_string = bridge_vars .. table.concat(bridge_components, ",")
             log("INFO", "Bridging to failover step " .. tostring(i) .. ": " .. bridge_string)
             session:execute("bridge", bridge_string)
             
@@ -271,16 +284,9 @@ log("INFO", "CDR response: " .. cdr_response)
   -- Parse the call ID from response for recording upload
   local db_call_id = json_value(cdr_response, "callId")
 
-  -- ── Step 6: Upload recording to S3 ────────────────────────────────────
-  if recording_enabled and recording_path ~= "" and db_call_id then
-    local upload_cmd = string.format(
-      "%s '%s' '%s' &",
-      UPLOAD_SCRIPT,
-      recording_path,
-      db_call_id
-    )
-    log("INFO", "Kicking off recording upload: " .. upload_cmd)
-    os.execute(upload_cmd)
-  end
+  -- Note: Recording upload is handled automatically by the API service 
+  -- after receiving the CDR webhook, via shared volume access.
+  log("INFO", "Recording upload will be handled by API for call ID: " .. (db_call_id or "nil"))
+
 
 log("INFO", "Inbound call processing complete for UUID: " .. call_uuid)

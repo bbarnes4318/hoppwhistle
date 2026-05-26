@@ -110,7 +110,7 @@
         <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
 
         <!-- DIDCentral STIR/SHAKEN signing (local ES256 A-attestation) -->
-        <action application="lua" data="local_shaken.lua"/>
+        <!-- <action application="lua" data="local_shaken.lua"/> -->
 
         <!-- Bridge to DIDCentral ONLY -->
         <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC}sofia/gateway/didcentral/1${vapi_dest}"/>
@@ -141,8 +141,8 @@
         <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
 
         <!-- FracTEL STIR/SHAKEN signing (local ES256 A-attestation) -->
-        <action application="lua" data="local_shaken.lua"/>
-        <action application="set" data="sip_h_X-Attestation-Level=A"/>
+        <!-- <action application="lua" data="local_shaken.lua"/> -->
+        <!-- <action application="set" data="sip_h_X-Attestation-Level=A"/> -->
 
         <!-- Bridge to FracTEL — load-balanced across all 6 SBCs -->
         <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC}sofia/gateway/fractel1/1${vapi_dest}|sofia/gateway/fractel2/1${vapi_dest}|sofia/gateway/fractel3/1${vapi_dest}|sofia/gateway/fractel4/1${vapi_dest}|sofia/gateway/fractel5/1${vapi_dest}|sofia/gateway/fractel6/1${vapi_dest}"/>

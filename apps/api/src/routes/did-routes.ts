@@ -390,7 +390,54 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
             status: 'PROCESSING',
           },
         });
+
+        // Trigger asynchronous background upload from local shared volume mount
+        const recordingPath = body.recordingPath;
+        const callId = call.id;
+        const duration = body.recordingDuration || body.duration || 0;
+
+        setTimeout(async () => {
+          try {
+            const fs = await import('fs');
+            if (fs.existsSync(recordingPath)) {
+              console.log(`[FS-CDR] Background upload started for file: ${recordingPath}`);
+              const fileBuffer = fs.readFileSync(recordingPath);
+              const { RecordingService } = await import('../services/recording-service.js');
+              const recordingService = new RecordingService();
+              
+              const uploadResult = await recordingService.uploadRecording({
+                callId: callId,
+                format: 'wav',
+                file: fileBuffer,
+                duration: duration,
+              });
+              
+              console.log(`[FS-CDR] Background upload complete for call ${callId}. Recording ID: ${uploadResult.id}`);
+            } else {
+              console.error(`[FS-CDR] Recording file not found at local path: ${recordingPath}`);
+              const { RecordingService } = await import('../services/recording-service.js');
+              const recordingService = new RecordingService();
+              await recordingService.markRecordingFailed(
+                callId,
+                `Recording file not found at local path: ${recordingPath}`
+              );
+            }
+          } catch (uploadErr) {
+            console.error(`[FS-CDR] Failed to upload recording in background:`, uploadErr);
+            try {
+              const { RecordingService } = await import('../services/recording-service.js');
+              const recordingService = new RecordingService();
+              await recordingService.markRecordingFailed(
+                callId,
+                uploadErr instanceof Error ? uploadErr.message : 'S3 upload failed'
+              );
+            } catch (err) {
+              console.error(`[FS-CDR] Failed to mark recording as failed:`, err);
+            }
+          }
+        }, 1000); // 1-second delay to ensure FreeSWITCH has finished writing/flushing the file
       }
+
 
       // Update DID route stats
       await prisma.didRoute.update({

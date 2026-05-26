@@ -208,6 +208,10 @@ services:
       # TCPA Litigator Validation (Realvalidito)
       - TCPA_API_KEY=${TCPA_API_KEY}
       - TCPA_API_SECRET=${TCPA_API_SECRET}
+      # BulkVS Number Provisioning API
+      - BULKVS_USERNAME=jimmy@getlifeassurance.com
+      - BULKVS_PASSWORD=50e77367256f3bd823f44d13dc1e8d17
+      - BULKVS_TRUNK_GROUP=pvn
     depends_on:
       redis:
         condition: service_healthy
@@ -222,6 +226,9 @@ services:
       retries: 5
       start_period: 30s
     restart: unless-stopped
+    volumes:
+      - freeswitch_recordings:/recordings:ro
+
 
   # ===========================================
   # WORKER - Background Job Processor

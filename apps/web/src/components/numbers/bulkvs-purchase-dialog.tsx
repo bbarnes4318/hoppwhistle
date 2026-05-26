@@ -75,17 +75,30 @@ export function BulkvsPurchaseDialog({ open, onOpenChange, onSuccess }: BulkvsAd
 
     setLoading(true);
     setError(null);
+    setNumbers([]);
     try {
       const response = await apiClient.get<{
         data: BulkvsNumber[];
+        meta?: { count: number };
         error?: { message: string };
       }>(`/api/v1/bulkvs/available?areaCode=${encodeURIComponent(areaCode)}`);
 
-      if (response.data?.data) {
-        setNumbers(response.data.data);
-      } else if (response.data?.error) {
-        setError(response.data.error.message || 'Failed to find numbers');
+      // Check for API-level errors (non-200 responses)
+      if (response.error) {
+        setError(response.error.message || 'Failed to search numbers');
+        return;
       }
+
+      // Check for application-level errors in the response body
+      if (response.data?.error) {
+        setError(response.data.error.message || 'Failed to find numbers');
+        return;
+      }
+
+      if (response.data?.data && response.data.data.length > 0) {
+        setNumbers(response.data.data);
+      }
+      // If no numbers found and no error, the UI will show "No numbers available"
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to search numbers';
       const apiError = (err as { response?: { data?: { error?: { message?: string } } } })?.response
@@ -110,18 +123,25 @@ export function BulkvsPurchaseDialog({ open, onOpenChange, onSuccess }: BulkvsAd
       const response = await apiClient.post<{
         success: boolean;
         data: AddResult;
+        error?: { message: string };
       }>('/api/v1/bulkvs/purchase', {
         number: selectedNumber.id, // Add specific number to purchase (id holds the provider ID/raw TN)
         areaCode: selectedNumber.metadata?.npa || areaCode,
         destination: destination ? destination.trim() : undefined,
       });
 
+      // Check for API-level errors (non-200 responses)
+      if (response.error) {
+        setError(response.error.message || 'Failed to purchase number');
+        return;
+      }
+
       if (response.data?.success) {
         setAddResult(response.data.data);
         setStep('success');
         onSuccess?.();
       } else {
-        throw new Error('Action failed');
+        setError(response.data?.error?.message || 'Failed to purchase number. Please try again.');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add number');
@@ -136,7 +156,7 @@ export function BulkvsPurchaseDialog({ open, onOpenChange, onSuccess }: BulkvsAd
         return (
           <div className="space-y-4">
             <div className="text-sm text-muted-foreground mb-4">
-              Enter a 3-digit area code to search for available BulkVS numbers.
+              Enter a 3-digit area code to search for available Hopwhistle numbers.
             </div>
 
             <div className="flex gap-2">
@@ -282,12 +302,12 @@ export function BulkvsPurchaseDialog({ open, onOpenChange, onSuccess }: BulkvsAd
       <DialogContent className="sm:max-w-[600px] max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>
-            {step === 'success' ? 'Number Added' : 'Add Phone Number (BulkVS)'}
+            {step === 'success' ? 'Number Added' : 'Add Phone Number (Hopwhistle)'}
           </DialogTitle>
           <DialogDescription>
             {step === 'success'
               ? 'Your new number is ready to use'
-              : 'Search and add numbers from the BulkVS inventory.'}
+              : 'Search and add numbers from the Hopwhistle inventory.'}
           </DialogDescription>
         </DialogHeader>
 
