@@ -37,8 +37,9 @@
     <!-- Outbound calls via BulkVS (NANP numbers only) -->
     <extension name="outbound-to-bulkvs">
       <condition field="destination_number" expression="^1?([2-9]\d{9})$">
-        <action application="log" data="INFO [DEFAULT] Outbound call to ${destination_number} via BulkVS"/>
-        <action application="set" data="effective_caller_id_number=12816991120"/>
+        <action application="log" data="INFO [DEFAULT] Outbound call to ${destination_number} via BulkVS with X-Caller-ID=${sip_h_X-Caller-ID}"/>
+        <action application="set" data="req_caller_id=${cond(${sip_h_X-Caller-ID} != '' ? ${sip_h_X-Caller-ID} : ${sip_h_x-caller-id})}"/>
+        <action application="set" data="effective_caller_id_number=${cond(${req_caller_id} != '' ? ${req_caller_id} : 12816991120)}"/>
         <action application="set" data="effective_caller_id_name=Hopwhistle"/>
         <action application="set" data="hangup_after_bridge=true"/>
         <action application="set" data="bypass_media=false"/>

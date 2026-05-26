@@ -107,11 +107,15 @@ export class FreeSwitchService {
       // uuid_record <uuid> start <path> [<limit_seconds>]
       await this.executeApi('uuid_record', `${callUuid} start ${recordingPath}`);
 
-      // Set a channel variable so the hangup hook knows to upload
+      // Set channel variables for tracking
       await this.executeApi('uuid_setvar', `${callUuid} hopwhistle_call_id ${callId}`);
       await this.executeApi('uuid_setvar', `${callUuid} hopwhistle_recording_path ${recordingPath}`);
 
-      logger.info({ msg: 'Recording started successfully', callUuid, callId });
+      // Register hangup hook to upload the recording file
+      const uploadCmd = `system /usr/share/freeswitch/scripts/upload-recording.sh ${recordingPath} ${callId}`;
+      await this.executeApi('uuid_setvar', `${callUuid} api_on_hangup "${uploadCmd}"`);
+
+      logger.info({ msg: 'Recording started successfully with hangup hook', callUuid, callId });
       return true;
     } catch (err) {
       logger.error({ msg: 'Failed to start recording', callUuid, callId, error: err });

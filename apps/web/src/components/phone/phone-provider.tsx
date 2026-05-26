@@ -558,9 +558,16 @@ export function PhoneProvider({
  headers: getApiHeaders(),
  body: JSON.stringify({ phoneNumber }),
  });
- const data = (await response.json()) as ApiResponse;
+
+ if (!response.ok) {
+ const errData = await response.json().catch(() => ({}));
+ throw new Error(errData.error?.message || 'Failed to initiate call');
+ }
+
+ const data = (await response.json()) as ApiResponse & { callerId?: string };
  // Call ID from API for tracking
  const apiCallId = data.callId;
+ const chosenCallerId = data.callerId || '';
 
  // SIP INVITE - use server IP for the target domain (must match FreeSWITCH)
  const sipTargetDomain = process.env.NEXT_PUBLIC_IP || '3.214.60.13';
@@ -597,9 +604,11 @@ export function PhoneProvider({
  });
 
  inviter
- .invite()
+ .invite({
+ extraHeaders: chosenCallerId ? [`X-Caller-ID: ${chosenCallerId}`] : [],
+ })
  .then(() => {
- console.log('[Phone] INVITE sent');
+ console.log('[Phone] INVITE sent with caller ID:', chosenCallerId);
  })
  .catch(e => {
  console.error('[Phone] INVITE failed', e);

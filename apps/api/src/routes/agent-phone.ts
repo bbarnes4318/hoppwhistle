@@ -217,12 +217,58 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       const callSid = `call_${Date.now()}_${Math.random().toString(36).substring(7)}`;
       const prisma = getPrismaClient();
 
+      const isAuthenticatedUser = userId !== 'demo-agent';
+      let outboundCallerId = callerId || '12816991120';
+
+      if (isAuthenticatedUser) {
+        const userNumbers = await prisma.phoneNumber.findMany({
+          where: {
+            tenantId,
+            userId,
+            status: 'ACTIVE',
+          },
+        });
+
+        const userRecord = await prisma.user.findUnique({
+          where: { id: userId },
+          include: {
+            roles: {
+              include: {
+                role: true,
+              },
+            },
+          },
+        });
+        const userRoles = userRecord?.roles.map(ur => ur.role.name) || [];
+        const isAdminOrOwner = userRoles.some(role => role === 'ADMIN' || role === 'OWNER');
+
+        if (userNumbers.length === 0 && !isAdminOrOwner) {
+          void reply.code(400);
+          return {
+            error: {
+              code: 'NO_ASSIGNED_NUMBER',
+              message: 'You do not have any phone numbers assigned to your account. Please add a phone number on the Phone Numbers page first.',
+            },
+          };
+        }
+
+        if (userNumbers.length > 0) {
+          const hasNumber = userNumbers.some(n => n.number === callerId || n.number.replace(/\D/g, '') === callerId?.replace(/\D/g, ''));
+          if (!hasNumber || !callerId) {
+            outboundCallerId = userNumbers[0].number;
+          }
+        }
+      }
+
+      // Normalize caller ID to exactly 11 digits (e.g. 12816991120)
+      const digitsOnly = outboundCallerId.replace(/\D/g, '');
+      const fsCallerId = digitsOnly.length === 10 ? '1' + digitsOnly : digitsOnly;
+
       // Determine recording intent from campaign settings
       const recordingEnabled = await shouldRecordCall(campaignId);
 
       // Create call in PostgreSQL
       // Skip createdById for demo/unauthenticated requests to avoid FK constraint issues
-      const isAuthenticatedUser = userId !== 'demo-agent';
       const call = await prisma.call.create({
         data: {
           tenantId,
@@ -232,10 +278,11 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
           status: 'INITIATED',
           ...(isAuthenticatedUser ? { createdById: userId } : {}),
           campaignId: campaignId ?? null,
+          callerId: fsCallerId,
           // Recording lifecycle: mark intent at call creation
           recordingStatus: recordingEnabled ? 'PENDING' : null,
           metadata: {
-            callerId: callerId ?? null,
+            callerId: fsCallerId,
             agentId: userId,
             originatedBy: 'agent-phone',
             recordingEnabled,
@@ -261,7 +308,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
           { id: 'callee', number: phoneNumber, role: 'callee', status: 'ringing' },
         ],
         timers: [],
-        metadata: { callerId, campaignId, dbCallId: call.id },
+        metadata: { callerId: fsCallerId, campaignId, dbCallId: call.id },
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
@@ -276,7 +323,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
           direction: 'outbound',
           agentId: userId,
           phoneNumber,
-          callerId,
+          callerId: fsCallerId,
           campaignId,
           timestamp: new Date().toISOString(),
         },
@@ -292,6 +339,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
         callSid,
         status: 'initiated',
         phoneNumber,
+        callerId: fsCallerId,
         direction: 'outbound',
         createdAt: call.createdAt.toISOString(),
         // Browser should use these credentials to connect via Verto

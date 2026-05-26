@@ -185,6 +185,7 @@ model User {
   stirShakenOverrides StirShakenStatus[] @relation("StirShakenOverrideUser")
   assignedLeads       Lead[]
   buyerTransactions   BuyerTransaction[] @relation("BuyerTransactionCreator")
+  phoneNumbers        PhoneNumber[]
 
   // Payroll relations
   timeEntries    TimeEntry[]
@@ -288,6 +289,7 @@ enum ApiKeyStatus {
 model PhoneNumber {
   id           String            @id @default(uuid())
   tenantId     String
+  userId       String?
   number       String // E.164 format
   carrierId    String?
   trunkId      String?
@@ -310,6 +312,7 @@ model PhoneNumber {
 
   // Relations
   tenant         Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user           User?                     @relation(fields: [userId], references: [id], onDelete: SetNull)
   carrier        Carrier?                  @relation(fields: [carrierId], references: [id])
   trunk          Trunk?                    @relation(fields: [trunkId], references: [id])
   campaign       Campaign?                 @relation(fields: [campaignId], references: [id])
@@ -325,6 +328,7 @@ model PhoneNumber {
   @@index([tenantId, number])
   @@index([tenantId, status])
   @@index([tenantId, campaignId])
+  @@index([userId])
   @@index([carrierId])
   @@index([trunkId])
   @@index([provider])

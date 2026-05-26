@@ -25,9 +25,15 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
       const limit = parseInt(request.query.limit || '20');
       const skip = (page - 1) * limit;
 
+      const isAdminOrOwner = user?.roles?.some(role => role === 'ADMIN' || role === 'OWNER');
+      const where: Record<string, any> = { tenantId };
+      if (!isAdminOrOwner && user?.userId) {
+        where.userId = user.userId;
+      }
+
       const [numbers, total] = await Promise.all([
         prisma.phoneNumber.findMany({
-          where: { tenantId },
+          where,
           take: limit,
           skip,
           orderBy: { createdAt: 'desc' },
@@ -40,7 +46,7 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
             },
           },
         }),
-        prisma.phoneNumber.count({ where: { tenantId } }),
+        prisma.phoneNumber.count({ where }),
       ]);
 
       return {
@@ -187,6 +193,7 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
     Body: {
       status?: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
       campaignId?: string | null;
+      userId?: string | null;
       capabilities?: {
         voice?: boolean;
         sms?: boolean;
@@ -247,6 +254,9 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
       }
       if (body.campaignId !== undefined) {
         updateData.campaignId = body.campaignId;
+      }
+      if (body.userId !== undefined) {
+        updateData.userId = body.userId;
       }
       if (body.capabilities !== undefined) {
         updateData.capabilities = { ...(existingNumber.capabilities as Record<string, unknown> ?? {}), ...body.capabilities };
@@ -1386,8 +1396,60 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       const phone = request.query.phone;
 
       // Build where clause — optionally filter by phone number
-      const where: Record<string, unknown> = { tenantId };
-      if (phone) {
+      const where: Record<string, any> = { tenantId };
+      const isAdminOrOwner = user?.roles?.some(role => role === 'ADMIN' || role === 'OWNER');
+      
+      if (!isAdminOrOwner && user?.userId) {
+        // Fetch user phone numbers
+        const userNumbers = await prisma.phoneNumber.findMany({
+          where: {
+            tenantId,
+            userId: user.userId,
+          },
+          select: {
+            number: true,
+          },
+        });
+        const numberStrings = userNumbers.map(n => n.number);
+
+        // Normalize numbers (e.g. strip +1 if stored without, or include both formats)
+        const numberFormats: string[] = [];
+        for (const num of numberStrings) {
+          numberFormats.push(num);
+          if (num.startsWith('+1')) {
+            numberFormats.push(num.substring(2)); // 10 digit
+            numberFormats.push(num.substring(1)); // 11 digit (1xxxxxxxxxx)
+          } else if (num.startsWith('1') && num.length === 11) {
+            numberFormats.push('+' + num);
+            numberFormats.push(num.substring(1));
+          } else if (num.length === 10) {
+            numberFormats.push('+1' + num);
+            numberFormats.push('1' + num);
+          }
+        }
+
+        where.OR = [
+          { createdById: user.userId },
+          { fromNumber: { userId: user.userId } },
+          { callerId: { in: numberFormats } },
+          { toNumber: { in: numberFormats } },
+          { did: { in: numberFormats } }
+        ];
+
+        if (phone) {
+          const phoneFilter = [
+            { toNumber: phone },
+            { callerId: phone },
+            { toNumber: phone.replace(/^\+1/, '') },
+            { callerId: phone.replace(/^\+1/, '') },
+          ];
+          where.AND = [
+            { OR: where.OR },
+            { OR: phoneFilter }
+          ];
+          delete where.OR;
+        }
+      } else if (phone) {
         where.OR = [
           { toNumber: phone },
           { callerId: phone },

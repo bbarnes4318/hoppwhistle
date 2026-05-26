@@ -138,6 +138,7 @@ export class ProvisioningService {
     const dbNumber = await prisma.phoneNumber.create({
       data: {
         tenantId: context.tenantId,
+        userId: context.userId || null,
         number: provisioned.number,
         provider: selectedProvider,
         status: 'ACTIVE',
