@@ -22,7 +22,7 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
     };
   }>('/api/v1/recordings/upload', async (request, reply) => {
     try {
-      const { callId, legId, url, format, size, duration } = request.body;
+      const { callId, legId, url, format, size, duration } = request.body || {};
 
       // If URL is provided, download and upload to S3
       if (url) {
@@ -62,12 +62,45 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
       }
 
       const buffer = await data.toBuffer();
+
+      // Resolve fields from multipart fields if they were not in request.body
+      const fields = data.fields as Record<string, unknown>;
+      const getFieldValue = (key: string): string | undefined => {
+        const field = fields[key];
+        if (!field) return undefined;
+        if (Array.isArray(field)) {
+          const first = field[0] as Record<string, unknown> | undefined;
+          return first && typeof first === 'object' && 'value' in first
+            ? String(first.value)
+            : undefined;
+        }
+        if (typeof field === 'object' && 'value' in field) {
+          return String((field as Record<string, unknown>).value);
+        }
+        return undefined;
+      };
+
+      const resolvedCallId = callId || getFieldValue('callId');
+      const resolvedLegId = legId || getFieldValue('legId');
+      const resolvedFormat = format || getFieldValue('format') || data.filename?.split('.').pop() || 'wav';
+      const resolvedDuration = duration || (fields.duration ? Number(getFieldValue('duration')) : undefined);
+
+      if (!resolvedCallId) {
+        reply.code(400);
+        return {
+          error: {
+            code: 'MISSING_CALL_ID',
+            message: 'callId is required',
+          },
+        };
+      }
+
       const uploadResult = await recordingService.uploadRecording({
-        callId,
-        legId,
-        format: format || data.filename?.split('.').pop() || 'wav',
+        callId: resolvedCallId,
+        legId: resolvedLegId,
+        format: resolvedFormat,
         file: buffer,
-        duration,
+        duration: resolvedDuration,
       });
 
       return {

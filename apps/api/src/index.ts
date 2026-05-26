@@ -63,7 +63,7 @@ async function buildServer() {
   await registerAuth(server);
 
   // Register multipart for file uploads (must be before routes)
-  await server.register(multipart, { addToBody: true });
+  await server.register(multipart);
 
   // Global API key authentication for /api/v1/* routes
   const { createHash } = await import('crypto');
