@@ -31,6 +31,7 @@ interface EditNumberDialogProps {
  number: string;
  currentStatus: string;
  currentCampaignId?: string | null;
+ currentUserId?: string | null;
  currentCapabilities?: {
  voice?: boolean;
  sms?: boolean;
@@ -54,6 +55,7 @@ export function EditNumberDialog({
  number,
  currentStatus,
  currentCampaignId,
+ currentUserId,
  currentCapabilities = {},
  currentPoolType,
  currentPoolStatus,
@@ -61,12 +63,21 @@ export function EditNumberDialog({
 }: EditNumberDialogProps) {
  const [loading, setLoading] = useState(false);
  const [loadingCampaigns, setLoadingCampaigns] = useState(false);
+ const [loadingUsers, setLoadingUsers] = useState(false);
  const [error, setError] = useState<string | null>(null);
  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+ interface User {
+ id: string;
+ email: string;
+ firstName?: string;
+ lastName?: string;
+ }
+ const [users, setUsers] = useState<User[]>([]);
  const caps = typeof currentCapabilities === 'string' ? JSON.parse(currentCapabilities as string) : (currentCapabilities || {});
  const [formData, setFormData] = useState({
  status: (currentStatus || 'ACTIVE').toString().toUpperCase() as 'ACTIVE' | 'INACTIVE' | 'SUSPENDED',
  campaignId: currentCampaignId || 'none',
+ userId: currentUserId || 'none',
  capabilities: {
  voice: caps?.voice ?? true,
  sms: caps?.sms ?? false,
@@ -82,6 +93,7 @@ export function EditNumberDialog({
  setFormData({
  status: (currentStatus || 'ACTIVE').toString().toUpperCase() as 'ACTIVE' | 'INACTIVE' | 'SUSPENDED',
  campaignId: currentCampaignId || 'none',
+ userId: currentUserId || 'none',
  capabilities: {
  voice: caps?.voice ?? true,
  sms: caps?.sms ?? false,
@@ -91,8 +103,23 @@ export function EditNumberDialog({
  rtbPoolEnabled: currentPoolType === 'POOL',
  });
  loadCampaigns();
+ loadUsers();
  }
- }, [open, currentStatus, currentCampaignId, currentCapabilities, currentPoolType]);
+ }, [open, currentStatus, currentCampaignId, currentUserId, currentCapabilities, currentPoolType]);
+
+ const loadUsers = async () => {
+ setLoadingUsers(true);
+ try {
+ const response = await apiClient.get<{ data: User[] }>('/api/v1/users');
+ if (response.data?.data) {
+ setUsers(response.data.data);
+ }
+ } catch (err) {
+ console.error('Failed to load users:', err);
+ } finally {
+ setLoadingUsers(false);
+ }
+ };
 
  const loadCampaigns = async () => {
  setLoadingCampaigns(true);
@@ -130,6 +157,7 @@ export function EditNumberDialog({
  }>(`/api/v1/numbers/${numberId}`, {
  status: formData.status,
  campaignId: formData.rtbPoolEnabled || formData.campaignId === 'none' ? null : formData.campaignId,
+ userId: formData.userId === 'none' ? null : formData.userId,
  capabilities: formData.capabilities,
  poolType: formData.rtbPoolEnabled ? 'POOL' : 'STATIC',
  poolStatus: formData.rtbPoolEnabled ? 'AVAILABLE' : null,
@@ -203,6 +231,27 @@ export function EditNumberDialog({
  {campaigns.map(campaign => (
  <SelectItem key={campaign.id} value={campaign.id}>
  {campaign.name}
+ </SelectItem>
+ ))}
+ </SelectContent>
+ </Select>
+ </div>
+
+ <div className="space-y-2">
+ <Label htmlFor="assigned-user">Assigned Agent</Label>
+ <Select
+ value={formData.userId}
+ onValueChange={value => setFormData({ ...formData, userId: value })}
+ disabled={loading || loadingUsers}
+ >
+ <SelectTrigger id="assigned-user">
+ <SelectValue placeholder="Select an agent (optional)" />
+ </SelectTrigger>
+ <SelectContent>
+ <SelectItem value="none">None</SelectItem>
+ {users.map(u => (
+ <SelectItem key={u.id} value={u.id}>
+ {u.firstName || u.lastName ? `${u.firstName || ''} ${u.lastName || ''}`.trim() : u.email}
  </SelectItem>
  ))}
  </SelectContent>

@@ -30,6 +30,7 @@ interface PhoneNumber {
   poolType?: 'POOL' | 'STATIC' | 'BUYER' | null;
   poolStatus?: 'AVAILABLE' | 'ASSIGNED' | 'RESERVED' | null;
   campaign: { id: string; name: string } | null;
+  user: { id: string; name: string } | null;
   purchasedAt?: string;
   capabilities?: {
     voice?: boolean;
@@ -246,26 +247,36 @@ export default function NumbersPage() {
                         </Button>
                       </div>
 
-                      <div className="mt-auto grid grid-cols-2 gap-4 text-sm border-t border-border/50 pt-4">
-                        <div>
-                          <div className="text-muted-foreground text-xs uppercase tracking-wider mb-1">
-                            Campaign
+                      <div className="mt-auto border-t border-border/50 pt-4 space-y-2 text-sm">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <div className="text-muted-foreground text-xs uppercase tracking-wider mb-1">
+                              Campaign
+                            </div>
+                            <div
+                              className="font-medium truncate"
+                              title={number.campaign?.name || 'Unassigned'}
+                            >
+                              {number.campaign?.name || 'Unassigned'}
+                            </div>
                           </div>
-                          <div
-                            className="font-medium truncate"
-                            title={number.campaign?.name || 'Unassigned'}
-                          >
-                            {number.campaign?.name || 'Unassigned'}
+                          <div>
+                            <div className="text-muted-foreground text-xs uppercase tracking-wider mb-1">
+                              Purchased
+                            </div>
+                            <div className="font-medium">
+                              {number.purchasedAt
+                                ? new Date(number.purchasedAt).toLocaleDateString()
+                                : 'N/A'}
+                            </div>
                           </div>
                         </div>
                         <div>
                           <div className="text-muted-foreground text-xs uppercase tracking-wider mb-1">
-                            Purchased
+                            Assigned Agent
                           </div>
-                          <div className="font-medium">
-                            {number.purchasedAt
-                              ? new Date(number.purchasedAt).toLocaleDateString()
-                              : 'N/A'}
+                          <div className="font-medium truncate" title={number.user?.name || 'Unassigned'}>
+                            {number.user?.name || 'Unassigned'}
                           </div>
                         </div>
                       </div>
@@ -410,6 +421,7 @@ export default function NumbersPage() {
           number={selectedNumber.number}
           currentStatus={selectedNumber.status}
           currentCampaignId={selectedNumber.campaign?.id}
+          currentUserId={selectedNumber.user?.id}
           currentCapabilities={selectedNumber.capabilities}
           currentPoolType={selectedNumber.poolType}
           currentPoolStatus={selectedNumber.poolStatus}

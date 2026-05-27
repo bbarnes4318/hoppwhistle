@@ -135,7 +135,7 @@ export class FreeSwitchService {
         throw new Error(`Could not resolve active FreeSWITCH channel for call ${callId} / ${callUuid}`);
       }
 
-      const recordingPath = `/tmp/recordings/${callId}.wav`;
+      const recordingPath = `/recordings/${callId}.wav`;
 
       logger.info({ msg: 'Starting call recording', uuid: realUuid, callId, recordingPath });
 
@@ -150,7 +150,7 @@ export class FreeSwitchService {
       await this.executeApi('uuid_setvar', `${realUuid} hopwhistle_call_id ${callId}`);
       await this.executeApi('uuid_setvar', `${realUuid} hopwhistle_recording_path ${recordingPath}`);
 
-      const uploadCmd = `system /usr/share/freeswitch/scripts/upload-recording.sh ${recordingPath} ${callId}`;
+      const uploadCmd = `bg_system /usr/share/freeswitch/scripts/upload-recording.sh ${recordingPath} ${callId}`;
       await this.executeApi('uuid_setvar', `${realUuid} api_hangup_hook "${uploadCmd}"`);
 
       logger.info({ msg: 'Recording started successfully with hangup hook', uuid: realUuid, callId });
@@ -172,7 +172,7 @@ export class FreeSwitchService {
    */
   async stopRecording(callUuid: string, callId: string): Promise<void> {
     try {
-      const recordingPath = `/tmp/recordings/${callId}.wav`;
+      const recordingPath = `/recordings/${callId}.wav`;
       logger.info({ msg: 'Stopping call recording', callUuid, callId });
 
       // uuid_record <uuid> stop <path>

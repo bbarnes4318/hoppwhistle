@@ -12,7 +12,7 @@ COPY --from=donor /usr/bin/openssl /usr/bin/openssl
 COPY --from=donor /usr/bin/curl /usr/bin/curl
 
 # Create additional directories
-RUN mkdir -p /recordings
+RUN mkdir -p /recordings /tmp/recordings
 
 # The base image uses /usr/share/freeswitch/conf/vanilla/ as default config
 # We need to copy our customizations there to MERGE with the base config
@@ -40,9 +40,10 @@ COPY apps/freeswitch/scripts/ /usr/share/freeswitch/scripts/
 # Copy entrypoint
 COPY apps/freeswitch/docker-entrypoint.sh /docker-entrypoint.sh
 
-# Fix Windows line endings and make executable
+# Fix Windows line endings and make executable for ALL scripts
 RUN sed -i 's/\r$//' /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh
-RUN chmod +x /usr/share/freeswitch/scripts/*.sh 2>/dev/null || true
+RUN find /usr/share/freeswitch/scripts -name '*.sh' -exec sed -i 's/\r$//' {} + \
+    && chmod +x /usr/share/freeswitch/scripts/*.sh 2>/dev/null || true
 
 # Expose ports (SIP, ESL, RTP, Verto WebSocket, Vapi SIP)
 EXPOSE 5060/udp 5060/tcp 5066/tcp 5070/udp 5070/tcp 5080/udp 5080/tcp 7443/tcp 8021/tcp 8082/tcp 8083/tcp 16384-32768/udp

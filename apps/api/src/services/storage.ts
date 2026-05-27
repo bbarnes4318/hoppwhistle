@@ -11,6 +11,7 @@ import {
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { NodeHttpHandler } from '@smithy/node-http-handler';
 
 export interface StorageConfig {
   endpoint?: string;
@@ -56,6 +57,10 @@ export class StorageService {
         secretAccessKey: config.secretAccessKey,
       },
       forcePathStyle: config.forcePathStyle ?? true, // MinIO requires this
+      requestHandler: new NodeHttpHandler({
+        connectionTimeout: 2000,
+        socketTimeout: 3000,
+      }),
     });
   }
 
@@ -161,7 +166,8 @@ export class StorageService {
     storageKey: string,
     expiresIn: number = 3600 // Default 1 hour
   ): Promise<string> {
-    if (this.isLocal) {
+    const localFilePath = path.join(this.localDir, storageKey);
+    if (this.isLocal || fs.existsSync(localFilePath)) {
       return `/api/v1/recordings/local-stream/${encodeURIComponent(storageKey)}`;
     }
 
@@ -220,8 +226,9 @@ export class StorageService {
    * Check if a recording exists
    */
   async exists(storageKey: string): Promise<boolean> {
-    if (this.isLocal) {
-      return fs.existsSync(path.join(this.localDir, storageKey));
+    const localFilePath = path.join(this.localDir, storageKey);
+    if (this.isLocal || fs.existsSync(localFilePath)) {
+      return true;
     }
 
     if (!this.s3Client) {
@@ -253,17 +260,17 @@ export class StorageService {
     lastModified: Date;
     checksum?: string;
   }> {
-    if (this.isLocal) {
-      const filePath = path.join(this.localDir, storageKey);
-      if (!fs.existsSync(filePath)) {
+    const localFilePath = path.join(this.localDir, storageKey);
+    if (this.isLocal || fs.existsSync(localFilePath)) {
+      if (!fs.existsSync(localFilePath)) {
         throw new Error('Recording file not found locally');
       }
-      const stat = fs.statSync(filePath);
+      const stat = fs.statSync(localFilePath);
       return {
         size: BigInt(stat.size),
         contentType: this.getContentType(path.extname(storageKey).slice(1)),
         lastModified: stat.mtime,
-        checksum: this.calculateBufferChecksum(fs.readFileSync(filePath)),
+        checksum: this.calculateBufferChecksum(fs.readFileSync(localFilePath)),
       };
     }
 

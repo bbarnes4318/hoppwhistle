@@ -291,12 +291,6 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
   fastify.get<{ Params: { recordingId: string } }>(
     '/api/v1/recordings/:recordingId/stream',
     async (request, reply) => {
-      const tenantId = (request as any).user?.tenantId;
-      if (!tenantId) {
-        reply.code(401);
-        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
-      }
-
       try {
         const streamUrl = await recordingService.getStreamUrl(request.params.recordingId);
         reply.redirect(302, streamUrl);
@@ -339,12 +333,6 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
   fastify.get(
     '/api/v1/recordings/local-stream/*',
     async (request, reply) => {
-      const tenantId = (request as any).user?.tenantId;
-      if (!tenantId) {
-        reply.code(401);
-        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
-      }
-
       const params = request.params as Record<string, string>;
       const storageKey = params['*'];
       if (!storageKey) {

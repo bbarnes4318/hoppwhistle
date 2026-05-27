@@ -53,6 +53,14 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
                 name: true,
               },
             },
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+              },
+            },
           },
         }),
         prisma.phoneNumber.count({ where }),
@@ -68,6 +76,7 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
           poolType: n.poolType,
           poolStatus: n.poolStatus,
           campaign: n.campaign ? { id: n.campaign.id, name: n.campaign.name } : null,
+          user: n.user ? { id: n.user.id, name: `${n.user.firstName || ''} ${n.user.lastName || ''}`.trim() || n.user.email } : null,
           purchasedAt: n.purchasedAt?.toISOString(),
           createdAt: n.createdAt.toISOString(),
           updatedAt: n.updatedAt.toISOString(),
@@ -291,6 +300,14 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
               name: true,
             },
           },
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+            },
+          },
         },
       });
 
@@ -311,6 +328,9 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
         capabilities: updatedNumber.capabilities,
         campaign: updatedNumber.campaign
           ? { id: updatedNumber.campaign.id, name: updatedNumber.campaign.name }
+          : null,
+        user: updatedNumber.user
+          ? { id: updatedNumber.user.id, name: `${updatedNumber.user.firstName || ''} ${updatedNumber.user.lastName || ''}`.trim() || updatedNumber.user.email }
           : null,
         purchasedAt: updatedNumber.purchasedAt?.toISOString(),
         createdAt: updatedNumber.createdAt.toISOString(),

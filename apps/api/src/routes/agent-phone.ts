@@ -411,18 +411,24 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       // Auto-start server-side recording via FreeSWITCH ESL
       // This is fire-and-forget - the call should proceed even if recording fails
       if (recordingEnabled) {
-        freeswitchService.startRecording(call.callSid, callId).catch((err) => {
-          console.error(`[Recording] Failed to start recording for call ${callId}:`, err);
-          // Mark recording as failed so UI shows correct state
-          const prismaForError = getPrismaClient();
-          void prismaForError.call.update({
-            where: { id: callId },
-            data: {
-              recordingStatus: 'FAILED',
-              recordingError: err instanceof Error ? err.message : 'Recording start failed',
-            },
+        freeswitchService.startRecording(call.callSid, callId)
+          .then((started) => {
+            if (!started) {
+              throw new Error('Recording start returned false (check FreeSWITCH connection or logs)');
+            }
+          })
+          .catch((err) => {
+            console.error(`[Recording] Failed to start recording for call ${callId}:`, err);
+            // Mark recording as failed so UI shows correct state
+            const prismaForError = getPrismaClient();
+            void prismaForError.call.update({
+              where: { id: callId },
+              data: {
+                recordingStatus: 'FAILED',
+                recordingError: err instanceof Error ? err.message : 'Recording start failed',
+              },
+            });
           });
-        });
       }
 
       // Update Redis state
@@ -568,6 +574,83 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
           timestamp: endedAt.toISOString(),
         },
       });
+
+      // ======================================================================
+      // Recording finalization failsafe
+      // ======================================================================
+      // The FreeSWITCH hangup hook should upload the recording file within ~15s.
+      // Schedule a delayed check: if the recording is still PROCESSING after 20s,
+      // try to fetch it from the FS container or mark it as failed.
+      if (recordingUpdate.recordingStatus === 'PROCESSING') {
+        const checkDelay = 20_000; // 20 seconds
+        setTimeout(async () => {
+          try {
+            const freshCall = await prisma.call.findUnique({
+              where: { id: callId },
+              select: { recordingStatus: true, primaryRecordingId: true },
+            });
+
+            if (freshCall?.recordingStatus === 'PROCESSING') {
+              console.warn(
+                `[Recording] Call ${callId} still PROCESSING after ${checkDelay / 1000}s — ` +
+                'FS hangup hook may have failed. Attempting direct file fetch...'
+              );
+
+              // Try to find and upload the recording file from the shared volume
+              const fs = await import('fs');
+              const recordingPath = `/recordings/${callId}.wav`;
+              const altPath = `/tmp/recordings/${callId}.wav`;
+
+              let filePath: string | null = null;
+              if (fs.existsSync(recordingPath)) {
+                filePath = recordingPath;
+              } else if (fs.existsSync(altPath)) {
+                filePath = altPath;
+              }
+
+              if (filePath) {
+                console.info(`[Recording] Found recording file at ${filePath}, uploading...`);
+                const fileBuffer = fs.readFileSync(filePath);
+                const { RecordingService } = await import('../services/recording-service.js');
+                const recordingService = new RecordingService();
+                await recordingService.uploadRecording({
+                  callId,
+                  format: 'wav',
+                  file: fileBuffer,
+                  duration: duration > 0 ? duration : undefined,
+                });
+                console.info(`[Recording] Successfully uploaded recording for call ${callId} via failsafe`);
+                // Clean up the file
+                try { fs.unlinkSync(filePath); } catch { /* ignore */ }
+              } else {
+                console.warn(
+                  `[Recording] No recording file found for call ${callId} at ${recordingPath} or ${altPath}. ` +
+                  'Marking as FAILED.'
+                );
+                await prisma.call.update({
+                  where: { id: callId },
+                  data: {
+                    recordingStatus: 'FAILED',
+                    recordingError: 'Recording file not found after hangup hook timeout',
+                  },
+                });
+              }
+            }
+          } catch (err) {
+            console.error(`[Recording] Failsafe check failed for call ${callId}:`, err);
+            // Mark as FAILED so UI doesn't spin forever
+            try {
+              await prisma.call.update({
+                where: { id: callId },
+                data: {
+                  recordingStatus: 'FAILED',
+                  recordingError: `Failsafe upload failed: ${err instanceof Error ? err.message : 'unknown error'}`,
+                },
+              });
+            } catch { /* ignore update errors */ }
+          }
+        }, checkDelay);
+      }
 
       return {
         callId,

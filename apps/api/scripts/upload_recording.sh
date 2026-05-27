@@ -18,7 +18,7 @@
 # ============================================================================
 
 API_URL="${HOPWHISTLE_API_URL:-http://localhost:3001}"
-RECORDING_DIR="/tmp/recordings"
+RECORDING_DIR="/recordings"
 
 # Called with: upload_recording.sh <call_id> <recording_path>
 CALL_ID="$1"
