@@ -1,14 +1,15 @@
-# Stage 1: Get openssl CLI binary from matching Debian image
-# The safarov base already has libssl.so.3/libcrypto.so.3 — only the CLI is missing
-FROM debian:bookworm-slim AS openssl-donor
-RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
+# Stage 1: Get openssl CLI and curl binaries from matching Debian image
+# The safarov base already has libssl.so.3/libcrypto.so.3/libcurl.so.4 — only the CLI/binaries are missing
+FROM debian:bookworm-slim AS donor
+RUN apt-get update && apt-get install -y --no-install-recommends openssl curl && rm -rf /var/lib/apt/lists/*
 
 # Stage 2: Build the FreeSWITCH image
 # Use safarov FreeSWITCH image which includes mod_verto for WebRTC
 FROM safarov/freeswitch:1.10.12
 
-# Graft openssl CLI binary for STIR/SHAKEN local signing
-COPY --from=openssl-donor /usr/bin/openssl /usr/bin/openssl
+# Graft openssl CLI and curl binaries
+COPY --from=donor /usr/bin/openssl /usr/bin/openssl
+COPY --from=donor /usr/bin/curl /usr/bin/curl
 
 # Create additional directories
 RUN mkdir -p /recordings

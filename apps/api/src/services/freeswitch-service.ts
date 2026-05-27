@@ -113,7 +113,7 @@ export class FreeSwitchService {
 
       // Register hangup hook to upload the recording file
       const uploadCmd = `system /usr/share/freeswitch/scripts/upload-recording.sh ${recordingPath} ${callId}`;
-      await this.executeApi('uuid_setvar', `${callUuid} api_on_hangup "${uploadCmd}"`);
+      await this.executeApi('uuid_setvar', `${callUuid} api_hangup_hook "${uploadCmd}"`);
 
       logger.info({ msg: 'Recording started successfully with hangup hook', callUuid, callId });
       return true;
