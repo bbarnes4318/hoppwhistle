@@ -1,11 +1,16 @@
 'use client';
 
+import {
+  CALL_SOURCE_LABELS,
+  DISPOSITION_COLORS,
+  DISPOSITION_LABELS,
+} from '@hopwhistle/shared';
 import { Play, Search } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { apiClient } from '@/lib/api';
@@ -41,13 +46,6 @@ interface CallRecord {
   campaign?: { name: string } | null;
   fromNumber?: { number: string } | null;
 }
-
-import {
-  DISPOSITION_LABELS,
-  DISPOSITION_COLORS,
-  CALL_SOURCE_LABELS,
-  getDispositionLabel,
-} from '@hopwhistle/shared';
 
 function getCallResult(call: CallRecord): string {
  if (call.disposition) {
@@ -172,122 +170,118 @@ export default function CallLogsPage() {
  </div>
  </div>
 
- <Card className="flex-1 flex flex-col overflow-hidden min-h-0">
- <CardHeader className="flex-shrink-0">
- <CardTitle>Call History</CardTitle>
- <CardDescription>Recent calls and disposition details</CardDescription>
- </CardHeader>
- <CardContent className="flex-1 overflow-y-auto min-h-0">
- <Table>
- <TableHeader>
- <TableRow>
- <TableHead>Time</TableHead>
- <TableHead>From</TableHead>
- <TableHead>To</TableHead>
- <TableHead>Duration</TableHead>
- <TableHead>Disposition</TableHead>
- <TableHead>Source</TableHead>
- <TableHead>Notes</TableHead>
- <TableHead className="text-right">Recording</TableHead>
- </TableRow>
- </TableHeader>
- <TableBody>
- {loading ? (
- <TableRow>
- <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
- Loading calls...
- </TableCell>
- </TableRow>
- ) : filteredCalls.length === 0 ? (
- <TableRow>
- <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
- No calls found
- </TableCell>
- </TableRow>
- ) : (
- filteredCalls.map(call => {
- const result = getCallResult(call);
- return (
- <TableRow key={call.id}>
- <TableCell className="font-mono text-xs">
- {new Date(call.createdAt).toLocaleString('en-US', {
- month: 'short',
- day: 'numeric',
- hour: '2-digit',
- minute: '2-digit',
- })}
- </TableCell>
- <TableCell>
- {formatPhoneNumber(call.callerId || call.fromNumber?.number || '—')}
- </TableCell>
- <TableCell>
- {formatPhoneNumber(call.toNumber || call.targetNumber || call.did || '—')}
- </TableCell>
- <TableCell className="font-mono text-xs">
- {(() => {
- const dur = call.connectedDuration || call.duration;
- if (dur) return formatDuration(dur);
- if (call.answeredAt && call.endedAt) {
- const secs = Math.floor((new Date(call.endedAt).getTime() - new Date(call.answeredAt).getTime()) / 1000);
- return secs > 0 ? formatDuration(secs) : '—';
- }
- return '—';
- })()}
- </TableCell>
- <TableCell>
- <Badge variant="outline" className={getResultBadgeClass(call)}>
- {result}
- </Badge>
- </TableCell>
- <TableCell>
- {call.callSource ? (
- <span className="text-xs font-mono text-muted-foreground uppercase tracking-widest">
- {CALL_SOURCE_LABELS[call.callSource] || call.callSource}
- </span>
- ) : (
- <span className="text-xs text-muted-foreground/50">—</span>
- )}
- </TableCell>
- <TableCell className="max-w-[200px] truncate text-xs text-muted-foreground font-sans" title={call.dispositionNotes || ''}>
- {call.dispositionNotes || '—'}
- </TableCell>
-  <TableCell className="text-right">
+  <Card className="flex-1 flex flex-col overflow-hidden min-h-0">
+  <CardContent className="flex-1 overflow-y-auto min-h-0 p-0">
+  <Table>
+  <TableHeader className="bg-muted/10">
+  <TableRow>
+  <TableHead className="pl-6">Time</TableHead>
+  <TableHead>From</TableHead>
+  <TableHead>To</TableHead>
+  <TableHead>Duration</TableHead>
+  <TableHead>Disposition</TableHead>
+  <TableHead>Source</TableHead>
+  <TableHead>Notes</TableHead>
+  <TableHead className="pr-6 text-right">Recording</TableHead>
+  </TableRow>
+  </TableHeader>
+  <TableBody>
+  {loading ? (
+  <TableRow>
+  <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+  Loading calls...
+  </TableCell>
+  </TableRow>
+  ) : filteredCalls.length === 0 ? (
+  <TableRow>
+  <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+  No calls found
+  </TableCell>
+  </TableRow>
+  ) : (
+  filteredCalls.map(call => {
+  const result = getCallResult(call);
+  return (
+  <TableRow key={call.id}>
+  <TableCell className="pl-6 font-mono text-xs">
+  {new Date(call.createdAt).toLocaleString('en-US', {
+  month: 'short',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  })}
+  </TableCell>
+  <TableCell>
+  {formatPhoneNumber(call.callerId || call.fromNumber?.number || '—')}
+  </TableCell>
+  <TableCell>
+  {formatPhoneNumber(call.toNumber || call.targetNumber || call.did || '—')}
+  </TableCell>
+  <TableCell className="font-mono text-xs">
   {(() => {
-  const recUrl = call.recordingUrl || (call.primaryRecordingId ? `/api/v1/recordings/${call.primaryRecordingId}/stream` : null);
-  if ((call.recordingStatus === 'READY' || (!call.recordingStatus && recUrl)) && (call.primaryRecordingId || call.recordingUrl)) {
-  return (
-  <Button variant="ghost" size="sm" onClick={() => handlePlayCallRecording(call)} title="Play Recording"><Play className="h-4 w-4" /></Button>
-  );
+  const dur = call.connectedDuration || call.duration;
+  if (dur) return formatDuration(dur);
+  if (call.answeredAt && call.endedAt) {
+  const secs = Math.floor((new Date(call.endedAt).getTime() - new Date(call.answeredAt).getTime()) / 1000);
+  return secs > 0 ? formatDuration(secs) : '—';
   }
-  if (call.recordingStatus === 'PENDING' || call.recordingStatus === 'RECORDING' || call.recordingStatus === 'PROCESSING') {
-  return (
-  <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-xs text-amber-400">
-  <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
-  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-  </svg>
-  {call.recordingStatus === 'PENDING' ? 'Pending' : call.recordingStatus === 'RECORDING' ? 'Recording' : 'Processing'}
-  </span>
-  );
-  }
-  if (call.recordingStatus === 'FAILED') {
-  return (
-  <span className="inline-flex items-center gap-1 rounded-md border border-red-500/30 bg-red-500/10 px-2 py-1 text-xs text-red-400 cursor-help" title={call.recordingError || "Recording failed"}>
-  ✕ Failed
-  </span>
-  );
-  }
-  return <span className="text-xs text-muted-foreground">—</span>;
+  return '—';
   })()}
   </TableCell>
- </TableRow>
- );
- })
- )}
- </TableBody>
- </Table>
-
- {/* Pagination */}
+  <TableCell>
+  <Badge variant="outline" className={getResultBadgeClass(call)}>
+  {result}
+  </Badge>
+  </TableCell>
+  <TableCell>
+  {call.callSource ? (
+  <span className="text-xs font-mono text-muted-foreground uppercase tracking-widest">
+  {CALL_SOURCE_LABELS[call.callSource] || call.callSource}
+  </span>
+  ) : (
+  <span className="text-xs text-muted-foreground/50">—</span>
+  )}
+  </TableCell>
+  <TableCell className="max-w-[200px] truncate text-xs text-muted-foreground font-sans" title={call.dispositionNotes || ''}>
+  {call.dispositionNotes || '—'}
+  </TableCell>
+   <TableCell className="pr-6 text-right">
+   {(() => {
+   const recUrl = call.recordingUrl || (call.primaryRecordingId ? `/api/v1/recordings/${call.primaryRecordingId}/stream` : null);
+   if ((call.recordingStatus === 'READY' || (!call.recordingStatus && recUrl)) && (call.primaryRecordingId || call.recordingUrl)) {
+   return (
+   <Button variant="ghost" size="sm" onClick={() => handlePlayCallRecording(call)} title="Play Recording"><Play className="h-4 w-4" /></Button>
+   );
+   }
+   if (call.recordingStatus === 'PENDING' || call.recordingStatus === 'RECORDING' || call.recordingStatus === 'PROCESSING') {
+   return (
+   <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-xs text-amber-400">
+   <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
+   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+   </svg>
+   {call.recordingStatus === 'PENDING' ? 'Pending' : call.recordingStatus === 'RECORDING' ? 'Recording' : 'Processing'}
+   </span>
+   );
+   }
+   if (call.recordingStatus === 'FAILED') {
+   return (
+   <span className="inline-flex items-center gap-1 rounded-md border border-red-500/30 bg-red-500/10 px-2 py-1 text-xs text-red-400 cursor-help" title={call.recordingError || "Recording failed"}>
+   ✕ Failed
+   </span>
+   );
+   }
+   return <span className="text-xs text-muted-foreground">—</span>;
+   })()}
+   </TableCell>
+  </TableRow>
+  );
+  })
+  )}
+  </TableBody>
+  </Table>
+  
+  {/* Pagination */}
  {totalPages > 1 && (
  <div className="flex items-center justify-center gap-2 py-3 border-t">
  <Button
