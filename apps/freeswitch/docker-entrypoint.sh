@@ -73,6 +73,10 @@ else
     echo "WARNING: Let's Encrypt certs not found at $LE_ARCHIVE — WSS will use self-signed cert!"
 fi
 
+# Ensure recordings directory exists and is writeable
+mkdir -p /tmp/recordings
+chmod 777 /tmp/recordings
+
 echo "Starting FreeSWITCH..."
 
 # Execute the main command
