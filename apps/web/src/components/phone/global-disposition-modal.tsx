@@ -1,15 +1,17 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { usePathname } from 'next/navigation';
-import { usePhone } from './phone-provider';
 import {
   DISPOSITIONS,
   DISPOSITION_LABELS,
   DISPOSITION_COLORS,
   FOLLOW_UP_DISPOSITIONS,
-  type DispositionValue,
 } from '@hopwhistle/shared';
+import { usePathname } from 'next/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
+
+import { usePhone } from './phone-provider';
+
+import { apiClient } from '@/lib/api';
 
 // Build button list from shared constants
 const DISPOSITION_BUTTONS = DISPOSITIONS.map(value => ({
@@ -46,6 +48,18 @@ export function GlobalDispositionModal() {
   // Track the last handled call to prevent duplicate prompts
   const handledCallIdsRef = useRef<Set<string>>(new Set());
 
+  const resetAndClose = useCallback(() => {
+    setOpen(false);
+    setSelectedDisposition('');
+    setNotes('');
+    setFollowUpDate('');
+    setFollowUpTime('');
+    setSaved(false);
+    setSaving(false);
+    setSaveError(null);
+    clearPendingDispositionCall();
+  }, [clearPendingDispositionCall]);
+
   // Detect pending disposition → show modal if not on Call Center Portal
   useEffect(() => {
     const isOnCallCenter = pathname?.includes('/call-center');
@@ -72,24 +86,19 @@ export function GlobalDispositionModal() {
     }
 
     try {
-      const response = await fetch('/api/v1/calls/disposition', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          callId: pendingDispositionCall.callId,
-          disposition: selectedDisposition,
-          notes,
-          duration: pendingDispositionCall.duration || 0,
-          callerNumber: pendingDispositionCall.phoneNumber,
-          direction: pendingDispositionCall.direction?.toUpperCase(),
-          callSource: 'SOFTPHONE',
-          followUpAt,
-        }),
+      const response = await apiClient.post('/api/v1/calls/disposition', {
+        callId: pendingDispositionCall.callId,
+        disposition: selectedDisposition,
+        notes,
+        duration: pendingDispositionCall.duration || 0,
+        callerNumber: pendingDispositionCall.phoneNumber,
+        direction: pendingDispositionCall.direction?.toUpperCase(),
+        callSource: 'SOFTPHONE',
+        followUpAt,
       });
 
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data?.error?.message || `Save failed (HTTP ${response.status})`);
+      if (response.error) {
+        throw new Error(response.error.message || 'Save failed');
       }
 
       // Mark as handled so it doesn't re-prompt
@@ -104,26 +113,21 @@ export function GlobalDispositionModal() {
     } finally {
       setSaving(false);
     }
-  }, [selectedDisposition, notes, followUpDate, followUpTime, pendingDispositionCall]);
+  }, [
+    selectedDisposition,
+    notes,
+    followUpDate,
+    followUpTime,
+    pendingDispositionCall,
+    resetAndClose,
+  ]);
 
   const handleSkip = useCallback(() => {
     if (pendingDispositionCall) {
       handledCallIdsRef.current.add(pendingDispositionCall.callId);
     }
     resetAndClose();
-  }, [pendingDispositionCall]);
-
-  const resetAndClose = () => {
-    setOpen(false);
-    setSelectedDisposition('');
-    setNotes('');
-    setFollowUpDate('');
-    setFollowUpTime('');
-    setSaved(false);
-    setSaving(false);
-    setSaveError(null);
-    clearPendingDispositionCall();
-  };
+  }, [pendingDispositionCall, resetAndClose]);
 
   if (!open || !pendingDispositionCall) return null;
 
@@ -174,7 +178,8 @@ export function GlobalDispositionModal() {
                     className={
                       'w-full p-3 rounded text-left text-xs font-mono uppercase tracking-widest transition-all border ' +
                       (selectedDisposition === value
-                        ? (MODAL_DISPOSITION_COLORS[value] || 'bg-primary/10 border-primary text-primary')
+                        ? MODAL_DISPOSITION_COLORS[value] ||
+                          'bg-primary/10 border-primary text-primary'
                         : 'bg-background border-border text-muted-foreground hover:bg-muted')
                     }
                   >
@@ -187,11 +192,15 @@ export function GlobalDispositionModal() {
               {needsFollowUp && (
                 <div className="bg-background border border-border rounded p-4 space-y-3">
                   <h4 className="text-xs font-mono uppercase tracking-widest text-foreground pb-2 border-b border-border flex items-center gap-2">
-                    {selectedDisposition === 'SET_APPOINTMENT' ? '📅 Appointment Details' :
-                     selectedDisposition === 'SET_CALLBACK' ? '📞 Callback Schedule' :
-                     '📋 Follow-Up Schedule'}
+                    {selectedDisposition === 'SET_APPOINTMENT'
+                      ? '📅 Appointment Details'
+                      : selectedDisposition === 'SET_CALLBACK'
+                        ? '📞 Callback Schedule'
+                        : '📋 Follow-Up Schedule'}
                     {isRequired && (
-                      <span className="text-[10px] text-amber-400 normal-case tracking-normal">(required)</span>
+                      <span className="text-[10px] text-amber-400 normal-case tracking-normal">
+                        (required)
+                      </span>
                     )}
                   </h4>
                   <div className="grid grid-cols-2 gap-3">
@@ -240,7 +249,9 @@ export function GlobalDispositionModal() {
 
             <div className="px-6 py-4 border-t border-border space-y-2">
               <button
-                onClick={handleSave}
+                onClick={() => {
+                  void handleSave();
+                }}
                 disabled={!canSave || saving}
                 className="w-full py-3 bg-primary hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed text-primary-foreground font-mono uppercase tracking-widest text-xs rounded transition-colors"
               >
