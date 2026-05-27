@@ -1912,6 +1912,26 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
         updateData.recordingStatus = 'FAILED';
         updateData.recordingError = errorMsg || 'Recording failed';
         updateData.recordingCompletedAt = now;
+        
+        // Try to parse HTTP code from the error message if it's there
+        let uploadHttpCode: number | null = null;
+        if (errorMsg) {
+          const match = errorMsg.match(/HTTP (\d+)/);
+          if (match) {
+            uploadHttpCode = parseInt(match[1], 10);
+          }
+        }
+        const callMetadata = (call.metadata as any) || {};
+        const existingRecordingDebug = callMetadata.recordingDebug || {};
+        updateData.metadata = {
+          ...callMetadata,
+          recordingDebug: {
+            ...existingRecordingDebug,
+            uploadAttemptedAt: now.toISOString(),
+            uploadHttpCode,
+            uploadError: errorMsg || 'Recording failed',
+          },
+        };
         break;
       default:
         void reply.code(400);
@@ -1964,6 +1984,25 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       const path = await import('path');
       const localDir = process.env.LOCAL_STORAGE_DIR || '/tmp/uploads';
 
+      const wavPath = `/recordings/${callId}.wav`;
+      const tmpWavPath = `/tmp/recordings/${callId}.wav`;
+
+      const apiRecordingsWavExists = fs.existsSync(wavPath);
+      let apiRecordingsWavSize: string | null = null;
+      if (apiRecordingsWavExists) {
+        try {
+          apiRecordingsWavSize = fs.statSync(wavPath).size.toString();
+        } catch {}
+      }
+
+      const apiTmpRecordingsWavExists = fs.existsSync(tmpWavPath);
+      let apiTmpRecordingsWavSize: string | null = null;
+      if (apiTmpRecordingsWavExists) {
+        try {
+          apiTmpRecordingsWavSize = fs.statSync(tmpWavPath).size.toString();
+        } catch {}
+      }
+
       const recordingsWithFileCheck = call.recordings.map(r => {
         let fileExists: boolean | null = null;
         if (storageType === 'local' && r.storageKey) {
@@ -1995,9 +2034,17 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
           recordingError: call.recordingError,
           recordingStartedAt: call.recordingStartedAt,
           recordingCompletedAt: call.recordingCompletedAt,
+          externalId: (call as any).externalId ?? null,
+          callSource: (call as any).callSource ?? null,
           metadata: call.metadata,
         },
         recordings: recordingsWithFileCheck,
+        diagnostics: {
+          apiRecordingsWavExists,
+          apiRecordingsWavSize,
+          apiTmpRecordingsWavExists,
+          apiTmpRecordingsWavSize,
+        },
         storage: {
           type: storageType,
           bucket: process.env.S3_BUCKET || null,

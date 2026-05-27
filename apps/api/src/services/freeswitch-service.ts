@@ -176,6 +176,32 @@ export class FreeSwitchService {
       await this.executeApi('uuid_setvar', `${realUuid} api_hangup_hook "${uploadCmd}"`);
 
       logger.info({ msg: 'Recording started successfully with hangup hook', uuid: realUuid, callId });
+
+      try {
+        const { getPrismaClient } = await import('../lib/prisma.js');
+        const prisma = getPrismaClient();
+        const call = await prisma.call.findUnique({ where: { id: callId } });
+        if (call) {
+          const callMetadata = (call.metadata as any) || {};
+          const existingRecordingDebug = callMetadata.recordingDebug || {};
+          await prisma.call.update({
+            where: { id: callId },
+            data: {
+              metadata: {
+                ...callMetadata,
+                recordingDebug: {
+                  ...existingRecordingDebug,
+                  freeswitchRecordingStartedAt: new Date().toISOString(),
+                  freeswitchRecordingPath: recordingPath,
+                }
+              } as any
+            }
+          });
+        }
+      } catch (err) {
+        logger.error({ msg: 'Failed to update call metadata in startRecording', error: err });
+      }
+
       return true;
     } catch (err) {
       logger.error({ msg: 'Failed to start recording', callUuid, callId, error: err });

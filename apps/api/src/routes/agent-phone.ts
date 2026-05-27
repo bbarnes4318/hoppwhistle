@@ -286,10 +286,22 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
             agentId: userId,
             originatedBy: 'agent-phone',
             recordingEnabled,
+            recordingDebug: {
+              originateCreatedAt: new Date().toISOString(),
+              sipHeaderSent: true,
+            },
           } as Prisma.JsonObject,
           startedAt: new Date(),
         },
       });
+
+      request.log.info({
+        callId: call.id,
+        callSid: call.callSid,
+        fromNumber: fsCallerId,
+        toNumber: phoneNumber,
+        recordingEnabled,
+      }, 'HOPWHISTLE ORIGINATE DIAGNOSTIC LOG');
 
       // Update agent status to on-call
       await setAgentStatus(userId, {
@@ -388,6 +400,12 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       const recordingEnabled = callMetadata.recordingEnabled !== false;
       const answeredAt = call.answeredAt || new Date();
 
+      const existingRecordingDebug = (callMetadata.recordingDebug as Record<string, any>) || {};
+      const recordingDebug = {
+        ...existingRecordingDebug,
+        answerNotifiedAt: answeredAt.toISOString(),
+      };
+
       // Update call in PostgreSQL
       await prisma.call.update({
         where: { id: callId },
@@ -404,6 +422,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
           metadata: {
             ...callMetadata,
             answeredByAgentId: userId,
+            recordingDebug,
           } as Prisma.JsonObject,
         },
       });
@@ -544,9 +563,15 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
 
       // Add metadata.endReason
       const callMetadata = (call.metadata as Prisma.JsonObject) ?? {};
+      const existingRecordingDebug = (callMetadata.recordingDebug as Record<string, any>) || {};
+      const recordingDebug = {
+        ...existingRecordingDebug,
+        hangupNotifiedAt: endedAt.toISOString(),
+      };
       const updatedMetadata = {
         ...callMetadata,
         ...(endReason ? { endReason } : {}),
+        recordingDebug,
       };
 
       // Update call in PostgreSQL
