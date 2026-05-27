@@ -495,6 +495,17 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
 
       // If call is already COMPLETED, return the existing finalized values.
       if (call.status === 'COMPLETED') {
+        if (
+          call.recordingStatus === 'PENDING' ||
+          call.recordingStatus === 'RECORDING' ||
+          call.recordingStatus === 'PROCESSING'
+        ) {
+          const { reconcileRecordingForCall } = await import('../services/recording-reconciler.js');
+          void reconcileRecordingForCall(callId).catch(err => {
+            console.error(`[Recording] Reconcile failed for already completed call ${callId}:`, err);
+          });
+        }
+
         return {
           callId,
           status: 'completed',
@@ -578,102 +589,17 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       // ======================================================================
       // Recording finalization failsafe
       // ======================================================================
-      // The FreeSWITCH hangup hook should upload the recording file within ~15s.
-      // Schedule a delayed check: if the recording is still PROCESSING after 20s,
-      // try to fetch it from the FS container or mark it as failed.
-      if (recordingUpdate.recordingStatus === 'PROCESSING') {
-        const checkDelay = 20_000; // 20 seconds
-        setTimeout(async () => {
-          try {
-            const prismaForFailsafe = getPrismaClient();
+      const finalRecordingStatus =
+        String(recordingUpdate.recordingStatus || call.recordingStatus || '');
 
-            // 1. Check for existing recording row first
-            const existingRecording = await prismaForFailsafe.recording.findFirst({
-              where: { callId },
-            });
+      if (['PENDING', 'RECORDING', 'PROCESSING'].includes(finalRecordingStatus)) {
+        const { reconcileRecordingForCall } = await import('../services/recording-reconciler.js');
 
-            if (existingRecording) {
-              const playbackUrl = `/api/v1/recordings/${existingRecording.id}/stream`;
-              await prismaForFailsafe.call.update({
-                where: { id: callId },
-                data: {
-                  primaryRecordingId: existingRecording.id,
-                  recordingStatus: 'READY',
-                  recordingUrl: playbackUrl,
-                  recordingCompletedAt: existingRecording.createdAt,
-                  recordingError: null,
-                },
-              });
-              console.info(`[Recording] Failsafe: Found existing recording row for call ${callId}. Updated call status to READY.`);
-              return;
-            }
-
-            const freshCall = await prismaForFailsafe.call.findUnique({
-              where: { id: callId },
-              select: { recordingStatus: true },
-            });
-
-            if (freshCall?.recordingStatus === 'PROCESSING') {
-              console.warn(
-                `[Recording] Call ${callId} still PROCESSING after ${checkDelay / 1000}s — ` +
-                'FS hangup hook may have failed. Attempting direct file fetch...'
-              );
-
-              // Try to find and upload the recording file from the shared volume
-              const fs = await import('fs');
-              const recordingPath = `/recordings/${callId}.wav`;
-              const altPath = `/tmp/recordings/${callId}.wav`;
-
-              let filePath: string | null = null;
-              if (fs.existsSync(recordingPath)) {
-                filePath = recordingPath;
-              } else if (fs.existsSync(altPath)) {
-                filePath = altPath;
-              }
-
-              if (filePath) {
-                console.info(`[Recording] Failsafe: Found recording file at ${filePath}, uploading...`);
-                const fileBuffer = fs.readFileSync(filePath);
-                const { RecordingService } = await import('../services/recording-service.js');
-                const recordingService = new RecordingService();
-                await recordingService.uploadRecording({
-                  callId,
-                  format: 'wav',
-                  file: fileBuffer,
-                  duration: duration > 0 ? duration : undefined,
-                });
-                console.info(`[Recording] Failsafe: Successfully uploaded recording for call ${callId} via failsafe`);
-                // Clean up the file
-                try { fs.unlinkSync(filePath); } catch { /* ignore */ }
-              } else {
-                console.warn(
-                  `[Recording] Failsafe: No recording file found for call ${callId} at ${recordingPath} or ${altPath}. ` +
-                  'Marking as FAILED.'
-                );
-                await prismaForFailsafe.call.update({
-                  where: { id: callId },
-                  data: {
-                    recordingStatus: 'FAILED',
-                    recordingError: 'Recording file not found after hangup hook timeout',
-                  },
-                });
-              }
-            }
-          } catch (err) {
-            console.error(`[Recording] Failsafe check failed for call ${callId}:`, err);
-            // Mark as FAILED so UI doesn't spin forever
-            try {
-              const prismaForError = getPrismaClient();
-              await prismaForError.call.update({
-                where: { id: callId },
-                data: {
-                  recordingStatus: 'FAILED',
-                  recordingError: `Failsafe upload failed: ${err instanceof Error ? err.message : 'unknown error'}`,
-                },
-              });
-            } catch { /* ignore update errors */ }
-          }
-        }, checkDelay);
+        setTimeout(() => {
+          void reconcileRecordingForCall(callId).catch(err => {
+            console.error(`[Recording] Delayed reconcile failed for call ${callId}:`, err);
+          });
+        }, 60_000);
       }
 
       return {

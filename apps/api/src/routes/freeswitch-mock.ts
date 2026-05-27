@@ -13,6 +13,7 @@ import { FastifyInstance } from 'fastify';
  *   POST /api/v1/calls/:callId/recording-status — Recording state transitions
  */
 export async function registerFreeSWITCHMockRoutes(fastify: FastifyInstance): Promise<void> {
+  await Promise.resolve();
   // Trunk authentication endpoint
   fastify.post('/api/v1/trunks/auth', async (request, reply) => {
     const { from, to, source_ip } = request.body as {
@@ -164,5 +165,4 @@ export async function registerFreeSWITCHMockRoutes(fastify: FastifyInstance): Pr
       message: 'Notification received (no URL to process)',
     };
   });
-
 }

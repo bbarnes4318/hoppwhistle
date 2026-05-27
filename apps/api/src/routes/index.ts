@@ -1429,6 +1429,13 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
         return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
       }
 
+      try {
+        const { reconcileStaleRecordingsForTenant } = await import('../services/recording-reconciler.js');
+        await reconcileStaleRecordingsForTenant(tenantId);
+      } catch (err) {
+        request.log.error({ err, tenantId }, 'Recording reconciliation failed before call list fetch');
+      }
+
       const prisma = (await import('../lib/prisma.js')).getPrismaClient();
       const page = parseInt(request.query.page || '1');
       const limit = parseInt(request.query.limit || '20');
@@ -2221,6 +2228,66 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
         isOverdue: f.followUpAt ? f.followUpAt < now : false,
       })),
     };
+  });
+
+  fastify.post<{
+    Params: { callId: string };
+    Body: {
+      status: string;
+      error?: string;
+      uuid?: string;
+    };
+  }>('/api/v1/calls/:callId/recording-status', async (request, reply) => {
+    const { callId } = request.params;
+    const { status, error: errorMsg, uuid } = request.body;
+
+    request.log.info(
+      {
+        event: 'recording.status',
+        callId,
+        status,
+        uuid,
+        error: errorMsg,
+      },
+      'Recording status update'
+    );
+
+    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+
+    const updateData: Record<string, unknown> = {};
+    switch (status) {
+      case 'started':
+        updateData.recordingStatus = 'RECORDING';
+        updateData.recordingStartedAt = new Date();
+        break;
+      case 'stopped':
+      case 'processing':
+        updateData.recordingStatus = 'PROCESSING';
+        updateData.recordingError = null;
+        break;
+      case 'failed':
+      case 'error':
+        updateData.recordingStatus = 'FAILED';
+        updateData.recordingError = errorMsg || 'Unknown recording error';
+        updateData.recordingCompletedAt = new Date();
+        break;
+      default:
+        void reply.code(400);
+        return { error: { code: 'INVALID_STATUS', message: `Unknown status: ${status}` } };
+    }
+
+    try {
+      await prisma.call.update({
+        where: { id: callId },
+        data: updateData,
+      });
+
+      return { success: true, callId, recordingStatus: updateData.recordingStatus };
+    } catch (err) {
+      request.log.error({ error: err, callId }, 'Failed to update recording status');
+      void reply.code(500);
+      return { error: { code: 'UPDATE_FAILED', message: 'Failed to update recording status' } };
+    }
   });
 }
 
