@@ -1537,61 +1537,105 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
             campaign: true,
             fromNumber: true,
             createdBy: { select: { firstName: true, lastName: true } },
+            recordings: {
+              where: { deletedAt: null },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
           },
         }),
         prisma.call.count({ where }),
       ]);
 
       // Map calls to include recording + contractor disposition fields
-      const mappedCalls = calls.map(call => ({
-        id: call.id,
-        tenantId: call.tenantId,
-        callSid: call.callSid,
-        externalId: call.externalId,
-        createdById: call.createdById,
-        toNumber: call.toNumber,
-        direction: call.direction,
-        status: call.status,
-        duration: call.duration,
-        connectedDuration: call.connectedDuration,
-        cost: call.cost,
-        revenue: call.revenue,
-        callerId: call.callerId,
-        did: call.did,
-        targetNumber: call.targetNumber,
-        converted: call.converted,
-        paidOut: call.paidOut,
-        missedCall: call.missedCall,
-        blocked: call.blocked,
-        // Recording fields
-        recordingUrl: call.recordingUrl,
-        recordingStatus: call.recordingStatus,
-        recordingError: call.recordingError,
-        primaryRecordingId: call.primaryRecordingId,
-        recordingStartedAt: call.recordingStartedAt?.toISOString() ?? null,
-        recordingCompletedAt: call.recordingCompletedAt?.toISOString() ?? null,
-        // Contractor Call Intelligence fields
-        disposition: call.disposition,
-        dispositionNotes: call.dispositionNotes,
-        callSource: call.callSource,
-        followUpAt: call.followUpAt?.toISOString() ?? null,
-        followUpStatus: call.followUpStatus,
-        // Related entities
-        campaign: call.campaign ? { id: call.campaign.id, name: call.campaign.name } : null,
-        fromNumber: call.fromNumber
-          ? { id: call.fromNumber.id, number: call.fromNumber.number }
-          : null,
-        createdBy: call.createdBy
-          ? { firstName: call.createdBy.firstName, lastName: call.createdBy.lastName }
-          : null,
-        // Timestamps
-        createdAt: call.createdAt.toISOString(),
-        updatedAt: call.updatedAt.toISOString(),
-        startedAt: call.startedAt?.toISOString(),
-        answeredAt: call.answeredAt?.toISOString(),
-        endedAt: call.endedAt?.toISOString(),
-        metadata: call.metadata,
-      }));
+      const mappedCalls = calls.map(call => {
+        const latestRecording = call.recordings?.[0] ?? null;
+
+        const effectivePrimaryRecordingId =
+          call.primaryRecordingId || latestRecording?.id || null;
+
+        const effectiveRecordingUrl =
+          call.recordingUrl ||
+          (effectivePrimaryRecordingId
+            ? `/api/v1/recordings/${effectivePrimaryRecordingId}/stream`
+            : null);
+
+        const effectiveRecordingStatus =
+          effectiveRecordingUrl || effectivePrimaryRecordingId
+            ? 'READY'
+            : call.recordingStatus;
+
+        if (latestRecording && call.recordingStatus !== 'READY') {
+          void prisma.call.update({
+            where: { id: call.id },
+            data: {
+              primaryRecordingId: latestRecording.id,
+              recordingStatus: 'READY',
+              recordingUrl: `/api/v1/recordings/${latestRecording.id}/stream`,
+              recordingCompletedAt: latestRecording.createdAt,
+              recordingError: null,
+            },
+          }).catch(err => {
+            request.log.error(
+              { err, callId: call.id, recordingId: latestRecording.id },
+              'Failed to repair stale call recording status from existing recording row'
+            );
+          });
+        }
+
+        return {
+          id: call.id,
+          tenantId: call.tenantId,
+          callSid: call.callSid,
+          externalId: call.externalId,
+          createdById: call.createdById,
+          toNumber: call.toNumber,
+          direction: call.direction,
+          status: call.status,
+          duration: call.duration,
+          connectedDuration: call.connectedDuration,
+          cost: call.cost,
+          revenue: call.revenue,
+          callerId: call.callerId,
+          did: call.did,
+          targetNumber: call.targetNumber,
+          converted: call.converted,
+          paidOut: call.paidOut,
+          missedCall: call.missedCall,
+          blocked: call.blocked,
+          // Recording fields
+          recordingUrl: effectiveRecordingUrl,
+          recordingStatus: effectiveRecordingStatus,
+          recordingError: effectiveRecordingStatus === 'READY' ? null : call.recordingError,
+          primaryRecordingId: effectivePrimaryRecordingId,
+          recordingStartedAt: call.recordingStartedAt?.toISOString() ?? null,
+          recordingCompletedAt:
+            call.recordingCompletedAt?.toISOString() ??
+            latestRecording?.createdAt?.toISOString?.() ??
+            null,
+          // Contractor Call Intelligence fields
+          disposition: call.disposition,
+          dispositionNotes: call.dispositionNotes,
+          callSource: call.callSource,
+          followUpAt: call.followUpAt?.toISOString() ?? null,
+          followUpStatus: call.followUpStatus,
+          // Related entities
+          campaign: call.campaign ? { id: call.campaign.id, name: call.campaign.name } : null,
+          fromNumber: call.fromNumber
+            ? { id: call.fromNumber.id, number: call.fromNumber.number }
+            : null,
+          createdBy: call.createdBy
+            ? { firstName: call.createdBy.firstName, lastName: call.createdBy.lastName }
+            : null,
+          // Timestamps
+          createdAt: call.createdAt.toISOString(),
+          updatedAt: call.updatedAt.toISOString(),
+          startedAt: call.startedAt?.toISOString(),
+          answeredAt: call.answeredAt?.toISOString(),
+          endedAt: call.endedAt?.toISOString(),
+          metadata: call.metadata,
+        };
+      });
 
       return {
         data: mappedCalls,
