@@ -12,7 +12,7 @@ COPY --from=donor /usr/bin/openssl /usr/bin/openssl
 COPY --from=donor /usr/bin/curl /usr/bin/curl
 
 # Create additional directories
-RUN mkdir -p /recordings /tmp/recordings
+RUN mkdir -p /recordings /tmp/recordings && chmod 777 /recordings /tmp/recordings
 
 # The base image uses /usr/share/freeswitch/conf/vanilla/ as default config
 # We need to copy our customizations there to MERGE with the base config

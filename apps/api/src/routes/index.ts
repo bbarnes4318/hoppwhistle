@@ -1536,7 +1536,10 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
         // Recording fields
         recordingUrl: call.recordingUrl,
         recordingStatus: call.recordingStatus,
+        recordingError: call.recordingError,
         primaryRecordingId: call.primaryRecordingId,
+        recordingStartedAt: call.recordingStartedAt?.toISOString() ?? null,
+        recordingCompletedAt: call.recordingCompletedAt?.toISOString() ?? null,
         // Contractor Call Intelligence fields
         disposition: call.disposition,
         dispositionNotes: call.dispositionNotes,
@@ -1774,6 +1777,156 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       fromNumber: call.fromNumber,
       recordings: call.recordings,
       transcriptions: call.transcriptions,
+    };
+  });
+
+  // ── Recording Status POST — Update recording lifecycle state ──
+  fastify.post<{
+    Params: { callId: string };
+    Body: {
+      status: 'started' | 'recording' | 'stopped' | 'processing' | 'ready' | 'error' | 'failed';
+      error?: string;
+    };
+  }>('/api/v1/calls/:callId/recording-status', async (request, reply) => {
+    const { callId } = request.params;
+    const { status, error: errorMsg } = request.body || {};
+
+    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+
+    // Check if call exists first
+    const call = await prisma.call.findUnique({
+      where: { id: callId },
+    });
+
+    if (!call) {
+      void reply.code(404);
+      return { error: { code: 'NOT_FOUND', message: 'Call not found' } };
+    }
+
+    const updateData: Record<string, any> = {};
+    const now = new Date();
+
+    switch (status) {
+      case 'started':
+      case 'recording':
+        updateData.recordingStatus = 'RECORDING';
+        if (!call.recordingStartedAt) {
+          updateData.recordingStartedAt = now;
+        }
+        break;
+      case 'stopped':
+      case 'processing':
+        updateData.recordingStatus = 'PROCESSING';
+        break;
+      case 'ready':
+        // only set READY if recordingUrl or primaryRecordingId exists
+        if (!call.recordingUrl && !call.primaryRecordingId) {
+          void reply.code(400);
+          return {
+            error: {
+              code: 'INVALID_STATE',
+              message: 'Cannot set status to READY without a playable recordingUrl or primaryRecordingId',
+            },
+          };
+        }
+        updateData.recordingStatus = 'READY';
+        break;
+      case 'error':
+      case 'failed':
+        updateData.recordingStatus = 'FAILED';
+        updateData.recordingError = errorMsg || 'Recording failed';
+        updateData.recordingCompletedAt = now;
+        break;
+      default:
+        void reply.code(400);
+        return { error: { code: 'INVALID_STATUS', message: `Unknown status: ${status}` } };
+    }
+
+    try {
+      const updatedCall = await prisma.call.update({
+        where: { id: callId },
+        data: updateData,
+      });
+
+      return {
+        success: true,
+        callId,
+        recordingStatus: updatedCall.recordingStatus,
+      };
+    } catch (err) {
+      request.log.error({ error: err, callId }, 'Failed to update recording status');
+      void reply.code(500);
+      return { error: { code: 'UPDATE_FAILED', message: 'Failed to update recording status' } };
+    }
+  });
+
+  // ── Recording Debug GET — Debug pipeline issues for a single call ──
+  fastify.get<{ Params: { callId: string } }>('/api/v1/calls/:callId/recording-debug', async (request, reply) => {
+    const { callId } = request.params;
+    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+
+    const call = await prisma.call.findUnique({
+      where: { id: callId },
+      include: {
+        recordings: true,
+      },
+    });
+
+    if (!call) {
+      void reply.code(404);
+      return { error: { code: 'NOT_FOUND', message: 'Call not found' } };
+    }
+
+    const { getStorageService } = await import('../services/storage.js');
+    const storageService = getStorageService();
+    
+    // Determine storage type
+    const storageType = process.env.S3_BUCKET ? 'S3' : 'local';
+    
+    const fs = await import('fs');
+    const path = await import('path');
+    const localDir = process.env.LOCAL_STORAGE_DIR || '/tmp/uploads';
+
+    const recordingsWithFileCheck = call.recordings.map(r => {
+      let fileExists: boolean | null = null;
+      if (storageType === 'local' && r.storageKey) {
+        const localFilePath = path.join(localDir, r.storageKey);
+        fileExists = fs.existsSync(localFilePath);
+      }
+      return {
+        id: r.id,
+        callId: r.callId,
+        legId: r.legId,
+        url: r.url,
+        storageKey: r.storageKey,
+        format: r.format,
+        size: r.size?.toString(),
+        status: r.status,
+        createdAt: r.createdAt,
+        fileExists,
+      };
+    });
+
+    return {
+      call: {
+        id: call.id,
+        callSid: call.callSid,
+        status: call.status,
+        recordingStatus: call.recordingStatus,
+        recordingUrl: call.recordingUrl,
+        primaryRecordingId: call.primaryRecordingId,
+        recordingError: call.recordingError,
+        recordingStartedAt: call.recordingStartedAt,
+        recordingCompletedAt: call.recordingCompletedAt,
+        metadata: call.metadata,
+      },
+      recordings: recordingsWithFileCheck,
+      storage: {
+        type: storageType,
+        bucket: process.env.S3_BUCKET || null,
+        endpoint: process.env.S3_ENDPOINT || null,
+        localStorageDir: localDir,
+      },
     };
   });
 

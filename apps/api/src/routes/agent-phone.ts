@@ -585,9 +585,32 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
         const checkDelay = 20_000; // 20 seconds
         setTimeout(async () => {
           try {
-            const freshCall = await prisma.call.findUnique({
+            const prismaForFailsafe = getPrismaClient();
+
+            // 1. Check for existing recording row first
+            const existingRecording = await prismaForFailsafe.recording.findFirst({
+              where: { callId },
+            });
+
+            if (existingRecording) {
+              const playbackUrl = `/api/v1/recordings/${existingRecording.id}/stream`;
+              await prismaForFailsafe.call.update({
+                where: { id: callId },
+                data: {
+                  primaryRecordingId: existingRecording.id,
+                  recordingStatus: 'READY',
+                  recordingUrl: playbackUrl,
+                  recordingCompletedAt: existingRecording.createdAt,
+                  recordingError: null,
+                },
+              });
+              console.info(`[Recording] Failsafe: Found existing recording row for call ${callId}. Updated call status to READY.`);
+              return;
+            }
+
+            const freshCall = await prismaForFailsafe.call.findUnique({
               where: { id: callId },
-              select: { recordingStatus: true, primaryRecordingId: true },
+              select: { recordingStatus: true },
             });
 
             if (freshCall?.recordingStatus === 'PROCESSING') {
@@ -609,7 +632,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
               }
 
               if (filePath) {
-                console.info(`[Recording] Found recording file at ${filePath}, uploading...`);
+                console.info(`[Recording] Failsafe: Found recording file at ${filePath}, uploading...`);
                 const fileBuffer = fs.readFileSync(filePath);
                 const { RecordingService } = await import('../services/recording-service.js');
                 const recordingService = new RecordingService();
@@ -619,15 +642,15 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
                   file: fileBuffer,
                   duration: duration > 0 ? duration : undefined,
                 });
-                console.info(`[Recording] Successfully uploaded recording for call ${callId} via failsafe`);
+                console.info(`[Recording] Failsafe: Successfully uploaded recording for call ${callId} via failsafe`);
                 // Clean up the file
                 try { fs.unlinkSync(filePath); } catch { /* ignore */ }
               } else {
                 console.warn(
-                  `[Recording] No recording file found for call ${callId} at ${recordingPath} or ${altPath}. ` +
+                  `[Recording] Failsafe: No recording file found for call ${callId} at ${recordingPath} or ${altPath}. ` +
                   'Marking as FAILED.'
                 );
-                await prisma.call.update({
+                await prismaForFailsafe.call.update({
                   where: { id: callId },
                   data: {
                     recordingStatus: 'FAILED',
@@ -640,7 +663,8 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
             console.error(`[Recording] Failsafe check failed for call ${callId}:`, err);
             // Mark as FAILED so UI doesn't spin forever
             try {
-              await prisma.call.update({
+              const prismaForError = getPrismaClient();
+              await prismaForError.call.update({
                 where: { id: callId },
                 data: {
                   recordingStatus: 'FAILED',

@@ -154,7 +154,7 @@ export class FreeSwitchService {
       }
 
       if (!realUuid) {
-        throw new Error(`Could not resolve active FreeSWITCH channel for call ${callId} / ${callUuid}`);
+        throw new Error(`Missing X-Hopwhistle-Call-Id on FreeSWITCH channel.`);
       }
 
       const recordingPath = `/recordings/${callId}.wav`;

@@ -74,8 +74,8 @@ else
 fi
 
 # Ensure recordings directory exists and is writeable
-mkdir -p /tmp/recordings
-chmod 777 /tmp/recordings
+mkdir -p /recordings /tmp/recordings
+chmod 777 /recordings /tmp/recordings
 
 echo "Starting FreeSWITCH..."
 

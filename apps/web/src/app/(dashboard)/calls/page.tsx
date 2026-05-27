@@ -27,6 +27,9 @@ interface CallRecord {
   recordingUrl?: string | null;
   recordingStatus?: string | null;
   primaryRecordingId?: string | null;
+  recordingError?: string | null;
+  recordingStartedAt?: string | null;
+  recordingCompletedAt?: string | null;
   disposition?: string | null;
   dispositionNotes?: string | null;
   callSource?: string | null;
@@ -74,11 +77,49 @@ function getResultBadgeClass(call: CallRecord): string {
 }
 
 export default function CallLogsPage() {
- const [calls, setCalls] = useState<CallRecord[]>([]);
- const [loading, setLoading] = useState(true);
- const [search, setSearch] = useState('');
- const [page, setPage] = useState(1);
- const [totalPages, setTotalPages] = useState(1);
+  const [calls, setCalls] = useState<CallRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+
+  const handlePlayRecording = async (recordingId: string) => {
+    try {
+      const response = await apiClient.get<{ url: string }>(`/api/v1/recordings/${recordingId}/url`);
+      if (response.data?.url) {
+        let playableUrl = response.data.url;
+        if (playableUrl.startsWith('/')) {
+          const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+          playableUrl = `${apiBaseUrl.replace(/\/$/, '')}${playableUrl}`;
+        }
+        window.open(playableUrl, '_blank');
+      } else {
+        alert('Could not retrieve playback URL');
+      }
+    } catch (err) {
+      console.error('Failed to get playback URL:', err);
+      alert('Failed to load recording playback URL');
+    }
+  };
+
+  const handlePlayCallRecording = async (call: CallRecord) => {
+    if (call.primaryRecordingId) {
+      await handlePlayRecording(call.primaryRecordingId);
+    } else if (call.recordingUrl) {
+      // Try to extract recording ID from /api/v1/recordings/:recordingId/stream
+      const match = call.recordingUrl.match(/\/api\/v1\/recordings\/([a-zA-Z0-9_-]+)\/stream/);
+      if (match && match[1]) {
+        await handlePlayRecording(match[1]);
+      } else {
+        let url = call.recordingUrl;
+        if (url.startsWith('/')) {
+          const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+          url = `${apiBaseUrl.replace(/\/$/, '')}${url}`;
+        }
+        window.open(url, '_blank');
+      }
+    }
+  };
 
  const fetchCalls = useCallback(async () => {
  setLoading(true);
@@ -210,37 +251,35 @@ export default function CallLogsPage() {
  <TableCell className="max-w-[200px] truncate text-xs text-muted-foreground font-sans" title={call.dispositionNotes || ''}>
  {call.dispositionNotes || '—'}
  </TableCell>
- <TableCell className="text-right">
- {(() => {
- const recUrl = call.recordingUrl || (call.primaryRecordingId ? `/api/v1/recordings/${call.primaryRecordingId}/stream` : null);
- if ((call.recordingStatus === 'READY' || !call.recordingStatus) && recUrl) {
- return (
- <a href={recUrl} target="_blank" rel="noopener noreferrer">
- <Button variant="ghost" size="sm"><Play className="h-4 w-4" /></Button>
- </a>
- );
- }
- if (call.recordingStatus === 'PENDING' || call.recordingStatus === 'RECORDING' || call.recordingStatus === 'PROCESSING') {
- return (
- <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-xs text-amber-400">
- <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
- <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
- <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
- </svg>
- {call.recordingStatus === 'PENDING' ? 'Pending' : call.recordingStatus === 'RECORDING' ? 'Recording' : 'Processing'}
- </span>
- );
- }
- if (call.recordingStatus === 'FAILED') {
- return (
- <span className="inline-flex items-center gap-1 rounded-md border border-red-500/30 bg-red-500/10 px-2 py-1 text-xs text-red-400" title="Recording failed">
- ✕ Failed
- </span>
- );
- }
- return <span className="text-xs text-muted-foreground">—</span>;
- })()}
- </TableCell>
+  <TableCell className="text-right">
+  {(() => {
+  const recUrl = call.recordingUrl || (call.primaryRecordingId ? `/api/v1/recordings/${call.primaryRecordingId}/stream` : null);
+  if ((call.recordingStatus === 'READY' || (!call.recordingStatus && recUrl)) && (call.primaryRecordingId || call.recordingUrl)) {
+  return (
+  <Button variant="ghost" size="sm" onClick={() => handlePlayCallRecording(call)} title="Play Recording"><Play className="h-4 w-4" /></Button>
+  );
+  }
+  if (call.recordingStatus === 'PENDING' || call.recordingStatus === 'RECORDING' || call.recordingStatus === 'PROCESSING') {
+  return (
+  <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-xs text-amber-400">
+  <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
+  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+  </svg>
+  {call.recordingStatus === 'PENDING' ? 'Pending' : call.recordingStatus === 'RECORDING' ? 'Recording' : 'Processing'}
+  </span>
+  );
+  }
+  if (call.recordingStatus === 'FAILED') {
+  return (
+  <span className="inline-flex items-center gap-1 rounded-md border border-red-500/30 bg-red-500/10 px-2 py-1 text-xs text-red-400 cursor-help" title={call.recordingError || "Recording failed"}>
+  ✕ Failed
+  </span>
+  );
+  }
+  return <span className="text-xs text-muted-foreground">—</span>;
+  })()}
+  </TableCell>
  </TableRow>
  );
  })

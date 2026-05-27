@@ -21,8 +21,10 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
       duration?: number;
     };
   }>('/api/v1/recordings/upload', async (request, reply) => {
+    let resolvedCallId: string | undefined = undefined;
     try {
       const { callId, legId, url, format, duration } = request.body || {};
+      resolvedCallId = callId;
 
       // If URL is provided, download and upload to S3
       if (url) {
@@ -32,8 +34,11 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
         }
 
         const buffer = Buffer.from(await response.arrayBuffer());
+        if (buffer.length === 0) {
+          throw new Error('Downloaded recording file is empty');
+        }
         const uploadResult = await recordingService.uploadRecording({
-          callId,
+          callId: resolvedCallId || '',
           legId,
           format: format || 'wav',
           file: buffer,
@@ -50,7 +55,6 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
       }
 
       let fileBuffer: Buffer | null = null;
-      let resolvedCallId: string | undefined = callId;
       let resolvedFormat: string | undefined = format;
       let resolvedLegId: string | undefined = legId;
       let resolvedDuration: number | undefined = duration;
@@ -78,16 +82,6 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
         }
       }
 
-      if (!fileBuffer) {
-        reply.code(400);
-        return {
-          error: {
-            code: 'MISSING_FILE',
-            message: 'No file provided',
-          },
-        };
-      }
-
       if (!resolvedCallId) {
         reply.code(400);
         return {
@@ -96,6 +90,10 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
             message: 'callId is required',
           },
         };
+      }
+
+      if (!fileBuffer || fileBuffer.length === 0) {
+        throw new Error('No file provided or file is empty');
       }
 
       const uploadResult = await recordingService.uploadRecording({
@@ -114,11 +112,19 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
         checksum: uploadResult.checksum,
       };
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Failed to upload recording';
+      if (resolvedCallId) {
+        try {
+          await recordingService.markRecordingFailed(resolvedCallId, errorMsg);
+        } catch (markErr) {
+          request.log.error({ error: markErr, callId: resolvedCallId }, 'Failed to mark recording as failed');
+        }
+      }
       reply.code(400);
       return {
         error: {
           code: 'UPLOAD_ERROR',
-          message: error instanceof Error ? error.message : 'Failed to upload recording',
+          message: errorMsg,
         },
       };
     }
@@ -334,10 +340,17 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
     '/api/v1/recordings/local-stream/*',
     async (request, reply) => {
       const params = request.params as Record<string, string>;
-      const storageKey = params['*'];
+      let storageKey = params['*'];
       if (!storageKey) {
         reply.code(400);
         return { error: { code: 'BAD_REQUEST', message: 'Missing storage key' } };
+      }
+
+      // Ensure storage key is fully URL-decoded (handling %2F, %20, etc.)
+      try {
+        storageKey = decodeURIComponent(storageKey);
+      } catch {
+        // ignore decoding errors
       }
 
       const fs = await import('fs');
@@ -345,12 +358,20 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
       const localDir = process.env.LOCAL_STORAGE_DIR || '/tmp/uploads';
       const localFilePath = path.join(localDir, storageKey);
 
-      if (!fs.existsSync(localFilePath)) {
+      // Verify directory traversal protection
+      const resolvedPath = path.resolve(localFilePath);
+      const resolvedDir = path.resolve(localDir);
+      if (!resolvedPath.startsWith(resolvedDir)) {
+        reply.code(403);
+        return { error: { code: 'FORBIDDEN', message: 'Access forbidden: invalid storage key' } };
+      }
+
+      if (!fs.existsSync(resolvedPath)) {
         reply.code(404);
         return { error: { code: 'NOT_FOUND', message: 'Local recording file not found' } };
       }
 
-      const stream = fs.createReadStream(localFilePath);
+      const stream = fs.createReadStream(resolvedPath);
       void reply.type('audio/wav');
       return reply.send(stream);
     }

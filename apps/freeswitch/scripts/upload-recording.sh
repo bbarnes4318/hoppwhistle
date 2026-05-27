@@ -21,6 +21,12 @@ fi
 API_URL="${API_URL:-http://api:3001}"
 API_KEY="${API_KEY:-}"
 
+# Build headers/options array for curl to ensure authentication is sent to all endpoints
+CURL_OPTS=("-s")
+if [ -n "$API_KEY" ]; then
+  CURL_OPTS+=("-H" "x-api-key: ${API_KEY}")
+fi
+
 # Wait for the recording file to appear and stabilize.
 # record_session may still be flushing when the hangup hook fires.
 MAX_WAIT=10
@@ -43,18 +49,18 @@ done
 if [ ! -f "$RECORDING_FILE" ]; then
   log "ERROR: Recording file not found after ${MAX_WAIT}s: $RECORDING_FILE"
   # Notify API that recording failed
-  curl -s -X POST "${API_URL}/api/v1/calls/${CALL_ID}/recording-status" \
+  curl "${CURL_OPTS[@]}" -X POST "${API_URL}/api/v1/calls/${CALL_ID}/recording-status" \
     -H "Content-Type: application/json" \
-    -d "{\"status\": \"error\", \"error\": \"Recording file not found: ${RECORDING_FILE}\"}" || true
+    -d "{\"status\": \"failed\", \"error\": \"Recording file not found: ${RECORDING_FILE}\"}" || true
   exit 1
 fi
 
 FILE_SIZE=$(stat -c%s "$RECORDING_FILE" 2>/dev/null || stat -f%z "$RECORDING_FILE" 2>/dev/null || echo "0")
 if [ "$FILE_SIZE" = "0" ]; then
   log "ERROR: Recording file is empty: $RECORDING_FILE"
-  curl -s -X POST "${API_URL}/api/v1/calls/${CALL_ID}/recording-status" \
+  curl "${CURL_OPTS[@]}" -X POST "${API_URL}/api/v1/calls/${CALL_ID}/recording-status" \
     -H "Content-Type: application/json" \
-    -d "{\"status\": \"error\", \"error\": \"Recording file is empty\"}" || true
+    -d "{\"status\": \"failed\", \"error\": \"Recording file is empty\"}" || true
   rm -f "$RECORDING_FILE"
   exit 1
 fi
@@ -72,18 +78,10 @@ HTTP_CODE=""
 BODY=""
 
 while [ $ATTEMPT -le $MAX_RETRIES ]; do
-  if [ -n "$API_KEY" ]; then
-    RESPONSE=$(curl -s -w "\n%{http_code}" --max-time 30 -X POST "${API_URL}/api/v1/recordings/upload" \
-      -H "X-API-Key: ${API_KEY}" \
-      -F "callId=${CALL_ID}" \
-      -F "format=${EXTENSION}" \
-      -F "file=@${RECORDING_FILE}" 2>&1)
-  else
-    RESPONSE=$(curl -s -w "\n%{http_code}" --max-time 30 -X POST "${API_URL}/api/v1/recordings/upload" \
-      -F "callId=${CALL_ID}" \
-      -F "format=${EXTENSION}" \
-      -F "file=@${RECORDING_FILE}" 2>&1)
-  fi
+  RESPONSE=$(curl "${CURL_OPTS[@]}" -w "\n%{http_code}" --max-time 30 -X POST "${API_URL}/api/v1/recordings/upload" \
+    -F "callId=${CALL_ID}" \
+    -F "format=${EXTENSION}" \
+    -F "file=@${RECORDING_FILE}" 2>&1)
 
   HTTP_CODE=$(echo "$RESPONSE" | tail -1)
   BODY=$(echo "$RESPONSE" | sed '$d')
@@ -104,7 +102,7 @@ log "ERROR: Upload failed after ${MAX_RETRIES} attempts (HTTP ${HTTP_CODE})"
 log "Response: ${BODY}"
 
 # Notify API that recording upload failed
-curl -s -X POST "${API_URL}/api/v1/calls/${CALL_ID}/recording-status" \
+curl "${CURL_OPTS[@]}" -X POST "${API_URL}/api/v1/calls/${CALL_ID}/recording-status" \
   -H "Content-Type: application/json" \
-  -d "{\"status\": \"error\", \"error\": \"Upload failed after ${MAX_RETRIES} attempts (HTTP ${HTTP_CODE})\"}" || true
+  -d "{\"status\": \"failed\", \"error\": \"Upload failed after ${MAX_RETRIES} attempts (HTTP ${HTTP_CODE}): ${BODY}\"}" || true
 exit 1
