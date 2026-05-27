@@ -162,10 +162,45 @@ async function test() {
     }
     console.log(`Assigning number ${firstNum.number} to Jimmy...`);
 
-    // Assign number to Jimmy
-    await prisma.phoneNumber.update({
-      where: { id: firstNum.id },
-      data: { userId: jimmy.id }
+    // Assign number to Jimmy via API
+    const assignRes = await callApi(`/api/v1/numbers/${firstNum.id}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${leoToken}` },
+      body: { userId: jimmy.id }
+    });
+    if (assignRes.status !== 200) {
+      throw new Error(`Failed to assign number via API: ${JSON.stringify(assignRes.data)}`);
+    }
+
+    // Verify DidRoute was automatically created
+    const lookupRes = await callApi(`/api/v1/freeswitch/lookup?did=${firstNum.number}`);
+    console.log('DID lookup status after assignment:', lookupRes.status);
+    console.log('DID lookup destination:', lookupRes.data.destination);
+    if (lookupRes.status === 200 && lookupRes.data.destination === jimmy.id) {
+      console.log('✅ PASS: DID route automatically created pointing to user ID');
+    } else {
+      console.error('❌ FAIL: DID routing was not created correctly');
+    }
+
+    // Unassign number to test cleanup
+    const unassignRes = await callApi(`/api/v1/numbers/${firstNum.id}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${leoToken}` },
+      body: { userId: null }
+    });
+    const lookupRes2 = await callApi(`/api/v1/freeswitch/lookup?did=${firstNum.number}`);
+    console.log('DID lookup status after unassignment:', lookupRes2.status);
+    if (lookupRes2.status === 404) {
+      console.log('✅ PASS: DID route automatically cleaned up on unassignment');
+    } else {
+      console.error('❌ FAIL: DID route was not cleaned up');
+    }
+
+    // Re-assign to Jimmy for the remainder of the tests
+    await callApi(`/api/v1/numbers/${firstNum.id}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${leoToken}` },
+      body: { userId: jimmy.id }
     });
 
     // Jimmy (Non-Admin) list numbers again (should see 1 number)

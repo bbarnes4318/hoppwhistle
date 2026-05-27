@@ -181,15 +181,22 @@ for i, step in ipairs(failover_steps) do
             -- Strip whitespace
             p_dest = string.gsub(p_dest, "^%s*(.-)%s*$", "%1")
             if p_dest ~= "" then
-                -- Check if it's a short extension (e.g. 1000)
+                -- Check if it's a short extension (e.g. 1000) or a UUID (User ID)
+                local is_internal = false
                 if string.match(p_dest, "^%d%d%d%d$") then
+                    is_internal = true
+                elseif string.match(p_dest, "^%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$") then
+                    is_internal = true
+                end
+
+                if is_internal then
                     -- Pre-resolve the contact to check if registered
                     local contact = api:execute("sofia_contact", "internal/" .. p_dest .. "@3.214.60.13") or ""
                     if contact ~= "" and not string.match(contact, "^error") then
-                        log("INFO", "Extension " .. p_dest .. " registered: " .. contact)
+                        log("INFO", "Internal extension " .. p_dest .. " registered: " .. contact)
                         table.insert(bridge_components, contact)
                     else
-                        log("WARNING", "Extension " .. p_dest .. " NOT registered — skipping")
+                        log("WARNING", "Internal extension " .. p_dest .. " NOT registered — skipping")
                     end
                 else
                     -- Strip leading + for external dialing

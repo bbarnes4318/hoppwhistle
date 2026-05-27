@@ -170,6 +170,10 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
         };
       }
 
+      // Automatically sync/create inbound DidRoute pointing to user's extension
+      const { didRouteService } = await import('../services/did-route-service.js');
+      await didRouteService.syncDidRouteForNumber(dbNumber.id, tenantId);
+
       void reply.code(201);
       return {
         id: dbNumber.id,
@@ -318,6 +322,10 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
         ipAddress: request.ip,
         requestId: request.id,
       });
+
+      // Sync inbound DidRoute for the updated user assignment
+      const { didRouteService } = await import('../services/did-route-service.js');
+      await didRouteService.syncDidRouteForNumber(numberId, tenantId);
 
       return {
         id: updatedNumber.id,

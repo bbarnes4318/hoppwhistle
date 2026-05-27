@@ -134,6 +134,9 @@ export async function registerBulkvsProcurementRoutes(fastify: FastifyInstance):
             recordingEnabled: true,
           }
         });
+      } else {
+        const { didRouteService } = await import('../services/did-route-service.js');
+        await didRouteService.syncDidRouteForNumber(phoneNumber.id, tenantId);
       }
 
       logger.info({
