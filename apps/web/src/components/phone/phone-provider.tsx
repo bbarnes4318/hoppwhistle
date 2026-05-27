@@ -239,6 +239,8 @@ export function PhoneProvider({
  const heldSessionRef = useRef<Session | null>(null);
  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
  const [hasHeldCalls, setHasHeldCalls] = useState(false);
+ const reportedAnsweredCallsRef = useRef<Set<string>>(new Set());
+ const reportedEndedCallsRef = useRef<Set<string>>(new Set());
 
  // ============================================================================
  // Audio Utilities
@@ -470,49 +472,103 @@ export function PhoneProvider({
  wireRemoteAudio(pc);
  };
 
- const handleCallAnswered = useCallback(() => {
- setCurrentCall(prev => {
- if (!prev) return prev;
- return {
- ...prev,
- state: 'active',
- answerTime: new Date(),
- };
- });
- setAgentStatusState('on-call');
- stopRingtone();
- startCallDurationTimer();
- }, [stopRingtone, startCallDurationTimer]);
+  const handleCallAnswered = useCallback(() => {
+    setCurrentCall(prev => {
+      if (!prev) return prev;
 
- const handleCallEnded = useCallback(() => {
- setCurrentCall(prev => {
- if (prev) {
- const completedCall: CallInfo = {
- ...prev,
- state: 'ended',
- endTime: new Date(),
- };
- setCallHistory(history => [completedCall, ...history].slice(0, 50));
- // Preserve call data for disposition modal
- setPendingDispositionCall({
- callId: prev.callId,
- direction: prev.direction,
- phoneNumber: prev.phoneNumber,
- callerName: prev.callerName,
- duration: prev.duration,
- startTime: prev.startTime,
- endTime: new Date(),
- prospectData: prev.prospectData,
- });
- }
- return null;
- });
- setAgentStatusState('available');
- setIsConnecting(false); // Reset connecting state so user can make new calls
- stopRingtone();
- stopCallDurationTimer();
- sessionRef.current = null;
- }, [stopRingtone, stopCallDurationTimer]);
+      if (prev.direction === 'outbound') {
+        const callId = prev.callId;
+        if (!reportedAnsweredCallsRef.current.has(callId)) {
+          reportedAnsweredCallsRef.current.add(callId);
+          const url = `${normalizedApiUrl}/api/v1/agent/call/${callId}/answer`;
+          fetch(url, {
+            method: 'POST',
+            headers: getApiHeaders(),
+            body: JSON.stringify({}),
+          })
+            .then(res => {
+              if (!res.ok) {
+                console.error('[Phone] Failed to report answer to backend');
+              } else {
+                console.log('[Phone] Answer successfully reported to backend');
+              }
+            })
+            .catch(err => console.error('[Phone] Failed to report answer:', err));
+        }
+      }
+
+      return {
+        ...prev,
+        state: 'active',
+        answerTime: new Date(),
+      };
+    });
+    setAgentStatusState('on-call');
+    stopRingtone();
+    startCallDurationTimer();
+  }, [stopRingtone, startCallDurationTimer, normalizedApiUrl, getApiHeaders]);
+
+  const handleCallEnded = useCallback(() => {
+    setCurrentCall(prev => {
+      if (prev) {
+        const completedCall: CallInfo = {
+          ...prev,
+          state: 'ended',
+          endTime: new Date(),
+        };
+
+        const duration = prev.answerTime
+          ? Math.floor((Date.now() - prev.answerTime.getTime()) / 1000)
+          : 0;
+
+        if (prev.direction === 'outbound') {
+          const callId = prev.callId;
+          if (!reportedEndedCallsRef.current.has(callId)) {
+            reportedEndedCallsRef.current.add(callId);
+            const url = `${normalizedApiUrl}/api/v1/agent/call/${callId}/hangup`;
+            fetch(url, {
+              method: 'POST',
+              headers: getApiHeaders(),
+              body: JSON.stringify({
+                duration,
+                startedAt: prev.startTime?.toISOString(),
+                answeredAt: prev.answerTime?.toISOString(),
+                endedAt: new Date().toISOString(),
+                endReason: 'sip_terminated',
+              }),
+            })
+              .then(res => {
+                if (!res.ok) {
+                  console.error('[Phone] Failed to report hangup to backend');
+                } else {
+                  console.log('[Phone] Hangup successfully reported to backend');
+                }
+              })
+              .catch(err => console.error('[Phone] Failed to report hangup:', err));
+          }
+        }
+
+        setCallHistory(history => [completedCall, ...history].slice(0, 50));
+        // Preserve call data for disposition modal
+        setPendingDispositionCall({
+          callId: prev.callId,
+          direction: prev.direction,
+          phoneNumber: prev.phoneNumber,
+          callerName: prev.callerName,
+          duration: duration,
+          startTime: prev.startTime,
+          endTime: new Date(),
+          prospectData: prev.prospectData,
+        });
+      }
+      return null;
+    });
+    setAgentStatusState('available');
+    setIsConnecting(false);
+    stopRingtone();
+    stopCallDurationTimer();
+    sessionRef.current = null;
+  }, [stopRingtone, stopCallDurationTimer, normalizedApiUrl, getApiHeaders]);
 
  // Keep refs in sync so stateChange listeners always call latest versions
  useEffect(() => { handleCallAnsweredRef.current = handleCallAnswered; }, [handleCallAnswered]);
@@ -603,10 +659,20 @@ export function PhoneProvider({
  }
  });
 
- inviter
- .invite({
- extraHeaders: chosenCallerId ? [`X-Caller-ID: ${chosenCallerId}`] : [],
- })
+  const extraHeaders: string[] = [];
+  if (chosenCallerId) {
+    extraHeaders.push(`X-Caller-ID: ${chosenCallerId}`);
+  }
+  if (apiCallId) {
+    extraHeaders.push(`X-Hopwhistle-Call-Id: ${apiCallId}`);
+  }
+
+  inviter
+    .invite({
+      requestOptions: {
+        extraHeaders,
+      },
+    })
  .then(() => {
  console.log('[Phone] INVITE sent with caller ID:', chosenCallerId);
  })
@@ -678,22 +744,24 @@ export function PhoneProvider({
   }, [wireRemoteAudio, stopRingtone]);
 
  const hangupCall = useCallback(() => {
- if (sessionRef.current) {
- switch (sessionRef.current.state) {
- case SessionState.Initial:
- case SessionState.Establishing:
- if (sessionRef.current instanceof Inviter) {
- void sessionRef.current.cancel();
- } else if (sessionRef.current instanceof Invitation) {
- void sessionRef.current.reject();
- }
- break;
- case SessionState.Established:
- void sessionRef.current.bye();
- break;
- }
- }
- }, []);
+    if (sessionRef.current) {
+      switch (sessionRef.current.state) {
+        case SessionState.Initial:
+        case SessionState.Establishing:
+          if (sessionRef.current instanceof Inviter) {
+            void sessionRef.current.cancel();
+          } else if (sessionRef.current instanceof Invitation) {
+            void sessionRef.current.reject();
+          }
+          break;
+        case SessionState.Established:
+          void sessionRef.current.bye();
+          break;
+      }
+    }
+    // Safety net: force local call end if SIP.js is stuck or already terminated
+    handleCallEndedRef.current();
+  }, []);
 
  const toggleMute = useCallback(() => {
  // TODO: Implement SIP mute

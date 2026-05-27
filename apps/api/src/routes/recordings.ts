@@ -22,7 +22,7 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
     };
   }>('/api/v1/recordings/upload', async (request, reply) => {
     try {
-      const { callId, legId, url, format, size, duration } = request.body || {};
+      const { callId, legId, url, format, duration } = request.body || {};
 
       // If URL is provided, download and upload to S3
       if (url) {
@@ -49,9 +49,36 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
         };
       }
 
-      // If file is uploaded directly (multipart/form-data)
-      const data = await request.file();
-      if (!data) {
+      let fileBuffer: Buffer | null = null;
+      let resolvedCallId: string | undefined = callId;
+      let resolvedFormat: string | undefined = format;
+      let resolvedLegId: string | undefined = legId;
+      let resolvedDuration: number | undefined = duration;
+
+      if (request.isMultipart()) {
+        const parts = request.parts();
+        for await (const part of parts) {
+          if (part.type === 'file') {
+            fileBuffer = await part.toBuffer();
+            if (!resolvedFormat && part.filename) {
+              resolvedFormat = part.filename.split('.').pop();
+            }
+          } else {
+            const fieldVal = part.value !== undefined ? String(part.value) : undefined;
+            if (part.fieldname === 'callId') {
+              resolvedCallId = fieldVal;
+            } else if (part.fieldname === 'format') {
+              resolvedFormat = fieldVal;
+            } else if (part.fieldname === 'legId') {
+              resolvedLegId = fieldVal;
+            } else if (part.fieldname === 'duration') {
+              resolvedDuration = fieldVal ? Number(fieldVal) : undefined;
+            }
+          }
+        }
+      }
+
+      if (!fileBuffer) {
         reply.code(400);
         return {
           error: {
@@ -60,30 +87,6 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
           },
         };
       }
-
-      const buffer = await data.toBuffer();
-
-      // Resolve fields from multipart fields if they were not in request.body
-      const fields = data.fields as Record<string, unknown>;
-      const getFieldValue = (key: string): string | undefined => {
-        const field = fields[key];
-        if (!field) return undefined;
-        if (Array.isArray(field)) {
-          const first = field[0] as Record<string, unknown> | undefined;
-          return first && typeof first === 'object' && 'value' in first
-            ? String(first.value)
-            : undefined;
-        }
-        if (typeof field === 'object' && 'value' in field) {
-          return String((field as Record<string, unknown>).value);
-        }
-        return undefined;
-      };
-
-      const resolvedCallId = callId || getFieldValue('callId');
-      const resolvedLegId = legId || getFieldValue('legId');
-      const resolvedFormat = format || getFieldValue('format') || data.filename?.split('.').pop() || 'wav';
-      const resolvedDuration = duration || (fields.duration ? Number(getFieldValue('duration')) : undefined);
 
       if (!resolvedCallId) {
         reply.code(400);
@@ -98,8 +101,8 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
       const uploadResult = await recordingService.uploadRecording({
         callId: resolvedCallId,
         legId: resolvedLegId,
-        format: resolvedFormat,
-        file: buffer,
+        format: resolvedFormat || 'wav',
+        file: fileBuffer,
         duration: resolvedDuration,
       });
 
@@ -297,6 +300,7 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
       try {
         const streamUrl = await recordingService.getStreamUrl(request.params.recordingId);
         reply.redirect(302, streamUrl);
+        return;
       } catch (error) {
         reply.code(404);
         return {

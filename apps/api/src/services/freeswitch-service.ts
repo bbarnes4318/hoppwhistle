@@ -80,6 +80,29 @@ export class FreeSwitchService {
     }
   }
 
+  async resolveUuidByCallId(callId: string): Promise<string | null> {
+    try {
+      const jsonOutput = await this.executeApi('show', 'channels as json');
+      let channels: { rows?: Array<{ uuid?: string }> };
+      try {
+        channels = JSON.parse(jsonOutput) as { rows?: Array<{ uuid?: string }> };
+      } catch {
+        return null;
+      }
+      const uuids = (channels.rows || []).map(r => r.uuid).filter((u): u is string => !!u);
+      for (const uuid of uuids) {
+        const chanCallId = await this.executeApi('uuid_getvar', `${uuid} hopwhistle_call_id`);
+        if (chanCallId === callId) {
+          return uuid;
+        }
+      }
+      return null;
+    } catch (err) {
+      logger.error({ msg: 'Error resolving UUID by Call ID', error: err });
+      return null;
+    }
+  }
+
   // ============================================================================
   // Call Recording Controls
   // ============================================================================
@@ -97,25 +120,40 @@ export class FreeSwitchService {
    */
   async startRecording(callUuid: string, callId: string): Promise<boolean> {
     try {
-      // Build the recording file path.
-      // FreeSWITCH records to /tmp/recordings/ (configured in freeswitch.xml)
-      // The callId is used in the filename so the upload callback can map it back.
+      let realUuid: string | null = await this.resolveUuidByCallId(callId);
+      if (!realUuid) {
+        realUuid = await this.resolveUuid(callUuid);
+      }
+      if (!realUuid) {
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (uuidRegex.test(callUuid)) {
+          realUuid = callUuid;
+        }
+      }
+
+      if (!realUuid) {
+        throw new Error(`Could not resolve active FreeSWITCH channel for call ${callId} / ${callUuid}`);
+      }
+
       const recordingPath = `/tmp/recordings/${callId}.wav`;
 
-      logger.info({ msg: 'Starting call recording', callUuid, callId, recordingPath });
+      logger.info({ msg: 'Starting call recording', uuid: realUuid, callId, recordingPath });
 
-      // uuid_record <uuid> start <path> [<limit_seconds>]
-      await this.executeApi('uuid_record', `${callUuid} start ${recordingPath}`);
+      const isAlreadyRecording = await this.isRecording(realUuid);
+      if (isAlreadyRecording) {
+        logger.info({ msg: 'Channel is already recording', uuid: realUuid, callId });
+        return true;
+      }
 
-      // Set channel variables for tracking
-      await this.executeApi('uuid_setvar', `${callUuid} hopwhistle_call_id ${callId}`);
-      await this.executeApi('uuid_setvar', `${callUuid} hopwhistle_recording_path ${recordingPath}`);
+      await this.executeApi('uuid_record', `${realUuid} start ${recordingPath}`);
 
-      // Register hangup hook to upload the recording file
+      await this.executeApi('uuid_setvar', `${realUuid} hopwhistle_call_id ${callId}`);
+      await this.executeApi('uuid_setvar', `${realUuid} hopwhistle_recording_path ${recordingPath}`);
+
       const uploadCmd = `system /usr/share/freeswitch/scripts/upload-recording.sh ${recordingPath} ${callId}`;
-      await this.executeApi('uuid_setvar', `${callUuid} api_hangup_hook "${uploadCmd}"`);
+      await this.executeApi('uuid_setvar', `${realUuid} api_hangup_hook "${uploadCmd}"`);
 
-      logger.info({ msg: 'Recording started successfully with hangup hook', callUuid, callId });
+      logger.info({ msg: 'Recording started successfully with hangup hook', uuid: realUuid, callId });
       return true;
     } catch (err) {
       logger.error({ msg: 'Failed to start recording', callUuid, callId, error: err });

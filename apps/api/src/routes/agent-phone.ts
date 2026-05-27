@@ -371,16 +371,29 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
         return { error: { code: 'CALL_NOT_FOUND', message: 'Call not found' } };
       }
 
+      // Check if already answered or completed
+      if (call.status === 'ANSWERED' || call.status === 'COMPLETED') {
+        const callMetadata = (call.metadata as Prisma.JsonObject) ?? {};
+        const recordingEnabled = callMetadata.recordingEnabled !== false;
+        return {
+          callId,
+          status: call.status.toLowerCase(),
+          answeredAt: call.answeredAt?.toISOString() || new Date().toISOString(),
+          recordingEnabled,
+        };
+      }
+
       // Check if recording should happen for this call
       const callMetadata = (call.metadata as Prisma.JsonObject) ?? {};
       const recordingEnabled = callMetadata.recordingEnabled !== false;
+      const answeredAt = call.answeredAt || new Date();
 
       // Update call in PostgreSQL
       await prisma.call.update({
         where: { id: callId },
         data: {
           status: 'ANSWERED',
-          answeredAt: new Date(),
+          answeredAt,
           // If recording is enabled, transition from PENDING → RECORDING
           ...(recordingEnabled && call.recordingStatus === 'PENDING'
             ? {
@@ -430,14 +443,14 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
           callId,
           agentId: userId,
           recordingEnabled,
-          timestamp: new Date().toISOString(),
+          timestamp: answeredAt.toISOString(),
         },
       });
 
       return {
         callId,
         status: 'answered',
-        answeredAt: new Date().toISOString(),
+        answeredAt: answeredAt.toISOString(),
         recordingEnabled,
       };
     }
@@ -447,10 +460,20 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
    * POST /api/v1/agent/call/:callId/hangup
    * Hang up a call - updates PostgreSQL with duration
    */
-  fastify.post<{ Params: CallIdParams }>(
+  fastify.post<{
+    Params: CallIdParams;
+    Body?: {
+      duration?: number;
+      startedAt?: string;
+      answeredAt?: string;
+      endedAt?: string;
+      endReason?: string;
+    };
+  }>(
     '/api/v1/agent/call/:callId/hangup',
     async (request, reply: FastifyReply) => {
       const { callId } = request.params;
+      const { duration: bodyDuration, startedAt: bodyStartedAt, answeredAt: bodyAnsweredAt, endedAt: bodyEndedAt, endReason } = request.body || {};
       const { userId, tenantId } = getUser(request);
       const prisma = getPrismaClient();
 
@@ -464,19 +487,50 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
         return { error: { code: 'CALL_NOT_FOUND', message: 'Call not found' } };
       }
 
-      // Calculate duration
-      const endedAt = new Date();
-      let duration = 0;
-      if (call.answeredAt) {
-        duration = Math.floor((endedAt.getTime() - call.answeredAt.getTime()) / 1000);
+      // If call is already COMPLETED, return the existing finalized values.
+      if (call.status === 'COMPLETED') {
+        return {
+          callId,
+          status: 'completed',
+          duration: call.duration ?? 0,
+          endedAt: call.endedAt?.toISOString() || new Date().toISOString(),
+        };
       }
 
-      // If recording was active, transition to PROCESSING
-      // (the actual file upload happens asynchronously via the FreeSWITCH hangup hook)
-      const recordingStatusUpdate: Record<string, unknown> = {};
-      if (call.recordingStatus === 'RECORDING') {
-        recordingStatusUpdate.recordingStatus = 'PROCESSING';
+      const endedAt = bodyEndedAt ? new Date(bodyEndedAt) : new Date();
+      const answeredAt = call.answeredAt || (bodyAnsweredAt ? new Date(bodyAnsweredAt) : null);
+      const startedAt = call.startedAt || (bodyStartedAt ? new Date(bodyStartedAt) : null);
+
+      // Duration calculation logic
+      let duration = 0;
+      if (bodyDuration !== undefined && typeof bodyDuration === 'number' && Number.isFinite(bodyDuration) && bodyDuration >= 0) {
+        duration = bodyDuration;
+      } else if (answeredAt) {
+        duration = Math.floor((endedAt.getTime() - answeredAt.getTime()) / 1000);
+      } else if (startedAt) {
+        duration = Math.floor((endedAt.getTime() - startedAt.getTime()) / 1000);
       }
+      if (duration < 0) duration = 0;
+
+      // Handle recordingStatus transitions:
+      const recordingUpdate: Record<string, unknown> = {};
+      if (call.recordingStatus === 'RECORDING') {
+        recordingUpdate.recordingStatus = 'PROCESSING';
+      } else if (call.recordingStatus === 'PENDING') {
+        if (!answeredAt) {
+          recordingUpdate.recordingStatus = 'FAILED';
+          recordingUpdate.recordingError = 'Call was not answered, no recording generated.';
+        } else {
+          recordingUpdate.recordingStatus = 'PROCESSING';
+        }
+      }
+
+      // Add metadata.endReason
+      const callMetadata = (call.metadata as Prisma.JsonObject) ?? {};
+      const updatedMetadata = {
+        ...callMetadata,
+        ...(endReason ? { endReason } : {}),
+      };
 
       // Update call in PostgreSQL
       await prisma.call.update({
@@ -484,8 +538,11 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
         data: {
           status: 'COMPLETED',
           endedAt,
+          answeredAt: answeredAt || undefined,
           duration,
-          ...recordingStatusUpdate,
+          connectedDuration: answeredAt ? duration : 0,
+          metadata: updatedMetadata as Prisma.JsonObject,
+          ...recordingUpdate,
         },
       });
 
@@ -507,7 +564,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
           callId,
           agentId: userId,
           duration,
-          endReason: 'agent_hangup',
+          endReason: endReason || 'agent_hangup',
           timestamp: endedAt.toISOString(),
         },
       });

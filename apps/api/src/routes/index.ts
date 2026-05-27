@@ -1855,10 +1855,37 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
     }
 
     if (call) {
+      const finalEndedAt = call.endedAt || new Date();
+      let finalDuration = call.duration;
+      if (duration !== undefined && typeof duration === 'number' && Number.isFinite(duration) && duration >= 0) {
+        finalDuration = duration;
+      } else if (finalDuration === null || finalDuration === undefined) {
+        finalDuration = 0;
+      }
+
+      const recordingStatusUpdate: Record<string, unknown> = {};
+      if (call.recordingStatus === 'RECORDING') {
+        recordingStatusUpdate.recordingStatus = 'PROCESSING';
+      } else if (call.recordingStatus === 'PENDING') {
+        if (!call.answeredAt) {
+          recordingStatusUpdate.recordingStatus = 'FAILED';
+          recordingStatusUpdate.recordingError = 'Call was not answered, no recording generated.';
+        } else {
+          recordingStatusUpdate.recordingStatus = 'PROCESSING';
+        }
+      }
+
       // Update existing call record (idempotent upsert pattern)
       const updated = await prisma.call.update({
         where: { id: call.id },
-        data: updateData,
+        data: {
+          ...updateData,
+          status: 'COMPLETED',
+          endedAt: finalEndedAt,
+          duration: finalDuration,
+          connectedDuration: call.answeredAt ? finalDuration : 0,
+          ...recordingStatusUpdate,
+        },
       });
       return {
         id: updated.id,
