@@ -63,19 +63,30 @@ export class FreeSwitchService {
 
       // Iterate through active channels to find the one matching the SIP Call-ID
       const uuids: string[] = rows
-        .map((r: { uuid?: string }) => r.uuid)
-        .filter((u): u is string => typeof u === 'string');
+          .map((r: { uuid?: string }) => r.uuid)
+          .filter((u): u is string => typeof u === 'string');
 
       for (const uuid of uuids) {
-        const chanCallId = await this.executeApi('uuid_getvar', `${uuid} sip_call_id`);
-        if (chanCallId === sipCallId) {
-          return uuid;
+        try {
+          const chanCallId = await this.executeApi('uuid_getvar', `${uuid} sip_call_id`);
+          if (chanCallId === sipCallId) {
+            return uuid;
+          }
+        } catch (err) {
+          logger.warn({
+            msg: 'Failed to check sip_call_id on active channel',
+            uuid,
+            error: err instanceof Error ? err.stack : String(err)
+          });
         }
       }
 
       return null;
     } catch (err) {
-      logger.error({ msg: 'Error resolving UUID', error: err });
+      logger.error({
+        msg: 'Error resolving UUID',
+        error: err instanceof Error ? err.stack : String(err)
+      });
       return null;
     }
   }
@@ -91,14 +102,25 @@ export class FreeSwitchService {
       }
       const uuids = (channels.rows || []).map(r => r.uuid).filter((u): u is string => !!u);
       for (const uuid of uuids) {
-        const chanCallId = await this.executeApi('uuid_getvar', `${uuid} hopwhistle_call_id`);
-        if (chanCallId === callId) {
-          return uuid;
+        try {
+          const chanCallId = await this.executeApi('uuid_getvar', `${uuid} hopwhistle_call_id`);
+          if (chanCallId === callId) {
+            return uuid;
+          }
+        } catch (err) {
+          logger.warn({
+            msg: 'Failed to check hopwhistle_call_id on active channel',
+            uuid,
+            error: err instanceof Error ? err.stack : String(err)
+          });
         }
       }
       return null;
     } catch (err) {
-      logger.error({ msg: 'Error resolving UUID by Call ID', error: err });
+      logger.error({
+        msg: 'Error resolving UUID by Call ID',
+        error: err instanceof Error ? err.stack : String(err)
+      });
       return null;
     }
   }

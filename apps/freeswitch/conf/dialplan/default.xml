@@ -37,20 +37,42 @@
     <!-- Outbound calls via BulkVS (NANP numbers only) -->
     <extension name="outbound-to-bulkvs">
       <condition field="destination_number" expression="^1?([2-9]\d{9})$">
-        <action application="log" data="INFO [DEFAULT] Outbound call to ${destination_number} via BulkVS with X-Caller-ID=${sip_h_X-Caller-ID}"/>
-        <action application="set" data="req_caller_id=${cond(${sip_h_X-Caller-ID} != '' ? ${sip_h_X-Caller-ID} : ${sip_h_x-caller-id})}"/>
-        <action application="set" data="clean_caller_id=${cond(${req_caller_id} != '' ? ${req_caller_id} : 12816991120)}"/>
-        <action application="set" data="effective_caller_id_number=+${clean_caller_id}"/>
-        <action application="set" data="origination_caller_id_number=+${clean_caller_id}"/>
-        <action application="set" data="effective_caller_id_name=Hopwhistle"/>
+        <action application="log" data="INFO [DEFAULT] Outbound call to ${destination_number} via BulkVS"/>
+        
+        <!-- Extract X-Caller-ID (mixed or lowercase) -->
+        <action application="set" data="req_caller_id=${sip_h_X-Caller-ID}" inline="true"/>
+      </condition>
+
+      <!-- If req_caller_id is empty, fallback to lowercase -->
+      <condition field="${req_caller_id}" expression="^$" break="never">
+        <action application="set" data="req_caller_id=${sip_h_x-caller-id}" inline="true"/>
+      </condition>
+
+      <!-- If req_caller_id is still empty, set default -->
+      <condition field="${req_caller_id}" expression="^$" break="never">
+        <action application="set" data="req_caller_id=12816991120" inline="true"/>
+      </condition>
+
+      <!-- Now apply caller ID details and codec parameters -->
+      <condition field="destination_number" expression="^1?([2-9]\d{9})$">
+        <action application="set" data="clean_caller_id=${req_caller_id}" inline="true"/>
+        <action application="set" data="effective_caller_id_number=+${clean_caller_id}" inline="true"/>
+        <action application="set" data="origination_caller_id_number=+${clean_caller_id}" inline="true"/>
+        <action application="set" data="effective_caller_id_name=Hopwhistle" inline="true"/>
         <action application="set" data="hangup_after_bridge=true"/>
         <action application="set" data="bypass_media=false"/>
         <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
         <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
         
-        <!-- Set and verify Hopwhistle Call ID -->
-        <action application="set" data="hopwhistle_call_id=${cond(${sip_h_X-Hopwhistle-Call-Id} != '' ? ${sip_h_X-Hopwhistle-Call-Id} : ${sip_h_x-hopwhistle-call-id})}"/>
+        <!-- Extract Hopwhistle Call ID -->
+        <action application="set" data="hopwhistle_call_id=${sip_h_X-Hopwhistle-Call-Id}" inline="true"/>
       </condition>
+
+      <!-- If hopwhistle_call_id is empty, fallback to lowercase -->
+      <condition field="${hopwhistle_call_id}" expression="^$" break="never">
+        <action application="set" data="hopwhistle_call_id=${sip_h_x-hopwhistle-call-id}" inline="true"/>
+      </condition>
+
       <!-- Conditionally record if hopwhistle_call_id is set -->
       <condition field="${hopwhistle_call_id}" expression="^(.+)$" break="never">
         <action application="log" data="INFO [DEFAULT] Outbound call recording active for Call ID: ${hopwhistle_call_id}"/>
@@ -58,6 +80,7 @@
         <action application="set" data="api_hangup_hook=bg_system /usr/share/freeswitch/scripts/upload-recording.sh ${hopwhistle_recording_path} ${hopwhistle_call_id}"/>
         <action application="record_session" data="${hopwhistle_recording_path}"/>
       </condition>
+
       <!-- Bridge outbound call -->
       <condition field="destination_number" expression="^1?([2-9]\d{9})$">
         <action application="bridge" data="sofia/gateway/bulkvs/1${destination_number}"/>
