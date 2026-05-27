@@ -24,7 +24,7 @@ export function DialerPanel({
         <input
           type="text"
           value={phoneNumber}
-          onChange={(e) => setPhoneNumber(formatPhoneNumber(e.target.value.replace(/\\D/g, '')))}
+          onChange={(e) => setPhoneNumber(formatPhoneNumber(e.target.value.replace(/\D/g, '')))}
           placeholder="(555) 123-4567"
           className="w-full bg-transparent text-2xl text-foreground text-center font-mono py-3 border-b border-border focus:border-primary focus:outline-none transition-colors"
         />
@@ -50,7 +50,7 @@ export function DialerPanel({
           Clear
         </button>
         <button
-          disabled={disabled || phoneNumber.replace(/\\D/g, '').length !== 10}
+          disabled={disabled || phoneNumber.replace(/\D/g, '').length !== 10}
           onClick={onDial}
           className="flex-1 py-3 bg-primary hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed text-primary-foreground font-mono uppercase tracking-widest text-xs rounded transition-colors flex items-center justify-center space-x-2"
         >
