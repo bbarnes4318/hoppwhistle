@@ -339,6 +339,14 @@ async function buildServer() {
   await fronterBotService.start();
   console.log('[API] Fronter Bot socket server started');
 
+  // ── Startup Data Repair ─────────────────────────────────────────────────
+  // Fix any DID routes that had their destination set to a user UUID
+  // instead of a real phone number (caused by a bug in syncDidRouteForNumber).
+  const { repairUuidRouteDestinations } = await import('./services/repair-uuid-routes.js');
+  repairUuidRouteDestinations().catch(err => {
+    console.error('[REPAIR] UUID route repair failed (non-fatal):', err);
+  });
+
   // Error handler
   server.setErrorHandler((error, request, reply) => {
     server.log.error(error);
