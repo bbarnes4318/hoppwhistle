@@ -9,6 +9,7 @@ import {
   DollarSign,
   FileText,
   GitBranch,
+  Globe,
   Headphones,
   LayoutDashboard,
   Megaphone,
@@ -100,6 +101,12 @@ const toolsNavigation: NavItem[] = [
     name: 'Recording Analyzer',
     href: '/tools/recording-analyzer',
     icon: AudioLines,
+    adminOnly: true,
+  },
+  {
+    name: 'Campaign Map',
+    href: '/tools/campaign-map',
+    icon: Globe,
     adminOnly: true,
   },
 ];
