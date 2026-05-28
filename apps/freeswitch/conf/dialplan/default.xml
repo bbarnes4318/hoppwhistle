@@ -37,8 +37,7 @@
     <!-- Outbound calls via BulkVS (NANP numbers only) -->
     <extension name="outbound-to-bulkvs">
       <condition field="destination_number" expression="^\+?1?([2-9]\d{9})$">
-        <action application="set" data="clean_dest=$1" inline="true"/>
-        <action application="log" data="INFO [DEFAULT] Outbound call to ${clean_dest} via BulkVS"/>
+        <action application="log" data="INFO [DEFAULT] Outbound call to $1 via BulkVS"/>
         
         <!-- Extract X-Caller-ID (mixed or lowercase) -->
         <action application="set" data="req_caller_id=${sip_h_X-Caller-ID}" inline="true"/>
@@ -76,7 +75,7 @@
 
       <!-- Logging variables before starting recording checks -->
       <condition field="destination_number" expression="^\+?1?([2-9]\d{9})$" break="never">
-        <action application="log" data="INFO [DEFAULT] Evaluation: destination=${destination_number}, clean_dest=${clean_dest}, call_id=${hopwhistle_call_id}"/>
+        <action application="log" data="INFO [DEFAULT] Evaluation: destination=${destination_number}, clean_dest=$1, call_id=${hopwhistle_call_id}"/>
       </condition>
 
       <!-- Warn if Hopwhistle Call ID is missing -->
@@ -94,7 +93,7 @@
 
       <!-- Bridge outbound call -->
       <condition field="destination_number" expression="^\+?1?([2-9]\d{9})$">
-        <action application="bridge" data="sofia/gateway/bulkvs/1${clean_dest}"/>
+        <action application="bridge" data="sofia/gateway/bulkvs/1$1"/>
         <action application="hangup" data="NORMAL_CLEARING"/>
       </condition>
     </extension>
