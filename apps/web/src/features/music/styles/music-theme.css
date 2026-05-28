@@ -4,6 +4,11 @@
    Does NOT contaminate the base Hopwhistle theme.
    ═══════════════════════════════════════════════════════════════ */
 
+.music-console,
+.music-console * {
+  box-sizing: border-box;
+}
+
 .music-console {
   /* ── Core Palette (Warm Parchment & High-Contrast Ink) ── */
   --m-bg:         #F7F3EA;

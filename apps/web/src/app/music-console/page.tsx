@@ -27,8 +27,6 @@ import {
   YAxis,
 } from 'recharts';
 
-import type { ProofRecord } from '../../../features/music/types';
-
 import {
   campaignTimeSeries,
   funnelData,
@@ -43,6 +41,7 @@ import {
   outcomeLabel,
   segmentLabel,
 } from '@/features/music/lib/utils';
+import type { ProofRecord } from '@/features/music/types';
 import { cn } from '@/lib/utils';
 
 // Client-safe time extractor to prevent hydration warnings
