@@ -60,6 +60,44 @@ export async function repairUuidRouteDestinations(): Promise<void> {
       routeIds: corruptedRoutes.map(r => r.id),
     });
 
+    // Special pre-repair step: if user '1b419be1-cccd-40cb-99ae-ca88d696e370' (moheenkhan659@gmail.com)
+    // is in the database and has no extension in metadata, set their extension to '+18666132993'.
+    // This fixes the user's specific case automatically.
+    try {
+      const specialUser = await prisma.user.findUnique({
+        where: { id: '1b419be1-cccd-40cb-99ae-ca88d696e370' },
+      });
+      if (specialUser) {
+        const metadata = (specialUser.metadata as Record<string, any>) || {};
+        if (!metadata.extension) {
+          metadata.extension = '+18666132993';
+          await prisma.user.update({
+            where: { id: specialUser.id },
+            data: { metadata },
+          });
+          logger.info({
+            msg: '[REPAIR] Updated special user moheenkhan659@gmail.com extension metadata',
+            userId: specialUser.id,
+            extension: '+18666132993',
+          });
+
+          // Refresh the user objects in our fetched corruptedRoutes list so the loop picks it up
+          for (const route of corruptedRoutes) {
+            if (route.phoneNumber?.userId === specialUser.id) {
+              if (route.phoneNumber.user) {
+                route.phoneNumber.user.metadata = metadata;
+              }
+            }
+          }
+        }
+      }
+    } catch (err) {
+      logger.error({
+        msg: '[REPAIR] Failed to set special user extension',
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
     let fixed = 0;
     let unfixable = 0;
 
