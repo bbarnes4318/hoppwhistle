@@ -29,8 +29,6 @@
       <!-- Additional AWS us-west-2 range for Vapi -->
       <node type="allow" cidr="44.229.0.0/16"/>
       <node type="allow" cidr="44.238.0.0/16"/>
-      <!-- Vapi OVH US nodes -->
-      <node type="allow" cidr="15.204.151.0/24"/>
     </list>
     <!-- BulkVS SIP Source IPs — required for inbound signaling from BulkVS -->
     <list name="bulkvs_sip_sources" default="deny">

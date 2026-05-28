@@ -25,8 +25,6 @@
       <node type="allow" cidr="34.223.48.0/20"/>
       <node type="allow" cidr="44.229.0.0/16"/>
       <node type="allow" cidr="44.238.0.0/16"/>
-      <!-- Vapi OVH US nodes -->
-      <node type="allow" cidr="15.204.151.0/24"/>
     </list>
     <!-- BulkVS SIP Source IPs -->
     <list name="bulkvs_sip_sources" default="deny">
