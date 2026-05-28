@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+
 import { apiClient } from '@/lib/api';
 
 export type RoleName = 'OWNER' | 'ADMIN' | 'ANALYST' | 'PUBLISHER' | 'BUYER' | 'READONLY';
@@ -99,9 +100,9 @@ export function useScriptAccess() {
 
   // Script access logic:
   // - Sales Script: Everyone has access
-  // - Retention Script: Only ADMIN or OWNER
+  // - Retention Script: Available to all agents
   const canAccessSalesScript = true;
-  const canAccessRetentionScript = isAdminOrOwner;
+  const canAccessRetentionScript = true;
 
   // Derive job title from role for display purposes
   const derivedJobTitle = isAdminOrOwner ? 'Admin' : 'Agent';
