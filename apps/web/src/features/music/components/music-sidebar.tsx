@@ -48,7 +48,7 @@ export function MusicSidebar() {
           const isExactDashboard = item.href === '/music-console' && pathname === '/music-console';
           const isSubpage = item.href !== '/music-console' && pathname?.startsWith(item.href);
           const isActive = isExactDashboard || isSubpage;
-          
+
           return (
             <Link
               key={item.name}
@@ -57,7 +57,7 @@ export function MusicSidebar() {
                 'flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-semibold transition-all duration-200',
                 isActive
                   ? 'm-bg-accent-dim m-text-accent border-l-2 border-[var(--m-accent)]'
-                  : 'm-text-dim hover:text-[var(--m-text)] hover:bg-[rgba(255,255,255,0.03)]'
+                  : 'm-text-dim hover:text-[var(--m-text)] hover:bg-[rgba(42,38,32,0.04)]'
               )}
             >
               <item.icon className="h-5 w-5" />
@@ -66,11 +66,11 @@ export function MusicSidebar() {
           );
         })}
       </nav>
-      
+
       <div className="p-4 border-t border-[var(--m-border-2)]">
         <Link
           href="/dashboard"
-          className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium m-text-dim hover:text-[var(--m-text)] hover:bg-[rgba(255,255,255,0.03)] transition-all"
+          className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium m-text-dim hover:text-[var(--m-text)] hover:bg-[rgba(42,38,32,0.04)] transition-all"
         >
           <ArrowLeft className="h-4 w-4" />
           Back to Core Platform

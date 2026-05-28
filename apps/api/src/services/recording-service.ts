@@ -82,6 +82,18 @@ export class RecordingService {
     // Build a secure internal playback URL instead of exposing raw S3 URLs
     const playbackUrl = `/api/v1/recordings/${recording.id}/stream`;
 
+    const existingCall = await this.prisma.call.findUnique({
+      where: { id: data.callId },
+      select: { metadata: true }
+    });
+    const callMetadata = (existingCall?.metadata as any) || {};
+    const existingRecordingDebug = callMetadata.recordingDebug || {};
+    const recordingDebug = {
+      ...existingRecordingDebug,
+      uploadAttemptedAt: new Date().toISOString(),
+      uploadHttpCode: 200,
+    };
+
     await this.prisma.call.update({
       where: { id: data.callId },
       data: {
@@ -90,6 +102,10 @@ export class RecordingService {
         recordingCompletedAt: new Date(),
         recordingUrl: playbackUrl,
         recordingError: null, // Clear any previous error
+        metadata: {
+          ...callMetadata,
+          recordingDebug,
+        } as any,
       },
     });
 
@@ -124,11 +140,27 @@ export class RecordingService {
    * Called when recording upload or processing fails.
    */
   async markRecordingFailed(callId: string, error: string): Promise<void> {
+    const existingCall = await this.prisma.call.findUnique({
+      where: { id: callId },
+      select: { metadata: true }
+    });
+    const callMetadata = (existingCall?.metadata as any) || {};
+    const existingRecordingDebug = callMetadata.recordingDebug || {};
+    const recordingDebug = {
+      ...existingRecordingDebug,
+      uploadAttemptedAt: new Date().toISOString(),
+      uploadError: error,
+    };
+
     await this.prisma.call.update({
       where: { id: callId },
       data: {
         recordingStatus: 'FAILED',
         recordingError: error,
+        metadata: {
+          ...callMetadata,
+          recordingDebug,
+        } as any,
       },
     });
 

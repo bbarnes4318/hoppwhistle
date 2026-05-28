@@ -1,22 +1,22 @@
 'use client';
 
 import {
- createContext,
- useCallback,
- useContext,
- useEffect,
- useRef,
- useState,
- type ReactNode,
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
 } from 'react';
 import {
- UserAgent,
- Registerer,
- Inviter,
- Session,
- SessionState,
- Invitation,
- UserAgentOptions,
+  UserAgent,
+  Registerer,
+  Inviter,
+  Session,
+  SessionState,
+  Invitation,
+  UserAgentOptions,
 } from 'sip.js';
 
 // ============================================================================
@@ -42,87 +42,87 @@ export interface PendingDispositionCall {
 }
 
 export interface ScreenPopField {
- id: string;
- label: string;
- key: string;
- enabled: boolean;
- order: number;
+  id: string;
+  label: string;
+  key: string;
+  enabled: boolean;
+  order: number;
 }
 
 export interface ProspectData {
- id?: string;
- firstName?: string;
- lastName?: string;
- fullName?: string;
- phoneNumber?: string;
- email?: string;
- company?: string;
- address?: string;
- city?: string;
- state?: string;
- zipCode?: string;
- leadSource?: string;
- campaignName?: string;
- customFields?: Record<string, string | number | boolean>;
- notes?: string;
- [key: string]: unknown;
+  id?: string;
+  firstName?: string;
+  lastName?: string;
+  fullName?: string;
+  phoneNumber?: string;
+  email?: string;
+  company?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  leadSource?: string;
+  campaignName?: string;
+  customFields?: Record<string, string | number | boolean>;
+  notes?: string;
+  [key: string]: unknown;
 }
 
 export interface CallInfo {
- callId: string;
- direction: CallDirection;
- state: CallState;
- phoneNumber: string;
- callerName?: string;
- startTime?: Date;
- answerTime?: Date;
- endTime?: Date;
- duration: number;
- isMuted: boolean;
- isOnHold: boolean;
- recordingEnabled: boolean;
- prospectData?: ProspectData;
- queueName?: string;
- campaignId?: string;
+  callId: string;
+  direction: CallDirection;
+  state: CallState;
+  phoneNumber: string;
+  callerName?: string;
+  startTime?: Date;
+  answerTime?: Date;
+  endTime?: Date;
+  duration: number;
+  isMuted: boolean;
+  isOnHold: boolean;
+  recordingEnabled: boolean;
+  prospectData?: ProspectData;
+  queueName?: string;
+  campaignId?: string;
 }
 
 export interface PhoneContextType {
- // State
- agentStatus: AgentStatus;
- currentCall: CallInfo | null;
- callHistory: CallInfo[];
- isPhonePanelOpen: boolean;
- isConnecting: boolean;
- audioDevices: MediaDeviceInfo[];
- selectedAudioInput: string | null;
- selectedAudioOutput: string | null;
- screenPopFields: ScreenPopField[];
- error: string | null;
- isRegistered: boolean; // SIP Registration status
- dialerNumber: string; // Pre-filled dialer number
- pendingDispositionCall: PendingDispositionCall | null; // Post-call disposition data
+  // State
+  agentStatus: AgentStatus;
+  currentCall: CallInfo | null;
+  callHistory: CallInfo[];
+  isPhonePanelOpen: boolean;
+  isConnecting: boolean;
+  audioDevices: MediaDeviceInfo[];
+  selectedAudioInput: string | null;
+  selectedAudioOutput: string | null;
+  screenPopFields: ScreenPopField[];
+  error: string | null;
+  isRegistered: boolean; // SIP Registration status
+  dialerNumber: string; // Pre-filled dialer number
+  pendingDispositionCall: PendingDispositionCall | null; // Post-call disposition data
 
- // Actions
- setAgentStatus: (status: AgentStatus) => void;
- openPhonePanel: () => void;
- closePhonePanel: () => void;
- togglePhonePanel: () => void;
- setDialerNumber: (number: string) => void; // Pre-fill dialer
- makeCall: (phoneNumber: string) => Promise<void>;
- answerCall: () => void;
- hangupCall: () => void;
- toggleMute: () => void;
- toggleHold: () => void;
- sendDTMF: (digit: string) => void;
- transferCall: (destination: string, type: 'blind' | 'warm') => void;
- addThirdParty: (phoneNumber: string) => Promise<void>;
- mergeCalls: () => Promise<void>;
- hasHeldCalls: boolean;
- setAudioInput: (deviceId: string) => void;
- setAudioOutput: (deviceId: string) => void;
- updateScreenPopFields: (fields: ScreenPopField[]) => void;
- clearError: () => void;
- clearPendingDispositionCall: () => void;
+  // Actions
+  setAgentStatus: (status: AgentStatus) => void;
+  openPhonePanel: () => void;
+  closePhonePanel: () => void;
+  togglePhonePanel: () => void;
+  setDialerNumber: (number: string) => void; // Pre-fill dialer
+  makeCall: (phoneNumber: string) => Promise<void>;
+  answerCall: () => void;
+  hangupCall: () => void;
+  toggleMute: () => void;
+  toggleHold: () => void;
+  sendDTMF: (digit: string) => void;
+  transferCall: (destination: string, type: 'blind' | 'warm') => void;
+  addThirdParty: (phoneNumber: string) => Promise<void>;
+  mergeCalls: () => Promise<void>;
+  hasHeldCalls: boolean;
+  setAudioInput: (deviceId: string) => void;
+  setAudioOutput: (deviceId: string) => void;
+  updateScreenPopFields: (fields: ScreenPopField[]) => void;
+  clearError: () => void;
+  clearPendingDispositionCall: () => void;
 }
 
 // ============================================================================
@@ -130,18 +130,33 @@ export interface PhoneContextType {
 // ============================================================================
 
 const defaultScreenPopFields: ScreenPopField[] = [
- { id: 'fullName', label: 'Full Name', key: 'fullName', enabled: true, order: 1 },
- { id: 'phoneNumber', label: 'Phone Number', key: 'phoneNumber', enabled: true, order: 2 },
- { id: 'email', label: 'Email', key: 'email', enabled: true, order: 3 },
- { id: 'company', label: 'Company', key: 'company', enabled: true, order: 4 },
- { id: 'address', label: 'Address', key: 'address', enabled: false, order: 5 },
- { id: 'city', label: 'City', key: 'city', enabled: false, order: 6 },
- { id: 'state', label: 'State', key: 'state', enabled: false, order: 7 },
- { id: 'zipCode', label: 'Zip Code', key: 'zipCode', enabled: false, order: 8 },
- { id: 'leadSource', label: 'Lead Source', key: 'leadSource', enabled: true, order: 9 },
- { id: 'campaignName', label: 'Campaign', key: 'campaignName', enabled: true, order: 10 },
- { id: 'notes', label: 'Notes', key: 'notes', enabled: false, order: 11 },
+  { id: 'fullName', label: 'Full Name', key: 'fullName', enabled: true, order: 1 },
+  { id: 'phoneNumber', label: 'Phone Number', key: 'phoneNumber', enabled: true, order: 2 },
+  { id: 'email', label: 'Email', key: 'email', enabled: true, order: 3 },
+  { id: 'company', label: 'Company', key: 'company', enabled: true, order: 4 },
+  { id: 'address', label: 'Address', key: 'address', enabled: false, order: 5 },
+  { id: 'city', label: 'City', key: 'city', enabled: false, order: 6 },
+  { id: 'state', label: 'State', key: 'state', enabled: false, order: 7 },
+  { id: 'zipCode', label: 'Zip Code', key: 'zipCode', enabled: false, order: 8 },
+  { id: 'leadSource', label: 'Lead Source', key: 'leadSource', enabled: true, order: 9 },
+  { id: 'campaignName', label: 'Campaign', key: 'campaignName', enabled: true, order: 10 },
+  { id: 'notes', label: 'Notes', key: 'notes', enabled: false, order: 11 },
 ];
+
+const dtmfFrequencies: Record<string, [number, number]> = {
+  '1': [697, 1209],
+  '2': [697, 1336],
+  '3': [697, 1477],
+  '4': [770, 1209],
+  '5': [770, 1336],
+  '6': [770, 1477],
+  '7': [852, 1209],
+  '8': [852, 1336],
+  '9': [852, 1477],
+  '*': [941, 1209],
+  '0': [941, 1336],
+  '#': [941, 1477],
+};
 
 // ============================================================================
 // Context
@@ -150,11 +165,11 @@ const defaultScreenPopFields: ScreenPopField[] = [
 const PhoneContext = createContext<PhoneContextType | null>(null);
 
 export function usePhone(): PhoneContextType {
- const context = useContext(PhoneContext);
- if (!context) {
- throw new Error('usePhone must be used within a PhoneProvider');
- }
- return context;
+  const context = useContext(PhoneContext);
+  if (!context) {
+    throw new Error('usePhone must be used within a PhoneProvider');
+  }
+  return context;
 }
 
 // ============================================================================
@@ -162,10 +177,10 @@ export function usePhone(): PhoneContextType {
 // ============================================================================
 
 interface ApiResponse {
- callId?: string;
- error?: {
- message?: string;
- };
+  callId?: string;
+  error?: {
+    message?: string;
+  };
 }
 
 // ============================================================================
@@ -173,304 +188,320 @@ interface ApiResponse {
 // ============================================================================
 
 interface PhoneProviderProps {
- children: ReactNode;
- wsUrl?: string;
- apiUrl?: string;
+  children: ReactNode;
+  wsUrl?: string;
+  apiUrl?: string;
 }
 
 export function PhoneProvider({
- children,
- apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001',
+  children,
+  apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001',
 }: PhoneProviderProps): JSX.Element {
- // Normalize apiUrl to just be the base (remove trailing /api/v1 if present)
- const normalizedApiUrl = apiUrl.replace(/\/api\/v1\/?$/, '');
+  // Normalize apiUrl to just be the base (remove trailing /api/v1 if present)
+  const normalizedApiUrl = apiUrl.replace(/\/api\/v1\/?$/, '');
 
- // API key for authenticated requests
- const apiKey = process.env.NEXT_PUBLIC_API_KEY || '';
+  // API key for authenticated requests
+  const apiKey = process.env.NEXT_PUBLIC_API_KEY || '';
 
- // Common headers for API requests
- const getApiHeaders = useCallback(
- (contentType = true): HeadersInit => {
- const headers: HeadersInit = {};
- if (contentType) {
- headers['Content-Type'] = 'application/json';
- }
- if (apiKey) {
- headers['x-api-key'] = apiKey;
- }
- return headers;
- },
- [apiKey]
- );
+  // Common headers for API requests
+  const getApiHeaders = useCallback(
+    (contentType = true): HeadersInit => {
+      const headers: HeadersInit = {};
+      if (contentType) {
+        headers['Content-Type'] = 'application/json';
+      }
+      if (apiKey) {
+        headers['x-api-key'] = apiKey;
+      }
+      return headers;
+    },
+    [apiKey]
+  );
 
- // State
- const [agentStatus, setAgentStatusState] = useState<AgentStatus>('offline');
- const [currentCall, setCurrentCall] = useState<CallInfo | null>(null);
- const [callHistory, setCallHistory] = useState<CallInfo[]>([]);
- const [isPhonePanelOpen, setIsPhonePanelOpen] = useState(false);
- const [isConnecting, setIsConnecting] = useState(false);
- const [isRegistered, setIsRegistered] = useState(false);
- const [audioDevices] = useState<MediaDeviceInfo[]>([]);
- const [selectedAudioInput, setSelectedAudioInput] = useState<string | null>(null);
- const [selectedAudioOutput, setSelectedAudioOutput] = useState<string | null>(null);
- const [screenPopFields, setScreenPopFields] = useState<ScreenPopField[]>(() => {
- if (typeof window !== 'undefined') {
- const saved = localStorage.getItem('screenPopFields');
- if (saved) {
- try {
- return JSON.parse(saved) as ScreenPopField[];
- } catch {
- return defaultScreenPopFields;
- }
- }
- }
- return defaultScreenPopFields;
- });
- const [error, setError] = useState<string | null>(null);
- const [pendingDispositionCall, setPendingDispositionCall] = useState<PendingDispositionCall | null>(null);
- const [dialerNumber, setDialerNumber] = useState<string>('');
+  // State
+  const [agentStatus, setAgentStatusState] = useState<AgentStatus>('offline');
+  const [currentCall, setCurrentCall] = useState<CallInfo | null>(null);
+  const [callHistory, setCallHistory] = useState<CallInfo[]>([]);
+  const [isPhonePanelOpen, setIsPhonePanelOpen] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [isRegistered, setIsRegistered] = useState(false);
+  const [audioDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedAudioInput, setSelectedAudioInput] = useState<string | null>(null);
+  const [selectedAudioOutput, setSelectedAudioOutput] = useState<string | null>(null);
+  const [screenPopFields, setScreenPopFields] = useState<ScreenPopField[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('screenPopFields');
+      if (saved) {
+        try {
+          return JSON.parse(saved) as ScreenPopField[];
+        } catch {
+          return defaultScreenPopFields;
+        }
+      }
+    }
+    return defaultScreenPopFields;
+  });
+  const [error, setError] = useState<string | null>(null);
+  const [pendingDispositionCall, setPendingDispositionCall] =
+    useState<PendingDispositionCall | null>(null);
+  const [dialerNumber, setDialerNumber] = useState<string>('');
 
- // Refs
+  // Refs
 
- const callDurationIntervalRef = useRef<NodeJS.Timeout | null>(null);
- const ringtoneRef = useRef<HTMLAudioElement | null>(null);
- const userAgentRef = useRef<UserAgent | null>(null);
- const sessionRef = useRef<Session | null>(null);
- const heldSessionRef = useRef<Session | null>(null);
- const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
- const [hasHeldCalls, setHasHeldCalls] = useState(false);
- const reportedAnsweredCallsRef = useRef<Set<string>>(new Set());
- const reportedEndedCallsRef = useRef<Set<string>>(new Set());
+  const callDurationIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const ringtoneRef = useRef<HTMLAudioElement | null>(null);
+  const userAgentRef = useRef<UserAgent | null>(null);
+  const sessionRef = useRef<Session | null>(null);
+  const heldSessionRef = useRef<Session | null>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [hasHeldCalls, setHasHeldCalls] = useState(false);
+  const reportedAnsweredCallsRef = useRef<Set<string>>(new Set());
+  const reportedEndedCallsRef = useRef<Set<string>>(new Set());
+  const audioContextRef = useRef<AudioContext | null>(null);
 
- // ============================================================================
- // Audio Utilities
- // ============================================================================
+  // ============================================================================
+  // Audio Utilities
+  // ============================================================================
 
- const playRingtone = useCallback(() => {
- if (typeof window !== 'undefined' && !ringtoneRef.current) {
- ringtoneRef.current = new Audio('/sounds/ringtone.mp3');
- ringtoneRef.current.loop = true;
- }
- ringtoneRef.current?.play().catch(() => {
- // Ignore audio play errors
- });
- }, []);
+  const playRingtone = useCallback(() => {
+    if (typeof window !== 'undefined' && !ringtoneRef.current) {
+      ringtoneRef.current = new Audio('/sounds/ringtone.mp3');
+      ringtoneRef.current.loop = true;
+    }
+    ringtoneRef.current?.play().catch(() => {
+      // Ignore audio play errors
+    });
+  }, []);
 
- const stopRingtone = useCallback(() => {
- if (ringtoneRef.current) {
- ringtoneRef.current.pause();
- ringtoneRef.current.currentTime = 0;
- }
- }, []);
+  const stopRingtone = useCallback(() => {
+    if (ringtoneRef.current) {
+      ringtoneRef.current.pause();
+      ringtoneRef.current.currentTime = 0;
+    }
+  }, []);
 
- // Ensure remote audio element exists
- useEffect(() => {
- if (typeof window !== 'undefined' && !remoteAudioRef.current) {
- const audio = document.createElement('audio');
- audio.autoplay = true;
- audio.style.display = 'none'; // Hidden audio element
- document.body.appendChild(audio);
- remoteAudioRef.current = audio;
- }
- return () => {
- if (remoteAudioRef.current && remoteAudioRef.current.parentNode) {
- remoteAudioRef.current.parentNode.removeChild(remoteAudioRef.current);
- }
- };
- }, []);
+  // Ensure remote audio element exists
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !remoteAudioRef.current) {
+      const audio = document.createElement('audio');
+      audio.autoplay = true;
+      audio.style.display = 'none'; // Hidden audio element
+      document.body.appendChild(audio);
+      remoteAudioRef.current = audio;
+    }
+    return () => {
+      if (remoteAudioRef.current && remoteAudioRef.current.parentNode) {
+        remoteAudioRef.current.parentNode.removeChild(remoteAudioRef.current);
+      }
+    };
+  }, []);
 
- // ============================================================================
- // Call Duration Timer
- // ============================================================================
+  // ============================================================================
+  // Call Duration Timer
+  // ============================================================================
 
- const startCallDurationTimer = useCallback(() => {
- if (callDurationIntervalRef.current) {
- clearInterval(callDurationIntervalRef.current);
- }
+  const startCallDurationTimer = useCallback(() => {
+    if (callDurationIntervalRef.current) {
+      clearInterval(callDurationIntervalRef.current);
+    }
 
- callDurationIntervalRef.current = setInterval(() => {
- setCurrentCall(prev => {
- if (!prev || !prev.answerTime) return prev;
- return {
- ...prev,
- duration: Math.floor((Date.now() - prev.answerTime.getTime()) / 1000),
- };
- });
- }, 1000);
- }, []);
+    callDurationIntervalRef.current = setInterval(() => {
+      setCurrentCall(prev => {
+        if (!prev || !prev.answerTime) return prev;
+        return {
+          ...prev,
+          duration: Math.floor((Date.now() - prev.answerTime.getTime()) / 1000),
+        };
+      });
+    }, 1000);
+  }, []);
 
- const stopCallDurationTimer = useCallback(() => {
- if (callDurationIntervalRef.current) {
- clearInterval(callDurationIntervalRef.current);
- callDurationIntervalRef.current = null;
- }
- }, []);
+  const stopCallDurationTimer = useCallback(() => {
+    if (callDurationIntervalRef.current) {
+      clearInterval(callDurationIntervalRef.current);
+      callDurationIntervalRef.current = null;
+    }
+  }, []);
 
- // ============================================================================
- // SIP / WebRTC Implementation
- // ============================================================================
+  // ============================================================================
+  // SIP / WebRTC Implementation
+  // ============================================================================
 
- // ============================================================================
- // Remote Audio Setup — race-condition-proof implementation
- // ============================================================================
+  // ============================================================================
+  // Remote Audio Setup — race-condition-proof implementation
+  // ============================================================================
 
- /**
- * Installs ontrack listener on a PeerConnection (idempotent).
- * Must be called as early as possible — ideally BEFORE accept() resolves.
- * Also picks up any tracks that are already on the receivers.
- *
- * Uses a WeakSet to guarantee it only runs ONCE per PeerConnection,
- * preventing the play() AbortError from double srcObject assignment.
- */
- const wiredPcsRef = useRef<WeakSet<RTCPeerConnection>>(new WeakSet());
+  /**
+   * Installs ontrack listener on a PeerConnection (idempotent).
+   * Must be called as early as possible — ideally BEFORE accept() resolves.
+   * Also picks up any tracks that are already on the receivers.
+   *
+   * Uses a WeakSet to guarantee it only runs ONCE per PeerConnection,
+   * preventing the play() AbortError from double srcObject assignment.
+   */
+  const wiredPcsRef = useRef<WeakSet<RTCPeerConnection>>(new WeakSet());
 
- const wireRemoteAudio = useCallback((pc: RTCPeerConnection) => {
- // Idempotency guard — never wire the same PC twice
- if (wiredPcsRef.current.has(pc)) {
- console.log('[Phone] wireRemoteAudio: already wired this PC, skipping');
- return;
- }
- wiredPcsRef.current.add(pc);
+  const wireRemoteAudio = useCallback((pc: RTCPeerConnection) => {
+    // Idempotency guard — never wire the same PC twice
+    if (wiredPcsRef.current.has(pc)) {
+      console.log('[Phone] wireRemoteAudio: already wired this PC, skipping');
+      return;
+    }
+    wiredPcsRef.current.add(pc);
 
- const audioEl = remoteAudioRef.current;
- if (!audioEl) {
- console.warn('[Phone] wireRemoteAudio: no audio element');
- return;
- }
+    const audioEl = remoteAudioRef.current;
+    if (!audioEl) {
+      console.warn('[Phone] wireRemoteAudio: no audio element');
+      return;
+    }
 
- // Create a single MediaStream that accumulates tracks
- const stream = new MediaStream();
+    // Create a single MediaStream that accumulates tracks
+    const stream = new MediaStream();
 
- // Helper: attach stream/tracks to audio element and play
- const attachAndPlay = (src: MediaStream) => {
- audioEl.srcObject = src;
- audioEl.play().catch((e) => console.warn('[Phone] audio.play() blocked:', e));
- };
+    // Helper: attach stream/tracks to audio element and play
+    const attachAndPlay = (src: MediaStream) => {
+      audioEl.srcObject = src;
+      audioEl.play().catch(e => console.warn('[Phone] audio.play() blocked:', e));
+    };
 
- // 1. Grab tracks already present on the receivers (covers late-call to this fn)
- pc.getReceivers().forEach((r) => {
- if (r.track && r.track.readyState === 'live') {
- console.log('[Phone] wireRemoteAudio: existing receiver track', r.track.kind, r.track.id);
- stream.addTrack(r.track);
- }
- });
+    // 1. Grab tracks already present on the receivers (covers late-call to this fn)
+    pc.getReceivers().forEach(r => {
+      if (r.track && r.track.readyState === 'live') {
+        console.log('[Phone] wireRemoteAudio: existing receiver track', r.track.kind, r.track.id);
+        stream.addTrack(r.track);
+      }
+    });
 
- // 2. Install ontrack for any tracks that arrive later
- pc.addEventListener('track', (event: RTCTrackEvent) => {
- console.log('[Phone] ontrack fired:', event.track.kind, event.track.id, 'readyState:', event.track.readyState);
- // Prefer the event's stream if available
- if (event.streams?.[0]) {
- attachAndPlay(event.streams[0]);
- } else {
- stream.addTrack(event.track);
- attachAndPlay(stream);
- }
- });
+    // 2. Install ontrack for any tracks that arrive later
+    pc.addEventListener('track', (event: RTCTrackEvent) => {
+      console.log(
+        '[Phone] ontrack fired:',
+        event.track.kind,
+        event.track.id,
+        'readyState:',
+        event.track.readyState
+      );
+      // Prefer the event's stream if available
+      if (event.streams?.[0]) {
+        attachAndPlay(event.streams[0]);
+      } else {
+        stream.addTrack(event.track);
+        attachAndPlay(stream);
+      }
+    });
 
- // 3. Attach whatever we have immediately
- if (stream.getTracks().length > 0) {
- console.log('[Phone] wireRemoteAudio: attaching', stream.getTracks().length, 'existing tracks');
- attachAndPlay(stream);
- }
- }, []);
+    // 3. Attach whatever we have immediately
+    if (stream.getTracks().length > 0) {
+      console.log(
+        '[Phone] wireRemoteAudio: attaching',
+        stream.getTracks().length,
+        'existing tracks'
+      );
+      attachAndPlay(stream);
+    }
+  }, []);
 
- // Keep handleCallAnswered / handleCallEnded in refs so stateChange listeners
- // always call the latest versions (avoids stale closures).
- const handleCallAnsweredRef = useRef<() => void>(() => {});
- const handleCallEndedRef = useRef<() => void>(() => {});
+  // Keep handleCallAnswered / handleCallEnded in refs so stateChange listeners
+  // always call the latest versions (avoids stale closures).
+  const handleCallAnsweredRef = useRef<() => void>(() => {});
+  const handleCallEndedRef = useRef<() => void>(() => {});
 
- const handleIncomingSipCall = useCallback(
- (invitation: Invitation) => {
- sessionRef.current = invitation;
- const remoteIdentity = invitation.remoteIdentity;
- const callerNumber = remoteIdentity.uri.user || 'Unknown';
- const callerName = remoteIdentity.displayName || 'Unknown';
+  const handleIncomingSipCall = useCallback(
+    (invitation: Invitation) => {
+      sessionRef.current = invitation;
+      const remoteIdentity = invitation.remoteIdentity;
+      const callerNumber = remoteIdentity.uri.user || 'Unknown';
+      const callerName = remoteIdentity.displayName || 'Unknown';
 
- const callInfo: CallInfo = {
- callId: invitation.request.headers['Call-ID']?.[0]?.raw || `call_${Date.now()}`,
- direction: 'inbound',
- state: 'ringing',
- phoneNumber: callerNumber,
- callerName,
- startTime: new Date(),
- duration: 0,
- isMuted: false,
- isOnHold: false,
- recordingEnabled: true,
- };
+      const callInfo: CallInfo = {
+        callId: invitation.request.headers['Call-ID']?.[0]?.raw || `call_${Date.now()}`,
+        direction: 'inbound',
+        state: 'ringing',
+        phoneNumber: callerNumber,
+        callerName,
+        startTime: new Date(),
+        duration: 0,
+        isMuted: false,
+        isOnHold: false,
+        recordingEnabled: true,
+      };
 
- setCurrentCall(callInfo);
- setIsPhonePanelOpen(true);
- playRingtone();
+      setCurrentCall(callInfo);
+      setIsPhonePanelOpen(true);
+      playRingtone();
 
- // Fetch prospect data for screen pop (async, non-blocking)
- if (callerNumber && callerNumber !== 'Unknown') {
- fetch(`${normalizedApiUrl}/api/v1/prospects/by-phone/${encodeURIComponent(callerNumber)}`, {
- method: 'GET',
- headers: getApiHeaders(false),
- })
- .then(response => response.json())
- .then((data: { prospect?: ProspectData }) => {
- if (data.prospect) {
- console.log('[Phone] Screen pop data loaded:', data.prospect);
- setCurrentCall(prev => {
- if (!prev) return prev;
- return {
- ...prev,
- prospectData: {
- id: data.prospect?.id,
- firstName: data.prospect?.firstName,
- lastName: data.prospect?.lastName,
- fullName:
- `${data.prospect?.firstName || ''} ${data.prospect?.lastName || ''}`.trim(),
- phoneNumber: data.prospect?.phone as string | undefined,
- email: data.prospect?.email,
- address: data.prospect?.street as string | undefined,
- city: data.prospect?.city,
- state: data.prospect?.state,
- zipCode: data.prospect?.zip as string | undefined,
- ...data.prospect,
- },
- };
- });
- }
- })
- .catch(err => {
- console.log('[Phone] No screen pop data found:', err);
- });
- }
+      // Fetch prospect data for screen pop (async, non-blocking)
+      if (callerNumber && callerNumber !== 'Unknown') {
+        fetch(`${normalizedApiUrl}/api/v1/prospects/by-phone/${encodeURIComponent(callerNumber)}`, {
+          method: 'GET',
+          headers: getApiHeaders(false),
+        })
+          .then(response => response.json())
+          .then((data: { prospect?: ProspectData }) => {
+            if (data.prospect) {
+              console.log('[Phone] Screen pop data loaded:', data.prospect);
+              setCurrentCall(prev => {
+                if (!prev) return prev;
+                return {
+                  ...prev,
+                  prospectData: {
+                    id: data.prospect?.id,
+                    firstName: data.prospect?.firstName,
+                    lastName: data.prospect?.lastName,
+                    fullName:
+                      `${data.prospect?.firstName || ''} ${data.prospect?.lastName || ''}`.trim(),
+                    phoneNumber: data.prospect?.phone as string | undefined,
+                    email: data.prospect?.email,
+                    address: data.prospect?.street as string | undefined,
+                    city: data.prospect?.city,
+                    state: data.prospect?.state,
+                    zipCode: data.prospect?.zip as string | undefined,
+                    ...data.prospect,
+                  },
+                };
+              });
+            }
+          })
+          .catch(err => {
+            console.log('[Phone] No screen pop data found:', err);
+          });
+      }
 
- // Use refs for the callbacks to avoid stale closures in the listener
- invitation.stateChange.addListener(newState => {
- console.log('[Phone] Invitation state changed:', newState);
- if (newState === SessionState.Terminated) {
- handleCallEndedRef.current();
- } else if (newState === SessionState.Established) {
- handleCallAnsweredRef.current();
- // Re-wire as a safety net — the primary wire is in answerCall
- // eslint-disable-next-line @typescript-eslint/no-explicit-any
- const pc = (invitation.sessionDescriptionHandler as any)?.peerConnection as RTCPeerConnection | undefined;
- if (pc) wireRemoteAudio(pc);
- }
- });
- },
- // eslint-disable-next-line react-hooks/exhaustive-deps
- [playRingtone, normalizedApiUrl, getApiHeaders, wireRemoteAudio]
- );
+      // Use refs for the callbacks to avoid stale closures in the listener
+      invitation.stateChange.addListener(newState => {
+        console.log('[Phone] Invitation state changed:', newState);
+        if (newState === SessionState.Terminated) {
+          handleCallEndedRef.current();
+        } else if (newState === SessionState.Established) {
+          handleCallAnsweredRef.current();
+          // Re-wire as a safety net — the primary wire is in answerCall
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const pc = (invitation.sessionDescriptionHandler as any)?.peerConnection as
+            | RTCPeerConnection
+            | undefined;
+          if (pc) wireRemoteAudio(pc);
+        }
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [playRingtone, normalizedApiUrl, getApiHeaders, wireRemoteAudio]
+  );
 
- /**
- * Legacy compat wrapper — called from outbound (Inviter) flows.
- * Delegates to the new wireRemoteAudio.
- */
- const setupRemoteAudio = (session: Session) => {
- // eslint-disable-next-line @typescript-eslint/no-explicit-any
- const pc = (session.sessionDescriptionHandler as any)?.peerConnection as RTCPeerConnection | undefined;
- if (!pc) {
- console.warn('[Phone] setupRemoteAudio: no peerConnection on session');
- return;
- }
- wireRemoteAudio(pc);
- };
+  /**
+   * Legacy compat wrapper — called from outbound (Inviter) flows.
+   * Delegates to the new wireRemoteAudio.
+   */
+  const setupRemoteAudio = (session: Session) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pc = (session.sessionDescriptionHandler as any)?.peerConnection as
+      | RTCPeerConnection
+      | undefined;
+    if (!pc) {
+      console.warn('[Phone] setupRemoteAudio: no peerConnection on session');
+      return;
+    }
+    wireRemoteAudio(pc);
+  };
 
   const handleCallAnswered = useCallback(() => {
     setCurrentCall(prev => {
@@ -570,126 +601,134 @@ export function PhoneProvider({
     sessionRef.current = null;
   }, [stopRingtone, stopCallDurationTimer, normalizedApiUrl, getApiHeaders]);
 
- // Keep refs in sync so stateChange listeners always call latest versions
- useEffect(() => { handleCallAnsweredRef.current = handleCallAnswered; }, [handleCallAnswered]);
- useEffect(() => { handleCallEndedRef.current = handleCallEnded; }, [handleCallEnded]);
+  // Keep refs in sync so stateChange listeners always call latest versions
+  useEffect(() => {
+    handleCallAnsweredRef.current = handleCallAnswered;
+  }, [handleCallAnswered]);
+  useEffect(() => {
+    handleCallEndedRef.current = handleCallEnded;
+  }, [handleCallEnded]);
 
- // ============================================================================
- // Phone Actions
- // ============================================================================
+  // ============================================================================
+  // Phone Actions
+  // ============================================================================
 
- const setAgentStatus = useCallback(
- (status: AgentStatus) => {
- // Sync with API
- void fetch(`${normalizedApiUrl}/api/v1/agent/status`, {
- method: 'PUT',
- headers: getApiHeaders(),
- body: JSON.stringify({ status }),
- }).catch(() => {});
- setAgentStatusState(status);
- },
- [normalizedApiUrl, getApiHeaders]
- );
+  const setAgentStatus = useCallback(
+    (status: AgentStatus) => {
+      // Sync with API
+      void fetch(`${normalizedApiUrl}/api/v1/agent/status`, {
+        method: 'PUT',
+        headers: getApiHeaders(),
+        body: JSON.stringify({ status }),
+      }).catch(() => {});
+      setAgentStatusState(status);
+    },
+    [normalizedApiUrl, getApiHeaders]
+  );
 
- const openPhonePanel = useCallback(() => setIsPhonePanelOpen(true), []);
- const closePhonePanel = useCallback(() => setIsPhonePanelOpen(false), []);
- const togglePhonePanel = useCallback(() => setIsPhonePanelOpen(prev => !prev), []);
+  const openPhonePanel = useCallback(() => setIsPhonePanelOpen(true), []);
+  const closePhonePanel = useCallback(() => setIsPhonePanelOpen(false), []);
+  const togglePhonePanel = useCallback(() => setIsPhonePanelOpen(prev => !prev), []);
 
- const makeCall = useCallback(
- async (phoneNumber: string) => {
- if (!userAgentRef.current || !isRegistered) {
- setError('Phone not connected');
- return;
- }
+  const makeCall = useCallback(
+    async (phoneNumber: string) => {
+      if (!userAgentRef.current || !isRegistered) {
+        setError('Phone not connected');
+        return;
+      }
 
- console.log('[Phone] Initiating call to:', phoneNumber);
- setIsConnecting(true);
- setError(null);
+      console.log('[Phone] Initiating call to:', phoneNumber);
+      setIsConnecting(true);
+      setError(null);
 
- // Track call via API
- try {
- const url = `${normalizedApiUrl}/api/v1/agent/call/originate`;
- const response = await fetch(url, {
- method: 'POST',
- headers: getApiHeaders(),
- body: JSON.stringify({ phoneNumber }),
- });
+      // Track call via API
+      try {
+        const url = `${normalizedApiUrl}/api/v1/agent/call/originate`;
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: getApiHeaders(),
+          body: JSON.stringify({ phoneNumber }),
+        });
 
- if (!response.ok) {
- const errData = await response.json().catch(() => ({}));
- throw new Error(errData.error?.message || 'Failed to initiate call');
- }
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.error?.message || 'Failed to initiate call');
+        }
 
- const data = (await response.json()) as ApiResponse & { callerId?: string };
- // Call ID from API for tracking
- const apiCallId = data.callId;
- const chosenCallerId = data.callerId || '';
+        const data = (await response.json()) as ApiResponse & { callerId?: string };
+        // Call ID from API for tracking
+        const apiCallId = data.callId;
+        const chosenCallerId = data.callerId || '';
 
- // SIP INVITE - use server IP for the target domain (must match FreeSWITCH)
- const sipTargetDomain = process.env.NEXT_PUBLIC_IP || '3.214.60.13';
- const target = UserAgent.makeURI(`sip:${phoneNumber}@${sipTargetDomain}`);
- if (!target) throw new Error('Invalid target URI');
+        // SIP INVITE - use server IP for the target domain (must match FreeSWITCH)
+        const sipTargetDomain = process.env.NEXT_PUBLIC_IP || '3.214.60.13';
+        const target = UserAgent.makeURI(`sip:${phoneNumber}@${sipTargetDomain}`);
+        if (!target) throw new Error('Invalid target URI');
 
- const inviter = new Inviter(userAgentRef.current, target);
- sessionRef.current = inviter;
+        const extraHeaders: string[] = [];
+        if (chosenCallerId) {
+          extraHeaders.push(`X-Caller-ID: ${chosenCallerId}`);
+        }
+        if (apiCallId) {
+          extraHeaders.push(`X-Hopwhistle-Call-Id: ${apiCallId}`);
+        }
 
- const callInfo: CallInfo = {
- callId: apiCallId ?? `call_${Date.now()}`,
- direction: 'outbound',
- state: 'connecting',
- phoneNumber,
- startTime: new Date(),
- duration: 0,
- isMuted: false,
- isOnHold: false,
- recordingEnabled: true,
- };
+        console.log('[Phone] Creating Inviter with extraHeaders:', extraHeaders);
 
- setCurrentCall(callInfo);
- setAgentStatusState('on-call');
- setIsPhonePanelOpen(true);
+        const inviter = new Inviter(userAgentRef.current, target, {
+          extraHeaders,
+        });
+        sessionRef.current = inviter;
 
- inviter.stateChange.addListener(newState => {
- console.log('[Phone] Session state:', newState);
- if (newState === SessionState.Established) {
- handleCallAnsweredRef.current();
- setupRemoteAudio(inviter);
- } else if (newState === SessionState.Terminated) {
- handleCallEndedRef.current();
- }
- });
+        const callInfo: CallInfo = {
+          callId: apiCallId ?? `call_${Date.now()}`,
+          direction: 'outbound',
+          state: 'connecting',
+          phoneNumber,
+          startTime: new Date(),
+          duration: 0,
+          isMuted: false,
+          isOnHold: false,
+          recordingEnabled: true,
+        };
 
-  const extraHeaders: string[] = [];
-  if (chosenCallerId) {
-    extraHeaders.push(`X-Caller-ID: ${chosenCallerId}`);
-  }
-  if (apiCallId) {
-    extraHeaders.push(`X-Hopwhistle-Call-Id: ${apiCallId}`);
-  }
+        setCurrentCall(callInfo);
+        setAgentStatusState('on-call');
+        setIsPhonePanelOpen(true);
 
-  inviter
-    .invite({
-      requestOptions: {
-        extraHeaders,
-      },
-    })
- .then(() => {
- console.log('[Phone] INVITE sent with caller ID:', chosenCallerId);
- })
- .catch(e => {
- console.error('[Phone] INVITE failed', e);
- setError('Call failed');
- handleCallEndedRef.current();
- });
- } catch (err) {
- console.error('[Phone] Call failed:', err);
- const message = err instanceof Error ? err.message : 'Failed to place call';
- setError(message);
- setIsConnecting(false);
- }
- },
- [normalizedApiUrl, getApiHeaders, isRegistered]
- );
+        inviter.stateChange.addListener(newState => {
+          console.log('[Phone] Session state:', newState);
+          if (newState === SessionState.Established) {
+            handleCallAnsweredRef.current();
+            setupRemoteAudio(inviter);
+          } else if (newState === SessionState.Terminated) {
+            handleCallEndedRef.current();
+          }
+        });
+
+        inviter
+          .invite({
+            requestOptions: {
+              extraHeaders,
+            },
+          })
+          .then(() => {
+            console.log('[Phone] INVITE sent with caller ID:', chosenCallerId);
+          })
+          .catch(e => {
+            console.error('[Phone] INVITE failed', e);
+            setError('Call failed');
+            handleCallEndedRef.current();
+          });
+      } catch (err) {
+        console.error('[Phone] Call failed:', err);
+        const message = err instanceof Error ? err.message : 'Failed to place call';
+        setError(message);
+        setIsConnecting(false);
+      }
+    },
+    [normalizedApiUrl, getApiHeaders, isRegistered]
+  );
 
   const answerCall = useCallback(() => {
     if (
@@ -723,7 +762,9 @@ export function PhoneProvider({
           // but this is a belt-and-suspenders call. wireRemoteAudio uses
           // addEventListener('track', ...) so duplicate installs are safe.
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const pc = (invitation.sessionDescriptionHandler as any)?.peerConnection as RTCPeerConnection | undefined;
+          const pc = (invitation.sessionDescriptionHandler as any)?.peerConnection as
+            | RTCPeerConnection
+            | undefined;
           if (pc) {
             wireRemoteAudio(pc);
           } else {
@@ -743,7 +784,7 @@ export function PhoneProvider({
     }
   }, [wireRemoteAudio, stopRingtone]);
 
- const hangupCall = useCallback(() => {
+  const hangupCall = useCallback(() => {
     if (sessionRef.current) {
       switch (sessionRef.current.state) {
         case SessionState.Initial:
@@ -763,299 +804,365 @@ export function PhoneProvider({
     handleCallEndedRef.current();
   }, []);
 
- const toggleMute = useCallback(() => {
- // TODO: Implement SIP mute
- // sessionRef.current?.mute() / unmute()
- setCurrentCall(prev => {
- if (!prev) return prev;
- return { ...prev, isMuted: !prev.isMuted };
- });
- }, []);
+  const toggleMute = useCallback(() => {
+    // TODO: Implement SIP mute
+    // sessionRef.current?.mute() / unmute()
+    setCurrentCall(prev => {
+      if (!prev) return prev;
+      return { ...prev, isMuted: !prev.isMuted };
+    });
+  }, []);
 
- const toggleHold = useCallback(async () => {
- if (!sessionRef.current || sessionRef.current.state !== SessionState.Established) {
- return;
- }
+  const toggleHold = useCallback(() => {
+    if (!sessionRef.current || sessionRef.current.state !== SessionState.Established) {
+      return;
+    }
 
- const session = sessionRef.current;
- const currentlyOnHold = currentCall?.isOnHold ?? false;
+    const session = sessionRef.current;
+    const currentlyOnHold = currentCall?.isOnHold ?? false;
 
- try {
- // Send re-INVITE with hold/unhold SDP modifiers
- // eslint-disable-next-line @typescript-eslint/no-explicit-any
- const sdh = session.sessionDescriptionHandler as any;
- if (sdh && sdh.peerConnection) {
- const pc = sdh.peerConnection as RTCPeerConnection;
- const senders = pc.getSenders();
- for (const sender of senders) {
- if (sender.track && sender.track.kind === 'audio') {
- sender.track.enabled = currentlyOnHold; // unmute for resume, mute for hold
- }
- }
- }
+    try {
+      // Send re-INVITE with hold/unhold SDP modifiers
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sdh = session.sessionDescriptionHandler as any;
+      if (sdh && sdh.peerConnection) {
+        const pc = sdh.peerConnection as RTCPeerConnection;
+        const senders = pc.getSenders();
+        for (const sender of senders) {
+          if (sender.track && sender.track.kind === 'audio') {
+            sender.track.enabled = currentlyOnHold; // unmute for resume, mute for hold
+          }
+        }
+      }
 
- setCurrentCall(prev => {
- if (!prev) return prev;
- return {
- ...prev,
- isOnHold: !currentlyOnHold,
- state: !currentlyOnHold ? 'hold' : 'active',
- };
- });
- } catch (err) {
- console.error('[Phone] Hold toggle failed:', err);
- // Fallback: still update UI state so user isn't stuck
- setCurrentCall(prev => {
- if (!prev) return prev;
- return {
- ...prev,
- isOnHold: !currentlyOnHold,
- state: !currentlyOnHold ? 'hold' : 'active',
- };
- });
- }
- }, [currentCall?.isOnHold]);
+      setCurrentCall(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          isOnHold: !currentlyOnHold,
+          state: !currentlyOnHold ? 'hold' : 'active',
+        };
+      });
+    } catch (err) {
+      console.error('[Phone] Hold toggle failed:', err);
+      // Fallback: still update UI state so user isn't stuck
+      setCurrentCall(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          isOnHold: !currentlyOnHold,
+          state: !currentlyOnHold ? 'hold' : 'active',
+        };
+      });
+    }
+  }, [currentCall?.isOnHold]);
 
- const sendDTMF = useCallback((digit: string) => {
- if (sessionRef.current && sessionRef.current.state === SessionState.Established) {
- // eslint-disable-next-line @typescript-eslint/no-explicit-any
- (sessionRef.current as any).dtmf(digit);
- }
- }, []);
+  const playDTMFTone = useCallback((digit: string) => {
+    try {
+      if (!audioContextRef.current) {
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioContextClass) {
+          audioContextRef.current = new AudioContextClass();
+        }
+      }
 
- const transferCall = useCallback((_destination: string, _type: 'blind' | 'warm') => {
- // TODO: Implement SIP REFER
- console.log('Transfer not fully implemented in SIP yet');
- }, []);
+      const context = audioContextRef.current;
+      if (!context) return;
 
- // Add third party to call (for 3-way calling)
- // This puts the current call on hold and dials the new number
- const addThirdParty = useCallback(
- async (phoneNumber: string) => {
- if (!sessionRef.current || sessionRef.current.state !== SessionState.Established) {
- setError('No active call to add party to');
- return;
- }
+      const frequencies = dtmfFrequencies[digit];
+      if (!frequencies) return;
 
- if (!userAgentRef.current) {
- setError('Phone not connected');
- return;
- }
+      const duration = 0.15;
 
- try {
- console.log('[Phone] Adding third party:', phoneNumber);
+      const osc1 = context.createOscillator();
+      const osc2 = context.createOscillator();
+      const gainNode = context.createGain();
 
- // 1. Put the current call on hold (await so SIP processes)
- await toggleHold();
+      osc1.type = 'sine';
+      osc2.type = 'sine';
+      osc1.frequency.value = frequencies[0];
+      osc2.frequency.value = frequencies[1];
 
- // 2. Stash the current session
- heldSessionRef.current = sessionRef.current;
- setHasHeldCalls(true);
- sessionRef.current = null; // Clear so makeCall starts fresh
+      gainNode.gain.value = 0.05; // Comfort volume for DTMF tones during active call
 
- // 3. Small delay to let FreeSWITCH process the hold
- await new Promise(resolve => setTimeout(resolve, 500));
+      osc1.connect(gainNode);
+      osc2.connect(gainNode);
+      gainNode.connect(context.destination);
 
- // 4. Dial the new number
- await makeCall(phoneNumber);
- } catch (err) {
- console.error('[Phone] Add third party failed:', err);
- const message = err instanceof Error ? err.message : 'Failed to add party';
- setError(message);
+      osc1.start();
+      osc2.start();
 
- // Restore if failed
- if (heldSessionRef.current) {
- sessionRef.current = heldSessionRef.current;
- heldSessionRef.current = null;
- setHasHeldCalls(false);
- // Try to unhold the original call
- try { await toggleHold(); } catch { /* best effort */ }
- }
- }
- },
- [toggleHold, makeCall]
- );
+      setTimeout(() => {
+        osc1.stop();
+        osc2.stop();
+      }, duration * 1000);
+    } catch {
+      // Ignore audio errors
+    }
+  }, []);
 
- const mergeCalls = useCallback(async () => {
- if (!sessionRef.current || !heldSessionRef.current) {
- setError('Need two calls to merge');
- return;
- }
+  const sendDTMF = useCallback(
+    (digit: string) => {
+      playDTMFTone(digit);
 
- // Get call IDs using the SIP Call-ID header or internal id
- // Note: sip.js session.id is usually the Call-ID
- const activeCallId = sessionRef.current.id;
- const heldCallId = heldSessionRef.current.id;
+      if (sessionRef.current && sessionRef.current.state === SessionState.Established) {
+        const sdh = sessionRef.current.sessionDescriptionHandler;
+        if (sdh && typeof (sdh as any).sendDtmf === 'function') {
+          console.log('[Phone] Sending DTMF via SessionDescriptionHandler:', digit);
+          (sdh as any).sendDtmf(digit);
+        } else {
+          console.warn(
+            '[Phone] SessionDescriptionHandler does not support sendDtmf, trying legacy .dtmf'
+          );
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (sessionRef.current as any).dtmf(digit);
+          } catch (e) {
+            console.error('[Phone] Failed to send DTMF via legacy method:', e);
+          }
+        }
+      }
+    },
+    [playDTMFTone]
+  );
 
- console.log('[Phone] Merging calls...', {
- active: activeCallId,
- held: heldCallId,
- });
+  const transferCall = useCallback((_destination: string, _type: 'blind' | 'warm') => {
+    // TODO: Implement SIP REFER
+    console.log('Transfer not fully implemented in SIP yet');
+  }, []);
 
- try {
- // Call backend API to merge
- const response = await fetch(`${normalizedApiUrl}/api/v1/agent/call/merge`, {
- method: 'POST',
- headers: getApiHeaders(),
- body: JSON.stringify({
- activeCallId,
- heldCallId,
- }),
- });
+  // Add third party to call (for 3-way calling)
+  // This puts the current call on hold and dials the new number
+  const addThirdParty = useCallback(
+    async (phoneNumber: string) => {
+      if (!sessionRef.current || sessionRef.current.state !== SessionState.Established) {
+        setError('No active call to add party to');
+        return;
+      }
 
- if (!response.ok) {
- throw new Error('Merge failed');
- }
+      if (!userAgentRef.current) {
+        setError('Phone not connected');
+        return;
+      }
 
- // On success, the held session is effectively consumed/merged.
- // We should probably rely on the backend events, but simpler to clean up local state
- heldSessionRef.current = null;
- setHasHeldCalls(false);
+      try {
+        console.log('[Phone] Adding third party:', phoneNumber);
 
- // The active session remains as the "Conference" session
- console.log('[Phone] Merge command sent successfully');
- } catch (err) {
- console.error('[Phone] Merge failed:', err);
- setError('Failed to merge calls');
- }
- }, [normalizedApiUrl, getApiHeaders]);
+        // 1. Put the current call on hold (await so SIP processes)
+        toggleHold();
 
- const setAudioInput = useCallback((deviceId: string) => {
- setSelectedAudioInput(deviceId);
- }, []);
+        // 2. Stash the current session
+        heldSessionRef.current = sessionRef.current;
+        setHasHeldCalls(true);
+        sessionRef.current = null; // Clear so makeCall starts fresh
 
- const setAudioOutput = useCallback((deviceId: string) => {
- setSelectedAudioOutput(deviceId);
- }, []);
+        // 3. Small delay to let FreeSWITCH process the hold
+        await new Promise(resolve => setTimeout(resolve, 500));
 
- const updateScreenPopFields = useCallback((fields: ScreenPopField[]) => {
- setScreenPopFields(fields);
- if (typeof window !== 'undefined') {
- localStorage.setItem('screenPopFields', JSON.stringify(fields));
- }
- }, []);
+        // 4. Dial the new number
+        await makeCall(phoneNumber);
+      } catch (err) {
+        console.error('[Phone] Add third party failed:', err);
+        const message = err instanceof Error ? err.message : 'Failed to add party';
+        setError(message);
 
- const clearError = useCallback(() => setError(null), []);
- const clearPendingDispositionCall = useCallback(() => setPendingDispositionCall(null), []);
+        // Restore if failed
+        if (heldSessionRef.current) {
+          sessionRef.current = heldSessionRef.current;
+          heldSessionRef.current = null;
+          setHasHeldCalls(false);
+          // Try to unhold the original call
+          try {
+            toggleHold();
+          } catch {
+            /* best effort */
+          }
+        }
+      }
+    },
+    [toggleHold, makeCall]
+  );
 
- // Main SIP Initialization - Moved to bottom to satisfy dependencies
- useEffect(() => {
- if (typeof window === 'undefined') return;
+  const mergeCalls = useCallback(async () => {
+    if (!sessionRef.current || !heldSessionRef.current) {
+      setError('Need two calls to merge');
+      return;
+    }
 
- // SIP credentials (matches FreeSWITCH directory: /etc/freeswitch/directory/default/1000.xml)
- const sipUser = '1000';
- const sipPass = '1234';
- // SIP realm must match FreeSWITCH's configured domain (the server's public IP)
- const sipDomain = process.env.NEXT_PUBLIC_IP || '3.214.60.13';
- // WebSocket host uses window hostname for SSL cert validation
- const wsHost = window.location.hostname;
- const isSecure = window.location.protocol === 'https:';
- // Port 7443: FreeSWITCH native WSS (requires valid SSL certs)
- // Port 8083: Direct WS for local/dev
- const sipWsUrl = isSecure ? `wss://${wsHost}:7443` : `ws://${sipDomain}:8083`;
+    // Get call IDs using the SIP Call-ID header or internal id
+    // Note: sip.js session.id is usually the Call-ID
+    const activeCallId = sessionRef.current.id;
+    const heldCallId = heldSessionRef.current.id;
 
- console.log('[Phone] Initializing SIP UA:', { sipUser, sipDomain, sipWsUrl });
+    console.log('[Phone] Merging calls...', {
+      active: activeCallId,
+      held: heldCallId,
+    });
 
- const uri = UserAgent.makeURI(`sip:${sipUser}@${sipDomain}`);
- if (!uri) {
- setError('Invalid SIP URI');
- return;
- }
+    try {
+      // Call backend API to merge
+      const response = await fetch(`${normalizedApiUrl}/api/v1/agent/call/merge`, {
+        method: 'POST',
+        headers: getApiHeaders(),
+        body: JSON.stringify({
+          activeCallId,
+          heldCallId,
+        }),
+      });
 
- const options: UserAgentOptions = {
- uri,
- transportOptions: {
- server: sipWsUrl,
- },
- authorizationUsername: sipUser,
- authorizationPassword: sipPass,
- reconnectionAttempts: 3,
- reconnectionDelay: 4,
- delegate: {
- onConnect: () => {
- console.log('[Phone] SIP Transport Connected');
- setError(null);
- },
- onDisconnect: error => {
- console.log('[Phone] SIP Transport Disconnected', error);
- setIsRegistered(false);
- if (error) setError('SIP connection lost');
- },
- onInvite: (invitation: Invitation) => {
- console.log('[Phone] Incoming SIP Invite');
- handleIncomingSipCall(invitation);
- },
- },
- };
+      if (!response.ok) {
+        throw new Error('Merge failed');
+      }
 
- const ua = new UserAgent(options);
- userAgentRef.current = ua;
+      // On success, the held session is effectively consumed/merged.
+      // We should probably rely on the backend events, but simpler to clean up local state
+      heldSessionRef.current = null;
+      setHasHeldCalls(false);
 
- ua.start()
- .then(() => {
- console.log('[Phone] SIP UA Started');
- const registerer = new Registerer(ua);
- registerer
- .register()
- .then(() => {
- console.log('[Phone] SIP Registered');
- setIsRegistered(true);
- setAgentStatusState('available');
- })
- .catch(e => {
- console.error('[Phone] SIP Registration Failed', e);
- setError('Registration failed');
- });
- })
- .catch(e => {
- console.error('[Phone] SIP UA Start Failed', e);
- setError('Phone initialization failed');
- });
+      // The active session remains as the "Conference" session
+      console.log('[Phone] Merge command sent successfully');
+    } catch (err) {
+      console.error('[Phone] Merge failed:', err);
+      setError('Failed to merge calls');
+    }
+  }, [normalizedApiUrl, getApiHeaders]);
 
- return () => {
- if (ua) {
- void ua.stop();
- }
- };
- }, [handleIncomingSipCall]);
+  const setAudioInput = useCallback((deviceId: string) => {
+    setSelectedAudioInput(deviceId);
+  }, []);
 
- const value: PhoneContextType = {
- agentStatus,
- currentCall,
- callHistory,
- isPhonePanelOpen,
- isConnecting,
- audioDevices,
- selectedAudioInput,
- selectedAudioOutput,
- screenPopFields,
- error,
- isRegistered, // Exported for UI
- dialerNumber, // Pre-filled dialer number
- pendingDispositionCall, // Post-call disposition data
- setAgentStatus,
- openPhonePanel,
- closePhonePanel,
- togglePhonePanel,
- setDialerNumber, // Pre-fill dialer action
- makeCall,
- answerCall,
- hangupCall,
- toggleMute,
- toggleHold,
- sendDTMF,
- transferCall,
- addThirdParty,
- mergeCalls,
- hasHeldCalls,
- setAudioInput,
- setAudioOutput,
- updateScreenPopFields,
- clearError,
- clearPendingDispositionCall,
- };
+  const setAudioOutput = useCallback((deviceId: string) => {
+    setSelectedAudioOutput(deviceId);
+  }, []);
 
- return <PhoneContext.Provider value={value}>{children}</PhoneContext.Provider>;
+  const updateScreenPopFields = useCallback((fields: ScreenPopField[]) => {
+    setScreenPopFields(fields);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('screenPopFields', JSON.stringify(fields));
+    }
+  }, []);
+
+  const clearError = useCallback(() => setError(null), []);
+  const clearPendingDispositionCall = useCallback(() => setPendingDispositionCall(null), []);
+
+  // Main SIP Initialization - Moved to bottom to satisfy dependencies
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    // SIP credentials (matches FreeSWITCH directory: /etc/freeswitch/directory/default/1000.xml)
+    const sipUser = '1000';
+    const sipPass = '1234';
+    // SIP realm must match FreeSWITCH's configured domain (the server's public IP)
+    const sipDomain = process.env.NEXT_PUBLIC_IP || '3.214.60.13';
+    // WebSocket host uses window hostname for SSL cert validation
+    const wsHost = window.location.hostname;
+    const isSecure = window.location.protocol === 'https:';
+    // Port 7443: FreeSWITCH native WSS (requires valid SSL certs)
+    // Port 8083: Direct WS for local/dev
+    const sipWsUrl = isSecure ? `wss://${wsHost}:7443` : `ws://${sipDomain}:8083`;
+
+    console.log('[Phone] Initializing SIP UA:', { sipUser, sipDomain, sipWsUrl });
+
+    const uri = UserAgent.makeURI(`sip:${sipUser}@${sipDomain}`);
+    if (!uri) {
+      setError('Invalid SIP URI');
+      return;
+    }
+
+    const options: UserAgentOptions = {
+      uri,
+      transportOptions: {
+        server: sipWsUrl,
+      },
+      authorizationUsername: sipUser,
+      authorizationPassword: sipPass,
+      reconnectionAttempts: 3,
+      reconnectionDelay: 4,
+      delegate: {
+        onConnect: () => {
+          console.log('[Phone] SIP Transport Connected');
+          setError(null);
+        },
+        onDisconnect: error => {
+          console.log('[Phone] SIP Transport Disconnected', error);
+          setIsRegistered(false);
+          if (error) setError('SIP connection lost');
+        },
+        onInvite: (invitation: Invitation) => {
+          console.log('[Phone] Incoming SIP Invite');
+          handleIncomingSipCall(invitation);
+        },
+      },
+    };
+
+    const ua = new UserAgent(options);
+    userAgentRef.current = ua;
+
+    ua.start()
+      .then(() => {
+        console.log('[Phone] SIP UA Started');
+        const registerer = new Registerer(ua);
+        registerer
+          .register()
+          .then(() => {
+            console.log('[Phone] SIP Registered');
+            setIsRegistered(true);
+            setAgentStatusState('available');
+          })
+          .catch(e => {
+            console.error('[Phone] SIP Registration Failed', e);
+            setError('Registration failed');
+          });
+      })
+      .catch(e => {
+        console.error('[Phone] SIP UA Start Failed', e);
+        setError('Phone initialization failed');
+      });
+
+    return () => {
+      if (ua) {
+        void ua.stop();
+      }
+    };
+  }, [handleIncomingSipCall]);
+
+  const value: PhoneContextType = {
+    agentStatus,
+    currentCall,
+    callHistory,
+    isPhonePanelOpen,
+    isConnecting,
+    audioDevices,
+    selectedAudioInput,
+    selectedAudioOutput,
+    screenPopFields,
+    error,
+    isRegistered, // Exported for UI
+    dialerNumber, // Pre-filled dialer number
+    pendingDispositionCall, // Post-call disposition data
+    setAgentStatus,
+    openPhonePanel,
+    closePhonePanel,
+    togglePhonePanel,
+    setDialerNumber, // Pre-fill dialer action
+    makeCall,
+    answerCall,
+    hangupCall,
+    toggleMute,
+    toggleHold,
+    sendDTMF,
+    transferCall,
+    addThirdParty,
+    mergeCalls,
+    hasHeldCalls,
+    setAudioInput,
+    setAudioOutput,
+    updateScreenPopFields,
+    clearError,
+    clearPendingDispositionCall,
+  };
+
+  return <PhoneContext.Provider value={value}>{children}</PhoneContext.Provider>;
 }
 
 export default PhoneProvider;

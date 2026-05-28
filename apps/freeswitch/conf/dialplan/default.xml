@@ -34,38 +34,40 @@
       </condition>
     </extension>
 
+    <!-- Recording Smoke Test Extension -->
+    <extension name="recording-smoke-test">
+      <condition field="destination_number" expression="^(9999)$">
+        <action application="log" data="INFO HOPWHISTLE RECORDING SMOKE TEST HIT"/>
+        <action application="set" data="bypass_media=false" inline="true"/>
+        <action application="set" data="proxy_media=false" inline="true"/>
+        <action application="answer"/>
+        <action application="record_session" data="/recordings/test.wav"/>
+        <action application="playback" data="tone_stream://%(2000,4000,440,480);loops=3"/>
+        <action application="hangup"/>
+      </condition>
+    </extension>
+
     <!-- Outbound calls via BulkVS (NANP numbers only) -->
     <extension name="outbound-to-bulkvs">
+      <!-- Unavoidable top level logging + initialization. This must be the very first condition. -->
       <condition field="destination_number" expression="^\+?1?([2-9]\d{9})$">
-        <action application="log" data="INFO [DEFAULT] Outbound call to $1 via BulkVS"/>
-        
+        <!-- Force media through FreeSWITCH so RTP is captured -->
+        <action application="set" data="bypass_media=false" inline="true"/>
+        <action application="set" data="proxy_media=false" inline="true"/>
+        <action application="set" data="bypass_media_after_bridge=false" inline="true"/>
+
         <!-- Extract X-Caller-ID (mixed or lowercase) -->
         <action application="set" data="req_caller_id=${sip_h_X-Caller-ID}" inline="true"/>
+        <action application="set" data="hopwhistle_call_id=${sip_h_X-Hopwhistle-Call-Id}" inline="true"/>
       </condition>
 
       <!-- If req_caller_id is empty, fallback to lowercase -->
       <condition field="${req_caller_id}" expression="^$" break="never">
         <action application="set" data="req_caller_id=${sip_h_x-caller-id}" inline="true"/>
       </condition>
-
       <!-- If req_caller_id is still empty, set default -->
       <condition field="${req_caller_id}" expression="^$" break="never">
         <action application="set" data="req_caller_id=12816991120" inline="true"/>
-      </condition>
-
-      <!-- Now apply caller ID details and codec parameters -->
-      <condition field="destination_number" expression="^\+?1?([2-9]\d{9})$">
-        <action application="set" data="clean_caller_id=${req_caller_id}" inline="true"/>
-        <action application="set" data="effective_caller_id_number=+${clean_caller_id}" inline="true"/>
-        <action application="set" data="origination_caller_id_number=+${clean_caller_id}" inline="true"/>
-        <action application="set" data="effective_caller_id_name=Hopwhistle" inline="true"/>
-        <action application="set" data="hangup_after_bridge=true"/>
-        <action application="set" data="bypass_media=false"/>
-        <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
-        <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
-        
-        <!-- Extract Hopwhistle Call ID -->
-        <action application="set" data="hopwhistle_call_id=${sip_h_X-Hopwhistle-Call-Id}" inline="true"/>
       </condition>
 
       <!-- If hopwhistle_call_id is empty, fallback to lowercase -->
@@ -73,22 +75,33 @@
         <action application="set" data="hopwhistle_call_id=${sip_h_x-hopwhistle-call-id}" inline="true"/>
       </condition>
 
-      <!-- Logging variables before starting recording checks -->
+      <!-- Now we log all details (including extracted variables) -->
       <condition field="destination_number" expression="^\+?1?([2-9]\d{9})$" break="never">
-        <action application="log" data="INFO [DEFAULT] Evaluation: destination=${destination_number}, clean_dest=$1, call_id=${hopwhistle_call_id}"/>
+        <action application="log" data="INFO HOPWHISTLE OUTBOUND HIT uuid=${uuid} dest=${destination_number} clean_dest=$1 sip_call_id=${sip_call_id} header=${sip_h_X-Hopwhistle-Call-Id} lowercase=${sip_h_x-hopwhistle-call-id} hopwhistle_call_id=${hopwhistle_call_id} hopwhistle_recording_path=/recordings/${hopwhistle_call_id}.wav caller_id_number=${caller_id_number} effective_caller_id_number=${effective_caller_id_number}" inline="true"/>
       </condition>
 
-      <!-- Warn if Hopwhistle Call ID is missing -->
+      <!-- If hopwhistle_call_id is still empty: log a clear error and notify API recording-status failed -->
       <condition field="${hopwhistle_call_id}" expression="^$" break="never">
-        <action application="log" data="WARNING [DEFAULT] Missing X-Hopwhistle-Call-Id on FreeSWITCH channel for destination=${destination_number}."/>
+        <action application="log" data="ERR HOPWHISTLE OUTBOUND ERROR: Missing X-Hopwhistle-Call-Id header! Cannot record call."/>
+        <!-- Notify API recording-status failed directly via bg_system / curl -->
+        <action application="bg_system" data="curl -s -X POST -H 'Content-Type: application/json' -H 'x-api-key: ${env(API_KEY)}' -d '{&quot;status&quot;: &quot;failed&quot;, &quot;error&quot;: &quot;Missing X-Hopwhistle-Call-Id header on FreeSWITCH channel&quot;}' http://api:3001/api/v1/calls/unknown/recording-status || true"/>
       </condition>
 
-      <!-- Conditionally record if hopwhistle_call_id is set -->
+      <!-- If hopwhistle_call_id is NOT empty, apply details and start record_session before bridge -->
       <condition field="${hopwhistle_call_id}" expression="^(.+)$" break="never">
+        <action application="set" data="clean_caller_id=${req_caller_id}" inline="true"/>
+        <action application="set" data="effective_caller_id_number=+${clean_caller_id}" inline="true"/>
+        <action application="set" data="origination_caller_id_number=+${clean_caller_id}" inline="true"/>
+        <action application="set" data="effective_caller_id_name=Hopwhistle" inline="true"/>
+        <action application="set" data="hangup_after_bridge=true"/>
+        <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
+        <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
+
+        <!-- Set recording variables and start record_session -->
         <action application="set" data="hopwhistle_recording_path=/recordings/${hopwhistle_call_id}.wav" inline="true"/>
-        <action application="log" data="INFO [DEFAULT] Outbound call recording active. starting record_session for Call ID: ${hopwhistle_call_id}, path: ${hopwhistle_recording_path}"/>
-        <action application="set" data="api_hangup_hook=bg_system /usr/share/freeswitch/scripts/upload-recording.sh ${hopwhistle_recording_path} ${hopwhistle_call_id}"/>
-        <action application="record_session" data="${hopwhistle_recording_path}"/>
+        <action application="log" data="INFO HOPWHISTLE RECORD_SESSION START path=/recordings/${hopwhistle_call_id}.wav" inline="true"/>
+        <action application="set" data="api_hangup_hook=bg_system /usr/share/freeswitch/scripts/upload-recording.sh /recordings/${hopwhistle_call_id}.wav ${hopwhistle_call_id}"/>
+        <action application="record_session" data="/recordings/${hopwhistle_call_id}.wav"/>
       </condition>
 
       <!-- Bridge outbound call -->

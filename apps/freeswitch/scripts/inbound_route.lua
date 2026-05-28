@@ -138,10 +138,7 @@ if recording_enabled then
   -- Ensure recording directory exists
   os.execute("mkdir -p " .. RECORDING_DIR)
 
-  local date_path = os.date("%Y/%m/%d")
-  os.execute("mkdir -p " .. RECORDING_DIR .. "/" .. date_path)
-
-  recording_path = RECORDING_DIR .. "/" .. date_path .. "/" .. call_uuid .. ".wav"
+  recording_path = RECORDING_DIR .. "/in_" .. call_uuid .. ".wav"
   session:setVariable("x_recording_path", recording_path)
   
   log("INFO", "Recording to: " .. recording_path)

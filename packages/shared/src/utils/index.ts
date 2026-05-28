@@ -10,3 +10,4 @@ export const isValidPhoneNumber = (phone: string): boolean => {
   return cleaned.length >= 10 && cleaned.length <= 15;
 };
 
+export * from './phone-geo';
