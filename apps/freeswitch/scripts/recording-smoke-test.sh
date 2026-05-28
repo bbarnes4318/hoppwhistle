@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # Hopwhistle FreeSWITCH Recording Smoke Test
 # Runs inside the FreeSWITCH docker container to verify file writing,
 # dialplan execution, media path capture, and audio generation.

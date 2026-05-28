@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # Upload recording to Hopwhistle API
 # Called by FreeSWITCH api_hangup_hook after call ends.
 # The recording file may still be being finalized when this runs,
@@ -39,10 +39,10 @@ if [ -z "$RECORDING_FILE" ] || [ -z "$CALL_ID" ]; then
   exit 1
 fi
 
-# Build headers/options array for curl to ensure authentication is sent to all endpoints
-CURL_OPTS=("-s")
+# Build headers/options array for curl in a POSIX sh compliant way
+API_KEY_HEADER=""
 if [ "$API_KEY_PRESENT" = "yes" ]; then
-  CURL_OPTS+=("-H" "x-api-key: ${API_KEY}")
+  API_KEY_HEADER="-H x-api-key:$API_KEY"
 fi
 
 # Wait for the recording file to appear and stabilize.
@@ -69,7 +69,7 @@ done
 if [ ! -f "$RECORDING_FILE" ]; then
   log "ERROR: Recording file not found after ${MAX_WAIT}s: $RECORDING_FILE"
   # Notify API that recording failed
-  curl "${CURL_OPTS[@]}" -X POST "${API_URL}/api/v1/calls/${CALL_ID}/recording-status" \
+  curl -s $API_KEY_HEADER -X POST "${API_URL}/api/v1/calls/${CALL_ID}/recording-status" \
     -H "Content-Type: application/json" \
     -d "{\"status\": \"failed\", \"error\": \"Recording file not found after ${MAX_WAIT}s: ${RECORDING_FILE}\"}" || true
   exit 1
@@ -78,7 +78,7 @@ fi
 FILE_SIZE=$(stat -c%s "$RECORDING_FILE" 2>/dev/null || stat -f%z "$RECORDING_FILE" 2>/dev/null || echo "0")
 if [ "$FILE_SIZE" -le 100 ]; then
   log "ERROR: Recording file is too small (<= 100 bytes): $RECORDING_FILE (size: $FILE_SIZE bytes). Rejecting empty/header-only file."
-  curl "${CURL_OPTS[@]}" -X POST "${API_URL}/api/v1/calls/${CALL_ID}/recording-status" \
+  curl -s $API_KEY_HEADER -X POST "${API_URL}/api/v1/calls/${CALL_ID}/recording-status" \
     -H "Content-Type: application/json" \
     -d "{\"status\": \"failed\", \"error\": \"Recording file too small or header-only ($FILE_SIZE bytes)\"}" || true
   # Do not delete the local file on failure. Leave it for inspection.
@@ -98,7 +98,7 @@ HTTP_CODE=""
 BODY=""
 
 while [ $ATTEMPT -le $MAX_RETRIES ]; do
-  RESPONSE=$(curl "${CURL_OPTS[@]}" -w "\n%{http_code}" --max-time 30 -X POST "${API_URL}/api/v1/recordings/upload" \
+  RESPONSE=$(curl -s $API_KEY_HEADER -w "\n%{http_code}" --max-time 30 -X POST "${API_URL}/api/v1/recordings/upload" \
     -F "callId=${CALL_ID}" \
     -F "format=${EXTENSION}" \
     -F "file=@${RECORDING_FILE}" 2>&1)
@@ -123,7 +123,7 @@ log "ERROR: Upload failed after ${MAX_RETRIES} attempts (HTTP ${HTTP_CODE})"
 log "Response body of last attempt: ${BODY}"
 
 # Notify API that recording upload failed
-curl "${CURL_OPTS[@]}" -X POST "${API_URL}/api/v1/calls/${CALL_ID}/recording-status" \
+curl -s $API_KEY_HEADER -X POST "${API_URL}/api/v1/calls/${CALL_ID}/recording-status" \
   -H "Content-Type: application/json" \
   -d "{\"status\": \"failed\", \"error\": \"Upload failed after ${MAX_RETRIES} attempts (HTTP ${HTTP_CODE}): ${BODY}\"}" || true
 
