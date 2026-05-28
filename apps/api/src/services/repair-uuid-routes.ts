@@ -122,10 +122,12 @@ export async function repairUuidRouteDestinations(): Promise<void> {
         });
         fixed++;
       } else {
-        // No extension available — we can't auto-fix, but we should clear the bad UUID
-        // destination since it will never work. Leave the route but warn loudly.
-        logger.error({
-          msg: '[REPAIR] Route has UUID destination but user has no extension — REQUIRES MANUAL FIX via DID Routes UI',
+        // No extension available — we can't auto-fix, so delete the corrupted route from the database
+        await prisma.didRoute.delete({
+          where: { id: route.id },
+        });
+        logger.warn({
+          msg: '[REPAIR] Route has UUID destination but user has no extension — DELETED corrupted route',
           routeId: route.id,
           did: route.did,
           destination: route.destination,

@@ -41,6 +41,20 @@ export class DidRouteService {
         });
 
         if (existingRoute) {
+          // If autoDestination is null and the existing route has an invalid destination (e.g. UUID),
+          // delete the route entirely so we don't leave a corrupted route in the database.
+          if (!autoDestination && !isValidPhoneDestination(existingRoute.destination)) {
+            await prisma.didRoute.delete({
+              where: { id: existingRoute.id },
+            });
+            logger.info({
+              msg: 'syncDidRouteForNumber: Deleted existing DidRoute with invalid destination and no extension',
+              number: phoneNumber.number,
+              invalidDestination: existingRoute.destination,
+            });
+            return;
+          }
+
           // If the route already has a valid destination (manually configured),
           // do NOT overwrite it — only update status and label
           const shouldUpdateDestination =
@@ -73,6 +87,20 @@ export class DidRouteService {
           });
 
           if (duplicate) {
+            // If autoDestination is null and the duplicate route has an invalid destination (e.g. UUID),
+            // delete the duplicate route entirely.
+            if (!autoDestination && !isValidPhoneDestination(duplicate.destination)) {
+              await prisma.didRoute.delete({
+                where: { id: duplicate.id },
+              });
+              logger.info({
+                msg: 'syncDidRouteForNumber: Deleted duplicate DidRoute with invalid destination and no extension',
+                number: phoneNumber.number,
+                invalidDestination: duplicate.destination,
+              });
+              return;
+            }
+
             // A route already exists for this DID — preserve its destination if valid
             const shouldUpdateDestination =
               autoDestination && !isValidPhoneDestination(duplicate.destination);

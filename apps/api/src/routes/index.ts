@@ -2886,6 +2886,137 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
       tempPassword: tempPassword, // Only for development/testing
     };
   });
+
+  fastify.patch<{
+    Params: { userId: string };
+    Body: {
+      firstName?: string;
+      lastName?: string;
+      status?: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
+      metadata?: Record<string, unknown>;
+    };
+  }>('/api/v1/users/:userId', async (request, reply) => {
+    try {
+      const user = (request as AuthRequest).user;
+      const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+      const tenantId = demoTenantId || user?.tenantId;
+
+      if (!tenantId) {
+        void reply.code(401);
+        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      }
+
+      const { userId } = request.params;
+      const body = request.body;
+      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+
+      // Verify user exists and belongs to tenant
+      const existingUser = await prisma.user.findFirst({
+        where: {
+          id: userId,
+          tenantId: tenantId,
+        },
+      });
+
+      if (!existingUser) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'User not found' } };
+      }
+
+      const updateData: Record<string, unknown> = {};
+      if (body.firstName !== undefined) {
+        updateData.firstName = body.firstName;
+      }
+      if (body.lastName !== undefined) {
+        updateData.lastName = body.lastName;
+      }
+      if (body.status !== undefined) {
+        updateData.status = body.status;
+      }
+
+      let metadataChanged = false;
+      let newExtension: string | null = null;
+      let oldExtension: string | null = null;
+
+      if (body.metadata !== undefined) {
+        const currentMetadata = (existingUser.metadata as Record<string, any>) || {};
+        const mergedMetadata = {
+          ...currentMetadata,
+          ...body.metadata,
+        };
+        updateData.metadata = mergedMetadata;
+
+        oldExtension = currentMetadata.extension || null;
+        newExtension = body.metadata.extension !== undefined ? (body.metadata.extension as string | null) : oldExtension;
+        if (newExtension !== oldExtension) {
+          metadataChanged = true;
+        }
+      }
+
+      const updatedUser = await prisma.user.update({
+        where: { id: userId },
+        data: updateData,
+        include: {
+          roles: {
+            include: {
+              role: true,
+            },
+          },
+          buyer: true,
+        },
+      });
+
+      // Audit log
+      const { auditUpdate } = await import('../services/audit.js');
+      await auditUpdate(tenantId, 'User', userId, existingUser, updatedUser, {
+        userId: user?.userId,
+        ipAddress: request.ip,
+        requestId: request.id,
+      });
+
+      // Sync inbound DidRoute if user's extension changed
+      if (metadataChanged) {
+        const phoneNumbers = await prisma.phoneNumber.findMany({
+          where: { userId, tenantId, status: 'ACTIVE' },
+        });
+
+        const { didRouteService } = await import('../services/did-route-service.js');
+        for (const num of phoneNumbers) {
+          await didRouteService.syncDidRouteForNumber(num.id, tenantId);
+        }
+
+        const { logger } = await import('../lib/logger.js');
+        logger.info({
+          msg: 'User extension updated; synced did routes for assigned phone numbers',
+          userId,
+          phoneNumbersCount: phoneNumbers.length,
+          oldExtension,
+          newExtension,
+        });
+      }
+
+      return {
+        id: updatedUser.id,
+        email: updatedUser.email,
+        firstName: updatedUser.firstName,
+        lastName: updatedUser.lastName,
+        status: updatedUser.status.toLowerCase(),
+        roles: updatedUser.roles.map(r => r.role.name.toLowerCase()),
+        buyerId: updatedUser.buyerId,
+        buyerName: updatedUser.buyer?.name || null,
+        metadata: updatedUser.metadata,
+        createdAt: updatedUser.createdAt.toISOString(),
+      };
+    } catch (error: unknown) {
+      void reply.code(400);
+      return {
+        error: {
+          code: 'UPDATE_FAILED',
+          message: (error as Error).message || 'Failed to update user',
+        },
+      };
+    }
+  });
 }
 
 // Public API - Reporting
