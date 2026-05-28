@@ -7,3 +7,7 @@ docker exec hopwhistle-postgres-dev psql -U callfabric -d callfabric -c "SELECT 
 
 echo "=== USERS ==="
 docker exec hopwhistle-postgres-dev psql -U callfabric -d callfabric -c "SELECT id, email, metadata FROM users WHERE id = '1b419be1-cccd-40cb-99ae-ca88d696e370';"
+
+echo "=== AUDIT LOGS ==="
+docker exec hopwhistle-postgres-dev psql -U callfabric -d callfabric -c "SELECT id, action, \"entityId\", changes, \"createdAt\" FROM audit_logs WHERE \"entityId\" = 'bd53f020-a029-4b85-b971-e8fa44947dff' OR \"entityId\" = '0b731b2b-cd8c-4213-ad4d-8c8fe97a13b3' OR \"entityId\" = '7151a7e7-b197-4ae4-94b5-cbcce6255dcd' ORDER BY \"createdAt\" DESC LIMIT 10;"
+
