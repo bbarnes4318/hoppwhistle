@@ -630,7 +630,19 @@ export function PhoneProvider({
  const target = UserAgent.makeURI(`sip:${phoneNumber}@${sipTargetDomain}`);
  if (!target) throw new Error('Invalid target URI');
 
- const inviter = new Inviter(userAgentRef.current, target);
+ const extraHeaders: string[] = [];
+ if (chosenCallerId) {
+   extraHeaders.push(`X-Caller-ID: ${chosenCallerId}`);
+ }
+ if (apiCallId) {
+   extraHeaders.push(`X-Hopwhistle-Call-Id: ${apiCallId}`);
+ }
+
+ console.log('[Phone] Creating Inviter with extraHeaders:', extraHeaders);
+
+ const inviter = new Inviter(userAgentRef.current, target, {
+   extraHeaders,
+ });
  sessionRef.current = inviter;
 
  const callInfo: CallInfo = {
@@ -658,14 +670,6 @@ export function PhoneProvider({
  handleCallEndedRef.current();
  }
  });
-
-  const extraHeaders: string[] = [];
-  if (chosenCallerId) {
-    extraHeaders.push(`X-Caller-ID: ${chosenCallerId}`);
-  }
-  if (apiCallId) {
-    extraHeaders.push(`X-Hopwhistle-Call-Id: ${apiCallId}`);
-  }
 
   inviter
     .invite({
