@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowRightLeft, Download, Edit2, Loader2, Plus, Search } from 'lucide-react';
+import { ArrowRightLeft, Download, Edit2, Loader2, Plus, Search, Trash2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 import { BulkvsPurchaseDialog } from '@/components/numbers/bulkvs-purchase-dialog';
@@ -133,6 +133,27 @@ export default function NumbersPage() {
 
   const handleEditSuccess = () => {
     void loadNumbers();
+  };
+
+  const handleDeleteRoute = async (routeId: string) => {
+    if (!window.confirm('Are you sure you want to delete this inbound route?')) {
+      return;
+    }
+    try {
+      await apiClient.delete(`/api/v1/did-routes/${routeId}`);
+      toast({
+        title: 'Success',
+        description: 'Inbound route deleted successfully.',
+      });
+      void loadRoutes();
+    } catch (err) {
+      console.error('Failed to delete route:', err);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to delete inbound route.',
+      });
+    }
   };
 
   const filteredRoutes = routes.filter(
@@ -275,7 +296,10 @@ export default function NumbersPage() {
                           <div className="text-muted-foreground text-xs uppercase tracking-wider mb-1">
                             Assigned Agent
                           </div>
-                          <div className="font-medium truncate" title={number.user?.name || 'Unassigned'}>
+                          <div
+                            className="font-medium truncate"
+                            title={number.user?.name || 'Unassigned'}
+                          >
                             {number.user?.name || 'Unassigned'}
                           </div>
                         </div>
@@ -355,6 +379,14 @@ export default function NumbersPage() {
                             )}
                           </div>
                         </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-full text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          onClick={() => handleDeleteRoute(route.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
 
                       <div className="space-y-4 border-t border-border/50 pt-4 text-sm mt-auto">
