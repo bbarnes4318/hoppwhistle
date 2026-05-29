@@ -304,7 +304,7 @@ export class DialerWorker {
         c.name as campaign_name
       FROM "leads" l
       INNER JOIN "campaigns" c ON l."campaignId" = c.id
-      WHERE l.status IN ('NEW', 'RECYCLED')
+      WHERE l.status = 'NEW'
         AND c.status = 'ACTIVE'
       ORDER BY l."createdAt" ASC
       LIMIT ${limit}
