@@ -1,15 +1,16 @@
 'use client';
 
 import { Play, Save, Eye } from 'lucide-react';
-import { use } from 'react';
+import { useParams } from 'next/navigation';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 // Mock flow builder - simplified visual representation
-export default function FlowBuilderPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function FlowBuilderPage() {
+  const params = useParams();
+  const id = params.id as string;
 
   return (
     <div className="space-y-6">

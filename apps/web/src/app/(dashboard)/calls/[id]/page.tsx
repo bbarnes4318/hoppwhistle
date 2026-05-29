@@ -1,7 +1,7 @@
 'use client';
 
 import { Play } from 'lucide-react';
-import { use } from 'react';
+import { useParams } from 'next/navigation';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -27,8 +27,9 @@ const mockCall = {
   },
 };
 
-export default function CallDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function CallDetailPage() {
+  const params = useParams();
+  const id = params.id as string;
   const call = mockCall; // In real app, fetch by id
 
   return (
