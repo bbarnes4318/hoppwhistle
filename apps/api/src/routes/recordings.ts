@@ -274,8 +274,24 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
     }
 
     try {
+      const { recordingId } = request.params;
+
+      // Verify tenant ownership
+      const recording = await prisma.recording.findFirst({
+        where: {
+          id: recordingId,
+          deletedAt: null,
+          call: { tenantId },
+        },
+      });
+
+      if (!recording) {
+        reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Recording not found' } };
+      }
+
       const expiresIn = parseInt(request.query.expiresIn || '3600', 10);
-      const signedUrl = await recordingService.getSignedUrl(request.params.recordingId, expiresIn);
+      const signedUrl = await recordingService.getSignedUrl(recordingId, expiresIn);
 
       return {
         url: signedUrl,
@@ -297,8 +313,30 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
   fastify.get<{ Params: { recordingId: string } }>(
     '/api/v1/recordings/:recordingId/stream',
     async (request, reply) => {
+      const tenantId = (request as any).user?.tenantId;
+      if (!tenantId) {
+        reply.code(401);
+        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      }
+
       try {
-        const streamUrl = await recordingService.getStreamUrl(request.params.recordingId);
+        const { recordingId } = request.params;
+
+        // Verify tenant ownership
+        const recording = await prisma.recording.findFirst({
+          where: {
+            id: recordingId,
+            deletedAt: null,
+            call: { tenantId },
+          },
+        });
+
+        if (!recording) {
+          reply.code(404);
+          return { error: { code: 'NOT_FOUND', message: 'Recording not found' } };
+        }
+
+        const streamUrl = await recordingService.getStreamUrl(recordingId);
         reply.redirect(302, streamUrl);
         return;
       } catch (error) {

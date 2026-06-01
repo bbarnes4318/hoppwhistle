@@ -1422,12 +1422,269 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
       }
     }
   );
-}
-
 // Public API - Calls
 export async function registerCallRoutes(fastify: FastifyInstance) {
   await Promise.resolve();
-  fastify.get<{ Querystring: { page?: string; limit?: string; phone?: string } }>(
+
+  function formatDuration(seconds?: number | null): string {
+    if (seconds === undefined || seconds === null || isNaN(seconds)) return '0:00';
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+
+    if (hours > 0) {
+      return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+    return `${minutes}:${String(secs).padStart(2, '0')}`;
+  }
+
+  function getPublicApiBaseUrl(request: FastifyRequest): string {
+    const envUrl = process.env.PUBLIC_API_URL || process.env.API_PUBLIC_URL;
+    if (envUrl) {
+      return envUrl;
+    }
+    const protocol = (request.headers['x-forwarded-proto'] as string) || 'http';
+    const host = request.headers.host || 'localhost:3001';
+    return `${protocol}://${host}`;
+  }
+
+  function buildRecordingPlaybackUrls(call: any, apiBaseUrl: string, token?: string) {
+    const latestRecording = call.recordings?.[0] ?? null;
+    const primaryId = call.primaryRecordingId || latestRecording?.id || null;
+
+    let primaryUrl = '';
+    if (primaryId) {
+      primaryUrl = `${apiBaseUrl.replace(/\/$/, '')}/api/v1/recordings/${primaryId}/stream`;
+      if (token) {
+        primaryUrl += `?token=${token}`;
+      }
+    } else if (call.recordingUrl) {
+      if (call.recordingUrl.startsWith('http://') || call.recordingUrl.startsWith('https://')) {
+        primaryUrl = call.recordingUrl;
+      } else {
+        primaryUrl = `${apiBaseUrl.replace(/\/$/, '')}${call.recordingUrl}`;
+        if (token && !primaryUrl.includes('?token=')) {
+          primaryUrl += `?token=${token}`;
+        }
+      }
+    }
+
+    // All recordings
+    const allUrls = call.recordings && call.recordings.length > 0
+      ? call.recordings.map((rec: any) => {
+          let u = `${apiBaseUrl.replace(/\/$/, '')}/api/v1/recordings/${rec.id}/stream`;
+          if (token) {
+            u += `?token=${token}`;
+          }
+          return u;
+        }).join('; ')
+      : primaryUrl;
+
+    return { primaryUrl, allUrls };
+  }
+
+  function csvEscape(value: any): string {
+    if (value === null || value === undefined) return '""';
+    const str = String(value);
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+
+  function buildCallWhere(params: {
+    tenantId: string;
+    isAdminOrOwner: boolean;
+    userId?: string;
+    userNumbers: string[];
+    search?: string;
+    phone?: string;
+    startDate?: string;
+    endDate?: string;
+  }) {
+    const { tenantId, isAdminOrOwner, userId, userNumbers, search, phone, startDate, endDate } = params;
+    const where: Record<string, any> = { tenantId };
+
+    if (!isAdminOrOwner && userId) {
+      const numberFormats: string[] = [];
+      for (const num of userNumbers) {
+        numberFormats.push(num);
+        if (num.startsWith('+1')) {
+          numberFormats.push(num.substring(2)); // 10 digit
+          numberFormats.push(num.substring(1)); // 11 digit (1xxxxxxxxxx)
+        } else if (num.startsWith('1') && num.length === 11) {
+          numberFormats.push('+' + num);
+          numberFormats.push(num.substring(1));
+        } else if (num.length === 10) {
+          numberFormats.push('+1' + num);
+          numberFormats.push('1' + num);
+        }
+      }
+      where.OR = [
+        { createdById: userId },
+        { fromNumber: { userId: userId } },
+        { callerId: { in: numberFormats } },
+        { toNumber: { in: numberFormats } },
+        { did: { in: numberFormats } },
+      ];
+    }
+
+    const andClauses: any[] = [];
+
+    if (phone) {
+      andClauses.push({
+        OR: [
+          { toNumber: phone },
+          { callerId: phone },
+          { toNumber: phone.replace(/^\+1/, '') },
+          { callerId: phone.replace(/^\+1/, '') },
+        ],
+      });
+    }
+
+    if (startDate) {
+      const parsedStart = new Date(startDate);
+      if (!isNaN(parsedStart.getTime())) {
+        andClauses.push({ createdAt: { gte: parsedStart } });
+      }
+    }
+    if (endDate) {
+      const parsedEnd = new Date(endDate);
+      if (!isNaN(parsedEnd.getTime())) {
+        andClauses.push({ createdAt: { lte: parsedEnd } });
+      }
+    }
+
+    if (search && search.trim()) {
+      const searchLower = search.trim();
+      andClauses.push({
+        OR: [
+          { id: { contains: searchLower, mode: 'insensitive' } },
+          { callSid: { contains: searchLower, mode: 'insensitive' } },
+          { callerId: { contains: searchLower, mode: 'insensitive' } },
+          { toNumber: { contains: searchLower, mode: 'insensitive' } },
+          { targetNumber: { contains: searchLower, mode: 'insensitive' } },
+          { did: { contains: searchLower, mode: 'insensitive' } },
+          { disposition: { contains: searchLower, mode: 'insensitive' } },
+          { dispositionNotes: { contains: searchLower, mode: 'insensitive' } },
+          { callSource: { contains: searchLower, mode: 'insensitive' } },
+          { campaign: { name: { contains: searchLower, mode: 'insensitive' } } },
+        ],
+      });
+    }
+
+    if (andClauses.length > 0) {
+      if (where.OR) {
+        where.AND = [
+          { OR: where.OR },
+          ...andClauses
+        ];
+        delete where.OR;
+      } else {
+        where.AND = andClauses;
+      }
+    }
+
+    return where;
+  }
+
+  function mapCallRecord(call: any, apiBaseUrl: string, prisma: any, request: any, skipDbUpdate = false) {
+    const latestRecording = call.recordings?.[0] ?? null;
+
+    const effectivePrimaryRecordingId =
+      call.primaryRecordingId || latestRecording?.id || null;
+
+    const effectiveRecordingUrl =
+      call.recordingUrl ||
+      (effectivePrimaryRecordingId
+        ? `/api/v1/recordings/${effectivePrimaryRecordingId}/stream`
+        : null);
+
+    const effectiveRecordingStatus =
+      effectiveRecordingUrl || effectivePrimaryRecordingId
+        ? 'READY'
+        : call.recordingStatus;
+
+    if (!skipDbUpdate && latestRecording && call.recordingStatus !== 'READY') {
+      prisma.call.update({
+        where: { id: call.id },
+        data: {
+          primaryRecordingId: latestRecording.id,
+          recordingStatus: 'READY',
+          recordingUrl: `/api/v1/recordings/${latestRecording.id}/stream`,
+          recordingCompletedAt: latestRecording.createdAt,
+          recordingError: null,
+        },
+      }).catch((err: any) => {
+        request.log.error(
+          { err, callId: call.id, recordingId: latestRecording.id },
+          'Failed to repair stale call recording status from existing recording row'
+        );
+      });
+    }
+
+    const playbackUrls = buildRecordingPlaybackUrls(call, apiBaseUrl);
+
+    return {
+      id: call.id,
+      tenantId: call.tenantId,
+      callSid: call.callSid,
+      externalId: call.externalId,
+      createdById: call.createdById,
+      toNumber: call.toNumber,
+      direction: call.direction,
+      status: call.status,
+      duration: call.duration,
+      connectedDuration: call.connectedDuration,
+      cost: call.cost,
+      revenue: call.revenue,
+      callerId: call.callerId,
+      did: call.did,
+      targetNumber: call.targetNumber,
+      converted: call.converted,
+      paidOut: call.paidOut,
+      missedCall: call.missedCall,
+      blocked: call.blocked,
+      recordingUrl: effectiveRecordingUrl,
+      absoluteRecordingUrl: playbackUrls.primaryUrl,
+      allRecordingUrls: playbackUrls.allUrls,
+      recordingStatus: effectiveRecordingStatus,
+      recordingError: effectiveRecordingStatus === 'READY' ? null : call.recordingError,
+      primaryRecordingId: effectivePrimaryRecordingId,
+      recordingStartedAt: call.recordingStartedAt?.toISOString() ?? null,
+      recordingCompletedAt:
+        call.recordingCompletedAt?.toISOString() ??
+        latestRecording?.createdAt?.toISOString?.() ??
+        null,
+      disposition: call.disposition,
+      dispositionNotes: call.dispositionNotes,
+      callSource: call.callSource,
+      followUpAt: call.followUpAt?.toISOString() ?? null,
+      followUpStatus: call.followUpStatus,
+      campaign: call.campaign ? { id: call.campaign.id, name: call.campaign.name } : null,
+      fromNumber: call.fromNumber
+        ? { id: call.fromNumber.id, number: call.fromNumber.number }
+        : null,
+      createdBy: call.createdBy
+        ? { firstName: call.createdBy.firstName, lastName: call.createdBy.lastName }
+        : null,
+      createdAt: call.createdAt.toISOString(),
+      updatedAt: call.updatedAt.toISOString(),
+      startedAt: call.startedAt?.toISOString(),
+      answeredAt: call.answeredAt?.toISOString(),
+      endedAt: call.endedAt?.toISOString(),
+      metadata: call.metadata,
+    };
+  }
+
+  // 1. GET /api/v1/calls — List all calls
+  fastify.get<{
+    Querystring: {
+      page?: string;
+      limit?: string;
+      phone?: string;
+      search?: string;
+      startDate?: string;
+      endDate?: string;
+    };
+  }>(
     '/api/v1/calls',
     async (request, reply) => {
       const user = (request as AuthRequest).user;
@@ -1437,6 +1694,32 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       if (!tenantId) {
         void reply.code(401);
         return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      }
+
+      const startDate = request.query.startDate;
+      const endDate = request.query.endDate;
+
+      if (startDate) {
+        const parsed = new Date(startDate);
+        if (isNaN(parsed.getTime())) {
+          void reply.code(400);
+          return { error: { code: 'VALIDATION_ERROR', message: 'Invalid startDate format' } };
+        }
+      }
+
+      if (endDate) {
+        const parsed = new Date(endDate);
+        if (isNaN(parsed.getTime())) {
+          void reply.code(400);
+          return { error: { code: 'VALIDATION_ERROR', message: 'Invalid endDate format' } };
+        }
+      }
+
+      if (startDate && endDate) {
+        if (new Date(startDate) > new Date(endDate)) {
+          void reply.code(400);
+          return { error: { code: 'VALIDATION_ERROR', message: 'startDate cannot be after endDate' } };
+        }
       }
 
       try {
@@ -1455,77 +1738,41 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       const page = parseInt(request.query.page || '1');
       const limit = parseInt(request.query.limit || '20');
       const skip = (page - 1) * limit;
-      const phone = request.query.phone;
 
       let userRoles: string[] = [];
+      let userNumbers: string[] = [];
       if (user?.userId) {
         const userRecord = await prisma.user.findUnique({
           where: { id: user.userId },
           include: { roles: { include: { role: true } } },
         });
         userRoles = userRecord?.roles.map(ur => ur.role.name) || [];
+
+        if (!userRoles.some(role => role === 'ADMIN' || role === 'OWNER')) {
+          const fetchedNumbers = await prisma.phoneNumber.findMany({
+            where: {
+              tenantId,
+              userId: user.userId,
+            },
+            select: {
+              number: true,
+            },
+          });
+          userNumbers = fetchedNumbers.map(n => n.number);
+        }
       }
       const isAdminOrOwner = userRoles.some(role => role === 'ADMIN' || role === 'OWNER');
 
-      // Build where clause — optionally filter by phone number
-      const where: Record<string, any> = { tenantId };
-
-      if (!isAdminOrOwner && user?.userId) {
-        // Fetch user phone numbers
-        const userNumbers = await prisma.phoneNumber.findMany({
-          where: {
-            tenantId,
-            userId: user.userId,
-          },
-          select: {
-            number: true,
-          },
-        });
-        const numberStrings = userNumbers.map(n => n.number);
-
-        // Normalize numbers (e.g. strip +1 if stored without, or include both formats)
-        const numberFormats: string[] = [];
-        for (const num of numberStrings) {
-          numberFormats.push(num);
-          if (num.startsWith('+1')) {
-            numberFormats.push(num.substring(2)); // 10 digit
-            numberFormats.push(num.substring(1)); // 11 digit (1xxxxxxxxxx)
-          } else if (num.startsWith('1') && num.length === 11) {
-            numberFormats.push('+' + num);
-            numberFormats.push(num.substring(1));
-          } else if (num.length === 10) {
-            numberFormats.push('+1' + num);
-            numberFormats.push('1' + num);
-          }
-        }
-
-        const orClause = [
-          { createdById: user.userId },
-          { fromNumber: { userId: user.userId } },
-          { callerId: { in: numberFormats } },
-          { toNumber: { in: numberFormats } },
-          { did: { in: numberFormats } },
-        ];
-
-        if (phone) {
-          const phoneFilter = [
-            { toNumber: phone },
-            { callerId: phone },
-            { toNumber: phone.replace(/^\+1/, '') },
-            { callerId: phone.replace(/^\+1/, '') },
-          ];
-          where.AND = [{ OR: orClause }, { OR: phoneFilter }];
-        } else {
-          where.OR = orClause;
-        }
-      } else if (phone) {
-        where.OR = [
-          { toNumber: phone },
-          { callerId: phone },
-          { toNumber: phone.replace(/^\+1/, '') },
-          { callerId: phone.replace(/^\+1/, '') },
-        ];
-      }
+      const where = buildCallWhere({
+        tenantId,
+        isAdminOrOwner,
+        userId: user?.userId,
+        userNumbers,
+        search: request.query.search,
+        phone: request.query.phone,
+        startDate: request.query.startDate,
+        endDate: request.query.endDate,
+      });
 
       const [calls, total] = await Promise.all([
         prisma.call.findMany({
@@ -1547,95 +1794,8 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
         prisma.call.count({ where }),
       ]);
 
-      // Map calls to include recording + contractor disposition fields
-      const mappedCalls = calls.map(call => {
-        const latestRecording = call.recordings?.[0] ?? null;
-
-        const effectivePrimaryRecordingId =
-          call.primaryRecordingId || latestRecording?.id || null;
-
-        const effectiveRecordingUrl =
-          call.recordingUrl ||
-          (effectivePrimaryRecordingId
-            ? `/api/v1/recordings/${effectivePrimaryRecordingId}/stream`
-            : null);
-
-        const effectiveRecordingStatus =
-          effectiveRecordingUrl || effectivePrimaryRecordingId
-            ? 'READY'
-            : call.recordingStatus;
-
-        if (latestRecording && call.recordingStatus !== 'READY') {
-          void prisma.call.update({
-            where: { id: call.id },
-            data: {
-              primaryRecordingId: latestRecording.id,
-              recordingStatus: 'READY',
-              recordingUrl: `/api/v1/recordings/${latestRecording.id}/stream`,
-              recordingCompletedAt: latestRecording.createdAt,
-              recordingError: null,
-            },
-          }).catch(err => {
-            request.log.error(
-              { err, callId: call.id, recordingId: latestRecording.id },
-              'Failed to repair stale call recording status from existing recording row'
-            );
-          });
-        }
-
-        return {
-          id: call.id,
-          tenantId: call.tenantId,
-          callSid: call.callSid,
-          externalId: call.externalId,
-          createdById: call.createdById,
-          toNumber: call.toNumber,
-          direction: call.direction,
-          status: call.status,
-          duration: call.duration,
-          connectedDuration: call.connectedDuration,
-          cost: call.cost,
-          revenue: call.revenue,
-          callerId: call.callerId,
-          did: call.did,
-          targetNumber: call.targetNumber,
-          converted: call.converted,
-          paidOut: call.paidOut,
-          missedCall: call.missedCall,
-          blocked: call.blocked,
-          // Recording fields
-          recordingUrl: effectiveRecordingUrl,
-          recordingStatus: effectiveRecordingStatus,
-          recordingError: effectiveRecordingStatus === 'READY' ? null : call.recordingError,
-          primaryRecordingId: effectivePrimaryRecordingId,
-          recordingStartedAt: call.recordingStartedAt?.toISOString() ?? null,
-          recordingCompletedAt:
-            call.recordingCompletedAt?.toISOString() ??
-            latestRecording?.createdAt?.toISOString?.() ??
-            null,
-          // Contractor Call Intelligence fields
-          disposition: call.disposition,
-          dispositionNotes: call.dispositionNotes,
-          callSource: call.callSource,
-          followUpAt: call.followUpAt?.toISOString() ?? null,
-          followUpStatus: call.followUpStatus,
-          // Related entities
-          campaign: call.campaign ? { id: call.campaign.id, name: call.campaign.name } : null,
-          fromNumber: call.fromNumber
-            ? { id: call.fromNumber.id, number: call.fromNumber.number }
-            : null,
-          createdBy: call.createdBy
-            ? { firstName: call.createdBy.firstName, lastName: call.createdBy.lastName }
-            : null,
-          // Timestamps
-          createdAt: call.createdAt.toISOString(),
-          updatedAt: call.updatedAt.toISOString(),
-          startedAt: call.startedAt?.toISOString(),
-          answeredAt: call.answeredAt?.toISOString(),
-          endedAt: call.endedAt?.toISOString(),
-          metadata: call.metadata,
-        };
-      });
+      const apiBaseUrl = getPublicApiBaseUrl(request);
+      const mappedCalls = calls.map(call => mapCallRecord(call, apiBaseUrl, prisma, request, false));
 
       return {
         data: mappedCalls,
@@ -1646,6 +1806,197 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
           totalPages: Math.ceil(total / limit),
         },
       };
+    }
+  );
+
+  // 2. GET /api/v1/calls/export.csv — Export all matching calls to CSV
+  fastify.get<{
+    Querystring: {
+      phone?: string;
+      search?: string;
+      startDate?: string;
+      endDate?: string;
+    };
+  }>(
+    '/api/v1/calls/export.csv',
+    async (request, reply) => {
+      const user = (request as AuthRequest).user;
+      const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+      const tenantId = demoTenantId || user?.tenantId;
+
+      if (!tenantId) {
+        void reply.code(401);
+        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      }
+
+      const startDate = request.query.startDate;
+      const endDate = request.query.endDate;
+
+      if (startDate) {
+        const parsed = new Date(startDate);
+        if (isNaN(parsed.getTime())) {
+          void reply.code(400);
+          return { error: { code: 'VALIDATION_ERROR', message: 'Invalid startDate format' } };
+        }
+      }
+
+      if (endDate) {
+        const parsed = new Date(endDate);
+        if (isNaN(parsed.getTime())) {
+          void reply.code(400);
+          return { error: { code: 'VALIDATION_ERROR', message: 'Invalid endDate format' } };
+        }
+      }
+
+      if (startDate && endDate) {
+        if (new Date(startDate) > new Date(endDate)) {
+          void reply.code(400);
+          return { error: { code: 'VALIDATION_ERROR', message: 'startDate cannot be after endDate' } };
+        }
+      }
+
+      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+
+      let userRoles: string[] = [];
+      let userNumbers: string[] = [];
+      if (user?.userId) {
+        const userRecord = await prisma.user.findUnique({
+          where: { id: user.userId },
+          include: { roles: { include: { role: true } } },
+        });
+        userRoles = userRecord?.roles.map(ur => ur.role.name) || [];
+
+        if (!userRoles.some(role => role === 'ADMIN' || role === 'OWNER')) {
+          const fetchedNumbers = await prisma.phoneNumber.findMany({
+            where: {
+              tenantId,
+              userId: user.userId,
+            },
+            select: {
+              number: true,
+            },
+          });
+          userNumbers = fetchedNumbers.map(n => n.number);
+        }
+      }
+      const isAdminOrOwner = userRoles.some(role => role === 'ADMIN' || role === 'OWNER');
+
+      const where = buildCallWhere({
+        tenantId,
+        isAdminOrOwner,
+        userId: user?.userId,
+        userNumbers,
+        search: request.query.search,
+        phone: request.query.phone,
+        startDate,
+        endDate,
+      });
+
+      const apiBaseUrl = getPublicApiBaseUrl(request);
+      const authHeader = request.headers.authorization;
+      const queryToken = (request.query as any)?.token;
+      const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.substring(7) : queryToken;
+
+      const headers = [
+        'Time',
+        'Call ID',
+        'Call SID',
+        'From',
+        'To',
+        'Duration',
+        'Status',
+        'Disposition',
+        'Source',
+        'Recording URL',
+        'All Recording URLs',
+        'Recording Status',
+        'Notes',
+      ];
+
+      const batchSize = 1000;
+      let offset = 0;
+      let hasMore = true;
+      const allRows: string[][] = [];
+
+      while (hasMore) {
+        const batch = await prisma.call.findMany({
+          where,
+          skip: offset,
+          take: batchSize,
+          orderBy: [
+            { createdAt: 'desc' },
+            { id: 'desc' }
+          ],
+          include: {
+            campaign: true,
+            fromNumber: true,
+            createdBy: { select: { firstName: true, lastName: true } },
+            recordings: {
+              where: { deletedAt: null },
+              orderBy: { createdAt: 'desc' },
+            },
+          },
+        });
+
+        if (batch.length === 0) {
+          hasMore = false;
+          break;
+        }
+
+        const mappedBatch = batch.map(call => {
+          const playbackUrls = buildRecordingPlaybackUrls(call, apiBaseUrl, token);
+          
+          const time = call.createdAt.toISOString();
+          const callId = call.id;
+          const callSid = call.callSid || '';
+          const from = call.callerId || call.fromNumber?.number || '';
+          const to = call.toNumber || call.targetNumber || call.did || '';
+          
+          const dur = call.connectedDuration || call.duration || 0;
+          const duration = formatDuration(dur);
+
+          const status = call.status;
+          const disposition = call.disposition || '';
+          const source = call.callSource || '';
+          const recUrl = playbackUrls.primaryUrl;
+          const allRecUrls = playbackUrls.allUrls;
+          const recStatus = call.recordingStatus || '';
+          const notes = call.dispositionNotes || '';
+
+          return [
+            time,
+            callId,
+            callSid,
+            from,
+            to,
+            duration,
+            status,
+            disposition,
+            source,
+            recUrl,
+            allRecUrls,
+            recStatus,
+            notes,
+          ];
+        });
+
+        allRows.push(...mappedBatch);
+        
+        offset += batch.length;
+        if (batch.length < batchSize) {
+          hasMore = false;
+        }
+      }
+
+      const csvContent = [
+        headers.join(','),
+        ...allRows.map(row => row.map(cell => csvEscape(cell)).join(',')),
+      ].join('\n');
+
+      const dateStr = new Date().toISOString().slice(0, 10);
+      void reply.header('Content-Type', 'text/csv; charset=utf-8');
+      void reply.header('Content-Disposition', `attachment; filename="call-logs-${dateStr}.csv"`);
+      return reply.send(csvContent);
     }
   );
 

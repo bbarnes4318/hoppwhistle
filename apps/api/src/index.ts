@@ -77,11 +77,12 @@ async function buildServer() {
 
     const authHeader = request.headers.authorization;
     const apiKey = request.headers['x-api-key'] as string;
+    const queryToken = (request.query as any)?.token;
 
     // Try JWT first
-    if (authHeader && authHeader.startsWith('Bearer ')) {
+    if ((authHeader && authHeader.startsWith('Bearer ')) || queryToken) {
       try {
-        const token = authHeader.substring(7);
+        const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.substring(7) : queryToken;
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any
         const decoded = await (request as any).jwtVerify(token);
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment

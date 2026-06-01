@@ -5,13 +5,20 @@ import {
   DISPOSITION_COLORS,
   DISPOSITION_LABELS,
 } from '@hopwhistle/shared';
-import { Play, Search } from 'lucide-react';
+import { Download, Loader2, Play, Search } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { apiClient } from '@/lib/api';
 import { formatDuration, formatPhoneNumber } from '@/lib/utils';
@@ -80,6 +87,111 @@ export default function CallLogsPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [exporting, setExporting] = useState(false);
+  const [datePreset, setDatePreset] = useState<string>('All Time');
+  const [fromDate, setFromDate] = useState<string>('');
+  const [toDate, setToDate] = useState<string>('');
+
+  const calculatePresetDates = (preset: string): { from: Date | null; to: Date | null } => {
+    const now = new Date();
+    const startOfDay = (d: Date) => {
+      const res = new Date(d);
+      res.setHours(0, 0, 0, 0);
+      return res;
+    };
+    const endOfDay = (d: Date) => {
+      const res = new Date(d);
+      res.setHours(23, 59, 59, 999);
+      return res;
+    };
+
+    switch (preset) {
+      case 'Today': {
+        return { from: startOfDay(now), to: endOfDay(now) };
+      }
+      case 'Yesterday': {
+        const yesterday = new Date();
+        yesterday.setDate(now.getDate() - 1);
+        return { from: startOfDay(yesterday), to: endOfDay(yesterday) };
+      }
+      case 'This Week': {
+        const monday = new Date();
+        const currentDay = now.getDay();
+        const distance = currentDay === 0 ? -6 : 1 - currentDay;
+        monday.setDate(now.getDate() + distance);
+        
+        const sunday = new Date(monday);
+        sunday.setDate(monday.getDate() + 6);
+        return { from: startOfDay(monday), to: endOfDay(sunday) };
+      }
+      case 'Last Week': {
+        const prevMonday = new Date();
+        const currentDay = now.getDay();
+        const distance = currentDay === 0 ? -13 : -6 - currentDay;
+        prevMonday.setDate(now.getDate() + distance);
+
+        const prevSunday = new Date(prevMonday);
+        prevSunday.setDate(prevMonday.getDate() + 6);
+        return { from: startOfDay(prevMonday), to: endOfDay(prevSunday) };
+      }
+      case 'This Month': {
+        const start = new Date(now.getFullYear(), now.getMonth(), 1);
+        const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        return { from: startOfDay(start), to: endOfDay(end) };
+      }
+      case 'Last Month': {
+        const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const end = new Date(now.getFullYear(), now.getMonth(), 0);
+        return { from: startOfDay(start), to: endOfDay(end) };
+      }
+      case 'This Quarter': {
+        const quarter = Math.floor(now.getMonth() / 3);
+        const start = new Date(now.getFullYear(), quarter * 3, 1);
+        const end = new Date(now.getFullYear(), (quarter + 1) * 3, 0);
+        return { from: startOfDay(start), to: endOfDay(end) };
+      }
+      case 'Last Quarter': {
+        const quarter = Math.floor(now.getMonth() / 3) - 1;
+        const start = new Date(now.getFullYear(), quarter * 3, 1);
+        const end = new Date(now.getFullYear(), (quarter + 1) * 3, 0);
+        return { from: startOfDay(start), to: endOfDay(end) };
+      }
+      case 'This Year': {
+        const start = new Date(now.getFullYear(), 0, 1);
+        const end = new Date(now.getFullYear(), 12, 0);
+        return { from: startOfDay(start), to: endOfDay(end) };
+      }
+      case 'Last Year': {
+        const start = new Date(now.getFullYear() - 1, 0, 1);
+        const end = new Date(now.getFullYear() - 1, 12, 0);
+        return { from: startOfDay(start), to: endOfDay(end) };
+      }
+      case 'Custom':
+      default:
+        return { from: null, to: null };
+    }
+  };
+
+  const formatDateToLocalInput = (date: Date | null): string => {
+    if (!date) return '';
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const handlePresetChange = (val: string) => {
+    setDatePreset(val);
+    if (val === 'All Time') {
+      setFromDate('');
+      setToDate('');
+    } else if (val !== 'Custom') {
+      const { from, to } = calculatePresetDates(val);
+      setFromDate(from ? formatDateToLocalInput(from) : '');
+      setToDate(to ? formatDateToLocalInput(to) : '');
+    }
+    setPage(1);
+  };
 
   const handlePlayRecording = async (recordingId: string) => {
     try {
@@ -119,56 +231,231 @@ export default function CallLogsPage() {
     }
   };
 
- const fetchCalls = useCallback(async () => {
- setLoading(true);
- try {
- const response = await apiClient.get<{ data: CallRecord[]; meta: { totalPages: number } }>(
- `/api/v1/calls?page=${page}&limit=50`
- );
- if (response.data) {
- setCalls(response.data.data || []);
- setTotalPages(response.data.meta?.totalPages || 1);
- }
- } catch (error) {
- console.error('Failed to fetch calls:', error);
- } finally {
- setLoading(false);
- }
- }, [page]);
+  const fetchCalls = useCallback(async () => {
+    setLoading(true);
+    try {
+      let startIso = '';
+      let endIso = '';
+      
+      if (datePreset && datePreset !== 'Custom' && datePreset !== 'All Time') {
+        const { from, to } = calculatePresetDates(datePreset);
+        if (from) startIso = from.toISOString();
+        if (to) endIso = to.toISOString();
+      } else if (datePreset === 'Custom') {
+        if (fromDate) {
+          startIso = new Date(fromDate + 'T00:00:00').toISOString();
+        }
+        if (toDate) {
+          endIso = new Date(toDate + 'T23:59:59.999').toISOString();
+        }
+      }
 
- useEffect(() => {
- void fetchCalls();
- }, [fetchCalls]);
+      const queryParams = new URLSearchParams({
+        page: String(page),
+        limit: '50',
+      });
+      if (search.trim()) {
+        queryParams.append('search', search.trim());
+      }
+      if (startIso) {
+        queryParams.append('startDate', startIso);
+      }
+      if (endIso) {
+        queryParams.append('endDate', endIso);
+      }
 
- const filteredCalls = calls.filter(
- c =>
- (c.callerId || '').includes(search) ||
- (c.toNumber || '').includes(search) ||
- (c.callSid || '').toLowerCase().includes(search.toLowerCase()) ||
- c.id.toLowerCase().includes(search.toLowerCase())
- );
+      const response = await apiClient.get<{ data: CallRecord[]; meta: { totalPages: number } }>(
+        `/api/v1/calls?${queryParams.toString()}`
+      );
+      if (response.data) {
+        setCalls(response.data.data || []);
+        setTotalPages(response.data.meta?.totalPages || 1);
+      }
+    } catch (error) {
+      console.error('Failed to fetch calls:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [page, search, datePreset, fromDate, toDate]);
 
- return (
- <div className="h-full flex flex-col overflow-hidden">
- <div className="flex items-center justify-between flex-shrink-0 mb-4">
- <div>
- <h1 className="text-2xl font-semibold">Call Logs</h1>
- <p className="text-sm text-muted-foreground">
- View call history and disposition outcomes
- </p>
- </div>
- <div className="relative w-64">
- <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
- <Input
- id="call-logs-search"
- name="call-logs-search"
- placeholder="Search calls..."
- value={search}
- onChange={e => setSearch(e.target.value)}
- className="pl-10"
- />
- </div>
- </div>
+  useEffect(() => {
+    void fetchCalls();
+  }, [fetchCalls]);
+
+  const handleExportCSV = async () => {
+    setExporting(true);
+    try {
+      let startIso = '';
+      let endIso = '';
+      
+      if (datePreset && datePreset !== 'Custom' && datePreset !== 'All Time') {
+        const { from, to } = calculatePresetDates(datePreset);
+        if (from) startIso = from.toISOString();
+        if (to) endIso = to.toISOString();
+      } else if (datePreset === 'Custom') {
+        if (fromDate) {
+          startIso = new Date(fromDate + 'T00:00:00').toISOString();
+        }
+        if (toDate) {
+          endIso = new Date(toDate + 'T23:59:59.999').toISOString();
+        }
+      }
+
+      const queryParams = new URLSearchParams();
+      if (search.trim()) {
+        queryParams.append('search', search.trim());
+      }
+      if (startIso) {
+        queryParams.append('startDate', startIso);
+      }
+      if (endIso) {
+        queryParams.append('endDate', endIso);
+      }
+
+      const headers: HeadersInit = {};
+      const storedToken = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      if (storedToken) {
+        headers['Authorization'] = `Bearer ${storedToken}`;
+      }
+      const apiKey = process.env.NEXT_PUBLIC_API_KEY;
+      if (apiKey) {
+        headers['x-api-key'] = apiKey;
+      }
+      const demoMode = typeof window !== 'undefined' ? localStorage.getItem('demoMode') === 'true' : false;
+      const demoTenantId = typeof window !== 'undefined' ? localStorage.getItem('demoTenantId') : null;
+      if (demoMode && demoTenantId) {
+        headers['X-Demo-Tenant-Id'] = demoTenantId;
+      }
+
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const url = `${apiBaseUrl.replace(/\/$/, '')}/api/v1/calls/export.csv?${queryParams.toString()}`;
+
+      const res = await fetch(url, {
+        method: 'GET',
+        headers,
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || 'Export failed');
+      }
+
+      const blob = await res.blob();
+      const contentDisposition = res.headers.get('Content-Disposition');
+      let filename = `call-logs-${new Date().toISOString().slice(0, 10)}.csv`;
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename="?([^"]+)"?/);
+        if (match && match[1]) {
+          filename = match[1];
+        }
+      }
+
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (err) {
+      console.error('Failed to export CSV:', err);
+      alert('Failed to export CSV. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  return (
+    <div className="h-full flex flex-col overflow-hidden">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between flex-shrink-0 mb-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Call Logs</h1>
+          <p className="text-sm text-muted-foreground">
+            View call history and disposition outcomes
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative w-48">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              id="call-logs-search"
+              name="call-logs-search"
+              placeholder="Search calls..."
+              value={search}
+              onChange={e => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              className="pl-10"
+            />
+          </div>
+          <div className="w-40">
+            <Select
+              value={datePreset}
+              onValueChange={handlePresetChange}
+            >
+              <SelectTrigger id="call-logs-date-preset">
+                <SelectValue placeholder="All Time" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All Time">All Time</SelectItem>
+                <SelectItem value="Today">Today</SelectItem>
+                <SelectItem value="Yesterday">Yesterday</SelectItem>
+                <SelectItem value="This Week">This Week</SelectItem>
+                <SelectItem value="Last Week">Last Week</SelectItem>
+                <SelectItem value="This Month">This Month</SelectItem>
+                <SelectItem value="Last Month">Last Month</SelectItem>
+                <SelectItem value="This Quarter">This Quarter</SelectItem>
+                <SelectItem value="Last Quarter">Last Quarter</SelectItem>
+                <SelectItem value="This Year">This Year</SelectItem>
+                <SelectItem value="Last Year">Last Year</SelectItem>
+                <SelectItem value="Custom">Custom</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="w-36">
+            <Input
+              id="call-logs-from-date"
+              type="date"
+              value={fromDate}
+              onChange={e => {
+                setFromDate(e.target.value);
+                setDatePreset('Custom');
+                setPage(1);
+              }}
+              className="w-full text-sm"
+            />
+          </div>
+          <div className="w-36">
+            <Input
+              id="call-logs-to-date"
+              type="date"
+              value={toDate}
+              onChange={e => {
+                setToDate(e.target.value);
+                setDatePreset('Custom');
+                setPage(1);
+              }}
+              className="w-full text-sm"
+            />
+          </div>
+          <Button
+            id="call-logs-export-csv"
+            variant="outline"
+            onClick={handleExportCSV}
+            disabled={exporting}
+            className="gap-2"
+          >
+            {exporting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            Export CSV
+          </Button>
+        </div>
+      </div>
 
   <Card className="flex-1 flex flex-col overflow-hidden min-h-0">
   <CardContent className="flex-1 overflow-y-auto min-h-0 p-0">
@@ -192,14 +479,14 @@ export default function CallLogsPage() {
   Loading calls...
   </TableCell>
   </TableRow>
-  ) : filteredCalls.length === 0 ? (
+  ) : calls.length === 0 ? (
   <TableRow>
   <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
   No calls found
   </TableCell>
   </TableRow>
   ) : (
-  filteredCalls.map(call => {
+  calls.map(call => {
   const result = getCallResult(call);
   return (
   <TableRow key={call.id}>
