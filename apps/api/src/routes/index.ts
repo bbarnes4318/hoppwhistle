@@ -1422,6 +1422,8 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
       }
     }
   );
+}
+
 // Public API - Calls
 export async function registerCallRoutes(fastify: FastifyInstance) {
   await Promise.resolve();
