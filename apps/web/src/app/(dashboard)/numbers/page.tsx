@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import { BulkvsPurchaseDialog } from '@/components/numbers/bulkvs-purchase-dialog';
 import { CreateRouteDialog } from '@/components/numbers/create-route-dialog';
 import { EditNumberDialog } from '@/components/numbers/edit-number-dialog';
+import { EditRouteDialog } from '@/components/numbers/edit-route-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -57,7 +58,9 @@ export default function NumbersPage() {
   const [bulkvsPurchaseDialogOpen, setBulkvsPurchaseDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [createRouteOpen, setCreateRouteOpen] = useState(false);
+  const [editRouteOpen, setEditRouteOpen] = useState(false);
   const [selectedNumber, setSelectedNumber] = useState<PhoneNumber | null>(null);
+  const [selectedRoute, setSelectedRoute] = useState<DidRoute | null>(null);
   const [numbers, setNumbers] = useState<PhoneNumber[]>([]);
   const [loading, setLoading] = useState(true);
   const [routes, setRoutes] = useState<DidRoute[]>([]);
@@ -133,6 +136,11 @@ export default function NumbersPage() {
 
   const handleEditSuccess = () => {
     void loadNumbers();
+  };
+
+  const handleEditRoute = (route: DidRoute) => {
+    setSelectedRoute(route);
+    setEditRouteOpen(true);
   };
 
   const filteredRoutes = routes.filter(
@@ -355,6 +363,14 @@ export default function NumbersPage() {
                             )}
                           </div>
                         </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-full"
+                          onClick={() => handleEditRoute(route)}
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
                       </div>
 
                       <div className="space-y-4 border-t border-border/50 pt-4 text-sm mt-auto">
@@ -426,6 +442,15 @@ export default function NumbersPage() {
           currentPoolType={selectedNumber.poolType}
           currentPoolStatus={selectedNumber.poolStatus}
           onSuccess={handleEditSuccess}
+        />
+      )}
+
+      {selectedRoute && (
+        <EditRouteDialog
+          open={editRouteOpen}
+          onOpenChange={setEditRouteOpen}
+          route={selectedRoute}
+          onSuccess={loadRoutes}
         />
       )}
     </div>
