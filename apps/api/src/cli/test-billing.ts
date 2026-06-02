@@ -147,6 +147,11 @@ async function runTests() {
           connectedDuration,
           duration,
           cost: new Prisma.Decimal(0.50), // carrier cost
+          direction: 'INBOUND',
+          fromNumber: '+15005550006',
+          toNumber: targetNumber,
+          startedAt: new Date(),
+          endedAt: new Date(),
         },
       });
     };
