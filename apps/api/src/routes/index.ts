@@ -1900,7 +1900,23 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       const apiBaseUrl = getPublicApiBaseUrl(request);
       const authHeader = request.headers.authorization;
       const queryToken = (request.query as any)?.token;
-      const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.substring(7) : queryToken;
+      let token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.substring(7) : queryToken;
+
+      if (!token && tenantId) {
+        try {
+          token = await (reply as any).jwtSign(
+            {
+              tenantId,
+              userId: user?.userId,
+              email: user?.email,
+              roles: ['ADMIN'],
+            },
+            { expiresIn: '7d' }
+          );
+        } catch (err) {
+          request.log.error({ err }, 'Failed to sign token for CSV export');
+        }
+      }
 
       const headers = [
         'Time',

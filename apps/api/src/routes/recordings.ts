@@ -290,13 +290,22 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
         return { error: { code: 'NOT_FOUND', message: 'Recording not found' } };
       }
 
-      const expiresIn = parseInt(request.query.expiresIn || '3600', 10);
-      const signedUrl = await recordingService.getSignedUrl(recordingId, expiresIn);
+      // Generate a short-lived token using reply.jwtSign
+      const token = await (reply as any).jwtSign(
+        {
+          tenantId,
+          userId: (request as any).user?.userId,
+          email: (request as any).user?.email,
+        },
+        { expiresIn: '1h' }
+      );
+
+      const playbackUrl = `/api/v1/recordings/${recordingId}/stream?token=${token}`;
 
       return {
-        url: signedUrl,
-        expiresIn,
-        expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString(),
+        url: playbackUrl,
+        expiresIn: 3600,
+        expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
       };
     } catch (error) {
       reply.code(404);
