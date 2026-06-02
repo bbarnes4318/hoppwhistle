@@ -91,6 +91,7 @@ interface CampaignBuyer {
   destinationNumber: string;
   pricePerBillableCall: string | null;
   priority: number;
+  weight: number;
   status: 'ACTIVE' | 'INACTIVE';
   createdAt: string;
 }
@@ -178,6 +179,7 @@ export default function CampaignDetailPage() {
     destinationNumber: '',
     pricePerBillableCall: '',
     priority: 0,
+    weight: 100,
     status: 'ACTIVE' as 'ACTIVE' | 'INACTIVE',
   });
 
@@ -418,6 +420,7 @@ export default function CampaignDetailPage() {
         destinationNumber: dest,
         pricePerBillableCall: buyerForm.pricePerBillableCall ? Number(buyerForm.pricePerBillableCall) : null,
         priority: Number(buyerForm.priority) || 0,
+        weight: Number(buyerForm.weight) || 100,
         status: buyerForm.status,
       });
 
@@ -440,6 +443,7 @@ export default function CampaignDetailPage() {
           destinationNumber: '',
           pricePerBillableCall: '',
           priority: 0,
+          weight: 100,
           status: 'ACTIVE',
         });
         void fetchCampaignData();
@@ -818,6 +822,7 @@ export default function CampaignDetailPage() {
                     <TableHead>Buyer</TableHead>
                     <TableHead>Destination DID</TableHead>
                     <TableHead>Priority</TableHead>
+                    <TableHead>Weight</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Price Rate</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -826,7 +831,7 @@ export default function CampaignDetailPage() {
                 <TableBody>
                   {campaignBuyers.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground text-sm">
+                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground text-sm">
                         No buyers or destination numbers assigned to this campaign yet.
                       </TableCell>
                     </TableRow>
@@ -846,6 +851,9 @@ export default function CampaignDetailPage() {
                         </TableCell>
                         <TableCell className="font-mono">
                           {cb.priority}
+                        </TableCell>
+                        <TableCell className="font-mono">
+                          {cb.weight || 100}
                         </TableCell>
                         <TableCell>
                           <Badge variant={cb.status === 'ACTIVE' ? 'outline' : 'secondary'} className={cn(
@@ -1152,20 +1160,34 @@ export default function CampaignDetailPage() {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="buyer-status">Assignment Status</Label>
-                <Select
-                  value={buyerForm.status}
-                  onValueChange={(val: any) => setBuyerForm({ ...buyerForm, status: val })}
-                >
-                  <SelectTrigger id="buyer-status">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ACTIVE">Active (Enabled)</SelectItem>
-                    <SelectItem value="INACTIVE">Inactive (Disabled)</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="buyer-weight">Weight (routing probability)</Label>
+                  <Input
+                    id="buyer-weight"
+                    type="number"
+                    min={1}
+                    value={buyerForm.weight}
+                    onChange={(e) => setBuyerForm({ ...buyerForm, weight: parseInt(e.target.value) || 100 })}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="buyer-status">Assignment Status</Label>
+                  <Select
+                    value={buyerForm.status}
+                    onValueChange={(val: any) => setBuyerForm({ ...buyerForm, status: val })}
+                  >
+                    <SelectTrigger id="buyer-status">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ACTIVE">Active (Enabled)</SelectItem>
+                      <SelectItem value="INACTIVE">Inactive (Disabled)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
 

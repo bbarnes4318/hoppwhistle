@@ -681,6 +681,7 @@ model BuyerEndpoint {
   maxCap         Int       @default(0) // Maximum calls allowed per period
   capPeriod      CapPeriod @default(DAY) // HOUR | DAY | MONTH
   maxConcurrency Int       @default(10) // Maximum simultaneous calls
+  weight         Int       @default(100)
 
   // Geo-Routing: Empty array = National (accepts all states)
   acceptedStates String[] // 2-letter state codes, e.g., ['TN', 'FL', 'AL']
@@ -2484,6 +2485,7 @@ model CampaignBuyer {
   destinationNumber    String
   pricePerBillableCall Decimal?            @db.Decimal(10, 4) // Override default buyer price
   priority             Int                 @default(0)
+  weight               Int                 @default(100)
   status               CampaignBuyerStatus @default(ACTIVE)
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt

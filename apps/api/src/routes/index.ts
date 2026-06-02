@@ -1234,6 +1234,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
       destinationNumber: string;
       pricePerBillableCall?: number;
       priority?: number;
+      weight?: number;
       status?: 'ACTIVE' | 'INACTIVE';
     };
   }>(
@@ -1245,7 +1246,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
       if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
 
       const { campaignId } = request.params;
-      const { buyerId, buyerEndpointId, destinationNumber, pricePerBillableCall, priority, status } = request.body;
+      const { buyerId, buyerEndpointId, destinationNumber, pricePerBillableCall, priority, weight, status } = request.body;
 
       if (!buyerId || !destinationNumber) {
         return reply.code(400).send({ error: 'buyerId and destinationNumber are required' });
@@ -1310,6 +1311,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
           destinationNumber: normalizedDestination,
           pricePerBillableCall: pricePerBillableCall !== undefined ? new Prisma.Decimal(pricePerBillableCall) : null,
           priority: priority || 0,
+          weight: weight !== undefined ? weight : 100,
           status: status || 'ACTIVE',
         },
         include: {
@@ -1330,6 +1332,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
       destinationNumber?: string;
       pricePerBillableCall?: number | null;
       priority?: number;
+      weight?: number;
       status?: 'ACTIVE' | 'INACTIVE';
     };
   }>(
@@ -1341,7 +1344,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
       if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
 
       const { campaignId, assignmentId } = request.params;
-      const { buyerEndpointId, destinationNumber, pricePerBillableCall, priority, status } = request.body;
+      const { buyerEndpointId, destinationNumber, pricePerBillableCall, priority, weight, status } = request.body;
       const prisma = (await import('../lib/prisma.js')).getPrismaClient();
 
       const existing = await prisma.campaignBuyer.findFirst({
@@ -1398,6 +1401,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
             ? (pricePerBillableCall === null ? null : new Prisma.Decimal(pricePerBillableCall))
             : undefined,
           priority: priority !== undefined ? priority : undefined,
+          weight: weight !== undefined ? weight : undefined,
           status: status || undefined,
         },
         include: {

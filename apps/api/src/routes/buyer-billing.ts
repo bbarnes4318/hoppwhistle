@@ -643,6 +643,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
         maxCap: t.maxCap,
         capPeriod: t.capPeriod,
         maxConcurrency: t.maxConcurrency,
+        weight: t.weight,
         acceptedStates: t.acceptedStates,
         isNational: t.acceptedStates.length === 0,
         hoursOfOperation: t.hoursOfOperation,
@@ -670,6 +671,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       maxCap?: number;
       capPeriod?: 'HOUR' | 'DAY' | 'MONTH';
       maxConcurrency?: number;
+      weight?: number;
       acceptedStates?: string[]; // Array of 2-letter state codes, empty = National (accepts all)
       hoursOfOperation?: Record<string, Array<{ start: string; end: string }>>; // Split-shift schedule
       timezone?: string; // e.g., 'America/New_York'
@@ -695,6 +697,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       maxCap,
       capPeriod,
       maxConcurrency,
+      weight,
       acceptedStates,
       hoursOfOperation,
       timezone,
@@ -736,6 +739,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
         maxCap: maxCap ?? 0,
         capPeriod: capPeriod ?? 'DAY',
         maxConcurrency: maxConcurrency ?? 10,
+        weight: weight ?? 100,
         acceptedStates: acceptedStates ?? [], // Empty = National (accepts all states)
         hoursOfOperation: hoursOfOperation ?? null,
         timezone: timezone ?? 'America/New_York',
@@ -756,6 +760,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       maxCap: target.maxCap,
       capPeriod: target.capPeriod,
       maxConcurrency: target.maxConcurrency,
+      weight: target.weight,
       acceptedStates: target.acceptedStates,
       isNational: target.acceptedStates.length === 0,
       hoursOfOperation: target.hoursOfOperation,
@@ -782,6 +787,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       maxCap?: number;
       capPeriod?: 'HOUR' | 'DAY' | 'MONTH';
       maxConcurrency?: number;
+      weight?: number;
       acceptedStates?: string[]; // Array of 2-letter state codes, empty = National (accepts all)
       hoursOfOperation?: Record<string, Array<{ start: string; end: string }>> | null; // Split-shift schedule
       timezone?: string; // e.g., 'America/New_York'
@@ -808,6 +814,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       maxCap,
       capPeriod,
       maxConcurrency,
+      weight,
       acceptedStates,
       hoursOfOperation,
       timezone,
@@ -844,6 +851,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
     if (maxCap !== undefined) updateData.maxCap = maxCap;
     if (capPeriod !== undefined) updateData.capPeriod = capPeriod;
     if (maxConcurrency !== undefined) updateData.maxConcurrency = maxConcurrency;
+    if (weight !== undefined) updateData.weight = weight;
     if (acceptedStates !== undefined) updateData.acceptedStates = acceptedStates;
     if (hoursOfOperation !== undefined) updateData.hoursOfOperation = hoursOfOperation;
     if (timezone !== undefined) updateData.timezone = timezone;
@@ -866,6 +874,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       maxCap: target.maxCap,
       capPeriod: target.capPeriod,
       maxConcurrency: target.maxConcurrency,
+      weight: target.weight,
       acceptedStates: target.acceptedStates,
       isNational: target.acceptedStates.length === 0,
       hoursOfOperation: target.hoursOfOperation,

@@ -2,8 +2,6 @@ import { logger } from '../lib/logger.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { extractAreaCode, getStateFromAreaCode, isCallerStateAccepted } from '../lib/geo.js';
 
-import { analyticsService } from './analytics.js';
-
 /**
  * Call data context for routing decisions.
  * Includes caller identification and geo data.
@@ -20,14 +18,15 @@ export interface CallData {
 }
 
 /**
- * Eligible buyer endpoint with geo-routing metadata.
+ * Eligible buyer endpoint with geo-routing and weight metadata.
  */
 export interface EligibleEndpoint {
   buyerId: string;
   buyerName: string;
-  endpointId: string;
+  endpointId: string | null;
   destination: string;
   priority: number;
+  weight: number;
   acceptedStates: string[];
   /** Whether this is a "National" endpoint (no state restrictions) */
   isNational: boolean;
@@ -64,12 +63,12 @@ export class RoutingService {
   }
 
   /**
-   * Get all eligible buyer endpoints for a campaign, filtered by geo-routing rules.
+   * Get all eligible buyer endpoints for a campaign, filtered by geo-routing and concurrency rules.
    *
    * @param tenantId - Tenant ID for the call
    * @param campaignId - Campaign ID to route for
    * @param callData - Caller data for geo-filtering
-   * @returns List of eligible endpoints after geo-filtering, or empty array if none match
+   * @returns List of eligible endpoints after geo/concurrency filtering, or empty array if none match
    */
   async getEligibleEndpoints(
     tenantId: string,
@@ -86,50 +85,66 @@ export class RoutingService {
       resolvedState: callerState,
     });
 
-    // Step 2: Fetch all active buyer endpoints for the campaign
-    const campaign = await this.prisma.campaign.findUnique({
-      where: { id: campaignId },
+    // Step 2: Fetch active campaign buyer assignments
+    const campaignBuyers = await this.prisma.campaignBuyer.findMany({
+      where: {
+        campaignId,
+        status: 'ACTIVE',
+        tenantId,
+      },
       include: {
-        publisher: {
-          include: {
-            buyers: {
-              where: { status: 'ACTIVE' },
-              include: {
-                endpoints: {
-                  where: { status: 'ACTIVE' },
-                  orderBy: { priority: 'desc' },
-                },
-              },
-            },
+        buyer: {
+          select: {
+            id: true,
+            name: true,
+            status: true,
+          },
+        },
+        buyerEndpoint: {
+          select: {
+            id: true,
+            name: true,
+            status: true,
+            maxConcurrency: true,
+            acceptedStates: true,
+            weight: true,
           },
         },
       },
     });
 
-    if (!campaign || !campaign.publisher) {
-      logger.warn(`No campaign or publisher found for campaign ${campaignId}`);
-      return [];
-    }
-
     const allEndpoints: EligibleEndpoint[] = [];
 
-    for (const buyer of campaign.publisher.buyers) {
-      for (const endpoint of buyer.endpoints) {
-        allEndpoints.push({
-          buyerId: buyer.id,
-          buyerName: buyer.name,
-          endpointId: endpoint.id,
-          destination: endpoint.destination,
-          priority: endpoint.priority,
-          acceptedStates: endpoint.acceptedStates || [],
-          isNational: !endpoint.acceptedStates || endpoint.acceptedStates.length === 0,
-        });
+    for (const assignment of campaignBuyers) {
+      // Exclude if buyer is inactive
+      if (assignment.buyer.status !== 'ACTIVE') {
+        continue;
       }
+
+      // If buyerEndpoint is attached, verify it is active
+      if (assignment.buyerEndpoint && assignment.buyerEndpoint.status !== 'ACTIVE') {
+        continue;
+      }
+
+      const ep = assignment.buyerEndpoint;
+      const acceptedStates = ep?.acceptedStates || [];
+      const weight = assignment.weight; // CampaignBuyer.weight is the primary weight
+
+      allEndpoints.push({
+        buyerId: assignment.buyerId,
+        buyerName: assignment.buyer.name,
+        endpointId: assignment.buyerEndpointId,
+        destination: assignment.destinationNumber,
+        priority: assignment.priority,
+        weight: weight,
+        acceptedStates: acceptedStates,
+        isNational: acceptedStates.length === 0,
+      });
     }
 
     // Step 3: Apply geo-routing filter
     // Logic: IF acceptedStates IS NOT EMPTY AND callerState NOT IN acceptedStates THEN EXCLUDE
-    const eligibleEndpoints = allEndpoints.filter(ep => {
+    let eligibleEndpoints = allEndpoints.filter(ep => {
       const isAccepted = isCallerStateAccepted(callerState, ep.acceptedStates);
 
       if (!isAccepted) {
@@ -146,8 +161,46 @@ export class RoutingService {
       return isAccepted;
     });
 
+    // Step 4: Apply concurrency routing filter
+    const activeTargetIds = eligibleEndpoints
+      .map(ep => ep.endpointId)
+      .filter((id): id is string => id !== null);
+
+    if (activeTargetIds.length > 0) {
+      try {
+        const { liveStatusService } = await import('./buyer-live-status-service.js');
+        const liveStatusMap = await liveStatusService.getTargetsLiveStatus(activeTargetIds);
+
+        eligibleEndpoints = eligibleEndpoints.filter(ep => {
+          if (!ep.endpointId) return true; // Direct route with no endpoint, bypass capacity check
+
+          // Get maxConcurrency from DB campaign buyer's endpoint
+          const dbAssignment = campaignBuyers.find(cb => cb.buyerEndpointId === ep.endpointId);
+          const maxConcurrency = dbAssignment?.buyerEndpoint?.maxConcurrency ?? 10;
+
+          const liveCalls = liveStatusMap.get(ep.endpointId) || 0;
+          const isFull = liveCalls >= maxConcurrency;
+
+          if (isFull) {
+            logger.info({
+              msg: 'Concurrency-routing: Endpoint EXCLUDED (at capacity)',
+              buyerId: ep.buyerId,
+              buyerName: ep.buyerName,
+              endpointId: ep.endpointId,
+              liveCalls,
+              maxConcurrency,
+            });
+          }
+
+          return !isFull;
+        });
+      } catch (err) {
+        logger.error('Error checking concurrency (fail-open):', err);
+      }
+    }
+
     logger.info({
-      msg: 'Geo-routing: Filtering complete',
+      msg: 'Geo/Concurrency-routing: Filtering complete',
       campaignId,
       callerState,
       totalEndpoints: allEndpoints.length,
@@ -159,7 +212,7 @@ export class RoutingService {
   }
 
   /**
-   * Select the best buyer for a campaign based on routing mode and geo-filtering.
+   * Select the best buyer for a campaign based on priority tiering, geo-routing, max concurrency, and weight settings.
    *
    * @param tenantId - Tenant ID
    * @param campaignId - Campaign ID
@@ -170,15 +223,15 @@ export class RoutingService {
     tenantId: string,
     campaignId: string,
     callData: CallData = {}
-  ): Promise<{ buyerId: string; endpoint: string; callerState?: string | null } | null> {
+  ): Promise<{ buyerId: string; endpoint: string; targetId?: string | null; callerState?: string | null } | null> {
     try {
-      // 1. Get geo-filtered eligible endpoints
+      // 1. Get geo and concurrency filtered eligible endpoints
       const eligibleEndpoints = await this.getEligibleEndpoints(tenantId, campaignId, callData);
 
       if (eligibleEndpoints.length === 0) {
         const callerState = this.resolveCallerState(callData);
         logger.warn({
-          msg: 'No eligible buyers after geo-filtering',
+          msg: 'No eligible buyers after dynamic filtering',
           campaignId,
           callerState,
           callerId: callData.callerId,
@@ -186,95 +239,56 @@ export class RoutingService {
         return null;
       }
 
-      // 2. Fetch Campaign routing mode
-      const campaign = await this.prisma.campaign.findUnique({
-        where: { id: campaignId },
-        select: { routingMode: true },
-      });
-
-      if (!campaign) {
-        logger.warn(`Campaign not found: ${campaignId}`);
-        return null;
-      }
-
-      // 3. Group endpoints by buyer for scoring
-      const buyerEndpointsMap = new Map<string, EligibleEndpoint[]>();
+      // 2. Group eligible endpoints by priority (descending)
+      const priorityGroups = new Map<number, EligibleEndpoint[]>();
       for (const ep of eligibleEndpoints) {
-        if (!buyerEndpointsMap.has(ep.buyerId)) {
-          buyerEndpointsMap.set(ep.buyerId, []);
+        const p = ep.priority;
+        if (!priorityGroups.has(p)) {
+          priorityGroups.set(p, []);
         }
-        buyerEndpointsMap.get(ep.buyerId)!.push(ep);
+        priorityGroups.get(p)!.push(ep);
       }
 
-      const buyerIds = [...buyerEndpointsMap.keys()];
+      // Get sorted list of unique priorities descending
+      const sortedPriorities = [...priorityGroups.keys()].sort((a, b) => b - a);
 
-      // 4. Apply routing mode
-      if (campaign.routingMode === 'STATIC') {
-        // Static: Pick highest priority endpoint from first eligible buyer
-        const bestEndpoint = eligibleEndpoints.sort((a, b) => b.priority - a.priority)[0];
+      // Select highest priority group that is not empty
+      const bestGroup = priorityGroups.get(sortedPriorities[0])!;
 
-        logger.info({
-          msg: 'Selected buyer (STATIC mode)',
-          campaignId,
-          buyerId: bestEndpoint.buyerId,
-          buyerName: bestEndpoint.buyerName,
-          isNational: bestEndpoint.isNational,
-        });
-
-        return {
-          buyerId: bestEndpoint.buyerId,
-          endpoint: bestEndpoint.destination,
-          callerState: this.resolveCallerState(callData),
-        };
+      // 3. Weighted Random Selection within the selected priority group
+      let totalWeight = 0;
+      for (const ep of bestGroup) {
+        totalWeight += Math.max(1, ep.weight);
       }
 
-      // 5. Performance/Hybrid Routing with scores
-      const scores = await analyticsService.getBuyerScores(tenantId, campaignId);
+      const randomValue = Math.random() * totalWeight;
+      let currentSum = 0;
+      let selectedEndpoint = bestGroup[0];
 
-      // Tier 1: Buyers with performance scores
-      // Tier 2: Buyers without scores (static fallback)
-      const tier1: string[] = [];
-      const tier2: string[] = [];
-
-      for (const buyerId of buyerIds) {
-        if (scores.has(buyerId)) {
-          tier1.push(buyerId);
-        } else {
-          tier2.push(buyerId);
+      for (const ep of bestGroup) {
+        currentSum += Math.max(1, ep.weight);
+        if (randomValue <= currentSum) {
+          selectedEndpoint = ep;
+          break;
         }
       }
-
-      // Sort Tier 1 by score DESC
-      tier1.sort((a, b) => (scores.get(b) || 0) - (scores.get(a) || 0));
-
-      // Sort Tier 2 by buyer name (stable sort)
-      const buyerNames = new Map<string, string>();
-      for (const ep of eligibleEndpoints) {
-        buyerNames.set(ep.buyerId, ep.buyerName);
-      }
-      tier2.sort((a, b) => (buyerNames.get(a) || '').localeCompare(buyerNames.get(b) || ''));
-
-      // Merge: Performance tier first, then static fallback
-      const sortedBuyerIds = [...tier1, ...tier2];
-      const bestBuyerId = sortedBuyerIds[0];
-      const bestEndpoints = buyerEndpointsMap.get(bestBuyerId)!;
-      const bestEndpoint = bestEndpoints.sort((a, b) => b.priority - a.priority)[0];
 
       logger.info({
-        msg: 'Selected buyer (PERFORMANCE/HYBRID mode)',
+        msg: 'Selected buyer via priority and weight routing',
         campaignId,
-        routingMode: campaign.routingMode,
-        buyerId: bestBuyerId,
-        buyerName: bestEndpoint.buyerName,
-        score: scores.get(bestBuyerId),
-        tier: tier1.includes(bestBuyerId) ? 'performance' : 'static_fallback',
-        isNational: bestEndpoint.isNational,
+        buyerId: selectedEndpoint.buyerId,
+        buyerName: selectedEndpoint.buyerName,
+        endpointId: selectedEndpoint.endpointId,
+        destination: selectedEndpoint.destination,
+        weight: selectedEndpoint.weight,
+        priority: selectedEndpoint.priority,
         callerState: this.resolveCallerState(callData),
       });
 
       return {
-        buyerId: bestBuyerId,
-        endpoint: bestEndpoint.destination,
+        buyerId: selectedEndpoint.buyerId,
+        endpoint: selectedEndpoint.destination,
+        targetId: selectedEndpoint.endpointId,
         callerState: this.resolveCallerState(callData),
       };
     } catch (error) {
@@ -285,3 +299,4 @@ export class RoutingService {
 }
 
 export const routingService = new RoutingService();
+

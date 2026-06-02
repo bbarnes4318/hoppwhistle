@@ -79,6 +79,7 @@ local destination     = json_value(response_body, "destination")
 local route_id        = json_value(response_body, "routeId")
 local tenant_id       = json_value(response_body, "tenantId")
 local buyer_id        = json_value(response_body, "buyerId")
+local target_id       = json_value(response_body, "targetId")
 local campaign_id     = json_value(response_body, "campaignId")
 local recording_flag  = json_value(response_body, "recordingEnabled")
 
@@ -126,6 +127,7 @@ session:setVariable("origination_caller_id_name", caller_number)
 session:setVariable("x_route_id", route_id or "")
 session:setVariable("x_tenant_id", tenant_id or "")
 session:setVariable("x_buyer_id", buyer_id or "")
+session:setVariable("x_target_id", target_id or "")
 session:setVariable("x_campaign_id", campaign_id or "")
 session:setVariable("x_did", did_normalized)
 session:setVariable("x_destination", destination)
@@ -254,7 +256,7 @@ if answered_epoch and answered_epoch ~= "" and answered_epoch ~= "0" then
 end
 
 local cdr_json = string.format(
-  '{"callId":"%s","routeId":"%s","tenantId":"%s","callerNumber":"%s","did":"%s","destination":"%s","buyerId":"%s","campaignId":"%s","duration":%s,"connectedDuration":%s,"hangupCause":"%s","startedAt":"%s","answeredAt":"%s","endedAt":"%s","recordingPath":"%s","recordingDuration":%s}',
+  '{"callId":"%s","routeId":"%s","tenantId":"%s","callerNumber":"%s","did":"%s","destination":"%s","buyerId":"%s","targetId":"%s","campaignId":"%s","duration":%s,"connectedDuration":%s,"hangupCause":"%s","startedAt":"%s","answeredAt":"%s","endedAt":"%s","recordingPath":"%s","recordingDuration":%s}',
   call_uuid,
   route_id or "",
   tenant_id or "",
@@ -262,6 +264,7 @@ local cdr_json = string.format(
   did_normalized,
   destination,
   buyer_id or "",
+  target_id or "",
   campaign_id or "",
   duration_val,
   billsec,

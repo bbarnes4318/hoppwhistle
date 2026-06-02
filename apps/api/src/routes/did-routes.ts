@@ -331,13 +331,40 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
       return reply.code(404).send({ error: 'no_route', did: normalizedDid });
     }
 
-    console.log(`[FS-LOOKUP] ${route.did} → ${route.destination} (buyer: ${route.buyerId || 'none'})`);
+    let destination = route.destination;
+    let buyerId = route.buyerId || null;
+    let targetId: string | null = null;
+
+    if (route.campaignId) {
+      try {
+        const { routingService } = await import('../services/routing.js');
+        const bestBuyer = await routingService.selectBestBuyer(
+          route.tenantId,
+          route.campaignId,
+          { callerId: caller }
+        );
+
+        if (bestBuyer) {
+          destination = bestBuyer.endpoint;
+          buyerId = bestBuyer.buyerId;
+          targetId = bestBuyer.targetId || null;
+          console.log(`[FS-LOOKUP] Dynamic route: campaign=${route.campaignId} caller=${caller} → buyer=${buyerId} endpoint=${destination} targetId=${targetId}`);
+        } else {
+          console.log(`[FS-LOOKUP] Dynamic route campaign=${route.campaignId} caller=${caller} returned no eligible buyers. Falling back to static route: ${destination}`);
+        }
+      } catch (routingErr) {
+        console.error(`[FS-LOOKUP] Dynamic routing error for campaign ${route.campaignId} caller ${caller} (fail-open):`, routingErr);
+      }
+    } else {
+      console.log(`[FS-LOOKUP] Static route: ${route.did} → ${destination} (buyer: ${buyerId || 'none'})`);
+    }
 
     return reply.send({
-      destination: route.destination,
+      destination: destination,
       recordingEnabled: route.recordingEnabled,
       routeId: route.id,
-      buyerId: route.buyerId || null,
+      buyerId: buyerId,
+      targetId: targetId,
       campaignId: route.campaignId || null,
       publisherId: route.publisherId || null,
       tenantId: route.tenantId,
@@ -361,6 +388,7 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
       destination: string;   // Where we forwarded to
       buyerId?: string;
       campaignId?: string;
+      targetId?: string;
       duration: number;       // Total duration in seconds
       connectedDuration?: number;
       billDuration?: number;
@@ -404,6 +432,40 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
         return reply.code(404).send({ error: 'Route not found' });
       }
 
+      let buyerId = body.buyerId || route.buyerId || null;
+      let targetId = body.targetId || null;
+      let buyerName = route.label || null;
+
+      // If buyerId is dynamically resolved but targetId is missing, resolve it by matching destination number
+      if (buyerId && !targetId && body.destination) {
+        const endpoint = await prisma.buyerEndpoint.findFirst({
+          where: {
+            buyerId,
+            destination: body.destination,
+            status: 'ACTIVE',
+          },
+          select: { id: true },
+        });
+        if (endpoint) {
+          targetId = endpoint.id;
+        }
+      }
+
+      // Resolve buyer name from buyer record if we have a buyerId
+      if (buyerId) {
+        try {
+          const buyer = await prisma.buyer.findUnique({
+            where: { id: buyerId },
+            select: { name: true },
+          });
+          if (buyer) {
+            buyerName = buyer.name;
+          }
+        } catch (dbErr) {
+          console.error('[FS-CDR] Failed to resolve buyer name:', dbErr);
+        }
+      }
+
       // Create Call record
       const call = await prisma.call.create({
         data: {
@@ -419,12 +481,13 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
           duration: body.duration || 0,
           connectedDuration: body.connectedDuration || 0,
           campaignId: route.campaignId || null,
-          buyerId: route.buyerId || null,
+          buyerId: buyerId,
+          targetId: targetId,
           publisherId: route.publisherId || null,
           startedAt: body.startedAt ? new Date(body.startedAt) : new Date(),
           answeredAt: body.answeredAt ? new Date(body.answeredAt) : null,
           endedAt: body.endedAt ? new Date(body.endedAt) : new Date(),
-          buyerName: route.label || null,
+          buyerName: buyerName,
           recordingStatus: body.recordingPath ? 'PENDING' : null,
         },
       });
