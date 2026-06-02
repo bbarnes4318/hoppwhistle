@@ -10,8 +10,8 @@ async function main() {
     // Fetch all campaigns that have a publisherId
     const campaigns = await prisma.campaign.findMany({
       where: {
-        publisherId: {
-          not: null,
+        NOT: {
+          publisherId: '',
         },
       },
       select: {
