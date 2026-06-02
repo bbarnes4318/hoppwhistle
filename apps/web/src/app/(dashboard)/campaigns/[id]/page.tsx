@@ -266,7 +266,7 @@ export default function CampaignDetailPage() {
       setLoadingEndpoints(true);
       try {
         const res = await apiClient.get<{ data: BuyerEndpoint[] }>(
-          `/api/v1/buyers/${buyerForm.buyerId}/endpoints`
+          `/api/v1/buyers/${buyerForm.buyerId}/targets`
         );
         if (res.data?.data) {
           setBuyerEndpoints(res.data.data);
@@ -753,9 +753,9 @@ export default function CampaignDetailPage() {
                     campaignPublishers.map((cp) => (
                       <TableRow key={cp.id}>
                         <TableCell>
-                          <span className="font-semibold text-foreground">{cp.publisher.name}</span>
+                          <span className="font-semibold text-foreground">{cp.publisher?.name || 'Unknown'}</span>
                           <span className="ml-2 text-xs font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                            {cp.publisher.code}
+                            {cp.publisher?.code || '—'}
                           </span>
                         </TableCell>
                         <TableCell>
@@ -840,7 +840,7 @@ export default function CampaignDetailPage() {
                       <TableRow key={cb.id}>
                         <TableCell>
                           <div className="flex flex-col">
-                            <span className="font-semibold text-foreground">{cb.buyer.name}</span>
+                            <span className="font-semibold text-foreground">{cb.buyer?.name || 'Unknown'}</span>
                             <span className="text-xs text-muted-foreground">
                               {cb.buyerEndpoint?.name || 'Ad-Hoc Endpoint'}
                             </span>
