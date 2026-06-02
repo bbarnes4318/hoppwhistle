@@ -50,7 +50,7 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
-import { toast } from '@/components/ui/use-toast';
+import { useToast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
@@ -126,6 +126,7 @@ interface CampaignDetails {
 }
 
 export default function CampaignDetailPage() {
+  const { toast } = useToast();
   const params = useParams();
   const router = useRouter();
   const id = params.id as string;
@@ -204,12 +205,16 @@ export default function CampaignDetailPage() {
       }
 
       // Fetch Publisher assignments
-      const pubRes = await apiClient.get<CampaignPublisher[]>(`/api/v1/campaigns/${id}/publishers`);
-      if (pubRes.data) setCampaignPublishers(pubRes.data);
+      const pubRes = await apiClient.get<{ data: CampaignPublisher[] }>(`/api/v1/campaigns/${id}/publishers`);
+      if (pubRes.data?.data) {
+        setCampaignPublishers(pubRes.data.data);
+      }
 
       // Fetch Buyer assignments
-      const buyerRes = await apiClient.get<CampaignBuyer[]>(`/api/v1/campaigns/${id}/buyers`);
-      if (buyerRes.data) setCampaignBuyers(buyerRes.data);
+      const buyerRes = await apiClient.get<{ data: CampaignBuyer[] }>(`/api/v1/campaigns/${id}/buyers`);
+      if (buyerRes.data?.data) {
+        setCampaignBuyers(buyerRes.data.data);
+      }
 
       // Fetch DID routes and filter by campaign
       const didRes = await apiClient.get<{ data: DidRoute[] }>('/api/v1/did-routes');
@@ -220,11 +225,15 @@ export default function CampaignDetailPage() {
 
     } catch (err) {
       console.error('Failed to load campaign data:', err);
-      toast.error('Error', 'Failed to retrieve campaign details.');
+      toast({
+        title: 'Error',
+        description: 'Failed to retrieve campaign details.',
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, toast]);
 
   // Load dropdown lists (Publishers & Buyers)
   const fetchDropdowns = useCallback(async () => {
@@ -299,14 +308,26 @@ export default function CampaignDetailPage() {
       });
 
       if (res.error) {
-        toast.error('Save Failed', res.error.message);
+        toast({
+          title: 'Save Failed',
+          description: res.error.message,
+          variant: 'destructive',
+        });
       } else {
-        toast.success('Settings Saved', 'Campaign settings have been successfully updated.');
+        toast({
+          title: 'Settings Saved',
+          description: 'Campaign settings have been successfully updated.',
+          variant: 'success',
+        });
         void fetchCampaignData();
       }
     } catch (err) {
       console.error('Failed to save settings:', err);
-      toast.error('Error', 'An unexpected error occurred while saving.');
+      toast({
+        title: 'Error',
+        description: 'An unexpected error occurred while saving.',
+        variant: 'destructive',
+      });
     } finally {
       setSavingSettings(false);
     }
@@ -326,9 +347,17 @@ export default function CampaignDetailPage() {
       });
 
       if (res.error) {
-        toast.error('Assignment Failed', res.error.message);
+        toast({
+          title: 'Assignment Failed',
+          description: res.error.message,
+          variant: 'destructive',
+        });
       } else {
-        toast.success('Publisher Assigned', 'Publisher has been assigned to this campaign.');
+        toast({
+          title: 'Publisher Assigned',
+          description: 'Publisher has been assigned to this campaign.',
+          variant: 'success',
+        });
         setPubDialogOpen(false);
         setPubForm({ publisherId: '', payoutPerBillableCall: '', status: 'ACTIVE' });
         void fetchCampaignData();
@@ -347,9 +376,17 @@ export default function CampaignDetailPage() {
     try {
       const res = await apiClient.delete(`/api/v1/campaigns/${id}/publishers/${assignmentId}`);
       if (res.error) {
-        toast.error('Removal Failed', res.error.message);
+        toast({
+          title: 'Removal Failed',
+          description: res.error.message,
+          variant: 'destructive',
+        });
       } else {
-        toast.success('Publisher Removed', 'The publisher assignment was successfully removed.');
+        toast({
+          title: 'Publisher Removed',
+          description: 'The publisher assignment was successfully removed.',
+          variant: 'success',
+        });
         void fetchCampaignData();
       }
     } catch (err) {
@@ -365,7 +402,11 @@ export default function CampaignDetailPage() {
     // Basic E.164 regex check for PSTN
     const dest = buyerForm.destinationNumber.trim();
     if (!dest.startsWith('+')) {
-      toast.error('Validation Error', 'Destination number must be in E.164 format (starting with +). e.g., +18652637582');
+      toast({
+        title: 'Validation Error',
+        description: 'Destination number must be in E.164 format (starting with +). e.g., +18652637582',
+        variant: 'destructive',
+      });
       return;
     }
 
@@ -381,9 +422,17 @@ export default function CampaignDetailPage() {
       });
 
       if (res.error) {
-        toast.error('Assignment Failed', res.error.message);
+        toast({
+          title: 'Assignment Failed',
+          description: res.error.message,
+          variant: 'destructive',
+        });
       } else {
-        toast.success('Buyer Assigned', 'Buyer destination has been assigned to this campaign.');
+        toast({
+          title: 'Buyer Assigned',
+          description: 'Buyer destination has been assigned to this campaign.',
+          variant: 'success',
+        });
         setBuyerDialogOpen(false);
         setBuyerForm({
           buyerId: '',
@@ -409,9 +458,17 @@ export default function CampaignDetailPage() {
     try {
       const res = await apiClient.delete(`/api/v1/campaigns/${id}/buyers/${assignmentId}`);
       if (res.error) {
-        toast.error('Removal Failed', res.error.message);
+        toast({
+          title: 'Removal Failed',
+          description: res.error.message,
+          variant: 'destructive',
+        });
       } else {
-        toast.success('Buyer Removed', 'The buyer assignment was successfully removed.');
+        toast({
+          title: 'Buyer Removed',
+          description: 'The buyer assignment was successfully removed.',
+          variant: 'success',
+        });
         void fetchCampaignData();
       }
     } catch (err) {

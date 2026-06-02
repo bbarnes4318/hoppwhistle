@@ -35,7 +35,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { toast } from '@/components/ui/use-toast';
+import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -123,6 +123,7 @@ interface CampaignProfitabilityReport {
 }
 
 export default function ReportsPage() {
+  const { toast } = useToast();
   const { hasFullAccess, userRoles, isBuyerOnly, isBuyer } = useAuth();
   const [activeTab, setActiveTab] = useState('campaign-profitability');
 
@@ -202,11 +203,15 @@ export default function ReportsPage() {
       }
     } catch (err) {
       console.error('Failed to load report:', err);
-      toast.error('Error', 'Failed to retrieve report data.');
+      toast({
+        title: 'Error',
+        description: 'Failed to retrieve report data.',
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
-  }, [activeTab, startDate, endDate, campaignId, showProfitability, showPublisherRevenue, showBuyerCosts]);
+  }, [activeTab, startDate, endDate, campaignId, showProfitability, showPublisherRevenue, showBuyerCosts, toast]);
 
   useEffect(() => {
     void fetchReport();
@@ -275,10 +280,18 @@ export default function ReportsPage() {
       a.remove();
       window.URL.revokeObjectURL(downloadUrl);
 
-      toast.success('Export Complete', 'Your CSV file has been generated and downloaded.');
+      toast({
+        title: 'Export Complete',
+        description: 'Your CSV file has been generated and downloaded.',
+        variant: 'success',
+      });
     } catch (err) {
       console.error('Export error:', err);
-      toast.error('Export Failed', 'An error occurred during report generation.');
+      toast({
+        title: 'Export Failed',
+        description: 'An error occurred during report generation.',
+        variant: 'destructive',
+      });
     } finally {
       setExporting(false);
     }
