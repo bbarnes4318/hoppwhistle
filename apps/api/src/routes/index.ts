@@ -1781,7 +1781,10 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
           where,
           take: limit,
           skip,
-          orderBy: { createdAt: 'desc' },
+          orderBy: [
+            { createdAt: 'desc' },
+            { id: 'desc' },
+          ],
           include: {
             campaign: true,
             fromNumber: true,
