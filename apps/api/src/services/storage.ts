@@ -9,6 +9,8 @@ import {
   GetObjectCommand,
   HeadObjectCommand,
   DeleteObjectCommand,
+  CreateBucketCommand,
+  HeadBucketCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { NodeHttpHandler } from '@smithy/node-http-handler';
@@ -36,6 +38,8 @@ export class StorageService {
   private isLocal = false;
   private localDir = process.env.LOCAL_STORAGE_DIR || '/tmp/uploads';
 
+  private bucketInitialized = false;
+
   constructor(config: StorageConfig) {
     this.config = config;
     this.bucket = config.bucket;
@@ -62,6 +66,29 @@ export class StorageService {
         socketTimeout: 3000,
       }),
     });
+  }
+
+  private async ensureBucketExists() {
+    if (this.isLocal || this.bucketInitialized || !this.s3Client) {
+      return;
+    }
+
+    try {
+      try {
+        await this.s3Client.send(new HeadBucketCommand({ Bucket: this.bucket }));
+      } catch (headErr: any) {
+        if (headErr.name === 'NotFound' || headErr.$metadata?.httpStatusCode === 404) {
+          console.log(`Bucket '${this.bucket}' not found. Creating it...`);
+          await this.s3Client.send(new CreateBucketCommand({ Bucket: this.bucket }));
+          console.log(`Bucket '${this.bucket}' created successfully.`);
+        } else {
+          throw headErr;
+        }
+      }
+      this.bucketInitialized = true;
+    } catch (err) {
+      console.error(`Failed to ensure S3 bucket '${this.bucket}' exists:`, err);
+    }
   }
 
   /**
@@ -123,6 +150,7 @@ export class StorageService {
         throw new Error('S3 Client not initialized');
       }
 
+      await this.ensureBucketExists();
       await this.s3Client.send(command);
 
       // Get file size
@@ -175,6 +203,7 @@ export class StorageService {
       throw new Error('S3 Client not initialized');
     }
 
+    await this.ensureBucketExists();
     const command = new GetObjectCommand({
       Bucket: this.bucket,
       Key: storageKey,
@@ -201,6 +230,7 @@ export class StorageService {
       throw new Error('S3 Client not initialized');
     }
 
+    await this.ensureBucketExists();
     const { storageKey, contentType, metadata, expiresInSec } = args;
 
     const command = new PutObjectCommand({
@@ -248,6 +278,7 @@ export class StorageService {
       throw new Error('S3 Client not initialized');
     }
 
+    await this.ensureBucketExists();
     const command = new GetObjectCommand({
       Bucket: this.bucket,
       Key: storageKey,
@@ -279,6 +310,7 @@ export class StorageService {
     }
 
     try {
+      await this.ensureBucketExists();
       const command = new HeadObjectCommand({
         Bucket: this.bucket,
         Key: storageKey,
@@ -321,6 +353,7 @@ export class StorageService {
       throw new Error('S3 Client not initialized');
     }
 
+    await this.ensureBucketExists();
     const command = new HeadObjectCommand({
       Bucket: this.bucket,
       Key: storageKey,
@@ -348,6 +381,7 @@ export class StorageService {
       throw new Error('S3 Client not initialized');
     }
 
+    await this.ensureBucketExists();
     const command = new HeadObjectCommand({
       Bucket: this.bucket,
       Key: storageKey,
@@ -372,6 +406,7 @@ export class StorageService {
       throw new Error('S3 Client not initialized');
     }
 
+    await this.ensureBucketExists();
     const command = new DeleteObjectCommand({
       Bucket: this.bucket,
       Key: storageKey,
