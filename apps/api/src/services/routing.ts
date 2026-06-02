@@ -179,7 +179,7 @@ export class RoutingService {
           const maxConcurrency = dbAssignment?.buyerEndpoint?.maxConcurrency ?? 10;
 
           const liveCalls = liveStatusMap.get(ep.endpointId) || 0;
-          const isFull = liveCalls >= maxConcurrency;
+          const isFull = maxConcurrency > 0 && liveCalls >= maxConcurrency;
 
           if (isFull) {
             logger.info({

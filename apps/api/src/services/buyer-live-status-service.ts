@@ -96,7 +96,7 @@ class DatabaseLiveStatusProvider implements LiveStatusProvider {
         targetId: t.id,
         liveCalls,
         maxConcurrency: t.maxConcurrency,
-        isFull: liveCalls >= t.maxConcurrency,
+        isFull: t.maxConcurrency > 0 && liveCalls >= t.maxConcurrency,
       };
     });
 
