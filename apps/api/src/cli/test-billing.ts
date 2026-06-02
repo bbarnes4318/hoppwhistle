@@ -97,6 +97,7 @@ async function runTests() {
         destination: '+18652637582',
         basePrice: new Prisma.Decimal(12.0),
         status: 'ACTIVE',
+        type: 'PSTN',
       },
     });
 
@@ -226,6 +227,7 @@ async function runTests() {
         destination: '+18005551234',
         basePrice: new Prisma.Decimal(14.00),
         status: 'ACTIVE',
+        type: 'PSTN',
       },
     });
 
