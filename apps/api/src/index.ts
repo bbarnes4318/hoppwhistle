@@ -80,13 +80,19 @@ async function buildServer() {
     const queryToken = (request.query as any)?.token;
 
     // Try JWT first
-    if ((authHeader && authHeader.startsWith('Bearer ')) || queryToken) {
+    if (authHeader && authHeader.startsWith('Bearer ')) {
       try {
-        const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.substring(7) : queryToken;
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any
-        const decoded = await (request as any).jwtVerify(token);
+        await request.jwtVerify();
+        return;
+      } catch {
+        // JWT failed, try API key
+      }
+    } else if (queryToken) {
+      try {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        request.user = decoded;
+        const decoded = server.jwt.verify(queryToken);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        request.user = decoded as any;
         return;
       } catch {
         // JWT failed, try API key
