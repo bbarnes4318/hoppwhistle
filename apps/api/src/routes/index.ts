@@ -1,5 +1,6 @@
 // Route handlers - placeholder implementations
 import { FastifyInstance, FastifyRequest } from 'fastify';
+import { Prisma } from '@prisma/client';
 
 import { AuthenticatedUser } from '../middleware/auth.js';
 
@@ -431,6 +432,9 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
           flow: c.flow,
           callerIdPoolId: c.callerIdPoolId,
           metadata: c.metadata,
+          billableDurationSeconds: c.billableDurationSeconds,
+          publisherPayoutPerBillableCall: c.publisherPayoutPerBillableCall,
+          buyerPricePerBillableCall: c.buyerPricePerBillableCall,
           calls: c._count.calls,
           phoneNumbers: c._count.phoneNumbers,
           createdAt: c.createdAt.toISOString(),
@@ -456,6 +460,9 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
       flowId?: string;
       callerIdPoolId?: string;
       status?: 'ACTIVE' | 'PAUSED';
+      billableDurationSeconds?: number;
+      publisherPayoutPerBillableCall?: number;
+      buyerPricePerBillableCall?: number;
       metadata?: Record<string, unknown>;
     };
   }>('/api/v1/campaigns', async (request, reply) => {
@@ -479,6 +486,23 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
       if (!body.publisherId) {
         void reply.code(400);
         return { error: { code: 'VALIDATION_ERROR', message: 'Publisher ID is required' } };
+      }
+
+      const billableDurationSeconds = body.billableDurationSeconds !== undefined ? body.billableDurationSeconds : 60;
+      const publisherPayoutPerBillableCall = body.publisherPayoutPerBillableCall !== undefined ? body.publisherPayoutPerBillableCall : 0;
+      const buyerPricePerBillableCall = body.buyerPricePerBillableCall !== undefined ? body.buyerPricePerBillableCall : 0;
+
+      if (billableDurationSeconds < 0) {
+        void reply.code(400);
+        return { error: { code: 'VALIDATION_ERROR', message: 'Billable duration seconds must be >= 0' } };
+      }
+      if (publisherPayoutPerBillableCall < 0) {
+        void reply.code(400);
+        return { error: { code: 'VALIDATION_ERROR', message: 'Publisher payout per billable call must be >= 0' } };
+      }
+      if (buyerPricePerBillableCall < 0) {
+        void reply.code(400);
+        return { error: { code: 'VALIDATION_ERROR', message: 'Buyer price per billable call must be >= 0' } };
       }
 
       // Verify publisher exists and belongs to tenant
@@ -537,7 +561,21 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
           status: body.status || 'ACTIVE',
           flowId: body.flowId || null,
           callerIdPoolId: body.callerIdPoolId || null,
+          billableDurationSeconds,
+          publisherPayoutPerBillableCall: new Prisma.Decimal(publisherPayoutPerBillableCall),
+          buyerPricePerBillableCall: new Prisma.Decimal(buyerPricePerBillableCall),
           metadata: (body.metadata as import('@prisma/client').Prisma.InputJsonValue) || {},
+        },
+      });
+
+      // Automatically create a CampaignPublisher assignment row backfill/link for backward compatibility
+      await prisma.campaignPublisher.create({
+        data: {
+          tenantId: tenantId,
+          campaignId: campaign.id,
+          publisherId: body.publisherId,
+          payoutPerBillableCall: null,
+          status: 'ACTIVE',
         },
       });
 
@@ -572,6 +610,9 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
         status: campaign.status,
         flowId: campaign.flowId,
         callerIdPoolId: campaign.callerIdPoolId,
+        billableDurationSeconds: campaign.billableDurationSeconds,
+        publisherPayoutPerBillableCall: campaign.publisherPayoutPerBillableCall,
+        buyerPricePerBillableCall: campaign.buyerPricePerBillableCall,
         metadata: campaign.metadata,
         createdAt: campaign.createdAt.toISOString(),
         updatedAt: campaign.updatedAt.toISOString(),
@@ -730,6 +771,9 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
         flow: campaign.flow,
         callerIdPoolId: campaign.callerIdPoolId,
         metadata: campaign.metadata,
+        billableDurationSeconds: campaign.billableDurationSeconds,
+        publisherPayoutPerBillableCall: campaign.publisherPayoutPerBillableCall,
+        buyerPricePerBillableCall: campaign.buyerPricePerBillableCall,
         calls: campaign._count.calls,
         phoneNumbers: campaign._count.phoneNumbers,
         createdAt: campaign.createdAt.toISOString(),
@@ -748,6 +792,9 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
       status?: 'ACTIVE' | 'PAUSED' | 'ARCHIVED';
       flowId?: string | null;
       callerIdPoolId?: string | null;
+      billableDurationSeconds?: number;
+      publisherPayoutPerBillableCall?: number;
+      buyerPricePerBillableCall?: number;
     };
   }>('/api/v1/campaigns/:campaignId', async (request, reply) => {
     try {
@@ -784,6 +831,28 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
       if (body.flowId !== undefined) updateData.flowId = body.flowId;
       if (body.callerIdPoolId !== undefined) updateData.callerIdPoolId = body.callerIdPoolId;
 
+      if (body.billableDurationSeconds !== undefined) {
+        if (body.billableDurationSeconds < 0) {
+          void reply.code(400);
+          return { error: { code: 'VALIDATION_ERROR', message: 'Billable duration seconds must be >= 0' } };
+        }
+        updateData.billableDurationSeconds = body.billableDurationSeconds;
+      }
+      if (body.publisherPayoutPerBillableCall !== undefined) {
+        if (body.publisherPayoutPerBillableCall < 0) {
+          void reply.code(400);
+          return { error: { code: 'VALIDATION_ERROR', message: 'Publisher payout must be >= 0' } };
+        }
+        updateData.publisherPayoutPerBillableCall = new Prisma.Decimal(body.publisherPayoutPerBillableCall);
+      }
+      if (body.buyerPricePerBillableCall !== undefined) {
+        if (body.buyerPricePerBillableCall < 0) {
+          void reply.code(400);
+          return { error: { code: 'VALIDATION_ERROR', message: 'Buyer price must be >= 0' } };
+        }
+        updateData.buyerPricePerBillableCall = new Prisma.Decimal(body.buyerPricePerBillableCall);
+      }
+
       // Update campaign
       const updatedCampaign = await prisma.campaign.update({
         where: { id: campaignId },
@@ -815,6 +884,9 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
         flow: updatedCampaign.flow,
         callerIdPoolId: updatedCampaign.callerIdPoolId,
         metadata: updatedCampaign.metadata,
+        billableDurationSeconds: updatedCampaign.billableDurationSeconds,
+        publisherPayoutPerBillableCall: updatedCampaign.publisherPayoutPerBillableCall,
+        buyerPricePerBillableCall: updatedCampaign.buyerPricePerBillableCall,
         createdAt: updatedCampaign.createdAt.toISOString(),
         updatedAt: updatedCampaign.updatedAt.toISOString(),
       };
@@ -968,6 +1040,395 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
           },
         };
       }
+    }
+  );
+
+  // GET campaign publishers
+  fastify.get<{ Params: { campaignId: string } }>(
+    '/api/v1/campaigns/:campaignId/publishers',
+    async (request, reply) => {
+      const user = (request as AuthRequest).user;
+      const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+      const tenantId = demoTenantId || user?.tenantId;
+      if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+
+      const { campaignId } = request.params;
+      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+
+      const campaign = await prisma.campaign.findFirst({
+        where: { id: campaignId, tenantId },
+      });
+      if (!campaign) return reply.code(404).send({ error: 'Campaign not found' });
+
+      const publishers = await prisma.campaignPublisher.findMany({
+        where: { campaignId, tenantId },
+        include: {
+          publisher: { select: { id: true, name: true, code: true, email: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      return { data: publishers };
+    }
+  );
+
+  // POST campaign publisher assignment
+  fastify.post<{
+    Params: { campaignId: string };
+    Body: {
+      publisherId: string;
+      payoutPerBillableCall?: number;
+      status?: 'ACTIVE' | 'INACTIVE';
+    };
+  }>(
+    '/api/v1/campaigns/:campaignId/publishers',
+    async (request, reply) => {
+      const user = (request as AuthRequest).user;
+      const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+      const tenantId = demoTenantId || user?.tenantId;
+      if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+
+      const { campaignId } = request.params;
+      const { publisherId, payoutPerBillableCall, status } = request.body;
+
+      if (!publisherId) {
+        return reply.code(400).send({ error: 'publisherId is required' });
+      }
+
+      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+
+      // Verify campaign & publisher belong to tenant
+      const campaign = await prisma.campaign.findFirst({ where: { id: campaignId, tenantId } });
+      if (!campaign) return reply.code(404).send({ error: 'Campaign not found' });
+
+      const publisher = await prisma.publisher.findFirst({ where: { id: publisherId, tenantId } });
+      if (!publisher) return reply.code(404).send({ error: 'Publisher not found' });
+
+      // Check duplicate
+      const existing = await prisma.campaignPublisher.findUnique({
+        where: {
+          tenantId_campaignId_publisherId: { tenantId, campaignId, publisherId },
+        },
+      });
+
+      if (existing) {
+        return reply.code(409).send({ error: 'Publisher is already assigned to this campaign', existingId: existing.id });
+      }
+
+      const assignment = await prisma.campaignPublisher.create({
+        data: {
+          tenantId,
+          campaignId,
+          publisherId,
+          payoutPerBillableCall: payoutPerBillableCall !== undefined ? new Prisma.Decimal(payoutPerBillableCall) : null,
+          status: status || 'ACTIVE',
+        },
+        include: {
+          publisher: { select: { id: true, name: true } },
+        },
+      });
+
+      return reply.code(201).send({ data: assignment });
+    }
+  );
+
+  // PATCH campaign publisher assignment
+  fastify.patch<{
+    Params: { campaignId: string; assignmentId: string };
+    Body: {
+      payoutPerBillableCall?: number | null;
+      status?: 'ACTIVE' | 'INACTIVE';
+    };
+  }>(
+    '/api/v1/campaigns/:campaignId/publishers/:assignmentId',
+    async (request, reply) => {
+      const user = (request as AuthRequest).user;
+      const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+      const tenantId = demoTenantId || user?.tenantId;
+      if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+
+      const { campaignId, assignmentId } = request.params;
+      const { payoutPerBillableCall, status } = request.body;
+      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+
+      const existing = await prisma.campaignPublisher.findFirst({
+        where: { id: assignmentId, campaignId, tenantId },
+      });
+      if (!existing) return reply.code(404).send({ error: 'Assignment not found' });
+
+      const updated = await prisma.campaignPublisher.update({
+        where: { id: assignmentId },
+        data: {
+          payoutPerBillableCall: payoutPerBillableCall !== undefined 
+            ? (payoutPerBillableCall === null ? null : new Prisma.Decimal(payoutPerBillableCall))
+            : undefined,
+          status: status || undefined,
+        },
+        include: {
+          publisher: { select: { id: true, name: true } },
+        },
+      });
+
+      return { data: updated };
+    }
+  );
+
+  // DELETE campaign publisher assignment
+  fastify.delete<{ Params: { campaignId: string; assignmentId: string } }>(
+    '/api/v1/campaigns/:campaignId/publishers/:assignmentId',
+    async (request, reply) => {
+      const user = (request as AuthRequest).user;
+      const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+      const tenantId = demoTenantId || user?.tenantId;
+      if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+
+      const { campaignId, assignmentId } = request.params;
+      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+
+      const existing = await prisma.campaignPublisher.findFirst({
+        where: { id: assignmentId, campaignId, tenantId },
+      });
+      if (!existing) return reply.code(404).send({ error: 'Assignment not found' });
+
+      await prisma.campaignPublisher.delete({ where: { id: assignmentId } });
+      return reply.code(204).send();
+    }
+  );
+
+  // GET campaign buyers
+  fastify.get<{ Params: { campaignId: string } }>(
+    '/api/v1/campaigns/:campaignId/buyers',
+    async (request, reply) => {
+      const user = (request as AuthRequest).user;
+      const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+      const tenantId = demoTenantId || user?.tenantId;
+      if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+
+      const { campaignId } = request.params;
+      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+
+      const campaign = await prisma.campaign.findFirst({
+        where: { id: campaignId, tenantId },
+      });
+      if (!campaign) return reply.code(404).send({ error: 'Campaign not found' });
+
+      const buyers = await prisma.campaignBuyer.findMany({
+        where: { campaignId, tenantId },
+        include: {
+          buyer: { select: { id: true, name: true, code: true } },
+          buyerEndpoint: { select: { id: true, name: true, destination: true } },
+        },
+        orderBy: { priority: 'desc' },
+      });
+
+      return { data: buyers };
+    }
+  );
+
+  // POST campaign buyer assignment
+  fastify.post<{
+    Params: { campaignId: string };
+    Body: {
+      buyerId: string;
+      buyerEndpointId?: string;
+      destinationNumber: string;
+      pricePerBillableCall?: number;
+      priority?: number;
+      status?: 'ACTIVE' | 'INACTIVE';
+    };
+  }>(
+    '/api/v1/campaigns/:campaignId/buyers',
+    async (request, reply) => {
+      const user = (request as AuthRequest).user;
+      const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+      const tenantId = demoTenantId || user?.tenantId;
+      if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+
+      const { campaignId } = request.params;
+      const { buyerId, buyerEndpointId, destinationNumber, pricePerBillableCall, priority, status } = request.body;
+
+      if (!buyerId || !destinationNumber) {
+        return reply.code(400).send({ error: 'buyerId and destinationNumber are required' });
+      }
+
+      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+
+      // Verify campaign & buyer belong to tenant
+      const campaign = await prisma.campaign.findFirst({ where: { id: campaignId, tenantId } });
+      if (!campaign) return reply.code(404).send({ error: 'Campaign not found' });
+
+      const buyer = await prisma.buyer.findFirst({ where: { id: buyerId, tenantId } });
+      if (!buyer) return reply.code(404).send({ error: 'Buyer not found' });
+
+      // Verify endpoint type and validate destination number format
+      let normalizedDestination = destinationNumber.trim();
+      let isPstn = true;
+
+      if (buyerEndpointId) {
+        const ep = await prisma.buyerEndpoint.findFirst({ where: { id: buyerEndpointId, buyerId } });
+        if (!ep) return reply.code(404).send({ error: 'Buyer endpoint not found' });
+        if (ep.type === 'SIP' || ep.type === 'WEBRTC') {
+          isPstn = false;
+        }
+      }
+
+      if (isPstn) {
+        // E.164 normalization & validation
+        const digits = normalizedDestination.replace(/\D/g, '');
+        if (digits.length < 10) {
+          return reply.code(400).send({ error: 'PSTN destination number must have at least 10 digits' });
+        }
+        normalizedDestination = digits.length === 10 ? `+1${digits}` : `+${digits}`;
+        // Validate with standard E.164 regex
+        if (!/^\+[1-9]\d{1,14}$/.test(normalizedDestination)) {
+          return reply.code(400).send({ error: 'Invalid destination number format' });
+        }
+      }
+
+      // Check duplicate (unique tenantId, campaignId, buyerId, destinationNumber)
+      const existing = await prisma.campaignBuyer.findUnique({
+        where: {
+          tenantId_campaignId_buyerId_destinationNumber: {
+            tenantId,
+            campaignId,
+            buyerId,
+            destinationNumber: normalizedDestination,
+          },
+        },
+      });
+
+      if (existing) {
+        return reply.code(409).send({ error: 'Buyer with this destination is already assigned to this campaign', existingId: existing.id });
+      }
+
+      const assignment = await prisma.campaignBuyer.create({
+        data: {
+          tenantId,
+          campaignId,
+          buyerId,
+          buyerEndpointId: buyerEndpointId || null,
+          destinationNumber: normalizedDestination,
+          pricePerBillableCall: pricePerBillableCall !== undefined ? new Prisma.Decimal(pricePerBillableCall) : null,
+          priority: priority || 0,
+          status: status || 'ACTIVE',
+        },
+        include: {
+          buyer: { select: { id: true, name: true } },
+          buyerEndpoint: { select: { id: true, name: true } },
+        },
+      });
+
+      return reply.code(201).send({ data: assignment });
+    }
+  );
+
+  // PATCH campaign buyer assignment
+  fastify.patch<{
+    Params: { campaignId: string; assignmentId: string };
+    Body: {
+      buyerEndpointId?: string | null;
+      destinationNumber?: string;
+      pricePerBillableCall?: number | null;
+      priority?: number;
+      status?: 'ACTIVE' | 'INACTIVE';
+    };
+  }>(
+    '/api/v1/campaigns/:campaignId/buyers/:assignmentId',
+    async (request, reply) => {
+      const user = (request as AuthRequest).user;
+      const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+      const tenantId = demoTenantId || user?.tenantId;
+      if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+
+      const { campaignId, assignmentId } = request.params;
+      const { buyerEndpointId, destinationNumber, pricePerBillableCall, priority, status } = request.body;
+      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+
+      const existing = await prisma.campaignBuyer.findFirst({
+        where: { id: assignmentId, campaignId, tenantId },
+      });
+      if (!existing) return reply.code(404).send({ error: 'Assignment not found' });
+
+      let normalizedDestination = destinationNumber !== undefined ? destinationNumber.trim() : existing.destinationNumber;
+      let isPstn = true;
+
+      const targetEpId = buyerEndpointId !== undefined ? buyerEndpointId : existing.buyerEndpointId;
+      if (targetEpId) {
+        const ep = await prisma.buyerEndpoint.findFirst({ where: { id: targetEpId, buyerId: existing.buyerId } });
+        if (!ep) return reply.code(404).send({ error: 'Buyer endpoint not found' });
+        if (ep.type === 'SIP' || ep.type === 'WEBRTC') {
+          isPstn = false;
+        }
+      }
+
+      if (isPstn && destinationNumber !== undefined) {
+        const digits = normalizedDestination.replace(/\D/g, '');
+        if (digits.length < 10) {
+          return reply.code(400).send({ error: 'PSTN destination number must have at least 10 digits' });
+        }
+        normalizedDestination = digits.length === 10 ? `+1${digits}` : `+${digits}`;
+        if (!/^\+[1-9]\d{1,14}$/.test(normalizedDestination)) {
+          return reply.code(400).send({ error: 'Invalid destination number format' });
+        }
+      }
+
+      // Check duplicate if destination number is changing
+      if (destinationNumber !== undefined && normalizedDestination !== existing.destinationNumber) {
+        const dup = await prisma.campaignBuyer.findUnique({
+          where: {
+            tenantId_campaignId_buyerId_destinationNumber: {
+              tenantId,
+              campaignId,
+              buyerId: existing.buyerId,
+              destinationNumber: normalizedDestination,
+            },
+          },
+        });
+        if (dup && dup.id !== assignmentId) {
+          return reply.code(409).send({ error: 'Another assignment exists with this destination' });
+        }
+      }
+
+      const updated = await prisma.campaignBuyer.update({
+        where: { id: assignmentId },
+        data: {
+          buyerEndpointId: buyerEndpointId !== undefined ? buyerEndpointId : undefined,
+          destinationNumber: destinationNumber !== undefined ? normalizedDestination : undefined,
+          pricePerBillableCall: pricePerBillableCall !== undefined
+            ? (pricePerBillableCall === null ? null : new Prisma.Decimal(pricePerBillableCall))
+            : undefined,
+          priority: priority !== undefined ? priority : undefined,
+          status: status || undefined,
+        },
+        include: {
+          buyer: { select: { id: true, name: true } },
+          buyerEndpoint: { select: { id: true, name: true } },
+        },
+      });
+
+      return { data: updated };
+    }
+  );
+
+  // DELETE campaign buyer assignment
+  fastify.delete<{ Params: { campaignId: string; assignmentId: string } }>(
+    '/api/v1/campaigns/:campaignId/buyers/:assignmentId',
+    async (request, reply) => {
+      const user = (request as AuthRequest).user;
+      const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+      const tenantId = demoTenantId || user?.tenantId;
+      if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+
+      const { campaignId, assignmentId } = request.params;
+      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+
+      const existing = await prisma.campaignBuyer.findFirst({
+        where: { id: assignmentId, campaignId, tenantId },
+      });
+      if (!existing) return reply.code(404).send({ error: 'Assignment not found' });
+
+      await prisma.campaignBuyer.delete({ where: { id: assignmentId } });
+      return reply.code(204).send();
     }
   );
 }
@@ -3534,6 +3995,48 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     }
   });
 
+  // Helper to get authenticated user profile (role, buyerId, publisherId)
+  async function getUserProfile(request: FastifyRequest, prisma: any) {
+    const user = (request as AuthRequest).user;
+    let userRoles: string[] = [];
+    let buyerId: string | null = null;
+    let publisherId: string | null = null;
+
+    if (user?.userId) {
+      const userRecord = await prisma.user.findUnique({
+        where: { id: user.userId },
+        include: { roles: { include: { role: true } } },
+      });
+      if (userRecord) {
+        userRoles = userRecord.roles.map((ur: any) => ur.role.name) || [];
+        buyerId = userRecord.buyerId || null;
+        publisherId = (userRecord.metadata as any)?.publisherId || null;
+      }
+    }
+    const isAdminOrOwner = userRoles.some(role => role === 'ADMIN' || role === 'OWNER');
+    return {
+      isAdminOrOwner,
+      userRoles,
+      buyerId,
+      publisherId,
+    };
+  }
+
+  // Helper to generate CSV
+  function toCsv(headers: string[], rows: any[][]): string {
+    const formatCell = (val: any) => {
+      if (val === null || val === undefined) return '';
+      const str = String(val);
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+    const headerLine = headers.map(formatCell).join(',');
+    const rowLines = rows.map(r => r.map(formatCell).join(','));
+    return [headerLine, ...rowLines].join('\n');
+  }
+
   fastify.get<{
     Querystring: {
       startDate?: string;
@@ -3706,6 +4209,714 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
         endDate: endDate.toISOString(),
       },
     };
+  });
+
+  // ── Publisher Revenue Report ──
+  fastify.get<{
+    Querystring: {
+      startDate?: string;
+      endDate?: string;
+      campaignId?: string;
+      publisherId?: string;
+    };
+  }>('/api/v1/reports/publisher-revenue', async (request, reply) => {
+    const prisma = getPrismaClient();
+    const { isAdminOrOwner, userRoles, publisherId: userPubId } = await getUserProfile(request, prisma);
+    
+    // Authorization check
+    if (!isAdminOrOwner && !userRoles.includes('PUBLISHER')) {
+      return reply.code(403).send({ error: 'Forbidden' });
+    }
+
+    const user = (request as AuthRequest).user;
+    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+    const tenantId = demoTenantId || user?.tenantId;
+    if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+
+    const startDate = request.query.startDate ? new Date(request.query.startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const endDate = request.query.endDate ? new Date(request.query.endDate) : new Date();
+
+    let targetPublisherId = request.query.publisherId || null;
+    if (userRoles.includes('PUBLISHER') && !isAdminOrOwner) {
+      targetPublisherId = userPubId;
+    }
+
+    const calls = await prisma.call.findMany({
+      where: {
+        tenantId,
+        createdAt: { gte: startDate, lte: endDate },
+        ...(request.query.campaignId ? { campaignId: request.query.campaignId } : {}),
+        ...(targetPublisherId ? { publisherId: targetPublisherId } : {}),
+      },
+      select: {
+        id: true,
+        publisherId: true,
+        publisherName: true,
+        campaignId: true,
+        campaignName: true,
+        did: true,
+        billable: true,
+        publisherPayoutAmount: true,
+        connectedDuration: true,
+        duration: true,
+      },
+    });
+
+    const groupsMap = new Map<string, any>();
+    let totalCalls = 0;
+    let billableCalls = 0;
+    let nonBillableCalls = 0;
+    let totalRevenue = new Prisma.Decimal(0);
+    let totalDuration = 0;
+
+    for (const call of calls) {
+      const pubId = call.publisherId || 'unknown';
+      const pubName = call.publisherName || 'Unknown Publisher';
+      const campId = call.campaignId || 'unknown';
+      const campName = call.campaignName || 'Unknown Campaign';
+      const did = call.did || 'unknown';
+      const key = `${pubId}_${campId}_${did}`;
+
+      totalCalls++;
+      if (call.billable) billableCalls++;
+      else nonBillableCalls++;
+
+      const payout = call.publisherPayoutAmount ? new Prisma.Decimal(call.publisherPayoutAmount) : new Prisma.Decimal(0);
+      totalRevenue = totalRevenue.plus(payout);
+
+      const dur = call.connectedDuration !== null && call.connectedDuration !== undefined
+        ? call.connectedDuration 
+        : (call.duration || 0);
+      totalDuration += dur;
+
+      if (!groupsMap.has(key)) {
+        groupsMap.set(key, {
+          publisherId: pubId,
+          publisherName: pubName,
+          campaignId: campId,
+          campaignName: campName,
+          trackingNumber: did,
+          totalCalls: 0,
+          billableCalls: 0,
+          nonBillableCalls: 0,
+          totalDuration: 0,
+          publisherRevenue: new Prisma.Decimal(0),
+        });
+      }
+
+      const g = groupsMap.get(key);
+      g.totalCalls++;
+      if (call.billable) g.billableCalls++;
+      else g.nonBillableCalls++;
+      g.totalDuration += dur;
+      g.publisherRevenue = g.publisherRevenue.plus(payout);
+    }
+
+    const rows = [...groupsMap.values()].map(g => {
+      const billableRate = g.totalCalls > 0 ? (g.billableCalls / g.totalCalls) : 0;
+      const averageDuration = g.totalCalls > 0 ? Math.round(g.totalDuration / g.totalCalls) : 0;
+      const payoutPerBillableCall = g.billableCalls > 0 
+        ? g.publisherRevenue.dividedBy(g.billableCalls).toFixed(4)
+        : '0.0000';
+
+      return {
+        publisherId: g.publisherId,
+        publisherName: g.publisherName,
+        campaignId: g.campaignId,
+        campaignName: g.campaignName,
+        trackingNumber: g.trackingNumber,
+        totalCalls: g.totalCalls,
+        billableCalls: g.billableCalls,
+        nonBillableCalls: g.nonBillableCalls,
+        billableRate,
+        averageDuration,
+        payoutPerBillableCall,
+        publisherRevenue: g.publisherRevenue.toFixed(4),
+      };
+    });
+
+    const overallBillableRate = totalCalls > 0 ? (billableCalls / totalCalls) : 0;
+    const overallAvgDuration = totalCalls > 0 ? Math.round(totalDuration / totalCalls) : 0;
+
+    return {
+      totals: {
+        totalCalls,
+        billableCalls,
+        nonBillableCalls,
+        averageDuration: overallAvgDuration,
+        billableRate: overallBillableRate,
+        publisherRevenue: totalRevenue.toFixed(4),
+      },
+      rows,
+    };
+  });
+
+  // ── Publisher Revenue CSV Export ──
+  fastify.get<{
+    Querystring: {
+      startDate?: string;
+      endDate?: string;
+      campaignId?: string;
+      publisherId?: string;
+    };
+  }>('/api/v1/reports/publisher-revenue/export.csv', async (request, reply) => {
+    const prisma = getPrismaClient();
+    const { isAdminOrOwner, userRoles, publisherId: userPubId } = await getUserProfile(request, prisma);
+    
+    if (!isAdminOrOwner && !userRoles.includes('PUBLISHER')) {
+      return reply.code(403).send({ error: 'Forbidden' });
+    }
+
+    const user = (request as AuthRequest).user;
+    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+    const tenantId = demoTenantId || user?.tenantId;
+    if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+
+    const startDate = request.query.startDate ? new Date(request.query.startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const endDate = request.query.endDate ? new Date(request.query.endDate) : new Date();
+
+    let targetPublisherId = request.query.publisherId || null;
+    if (userRoles.includes('PUBLISHER') && !isAdminOrOwner) {
+      targetPublisherId = userPubId;
+    }
+
+    const calls = await prisma.call.findMany({
+      where: {
+        tenantId,
+        createdAt: { gte: startDate, lte: endDate },
+        ...(request.query.campaignId ? { campaignId: request.query.campaignId } : {}),
+        ...(targetPublisherId ? { publisherId: targetPublisherId } : {}),
+      },
+      select: {
+        publisherName: true,
+        campaignName: true,
+        did: true,
+        billable: true,
+        publisherPayoutAmount: true,
+        connectedDuration: true,
+        duration: true,
+      },
+    });
+
+    const groupsMap = new Map<string, any>();
+    for (const call of calls) {
+      const pubName = call.publisherName || 'Unknown Publisher';
+      const campName = call.campaignName || 'Unknown Campaign';
+      const did = call.did || 'unknown';
+      const key = `${pubName}_${campName}_${did}`;
+
+      const payout = call.publisherPayoutAmount ? new Prisma.Decimal(call.publisherPayoutAmount) : new Prisma.Decimal(0);
+      const dur = call.connectedDuration !== null && call.connectedDuration !== undefined
+        ? call.connectedDuration 
+        : (call.duration || 0);
+
+      if (!groupsMap.has(key)) {
+        groupsMap.set(key, {
+          publisherName: pubName,
+          campaignName: campName,
+          trackingNumber: did,
+          totalCalls: 0,
+          billableCalls: 0,
+          nonBillableCalls: 0,
+          totalDuration: 0,
+          publisherRevenue: new Prisma.Decimal(0),
+        });
+      }
+
+      const g = groupsMap.get(key);
+      g.totalCalls++;
+      if (call.billable) g.billableCalls++;
+      else g.nonBillableCalls++;
+      g.totalDuration += dur;
+      g.publisherRevenue = g.publisherRevenue.plus(payout);
+    }
+
+    const rows = [...groupsMap.values()].map(g => {
+      const billableRate = g.totalCalls > 0 ? (g.billableCalls / g.totalCalls) : 0;
+      const averageDuration = g.totalCalls > 0 ? Math.round(g.totalDuration / g.totalCalls) : 0;
+      const payoutPerBillableCall = g.billableCalls > 0 
+        ? g.publisherRevenue.dividedBy(g.billableCalls).toFixed(4)
+        : '0.0000';
+
+      return [
+        g.publisherName,
+        g.campaignName,
+        g.trackingNumber,
+        g.totalCalls,
+        g.billableCalls,
+        g.nonBillableCalls,
+        (billableRate * 100).toFixed(2) + '%',
+        averageDuration,
+        payoutPerBillableCall,
+        g.publisherRevenue.toFixed(4),
+      ];
+    });
+
+    const csvHeaders = ['Publisher', 'Campaign', 'Tracking Number', 'Total Calls', 'Billable Calls', 'Non-Billable Calls', 'Billable Rate (%)', 'Avg Duration (s)', 'Payout / Billable Call ($)', 'Publisher Revenue ($)'];
+    const csvContent = toCsv(csvHeaders, rows);
+    void reply
+      .type('text/csv')
+      .header('Content-Disposition', 'attachment; filename="publisher_revenue_report.csv"')
+      .send(csvContent);
+  });
+
+  // ── Buyer Costs Report ──
+  fastify.get<{
+    Querystring: {
+      startDate?: string;
+      endDate?: string;
+      campaignId?: string;
+      buyerId?: string;
+    };
+  }>('/api/v1/reports/buyer-costs', async (request, reply) => {
+    const prisma = getPrismaClient();
+    const { isAdminOrOwner, userRoles, buyerId: userBuyerId } = await getUserProfile(request, prisma);
+
+    if (!isAdminOrOwner && !userRoles.includes('BUYER')) {
+      return reply.code(403).send({ error: 'Forbidden' });
+    }
+
+    const user = (request as AuthRequest).user;
+    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+    const tenantId = demoTenantId || user?.tenantId;
+    if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+
+    const startDate = request.query.startDate ? new Date(request.query.startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const endDate = request.query.endDate ? new Date(request.query.endDate) : new Date();
+
+    let targetBuyerId = request.query.buyerId || null;
+    if (userRoles.includes('BUYER') && !isAdminOrOwner) {
+      targetBuyerId = userBuyerId;
+    }
+
+    const calls = await prisma.call.findMany({
+      where: {
+        tenantId,
+        createdAt: { gte: startDate, lte: endDate },
+        ...(request.query.campaignId ? { campaignId: request.query.campaignId } : {}),
+        ...(targetBuyerId ? { buyerId: targetBuyerId } : {}),
+      },
+      select: {
+        id: true,
+        buyerId: true,
+        buyerName: true,
+        campaignId: true,
+        campaignName: true,
+        targetNumber: true,
+        billable: true,
+        buyerBillableAmount: true,
+        connectedDuration: true,
+        duration: true,
+      },
+    });
+
+    const groupsMap = new Map<string, any>();
+    let totalCalls = 0;
+    let billableCalls = 0;
+    let nonBillableCalls = 0;
+    let totalCost = new Prisma.Decimal(0);
+    let totalDuration = 0;
+
+    for (const call of calls) {
+      const bId = call.buyerId || 'unknown';
+      const bName = call.buyerName || 'Unknown Buyer';
+      const campId = call.campaignId || 'unknown';
+      const campName = call.campaignName || 'Unknown Campaign';
+      const dest = call.targetNumber || 'unknown';
+      const key = `${bId}_${campId}_${dest}`;
+
+      totalCalls++;
+      if (call.billable) billableCalls++;
+      else nonBillableCalls++;
+
+      const cost = call.buyerBillableAmount ? new Prisma.Decimal(call.buyerBillableAmount) : new Prisma.Decimal(0);
+      totalCost = totalCost.plus(cost);
+
+      const dur = call.connectedDuration !== null && call.connectedDuration !== undefined
+        ? call.connectedDuration 
+        : (call.duration || 0);
+      totalDuration += dur;
+
+      if (!groupsMap.has(key)) {
+        groupsMap.set(key, {
+          buyerId: bId,
+          buyerName: bName,
+          campaignId: campId,
+          campaignName: campName,
+          destinationNumber: dest,
+          totalCalls: 0,
+          billableCalls: 0,
+          nonBillableCalls: 0,
+          totalDuration: 0,
+          buyerCost: new Prisma.Decimal(0),
+        });
+      }
+
+      const g = groupsMap.get(key);
+      g.totalCalls++;
+      if (call.billable) g.billableCalls++;
+      else g.nonBillableCalls++;
+      g.totalDuration += dur;
+      g.buyerCost = g.buyerCost.plus(cost);
+    }
+
+    const rows = [...groupsMap.values()].map(g => {
+      const billableRate = g.totalCalls > 0 ? (g.billableCalls / g.totalCalls) : 0;
+      const averageDuration = g.totalCalls > 0 ? Math.round(g.totalDuration / g.totalCalls) : 0;
+      const pricePerBillableCall = g.billableCalls > 0 
+        ? g.buyerCost.dividedBy(g.billableCalls).toFixed(4)
+        : '0.0000';
+
+      return {
+        buyerId: g.buyerId,
+        buyerName: g.buyerName,
+        campaignId: g.campaignId,
+        campaignName: g.campaignName,
+        destinationNumber: g.destinationNumber,
+        totalCalls: g.totalCalls,
+        billableCalls: g.billableCalls,
+        nonBillableCalls: g.nonBillableCalls,
+        billableRate,
+        averageDuration,
+        pricePerBillableCall,
+        buyerCost: g.buyerCost.toFixed(4),
+      };
+    });
+
+    const overallBillableRate = totalCalls > 0 ? (billableCalls / totalCalls) : 0;
+    const overallAvgDuration = totalCalls > 0 ? Math.round(totalDuration / totalCalls) : 0;
+
+    return {
+      totals: {
+        totalCalls,
+        billableCalls,
+        nonBillableCalls,
+        averageDuration: overallAvgDuration,
+        billableRate: overallBillableRate,
+        buyerCost: totalCost.toFixed(4),
+      },
+      rows,
+    };
+  });
+
+  // ── Buyer Costs CSV Export ──
+  fastify.get<{
+    Querystring: {
+      startDate?: string;
+      endDate?: string;
+      campaignId?: string;
+      buyerId?: string;
+    };
+  }>('/api/v1/reports/buyer-costs/export.csv', async (request, reply) => {
+    const prisma = getPrismaClient();
+    const { isAdminOrOwner, userRoles, buyerId: userBuyerId } = await getUserProfile(request, prisma);
+
+    if (!isAdminOrOwner && !userRoles.includes('BUYER')) {
+      return reply.code(403).send({ error: 'Forbidden' });
+    }
+
+    const user = (request as AuthRequest).user;
+    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+    const tenantId = demoTenantId || user?.tenantId;
+    if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+
+    const startDate = request.query.startDate ? new Date(request.query.startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const endDate = request.query.endDate ? new Date(request.query.endDate) : new Date();
+
+    let targetBuyerId = request.query.buyerId || null;
+    if (userRoles.includes('BUYER') && !isAdminOrOwner) {
+      targetBuyerId = userBuyerId;
+    }
+
+    const calls = await prisma.call.findMany({
+      where: {
+        tenantId,
+        createdAt: { gte: startDate, lte: endDate },
+        ...(request.query.campaignId ? { campaignId: request.query.campaignId } : {}),
+        ...(targetBuyerId ? { buyerId: targetBuyerId } : {}),
+      },
+      select: {
+        buyerName: true,
+        campaignName: true,
+        targetNumber: true,
+        billable: true,
+        buyerBillableAmount: true,
+        connectedDuration: true,
+        duration: true,
+      },
+    });
+
+    const groupsMap = new Map<string, any>();
+    for (const call of calls) {
+      const bName = call.buyerName || 'Unknown Buyer';
+      const campName = call.campaignName || 'Unknown Campaign';
+      const dest = call.targetNumber || 'unknown';
+      const key = `${bName}_${campName}_${dest}`;
+
+      const cost = call.buyerBillableAmount ? new Prisma.Decimal(call.buyerBillableAmount) : new Prisma.Decimal(0);
+      const dur = call.connectedDuration !== null && call.connectedDuration !== undefined
+        ? call.connectedDuration 
+        : (call.duration || 0);
+
+      if (!groupsMap.has(key)) {
+        groupsMap.set(key, {
+          buyerName: bName,
+          campaignName: campName,
+          destinationNumber: dest,
+          totalCalls: 0,
+          billableCalls: 0,
+          nonBillableCalls: 0,
+          totalDuration: 0,
+          buyerCost: new Prisma.Decimal(0),
+        });
+      }
+
+      const g = groupsMap.get(key);
+      g.totalCalls++;
+      if (call.billable) g.billableCalls++;
+      else g.nonBillableCalls++;
+      g.totalDuration += dur;
+      g.buyerCost = g.buyerCost.plus(cost);
+    }
+
+    const rows = [...groupsMap.values()].map(g => {
+      const billableRate = g.totalCalls > 0 ? (g.billableCalls / g.totalCalls) : 0;
+      const averageDuration = g.totalCalls > 0 ? Math.round(g.totalDuration / g.totalCalls) : 0;
+      const pricePerBillableCall = g.billableCalls > 0 
+        ? g.buyerCost.dividedBy(g.billableCalls).toFixed(4)
+        : '0.0000';
+
+      return [
+        g.buyerName,
+        g.campaignName,
+        g.destinationNumber,
+        g.totalCalls,
+        g.billableCalls,
+        g.nonBillableCalls,
+        (billableRate * 100).toFixed(2) + '%',
+        averageDuration,
+        pricePerBillableCall,
+        g.buyerCost.toFixed(4),
+      ];
+    });
+
+    const csvHeaders = ['Buyer', 'Campaign', 'Destination Number', 'Total Calls', 'Billable Calls', 'Non-Billable Calls', 'Billable Rate (%)', 'Avg Duration (s)', 'Cost / Billable Call ($)', 'Buyer Cost ($)'];
+    const csvContent = toCsv(csvHeaders, rows);
+    void reply
+      .type('text/csv')
+      .header('Content-Disposition', 'attachment; filename="buyer_costs_report.csv"')
+      .send(csvContent);
+  });
+
+  // ── Campaign Profitability Report ──
+  fastify.get<{
+    Querystring: {
+      startDate?: string;
+      endDate?: string;
+      campaignId?: string;
+    };
+  }>('/api/v1/reports/campaign-profitability', async (request, reply) => {
+    const prisma = getPrismaClient();
+    const { isAdminOrOwner } = await getUserProfile(request, prisma);
+
+    if (!isAdminOrOwner) {
+      return reply.code(403).send({ error: 'Forbidden' });
+    }
+
+    const user = (request as AuthRequest).user;
+    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+    const tenantId = demoTenantId || user?.tenantId;
+    if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+
+    const startDate = request.query.startDate ? new Date(request.query.startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const endDate = request.query.endDate ? new Date(request.query.endDate) : new Date();
+
+    const calls = await prisma.call.findMany({
+      where: {
+        tenantId,
+        createdAt: { gte: startDate, lte: endDate },
+        ...(request.query.campaignId ? { campaignId: request.query.campaignId } : {}),
+      },
+      select: {
+        id: true,
+        campaignId: true,
+        campaignName: true,
+        billable: true,
+        buyerBillableAmount: true,
+        publisherPayoutAmount: true,
+        cost: true,
+      },
+    });
+
+    const groupsMap = new Map<string, any>();
+    let totalCalls = 0;
+    let billableCalls = 0;
+    let totalRev = new Prisma.Decimal(0);
+    let totalPayout = new Prisma.Decimal(0);
+    let totalCallCost = new Prisma.Decimal(0);
+
+    for (const call of calls) {
+      const campId = call.campaignId || 'unknown';
+      const campName = call.campaignName || 'Unknown Campaign';
+
+      totalCalls++;
+      if (call.billable) billableCalls++;
+
+      const rev = call.buyerBillableAmount ? new Prisma.Decimal(call.buyerBillableAmount) : new Prisma.Decimal(0);
+      const pay = call.publisherPayoutAmount ? new Prisma.Decimal(call.publisherPayoutAmount) : new Prisma.Decimal(0);
+      const callCost = call.cost ? new Prisma.Decimal(call.cost) : new Prisma.Decimal(0);
+
+      totalRev = totalRev.plus(rev);
+      totalPayout = totalPayout.plus(pay);
+      totalCallCost = totalCallCost.plus(callCost);
+
+      if (!groupsMap.has(campId)) {
+        groupsMap.set(campId, {
+          campaignId: campId,
+          campaignName: campName,
+          totalCalls: 0,
+          billableCalls: 0,
+          buyerRevenue: new Prisma.Decimal(0),
+          publisherPayout: new Prisma.Decimal(0),
+          callCost: new Prisma.Decimal(0),
+        });
+      }
+
+      const g = groupsMap.get(campId);
+      g.totalCalls++;
+      if (call.billable) g.billableCalls++;
+      g.buyerRevenue = g.buyerRevenue.plus(rev);
+      g.publisherPayout = g.publisherPayout.plus(pay);
+      g.callCost = g.callCost.plus(callCost);
+    }
+
+    const rows = [...groupsMap.values()].map(g => {
+      const profit = g.buyerRevenue.minus(g.publisherPayout).minus(g.callCost);
+      const margin = g.buyerRevenue.gt(0) 
+        ? profit.dividedBy(g.buyerRevenue).toNumber()
+        : 0;
+
+      return {
+        campaignId: g.campaignId,
+        campaignName: g.campaignName,
+        totalCalls: g.totalCalls,
+        billableCalls: g.billableCalls,
+        buyerRevenue: g.buyerRevenue.toFixed(4),
+        publisherPayout: g.publisherPayout.toFixed(4),
+        callCost: g.callCost.toFixed(4),
+        profit: profit.toFixed(4),
+        margin,
+      };
+    });
+
+    const overallProfit = totalRev.minus(totalPayout).minus(totalCallCost);
+    const overallMargin = totalRev.gt(0) 
+      ? overallProfit.dividedBy(totalRev).toNumber()
+      : 0;
+
+    return {
+      totals: {
+        totalCalls,
+        billableCalls,
+        buyerRevenue: totalRev.toFixed(4),
+        publisherPayout: totalPayout.toFixed(4),
+        callCost: totalCallCost.toFixed(4),
+        profit: overallProfit.toFixed(4),
+        margin: overallMargin,
+      },
+      rows,
+    };
+  });
+
+  // ── Campaign Profitability CSV Export ──
+  fastify.get<{
+    Querystring: {
+      startDate?: string;
+      endDate?: string;
+      campaignId?: string;
+    };
+  }>('/api/v1/reports/campaign-profitability/export.csv', async (request, reply) => {
+    const prisma = getPrismaClient();
+    const { isAdminOrOwner } = await getUserProfile(request, prisma);
+
+    if (!isAdminOrOwner) {
+      return reply.code(403).send({ error: 'Forbidden' });
+    }
+
+    const user = (request as AuthRequest).user;
+    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+    const tenantId = demoTenantId || user?.tenantId;
+    if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+
+    const startDate = request.query.startDate ? new Date(request.query.startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const endDate = request.query.endDate ? new Date(request.query.endDate) : new Date();
+
+    const calls = await prisma.call.findMany({
+      where: {
+        tenantId,
+        createdAt: { gte: startDate, lte: endDate },
+        ...(request.query.campaignId ? { campaignId: request.query.campaignId } : {}),
+      },
+      select: {
+        campaignName: true,
+        billable: true,
+        buyerBillableAmount: true,
+        publisherPayoutAmount: true,
+        cost: true,
+      },
+    });
+
+    const groupsMap = new Map<string, any>();
+    for (const call of calls) {
+      const campName = call.campaignName || 'Unknown Campaign';
+
+      const rev = call.buyerBillableAmount ? new Prisma.Decimal(call.buyerBillableAmount) : new Prisma.Decimal(0);
+      const pay = call.publisherPayoutAmount ? new Prisma.Decimal(call.publisherPayoutAmount) : new Prisma.Decimal(0);
+      const callCost = call.cost ? new Prisma.Decimal(call.cost) : new Prisma.Decimal(0);
+
+      if (!groupsMap.has(campName)) {
+        groupsMap.set(campName, {
+          campaignName: campName,
+          totalCalls: 0,
+          billableCalls: 0,
+          buyerRevenue: new Prisma.Decimal(0),
+          publisherPayout: new Prisma.Decimal(0),
+          callCost: new Prisma.Decimal(0),
+        });
+      }
+
+      const g = groupsMap.get(campName);
+      g.totalCalls++;
+      if (call.billable) g.billableCalls++;
+      g.buyerRevenue = g.buyerRevenue.plus(rev);
+      g.publisherPayout = g.publisherPayout.plus(pay);
+      g.callCost = g.callCost.plus(callCost);
+    }
+
+    const rows = [...groupsMap.values()].map(g => {
+      const profit = g.buyerRevenue.minus(g.publisherPayout).minus(g.callCost);
+      const margin = g.buyerRevenue.gt(0) 
+        ? (profit.dividedBy(g.buyerRevenue).toNumber() * 100).toFixed(2) + '%'
+        : '0.00%';
+
+      return [
+        g.campaignName,
+        g.totalCalls,
+        g.billableCalls,
+        g.buyerRevenue.toFixed(4),
+        g.publisherPayout.toFixed(4),
+        g.callCost.toFixed(4),
+        profit.toFixed(4),
+        margin,
+      ];
+    });
+
+    const csvHeaders = ['Campaign', 'Total Calls', 'Billable Calls', 'Buyer Revenue ($)', 'Publisher Payout ($)', 'Call Cost ($)', 'Profit ($)', 'Margin (%)'];
+    const csvContent = toCsv(csvHeaders, rows);
+    void reply
+      .type('text/csv')
+      .header('Content-Disposition', 'attachment; filename="campaign_profitability_report.csv"')
+      .send(csvContent);
   });
 }
 

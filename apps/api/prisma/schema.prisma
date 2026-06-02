@@ -59,6 +59,8 @@ model Tenant {
   insuranceLeads           InsuranceLead[]
   insuranceLeadSubmissions InsuranceLeadSubmission[]
   didRoutes                DidRoute[]
+  campaignPublishers       CampaignPublisher[]
+  campaignBuyers           CampaignBuyer[]
 
   @@index([slug])
   @@index([status])
@@ -363,11 +365,14 @@ model DidRoute {
   phoneNumber PhoneNumber  @relation(fields: [phoneNumberId], references: [id])
   buyer       Buyer?       @relation(fields: [buyerId], references: [id])
   campaign    Campaign?    @relation(fields: [campaignId], references: [id])
+  publisherId String?
+  publisher   Publisher?   @relation(fields: [publisherId], references: [id])
 
   @@unique([tenantId, did]) // One route per DID per tenant
   @@index([did])            // Fast lookup by DID (FreeSWITCH uses this)
   @@index([tenantId])
   @@index([buyerId])
+  @@index([publisherId])
   @@index([status])
   @@map("did_routes")
 }
@@ -517,9 +522,12 @@ model Campaign {
   routingMode      RoutingMode    @default(STATIC)
   callerIdPoolId   String?
   flowId           String? // Current active flow version
-  metadata         Json?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  metadata                       Json?
+  billableDurationSeconds        Int                 @default(60)
+  publisherPayoutPerBillableCall Decimal             @default(0) @db.Decimal(10, 4)
+  buyerPricePerBillableCall      Decimal             @default(0) @db.Decimal(10, 4)
+  createdAt                      DateTime            @default(now())
+  updatedAt                      DateTime            @updatedAt
 
   // Relations
   tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -530,6 +538,8 @@ model Campaign {
   calls        Call[]
   leads        Lead[]
   didRoutes    DidRoute[]
+  publishers   CampaignPublisher[]
+  buyers       CampaignBuyer[]
 
   @@index([tenantId])
   @@index([publisherId])
@@ -562,11 +572,13 @@ model Publisher {
   updatedAt          DateTime        @updatedAt
 
   // Relations
-  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  campaigns    Campaign[]
-  buyers       Buyer[]
-  calls        Call[]
-  pingRequests PingRequest[]
+  tenant             Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  campaigns          Campaign[]
+  buyers             Buyer[]
+  calls              Call[]
+  pingRequests       PingRequest[]
+  campaignPublishers CampaignPublisher[]
+  didRoutes          DidRoute[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -601,15 +613,16 @@ model Buyer {
   updatedAt DateTime @updatedAt
 
   // Relations
-  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  publisher    Publisher?         @relation(fields: [publisherId], references: [id])
-  users        User[] // Users linked to this buyer (for Buyer Portal access)
-  endpoints    BuyerEndpoint[]
-  calls        Call[]
-  transactions BuyerTransaction[]
-  didRoutes    DidRoute[]
-  stats        BuyerStats?
-  bids         BuyerBid[]
+  tenant         Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  publisher      Publisher?         @relation(fields: [publisherId], references: [id])
+  users          User[] // Users linked to this buyer (for Buyer Portal access)
+  endpoints      BuyerEndpoint[]
+  calls          Call[]
+  transactions   BuyerTransaction[]
+  didRoutes      DidRoute[]
+  stats          BuyerStats?
+  bids           BuyerBid[]
+  campaignBuyers CampaignBuyer[]
 
   @@unique([tenantId, code]) // Simplified: buyer code unique per tenant
   @@index([tenantId])
@@ -687,9 +700,10 @@ model BuyerEndpoint {
   updatedAt DateTime @updatedAt
 
   // Relations
-  buyer       Buyer        @relation(fields: [buyerId], references: [id], onDelete: Cascade)
-  phoneNumber PhoneNumber? @relation(fields: [phoneNumberId], references: [id])
-  bids        BuyerBid[]
+  buyer          Buyer           @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  phoneNumber    PhoneNumber?    @relation(fields: [phoneNumberId], references: [id])
+  bids           BuyerBid[]
+  campaignBuyers CampaignBuyer[]
 
   @@index([buyerId])
   @@index([phoneNumberId])
@@ -917,9 +931,15 @@ model Call {
   callerZipCode              String? // 5-digit ZIP code for geo-routing
 
   // Financial Fields (Currency/Decimal)
-  revenue Decimal? @db.Decimal(10, 4) // Total revenue for this call
-  payout  Decimal? @db.Decimal(10, 4) // Amount paid to publisher
-  profit  Decimal? @db.Decimal(10, 4) // Revenue minus payout/cost
+  revenue                    Decimal?  @db.Decimal(10, 4) // Total revenue for this call
+  payout                     Decimal?  @db.Decimal(10, 4) // Amount paid to publisher
+  profit                     Decimal?  @db.Decimal(10, 4) // Revenue minus payout/cost
+  billable                   Boolean   @default(false)
+  billableDurationThreshold  Int?
+  publisherPayoutAmount      Decimal?  @db.Decimal(10, 4)
+  buyerBillableAmount        Decimal?  @db.Decimal(10, 4)
+  billingCalculatedAt        DateTime?
+  billingRuleSnapshot        Json?
 
   // Boolean/Status Fields
   isDuplicate         Boolean @default(false) // If caller is duplicate
@@ -979,6 +999,10 @@ model Call {
   @@index([followUpAt])
   @@index([followUpStatus])
   @@index([createdById])
+  @@index([tenantId, campaignId, createdAt])
+  @@index([tenantId, publisherId, createdAt])
+  @@index([tenantId, buyerId, createdAt])
+  @@index([tenantId, billable, createdAt])
   @@map("calls")
 }
 
@@ -2422,4 +2446,63 @@ model InsuranceLeadSubmission {
   @@index([tenantId, postMode])
   @@index([receivedAt])
   @@map("insurance_lead_submissions")
+}
+
+model CampaignPublisher {
+  id                    String                  @id @default(uuid())
+  tenantId              String
+  campaignId            String
+  publisherId           String
+  payoutPerBillableCall Decimal?                @db.Decimal(10, 4) // Override default publisher payout
+  status                CampaignPublisherStatus @default(ACTIVE)
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+
+  // Relations
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  campaign  Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  publisher Publisher @relation(fields: [publisherId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, campaignId, publisherId])
+  @@index([tenantId])
+  @@index([campaignId])
+  @@index([publisherId])
+  @@map("campaign_publishers")
+}
+
+enum CampaignPublisherStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model CampaignBuyer {
+  id                   String              @id @default(uuid())
+  tenantId             String
+  campaignId           String
+  buyerId              String
+  buyerEndpointId      String?
+  destinationNumber    String
+  pricePerBillableCall Decimal?            @db.Decimal(10, 4) // Override default buyer price
+  priority             Int                 @default(0)
+  status               CampaignBuyerStatus @default(ACTIVE)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  // Relations
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  campaign      Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  buyer         Buyer          @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  buyerEndpoint BuyerEndpoint? @relation(fields: [buyerEndpointId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, campaignId, buyerId, destinationNumber])
+  @@index([tenantId])
+  @@index([campaignId])
+  @@index([buyerId])
+  @@index([buyerEndpointId])
+  @@map("campaign_buyers")
+}
+
+enum CampaignBuyerStatus {
+  ACTIVE
+  INACTIVE
 }

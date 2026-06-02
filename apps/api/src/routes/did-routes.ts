@@ -33,6 +33,7 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
         phoneNumber: { select: { number: true, provider: true, status: true } },
         buyer: { select: { id: true, name: true, code: true } },
         campaign: { select: { id: true, name: true } },
+        publisher: { select: { id: true, name: true, code: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -54,12 +55,33 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
       destination: string;
       buyerId?: string;
       campaignId?: string;
+      publisherId?: string;
       label?: string;
       recordingEnabled?: boolean;
     };
 
     if (!body.phoneNumberId || !body.destination) {
       return reply.code(400).send({ error: 'phoneNumberId and destination are required' });
+    }
+
+    // Validate tenant ownership of buyer/campaign/publisher if provided
+    if (body.buyerId) {
+      const buyer = await prisma.buyer.findUnique({ where: { id: body.buyerId } });
+      if (!buyer || buyer.tenantId !== user.tenantId) {
+        return reply.code(400).send({ error: 'Buyer not found' });
+      }
+    }
+    if (body.campaignId) {
+      const campaign = await prisma.campaign.findUnique({ where: { id: body.campaignId } });
+      if (!campaign || campaign.tenantId !== user.tenantId) {
+        return reply.code(400).send({ error: 'Campaign not found' });
+      }
+    }
+    if (body.publisherId) {
+      const publisher = await prisma.publisher.findUnique({ where: { id: body.publisherId } });
+      if (!publisher || publisher.tenantId !== user.tenantId) {
+        return reply.code(400).send({ error: 'Publisher not found' });
+      }
     }
 
     // Validate destination is E.164 unless it contains commas or pipes or is a short extension
@@ -97,12 +119,14 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
         destination,
         buyerId: body.buyerId || null,
         campaignId: body.campaignId || null,
+        publisherId: body.publisherId || null,
         label: body.label || null,
         recordingEnabled: body.recordingEnabled !== false,
       },
       include: {
         phoneNumber: { select: { number: true, provider: true } },
         buyer: { select: { id: true, name: true } },
+        publisher: { select: { id: true, name: true } },
       },
     });
 
@@ -127,6 +151,7 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
         destination?: string;
         buyerId?: string | null;
         campaignId?: string | null;
+        publisherId?: string | null;
         label?: string | null;
         recordingEnabled?: boolean;
         status?: 'ACTIVE' | 'PAUSED' | 'INACTIVE';
@@ -135,6 +160,26 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
       const existing = await prisma.didRoute.findUnique({ where: { id } });
       if (!existing || existing.tenantId !== user.tenantId) {
         return reply.code(404).send({ error: 'Route not found' });
+      }
+
+      // Validate tenant ownership of buyer/campaign/publisher if provided
+      if (body.buyerId) {
+        const buyer = await prisma.buyer.findUnique({ where: { id: body.buyerId } });
+        if (!buyer || buyer.tenantId !== user.tenantId) {
+          return reply.code(400).send({ error: 'Buyer not found' });
+        }
+      }
+      if (body.campaignId) {
+        const campaign = await prisma.campaign.findUnique({ where: { id: body.campaignId } });
+        if (!campaign || campaign.tenantId !== user.tenantId) {
+          return reply.code(400).send({ error: 'Campaign not found' });
+        }
+      }
+      if (body.publisherId) {
+        const publisher = await prisma.publisher.findUnique({ where: { id: body.publisherId } });
+        if (!publisher || publisher.tenantId !== user.tenantId) {
+          return reply.code(400).send({ error: 'Publisher not found' });
+        }
       }
 
       // Normalize destination if provided
@@ -155,6 +200,7 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
           destination,
           buyerId: body.buyerId !== undefined ? body.buyerId : undefined,
           campaignId: body.campaignId !== undefined ? body.campaignId : undefined,
+          publisherId: body.publisherId !== undefined ? body.publisherId : undefined,
           label: body.label !== undefined ? body.label : undefined,
           recordingEnabled: body.recordingEnabled !== undefined ? body.recordingEnabled : undefined,
           status: body.status || undefined,
@@ -162,6 +208,7 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
         include: {
           phoneNumber: { select: { number: true, provider: true } },
           buyer: { select: { id: true, name: true } },
+          publisher: { select: { id: true, name: true } },
         },
       });
 
@@ -272,6 +319,7 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
         destination: true,
         buyerId: true,
         campaignId: true,
+        publisherId: true,
         recordingEnabled: true,
         label: true,
         tenantId: true,
@@ -291,6 +339,7 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
       routeId: route.id,
       buyerId: route.buyerId || null,
       campaignId: route.campaignId || null,
+      publisherId: route.publisherId || null,
       tenantId: route.tenantId,
       label: route.label || null,
     });
@@ -345,6 +394,7 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
           phoneNumberId: true,
           buyerId: true,
           campaignId: true,
+          publisherId: true,
           tenantId: true,
           label: true,
         },
@@ -370,7 +420,7 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
           connectedDuration: body.connectedDuration || 0,
           campaignId: route.campaignId || null,
           buyerId: route.buyerId || null,
-          publisherId: null,
+          publisherId: route.publisherId || null,
           startedAt: body.startedAt ? new Date(body.startedAt) : new Date(),
           answeredAt: body.answeredAt ? new Date(body.answeredAt) : null,
           endedAt: body.endedAt ? new Date(body.endedAt) : new Date(),
@@ -378,6 +428,14 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
           recordingStatus: body.recordingPath ? 'PENDING' : null,
         },
       });
+
+      // Calculate call billing
+      try {
+        const { billingService } = await import('../services/billing-service.js');
+        await billingService.calculateCallBilling(call.id);
+      } catch (billingErr) {
+        console.error('[FS-CDR] Failed to calculate billing for call:', call.id, billingErr);
+      }
 
       // If there's a recording, create Recording record
       if (body.recordingPath) {

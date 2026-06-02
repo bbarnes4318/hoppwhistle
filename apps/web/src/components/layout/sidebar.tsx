@@ -2,6 +2,7 @@
 
 import {
   AudioLines,
+  BarChart3,
   Bot,
   ClipboardCheck,
   Clock,
@@ -58,6 +59,12 @@ const navigation: NavItem[] = [
   { name: 'Publishers', href: '/publishers', icon: Users, adminOnly: true },
   { name: 'Flows', href: '/flows', icon: GitBranch, adminOnly: true },
   { name: 'Call Logs', href: '/calls', icon: AudioLines },
+  {
+    name: 'Reports',
+    href: '/reports',
+    icon: BarChart3,
+    title: 'Publisher & buyer financial reports',
+  },
   {
     name: 'Contacts',
     href: '/contacts',
