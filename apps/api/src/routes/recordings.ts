@@ -309,7 +309,7 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
     }
   });
 
-  // Stream recording (redirects to signed URL)
+  // Stream recording
   fastify.get<{ Params: { recordingId: string } }>(
     '/api/v1/recordings/:recordingId/stream',
     async (request, reply) => {
@@ -336,9 +336,13 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
           return { error: { code: 'NOT_FOUND', message: 'Recording not found' } };
         }
 
-        const streamUrl = await recordingService.getStreamUrl(recordingId);
-        reply.redirect(302, streamUrl);
-        return;
+        const { stream, contentType, contentLength } = await recordingService.getRecordingStream(recordingId);
+        
+        void reply.type(contentType);
+        if (contentLength !== undefined) {
+          void reply.header('Content-Length', contentLength.toString());
+        }
+        return reply.send(stream);
       } catch (error) {
         reply.code(404);
         return {

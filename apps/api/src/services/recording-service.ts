@@ -219,6 +219,34 @@ export class RecordingService {
   }
 
   /**
+   * Get readable stream and content details for a recording
+   */
+  async getRecordingStream(recordingId: string): Promise<{
+    stream: Readable;
+    contentType: string;
+    contentLength?: bigint;
+  }> {
+    const recording = await this.prisma.recording.findUnique({
+      where: { id: recordingId },
+    });
+
+    if (!recording) {
+      throw new Error('Recording not found');
+    }
+
+    if (!recording.storageKey) {
+      throw new Error('Recording storage key not found');
+    }
+
+    if (recording.deletedAt) {
+      throw new Error('Recording has been deleted');
+    }
+
+    const storage = getStorageService();
+    return storage.getRecordingStream(recording.storageKey);
+  }
+
+  /**
    * Backfill metadata for a recording
    */
   async backfillMetadata(recordingId: string): Promise<void> {

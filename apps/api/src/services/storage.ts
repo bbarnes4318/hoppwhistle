@@ -223,6 +223,49 @@ export class StorageService {
   }
 
   /**
+   * Get a readable stream for a recording
+   */
+  async getRecordingStream(storageKey: string): Promise<{
+    stream: Readable;
+    contentType: string;
+    contentLength?: bigint;
+  }> {
+    const localFilePath = path.join(this.localDir, storageKey);
+    if (this.isLocal || fs.existsSync(localFilePath)) {
+      if (!fs.existsSync(localFilePath)) {
+        throw new Error('Recording file not found locally');
+      }
+      const stat = fs.statSync(localFilePath);
+      const stream = fs.createReadStream(localFilePath);
+      return {
+        stream,
+        contentType: this.getContentType(path.extname(storageKey).slice(1)),
+        contentLength: BigInt(stat.size),
+      };
+    }
+
+    if (!this.s3Client) {
+      throw new Error('S3 Client not initialized');
+    }
+
+    const command = new GetObjectCommand({
+      Bucket: this.bucket,
+      Key: storageKey,
+    });
+
+    const response = await this.s3Client.send(command);
+    if (!response.Body) {
+      throw new Error('S3 object body is empty');
+    }
+
+    return {
+      stream: response.Body as Readable,
+      contentType: response.ContentType || 'audio/wav',
+      contentLength: response.ContentLength ? BigInt(response.ContentLength) : undefined,
+    };
+  }
+
+  /**
    * Check if a recording exists
    */
   async exists(storageKey: string): Promise<boolean> {
