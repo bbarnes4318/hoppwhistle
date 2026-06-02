@@ -234,16 +234,76 @@ export class RecordingService {
       throw new Error('Recording not found');
     }
 
-    if (!recording.storageKey) {
-      throw new Error('Recording storage key not found');
-    }
-
     if (recording.deletedAt) {
       throw new Error('Recording has been deleted');
     }
 
-    const storage = getStorageService();
-    return storage.getRecordingStream(recording.storageKey);
+    const fs = await import('fs');
+    const path = await import('path');
+
+    // 1. Check if recording.url points to a local file path starting with '/recordings/'
+    if (recording.url && recording.url.startsWith('/recordings/')) {
+      const mountedPath = recording.url;
+      if (fs.existsSync(mountedPath)) {
+        const stat = fs.statSync(mountedPath);
+        return {
+          stream: fs.createReadStream(mountedPath),
+          contentType: 'audio/wav',
+          contentLength: BigInt(stat.size),
+        };
+      }
+    }
+
+    // 2. Check if the basename exists directly in mounted /recordings directory
+    if (recording.url) {
+      const baseName = path.basename(recording.url);
+      const possiblePath = path.join('/recordings', baseName);
+      if (fs.existsSync(possiblePath)) {
+        const stat = fs.statSync(possiblePath);
+        return {
+          stream: fs.createReadStream(possiblePath),
+          contentType: 'audio/wav',
+          contentLength: BigInt(stat.size),
+        };
+      }
+    }
+
+    // 3. Fallback to normal storage service flow if storageKey is present
+    if (!recording.storageKey) {
+      throw new Error('Recording storage key not found');
+    }
+
+    try {
+      const storage = getStorageService();
+      return await storage.getRecordingStream(recording.storageKey);
+    } catch (s3Error) {
+      // 4. If S3 fails, check if the file is in local uploads or /recordings
+      const localDir = process.env.LOCAL_STORAGE_DIR || '/tmp/uploads';
+      const localFilePath = path.join(localDir, recording.storageKey);
+      if (fs.existsSync(localFilePath)) {
+        const stat = fs.statSync(localFilePath);
+        return {
+          stream: fs.createReadStream(localFilePath),
+          contentType: 'audio/wav',
+          contentLength: BigInt(stat.size),
+        };
+      }
+
+      if (recording.url && recording.url.includes('/local-stream/')) {
+        const decodedKey = decodeURIComponent(recording.url.split('/local-stream/')[1]);
+        const fallbackPath = path.join(localDir, decodedKey);
+        if (fs.existsSync(fallbackPath)) {
+          const stat = fs.statSync(fallbackPath);
+          return {
+            stream: fs.createReadStream(fallbackPath),
+            contentType: 'audio/wav',
+            contentLength: BigInt(stat.size),
+          };
+        }
+      }
+
+      throw s3Error;
+    }
   }
 
   /**
