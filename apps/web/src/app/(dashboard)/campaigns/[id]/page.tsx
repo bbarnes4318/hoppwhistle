@@ -50,7 +50,7 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
-import { useToast } from '@/components/ui/use-toast';
+import { toast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
@@ -127,7 +127,6 @@ interface CampaignDetails {
 }
 
 export default function CampaignDetailPage() {
-  const { toast } = useToast();
   const params = useParams();
   const router = useRouter();
   const id = params.id as string;
@@ -235,7 +234,7 @@ export default function CampaignDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [id, toast]);
+  }, [id]);
 
   // Load dropdown lists (Publishers & Buyers)
   const fetchDropdowns = useCallback(async () => {
