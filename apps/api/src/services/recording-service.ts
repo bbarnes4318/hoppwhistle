@@ -244,7 +244,7 @@ export class RecordingService {
   }> {
     const recording = await this.prisma.recording.findUnique({
       where: { id: recordingId },
-      include: { call: { select: { id: true } } },
+      include: { call: { select: { id: true, callSid: true } } },
     });
 
     if (!recording) {
@@ -286,16 +286,61 @@ export class RecordingService {
       if (result) return result;
     }
 
-    // 3. Try the canonical callId-based FreeSWITCH recording path
+    // 3. Try the canonical callId-based and callSid-based FreeSWITCH recording paths
     const callId = recording.call?.id || recording.callId;
+    const callSid = recording.call?.callSid;
+
+    if (callSid) {
+      const rawUuid = callSid.replace(/^fs-/, '');
+      const pathsToTry = [
+        `/recordings/in_${rawUuid}.wav`,
+        `/recordings/${rawUuid}.wav`,
+        `/recordings/${callSid}.wav`,
+        `/tmp/recordings/in_${rawUuid}.wav`,
+        `/tmp/recordings/${rawUuid}.wav`,
+      ];
+
+      for (const p of pathsToTry) {
+        const result = serveLocalFile(p);
+        if (result) return result;
+      }
+    }
+
     if (callId) {
       const fsPath = `/recordings/${callId}.wav`;
       const result = serveLocalFile(fsPath);
       if (result) return result;
 
+      const inFsPath = `/recordings/in_${callId}.wav`;
+      const inResult = serveLocalFile(inFsPath);
+      if (inResult) return inResult;
+
       const tmpPath = `/tmp/recordings/${callId}.wav`;
       const tmpResult = serveLocalFile(tmpPath);
       if (tmpResult) return tmpResult;
+    }
+
+    // 3.5. Look up all other recording rows for this call and check if they point to an existing local file
+    if (callId) {
+      const otherRecordings = await this.prisma.recording.findMany({
+        where: {
+          callId,
+          id: { not: recordingId },
+          deletedAt: null,
+        },
+      });
+
+      for (const other of otherRecordings) {
+        if (other.url && other.url.startsWith('/recordings/')) {
+          const result = serveLocalFile(other.url);
+          if (result) return result;
+        }
+        if (other.url) {
+          const baseName = path.basename(other.url);
+          const result = serveLocalFile(path.join('/recordings', baseName));
+          if (result) return result;
+        }
+      }
     }
 
     // 4. Fallback to normal storage service flow if storageKey is present
