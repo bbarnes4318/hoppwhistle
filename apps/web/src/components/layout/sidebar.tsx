@@ -57,6 +57,7 @@ const navigation: NavItem[] = [
   { name: 'Numbers', href: '/numbers', icon: PhoneCall },
   { name: 'Campaigns', href: '/campaigns', icon: Megaphone, adminOnly: true },
   { name: 'Publishers', href: '/publishers', icon: Users, adminOnly: true },
+  { name: 'Buyers', href: '/buyers', icon: Users, adminOnly: true },
   { name: 'Flows', href: '/flows', icon: GitBranch, adminOnly: true },
   { name: 'Call Logs', href: '/calls', icon: AudioLines },
   {
