@@ -437,22 +437,19 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
         console.error('[FS-CDR] Failed to calculate billing for call:', call.id, billingErr);
       }
 
-      // If there's a recording, create Recording record
+      // If there's a recording, trigger background upload.
+      // Do NOT create a placeholder Recording row here — RecordingService.uploadRecording()
+      // handles row creation with the correct storageKey and primaryRecordingId linkage.
       if (body.recordingPath) {
-        await prisma.recording.create({
-          data: {
-            callId: call.id,
-            url: body.recordingPath, // Will be updated when uploaded to S3
-            duration: body.recordingDuration || body.duration || 0,
-            format: 'wav',
-            status: 'PROCESSING',
-          },
-        });
-
-        // Trigger asynchronous background upload from local shared volume mount
         const recordingPath = body.recordingPath;
         const callId = call.id;
         const duration = body.recordingDuration || body.duration || 0;
+
+        // Mark call as PROCESSING while we upload
+        await prisma.call.update({
+          where: { id: callId },
+          data: { recordingStatus: 'PROCESSING' },
+        });
 
         setTimeout(async () => {
           try {
@@ -531,6 +528,7 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
       url: string;
       format?: string;
       size?: number;
+      duration?: number;
     };
 
     if (!body.callId || !body.url) {
@@ -538,37 +536,47 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
     }
 
     try {
-      // Update recording with S3 URL
-      const recording = await prisma.recording.findFirst({
-        where: { callId: body.callId },
-      });
+      // Download the recording from the provided URL and upload via the canonical
+      // RecordingService pipeline so storageKey, primaryRecordingId, and Call row
+      // are all set correctly.
+      const { RecordingService } = await import('../services/recording-service.js');
+      const recordingService = new RecordingService();
 
-      if (recording) {
-        await prisma.recording.update({
-          where: { id: recording.id },
-          data: {
-            url: body.url,
-            status: 'COMPLETED',
-            size: body.size ? BigInt(body.size) : null,
-          },
-        });
+      const response = await fetch(body.url);
+      if (!response.ok) {
+        throw new Error(`Failed to download recording from ${body.url}: ${response.status}`);
       }
 
-      // Update call with recording URL and status
-      await prisma.call.update({
-        where: { id: body.callId },
-        data: {
-          recordingUrl: body.url,
-          recordingStatus: 'READY',
-          recordingCompletedAt: new Date(),
-        },
+      const buffer = Buffer.from(await response.arrayBuffer());
+      if (buffer.length === 0) {
+        throw new Error('Downloaded recording file is empty');
+      }
+
+      const result = await recordingService.uploadRecording({
+        callId: body.callId,
+        format: body.format || 'wav',
+        file: buffer,
+        duration: body.duration,
       });
 
-      console.log(`[FS-RECORDING] Updated call ${body.callId} with recording: ${body.url}`);
-      return reply.send({ updated: true });
+      console.log(`[FS-RECORDING] Processed recording for call ${body.callId}. Recording ID: ${result.id}, storageKey: ${result.storageKey}`);
+      return reply.send({ updated: true, recordingId: result.id, storageKey: result.storageKey });
     } catch (err) {
       console.error('[FS-RECORDING] Error:', err);
-      return reply.code(500).send({ error: 'Failed to update recording' });
+
+      // Mark as failed so UI shows correct state
+      try {
+        const { RecordingService } = await import('../services/recording-service.js');
+        const recordingService = new RecordingService();
+        await recordingService.markRecordingFailed(
+          body.callId,
+          err instanceof Error ? err.message : 'Recording upload processing failed'
+        );
+      } catch (markErr) {
+        console.error('[FS-RECORDING] Failed to mark recording as failed:', markErr);
+      }
+
+      return reply.code(500).send({ error: 'Failed to process recording' });
     }
   });
 

@@ -57,22 +57,38 @@ export class RecordingService {
       throw new Error(`Call ${data.callId} not found`);
     }
 
-    // Create recording record
-    // Note: Multiple recordings per call are supported (one per leg)
-    const recording = await this.prisma.recording.create({
-      data: {
+    // Upsert recording record.
+    // If there is already a Recording row for this call (e.g. a placeholder from
+    // the CDR handler) that is missing its storageKey, update it in-place instead
+    // of creating a duplicate row.
+    const existingRecording = await this.prisma.recording.findFirst({
+      where: {
         callId: data.callId,
-        legId: data.legId,
-        url: uploadResult.url,
-        storageKey: uploadResult.storageKey,
-        format,
-        size: uploadResult.size,
-        checksum: uploadResult.checksum,
-        duration: data.duration,
-        status: 'COMPLETED',
-        metadata: (data.metadata || {}) as import('@prisma/client').Prisma.InputJsonValue,
+        ...(data.legId ? { legId: data.legId } : {}),
+        storageKey: null,
       },
+      orderBy: { createdAt: 'desc' },
     });
+
+    const recordingData = {
+      callId: data.callId,
+      legId: data.legId,
+      url: uploadResult.url,
+      storageKey: uploadResult.storageKey,
+      format,
+      size: uploadResult.size,
+      checksum: uploadResult.checksum,
+      duration: data.duration,
+      status: 'COMPLETED' as const,
+      metadata: (data.metadata || {}) as import('@prisma/client').Prisma.InputJsonValue,
+    };
+
+    const recording = existingRecording
+      ? await this.prisma.recording.update({
+          where: { id: existingRecording.id },
+          data: recordingData,
+        })
+      : await this.prisma.recording.create({ data: recordingData });
 
     // =========================================================================
     // Update the Call row with recording info
@@ -228,6 +244,7 @@ export class RecordingService {
   }> {
     const recording = await this.prisma.recording.findUnique({
       where: { id: recordingId },
+      include: { call: { select: { id: true } } },
     });
 
     if (!recording) {
@@ -241,69 +258,103 @@ export class RecordingService {
     const fs = await import('fs');
     const path = await import('path');
 
-    // 1. Check if recording.url points to a local file path starting with '/recordings/'
-    if (recording.url && recording.url.startsWith('/recordings/')) {
-      const mountedPath = recording.url;
-      if (fs.existsSync(mountedPath)) {
-        const stat = fs.statSync(mountedPath);
-        return {
-          stream: fs.createReadStream(mountedPath),
-          contentType: 'audio/wav',
-          contentLength: BigInt(stat.size),
-        };
-      }
-    }
-
-    // 2. Check if the basename exists directly in mounted /recordings directory
-    if (recording.url) {
-      const baseName = path.basename(recording.url);
-      const possiblePath = path.join('/recordings', baseName);
-      if (fs.existsSync(possiblePath)) {
-        const stat = fs.statSync(possiblePath);
-        return {
-          stream: fs.createReadStream(possiblePath),
-          contentType: 'audio/wav',
-          contentLength: BigInt(stat.size),
-        };
-      }
-    }
-
-    // 3. Fallback to normal storage service flow if storageKey is present
-    if (!recording.storageKey) {
-      throw new Error('Recording storage key not found');
-    }
-
-    try {
-      const storage = getStorageService();
-      return await storage.getRecordingStream(recording.storageKey);
-    } catch (s3Error) {
-      // 4. If S3 fails, check if the file is in local uploads or /recordings
-      const localDir = process.env.LOCAL_STORAGE_DIR || '/tmp/uploads';
-      const localFilePath = path.join(localDir, recording.storageKey);
-      if (fs.existsSync(localFilePath)) {
-        const stat = fs.statSync(localFilePath);
-        return {
-          stream: fs.createReadStream(localFilePath),
-          contentType: 'audio/wav',
-          contentLength: BigInt(stat.size),
-        };
-      }
-
-      if (recording.url && recording.url.includes('/local-stream/')) {
-        const decodedKey = decodeURIComponent(recording.url.split('/local-stream/')[1]);
-        const fallbackPath = path.join(localDir, decodedKey);
-        if (fs.existsSync(fallbackPath)) {
-          const stat = fs.statSync(fallbackPath);
+    // Helper: serve a local file if it exists
+    const serveLocalFile = (filePath: string) => {
+      if (fs.existsSync(filePath)) {
+        const stat = fs.statSync(filePath);
+        if (stat.size > 0) {
           return {
-            stream: fs.createReadStream(fallbackPath),
+            stream: fs.createReadStream(filePath),
             contentType: 'audio/wav',
             contentLength: BigInt(stat.size),
           };
         }
       }
+      return null;
+    };
 
-      throw s3Error;
+    // 1. Check if recording.url points to a local file path starting with '/recordings/'
+    if (recording.url && recording.url.startsWith('/recordings/')) {
+      const result = serveLocalFile(recording.url);
+      if (result) return result;
     }
+
+    // 2. Check if the basename exists directly in mounted /recordings directory
+    if (recording.url) {
+      const baseName = path.basename(recording.url);
+      const result = serveLocalFile(path.join('/recordings', baseName));
+      if (result) return result;
+    }
+
+    // 3. Try the canonical callId-based FreeSWITCH recording path
+    const callId = recording.call?.id || recording.callId;
+    if (callId) {
+      const fsPath = `/recordings/${callId}.wav`;
+      const result = serveLocalFile(fsPath);
+      if (result) return result;
+
+      const tmpPath = `/tmp/recordings/${callId}.wav`;
+      const tmpResult = serveLocalFile(tmpPath);
+      if (tmpResult) return tmpResult;
+    }
+
+    // 4. Fallback to normal storage service flow if storageKey is present
+    if (recording.storageKey) {
+      try {
+        const storage = getStorageService();
+        return await storage.getRecordingStream(recording.storageKey);
+      } catch (s3Error) {
+        // If S3 fails, check if the file is in local uploads
+        const localDir = process.env.LOCAL_STORAGE_DIR || '/tmp/uploads';
+        const localFilePath = path.join(localDir, recording.storageKey);
+        const result = serveLocalFile(localFilePath);
+        if (result) return result;
+
+        if (recording.url && recording.url.includes('/local-stream/')) {
+          const decodedKey = decodeURIComponent(recording.url.split('/local-stream/')[1]);
+          const fallbackResult = serveLocalFile(path.join(localDir, decodedKey));
+          if (fallbackResult) return fallbackResult;
+        }
+
+        throw s3Error;
+      }
+    }
+
+    // 5. No storageKey — try local storage dir with callId pattern
+    const localDir = process.env.LOCAL_STORAGE_DIR || '/tmp/uploads';
+    if (callId) {
+      // Try common date-partitioned patterns in local dir
+      const today = new Date();
+      for (let daysBack = 0; daysBack < 7; daysBack++) {
+        const d = new Date(today);
+        d.setDate(d.getDate() - daysBack);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        const datePath = path.join(localDir, `recordings/${y}/${m}/${dd}/${callId}.wav`);
+        const result = serveLocalFile(datePath);
+        if (result) return result;
+      }
+    }
+
+    // 6. If recording.url is an external URL, try to stream from it directly
+    if (recording.url && (recording.url.startsWith('http://') || recording.url.startsWith('https://'))) {
+      try {
+        const response = await fetch(recording.url);
+        if (response.ok && response.body) {
+          return {
+            stream: Readable.fromWeb(response.body as any),
+            contentType: response.headers.get('content-type') || 'audio/wav',
+          };
+        }
+      } catch {
+        // External URL fetch failed, fall through to error
+      }
+    }
+
+    throw new Error(
+      `Recording file not found. storageKey=${recording.storageKey || 'null'}, url=${recording.url || 'null'}, callId=${callId}`
+    );
   }
 
   /**
