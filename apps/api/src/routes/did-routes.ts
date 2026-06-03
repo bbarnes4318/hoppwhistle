@@ -432,8 +432,13 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
         return reply.code(404).send({ error: 'Route not found' });
       }
 
-      let buyerId = body.buyerId || route.buyerId || null;
-      let targetId = body.targetId || null;
+      // Sanitize FK fields — Lua sends "null" / "" for missing IDs which would
+      // violate foreign-key constraints if passed through.
+      const sanitizeFk = (v: string | null | undefined): string | null =>
+        v && v !== '' && v !== 'null' && v !== 'undefined' ? v : null;
+
+      let buyerId = sanitizeFk(body.buyerId) || sanitizeFk(route.buyerId) || null;
+      let targetId = sanitizeFk(body.targetId) || null;
       let buyerName = route.label || null;
 
       // If buyerId is dynamically resolved but targetId is missing, resolve it by matching destination number

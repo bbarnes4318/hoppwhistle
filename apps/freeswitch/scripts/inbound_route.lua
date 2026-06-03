@@ -30,9 +30,11 @@ local function json_value(json_str, key)
   local pattern = '"' .. key .. '"%s*:%s*"([^"]*)"'
   local val = string.match(json_str, pattern)
   if val then return val end
-  -- Try boolean/number values
+  -- Try boolean/number values (but treat JSON null as Lua nil)
   pattern = '"' .. key .. '"%s*:%s*(%w+)'
-  return string.match(json_str, pattern)
+  val = string.match(json_str, pattern)
+  if val == "null" then return nil end
+  return val
 end
 
 -- ── Main Logic ──────────────────────────────────────────────────────────────
