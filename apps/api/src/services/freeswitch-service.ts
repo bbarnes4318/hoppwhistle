@@ -69,7 +69,13 @@ export class FreeSwitchService {
       for (const uuid of uuids) {
         try {
           const chanCallId = await this.executeApi('uuid_getvar', `${uuid} sip_call_id`);
-          if (chanCallId === sipCallId) {
+          if (
+            chanCallId && (
+              chanCallId === sipCallId ||
+              (chanCallId.length >= 10 && sipCallId.startsWith(chanCallId)) ||
+              (sipCallId.length >= 10 && chanCallId.startsWith(sipCallId))
+            )
+          ) {
             return uuid;
           }
         } catch (err) {
