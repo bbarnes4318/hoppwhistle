@@ -112,11 +112,15 @@ interface AgentStatusData {
 }
 
 async function getAgentStatus(userId: string): Promise<AgentStatusData> {
-  const redis = getRedisClient();
-  const key = `${AGENT_STATUS_PREFIX}${userId}`;
-  const data = await redis.get(key);
-  if (data) {
-    return JSON.parse(data) as AgentStatusData;
+  try {
+    const redis = getRedisClient();
+    const key = `${AGENT_STATUS_PREFIX}${userId}`;
+    const data = await redis.get(key);
+    if (data) {
+      return JSON.parse(data) as AgentStatusData;
+    }
+  } catch (err) {
+    console.warn(`[AgentStatus] Redis read failed for ${userId}, returning default:`, (err as Error).message);
   }
   return {
     status: 'offline',
@@ -125,9 +129,13 @@ async function getAgentStatus(userId: string): Promise<AgentStatusData> {
 }
 
 async function setAgentStatus(userId: string, status: AgentStatusData): Promise<void> {
-  const redis = getRedisClient();
-  const key = `${AGENT_STATUS_PREFIX}${userId}`;
-  await redis.setex(key, AGENT_STATUS_TTL, JSON.stringify(status));
+  try {
+    const redis = getRedisClient();
+    const key = `${AGENT_STATUS_PREFIX}${userId}`;
+    await redis.setex(key, AGENT_STATUS_TTL, JSON.stringify(status));
+  } catch (err) {
+    console.warn(`[AgentStatus] Redis write failed for ${userId}, skipping:`, (err as Error).message);
+  }
 }
 
 // eslint-disable-next-line @typescript-eslint/require-await
@@ -311,19 +319,23 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       });
 
       // Also store in Redis for real-time state (with screen pop data etc)
-      await callStateService.setCallState({
-        id: call.id,
-        tenantId,
-        status: 'initiated',
-        participants: [
-          { id: userId, number: 'agent', role: 'agent', status: 'answered' },
-          { id: 'callee', number: phoneNumber, role: 'callee', status: 'ringing' },
-        ],
-        timers: [],
-        metadata: { callerId: fsCallerId, campaignId, dbCallId: call.id },
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
+      try {
+        await callStateService.setCallState({
+          id: call.id,
+          tenantId,
+          status: 'initiated',
+          participants: [
+            { id: userId, number: 'agent', role: 'agent', status: 'answered' },
+            { id: 'callee', number: phoneNumber, role: 'callee', status: 'ringing' },
+          ],
+          timers: [],
+          metadata: { callerId: fsCallerId, campaignId, dbCallId: call.id },
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      } catch (err) {
+        console.warn(`[Originate] Redis callState write failed, continuing:`, (err as Error).message);
+      }
 
       // Emit call initiated event
       void eventBus.publish('call.*', {
@@ -451,7 +463,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       }
 
       // Update Redis state
-      await callStateService.updateCallState(callId, { status: 'answered' });
+      try { await callStateService.updateCallState(callId, { status: 'answered' }); } catch (err) { console.warn(`[Answer] Redis callState update failed, continuing:`, (err as Error).message); }
 
       // Update agent status
       await setAgentStatus(userId, {
@@ -589,7 +601,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       });
 
       // Update Redis state
-      await callStateService.updateCallState(callId, { status: 'completed' });
+      try { await callStateService.updateCallState(callId, { status: 'completed' }); } catch (err) { console.warn(`[Hangup] Redis callState update failed, continuing:`, (err as Error).message); }
 
       // Update agent status
       await setAgentStatus(userId, {
