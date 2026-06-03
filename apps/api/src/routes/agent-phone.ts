@@ -730,6 +730,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       }
 
       try {
+        request.log.info({ msg: 'MERGE REQUEST', activeCallId, heldCallId, userId });
         await freeswitchService.mergeCalls(activeCallId, heldCallId);
 
         // Publish merge event

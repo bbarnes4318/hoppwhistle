@@ -264,12 +264,66 @@ export class FreeSwitchService {
   async mergeCalls(activeSipCallId: string, heldSipCallId: string): Promise<void> {
     logger.info({ msg: 'Merging calls via FreeSWITCH', activeSipCallId, heldSipCallId });
 
-    // Resolve SIP Call-IDs to FreeSWITCH UUIDs
-    const activeUuid = await this.resolveUuid(activeSipCallId);
-    const heldUuid = await this.resolveUuid(heldSipCallId);
+    // Get all active channels for multi-strategy matching
+    let channels: Array<Record<string, string>> = [];
+    try {
+      const jsonOutput = await this.executeApi('show', 'channels as json');
+      const parsed = JSON.parse(jsonOutput) as { rows?: Array<Record<string, string>> };
+      channels = parsed.rows || [];
+      logger.info({ msg: 'Active FreeSWITCH channels for merge', count: channels.length, channels: channels.map(c => ({ uuid: c.uuid, name: c.name, cid_num: c.cid_num, dest: c.dest, call_uuid: c.call_uuid, callstate: c.callstate })) });
+    } catch (err) {
+      logger.error({ msg: 'Failed to list channels for merge', error: (err as Error).message });
+    }
+
+    // Multi-strategy UUID resolution
+    const resolveMulti = async (id: string, label: string): Promise<string | null> => {
+      // Strategy 1: sip_call_id match
+      let uuid = await this.resolveUuid(id);
+      if (uuid) {
+        logger.info({ msg: `${label}: resolved via sip_call_id`, id, uuid });
+        return uuid;
+      }
+
+      // Strategy 2: hopwhistle_call_id match
+      uuid = await this.resolveUuidByCallId(id);
+      if (uuid) {
+        logger.info({ msg: `${label}: resolved via hopwhistle_call_id`, id, uuid });
+        return uuid;
+      }
+
+      // Strategy 3: direct UUID — id itself is a FS UUID
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (uuidRegex.test(id)) {
+        const match = channels.find(c => c.uuid === id);
+        if (match) {
+          logger.info({ msg: `${label}: id is a direct FS UUID`, id });
+          return id;
+        }
+      }
+
+      // Strategy 4: match by call_uuid field (bridged partner UUID)
+      const byCallUuid = channels.find(c => c.call_uuid === id);
+      if (byCallUuid?.uuid) {
+        logger.info({ msg: `${label}: resolved via call_uuid bridge partner`, id, uuid: byCallUuid.uuid });
+        return byCallUuid.uuid;
+      }
+
+      // Strategy 5: match by name field (e.g. "sofia/internal/...")
+      const byName = channels.find(c => c.name?.includes(id));
+      if (byName?.uuid) {
+        logger.info({ msg: `${label}: resolved via channel name`, id, uuid: byName.uuid });
+        return byName.uuid;
+      }
+
+      logger.error({ msg: `${label}: could not resolve UUID`, id, availableUuids: channels.map(c => c.uuid) });
+      return null;
+    };
+
+    const activeUuid = await resolveMulti(activeSipCallId, 'ACTIVE');
+    const heldUuid = await resolveMulti(heldSipCallId, 'HELD');
 
     if (!activeUuid || !heldUuid) {
-      logger.error({ msg: 'Could not resolve UUIDs', activeUuid, heldUuid });
+      logger.error({ msg: 'Could not resolve UUIDs for merge', activeUuid, heldUuid, activeSipCallId, heldSipCallId });
       throw new Error('Could not find active calls in FreeSWITCH');
     }
 
