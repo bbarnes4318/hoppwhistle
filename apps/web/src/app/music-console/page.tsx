@@ -377,84 +377,140 @@ export default function MusicConsolePage() {
                   <span className="font-mono text-[var(--m-accent-2)]">12ms</span>
                 </div>
               </div>
+
+              <div className="space-y-2 p-3 bg-[var(--m-surface-2)]/60 rounded-xl border border-[var(--m-border-2)]">
+                <div className="text-[9px] font-extrabold tracking-widest text-[var(--m-muted)] uppercase font-bold">Queue Diagnostics</div>
+                <div className="flex items-center justify-between text-xs font-semibold text-[var(--m-text-2)]">
+                  <span>Queue Size</span>
+                  <span className="font-mono text-[var(--m-text)]">4,124</span>
+                </div>
+                <div className="flex items-center justify-between text-xs font-semibold text-[var(--m-text-2)]">
+                  <span>Avg Duration</span>
+                  <span className="font-mono text-[var(--m-text)]">48s</span>
+                </div>
+              </div>
             </div>
 
-            {/* Right Chart Canvas */}
-            <div className="md:col-span-3 h-[420px] w-full min-h-[350px] relative flex items-center justify-center">
-              {mounted ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart
-                    data={campaignTimeSeries}
-                    margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-                  >
-                    <defs>
-                      <linearGradient id="colorAnswers" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.15} />
-                        <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0} />
-                      </linearGradient>
-                      <linearGradient id="colorVerified" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10B981" stopOpacity={0.15} />
-                        <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      vertical={false}
-                      stroke="var(--m-border)"
-                    />
-                    <XAxis
-                      dataKey="date"
-                      stroke="var(--m-dim)"
-                      tick={{ fontSize: 10, fill: 'var(--m-muted)', fontWeight: 600 }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      stroke="var(--m-dim)"
-                      tick={{ fontSize: 10, fill: 'var(--m-muted)', fontWeight: 600 }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: 'var(--m-surface)',
-                        border: '1px solid var(--m-border)',
-                        borderRadius: '12px',
-                        boxShadow: '0 12px 32px rgba(9, 9, 11, 0.12)',
-                      }}
-                      itemStyle={{ fontSize: '11px', color: 'var(--m-text)', fontWeight: 600 }}
-                      labelStyle={{
-                        fontSize: '9px',
-                        color: 'var(--m-muted)',
-                        fontWeight: '850',
-                        marginBottom: '6px',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.08em'
-                      }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="humanAnswers"
-                      name="Human Answers"
-                      stroke="#8B5CF6"
-                      strokeWidth={3}
-                      fillOpacity={1}
-                      fill="url(#colorAnswers)"
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="verifiedEngagements"
-                      name="Verified Actions"
-                      stroke="#10B981"
-                      strokeWidth={3}
-                      fillOpacity={1}
-                      fill="url(#colorVerified)"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="text-xs text-[var(--m-muted)] font-mono animate-pulse">Loading telemetry signal charts...</div>
-              )}
+            {/* Right Chart & Ticker Column */}
+            <div className="md:col-span-3 flex flex-col justify-between space-y-4">
+              {/* Chart Canvas */}
+              <div className="h-[340px] w-full relative flex items-center justify-center">
+                {mounted ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart
+                      data={campaignTimeSeries}
+                      margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                    >
+                      <defs>
+                        <linearGradient id="colorAnswers" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.15} />
+                          <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0} />
+                        </linearGradient>
+                        <linearGradient id="colorVerified" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#10B981" stopOpacity={0.15} />
+                          <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        vertical={false}
+                        stroke="var(--m-border)"
+                      />
+                      <XAxis
+                        dataKey="date"
+                        stroke="var(--m-dim)"
+                        tick={{ fontSize: 10, fill: 'var(--m-muted)', fontWeight: 600 }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <YAxis
+                        stroke="var(--m-dim)"
+                        tick={{ fontSize: 10, fill: 'var(--m-muted)', fontWeight: 600 }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'var(--m-surface)',
+                          border: '1px solid var(--m-border)',
+                          borderRadius: '12px',
+                          boxShadow: '0 12px 32px rgba(9, 9, 11, 0.12)',
+                        }}
+                        itemStyle={{ fontSize: '11px', color: 'var(--m-text)', fontWeight: 600 }}
+                        labelStyle={{
+                          fontSize: '9px',
+                          color: 'var(--m-muted)',
+                          fontWeight: '850',
+                          marginBottom: '6px',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.08em'
+                        }}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="humanAnswers"
+                        name="Human Answers"
+                        stroke="#8B5CF6"
+                        strokeWidth={3}
+                        fillOpacity={1}
+                        fill="url(#colorAnswers)"
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="verifiedEngagements"
+                        name="Verified Actions"
+                        stroke="#10B981"
+                        strokeWidth={3}
+                        fillOpacity={1}
+                        fill="url(#colorVerified)"
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="text-xs text-[var(--m-muted)] font-mono animate-pulse">Loading telemetry signal charts...</div>
+                )}
+              </div>
+
+              {/* Real-Time Live Activity Terminal Ticker */}
+              <div className="border border-[var(--m-border)] rounded-xl bg-[var(--m-surface-2)] p-4 space-y-3">
+                <div className="flex items-center justify-between border-b border-[var(--m-border)] pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--m-accent)] opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-[var(--m-accent)]"></span>
+                    </span>
+                    <span className="text-[10px] font-black tracking-widest text-[var(--m-text)] uppercase">
+                      Live Telemetry Output
+                    </span>
+                  </div>
+                  <span className="text-[8px] font-mono text-[var(--m-muted)] bg-[var(--m-surface-3)] px-1.5 py-0.5 rounded border border-[var(--m-border)]">
+                    STREAM STATUS: NOMINAL
+                  </span>
+                </div>
+
+                <div className="font-mono text-[10px] space-y-1.5 text-[var(--m-text-2)] leading-relaxed">
+                  <div className="flex items-start gap-2">
+                    <span className="text-[var(--m-muted)]">[17:54:12]</span>
+                    <span className="text-[#8B5CF6] font-bold">OUTBOUND:</span>
+                    <span>Initiated contact route for +1865***1182 (Superfans tier) -> Ringing...</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-[var(--m-muted)]">[17:54:18]</span>
+                    <span className="text-[#10B981] font-bold">ANSWERED:</span>
+                    <span>Connect established on Node 02 for +1551***6220 -> Speech synthesis running...</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-[var(--m-muted)]">[17:54:25]</span>
+                    <span className="text-[var(--m-warning)] font-bold">INTENT:</span>
+                    <span>Fan verbal intent captured (Confidence: 94.2%) -> dispatching pre-save hook.</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-[var(--m-muted)]">[17:54:32]</span>
+                    <span className="text-[#10B981] font-bold">SUCCESS:</span>
+                    <span>Pre-save completed. CPA attribution: $0.25 (Transaction ref: tx_815a5f70)</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
