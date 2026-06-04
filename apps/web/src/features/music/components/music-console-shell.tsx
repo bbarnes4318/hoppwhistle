@@ -27,11 +27,7 @@ export function MusicConsoleShell({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div
-      className={`music-console flex h-screen w-screen overflow-hidden transition-colors duration-200 ${
-        isDarkPage ? 'm-dark-mode bg-[#09090B]' : 'bg-[var(--m-bg)]'
-      }`}
-    >
+    <div className="music-console m-dark-mode flex h-screen w-screen overflow-hidden transition-colors duration-200 bg-[var(--m-bg)]">
       <MusicAuthGuard>
         {/* Sidebar stays fixed */}
         <div className="shrink-0 h-full">

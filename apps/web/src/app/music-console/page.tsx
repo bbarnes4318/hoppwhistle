@@ -88,23 +88,23 @@ export default function MusicConsolePage() {
   };
 
   return (
-    <div className="space-y-8 pb-12">
+    <div className="space-y-12 pb-16">
       {/* ─── SECTION 1: Premium Hero Command Module (Dark Obsidian) ─── */}
       {/* ─── SECTION 1: Premium Hero Command Module (Dark Obsidian) ─── */}
-      <section className="m-dark-mode bg-[#0B0F19] text-[#FAFAFA] rounded-2xl border border-white/[0.04] p-6 lg:p-8 relative overflow-hidden shadow-[0_24px_48px_rgba(0,0,0,0.3)]">
+      <section className="bg-[var(--m-surface)] text-[var(--m-text)] rounded-2xl border border-[var(--m-border)] p-8 lg:p-10 relative overflow-hidden shadow-[0_12px_40px_-4px_rgba(0,0,0,0.35)]">
         {/* Glow Highlights */}
         <div className="absolute top-0 right-0 w-96 h-96 bg-[#8B5CF6]/5 rounded-full blur-[120px] pointer-events-none opacity-40" />
-        <div className="absolute bottom-0 left-0 w-80 h-80 bg-[#10B981]/5 rounded-full blur-[90px] pointer-events-none opacity-30" />
+        <div className="absolute bottom-0 left-0 w-80 h-80 bg-[var(--m-accent-2)]/5 rounded-full blur-[90px] pointer-events-none opacity-30" />
 
         <div className="relative z-10 space-y-6">
           {/* Header Row */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.06] pb-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--m-border-2)] pb-5">
             <div className="space-y-1">
               <div className="flex items-center gap-3">
                 <span className="text-[9px] font-black tracking-[0.25em] text-[#A78BFA] uppercase">
                   ACTIVE CAMPAIGN
                 </span>
-                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border border-[#10B981]/20 bg-[#10B981]/10 text-xs font-semibold text-[#10B981]">
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border border-[var(--m-accent-2)]/20 bg-[var(--m-accent-2)]/10 text-xs font-semibold text-[var(--m-accent-2)]">
                   <span className="m-pulse-dot h-1.5 w-1.5" />
                   <span className="font-mono text-[9px] uppercase tracking-wider">{livePulse.status}</span>
                 </span>
@@ -140,7 +140,7 @@ export default function MusicConsolePage() {
                 {formatCompactNumber(topKpis.fansContacted.value)}
               </div>
               <div className="text-[10px] text-zinc-400">
-                <span className="text-[#10B981] font-semibold">+{topKpis.fansContacted.change}%</span> vs prev week
+                <span className="text-[var(--m-accent-2)] font-semibold">+{topKpis.fansContacted.change}%</span> vs prev week
               </div>
             </div>
 
@@ -153,20 +153,20 @@ export default function MusicConsolePage() {
                 {formatCompactNumber(topKpis.humanAnswers.value)}
               </div>
               <div className="text-[10px] text-zinc-400">
-                <span className="text-[#10B981] font-semibold">+{topKpis.humanAnswers.change}%</span> connects
+                <span className="text-[var(--m-accent-2)] font-semibold">+{topKpis.humanAnswers.change}%</span> connects
               </div>
             </div>
 
             {/* KPI 3 */}
             <div className="space-y-1 border-l-0 md:border-l border-white/[0.06] pl-0 md:pl-4">
               <div className="text-[9px] font-black tracking-widest text-zinc-500 uppercase flex items-center gap-1.5">
-                <ShieldCheck className="h-3.5 w-3.5 text-[#10B981]" /> Verified Actions
+                <ShieldCheck className="h-3.5 w-3.5 text-[var(--m-accent-2)]" /> Verified Actions
               </div>
-              <div className="text-2xl font-black font-mono text-[#10B981]">
+              <div className="text-2xl font-black font-mono text-[var(--m-accent-2)]">
                 {formatCompactNumber(topKpis.verifiedEngagements.value)}
               </div>
               <div className="text-[10px] text-zinc-400">
-                <span className="text-[#10B981] font-semibold">+{topKpis.verifiedEngagements.change}%</span> conversions
+                <span className="text-[var(--m-accent-2)] font-semibold">+{topKpis.verifiedEngagements.change}%</span> conversions
               </div>
             </div>
 
@@ -179,7 +179,7 @@ export default function MusicConsolePage() {
                 {formatCompactNumber(topKpis.preSaves.value)}
               </div>
               <div className="text-[10px] text-zinc-400">
-                <span className="text-[#10B981] font-semibold">+{topKpis.preSaves.change}%</span> DSP actions
+                <span className="text-[var(--m-accent-2)] font-semibold">+{topKpis.preSaves.change}%</span> DSP actions
               </div>
             </div>
 
@@ -192,7 +192,7 @@ export default function MusicConsolePage() {
                 {formatCurrency(topKpis.costPerPreSave.value)}
               </div>
               <div className="text-[10px] text-zinc-400">
-                <span className="text-[#10B981] font-semibold">{topKpis.costPerPreSave.change}%</span> CPA yield
+                <span className="text-[var(--m-accent-2)] font-semibold">{topKpis.costPerPreSave.change}%</span> CPA yield
               </div>
             </div>
 
@@ -205,7 +205,7 @@ export default function MusicConsolePage() {
                 {formatCompactNumber(topKpis.proofCaptured.value)}
               </div>
               <div className="text-[10px] text-zinc-400">
-                <span className="text-[#10B981] font-semibold">+{topKpis.proofCaptured.change}%</span> verbatims
+                <span className="text-[var(--m-accent-2)] font-semibold">+{topKpis.proofCaptured.change}%</span> verbatims
               </div>
             </div>
           </div>
@@ -228,7 +228,7 @@ export default function MusicConsolePage() {
           </span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 relative">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 relative">
           {funnelData.map((stage, i) => {
             const meanings: Record<string, string> = {
               'Uploaded Fans': 'Audience list uploaded',
@@ -252,7 +252,7 @@ export default function MusicConsolePage() {
             return (
               <div
                 key={stage.label}
-                className="relative bg-[var(--m-surface)] border border-[var(--m-border-2)] hover:border-[var(--m-dim)] rounded-xl p-5 flex flex-col justify-between space-y-4 transition-all duration-200 shadow-sm hover:shadow-md group overflow-hidden"
+                className="relative bg-[var(--m-surface)] border border-[var(--m-border-2)] hover:border-[var(--m-accent)]/30 rounded-2xl p-6 lg:p-7 flex flex-col justify-between space-y-5 transition-all duration-300 shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:shadow-[0_12px_40px_rgb(0,0,0,0.12)] group overflow-hidden"
               >
                 {/* Visual decoration: light glow behind the icon */}
                 <div
@@ -311,9 +311,9 @@ export default function MusicConsolePage() {
       </section>
 
       {/* ─── SECTION 4: Timeline Chart & Section 5: Segment Heat ─── */}
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Live Campaign Movement with side-by-side grid composition */}
-        <div className="lg:col-span-2 m-card p-6 flex flex-col bg-[var(--m-surface)] relative overflow-hidden group">
+        <div className="lg:col-span-2 m-card p-8 lg:p-10 flex flex-col bg-[var(--m-surface)] relative overflow-hidden group">
           {/* Subtle background mesh glow */}
           <div className="absolute top-0 right-0 w-80 h-80 bg-[var(--m-accent)]/5 rounded-full blur-[80px] pointer-events-none opacity-30" />
 
@@ -407,8 +407,8 @@ export default function MusicConsolePage() {
                           <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0} />
                         </linearGradient>
                         <linearGradient id="colorVerified" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#10B981" stopOpacity={0.15} />
-                          <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
+                          <stop offset="5%" stopColor="#06B6D4" stopOpacity={0.15} />
+                          <stop offset="95%" stopColor="#06B6D4" stopOpacity={0} />
                         </linearGradient>
                       </defs>
                       <CartesianGrid
@@ -459,7 +459,7 @@ export default function MusicConsolePage() {
                         type="monotone"
                         dataKey="verifiedEngagements"
                         name="Verified Actions"
-                        stroke="#10B981"
+                        stroke="#06B6D4"
                         strokeWidth={3}
                         fillOpacity={1}
                         fill="url(#colorVerified)"
@@ -496,7 +496,7 @@ export default function MusicConsolePage() {
                   </div>
                   <div className="flex items-start gap-2">
                     <span className="text-[var(--m-muted)]">[17:54:18]</span>
-                    <span className="text-[#10B981] font-bold">ANSWERED:</span>
+                    <span className="text-[var(--m-accent-2)] font-bold">ANSWERED:</span>
                     <span>Connect established on Node 02 for +1551***6220 -> Speech synthesis running...</span>
                   </div>
                   <div className="flex items-start gap-2">
@@ -506,7 +506,7 @@ export default function MusicConsolePage() {
                   </div>
                   <div className="flex items-start gap-2">
                     <span className="text-[var(--m-muted)]">[17:54:32]</span>
-                    <span className="text-[#10B981] font-bold">SUCCESS:</span>
+                    <span className="text-[var(--m-accent-2)] font-bold">SUCCESS:</span>
                     <span>Pre-save completed. CPA attribution: $0.25 (Transaction ref: tx_815a5f70)</span>
                   </div>
                 </div>
@@ -516,7 +516,7 @@ export default function MusicConsolePage() {
         </div>
 
         {/* Audience Heat Board */}
-        <div className="m-card p-6 flex flex-col bg-[var(--m-surface)] relative overflow-hidden group">
+        <div className="m-card p-8 lg:p-10 flex flex-col bg-[var(--m-surface)] relative overflow-hidden group">
           <div className="absolute bottom-0 right-0 w-80 h-80 bg-[var(--m-warning)]/5 rounded-full blur-[80px] pointer-events-none opacity-20" />
 
           {/* Section Header */}
@@ -564,7 +564,7 @@ export default function MusicConsolePage() {
               return (
                 <div
                   key={seg.segment}
-                  className="p-3.5 bg-[var(--m-surface)] border border-[var(--m-border-2)] rounded-xl hover:border-[var(--m-dim)] hover:shadow-md transition-all duration-200 space-y-3.5 group relative overflow-hidden"
+                  className="p-4 bg-[var(--m-surface)] border border-[var(--m-border-2)] rounded-xl hover:border-[var(--m-accent-2)]/30 hover:shadow-lg transition-all duration-300 space-y-3.5 group relative overflow-hidden"
                 >
                   <div className="flex items-center justify-between gap-3 relative z-10">
                     <div className="flex items-center gap-2.5 min-w-0">
@@ -612,7 +612,7 @@ export default function MusicConsolePage() {
       </section>
 
       {/* ─── SECTION 6: Fan Proof Stream (Proof records coming back) ─── */}
-      <section className="m-card p-6 bg-[var(--m-surface)]">
+      <section className="m-card p-8 lg:p-10 bg-[var(--m-surface)]">
         <div className="border-b border-[var(--m-border-2)] pb-4 mb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div className="space-y-1">
             <h2 className="m-section-title">
@@ -637,7 +637,7 @@ export default function MusicConsolePage() {
 
             const accentColor =
               r.sentiment === 'positive'
-                ? 'bg-[#10B981]'
+                ? 'bg-[var(--m-accent-2)]'
                 : r.sentiment === 'negative'
                   ? 'bg-[#EF4444]'
                   : 'bg-[var(--m-muted)]';
@@ -665,9 +665,9 @@ export default function MusicConsolePage() {
                         className={cn(
                           'text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded border',
                           r.intent === 'high'
-                            ? 'bg-[#10B981]/10 text-[#10B981] border-[#10B981]/20'
+                            ? 'bg-[var(--m-accent-2)]/10 text-[var(--m-accent-2)] border-[var(--m-accent-2)]/20'
                             : r.intent === 'medium'
-                              ? 'bg-[#F59E0B]/10 text-[#F59E0B] border-[#F59E0B]/20'
+                              ? 'bg-[var(--m-warning)]/10 text-[var(--m-warning)] border-[var(--m-warning)]/20'
                               : 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20'
                         )}
                       >

@@ -5,29 +5,29 @@
    ═══════════════════════════════════════════════════════════════ */
 
 .music-console {
-  /* ── Core Palette (Warm Stone / Soft Neutral by Default) ── */
-  --m-bg:         #F8F9FA;               /* Clean warm stone off-white background */
-  --m-surface:    #FFFFFF;               /* Stark white card surfaces */
-  --m-surface-2:  #F4F4F5;               /* Secondary light gray/stone panels */
-  --m-surface-3:  #E4E4E7;               /* Deep border/hover highlights */
-  --m-text:       #09090B;               /* Stark zinc-950 for clear readability */
-  --m-text-2:     #27272A;               /* Secondary text zinc-800 */
-  --m-muted:      #71717A;               /* Muted text zinc-500 */
-  --m-dim:        #A1A1AA;               /* Dim text zinc-400 */
-  --m-border:     rgba(9, 9, 11, 0.08);  /* Subtle dark border */
-  --m-border-2:   rgba(9, 9, 11, 0.04);  /* Very faint divider line */
-  --m-grid-line:  rgba(9, 9, 11, 0.015); /* Light grid line color */
+  /* ── Core Palette (Unified Deep Navy / Charcoal Theme) ── */
+  --m-bg:         #0A0D14;               /* Rich, dark charcoal color */
+  --m-surface:    #121624;               /* Deep slate/navy card surfaces */
+  --m-surface-2:  #181D30;               /* Secondary dark panels */
+  --m-surface-3:  #20263F;               /* Deep border/hover highlights */
+  --m-text:       #FAFAFA;               /* Stark white text */
+  --m-text-2:     #E2E8F0;               /* Zinc-200 / Slate-200 */
+  --m-muted:      #94A3B8;               /* Muted slate-400 */
+  --m-dim:        #64748B;               /* Dim slate-500 */
+  --m-border:     rgba(255, 255, 255, 0.08); /* Faint white border on dark bg */
+  --m-border-2:   rgba(255, 255, 255, 0.04);
+  --m-grid-line:  rgba(255, 255, 255, 0.012);
   
-  /* Music Native Accents (Electric Violet & Verified Green) */
-  --m-accent:     #8B5CF6;               /* Electric Violet (violet-500) */
-  --m-accent-dim: rgba(139, 92, 246, 0.06);
-  --m-accent-2:   #10B981;               /* Verified Green (emerald-500) */
-  --m-accent-2-dim: rgba(16, 185, 129, 0.06);
+  /* Music Native Accents (Electric Purple & Bright Teal) */
+  --m-accent:     #9F7AEA;               /* Vibrant Electric Purple (primary) */
+  --m-accent-dim: rgba(159, 122, 234, 0.12);
+  --m-accent-2:   #06B6D4;               /* Bright Teal (secondary) */
+  --m-accent-2-dim: rgba(6, 182, 212, 0.12);
   --m-warning:    #F59E0B;               /* Amber/Coral (Attention/CPA/Revenue) */
   --m-danger:     #EF4444;               /* Coral/Red (Opt-Out/Failed/Risk) */
 
   /* ── Typography ── */
-  --m-font-sans:  'Plus Jakarta Sans', 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --m-font-sans:  'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --m-font-mono:  'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
 
   /* ── Sizing ── */
@@ -39,40 +39,43 @@
   background-color: var(--m-bg);
   color: var(--m-text);
   font-family: var(--m-font-sans);
+  line-height: 1.6;
+  letter-spacing: -0.011em;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-/* ── Dark Mode Override (Obsidian Command Surface) ── */
+/* ── Dark Mode Override (Scoped to support unified variables) ── */
 .music-console .m-dark-mode,
 .music-console .m-dark-mode header,
 .music-console .m-dark-mode main,
 .music-console.m-dark-mode {
-  --m-bg:         #09090B;               /* Deep pitch black background */
-  --m-surface:    rgba(24, 24, 27, 0.75); /* Translucent dark zinc card */
-  --m-surface-2:  #18181B;               /* Dark zinc-900 panels */
-  --m-surface-3:  #27272A;               /* Dark zinc-800 highlight overlays */
-  --m-text:       #FAFAFA;               /* Stark white text */
-  --m-text-2:     #E4E4E7;               /* Zinc-200 */
-  --m-muted:      #A1A1AA;               /* Zinc-400 */
-  --m-dim:        #71717A;               /* Zinc-500 */
-  --m-border:     rgba(255, 255, 255, 0.08); /* White border on dark bg */
+  --m-bg:         #0A0D14;
+  --m-surface:    #121624;
+  --m-surface-2:  #181D30;
+  --m-surface-3:  #20263F;
+  --m-text:       #FAFAFA;
+  --m-text-2:     #E2E8F0;
+  --m-muted:      #94A3B8;
+  --m-dim:        #64748B;
+  --m-border:     rgba(255, 255, 255, 0.08);
   --m-border-2:   rgba(255, 255, 255, 0.04);
-  --m-grid-line:  rgba(255, 255, 255, 0.015);
-  --m-accent-dim: rgba(139, 92, 246, 0.15);
-  --m-accent-2-dim: rgba(16, 185, 129, 0.12);
+  --m-grid-line:  rgba(255, 255, 255, 0.012);
+  --m-accent-dim: rgba(159, 122, 234, 0.12);
+  --m-accent-2-dim: rgba(6, 182, 212, 0.12);
 }
 
 /* ── Card / Surface ─────────────────────────────────────────── */
 .m-card {
   background-color: var(--m-surface);
   border: 1px solid var(--m-border);
-  border-radius: var(--m-radius-lg);
-  backdrop-filter: blur(12px);
-  box-shadow: 0 4px 20px -2px rgba(42, 38, 32, 0.03), 0 2px 8px -1px rgba(42, 38, 32, 0.02);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border-radius: var(--m-radius-xl);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 12px 30px -4px rgba(0, 0, 0, 0.35), 0 4px 12px -2px rgba(0, 0, 0, 0.25);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s ease;
 }
 
 .m-card-flush {
@@ -732,9 +735,9 @@
   transition: all 0.2s ease;
 }
 .m-journey-step:hover {
-  border-color: var(--m-border);
-  background-color: #fff;
-  box-shadow: 0 6px 16px rgba(42, 38, 32, 0.03);
+  border-color: rgba(159, 122, 234, 0.3);
+  background-color: var(--m-surface-2);
+  box-shadow: 0 12px 30px -4px rgba(0, 0, 0, 0.35);
 }
 
 .m-journey-connector {
@@ -789,9 +792,9 @@
   transition: all 0.15s ease;
 }
 .m-heat-row:hover {
-  border-color: var(--m-border);
+  border-color: rgba(159, 122, 234, 0.3);
   transform: translateX(2px);
-  background-color: #fff;
+  background-color: var(--m-surface-2);
 }
 
 .m-heat-rank {
@@ -834,9 +837,9 @@
   overflow: hidden;
 }
 .m-proof-card:hover {
-  border-color: var(--m-border);
-  box-shadow: 0 4px 16px rgba(42, 38, 32, 0.04);
-  background-color: #fff;
+  border-color: rgba(159, 122, 234, 0.3);
+  box-shadow: 0 12px 30px -4px rgba(0, 0, 0, 0.35);
+  background-color: var(--m-surface-2);
 }
 
 .m-proof-card-accent-bar {
@@ -902,9 +905,8 @@
 
 .m-font-mono     { font-family: var(--m-font-mono); }
 
-/* ── Premium Sidebar (Deep Midnight Navy Ink Theme) ── */
 .m-sidebar {
-  background: linear-gradient(180deg, #0A0D16 0%, #05070B 100%);
+  background: linear-gradient(180deg, #07090F 0%, #030408 100%);
   border-right: 1px solid rgba(255, 255, 255, 0.04);
   display: flex;
   flex-direction: column;
@@ -1007,9 +1009,9 @@
   box-shadow: 0 2px 8px rgba(9, 9, 11, 0.02);
 }
 .m-proof-card:hover {
-  border-color: var(--m-dim);
-  box-shadow: 0 8px 24px rgba(9, 9, 11, 0.06);
-  background-color: #ffffff;
+  border-color: rgba(159, 122, 234, 0.3);
+  box-shadow: 0 12px 30px -4px rgba(0, 0, 0, 0.35);
+  background-color: var(--m-surface-2);
 }
 .m-proof-card-accent-bar {
   position: absolute;
