@@ -16,6 +16,11 @@ import {
   Music,
   ChevronDown,
   ChevronUp,
+  Database,
+  Phone,
+  MessageSquare,
+  Award,
+  Radio,
 } from 'lucide-react';
 import Link from 'next/link';
 import React, { useState, useEffect } from 'react';
@@ -210,92 +215,134 @@ export default function MusicConsolePage() {
       {/* ─── SECTION 3: Stepped Fan Journey Path (Unified Attribution Card) ─── */}
       <section className="space-y-4">
         <div className="flex items-center justify-between px-1">
-          <h3 className="text-xs font-bold tracking-widest text-[var(--m-muted)] uppercase">
-            Stepped Fan Journey Path
-          </h3>
+          <div className="space-y-1">
+            <h3 className="text-xs font-black tracking-[0.2em] text-[var(--m-muted)] uppercase">
+              Stepped Fan Journey Path
+            </h3>
+            <p className="text-[11px] text-[var(--m-muted)]">
+              Multi-channel conversion funnel mapping audience progression from contact to conversion.
+            </p>
+          </div>
           <span className="text-[10px] font-mono font-bold text-[var(--m-muted)] bg-[var(--m-surface-2)] border border-[var(--m-border-2)] px-2.5 py-1 rounded">
             Campaign Mode: AI Dialing
           </span>
         </div>
 
-        <PremiumCard className="p-6 bg-[var(--m-surface)]">
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6 relative">
-            {funnelData.map((stage, i) => {
-              const meanings: Record<string, string> = {
-                'Uploaded Fans': 'Audience list uploaded',
-                Contacted: 'Fan contacts reached',
-                'Human Answered': 'Human connects verified',
-                Engaged: 'Convo continued past disclosure',
-                'Verified Intent': 'Fan verbal intent captured',
-                'Action Taken': 'Pre-save action completed',
-              };
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 relative">
+          {funnelData.map((stage, i) => {
+            const meanings: Record<string, string> = {
+              'Uploaded Fans': 'Audience list uploaded',
+              Contacted: 'Fan contacts reached',
+              'Human Answered': 'Human connects verified',
+              Engaged: 'Convo continued past disclosure',
+              'Verified Intent': 'Fan verbal intent captured',
+              'Action Taken': 'Pre-save action completed',
+            };
 
-              return (
-                <div key={stage.label} className="relative flex flex-col justify-between space-y-4 min-h-[120px]">
-                  <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-mono font-bold text-[var(--m-muted)]">STAGE 0{i + 1}</span>
-                    <span className="text-[10px] font-mono font-bold text-[var(--m-accent-2)] bg-[var(--m-accent-2-dim)] px-2 py-0.5 rounded border border-[var(--m-accent-2)]/15">
-                      {stage.percentage.toFixed(1)}%
-                    </span>
+            // Custom Lucide icons for each stage
+            const icons = [
+              <Database className="h-4.5 w-4.5" style={{ color: stage.color }} />,
+              <Phone className="h-4.5 w-4.5" style={{ color: stage.color }} />,
+              <Headphones className="h-4.5 w-4.5" style={{ color: stage.color }} />,
+              <MessageSquare className="h-4.5 w-4.5" style={{ color: stage.color }} />,
+              <ShieldCheck className="h-4.5 w-4.5" style={{ color: stage.color }} />,
+              <Award className="h-4.5 w-4.5" style={{ color: stage.color }} />,
+            ];
+
+            return (
+              <div
+                key={stage.label}
+                className="relative bg-[var(--m-surface)] border border-[var(--m-border-2)] hover:border-[var(--m-dim)] rounded-xl p-5 flex flex-col justify-between space-y-4 transition-all duration-200 shadow-sm hover:shadow-md group overflow-hidden"
+              >
+                {/* Visual decoration: light glow behind the icon */}
+                <div
+                  className="absolute -top-10 -left-10 w-24 h-24 rounded-full blur-2xl opacity-10 transition-opacity duration-300 group-hover:opacity-20 pointer-events-none"
+                  style={{ backgroundColor: stage.color }}
+                />
+
+                <div className="flex justify-between items-start z-10">
+                  <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-[var(--m-surface-2)] border border-[var(--m-border)]">
+                    {icons[i] || <Activity className="h-4.5 w-4.5" />}
                   </div>
+                  <span className="text-[10px] font-mono font-bold text-[var(--m-accent-2)] bg-[var(--m-accent-2-dim)] px-2 py-0.5 rounded border border-[var(--m-accent-2)]/15">
+                    {stage.percentage.toFixed(1)}%
+                  </span>
+                </div>
 
-                  <div className="space-y-1">
-                    <div className="text-xs font-bold text-[var(--m-text-2)] uppercase tracking-wider">
-                      {stage.label}
-                    </div>
-                    <div className="text-2xl font-black font-mono text-[var(--m-text)]">
-                      {formatCompactNumber(stage.count)}
-                    </div>
+                <div className="space-y-1 z-10 pt-2">
+                  <div className="text-[10px] font-mono font-bold text-[var(--m-muted)] tracking-wider uppercase">
+                    STAGE 0{i + 1}
                   </div>
-
-                  <div className="space-y-2 pt-1 border-t border-[var(--m-border-2)]">
-                    <div className="text-[10px] italic text-[var(--m-muted)] leading-relaxed">
-                      {meanings[stage.label] || stage.label}
-                    </div>
-                    <div className="h-1.5 w-full bg-[var(--m-surface-2)] rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all duration-500"
-                        style={{ width: `${stage.percentage}%`, backgroundColor: stage.color }}
-                      />
-                    </div>
+                  <div className="text-xs font-black text-[var(--m-text)] uppercase tracking-wide">
+                    {stage.label}
                   </div>
+                  <div className="text-2xl font-black font-mono text-[var(--m-text-2)] pt-1">
+                    {formatCompactNumber(stage.count)}
+                  </div>
+                </div>
 
-                  {/* Drop-off connector pill - horizontally positioned between steps on large displays */}
-                  {i < funnelData.length - 1 && (
-                    <div className="hidden lg:flex absolute top-1/2 -right-3 -translate-y-1/2 z-10 translate-x-1/2 items-center justify-center">
-                      <span className="text-[9px] font-mono font-bold text-[var(--m-danger)] bg-[var(--m-surface)] border border-[var(--m-danger)]/25 px-1.5 py-0.5 rounded shadow-xs select-none">
+                <div className="space-y-3 pt-2 border-t border-[var(--m-border-2)] z-10">
+                  <div className="text-[10px] text-[var(--m-muted)] leading-snug font-medium min-h-[30px]">
+                    {meanings[stage.label] || stage.label}
+                  </div>
+                  <div className="h-1.5 w-full bg-[var(--m-surface-2)] rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{ width: `${stage.percentage}%`, backgroundColor: stage.color }}
+                    />
+                  </div>
+                </div>
+
+                {/* Floating drop-off rate pill on the right border (for layout connection) */}
+                {i < funnelData.length - 1 && (
+                  <div className="hidden lg:flex absolute top-1/2 -right-3 -translate-y-1/2 z-25 translate-x-1/2 items-center justify-center">
+                    <div className="flex flex-col items-center shadow-xs bg-[var(--m-surface)] border border-[var(--m-danger)]/25 rounded px-2 py-1 select-none text-center">
+                      <span className="text-[9px] font-mono font-black text-[var(--m-danger)]">
                         -{(((stage.count - funnelData[i + 1].count) / stage.count) * 100).toFixed(0)}%
                       </span>
+                      <span className="text-[7px] font-sans font-bold text-[var(--m-muted)] uppercase tracking-wider scale-90">drop</span>
                     </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </PremiumCard>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </section>
 
       {/* ─── SECTION 4: Timeline Chart & Section 5: Segment Heat ─── */}
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Live Campaign Movement with side-by-side grid composition */}
-        <div className="lg:col-span-2 m-card p-6 flex flex-col bg-[var(--m-surface)]">
-          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 border-b border-[var(--m-border-2)] pb-4 mb-6">
+        <div className="lg:col-span-2 m-card p-6 flex flex-col bg-[var(--m-surface)] relative overflow-hidden group">
+          {/* Subtle background mesh glow */}
+          <div className="absolute top-0 right-0 w-80 h-80 bg-[var(--m-accent)]/5 rounded-full blur-[80px] pointer-events-none opacity-30" />
+
+          {/* Section Header */}
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 border-b border-[var(--m-border-2)] pb-5 mb-6">
             <div className="space-y-1">
-              <h2 className="m-section-title">
-                <Activity className="h-4.5 w-4.5 text-[var(--m-accent)]" /> Live Campaign Movement
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-[var(--m-accent-2)] animate-pulse" />
+                <span className="text-[9px] font-black tracking-[0.2em] text-[var(--m-accent-2)] uppercase">
+                  REAL-TIME TELEMETRY FEED
+                </span>
+              </div>
+              <h2 className="m-section-title text-base font-black">
+                <Activity className="h-4.5 w-4.5 text-[var(--m-accent)] animate-pulse" /> Live Campaign Movement
               </h2>
               <p className="m-section-subtitle">
-                Visual attribution metrics mapping answer response rates and action rate surges.
+                Geographic attribution surge tracking call answer rate vs pre-save completions.
               </p>
             </div>
 
-            {/* Legend Badges */}
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[var(--m-accent-dim)] text-[10px] font-bold text-[var(--m-accent)] border border-[var(--m-accent)]/10">
-                {livePulse.answerRate}% Answers
+            {/* Live Metrics Overlay */}
+            <div className="flex items-center flex-wrap gap-2.5">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[var(--m-accent-dim)] text-[10px] font-bold text-[var(--m-accent)] border border-[var(--m-accent)]/15">
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--m-accent)]" />
+                {livePulse.answerRate}% Connects
               </span>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[var(--m-accent-2-dim)] text-[10px] font-bold text-[var(--m-accent-2)] border border-[var(--m-accent-2)]/10">
-                {livePulse.verifiedRate}% Actions
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[var(--m-accent-2-dim)] text-[10px] font-bold text-[var(--m-accent-2)] border border-[var(--m-accent-2)]/15">
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--m-accent-2)]" />
+                {livePulse.verifiedRate}% Conversions
               </span>
             </div>
           </div>
@@ -304,18 +351,30 @@ export default function MusicConsolePage() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-stretch flex-1">
             {/* Left Analyst Insight Column */}
             <div className="md:col-span-1 flex flex-col justify-between space-y-4">
-              <div className="bg-[var(--m-surface-2)] p-4 rounded-xl border border-[var(--m-border)] space-y-2">
-                <div className="text-[9px] font-extrabold uppercase tracking-widest text-[var(--m-muted)]">Analysis Insight</div>
-                <p className="text-xs text-[var(--m-text-2)] leading-relaxed">
+              <div className="bg-[var(--m-surface-2)] p-4 rounded-xl border border-[var(--m-border)] space-y-3 shadow-xs">
+                <div className="flex items-center gap-1.5 text-[9px] font-extrabold uppercase tracking-widest text-[var(--m-muted)] border-b border-[var(--m-border)] pb-1.5">
+                  <Flame className="w-3.5 h-3.5 text-[var(--m-warning)] animate-bounce" /> Telemetry Insight
+                </div>
+                <p className="text-xs text-[var(--m-text-2)] leading-relaxed font-medium">
                   Verified activations peaked on April 22 following the <strong>North American Tour On-Sale</strong> launch, showing an 18.4% conversion rate surge.
                 </p>
               </div>
 
-              <div className="space-y-1.5 p-3 rounded-lg border border-[var(--m-border-2)]">
-                <div className="text-[9px] font-bold tracking-widest text-[var(--m-muted)] uppercase">Attribution Sync</div>
-                <div className="flex items-center gap-2 text-xs font-bold text-[var(--m-accent-2)]">
-                  <span className="h-2 w-2 rounded-full bg-[var(--m-accent-2)] animate-pulse" />
-                  <span>Sync Lag: 0.4s</span>
+              <div className="space-y-2 p-3 bg-[var(--m-surface-2)]/60 rounded-xl border border-[var(--m-border-2)]">
+                <div className="text-[9px] font-extrabold tracking-widest text-[var(--m-muted)] uppercase">Voice Node Status</div>
+                <div className="flex items-center justify-between text-xs font-bold text-[var(--m-text-2)]">
+                  <div className="flex items-center gap-1.5">
+                    <Radio className="w-3.5 h-3.5 text-[var(--m-accent)] animate-pulse" />
+                    <span>Active Dials</span>
+                  </div>
+                  <span className="font-mono text-[var(--m-accent)]">24/s</span>
+                </div>
+                <div className="flex items-center justify-between text-xs font-bold text-[var(--m-text-2)]">
+                  <div className="flex items-center gap-1.5">
+                    <Activity className="w-3.5 h-3.5 text-[var(--m-accent-2)]" />
+                    <span>Ping Latency</span>
+                  </div>
+                  <span className="font-mono text-[var(--m-accent-2)]">12ms</span>
                 </div>
               </div>
             </div>
@@ -330,11 +389,11 @@ export default function MusicConsolePage() {
                   >
                     <defs>
                       <linearGradient id="colorAnswers" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.12} />
+                        <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.15} />
                         <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0} />
                       </linearGradient>
                       <linearGradient id="colorVerified" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10B981" stopOpacity={0.12} />
+                        <stop offset="5%" stopColor="#10B981" stopOpacity={0.15} />
                         <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
                       </linearGradient>
                     </defs>
@@ -360,16 +419,17 @@ export default function MusicConsolePage() {
                       contentStyle={{
                         backgroundColor: 'var(--m-surface)',
                         border: '1px solid var(--m-border)',
-                        borderRadius: '8px',
-                        boxShadow: '0 8px 24px rgba(9, 9, 11, 0.08)',
+                        borderRadius: '12px',
+                        boxShadow: '0 12px 32px rgba(9, 9, 11, 0.12)',
                       }}
-                      itemStyle={{ fontSize: '11px', color: 'var(--m-text)' }}
+                      itemStyle={{ fontSize: '11px', color: 'var(--m-text)', fontWeight: 600 }}
                       labelStyle={{
-                        fontSize: '10px',
+                        fontSize: '9px',
                         color: 'var(--m-muted)',
-                        fontWeight: '800',
-                        marginBottom: '4px',
+                        fontWeight: '850',
+                        marginBottom: '6px',
                         textTransform: 'uppercase',
+                        letterSpacing: '0.08em'
                       }}
                     />
                     <Area
@@ -377,7 +437,7 @@ export default function MusicConsolePage() {
                       dataKey="humanAnswers"
                       name="Human Answers"
                       stroke="#8B5CF6"
-                      strokeWidth={2}
+                      strokeWidth={3}
                       fillOpacity={1}
                       fill="url(#colorAnswers)"
                     />
@@ -386,7 +446,7 @@ export default function MusicConsolePage() {
                       dataKey="verifiedEngagements"
                       name="Verified Actions"
                       stroke="#10B981"
-                      strokeWidth={2}
+                      strokeWidth={3}
                       fillOpacity={1}
                       fill="url(#colorVerified)"
                     />
@@ -400,12 +460,20 @@ export default function MusicConsolePage() {
         </div>
 
         {/* Audience Heat Board */}
-        <div className="m-card p-6 flex flex-col bg-[var(--m-surface)]">
-          <div className="space-y-1 mb-6 border-b border-[var(--m-border-2)] pb-4">
-            <h2 className="m-section-title">
+        <div className="m-card p-6 flex flex-col bg-[var(--m-surface)] relative overflow-hidden group">
+          <div className="absolute bottom-0 right-0 w-80 h-80 bg-[var(--m-warning)]/5 rounded-full blur-[80px] pointer-events-none opacity-20" />
+
+          {/* Section Header */}
+          <div className="space-y-1 mb-6 border-b border-[var(--m-border-2)] pb-5">
+            <div className="flex items-center gap-2">
+              <span className="text-[9px] font-black tracking-[0.2em] text-[var(--m-warning)] uppercase">
+                COHORT CLASSIFICATION
+              </span>
+            </div>
+            <h2 className="m-section-title text-base font-black">
               <Flame className="h-4.5 w-4.5 text-[var(--m-warning)]" /> Audience Heat Board
             </h2>
-            <p className="m-section-subtitle">Ranked target cohorts by engagement scores and actions.</p>
+            <p className="m-section-subtitle">Ranked target cohorts sorted by engagement metrics.</p>
           </div>
 
           <div className="space-y-3.5 flex-1 justify-center flex flex-col">
@@ -428,36 +496,56 @@ export default function MusicConsolePage() {
                 'Fan club inactive': 'ACTION REQ: INITIATE WIN-BACK WORKFLOW',
               };
 
+              // Determine Heat Colors and Icons based on engagement score
+              const isCrit = seg.engagement >= 90;
+              const isWarm = seg.engagement >= 75 && seg.engagement < 90;
+              const tempClass = isCrit
+                ? 'text-[var(--m-danger)] bg-[var(--m-danger)]/5 border-[var(--m-danger)]/15'
+                : isWarm
+                  ? 'text-[var(--m-warning)] bg-[var(--m-warning)]/5 border-[var(--m-warning)]/15'
+                  : 'text-[var(--m-accent)] bg-[var(--m-accent-dim)] border-[var(--m-accent)]/15';
+
               return (
                 <div
                   key={seg.segment}
-                  className="p-3 bg-[var(--m-surface)] border border-[var(--m-border-2)] rounded-lg hover:border-[var(--m-dim)] hover:shadow-xs transition-all duration-150 space-y-2 group"
+                  className="p-3.5 bg-[var(--m-surface)] border border-[var(--m-border-2)] rounded-xl hover:border-[var(--m-dim)] hover:shadow-md transition-all duration-200 space-y-3.5 group relative overflow-hidden"
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2.5">
-                      <span className="w-5 h-5 flex items-center justify-center bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded text-[9px] font-black text-[var(--m-muted)]">
-                        {i + 1}
+                  <div className="flex items-center justify-between gap-3 relative z-10">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="w-6 h-6 flex items-center justify-center bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-lg text-[10px] font-black text-[var(--m-muted)] shadow-2xs">
+                        0{i + 1}
                       </span>
-                      <span className="text-xs font-bold text-[var(--m-text)] truncate">{seg.segment}</span>
+                      <span className="text-xs font-black text-[var(--m-text)] truncate">{seg.segment}</span>
                     </div>
-                    <span className="text-[10px] font-mono font-bold text-[var(--m-accent-2)] bg-[var(--m-accent-2-dim)] px-2 py-0.5 rounded border border-[var(--m-accent-2)]/10">
-                      {seg.engagement}% score
+                    <span className={cn("text-[9px] font-mono font-black px-2 py-0.5 rounded-lg border tracking-wider", tempClass)}>
+                      {seg.engagement}% TEMP
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-between text-[10px] text-[var(--m-muted)] font-medium">
-                    <span>{captions[seg.segment] || 'Target audience segment'}</span>
-                    <span className="font-mono text-[var(--m-text-2)]">{formatCompactNumber(seg.count)} fans</span>
+                  <div className="space-y-1.5 relative z-10">
+                    <div className="flex items-center justify-between text-[10px] text-[var(--m-muted)] font-bold">
+                      <span className="truncate pr-2">{captions[seg.segment] || 'Target audience segment'}</span>
+                      <span className="font-mono text-[var(--m-text-2)] whitespace-nowrap">{formatCompactNumber(seg.count)} FANS</span>
+                    </div>
+
+                    {/* Styled glowing cylinder progress bar */}
+                    <div className="h-1.5 w-full bg-[var(--m-surface-2)] rounded-full overflow-hidden border border-[var(--m-border-2)]">
+                      <div
+                        className={cn(
+                          "h-full rounded-full transition-all duration-500",
+                          isCrit
+                            ? "bg-gradient-to-r from-[var(--m-warning)] to-[var(--m-danger)]"
+                            : isWarm
+                              ? "bg-gradient-to-r from-[var(--m-accent)] to-[var(--m-warning)]"
+                              : "bg-gradient-to-r from-[var(--m-accent-dim)] to-[var(--m-accent)]"
+                        )}
+                        style={{ width: `${seg.engagement}%` }}
+                      />
+                    </div>
                   </div>
 
-                  <div className="h-2 w-full bg-[var(--m-surface-2)] rounded-full overflow-hidden border border-[var(--m-border-2)]">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-[var(--m-accent)] to-[var(--m-warning)] transition-all duration-300"
-                      style={{ width: `${seg.engagement}%` }}
-                    />
-                  </div>
-
-                  <div className="text-[9px] font-extrabold text-[var(--m-accent)] bg-[var(--m-accent-dim)] border border-[var(--m-accent)]/10 rounded px-2 py-1 tracking-wider uppercase">
+                  {/* Recommendation action tag: elegant small tag */}
+                  <div className="text-[8px] font-black text-[var(--m-muted)] bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-lg px-2.5 py-1 tracking-widest uppercase transition-colors duration-200 group-hover:border-[var(--m-accent)]/20 group-hover:bg-[var(--m-accent-dim)] group-hover:text-[var(--m-accent)] relative z-10">
                     {recommendations[seg.segment] || 'ACTION REQ: DISPATCH OUTREACH'}
                   </div>
                 </div>
