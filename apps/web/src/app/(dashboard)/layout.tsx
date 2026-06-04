@@ -27,6 +27,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
  );
  }
 
+ const isCampaignMapPage = pathname?.includes('/tools/campaign-map');
+
  // Standard dashboard layout with proper scrolling
  return (
  <PhoneProvider>
@@ -34,7 +36,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
  <Sidebar />
  <div className="flex flex-1 flex-col h-screen overflow-hidden">
  <Header />
- <main className="flex-1 overflow-y-auto bg-background p-6 pb-20">{children}</main>
+ <main className={`flex-1 bg-background ${isCampaignMapPage ? 'p-0 overflow-hidden' : 'p-6 pb-20 overflow-y-auto'}`}>
+ {children}
+ </main>
  {/* Footer removed - legal links accessible via Settings page */}
  </div>
 

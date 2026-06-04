@@ -71,6 +71,7 @@ export default function CampaignGeoIntelligenceMap() {
   const [liveMode, setLiveMode] = useState<boolean>(true);
   const [compareMode] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [showLegend, setShowLegend] = useState<boolean>(true);
 
   // Interactive selected items
   const [inspectedPoint, setInspectedPoint] = useState<GeoMetricPoint | null>(null);
@@ -542,9 +543,9 @@ export default function CampaignGeoIntelligenceMap() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-64px)] w-full bg-slate-950 text-slate-100 overflow-hidden select-none relative font-sans">
+    <div className="flex flex-col h-full w-full bg-slate-950 text-slate-100 overflow-hidden select-none relative font-sans">
       {/* 1. TOP CONTROL ROW (Command Center Panel) */}
-      <div className="h-16 shrink-0 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between px-6 z-20 backdrop-blur-md">
+      <div className="min-h-16 h-auto py-3 shrink-0 bg-slate-900/90 border-b border-slate-800 flex flex-wrap items-center justify-between gap-4 px-6 z-20 backdrop-blur-md">
         {/* Left Side Header */}
         <div className="flex items-center gap-4">
           <div className="p-2 bg-sky-500/10 rounded-lg border border-sky-500/20">
@@ -561,7 +562,7 @@ export default function CampaignGeoIntelligenceMap() {
         </div>
 
         {/* Dynamic Filters & Controls */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {/* Campaign Selector */}
           <div className="flex flex-col gap-0.5">
             <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">
@@ -753,30 +754,49 @@ export default function CampaignGeoIntelligenceMap() {
           </div>
 
           {/* Disclaimer Legend Overlay */}
-          <div className="absolute left-4 bottom-4 bg-slate-950/95 border border-slate-800/80 p-3.5 rounded-xl backdrop-blur-md max-w-sm shadow-[0_4px_24px_rgba(0,0,0,0.5)] z-20">
-            <div className="flex items-center gap-2 mb-1.5">
-              <div className="h-1.5 w-1.5 rounded-full bg-sky-400 animate-pulse" />
-              <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-200">
-                Radar Metrics Legend
-              </h3>
-            </div>
-            <div className="space-y-1.5 text-[9px] text-slate-400">
-              <p>
-                Node sizes indicate total contacted call volume. Color scaling indicates intensity
-                of selected metric:{' '}
-                <span className="font-semibold text-slate-200">{selectedMetric}</span>.
-              </p>
-              <div className="h-2 w-full bg-gradient-to-r from-slate-900 to-sky-500 rounded my-1 border border-slate-800" />
-              <div className="flex justify-between text-[8px] font-mono text-slate-500">
-                <span>MIN</span>
-                <span>MAX ({formatMetricValue(maxVal)})</span>
+          {showLegend ? (
+            <div className="absolute left-4 bottom-4 bg-slate-950/95 border border-slate-800/80 p-3.5 rounded-xl backdrop-blur-md max-w-sm shadow-[0_4px_24px_rgba(0,0,0,0.5)] z-20">
+              <div className="flex items-center justify-between gap-4 mb-1.5">
+                <div className="flex items-center gap-2">
+                  <div className="h-1.5 w-1.5 rounded-full bg-sky-400 animate-pulse" />
+                  <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-200">
+                    Radar Metrics Legend
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setShowLegend(false)}
+                  className="text-slate-400 hover:text-white p-0.5 hover:bg-slate-800 rounded transition-colors text-[10px] font-bold h-5 w-5 flex items-center justify-center border border-slate-800"
+                  title="Close Legend"
+                >
+                  &times;
+                </button>
               </div>
-              <p className="border-t border-slate-800/50 pt-1.5 text-[8px] leading-relaxed text-slate-500 italic">
-                Disclaimer: Locations are derived from lead metadata and phone-number market data.
-                Area-code and prefix locations are directional, not exact physical locations.
-              </p>
+              <div className="space-y-1.5 text-[9px] text-slate-400">
+                <p>
+                  Node sizes indicate total contacted call volume. Color scaling indicates intensity
+                  of selected metric:{' '}
+                  <span className="font-semibold text-slate-200">{selectedMetric}</span>.
+                </p>
+                <div className="h-2 w-full bg-gradient-to-r from-slate-900 to-sky-500 rounded my-1 border border-slate-800" />
+                <div className="flex justify-between text-[8px] font-mono text-slate-500">
+                  <span>MIN</span>
+                  <span>MAX ({formatMetricValue(maxVal)})</span>
+                </div>
+                <p className="border-t border-slate-800/50 pt-1.5 text-[8px] leading-relaxed text-slate-500 italic">
+                  Disclaimer: Locations are derived from lead metadata and phone-number market data.
+                  Area-code and prefix locations are directional, not exact physical locations.
+                </p>
+              </div>
             </div>
-          </div>
+          ) : (
+            <button
+              onClick={() => setShowLegend(true)}
+              className="absolute left-4 bottom-4 bg-slate-950/95 border border-slate-800 p-2 rounded-xl hover:bg-slate-900 text-[10px] text-sky-400 font-bold flex items-center gap-1.5 shadow-[0_4px_24px_rgba(0,0,0,0.5)] z-20 transition-all hover:scale-105"
+            >
+              <HelpCircle className="h-3.5 w-3.5" />
+              <span>Show Legend</span>
+            </button>
+          )}
 
           {/* Tooltip Overlay */}
           {hoveredPoint && hoverInfo && (
