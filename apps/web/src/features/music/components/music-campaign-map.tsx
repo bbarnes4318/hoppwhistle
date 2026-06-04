@@ -536,180 +536,183 @@ export default function MusicCampaignMap() {
         )}
       </div>
 
-      {/* ─── SECTION 1: Top Command Control Header ─── */}
-      <header className="h-16 shrink-0 bg-[#0F0F11]/90 border-b border-white/5 flex flex-wrap items-center justify-between px-6 z-20 backdrop-blur-md gap-4 relative pointer-events-auto">
-        
-        {/* Title Group */}
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-[var(--m-accent-dim)] rounded-lg border border-[var(--m-accent)]/20">
-            <Globe className="h-4 w-4 text-[var(--m-accent)]" />
-          </div>
-          <div>
-            <h1 className="text-xs font-bold uppercase tracking-wider text-[#FAFAFA]">Campaign Map</h1>
-            <p className="text-[10px] text-[#A1A1AA]">Live geographic intelligence for fan activation, proof, CPA, and market movement.</p>
-          </div>
-        </div>
-
-        {/* Custom Premium Control Row */}
-        <div className="flex items-center gap-3 flex-wrap">
-          {/* Campaign Filter */}
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Campaign</span>
-            <select
-              value={selectedCampaign}
-              onChange={e => {
-                setSelectedCampaign(e.target.value);
-                setInspectedPoint(null);
-              }}
-              className="bg-[#18181B] border border-white/10 rounded-lg px-2.5 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-[var(--m-accent)] cursor-pointer h-7"
-            >
-              <option value="all">All Campaigns</option>
-              {musicCampaigns.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Artist Filter */}
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Artist</span>
-            <select
-              value={selectedArtist}
-              onChange={e => {
-                setSelectedArtist(e.target.value);
-                setInspectedPoint(null);
-              }}
-              className="bg-[#18181B] border border-white/10 rounded-lg px-2.5 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-[var(--m-accent)] cursor-pointer h-7"
-            >
-              <option value="all">All Artists</option>
-              {uniqueArtists.map(artist => (
-                <option key={artist} value={artist}>{artist}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Date Selector */}
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Timeline</span>
-            <div className="bg-[#18181B] border border-white/10 rounded-lg p-0.5 flex h-7">
-              {(['day', 'week', 'month'] as DatePreset[]).map(preset => (
-                <button
-                  key={preset}
-                  onClick={() => setSelectedPreset(preset)}
-                  className={cn(
-                    "px-2.5 text-[9px] font-bold rounded-md uppercase transition-all",
-                    selectedPreset === preset
-                      ? "bg-[#27272A] text-[var(--m-accent)] shadow-xs"
-                      : "text-[#71717A] hover:text-slate-300"
-                  )}
-                >
-                  {preset}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Layer Selector */}
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Visual Layer</span>
-            <select
-              value={selectedMetric}
-              onChange={e => setSelectedMetric(e.target.value as LayerMetric)}
-              className="bg-[#18181B] border border-white/10 rounded-lg px-2.5 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-[var(--m-accent)] cursor-pointer h-7"
-            >
-              <option value="answerRate">Answer Rate</option>
-              <option value="verifiedActions">Verified Actions</option>
-              <option value="proofRecords">Proof Records</option>
-              <option value="cpa">CPA Efficiency</option>
-              <option value="fanDensity">Fan Density</option>
-            </select>
-          </div>
-
-          {/* Granularity Selector */}
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Granularity</span>
-            <select
-              value={selectedGranularity}
-              onChange={e => {
-                setSelectedGranularity(e.target.value as Granularity);
-                setInspectedPoint(null);
-              }}
-              className="bg-[#18181B] border border-white/10 rounded-lg px-2.5 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-[var(--m-accent)] cursor-pointer h-7"
-            >
-              <option value="state">U.S. State</option>
-              <option value="area_code">Area Code (NPA)</option>
-              <option value="point">Fan Nodes</option>
-            </select>
-          </div>
-
-          {/* Confidence Filter */}
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Confidence</span>
-            <select
-              value={confidenceFilter}
-              onChange={e => setConfidenceFilter(e.target.value)}
-              className="bg-[#18181B] border border-white/10 rounded-lg px-2.5 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-[var(--m-accent)] cursor-pointer h-7"
-            >
-              <option value="all">All Grades</option>
-              <option value="high">CRM Verified</option>
-              <option value="medium">Rate Center</option>
-              <option value="low">Approx. cent</option>
-            </select>
-          </div>
-
-          {/* Live Pulse Radar Toggle */}
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Active Pulse</span>
-            <button
-              onClick={() => setLiveMode(!liveMode)}
-              className={cn(
-                "h-7 px-3 rounded-lg text-[10px] font-bold border transition-all flex items-center gap-1.5",
-                liveMode
-                  ? "bg-[var(--m-accent-dim)] border-[var(--m-accent)]/30 text-[var(--m-accent)] shadow-[0_0_12px_rgba(139,92,246,0.15)]"
-                  : "bg-[#18181B] border-white/5 text-[#71717A]"
-              )}
-            >
-              <span className={cn("h-1.5 w-1.5 rounded-full", liveMode ? "bg-[var(--m-accent)] animate-pulse" : "bg-zinc-600")} />
-              Live {liveMode ? 'Active' : 'Off'}
-            </button>
-          </div>
-
-          {/* Bottom lists toggle */}
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Market Lists</span>
-            <button
-              onClick={() => setShowBottomPanel(!showBottomPanel)}
-              className={cn(
-                "h-7 px-3 rounded-lg text-[10px] font-bold border transition-all flex items-center gap-1.5",
-                showBottomPanel
-                  ? "bg-[var(--m-accent-dim)] border-[var(--m-accent)]/30 text-[var(--m-accent)] shadow-[0_0_12px_rgba(139,92,246,0.15)]"
-                  : "bg-[#18181B] border-white/5 text-slate-300"
-              )}
-            >
-              <Sliders className="h-3 w-3" />
-              {showBottomPanel ? 'Visible' : 'Hidden'}
-            </button>
-          </div>
-
-          {/* Search Field */}
-          <div className="flex flex-col gap-0.5 relative">
-            <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Filter Market</span>
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2 h-3 w-3 text-[#71717A]" />
-              <input
-                type="text"
-                placeholder="City, State, AC..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="bg-[#18181B] border border-white/10 rounded-lg pl-7 pr-2.5 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-[var(--m-accent)] h-7 w-32 placeholder-zinc-600"
-              />
-            </div>
-          </div>
-        </div>
-      </header>
-
       {/* ─── SECTION 2: Floating Panels Content Overlay Area ─── */}
       <div className="flex-grow min-h-0 flex relative z-10 p-4 justify-end items-stretch pointer-events-none">
+
+        {/* Floating Glassmorphic HUD Controls Toolbar */}
+        <div className={cn(
+          "absolute top-4 left-4 bg-[#0F0F11]/90 border border-white/10 rounded-2xl flex flex-wrap items-center justify-between px-4 py-2.5 z-20 backdrop-blur-md gap-3 shadow-2xl pointer-events-auto transition-all duration-300",
+          sidebarOpen ? "right-4 lg:right-[416px]" : "right-4"
+        )}>
+          {/* Telemetry Badge */}
+          <div className="flex items-center gap-2.5 bg-zinc-900/60 border border-white/5 px-3 py-1.5 rounded-xl shrink-0">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--m-accent)] opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-[var(--m-accent)]"></span>
+            </span>
+            <div className="flex flex-col leading-none">
+              <span className="text-[9px] font-black uppercase tracking-widest text-[#FAFAFA] font-mono">TELEMETRY ACTIVE</span>
+              <span className="text-[7.5px] font-mono text-[var(--m-accent)] tracking-wider">LIVE MAP CONTROL</span>
+            </div>
+          </div>
+
+          {/* Custom Premium Control Row */}
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Campaign Filter */}
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Campaign</span>
+              <select
+                value={selectedCampaign}
+                onChange={e => {
+                  setSelectedCampaign(e.target.value);
+                  setInspectedPoint(null);
+                }}
+                className="bg-[#18181B] border border-white/10 rounded-lg px-2.5 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-[var(--m-accent)] cursor-pointer h-7"
+              >
+                <option value="all">All Campaigns</option>
+                {musicCampaigns.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Artist Filter */}
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Artist</span>
+              <select
+                value={selectedArtist}
+                onChange={e => {
+                  setSelectedArtist(e.target.value);
+                  setInspectedPoint(null);
+                }}
+                className="bg-[#18181B] border border-white/10 rounded-lg px-2.5 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-[var(--m-accent)] cursor-pointer h-7"
+              >
+                <option value="all">All Artists</option>
+                {uniqueArtists.map(artist => (
+                  <option key={artist} value={artist}>{artist}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Date Selector */}
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Timeline</span>
+              <div className="bg-[#18181B] border border-white/10 rounded-lg p-0.5 flex h-7">
+                {(['day', 'week', 'month'] as DatePreset[]).map(preset => (
+                  <button
+                    key={preset}
+                    onClick={() => setSelectedPreset(preset)}
+                    className={cn(
+                      "px-2.5 text-[9px] font-bold rounded-md uppercase transition-all",
+                      selectedPreset === preset
+                        ? "bg-[#27272A] text-[var(--m-accent)] shadow-xs"
+                        : "text-[#71717A] hover:text-slate-300"
+                    )}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Layer Selector */}
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Visual Layer</span>
+              <select
+                value={selectedMetric}
+                onChange={e => setSelectedMetric(e.target.value as LayerMetric)}
+                className="bg-[#18181B] border border-white/10 rounded-lg px-2.5 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-[var(--m-accent)] cursor-pointer h-7"
+              >
+                <option value="answerRate">Answer Rate</option>
+                <option value="verifiedActions">Verified Actions</option>
+                <option value="proofRecords">Proof Records</option>
+                <option value="cpa">CPA Efficiency</option>
+                <option value="fanDensity">Fan Density</option>
+              </select>
+            </div>
+
+            {/* Granularity Selector */}
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Granularity</span>
+              <select
+                value={selectedGranularity}
+                onChange={e => {
+                  setSelectedGranularity(e.target.value as Granularity);
+                  setInspectedPoint(null);
+                }}
+                className="bg-[#18181B] border border-white/10 rounded-lg px-2.5 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-[var(--m-accent)] cursor-pointer h-7"
+              >
+                <option value="state">U.S. State</option>
+                <option value="area_code">Area Code (NPA)</option>
+                <option value="point">Fan Nodes</option>
+              </select>
+            </div>
+
+            {/* Confidence Filter */}
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Confidence</span>
+              <select
+                value={confidenceFilter}
+                onChange={e => setConfidenceFilter(e.target.value)}
+                className="bg-[#18181B] border border-white/10 rounded-lg px-2.5 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-[var(--m-accent)] cursor-pointer h-7"
+              >
+                <option value="all">All Grades</option>
+                <option value="high">CRM Verified</option>
+                <option value="medium">Rate Center</option>
+                <option value="low">Approx. cent</option>
+              </select>
+            </div>
+
+            {/* Live Pulse Radar Toggle */}
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Active Pulse</span>
+              <button
+                onClick={() => setLiveMode(!liveMode)}
+                className={cn(
+                  "h-7 px-3 rounded-lg text-[10px] font-bold border transition-all flex items-center gap-1.5",
+                  liveMode
+                    ? "bg-[var(--m-accent-dim)] border-[var(--m-accent)]/30 text-[var(--m-accent)] shadow-[0_0_12px_rgba(139,92,246,0.15)]"
+                    : "bg-[#18181B] border-white/5 text-[#71717A]"
+                )}
+              >
+                <span className={cn("h-1.5 w-1.5 rounded-full", liveMode ? "bg-[var(--m-accent)] animate-pulse" : "bg-zinc-600")} />
+                Live {liveMode ? 'Active' : 'Off'}
+              </button>
+            </div>
+
+            {/* Bottom lists toggle */}
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Market Lists</span>
+              <button
+                onClick={() => setShowBottomPanel(!showBottomPanel)}
+                className={cn(
+                  "h-7 px-3 rounded-lg text-[10px] font-bold border transition-all flex items-center gap-1.5",
+                  showBottomPanel
+                    ? "bg-[var(--m-accent-dim)] border-[var(--m-accent)]/30 text-[var(--m-accent)] shadow-[0_0_12px_rgba(139,92,246,0.15)]"
+                    : "bg-[#18181B] border-white/5 text-slate-300"
+                )}
+              >
+                <Sliders className="h-3 w-3" />
+                {showBottomPanel ? 'Visible' : 'Hidden'}
+              </button>
+            </div>
+
+            {/* Search Field */}
+            <div className="flex flex-col gap-0.5 relative">
+              <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Filter Market</span>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2 h-3 w-3 text-[#71717A]" />
+                <input
+                  type="text"
+                  placeholder="City, State, AC..."
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  className="bg-[#18181B] border border-white/10 rounded-lg pl-7 pr-2.5 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-[var(--m-accent)] h-7 w-32 placeholder-zinc-600"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
         
         {/* SECTION 5: Right Diagnostics Inspector / Selected Market */}
         <div className={cn("shrink-0 bg-[#0F0F11]/95 border border-white/10 rounded-2xl flex flex-col h-full overflow-hidden pointer-events-auto shadow-2xl z-20 transition-all duration-300", sidebarOpen ? "w-full lg:w-96" : "w-0 border-none opacity-0 pointer-events-none")}>
@@ -730,14 +733,23 @@ export default function MusicCampaignMap() {
                 </div>
                 <div className="flex items-center gap-1.5">
                   <button
-                    onClick={() => setSidebarOpen(false)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      setSidebarOpen(false);
+                      setInspectedPoint(null);
+                    }}
                     className="text-[#71717A] hover:text-white bg-[#18181B] border border-white/5 hover:border-white/10 px-2 py-1 rounded-lg transition-all text-[10px] font-semibold"
                     title="Collapse Sidebar"
                   >
                     Hide
                   </button>
                   <button
-                    onClick={() => setInspectedPoint(null)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      setInspectedPoint(null);
+                    }}
                     className="text-[#71717A] hover:text-white bg-[#18181B] border border-white/5 hover:border-white/10 p-1 rounded-lg transition-all text-sm leading-none h-6 w-6 flex items-center justify-center font-bold"
                   >
                     &times;
@@ -834,7 +846,11 @@ export default function MusicCampaignMap() {
                 <div className="flex justify-between items-center w-full border-b border-white/5 pb-2 mb-2">
                   <h3 className="text-xs font-bold text-slate-200">Diagnostics Terminal</h3>
                   <button
-                    onClick={() => setSidebarOpen(false)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      setSidebarOpen(false);
+                    }}
                     className="text-[#71717A] hover:text-white bg-[#18181B] border border-white/5 hover:border-white/10 px-2 py-1 rounded-lg transition-all text-[10px] font-semibold"
                     title="Collapse Sidebar"
                   >
