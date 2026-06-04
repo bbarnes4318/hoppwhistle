@@ -870,8 +870,67 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       const { userId, tenantId } = getUser(request);
 
       const prisma = getPrismaClient();
-      const user = await prisma.user.findUnique({ where: { id: userId } });
-      const extension = (user?.metadata as any)?.extension;
+      let user = await prisma.user.findUnique({ where: { id: userId } });
+      let extension = (user?.metadata as any)?.extension;
+
+      // If user has no extension, dynamically assign a free one from 1000-1019
+      if (!extension && user) {
+        const allUsers = await prisma.user.findMany({
+          select: { metadata: true },
+        });
+        const usedExtensions = new Set<string>();
+        for (const u of allUsers) {
+          const ext = (u.metadata as any)?.extension;
+          if (ext) {
+            usedExtensions.add(ext.toString().trim());
+          }
+        }
+
+        let availableExtension: string | null = null;
+        for (let extNum = 1000; extNum <= 1019; extNum++) {
+          const extStr = extNum.toString();
+          if (!usedExtensions.has(extStr)) {
+            availableExtension = extStr;
+            break;
+          }
+        }
+
+        if (availableExtension) {
+          const currentMetadata = (user.metadata as Record<string, any>) || {};
+          const updatedMetadata = {
+            ...currentMetadata,
+            extension: availableExtension,
+          };
+
+          user = await prisma.user.update({
+            where: { id: userId },
+            data: { metadata: updatedMetadata },
+          });
+          extension = availableExtension;
+
+          request.log.info({
+            msg: 'webrtc/credentials: Automatically assigned free extension to user',
+            userId,
+            extension,
+          });
+
+          // Sync DidRoute for any active phone numbers assigned to the user
+          try {
+            const { didRouteService } = await import('../services/did-route-service.js');
+            const phoneNumbers = await prisma.phoneNumber.findMany({
+              where: { userId, status: 'ACTIVE' },
+            });
+            for (const phoneNum of phoneNumbers) {
+              await didRouteService.syncDidRouteForNumber(phoneNum.id, tenantId);
+            }
+          } catch (syncErr) {
+            request.log.error({
+              msg: 'webrtc/credentials: Failed to sync DID routes during auto-extension assignment',
+              err: syncErr,
+            });
+          }
+        }
+      }
 
       // Generate temporary credentials or use static extension mapping
       const username = extension ? `${extension}@${tenantId}` : `${userId}@${tenantId}`;

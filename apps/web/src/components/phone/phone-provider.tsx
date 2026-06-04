@@ -1118,8 +1118,10 @@ export function PhoneProvider({
         // Port 7443: FreeSWITCH native WSS (requires valid SSL certs)
         // Port 8083: Direct WS for local/dev
         let sipWsUrl = creds.wsUrl;
-        if (!sipWsUrl) {
-          sipWsUrl = isSecure ? `wss://${wsHost}:7443` : `ws://${sipDomain}:8083`;
+        if (isSecure) {
+          sipWsUrl = `wss://${wsHost}:7443`;
+        } else if (!sipWsUrl) {
+          sipWsUrl = `ws://${sipDomain}:8083`;
         }
 
         console.log('[Phone] Initializing SIP UA dynamically:', { sipUser, sipDomain, sipWsUrl });
