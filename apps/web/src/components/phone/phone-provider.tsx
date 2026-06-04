@@ -19,6 +19,33 @@ import {
   UserAgentOptions,
 } from 'sip.js';
 
+// Helper to extract the actual SIP Call-ID header from a SIP.js Session object
+function getSipCallId(session: any): string {
+  if (!session) return '';
+  
+  // Strategy 1: Check request headers (standard SIP header)
+  if (session.request && typeof session.request.getHeader === 'function') {
+    const headerVal = session.request.getHeader('Call-ID');
+    if (headerVal) return headerVal.trim();
+  }
+  
+  // Strategy 2: Check request.callId
+  if (session.request && session.request.callId) {
+    return session.request.callId.trim();
+  }
+  
+  // Strategy 3: Check incomingMessage or outgoingRequest
+  if (session.incomingMessage && session.incomingMessage.callId) {
+    return session.incomingMessage.callId.trim();
+  }
+  if (session.outgoingRequestMessage && session.outgoingRequestMessage.callId) {
+    return session.outgoingRequestMessage.callId.trim();
+  }
+  
+  // Fallback to session.id
+  return (session.id || '').trim();
+}
+
 // ============================================================================
 // Types & Interfaces
 // ============================================================================
@@ -671,8 +698,8 @@ export function PhoneProvider({
         const apiCallId = data.callId;
         const chosenCallerId = data.callerId || '';
 
-        // SIP INVITE - use server IP for the target domain (must match FreeSWITCH)
-        const sipTargetDomain = process.env.NEXT_PUBLIC_IP || '3.214.60.13';
+        // SIP INVITE - use registered server host for the target domain (must match FreeSWITCH)
+        const sipTargetDomain = userAgentRef.current?.configuration.uri.host || process.env.NEXT_PUBLIC_IP || '3.214.60.13';
         const target = UserAgent.makeURI(`sip:${phoneNumber}@${sipTargetDomain}`);
         if (!target) throw new Error('Invalid target URI');
 
@@ -1000,10 +1027,9 @@ export function PhoneProvider({
       return;
     }
 
-    // Get call IDs using the SIP Call-ID header or internal id
-    // Note: sip.js session.id is usually the Call-ID
-    const activeCallId = sessionRef.current.id;
-    const heldCallId = heldSessionRef.current.id;
+    // Get call IDs using the exact SIP Call-ID header to match FreeSWITCH's sip_call_id
+    const activeCallId = getSipCallId(sessionRef.current);
+    const heldCallId = getSipCallId(heldSessionRef.current);
 
     console.log('[Phone] Merging calls...', {
       active: activeCallId,
