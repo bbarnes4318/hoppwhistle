@@ -18,7 +18,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import Link from 'next/link';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Area,
   AreaChart,
@@ -68,6 +68,11 @@ const formatTimestamp = (ts: string) => {
 export default function MusicConsolePage() {
   const [playingRecordId, setPlayingRecordId] = useState<string | null>(null);
   const [expandedTranscriptId, setExpandedTranscriptId] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const togglePlay = (id: string) => {
     setPlayingRecordId(playingRecordId === id ? null : id);
@@ -80,62 +85,32 @@ export default function MusicConsolePage() {
   return (
     <div className="space-y-8 pb-12">
       {/* ─── SECTION 1: Premium Hero Command Module (Dark Obsidian) ─── */}
-      <section className="m-dark-mode bg-[#0B0F19] text-[#FAFAFA] rounded-2xl border border-white/[0.04] p-8 lg:p-10 relative overflow-hidden shadow-[0_24px_48px_rgba(0,0,0,0.3)]">
+      {/* ─── SECTION 1: Premium Hero Command Module (Dark Obsidian) ─── */}
+      <section className="m-dark-mode bg-[#0B0F19] text-[#FAFAFA] rounded-2xl border border-white/[0.04] p-6 lg:p-8 relative overflow-hidden shadow-[0_24px_48px_rgba(0,0,0,0.3)]">
         {/* Glow Highlights */}
-        <div className="absolute top-0 right-0 w-96 h-96 bg-[#8B5CF6]/10 rounded-full blur-[120px] pointer-events-none opacity-40" />
+        <div className="absolute top-0 right-0 w-96 h-96 bg-[#8B5CF6]/5 rounded-full blur-[120px] pointer-events-none opacity-40" />
         <div className="absolute bottom-0 left-0 w-80 h-80 bg-[#10B981]/5 rounded-full blur-[90px] pointer-events-none opacity-30" />
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center relative z-10">
-          {/* Left Column: Command details & KPI Summary */}
-          <div className="lg:col-span-7 space-y-6">
-            <div className="space-y-4">
+        <div className="relative z-10 space-y-6">
+          {/* Header Row */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.06] pb-5">
+            <div className="space-y-1">
               <div className="flex items-center gap-3">
-                <span className="text-[10px] font-black tracking-[0.25em] text-[#A78BFA] uppercase">
-                  SYSTEM COMMAND // CAMPAIGN: {livePulse.campaignName.toUpperCase()}
+                <span className="text-[9px] font-black tracking-[0.25em] text-[#A78BFA] uppercase">
+                  ACTIVE CAMPAIGN
                 </span>
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded border border-[#10B981]/20 bg-[#10B981]/10 text-xs font-semibold text-[#10B981]">
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border border-[#10B981]/20 bg-[#10B981]/10 text-xs font-semibold text-[#10B981]">
                   <span className="m-pulse-dot h-1.5 w-1.5" />
                   <span className="font-mono text-[9px] uppercase tracking-wider">{livePulse.status}</span>
                 </span>
               </div>
-              <h1 className="text-4xl lg:text-5xl font-black tracking-tight text-white leading-[1.1] max-w-2xl">
-                Turn fan attention into <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#C084FC] to-[#8B5CF6]">verified action</span>.
+              <h1 className="text-xl font-black text-white leading-tight">
+                {livePulse.campaignName} <span className="text-zinc-500 font-medium font-sans text-sm ml-2">by {livePulse.artist}</span>
               </h1>
-              <p className="text-sm lg:text-base text-zinc-400 max-w-xl leading-relaxed">
-                Configure voice agents to dial opted-in contacts, verify streaming actions, deliver tracking links, and secure conversions in the ledger.
-              </p>
             </div>
 
-            {/* Active Console Details Wrapper */}
-            <div className="bg-[#101423]/90 border border-white/[0.04] rounded-xl p-5 grid grid-cols-2 md:grid-cols-4 gap-4 backdrop-blur-xs">
-              <div className="space-y-1">
-                <div className="text-[9px] font-bold tracking-widest text-zinc-500 uppercase">Artist Profile</div>
-                <div className="text-sm font-bold text-white truncate">{livePulse.artist}</div>
-                <div className="text-[10px] text-zinc-400 truncate">Vapi Agent V2</div>
-              </div>
-              <div className="space-y-1 border-l border-white/[0.06] pl-4">
-                <div className="text-[9px] font-bold tracking-widest text-zinc-500 uppercase">Current CPA</div>
-                <div className="text-base font-mono font-bold text-[var(--m-warning)]">{formatCurrency(livePulse.cpa)}</div>
-                <div className="text-[10px] text-zinc-400">CPA Yield</div>
-              </div>
-              <div className="space-y-1 border-l border-white/[0.06] pl-4">
-                <div className="text-[9px] font-bold tracking-widest text-zinc-500 uppercase">Verified Actions</div>
-                <div className="text-base font-mono font-bold text-[#10B981]">
-                  {formatCompactNumber(topKpis.verifiedEngagements.value)}
-                </div>
-                <div className="text-[10px] text-zinc-400">Attributed saves</div>
-              </div>
-              <div className="space-y-1 border-l border-white/[0.06] pl-4">
-                <div className="text-[9px] font-bold tracking-widest text-zinc-500 uppercase">Proof Ledger</div>
-                <div className="text-base font-mono font-bold text-[#A78BFA]">
-                  {formatCompactNumber(topKpis.proofCaptured.value)}
-                </div>
-                <div className="text-[10px] text-zinc-400">Ledger locks</div>
-              </div>
-            </div>
-
-            {/* CTA Actions */}
-            <div className="flex flex-wrap items-center gap-3 pt-2">
+            {/* CTAs */}
+            <div className="flex items-center gap-3 shrink-0">
               <Link href="/music-console/proof">
                 <ActionButton variant="primary" className="text-xs font-semibold py-2 px-4 shadow-[0_4px_16px_rgba(139,92,246,0.2)] hover:shadow-[0_6px_20px_rgba(139,92,246,0.35)]">
                   View Proof Log <ArrowRight className="h-3.5 w-3.5" />
@@ -149,174 +124,87 @@ export default function MusicConsolePage() {
             </div>
           </div>
 
-          {/* Right Column: Premium Rotating Disc Visual */}
-          <div className="lg:col-span-5 flex items-center justify-center">
-            <div className="m-signal-disc-container">
-              {/* Radar expanding ripples */}
-              <div className="m-signal-disc-ripple-ring" />
-              <div className="m-signal-disc-ripple-ring" />
-
-              {/* Tonearm */}
-              <svg
-                className="absolute right-4 top-2 w-24 h-32 z-20 pointer-events-none"
-                viewBox="0 0 100 120"
-              >
-                <g className={cn("m-signal-disc-tonearm", playingRecordId !== null && "m-signal-disc-tonearm--active")}>
-                  <path
-                    d="M90,10 L80,10 L45,65 L35,68 L40,76 L48,72 L82,24 Z"
-                    fill="#94A3B8"
-                    stroke="rgba(0,0,0,0.5)"
-                    strokeWidth="1"
-                  />
-                  <circle cx="90" cy="10" r="7" fill="#0B0F19" />
-                  <rect
-                    x="33"
-                    y="72"
-                    width="10"
-                    height="8"
-                    rx="1"
-                    transform="rotate(-35 38 76)"
-                    fill="#EF4444"
-                  />
-                  <circle cx="38" cy="76" r="1.5" fill="#10B981" className="animate-pulse" />
-                </g>
-              </svg>
-
-              {/* Vinyl Disc Group */}
-              <div className="m-signal-disc m-signal-disc-spin">
-                {/* Grooves & Concentric Circular Arcs */}
-                <div className="m-signal-disc-grooves" />
-
-                {/* SVG Progress Arcs */}
-                <svg className="absolute inset-0 w-full h-full" viewBox="0 0 230 230">
-                  {/* Contact Rate Arc (Outer: Teal) */}
-                  <circle
-                    cx="115"
-                    cy="115"
-                    r="84"
-                    fill="none"
-                    stroke="#10B981"
-                    strokeWidth="3.5"
-                    strokeDasharray={`${2 * Math.PI * 84 * (livePulse.contactRate / 100)} ${2 * Math.PI * 84 * (1 - livePulse.contactRate / 100)}`}
-                    strokeLinecap="round"
-                    transform="rotate(-90 115 115)"
-                    opacity="0.9"
-                  />
-                  {/* Answer Rate Arc (Middle: Violet) */}
-                  <circle
-                    cx="115"
-                    cy="115"
-                    r="68"
-                    fill="none"
-                    stroke="#8B5CF6"
-                    strokeWidth="3.5"
-                    strokeDasharray={`${2 * Math.PI * 68 * (livePulse.answerRate / 100)} ${2 * Math.PI * 68 * (1 - livePulse.answerRate / 100)}`}
-                    strokeLinecap="round"
-                    transform="rotate(-45 115 115)"
-                    opacity="0.9"
-                  />
-                  {/* Verified Rate Arc (Inner: Gold) */}
-                  <circle
-                    cx="115"
-                    cy="115"
-                    r="52"
-                    fill="none"
-                    stroke="#F59E0B"
-                    strokeWidth="3.5"
-                    strokeDasharray={`${2 * Math.PI * 52 * (livePulse.verifiedRate / 100)} ${2 * Math.PI * 52 * (1 - livePulse.verifiedRate / 100)}`}
-                    strokeLinecap="round"
-                    transform="rotate(30 115 115)"
-                    opacity="0.9"
-                  />
-                </svg>
-
-                {/* Center Record Sticker */}
-                <div className="m-signal-disc-center bg-[#8B5CF6]">
-                  <div className="m-signal-disc-spindle" />
-                </div>
+          {/* 6 Core KPIs Grid (Premium Horizontal Strip) */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6 pt-2">
+            {/* KPI 1 */}
+            <div className="space-y-1">
+              <div className="text-[9px] font-black tracking-widest text-zinc-500 uppercase flex items-center gap-1.5">
+                <Users className="h-3.5 w-3.5 text-[#A78BFA]" /> Reached Fans
               </div>
+              <div className="text-2xl font-black font-mono text-white">
+                {formatCompactNumber(topKpis.fansContacted.value)}
+              </div>
+              <div className="text-[10px] text-zinc-400">
+                <span className="text-[#10B981] font-semibold">+{topKpis.fansContacted.change}%</span> vs prev week
+              </div>
+            </div>
 
-              {/* Coordinates & Floating Indicators */}
-              <div className="absolute top-1/2 left-[-20px] -translate-y-1/2 bg-[#101423] border border-white/10 px-3 py-1 rounded shadow-md text-center">
-                <div className="text-[8px] uppercase tracking-widest text-zinc-500 font-bold">
-                  Contact
-                </div>
-                <div className="text-xs font-mono font-bold text-[#10B981]">
-                  {livePulse.contactRate}%
-                </div>
+            {/* KPI 2 */}
+            <div className="space-y-1 border-l-0 sm:border-l border-white/[0.06] pl-0 sm:pl-4">
+              <div className="text-[9px] font-black tracking-widest text-zinc-500 uppercase flex items-center gap-1.5">
+                <Headphones className="h-3.5 w-3.5 text-[#8B5CF6]" /> Human Answers
               </div>
-              <div className="absolute top-8 right-0 bg-[#101423] border border-white/10 px-3 py-1 rounded shadow-md text-center">
-                <div className="text-[8px] uppercase tracking-widest text-zinc-500 font-bold">
-                  Answers
-                </div>
-                <div className="text-xs font-mono font-bold text-[#8B5CF6]">
-                  {livePulse.answerRate}%
-                </div>
+              <div className="text-2xl font-black font-mono text-white">
+                {formatCompactNumber(topKpis.humanAnswers.value)}
               </div>
-              <div className="absolute bottom-8 left-4 bg-[#101423] border border-white/10 px-3 py-1 rounded shadow-md text-center">
-                <div className="text-[8px] uppercase tracking-widest text-zinc-500 font-bold">
-                  Verified
-                </div>
-                <div className="text-xs font-mono font-bold text-[#F59E0B]">
-                  {livePulse.verifiedRate}%
-                </div>
+              <div className="text-[10px] text-zinc-400">
+                <span className="text-[#10B981] font-semibold">+{topKpis.humanAnswers.change}%</span> connects
+              </div>
+            </div>
+
+            {/* KPI 3 */}
+            <div className="space-y-1 border-l-0 md:border-l border-white/[0.06] pl-0 md:pl-4">
+              <div className="text-[9px] font-black tracking-widest text-zinc-500 uppercase flex items-center gap-1.5">
+                <ShieldCheck className="h-3.5 w-3.5 text-[#10B981]" /> Verified Actions
+              </div>
+              <div className="text-2xl font-black font-mono text-[#10B981]">
+                {formatCompactNumber(topKpis.verifiedEngagements.value)}
+              </div>
+              <div className="text-[10px] text-zinc-400">
+                <span className="text-[#10B981] font-semibold">+{topKpis.verifiedEngagements.change}%</span> conversions
+              </div>
+            </div>
+
+            {/* KPI 4 */}
+            <div className="space-y-1 border-l-0 lg:border-l border-white/[0.06] pl-0 lg:pl-4">
+              <div className="text-[9px] font-black tracking-widest text-zinc-500 uppercase flex items-center gap-1.5">
+                <CheckCircle2 className="h-3.5 w-3.5 text-sky-400" /> Pre-Saves
+              </div>
+              <div className="text-2xl font-black font-mono text-white">
+                {formatCompactNumber(topKpis.preSaves.value)}
+              </div>
+              <div className="text-[10px] text-zinc-400">
+                <span className="text-[#10B981] font-semibold">+{topKpis.preSaves.change}%</span> DSP actions
+              </div>
+            </div>
+
+            {/* KPI 5 */}
+            <div className="space-y-1 border-l-0 md:border-l border-white/[0.06] pl-0 md:pl-4">
+              <div className="text-[9px] font-black tracking-widest text-zinc-500 uppercase flex items-center gap-1.5">
+                <DollarSign className="h-3.5 w-3.5 text-[var(--m-warning)]" /> Cost / Pre-Save
+              </div>
+              <div className="text-2xl font-black font-mono text-[var(--m-warning)]">
+                {formatCurrency(topKpis.costPerPreSave.value)}
+              </div>
+              <div className="text-[10px] text-zinc-400">
+                <span className="text-[#10B981] font-semibold">{topKpis.costPerPreSave.change}%</span> CPA yield
+              </div>
+            </div>
+
+            {/* KPI 6 */}
+            <div className="space-y-1 border-l-0 lg:border-l border-white/[0.06] pl-0 lg:pl-4">
+              <div className="text-[9px] font-black tracking-widest text-zinc-500 uppercase flex items-center gap-1.5">
+                <FileText className="h-3.5 w-3.5 text-[#A78BFA]" /> Proof Records
+              </div>
+              <div className="text-2xl font-black font-mono text-[#A78BFA]">
+                {formatCompactNumber(topKpis.proofCaptured.value)}
+              </div>
+              <div className="text-[10px] text-zinc-400">
+                <span className="text-[#10B981] font-semibold">+{topKpis.proofCaptured.change}%</span> verbatims
               </div>
             </div>
           </div>
         </div>
-      </section>
-
-      {/* ─── SECTION 2: KPI Strip ─── */}
-      <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <MetricCard
-          label="Reached Fans"
-          tag="FAN SIGNAL"
-          value={formatCompactNumber(topKpis.fansContacted.value)}
-          change={topKpis.fansContacted.change}
-          subtext="Audiences prompted"
-          icon={Users}
-        />
-        <MetricCard
-          label="Human Answers"
-          tag="VOICE RESPONSE"
-          value={formatCompactNumber(topKpis.humanAnswers.value)}
-          change={topKpis.humanAnswers.change}
-          subtext="Live connections made"
-          icon={Headphones}
-        />
-        <MetricCard
-          label="Verified Actions"
-          tag="ACTION VERIFIED"
-          value={formatCompactNumber(topKpis.verifiedEngagements.value)}
-          change={topKpis.verifiedEngagements.change}
-          subtext="Conversions recorded"
-          icon={ShieldCheck}
-        />
-        <MetricCard
-          label="Pre-Saves"
-          tag="CONVERSION"
-          value={formatCompactNumber(topKpis.preSaves.value)}
-          change={topKpis.preSaves.change}
-          subtext="DSP platform pre-saves"
-          icon={CheckCircle2}
-        />
-        <MetricCard
-          label="Cost / Pre-Save"
-          tag="EFFICIENCY"
-          value={formatCurrency(topKpis.costPerPreSave.value)}
-          change={topKpis.costPerPreSave.change}
-          subtext="Target CPA metric yield"
-          icon={DollarSign}
-          trendType="negative-is-good"
-        />
-        <MetricCard
-          label="Proof Records"
-          tag="LEDGER PROOF"
-          value={formatCompactNumber(topKpis.proofCaptured.value)}
-          change={topKpis.proofCaptured.change}
-          subtext="Verbatims & audio locked"
-          icon={FileText}
-        />
       </section>
 
       {/* ─── SECTION 3: Stepped Fan Journey Path (Unified Attribution Card) ─── */}
@@ -433,76 +321,80 @@ export default function MusicConsolePage() {
             </div>
 
             {/* Right Chart Canvas */}
-            <div className="md:col-span-3 h-[250px] w-full min-h-[250px] relative">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart
-                  data={campaignTimeSeries}
-                  margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-                >
-                  <defs>
-                    <linearGradient id="colorAnswers" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.12} />
-                      <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="colorVerified" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10B981" stopOpacity={0.12} />
-                      <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    vertical={false}
-                    stroke="var(--m-border)"
-                  />
-                  <XAxis
-                    dataKey="date"
-                    stroke="var(--m-dim)"
-                    tick={{ fontSize: 10, fill: 'var(--m-muted)', fontWeight: 600 }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    stroke="var(--m-dim)"
-                    tick={{ fontSize: 10, fill: 'var(--m-muted)', fontWeight: 600 }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'var(--m-surface)',
-                      border: '1px solid var(--m-border)',
-                      borderRadius: '8px',
-                      boxShadow: '0 8px 24px rgba(9, 9, 11, 0.08)',
-                    }}
-                    itemStyle={{ fontSize: '11px', color: 'var(--m-text)' }}
-                    labelStyle={{
-                      fontSize: '10px',
-                      color: 'var(--m-muted)',
-                      fontWeight: '800',
-                      marginBottom: '4px',
-                      textTransform: 'uppercase',
-                    }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="humanAnswers"
-                    name="Human Answers"
-                    stroke="#8B5CF6"
-                    strokeWidth={2}
-                    fillOpacity={1}
-                    fill="url(#colorAnswers)"
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="verifiedEngagements"
-                    name="Verified Actions"
-                    stroke="#10B981"
-                    strokeWidth={2}
-                    fillOpacity={1}
-                    fill="url(#colorVerified)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+            <div className="md:col-span-3 h-[420px] w-full min-h-[350px] relative flex items-center justify-center">
+              {mounted ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart
+                    data={campaignTimeSeries}
+                    margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                  >
+                    <defs>
+                      <linearGradient id="colorAnswers" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.12} />
+                        <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="colorVerified" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10B981" stopOpacity={0.12} />
+                        <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      vertical={false}
+                      stroke="var(--m-border)"
+                    />
+                    <XAxis
+                      dataKey="date"
+                      stroke="var(--m-dim)"
+                      tick={{ fontSize: 10, fill: 'var(--m-muted)', fontWeight: 600 }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      stroke="var(--m-dim)"
+                      tick={{ fontSize: 10, fill: 'var(--m-muted)', fontWeight: 600 }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: 'var(--m-surface)',
+                        border: '1px solid var(--m-border)',
+                        borderRadius: '8px',
+                        boxShadow: '0 8px 24px rgba(9, 9, 11, 0.08)',
+                      }}
+                      itemStyle={{ fontSize: '11px', color: 'var(--m-text)' }}
+                      labelStyle={{
+                        fontSize: '10px',
+                        color: 'var(--m-muted)',
+                        fontWeight: '800',
+                        marginBottom: '4px',
+                        textTransform: 'uppercase',
+                      }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="humanAnswers"
+                      name="Human Answers"
+                      stroke="#8B5CF6"
+                      strokeWidth={2}
+                      fillOpacity={1}
+                      fill="url(#colorAnswers)"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="verifiedEngagements"
+                      name="Verified Actions"
+                      stroke="#10B981"
+                      strokeWidth={2}
+                      fillOpacity={1}
+                      fill="url(#colorVerified)"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="text-xs text-[var(--m-muted)] font-mono animate-pulse">Loading telemetry signal charts...</div>
+              )}
             </div>
           </div>
         </div>

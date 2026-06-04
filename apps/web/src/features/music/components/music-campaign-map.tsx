@@ -61,6 +61,8 @@ export default function MusicCampaignMap() {
   const [confidenceFilter, setConfidenceFilter] = useState<string>('all');
   const [liveMode, setLiveMode] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [showBottomPanel, setShowBottomPanel] = useState<boolean>(false);
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
 
   // Selected point and hover states
   const [inspectedPoint, setInspectedPoint] = useState<GeoMetricPoint | null>(null);
@@ -363,6 +365,7 @@ export default function MusicCampaignMap() {
         onClick: (info: any) => {
           if (info.object) {
             setInspectedPoint(info.object);
+            setSidebarOpen(true);
             setViewState(prev => ({
               ...prev,
               latitude: info.object.latitude - 0.15,
@@ -451,6 +454,7 @@ export default function MusicCampaignMap() {
   // Center view and inspect selected market node
   const handleInspectMarket = (p: GeoMetricPoint) => {
     setInspectedPoint(p);
+    setSidebarOpen(true);
     setViewState(prev => ({
       ...prev,
       latitude: p.latitude - 0.15,
@@ -505,10 +509,35 @@ export default function MusicCampaignMap() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-64px)] w-full bg-[#09090B] text-[#FAFAFA] overflow-hidden select-none relative font-sans">
+    <div className="flex flex-col h-full w-full bg-[#09090B] text-[#FAFAFA] overflow-hidden select-none relative font-sans">
       
+      {/* ─── Map Canvas Box (Full Viewport Background) ─── */}
+      <div className="absolute inset-0 w-full h-full z-0 bg-[#09090B]">
+        {DeckGL ? (
+          <div className="relative w-full h-full">
+            {/* Vector Basemap style element */}
+            <div ref={mapContainerRef} className="absolute inset-0 w-full h-full z-0 pointer-events-none" />
+
+            {/* WebGL DeckGL layers overlay */}
+            <DeckGL
+              viewState={viewState}
+              onViewStateChange={(e: any) => setViewState(e.viewState)}
+              controller={{ doubleClickZoom: false, dragRotate: true }}
+              layers={deckLayers}
+              getCursor={({ isHovering }: any) => (isHovering ? 'pointer' : 'default')}
+              style={{ position: 'absolute', inset: 0, zIndex: 10, pointerEvents: 'auto' }}
+            />
+          </div>
+        ) : (
+          <div className="h-full w-full flex flex-col items-center justify-center text-slate-400">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--m-accent)] mb-2" />
+            <span>Canvas overlay loading...</span>
+          </div>
+        )}
+      </div>
+
       {/* ─── SECTION 1: Top Command Control Header ─── */}
-      <header className="h-16 shrink-0 bg-[#0F0F11]/90 border-b border-white/5 flex flex-wrap items-center justify-between px-6 z-20 backdrop-blur-md gap-4">
+      <header className="h-16 shrink-0 bg-[#0F0F11]/90 border-b border-white/5 flex flex-wrap items-center justify-between px-6 z-20 backdrop-blur-md gap-4 relative pointer-events-auto">
         
         {/* Title Group */}
         <div className="flex items-center gap-3">
@@ -613,7 +642,7 @@ export default function MusicCampaignMap() {
             </select>
           </div>
 
-          {/* Location Confidence Filter */}
+          {/* Confidence Filter */}
           <div className="flex flex-col gap-0.5">
             <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Confidence</span>
             <select
@@ -645,6 +674,23 @@ export default function MusicCampaignMap() {
             </button>
           </div>
 
+          {/* Bottom lists toggle */}
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Market Lists</span>
+            <button
+              onClick={() => setShowBottomPanel(!showBottomPanel)}
+              className={cn(
+                "h-7 px-3 rounded-lg text-[10px] font-bold border transition-all flex items-center gap-1.5",
+                showBottomPanel
+                  ? "bg-[var(--m-accent-dim)] border-[var(--m-accent)]/30 text-[var(--m-accent)] shadow-[0_0_12px_rgba(139,92,246,0.15)]"
+                  : "bg-[#18181B] border-white/5 text-slate-300"
+              )}
+            >
+              <Sliders className="h-3 w-3" />
+              {showBottomPanel ? 'Visible' : 'Hidden'}
+            </button>
+          </div>
+
           {/* Search Field */}
           <div className="flex flex-col gap-0.5 relative">
             <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Filter Market</span>
@@ -662,173 +708,11 @@ export default function MusicCampaignMap() {
         </div>
       </header>
 
-      {/* ─── SECTION 2: Map Surface Area & Sidebar ─── */}
-      <div className="flex-grow min-h-0 flex flex-col lg:flex-row relative z-10 p-4 gap-4">
+      {/* ─── SECTION 2: Floating Panels Content Overlay Area ─── */}
+      <div className="flex-grow min-h-0 flex relative z-10 p-4 justify-end items-stretch pointer-events-none">
         
-        {/* Map Canvas Box */}
-        <div className="flex-1 h-[400px] lg:h-full relative bg-[#121214] border border-white/5 rounded-2xl overflow-hidden shadow-[inset_0_2px_8px_rgba(0,0,0,0.8)]">
-          {DeckGL ? (
-            <div className="relative w-full h-full">
-              {/* Vector Basemap style element */}
-              <div ref={mapContainerRef} className="absolute inset-0 w-full h-full z-0 pointer-events-none" />
-
-              {/* WebGL DeckGL layers overlay */}
-              <DeckGL
-                viewState={viewState}
-                onViewStateChange={(e: any) => setViewState(e.viewState)}
-                controller={{ doubleClickZoom: false, dragRotate: true }}
-                layers={deckLayers}
-                getCursor={({ isHovering }: any) => (isHovering ? 'pointer' : 'default')}
-                style={{ position: 'absolute', inset: 0, zIndex: 10, pointerEvents: 'auto' }}
-              />
-            </div>
-          ) : (
-            <div className="h-full w-full flex flex-col items-center justify-center text-slate-400">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--m-accent)] mb-2" />
-              <span>Canvas overlay loading...</span>
-            </div>
-          )}
-
-          {/* Floating Metric Overlay Cards */}
-          <div className="absolute top-4 left-4 right-4 z-20 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 pointer-events-none">
-            {/* 1. Answer Rate */}
-            <div className="bg-[#0F0F11]/85 backdrop-blur-md border border-white/5 shadow-md rounded-xl p-3 flex flex-col justify-between min-h-[64px] pointer-events-auto">
-              <span className="text-[8px] text-[#A1A1AA] uppercase tracking-wider font-bold">Answer Rate</span>
-              <span className="text-sm font-bold font-mono text-[var(--m-accent)]">{metricsStats.connectRate.toFixed(1)}%</span>
-              <span className="text-[7.5px] text-[#71717A] mt-0.5 truncate">Dials connected</span>
-            </div>
-
-            {/* 2. Verified Actions */}
-            <div className="bg-[#0F0F11]/85 backdrop-blur-md border border-white/5 shadow-md rounded-xl p-3 flex flex-col justify-between min-h-[64px] pointer-events-auto">
-              <span className="text-[8px] text-[#A1A1AA] uppercase tracking-wider font-bold">Verified Actions</span>
-              <span className="text-sm font-bold font-mono text-[#10B981]">{metricsStats.saves.toLocaleString()}</span>
-              <span className="text-[7.5px] text-[#71717A] mt-0.5 truncate">Attributed Pre-Saves</span>
-            </div>
-
-            {/* 3. Proof Records */}
-            <div className="bg-[#0F0F11]/85 backdrop-blur-md border border-white/5 shadow-md rounded-xl p-3 flex flex-col justify-between min-h-[64px] pointer-events-auto">
-              <span className="text-[8px] text-[#A1A1AA] uppercase tracking-wider font-bold">Proof Records</span>
-              <span className="text-sm font-bold font-mono text-[var(--m-accent)]">{metricsStats.listens.toLocaleString()}</span>
-              <span className="text-[7.5px] text-[#71717A] mt-0.5 truncate">Locked verifications</span>
-            </div>
-
-            {/* 4. CPA Efficiency */}
-            <div className="bg-[#0F0F11]/85 backdrop-blur-md border border-white/5 shadow-md rounded-xl p-3 flex flex-col justify-between min-h-[64px] pointer-events-auto">
-              <span className="text-[8px] text-[#A1A1AA] uppercase tracking-wider font-bold">CPA Efficiency</span>
-              <span className="text-sm font-bold font-mono text-[var(--m-warning)]">${metricsStats.cpa.toFixed(2)}</span>
-              <span className="text-[7.5px] text-[#71717A] mt-0.5 truncate">Avg cost per save</span>
-            </div>
-
-            {/* 5. Active Markets */}
-            <div className="bg-[#0F0F11]/85 backdrop-blur-md border border-white/5 shadow-md rounded-xl p-3 flex flex-col justify-between min-h-[64px] pointer-events-auto">
-              <span className="text-[8px] text-[#A1A1AA] uppercase tracking-wider font-bold">Active Markets</span>
-              <span className="text-sm font-bold font-mono text-slate-200">{metricsStats.activeMarketsCount}</span>
-              <span className="text-[7.5px] text-[#71717A] mt-0.5 truncate">Dialed city clusters</span>
-            </div>
-
-            {/* 6. Underperforming / Wasted */}
-            <div className="bg-[#0F0F11]/85 backdrop-blur-md border border-white/5 shadow-md rounded-xl p-3 flex flex-col justify-between min-h-[64px] pointer-events-auto">
-              <span className="text-[8px] text-[#A1A1AA] uppercase tracking-wider font-bold">Wasted Spend</span>
-              <span className="text-sm font-bold font-mono text-[var(--m-danger)]">${Math.round(metricsStats.wastedSpend).toLocaleString()}</span>
-              <span className="text-[7.5px] text-[#71717A] mt-0.5 truncate">Zero-conversion spend</span>
-            </div>
-          </div>
-
-          {/* Styled Zoom Controls */}
-          <div className="absolute right-4 bottom-4 flex flex-col gap-2 bg-[#0F0F11]/90 border border-white/10 p-1 rounded-xl backdrop-blur-md z-20 shadow-md">
-            <button
-              onClick={() => setViewState(v => ({ ...v, zoom: Math.min(v.zoom + 0.8, 16) }))}
-              className="w-7 h-7 text-xs font-bold text-slate-300 hover:text-white bg-[#18181B] border border-white/5 hover:border-white/10 rounded-lg flex items-center justify-center transition-all"
-            >
-              <Plus className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => setViewState(v => ({ ...v, zoom: Math.max(v.zoom - 0.8, 1) }))}
-              className="w-7 h-7 text-xs font-bold text-slate-300 hover:text-white bg-[#18181B] border border-white/5 hover:border-white/10 rounded-lg flex items-center justify-center transition-all"
-            >
-              <Minus className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() =>
-                setViewState({
-                  latitude: 37.8,
-                  longitude: -96.0,
-                  zoom: 3.8,
-                  pitch: 25,
-                  bearing: -5,
-                })
-              }
-              className="w-7 h-7 text-[8px] font-bold text-[var(--m-accent)] bg-[#18181B] border border-white/5 hover:border-white/10 rounded-lg flex items-center justify-center transition-all"
-              title="Center View"
-            >
-              CTR
-            </button>
-          </div>
-
-          {/* Map Legends Box */}
-          <div className="absolute left-4 bottom-4 bg-[#0F0F11]/95 border border-white/10 p-3.5 rounded-xl backdrop-blur-md max-w-xs shadow-lg z-20">
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <div className="h-1.5 w-1.5 rounded-full bg-[var(--m-accent-2)] animate-pulse" />
-              <h3 className="text-[9px] font-bold uppercase tracking-wider text-slate-200">
-                Layer intensity
-              </h3>
-            </div>
-            <div className="space-y-1.5 text-[8.5px] text-[#A1A1AA]">
-              <p>
-                Colors reflect the metrics of the <span className="font-semibold text-slate-200">{selectedMetric}</span> layer. Nodes are sized based on dial volume.
-              </p>
-              <div className="h-2 w-full bg-gradient-to-r from-zinc-800 to-[var(--m-accent)] rounded border border-white/5" />
-              <div className="flex justify-between text-[8px] font-mono text-[#71717A]">
-                <span>Low connect</span>
-                <span>High connect ({maxVal.toLocaleString()})</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Hover tooltips */}
-          {hoveredPoint && hoverInfo && (
-            <div
-              className="absolute pointer-events-none bg-[#0F0F11]/95 border border-white/10 p-3 rounded-xl shadow-xl backdrop-blur-md z-30 w-52 font-sans"
-              style={{ left: hoverInfo.x + 15, top: hoverInfo.y - 45 }}
-            >
-              <div className="flex justify-between items-start gap-2 mb-1.5">
-                <span className="text-xs font-bold text-slate-100">{hoveredPoint.label}</span>
-                <span className="px-1.5 py-0.5 rounded text-[8px] font-mono border bg-zinc-800 border-white/5 text-[#A1A1AA]">
-                  {hoveredPoint.locationConfidence === 'high' ? 'CRM MATCH' : hoveredPoint.locationConfidence === 'medium' ? 'RATE CENT' : 'APPROX'}
-                </span>
-              </div>
-              <div className="space-y-1 font-mono text-[9px] text-[#A1A1AA]">
-                <div className="flex justify-between">
-                  <span>Contacted:</span>
-                  <span className="text-slate-200 font-bold">{hoveredPoint.contacted}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Connects:</span>
-                  <span className="text-slate-200">
-                    {hoveredPoint.answered} ({hoveredPoint.answerRate || 0}%)
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Verified:</span>
-                  <span className="text-sky-400">
-                    {hoveredPoint.verifiedListens} ({hoveredPoint.listenRate || 0}%)
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Pre-Saves:</span>
-                  <span className="text-[#10B981] font-bold">{hoveredPoint.conversions}</span>
-                </div>
-                <div className="flex justify-between border-t border-white/5 pt-1 mt-1 text-[8.5px] uppercase font-bold text-[#FAFAFA]">
-                  <span>Market Index:</span>
-                  <span className="text-[var(--m-accent)]">{calculateMarketScore(hoveredPoint)}/100</span>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ─── SECTION 5: Right Diagnostics Inspector / Selected Market ─── */}
-        <div className="w-full lg:w-96 shrink-0 bg-[#121214] border border-white/5 rounded-2xl flex flex-col h-full lg:h-auto overflow-hidden z-20">
+        {/* SECTION 5: Right Diagnostics Inspector / Selected Market */}
+        <div className={cn("shrink-0 bg-[#0F0F11]/95 border border-white/10 rounded-2xl flex flex-col h-full overflow-hidden pointer-events-auto shadow-2xl z-20 transition-all duration-300", sidebarOpen ? "w-full lg:w-96" : "w-0 border-none opacity-0 pointer-events-none")}>
           {inspectedPoint ? (
             <div className="flex flex-col h-full p-5 space-y-4 overflow-y-auto">
               {/* Detail Header */}
@@ -844,12 +728,21 @@ export default function MusicCampaignMap() {
                     Confidence: {inspectedPoint.locationConfidence}
                   </span>
                 </div>
-                <button
-                  onClick={() => setInspectedPoint(null)}
-                  className="text-[#71717A] hover:text-white bg-[#18181B] border border-white/5 hover:border-white/10 p-1 rounded-lg transition-all text-sm leading-none h-6 w-6 flex items-center justify-center"
-                >
-                  &times;
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setSidebarOpen(false)}
+                    className="text-[#71717A] hover:text-white bg-[#18181B] border border-white/5 hover:border-white/10 px-2 py-1 rounded-lg transition-all text-[10px] font-semibold"
+                    title="Collapse Sidebar"
+                  >
+                    Hide
+                  </button>
+                  <button
+                    onClick={() => setInspectedPoint(null)}
+                    className="text-[#71717A] hover:text-white bg-[#18181B] border border-white/5 hover:border-white/10 p-1 rounded-lg transition-all text-sm leading-none h-6 w-6 flex items-center justify-center font-bold"
+                  >
+                    &times;
+                  </button>
+                </div>
               </div>
 
               {/* Geo Recommendation Block */}
@@ -872,7 +765,6 @@ export default function MusicCampaignMap() {
                     <span className="text-[#FAFAFA] font-bold">{inspectedPoint.contacted}</span>
                   </div>
                   <div className="flex justify-between items-center py-0.5 border-b border-white/5">
-                    <span className="text-[#71717A] font-sans text-[9px] uppercase tracking-wider">Answers</span>
                     <span className="text-[#FAFAFA]">{inspectedPoint.answered} <span className="text-[#71717A] text-[8px]">({inspectedPoint.answerRate || 0}%)</span></span>
                   </div>
                   <div className="flex justify-between items-center py-0.5 border-b border-white/5">
@@ -937,22 +829,58 @@ export default function MusicCampaignMap() {
               </div>
             </div>
           ) : (
-            <div className="flex-grow flex flex-col items-center justify-center p-6 text-center text-[#71717A] space-y-4">
-              <Compass className="h-10 w-10 text-[var(--m-accent)] animate-pulse" />
-              <div>
-                <h3 className="text-xs font-bold text-slate-200">Diagnostics terminal</h3>
-                <p className="text-[10px] mt-1 leading-relaxed">
-                  Select a market node on the map to run localized geo-intelligence diagnostics. Analyze connect rates, stream conversions, and CPA efficiency to optimize tour routing or merch allocation.
+            <div className="flex-grow flex flex-col items-center p-5 text-center text-[#71717A] space-y-3 overflow-y-auto relative w-full">
+              <div className="pt-2 w-full">
+                <div className="flex justify-between items-center w-full border-b border-white/5 pb-2 mb-2">
+                  <h3 className="text-xs font-bold text-slate-200">Diagnostics Terminal</h3>
+                  <button
+                    onClick={() => setSidebarOpen(false)}
+                    className="text-[#71717A] hover:text-white bg-[#18181B] border border-white/5 hover:border-white/10 px-2 py-1 rounded-lg transition-all text-[10px] font-semibold"
+                    title="Collapse Sidebar"
+                  >
+                    Hide
+                  </button>
+                </div>
+                <p className="text-[10px] mt-1 leading-normal text-zinc-400">
+                  Select a market node on the map to run localized geo-intelligence diagnostics.
                 </p>
               </div>
 
-              {/* ─── SECTION 6: Compact Live Operations Status ─── */}
-              <div className="w-full mt-4 bg-[#18181B]/40 border border-white/5 rounded-xl p-3.5 text-left space-y-2">
-                <div className="flex items-center justify-between border-b border-white/5 pb-1.5">
+              {/* ─── 6 Global Metrics Grid ─── */}
+              <div className="w-full grid grid-cols-2 gap-2 mt-1">
+                <div className="bg-[#18181B]/60 border border-white/5 rounded-xl p-2.5 text-left">
+                  <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider mb-0.5">Reached Fans</div>
+                  <div className="text-sm font-mono font-bold text-slate-100">{metricsStats.contacted.toLocaleString()}</div>
+                </div>
+                <div className="bg-[#18181B]/60 border border-white/5 rounded-xl p-2.5 text-left">
+                  <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider mb-0.5">Verified Actions</div>
+                  <div className="text-sm font-mono font-bold text-[#10B981]">{metricsStats.saves.toLocaleString()}</div>
+                </div>
+                <div className="bg-[#18181B]/60 border border-white/5 rounded-xl p-2.5 text-left">
+                  <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider mb-0.5">Proof Records</div>
+                  <div className="text-sm font-mono font-bold text-sky-400">{metricsStats.listens.toLocaleString()}</div>
+                </div>
+                <div className="bg-[#18181B]/60 border border-white/5 rounded-xl p-2.5 text-left">
+                  <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider mb-0.5">Average CPA</div>
+                  <div className="text-sm font-mono font-bold text-[var(--m-warning)]">${metricsStats.cpa.toFixed(2)}</div>
+                </div>
+                <div className="bg-[#18181B]/60 border border-white/5 rounded-xl p-2.5 text-left">
+                  <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider mb-0.5">Active Markets</div>
+                  <div className="text-sm font-mono font-bold text-indigo-400">{metricsStats.activeMarketsCount}</div>
+                </div>
+                <div className="bg-[#18181B]/60 border border-white/5 rounded-xl p-2.5 text-left">
+                  <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider mb-0.5">Wasted Spend</div>
+                  <div className="text-sm font-mono font-bold text-red-400">${metricsStats.wastedSpend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                </div>
+              </div>
+
+              {/* ─── Compact Live Operations Status ─── */}
+              <div className="w-full bg-[#18181B]/40 border border-white/5 rounded-xl p-3 text-left space-y-1.5 mt-auto">
+                <div className="flex items-center justify-between border-b border-white/5 pb-1">
                   <span className="text-[8px] font-bold text-slate-300 uppercase tracking-widest flex items-center gap-1">
                     <Radio className="h-3 w-3 text-[#10B981]" /> Operations Status
                   </span>
-                  <span className="h-2 w-2 rounded-full bg-[#10B981]" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#10B981]" />
                 </div>
                 <div className="space-y-1 font-mono text-[9px] text-[#A1A1AA]">
                   <div className="flex justify-between">
@@ -961,125 +889,237 @@ export default function MusicCampaignMap() {
                   </div>
                   <div className="flex justify-between">
                     <span>Routing health:</span>
-                    <span className="text-[#10B981]">99.8% (optimal)</span>
+                    <span className="text-[#10B981]">99.8%</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Ledger syncing:</span>
-                    <span className="text-slate-300">Live (0.4s)</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Data freshness:</span>
-                    <span className="text-slate-300">Updated just now</span>
+                    <span>Sync delay:</span>
+                    <span className="text-slate-300">0.4s</span>
                   </div>
                 </div>
               </div>
             </div>
           )}
         </div>
-      </div>
 
-      {/* ─── SECTION 4: Bottom Market Intelligence list panels ─── */}
-      <div className="h-44 shrink-0 bg-[#0F0F11] border-t border-white/5 grid grid-cols-1 md:grid-cols-5 divide-y md:divide-y-0 md:divide-x divide-white/5 z-20">
-        
-        {/* Panel 1: Top Answer Rates */}
-        <div className="p-4 flex flex-col justify-between min-w-0">
-          <div className="flex items-center gap-1.5 shrink-0">
-            <Zap className="h-3.5 w-3.5 text-cyan-400" />
-            <span className="text-[9px] font-bold uppercase tracking-widest text-[#FAFAFA]">Answer Rate</span>
+        {/* Styled Zoom Controls */}
+        <div 
+          className={cn(
+            "absolute flex flex-col gap-1.5 bg-[#0F0F11]/90 border border-white/10 p-1 rounded-xl backdrop-blur-md z-20 shadow-md pointer-events-auto transition-all duration-300",
+            sidebarOpen ? "right-[400px]" : "right-4"
+          )}
+          style={{ bottom: showBottomPanel ? '200px' : (sidebarOpen ? '16px' : '64px') }}
+        >
+          <button
+            onClick={() => setViewState(v => ({ ...v, zoom: Math.min(v.zoom + 0.8, 16) }))}
+            className="w-7 h-7 text-xs font-bold text-slate-300 hover:text-white bg-[#18181B] border border-white/5 hover:border-white/10 rounded-lg flex items-center justify-center transition-all"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => setViewState(v => ({ ...v, zoom: Math.max(v.zoom - 0.8, 1) }))}
+            className="w-7 h-7 text-xs font-bold text-slate-300 hover:text-white bg-[#18181B] border border-white/5 hover:border-white/10 rounded-lg flex items-center justify-center transition-all"
+          >
+            <Minus className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() =>
+              setViewState({
+                latitude: 37.8,
+                longitude: -96.0,
+                zoom: 3.8,
+                pitch: 25,
+                bearing: -5,
+              })
+            }
+            className="w-7 h-7 text-[8px] font-bold text-[var(--m-accent)] bg-[#18181B] border border-white/5 hover:border-white/10 rounded-lg flex items-center justify-center transition-all"
+            title="Center View"
+          >
+            CTR
+          </button>
+        </div>
+
+        {/* Reopen Sidebar Button */}
+        {!sidebarOpen && (
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="absolute right-4 bg-[#0F0F11]/90 border border-white/10 px-3 py-2 rounded-xl backdrop-blur-md z-20 shadow-md pointer-events-auto text-xs font-bold text-slate-300 hover:text-white transition-all duration-300 flex items-center gap-1.5"
+            style={{ bottom: showBottomPanel ? '200px' : '16px' }}
+          >
+            <Sliders className="h-3.5 w-3.5" />
+            Show Diagnostics
+          </button>
+        )}
+
+        {/* Map Legends Box */}
+        <div 
+          className="absolute left-4 bg-[#0F0F11]/95 border border-white/10 p-3 rounded-xl backdrop-blur-md max-w-xs shadow-lg z-20 pointer-events-auto transition-all duration-300"
+          style={{ bottom: showBottomPanel ? '200px' : '16px' }}
+        >
+          <div className="flex items-center gap-1.5 mb-1">
+            <div className="h-1.5 w-1.5 rounded-full bg-[var(--m-accent-2)] animate-pulse" />
+            <h3 className="text-[9px] font-bold uppercase tracking-wider text-slate-200">
+              Layer Intensity
+            </h3>
           </div>
-          <div className="space-y-1.5 mt-2.5 flex-grow overflow-y-auto">
-            {marketLists.sortedByAnswers.map((p, idx) => (
-              <div
-                key={p.id}
-                onClick={() => handleInspectMarket(p)}
-                className="flex justify-between text-[10px] items-center text-[#A1A1AA] hover:text-[#FAFAFA] cursor-pointer transition-colors"
-              >
-                <span className="truncate pr-2">{idx + 1}. {p.label}</span>
-                <span className="font-mono font-bold text-cyan-400 shrink-0">{p.answerRate}%</span>
-              </div>
-            ))}
+          <div className="space-y-1 text-[8.5px] text-[#A1A1AA]">
+            <p>
+              Colors reflect the <span className="font-semibold text-slate-200">{selectedMetric}</span> layer. Nodes are sized based on dial volume.
+            </p>
+            <div className="h-1.5 w-full bg-gradient-to-r from-zinc-800 to-[var(--m-accent)] rounded border border-white/5" />
+            <div className="flex justify-between text-[8px] font-mono text-[#71717A]">
+              <span>Low</span>
+              <span>High ({maxVal.toLocaleString()})</span>
+            </div>
           </div>
         </div>
 
-        {/* Panel 2: Top Verified Actions */}
-        <div className="p-4 flex flex-col justify-between min-w-0">
-          <div className="flex items-center gap-1.5 shrink-0">
-            <Volume2 className="h-3.5 w-3.5 text-emerald-400" />
-            <span className="text-[9px] font-bold uppercase tracking-widest text-[#FAFAFA]">Verified Actions</span>
-          </div>
-          <div className="space-y-1.5 mt-2.5 flex-grow overflow-y-auto">
-            {marketLists.sortedByActions.map((p, idx) => (
-              <div
-                key={p.id}
-                onClick={() => handleInspectMarket(p)}
-                className="flex justify-between text-[10px] items-center text-[#A1A1AA] hover:text-[#FAFAFA] cursor-pointer transition-colors"
-              >
-                <span className="truncate pr-2">{idx + 1}. {p.label}</span>
-                <span className="font-mono font-bold text-emerald-400 shrink-0">{p.conversions} saves</span>
+        {/* Hover tooltips */}
+        {hoveredPoint && hoverInfo && (
+          <div
+            className="absolute pointer-events-none bg-[#0F0F11]/95 border border-white/10 p-2.5 rounded-xl shadow-xl backdrop-blur-md z-30 w-52 font-sans"
+            style={{ left: hoverInfo.x + 15, top: hoverInfo.y - 45 }}
+          >
+            <div className="flex justify-between items-start gap-2 mb-1">
+              <span className="text-xs font-bold text-slate-100">{hoveredPoint.label}</span>
+              <span className="px-1.5 py-0.5 rounded text-[8px] font-mono border bg-zinc-800 border-white/5 text-[#A1A1AA]">
+                {hoveredPoint.locationConfidence === 'high' ? 'CRM MATCH' : hoveredPoint.locationConfidence === 'medium' ? 'RATE CENT' : 'APPROX'}
+              </span>
+            </div>
+            <div className="space-y-1 font-mono text-[9px] text-[#A1A1AA]">
+              <div className="flex justify-between">
+                <span>Contacted:</span>
+                <span className="text-slate-200 font-bold">{hoveredPoint.contacted}</span>
               </div>
-            ))}
+              <div className="flex justify-between">
+                <span>Connects:</span>
+                <span className="text-slate-200">
+                  {hoveredPoint.answered} ({hoveredPoint.answerRate || 0}%)
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>Verified:</span>
+                <span className="text-sky-400">
+                  {hoveredPoint.verifiedListens} ({hoveredPoint.listenRate || 0}%)
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>Pre-Saves:</span>
+                <span className="text-[#10B981] font-bold">{hoveredPoint.conversions}</span>
+              </div>
+              <div className="flex justify-between border-t border-white/5 pt-1 mt-1 text-[8.5px] uppercase font-bold text-[#FAFAFA]">
+                <span>Market Index:</span>
+                <span className="text-[var(--m-accent)]">{calculateMarketScore(hoveredPoint)}/100</span>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Panel 3: Top CPA Efficiency */}
-        <div className="p-4 flex flex-col justify-between min-w-0">
-          <div className="flex items-center gap-1.5 shrink-0">
-            <Target className="h-3.5 w-3.5 text-[var(--m-warning)]" />
-            <span className="text-[9px] font-bold uppercase tracking-widest text-[#FAFAFA]">CPA Efficiency</span>
-          </div>
-          <div className="space-y-1.5 mt-2.5 flex-grow overflow-y-auto">
-            {marketLists.sortedByCpa.map((p, idx) => (
-              <div
-                key={p.id}
-                onClick={() => handleInspectMarket(p)}
-                className="flex justify-between text-[10px] items-center text-[#A1A1AA] hover:text-[#FAFAFA] cursor-pointer transition-colors"
-              >
-                <span className="truncate pr-2">{idx + 1}. {p.label}</span>
-                <span className="font-mono font-bold text-[var(--m-warning)] shrink-0">${p.costPerConversion?.toFixed(2)}</span>
+        {/* ─── SECTION 4: Bottom Market Intelligence list panels (Floating and Toggled) ─── */}
+        {showBottomPanel && (
+          <div className={cn("absolute left-4 bottom-4 h-44 bg-[#0F0F11]/95 border border-white/10 grid grid-cols-1 md:grid-cols-5 divide-y md:divide-y-0 md:divide-x divide-white/5 z-20 rounded-xl overflow-hidden shadow-2xl backdrop-blur-md pointer-events-auto animate-fadeIn transition-all duration-300", sidebarOpen ? "right-[416px]" : "right-4")}>
+            
+            {/* Panel 1: Top Answer Rates */}
+            <div className="p-3.5 flex flex-col justify-between min-w-0">
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Zap className="h-3.5 w-3.5 text-cyan-400" />
+                <span className="text-[9px] font-bold uppercase tracking-widest text-[#FAFAFA]">Answer Rate</span>
               </div>
-            ))}
-          </div>
-        </div>
+              <div className="space-y-1 mt-2 flex-grow overflow-y-auto">
+                {marketLists.sortedByAnswers.map((p, idx) => (
+                  <div
+                    key={p.id}
+                    onClick={() => handleInspectMarket(p)}
+                    className="flex justify-between text-[10px] items-center text-[#A1A1AA] hover:text-[#FAFAFA] cursor-pointer transition-colors"
+                  >
+                    <span className="truncate pr-2">{idx + 1}. {p.label}</span>
+                    <span className="font-mono font-bold text-cyan-400 shrink-0">{p.answerRate}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
 
-        {/* Panel 4: Underperforming Markets */}
-        <div className="p-4 flex flex-col justify-between min-w-0">
-          <div className="flex items-center gap-1.5 shrink-0">
-            <TrendingDown className="h-3.5 w-3.5 text-[var(--m-danger)]" />
-            <span className="text-[9px] font-bold uppercase tracking-widest text-[#FAFAFA]">Underperforming</span>
-          </div>
-          <div className="space-y-1.5 mt-2.5 flex-grow overflow-y-auto">
-            {marketLists.underperforming.map((p, idx) => (
-              <div
-                key={p.id}
-                onClick={() => handleInspectMarket(p)}
-                className="flex justify-between text-[10px] items-center text-[#A1A1AA] hover:text-[#FAFAFA] cursor-pointer transition-colors"
-              >
-                <span className="truncate pr-2 text-[var(--m-danger)]/80">{idx + 1}. {p.label}</span>
-                <span className="font-mono font-bold text-[var(--m-danger)] shrink-0">${Math.round(p.spend)} cost</span>
+            {/* Panel 2: Top Verified Actions */}
+            <div className="p-3.5 flex flex-col justify-between min-w-0">
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Volume2 className="h-3.5 w-3.5 text-emerald-400" />
+                <span className="text-[9px] font-bold uppercase tracking-widest text-[#FAFAFA]">Verified Actions</span>
               </div>
-            ))}
-          </div>
-        </div>
+              <div className="space-y-1 mt-2 flex-grow overflow-y-auto">
+                {marketLists.sortedByActions.map((p, idx) => (
+                  <div
+                    key={p.id}
+                    onClick={() => handleInspectMarket(p)}
+                    className="flex justify-between text-[10px] items-center text-[#A1A1AA] hover:text-[#FAFAFA] cursor-pointer transition-colors"
+                  >
+                    <span className="truncate pr-2">{idx + 1}. {p.label}</span>
+                    <span className="font-mono font-bold text-emerald-400 shrink-0">{p.conversions}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
 
-        {/* Panel 5: Next Markets to Activate */}
-        <div className="p-4 flex flex-col justify-between min-w-0">
-          <div className="flex items-center gap-1.5 shrink-0">
-            <Sliders className="h-3.5 w-3.5 text-indigo-400" />
-            <span className="text-[9px] font-bold uppercase tracking-widest text-[#FAFAFA]">Next to Activate</span>
-          </div>
-          <div className="space-y-1.5 mt-2.5 flex-grow overflow-y-auto">
-            {marketLists.nextToActivate.map((p, idx) => (
-              <div
-                key={p.id}
-                onClick={() => handleInspectMarket(p)}
-                className="flex justify-between text-[10px] items-center text-[#A1A1AA] hover:text-[#FAFAFA] cursor-pointer transition-colors"
-              >
-                <span className="truncate pr-2 text-indigo-300">{idx + 1}. {p.label}</span>
-                <span className="font-mono font-bold text-indigo-400 shrink-0">{p.answerRate}% rate</span>
+            {/* Panel 3: Top CPA Efficiency */}
+            <div className="p-3.5 flex flex-col justify-between min-w-0">
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Target className="h-3.5 w-3.5 text-[var(--m-warning)]" />
+                <span className="text-[9px] font-bold uppercase tracking-widest text-[#FAFAFA]">CPA Efficiency</span>
               </div>
-            ))}
+              <div className="space-y-1 mt-2 flex-grow overflow-y-auto">
+                {marketLists.sortedByCpa.map((p, idx) => (
+                  <div
+                    key={p.id}
+                    onClick={() => handleInspectMarket(p)}
+                    className="flex justify-between text-[10px] items-center text-[#A1A1AA] hover:text-[#FAFAFA] cursor-pointer transition-colors"
+                  >
+                    <span className="truncate pr-2">{idx + 1}. {p.label}</span>
+                    <span className="font-mono font-bold text-[var(--m-warning)] shrink-0">${p.costPerConversion?.toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Panel 4: Underperforming Markets */}
+            <div className="p-3.5 flex flex-col justify-between min-w-0">
+              <div className="flex items-center gap-1.5 shrink-0">
+                <TrendingDown className="h-3.5 w-3.5 text-red-400" />
+                <span className="text-[9px] font-bold uppercase tracking-widest text-[#FAFAFA]">Underperforming</span>
+              </div>
+              <div className="space-y-1 mt-2 flex-grow overflow-y-auto">
+                {marketLists.underperforming.map((p, idx) => (
+                  <div
+                    key={p.id}
+                    onClick={() => handleInspectMarket(p)}
+                    className="flex justify-between text-[10px] items-center text-[#A1A1AA] hover:text-[#FAFAFA] cursor-pointer transition-colors"
+                  >
+                    <span className="truncate pr-2 text-red-400/80">{idx + 1}. {p.label}</span>
+                    <span className="font-mono font-bold text-red-400 shrink-0">${Math.round(p.spend)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Panel 5: Next Markets to Activate */}
+            <div className="p-3.5 flex flex-col justify-between min-w-0">
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Sliders className="h-3.5 w-3.5 text-indigo-400" />
+                <span className="text-[9px] font-bold uppercase tracking-widest text-[#FAFAFA]">Next to Activate</span>
+              </div>
+              <div className="space-y-1 mt-2 flex-grow overflow-y-auto">
+                {marketLists.nextToActivate.map((p, idx) => (
+                  <div
+                    key={p.id}
+                    onClick={() => handleInspectMarket(p)}
+                    className="flex justify-between text-[10px] items-center text-[#A1A1AA] hover:text-[#FAFAFA] cursor-pointer transition-colors"
+                  >
+                    <span className="truncate pr-2 text-indigo-300">{idx + 1}. {p.label}</span>
+                    <span className="font-mono font-bold text-indigo-400 shrink-0">{p.answerRate}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
           </div>
-        </div>
+        )}
 
       </div>
 

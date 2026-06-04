@@ -45,6 +45,14 @@ export default function MusicProofPage() {
   const [liveRecords, setLiveRecords] = useState<ProofRecord[]>([]);
 
   useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSelectedProof(undefined);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  useEffect(() => {
     if (liveMode && liveRecords.length === 0) {
       fetch('/api/vapi/calls?limit=50')
         .then(r => r.json())
@@ -248,189 +256,184 @@ export default function MusicProofPage() {
 
       {/* ─── Detail Drawer ─── */}
       {selectedProof && (
-        <div className="m-drawer-overlay">
-          <div className="m-drawer">
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs" onClick={() => setSelectedProof(undefined)}>
+          <div 
+            className="w-full max-w-2xl bg-[var(--m-surface)] border-l border-[var(--m-border-2)] h-screen fixed top-0 right-0 flex flex-col shadow-2xl overflow-hidden animate-[m-slide-in_0.2s_ease-out]"
+            onClick={(e) => e.stopPropagation()}
+          >
             
-            {/* Drawer Header */}
-            <div className="m-drawer-header flex items-start justify-between">
+            {/* Drawer Header (Always Pinned) */}
+            <div className="flex items-center justify-between p-3.5 border-b border-[var(--m-border-2)] bg-[var(--m-surface-2)] shrink-0">
               <div>
-                <div className="flex items-center gap-3 mb-2">
-                  <h2 className="text-xl font-bold flex items-center gap-2">
-                    <User className="h-5 w-5 m-text-muted" /> {selectedProof.fanName}
+                <div className="flex items-center gap-3 mb-0.5">
+                  <h2 className="text-base font-bold flex items-center gap-2 text-[var(--m-text)]">
+                    <User className="h-4 w-4 m-text-muted" /> {selectedProof.fanName}
                   </h2>
                   <span className={cn("m-badge", selectedProof.verifiedAction ? "m-badge--verified" : "m-badge--neutral")}>
                     {outcomeLabel(selectedProof.outcome)}
                   </span>
                 </div>
-                <div className="flex items-center gap-4 text-xs m-text-muted">
+                <div className="flex items-center gap-3 text-xs m-text-muted flex-wrap">
                   <span className="flex items-center gap-1.5"><Mic className="h-3.5 w-3.5" /> {selectedProof.artist}</span>
                   <span className="flex items-center gap-1.5"><Megaphone className="h-3.5 w-3.5" /> {selectedProof.campaignName}</span>
-                  <span className="m-font-mono text-[10px] m-text-dim uppercase border-l border-[var(--m-border)] pl-4">ID: {selectedProof.id.split('-')[1]}A9F</span>
+                  <span className="m-font-mono text-[10px] m-text-dim uppercase border-l border-[var(--m-border)] pl-2">ID: {selectedProof.id.split('-')[1]}A9F</span>
                 </div>
               </div>
-              <button onClick={() => setSelectedProof(undefined)} className="m-text-dim hover:text-[var(--m-text)] m-bg-surface p-1.5 rounded">
-                <X className="h-5 w-5" />
+              <button 
+                onClick={() => setSelectedProof(undefined)} 
+                className="p-1.5 hover:bg-[var(--m-surface-3)] rounded-lg transition-colors border border-[var(--m-border)] flex items-center justify-center bg-[var(--m-surface)]"
+                title="Close"
+              >
+                <X className="h-4 w-4 text-[var(--m-text)]" />
               </button>
             </div>
-
-            {/* Drawer Body */}
-            <div className="m-drawer-body space-y-8">
-              
-              {/* Audio & Intent */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="m-card-flush p-4 flex flex-col justify-between">
-                  <p className="m-kpi-label mb-3">Audio Proof</p>
-                  {selectedProof.hasRecording ? (
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-3">
-                        <button className="h-10 w-10 rounded-full bg-[var(--m-accent)] flex items-center justify-center text-white hover:opacity-90 transition-opacity">
-                          <Play className="h-4 w-4 ml-0.5" />
-                        </button>
-                        <div className="m-waveform flex-1">
-                          {Array.from({ length: 30 }).map((_, i) => (
-                            <div key={i} className="m-waveform-bar" style={{ height: `${getWaveformHeight(selectedProof.id, i)}%` }} />
-                          ))}
-                        </div>
-                      </div>
-                      <div className="flex justify-between text-[10px] m-text-dim m-font-mono">
-                        <span>0:00</span>
-                        <span>{Math.floor(selectedProof.duration / 60)}:{(selectedProof.duration % 60).toString().padStart(2, '0')}</span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-xs m-text-dim py-4">No audio recording available.</div>
-                  )}
-                </div>
-
-                <div className="m-card-flush p-4">
-                  <p className="m-kpi-label mb-3">Intent & Sentiment</p>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs m-text-muted">Captured Intent</span>
-                      <span className={cn(
-                        "text-xs font-bold uppercase",
-                        selectedProof.intent === 'high' ? "m-text-accent-2" : selectedProof.intent === 'medium' ? "m-text-warning" : "m-text-dim"
-                      )}>{selectedProof.intent}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs m-text-muted">Sentiment</span>
-                      <span className="text-xs font-medium capitalize flex items-center gap-2">
-                        <span className={cn("h-2 w-2 rounded-full", selectedProof.sentiment === 'positive' ? 'bg-[var(--m-accent-2)]' : selectedProof.sentiment === 'negative' ? 'bg-[var(--m-danger)]' : 'bg-[var(--m-dim)]')} />
-                        {selectedProof.sentiment}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between pt-2 border-t border-[var(--m-border-2)]">
-                      <span className="text-xs m-text-muted">Disposition</span>
-                      <span className="text-xs m-font-mono m-text-accent-2">{outcomeLabel(selectedProof.outcome)}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Transcript */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="m-section-title">
-                    <FileText className="!text-[var(--m-accent-2)]" /> Verbatim Transcript
-                  </h3>
-                  <button 
-                    className="m-btn m-btn--ghost" 
-                    onClick={() => {
-                      const txtContent = `Transcript for ${selectedProof.fanName}\n${selectedProof.transcriptSnippet}`;
-                      const link = document.createElement('a');
-                      link.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(txtContent));
-                      link.setAttribute('download', `transcript_${selectedProof.id}.txt`);
-                      document.body.appendChild(link);
-                      link.click();
-                      document.body.removeChild(link);
-                    }}
-                  >
-                    <Download className="h-3 w-3" /> Export
-                  </button>
-                </div>
-                {selectedProof.hasTranscript && selectedProof.transcriptSnippet ? (
-                  <div className="m-transcript space-y-2">
-                    {renderTranscript(selectedProof.transcriptSnippet)}
-                    {selectedProof.verifiedAction && (
-                      <div className="mt-4 p-3 rounded border border-[var(--m-accent-2)]/20 bg-[var(--m-accent-2-dim)] flex items-start gap-3">
-                        <CheckCircle2 className="h-4 w-4 m-text-accent-2 mt-0.5" />
-                        <div>
-                          <p className="text-xs font-medium m-text-accent-2">Verified Action Detected</p>
-                          <p className="text-[10px] m-text-muted mt-1">System captured explicit intent related to the campaign goal.</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="m-card-deep p-8 text-center text-xs m-text-dim">
-                    Transcript processing or unavailable for this status.
-                  </div>
-                )}
-              </div>
-
-              {/* Attribution & Compliance */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-4">
-                  <h3 className="m-kpi-label border-b border-[var(--m-border-2)] pb-2">Campaign Attribution</h3>
-                  <div className="space-y-2 text-xs">
-                    <div className="flex justify-between"><span className="m-text-dim">Source Target</span><span>{segmentLabel(selectedProof.segment)}</span></div>
-                    <div className="flex justify-between"><span className="m-text-dim">Score</span><span className="m-font-mono">{selectedProof.engagementScore}/100</span></div>
-                    <div className="flex justify-between"><span className="m-text-dim">CPA Applied</span><span className="m-font-mono m-text-accent">{formatCurrency(selectedProof.cpaAttribution)}</span></div>
-                    {selectedProof.verifiedAction && (
-                      <div className="flex items-center gap-1.5 m-text-accent-2 mt-2">
-                        <LinkIcon className="h-3 w-3" /> <span className="font-medium hover:underline cursor-pointer">View Generated Tracking Link</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <h3 className="m-kpi-label border-b border-[var(--m-border-2)] pb-2">Compliance & Privacy</h3>
-                  <div className="space-y-2 text-xs">
-                    <div className="flex justify-between"><span className="m-text-dim">Phone Map</span><span className="m-font-mono">{selectedProof.fanPhone.replace(/\d{4}$/, 'XXXX')}</span></div>
-                    <div className="flex justify-between"><span className="m-text-dim">Consent Source</span><span>{selectedProof.consentSource}</span></div>
-                    <div className="flex justify-between"><span className="m-text-dim">DNC Check</span><span className="m-text-accent-2 flex items-center gap-1"><Check className="h-3 w-3" /> Passed</span></div>
-                    <div className="flex justify-between"><span className="m-text-dim">AI Disclosure</span><span className="m-text-accent-2 flex items-center gap-1"><Check className="h-3 w-3" /> Delivered</span></div>
-                  </div>
-                </div>
+ 
+            {/* Drawer Body (2-Column layout) */}
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
                 
+                {/* Column 1: Audio and Transcript */}
                 <div className="space-y-4">
-                  <h3 className="m-kpi-label border-b border-[var(--m-border-2)] pb-2">Carrier Telemetry</h3>
-                  <div className="space-y-2 text-xs">
-                    <div className="flex justify-between"><span className="m-text-dim">SIP Response</span><span className="m-font-mono">{selectedProof.status === 'completed' ? '200 OK' : selectedProof.status === 'no_answer' ? '408 Request Timeout' : '486 Busy Here'}</span></div>
-                    <div className="flex justify-between"><span className="m-text-dim">Network Route</span><span>DIDCentral → US-East-1</span></div>
-                    <div className="flex justify-between"><span className="m-text-dim">Avg Jitter</span><span className="m-font-mono">{getJitter(selectedProof.id)}ms</span></div>
-                    <div className="flex justify-between"><span className="m-text-dim">STIR/SHAKEN</span><span className="m-text-accent-2 flex items-center gap-1"><Check className="h-3 w-3" /> A-Attest</span></div>
+                  {/* Audio */}
+                  <div className="m-card-flush p-3 flex flex-col justify-between bg-[var(--m-bg)] border border-[var(--m-border)] rounded-lg">
+                    <p className="m-kpi-label mb-2 text-[10px] font-bold uppercase tracking-wider text-[var(--m-muted)]">Audio Proof</p>
+                    {selectedProof.hasRecording ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2.5">
+                          <button className="h-8.5 w-8.5 rounded-full bg-[var(--m-accent)] flex items-center justify-center text-white hover:opacity-90 transition-opacity">
+                            <Play className="h-3.5 w-3.5 ml-0.5" />
+                          </button>
+                          <div className="m-waveform flex-1">
+                            {Array.from({ length: 24 }).map((_, i) => (
+                              <div key={i} className="m-waveform-bar" style={{ height: `${getWaveformHeight(selectedProof.id, i)}%` }} />
+                            ))}
+                          </div>
+                        </div>
+                        <div className="flex justify-between text-[9px] m-text-dim m-font-mono">
+                          <span>0:00</span>
+                          <span>{Math.floor(selectedProof.duration / 60)}:{(selectedProof.duration % 60).toString().padStart(2, '0')}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-xs m-text-dim py-3">No audio recording.</div>
+                    )}
                   </div>
-                </div>
-              </div>
-
-              {/* Timeline */}
-              <div className="pt-4 border-t border-[var(--m-border-2)]">
-                <h3 className="m-kpi-label mb-4">Interaction Timeline</h3>
-                <div className="relative pl-4 space-y-4 before:absolute before:inset-y-0 before:left-[7px] before:w-px before:bg-[var(--m-border-2)]">
-                  <div className="relative text-xs">
-                    <span className="absolute -left-4 top-1 h-1.5 w-1.5 rounded-full bg-[var(--m-dim)] ring-4 ring-[var(--m-bg)]" />
-                    <span className="m-text-dim m-font-mono mr-2">14:30:00</span> <span className="m-text-muted">Outbound dial initiated</span>
-                  </div>
-                  <div className="relative text-xs">
-                    <span className="absolute -left-4 top-1 h-1.5 w-1.5 rounded-full bg-[var(--m-accent)] ring-4 ring-[var(--m-bg)]" />
-                    <span className="m-text-dim m-font-mono mr-2">14:30:12</span> <span>Fan answered, AI disclosure played</span>
-                  </div>
-                  {selectedProof.verifiedAction && (
-                    <div className="relative text-xs">
-                      <span className="absolute -left-4 top-1 h-1.5 w-1.5 rounded-full bg-[var(--m-accent-2)] ring-4 ring-[var(--m-bg)]" />
-                      <span className="m-text-dim m-font-mono mr-2">14:31:05</span> <span className="m-text-accent-2 font-medium">Verified intent captured ({outcomeLabel(selectedProof.outcome)})</span>
+ 
+                  {/* Transcript */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-[10px] font-bold uppercase tracking-wider m-text-muted">
+                        Verbatim Transcript
+                      </h3>
+                      <button 
+                        className="m-btn m-btn--ghost text-[10px] py-0.5 px-2" 
+                        onClick={() => {
+                          const txtContent = `Transcript for ${selectedProof.fanName}\n${selectedProof.transcriptSnippet}`;
+                          const link = document.createElement('a');
+                          link.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(txtContent));
+                          link.setAttribute('download', `transcript_${selectedProof.id}.txt`);
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                        }}
+                      >
+                        <Download className="h-3 w-3" /> Export
+                      </button>
                     </div>
-                  )}
-                  <div className="relative text-xs">
-                    <span className="absolute -left-4 top-1 h-1.5 w-1.5 rounded-full bg-[var(--m-dim)] ring-4 ring-[var(--m-bg)]" />
-                    <span className="m-text-dim m-font-mono mr-2">14:31:45</span> <span className="m-text-muted">Call disconnected normally</span>
+                    {selectedProof.hasTranscript && selectedProof.transcriptSnippet ? (
+                      <div className="m-transcript max-h-[140px] overflow-y-auto space-y-1.5 p-2.5 bg-[var(--m-surface-2)] border border-[var(--m-border-2)] rounded">
+                        {renderTranscript(selectedProof.transcriptSnippet)}
+                        {selectedProof.verifiedAction && (
+                          <div className="mt-2 p-2 rounded border border-[var(--m-accent-2)]/20 bg-[var(--m-accent-2-dim)] flex items-start gap-2">
+                            <CheckCircle2 className="h-3.5 w-3.5 m-text-accent-2 mt-0.5" />
+                            <div>
+                              <p className="text-[11px] font-medium m-text-accent-2">Verified Action Detected</p>
+                              <p className="text-[9px] m-text-muted mt-0.5">System captured explicit intent related to the campaign goal.</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="m-card-deep p-6 text-center text-xs m-text-dim">
+                        Transcript unavailable for this status.
+                      </div>
+                    )}
                   </div>
                 </div>
+ 
+                {/* Column 2: Intent, Metadata, Timeline */}
+                <div className="space-y-4">
+                  {/* Intent & Sentiment */}
+                  <div className="m-card-flush p-3 bg-[var(--m-bg)] border border-[var(--m-border)] rounded-lg">
+                    <p className="m-kpi-label mb-2 text-[10px] font-bold uppercase tracking-wider text-[var(--m-muted)]">Intent & Sentiment</p>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="m-text-muted">Captured Intent</span>
+                        <span className={cn(
+                          "font-bold uppercase text-[11px]",
+                          selectedProof.intent === 'high' ? "m-text-accent-2" : selectedProof.intent === 'medium' ? "m-text-warning" : "m-text-dim"
+                        )}>{selectedProof.intent}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="m-text-muted">Sentiment</span>
+                        <span className="font-medium capitalize flex items-center gap-1.5 text-[11px]">
+                          <span className={cn("h-1.5 w-1.5 rounded-full", selectedProof.sentiment === 'positive' ? 'bg-[var(--m-accent-2)]' : selectedProof.sentiment === 'negative' ? 'bg-[var(--m-danger)]' : 'bg-[var(--m-dim)]')} />
+                          {selectedProof.sentiment}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+ 
+                  {/* Attribution & Compliance (3-column layout) */}
+                  <div className="grid grid-cols-3 gap-2 border border-[var(--m-border-2)] rounded-lg p-2.5 bg-[var(--m-surface-2)]">
+                    <div className="space-y-1 text-[9px]">
+                      <h4 className="font-bold uppercase tracking-wider m-text-muted border-b border-[var(--m-border-2)] pb-0.5">Attribution</h4>
+                      <div className="flex justify-between flex-col"><span className="m-text-dim">Target</span><span className="truncate max-w-[60px]" title={segmentLabel(selectedProof.segment)}>{segmentLabel(selectedProof.segment)}</span></div>
+                      <div className="flex justify-between flex-col"><span className="m-text-dim">Score</span><span className="m-font-mono font-bold text-[var(--m-text)]">{selectedProof.engagementScore}</span></div>
+                    </div>
+ 
+                    <div className="space-y-1 text-[9px] border-l border-[var(--m-border-2)] pl-2">
+                      <h4 className="font-bold uppercase tracking-wider m-text-muted border-b border-[var(--m-border-2)] pb-0.5">Compliance</h4>
+                      <div className="flex justify-between flex-col"><span className="m-text-dim">Phone</span><span className="m-font-mono font-bold text-[var(--m-text)]">{selectedProof.fanPhone.slice(-4)}</span></div>
+                      <div className="flex justify-between flex-col"><span className="m-text-dim">Consent</span><span className="truncate max-w-[60px]">{selectedProof.consentSource}</span></div>
+                    </div>
+                    
+                    <div className="space-y-1 text-[9px] border-l border-[var(--m-border-2)] pl-2">
+                      <h4 className="font-bold uppercase tracking-wider m-text-muted border-b border-[var(--m-border-2)] pb-0.5">Telemetry</h4>
+                      <div className="flex justify-between flex-col"><span className="m-text-dim">SIP</span><span className="font-semibold text-emerald-400">200 OK</span></div>
+                      <div className="flex justify-between flex-col"><span className="m-text-dim">Jitter</span><span className="m-font-mono font-bold text-[var(--m-text)]">{getJitter(selectedProof.id)}ms</span></div>
+                    </div>
+                  </div>
+ 
+                  {/* Timeline */}
+                  <div className="pt-2 border-t border-[var(--m-border-2)]">
+                    <h3 className="text-[10px] font-bold uppercase tracking-wider m-text-muted mb-2">Timeline</h3>
+                    <div className="relative pl-3 space-y-2 before:absolute before:inset-y-0 before:left-[5px] before:w-px before:bg-[var(--m-border-2)]">
+                      <div className="relative text-[10px]">
+                        <span className="absolute -left-3 top-1 h-1.5 w-1.5 rounded-full bg-[var(--m-dim)] ring-4 ring-[var(--m-bg)]" />
+                        <span className="m-text-dim m-font-mono mr-1">14:30:00</span> <span className="m-text-muted">Dial initiated</span>
+                      </div>
+                      <div className="relative text-[10px]">
+                        <span className="absolute -left-3 top-1 h-1.5 w-1.5 rounded-full bg-[var(--m-accent)] ring-4 ring-[var(--m-bg)]" />
+                        <span className="m-text-dim m-font-mono mr-1">14:30:12</span> <span>AI disclosure played</span>
+                      </div>
+                      {selectedProof.verifiedAction && (
+                        <div className="relative text-[10px]">
+                          <span className="absolute -left-3 top-1 h-1.5 w-1.5 rounded-full bg-[var(--m-accent-2)] ring-4 ring-[var(--m-bg)]" />
+                          <span className="m-text-dim m-font-mono mr-1">14:31:05</span> <span className="m-text-accent-2 font-medium">Intent captured</span>
+                        </div>
+                      )}
+                      <div className="relative text-[10px]">
+                        <span className="absolute -left-3 top-1 h-1.5 w-1.5 rounded-full bg-[var(--m-dim)] ring-4 ring-[var(--m-bg)]" />
+                        <span className="m-text-dim m-font-mono mr-1">14:31:45</span> <span className="m-text-muted">Call ended</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+ 
               </div>
-
             </div>
+            
           </div>
         </div>
       )}

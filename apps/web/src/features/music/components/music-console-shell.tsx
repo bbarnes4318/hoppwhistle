@@ -4,6 +4,7 @@ import React from 'react';
 import { usePathname } from 'next/navigation';
 import { MusicSidebar } from './music-sidebar';
 import { MusicAuthGuard } from './music-auth-guard';
+import { cn } from '@/lib/utils';
 
 interface MusicConsoleShellProps {
   children: React.ReactNode;
@@ -38,7 +39,7 @@ export function MusicConsoleShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <div className="flex flex-1 flex-col h-screen overflow-hidden min-w-0">
-          <header className="flex h-14 lg:h-16 shrink-0 items-center justify-between border-b border-[var(--m-border-2)] bg-[var(--m-surface)] px-8 z-10 transition-colors duration-200">
+          <header className="flex h-14 lg:h-16 shrink-0 items-center justify-between border-b border-[var(--m-border-2)] bg-[var(--m-surface)] px-8 transition-colors duration-200">
             <div className="flex flex-1 items-center min-w-0">
               <div className="flex items-center gap-2 text-xs font-semibold text-[var(--m-text-2)]">
                 <span className="text-[var(--m-muted)] tracking-wider uppercase text-[10px]">Console Workspace</span>
@@ -56,9 +57,13 @@ export function MusicConsoleShell({ children }: { children: React.ReactNode }) {
             </div>
           </header>
 
-          {/* Main content scrolls vertically */}
-          <main className="flex-1 overflow-y-auto relative z-0 bg-[var(--m-bg)]">
-            <div className="max-w-7xl mx-auto w-full px-8 lg:px-10 py-8">{children}</div>
+          {/* Main content scrolls vertically, except for Map page which is full viewport */}
+          <main className={cn("flex-1 relative bg-[var(--m-bg)]", pathname === '/music-console/map' ? "h-[calc(100vh-56px)] lg:h-[calc(100vh-64px)] overflow-hidden flex flex-col" : "overflow-y-auto")}>
+            {pathname === '/music-console/map' ? (
+              <div className="w-full h-full flex-grow flex flex-col">{children}</div>
+            ) : (
+              <div className="max-w-7xl mx-auto w-full px-8 lg:px-10 py-8">{children}</div>
+            )}
           </main>
         </div>
       </MusicAuthGuard>

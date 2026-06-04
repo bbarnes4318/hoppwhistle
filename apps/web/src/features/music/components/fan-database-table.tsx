@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Users, 
   Search, 
@@ -26,6 +26,14 @@ export function FanDatabaseTable() {
   const [selectedFan, setSelectedFan] = useState<FanProfile | null>(null);
   const [showFullPhone, setShowFullPhone] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSelectedFan(null);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const handleExport = () => {
     const csvContent = 'data:text/csv;charset=utf-8,Name,Phone,City,Segment,Source\n' + 
@@ -195,115 +203,123 @@ export function FanDatabaseTable() {
 
       {/* Detail Drawer */}
       {selectedFan && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm" onClick={() => setSelectedFan(null)}>
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs" onClick={() => setSelectedFan(null)}>
           <div 
-            className="w-full max-w-lg bg-[var(--m-surface)] border-l border-[var(--m-border-2)] h-full overflow-y-auto flex flex-col shadow-2xl"
+            className="w-full max-w-2xl bg-[var(--m-surface)] border-l border-[var(--m-border-2)] h-screen fixed top-0 right-0 flex flex-col shadow-2xl overflow-hidden animate-[m-slide-in_0.2s_ease-out]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between p-6 border-b border-[var(--m-border-2)] bg-[var(--m-surface-2)]">
+            {/* Pinned Header */}
+            <div className="flex items-center justify-between p-3.5 border-b border-[var(--m-border-2)] bg-[var(--m-surface-2)] shrink-0">
               <div>
-                <h2 className="text-xl font-bold m-text-text">{selectedFan.name}</h2>
-                <div className="flex items-center gap-2 text-sm m-text-dim mt-1">
+                <h2 className="text-base font-bold m-text-text">{selectedFan.name}</h2>
+                <div className="flex items-center gap-2 text-xs m-text-dim mt-0.5">
                   <span className="font-mono">{selectedFan.id}</span>
                   <span>•</span>
                   <span>{showFullPhone ? selectedFan.phone : `+1 XXX-XXX-${selectedFan.phone.slice(-4)}`}</span>
                   {!showFullPhone && (
-                    <button onClick={() => setShowFullPhone(true)} className="ml-2 text-xs text-[var(--m-accent)] hover:underline border border-[var(--m-border-2)] px-2 py-0.5 rounded">Reveal</button>
+                    <button onClick={() => setShowFullPhone(true)} className="ml-2 text-[10px] text-[var(--m-accent)] hover:underline border border-[var(--m-border-2)] px-1.5 py-0.5 rounded bg-[var(--m-surface)]">Reveal</button>
                   )}
                 </div>
               </div>
-              <button onClick={() => setSelectedFan(null)} className="p-2 hover:bg-[var(--m-border-2)] rounded-full transition-colors">
-                <X className="h-5 w-5 m-text-muted" />
+              <button 
+                onClick={() => setSelectedFan(null)} 
+                className="p-1.5 hover:bg-[var(--m-surface-3)] rounded-lg transition-colors border border-[var(--m-border)] flex items-center justify-center bg-[var(--m-surface)]"
+                title="Close"
+              >
+                <X className="h-4 w-4 text-[var(--m-text)]" />
               </button>
             </div>
-
-            <div className="p-6 space-y-8">
-              {/* Summary */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-[var(--m-bg)] p-3 rounded-md border border-[var(--m-border)]">
-                  <div className="text-xs m-text-muted uppercase tracking-wider mb-1 flex items-center gap-1"><MapPin className="h-3 w-3"/> City / Market</div>
-                  <div className="font-semibold">{selectedFan.city}</div>
-                </div>
-                <div className="bg-[var(--m-bg)] p-3 rounded-md border border-[var(--m-border)]">
-                  <div className="text-xs m-text-muted uppercase tracking-wider mb-1 flex items-center gap-1"><Star className="h-3 w-3"/> Segment</div>
-                  <div className="font-semibold capitalize">{selectedFan.segment.replace(/_/g, ' ')}</div>
-                </div>
-                <div className="bg-[var(--m-bg)] p-3 rounded-md border border-[var(--m-border)]">
-                  <div className="text-xs m-text-muted uppercase tracking-wider mb-1 flex items-center gap-1"><Music className="h-3 w-3"/> Top Artist</div>
-                  <div className="font-semibold">{selectedFan.favoriteArtist}</div>
-                </div>
-                <div className="bg-[var(--m-bg)] p-3 rounded-md border border-[var(--m-border)]">
-                  <div className="text-xs m-text-muted uppercase tracking-wider mb-1 flex items-center gap-1"><Activity className="h-3 w-3"/> Eng. Score</div>
-                  <div className="font-semibold text-[var(--m-accent)]">{selectedFan.engagementScore}/100</div>
-                </div>
-              </div>
-
-              {/* Compliance */}
-              <div className="border border-[var(--m-border-2)] rounded-lg overflow-hidden">
-                <div className="bg-[var(--m-surface-2)] px-4 py-2 border-b border-[var(--m-border-2)] flex items-center gap-2 font-semibold text-sm">
-                  <ShieldCheck className="h-4 w-4 m-text-accent" /> Consent & Compliance
-                </div>
-                <div className="p-4 space-y-3 text-sm">
-                  <div className="flex justify-between border-b border-[var(--m-border)] pb-2">
-                    <span className="m-text-dim">Status</span>
-                    <span className={selectedFan.consentStatus === 'opted_in' ? 'text-emerald-400' : 'text-rose-400'}>{selectedFan.consentStatus.toUpperCase()}</span>
+ 
+            {/* Content (2-Column layout) */}
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                
+                {/* Column 1: Info and Recommended Action */}
+                <div className="space-y-4">
+                  {/* Summary */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="bg-[var(--m-bg)] p-2 rounded border border-[var(--m-border)]">
+                      <div className="text-[9px] m-text-muted uppercase tracking-wider mb-0.5 flex items-center gap-1"><MapPin className="h-3 w-3"/> City / Market</div>
+                      <div className="font-bold text-xs text-[var(--m-text)]">{selectedFan.city}</div>
+                    </div>
+                    <div className="bg-[var(--m-bg)] p-2 rounded border border-[var(--m-border)]">
+                      <div className="text-[9px] m-text-muted uppercase tracking-wider mb-0.5 flex items-center gap-1"><Star className="h-3 w-3"/> Segment</div>
+                      <div className="font-bold text-xs text-[var(--m-text)] capitalize">{selectedFan.segment.replace(/_/g, ' ')}</div>
+                    </div>
+                    <div className="bg-[var(--m-bg)] p-2 rounded border border-[var(--m-border)]">
+                      <div className="text-[9px] m-text-muted uppercase tracking-wider mb-0.5 flex items-center gap-1"><Music className="h-3 w-3"/> Top Artist</div>
+                      <div className="font-bold text-xs text-[var(--m-text)] truncate">{selectedFan.favoriteArtist}</div>
+                    </div>
+                    <div className="bg-[var(--m-bg)] p-2 rounded border border-[var(--m-border)]">
+                      <div className="text-[9px] m-text-muted uppercase tracking-wider mb-0.5 flex items-center gap-1"><Activity className="h-3 w-3"/> Eng. Score</div>
+                      <div className="font-bold text-xs text-[var(--m-accent)]">{selectedFan.engagementScore}/100</div>
+                    </div>
                   </div>
-                  <div className="flex justify-between border-b border-[var(--m-border)] pb-2">
-                    <span className="m-text-dim">Source</span>
-                    <span className="capitalize">{selectedFan.source.replace(/_/g, ' ')}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="m-text-dim">TCPA Verified</span>
-                    <span className="text-emerald-400">Yes - Double Opt-In</span>
+ 
+                  {/* Recommended Action */}
+                  <div className="bg-[var(--m-accent)]/5 border border-[var(--m-accent)]/20 rounded-lg p-3">
+                    <div className="text-xs font-bold text-[var(--m-accent)] mb-1">Recommended Next Action</div>
+                    <div className="text-xs m-text-text leading-normal">Add to <span className="font-semibold">Early Access VIP Waitlist</span> based on consistent engagement and recent ticket intent verification.</div>
+                    <button 
+                      className="mt-3 w-full py-1.5 bg-[var(--m-accent)] text-white rounded text-xs font-bold hover:bg-violet-600 transition-colors disabled:opacity-50"
+                      onClick={() => {
+                        const btn = document.getElementById('sms-btn-vip');
+                        if (btn) btn.innerText = 'Sent!';
+                        setTimeout(() => { if (btn) btn.innerText = 'Trigger VIP SMS Follow-Up'; }, 2000);
+                      }}
+                      id="sms-btn-vip"
+                    >
+                      Trigger VIP SMS Follow-Up
+                    </button>
                   </div>
                 </div>
-              </div>
-
-              {/* Proof Records (Campaign History) */}
-              <div>
-                <h3 className="text-sm font-bold uppercase tracking-wider m-text-muted mb-4 border-b border-[var(--m-border-2)] pb-2">Recent Campaign Proof</h3>
-                <div className="space-y-3">
-                  {[1, 2].map(i => (
-                    <div key={i} className="bg-[var(--m-bg)] border border-[var(--m-border)] p-3 rounded-md">
-                      <div className="flex justify-between items-start mb-2">
-                        <div>
-                          <div className="font-semibold text-sm">Tour On-Sale Campaign</div>
-                          <div className="text-xs m-text-dim">Apr 20, 2026 • 2m 14s</div>
-                        </div>
-                        <span className="text-[10px] bg-emerald-400/10 text-emerald-400 px-2 py-0.5 rounded uppercase font-semibold border border-emerald-400/20">Ticket Intent</span>
+ 
+                {/* Column 2: Consent & Recent Proof */}
+                <div className="space-y-4">
+                  {/* Compliance */}
+                  <div className="border border-[var(--m-border-2)] rounded-lg overflow-hidden">
+                    <div className="bg-[var(--m-surface-2)] px-2.5 py-1 border-b border-[var(--m-border-2)] flex items-center gap-2 font-bold text-[10px] uppercase tracking-wider text-[var(--m-text-2)]">
+                      <ShieldCheck className="h-3.5 w-3.5 m-text-accent" /> Consent & Compliance
+                    </div>
+                    <div className="p-2.5 space-y-1.5 text-xs">
+                      <div className="flex justify-between border-b border-[var(--m-border-2)] pb-1">
+                        <span className="m-text-dim">Status</span>
+                        <span className={cn("font-bold", selectedFan.consentStatus === 'opted_in' ? 'text-emerald-400' : 'text-rose-400')}>{selectedFan.consentStatus.toUpperCase()}</span>
                       </div>
-                      <div className="bg-[var(--m-surface-2)] p-2 rounded text-xs m-text-dim font-mono mb-2">
-                        <span className="text-[var(--m-accent)]">AI:</span> Are you planning to grab tickets for the LA show?<br/>
-                        <span className="text-[var(--m-text)]">Fan:</span> Yes absolutely, when do they drop?
+                      <div className="flex justify-between border-b border-[var(--m-border-2)] pb-1">
+                        <span className="m-text-dim">Source</span>
+                        <span className="capitalize font-semibold">{selectedFan.source.replace(/_/g, ' ')}</span>
                       </div>
-                      <div className="flex justify-between items-center mt-2">
-                        <button className="flex items-center gap-1 text-xs text-[var(--m-accent)] hover:underline">
-                          <PlayCircle className="h-3 w-3" /> Play Recording
-                        </button>
-                        <span className="text-xs m-text-muted font-mono">Proof ID: pr-7x9{i}</span>
+                      <div className="flex justify-between">
+                        <span className="m-text-dim">TCPA Verified</span>
+                        <span className="text-emerald-400 font-semibold">Yes - Double Opt-In</span>
                       </div>
                     </div>
-                  ))}
+                  </div>
+ 
+                  {/* Proof Records (Campaign History) */}
+                  <div className="space-y-1.5">
+                    <h3 className="text-[10px] font-bold uppercase tracking-wider m-text-muted border-b border-[var(--m-border-2)] pb-1">Recent Campaign Proof</h3>
+                    <div className="space-y-1.5">
+                      {[1, 2].map(i => (
+                        <div key={i} className="bg-[var(--m-bg)] border border-[var(--m-border)] p-2 rounded-md flex justify-between items-center text-xs">
+                          <div>
+                            <div className="font-bold text-xs text-[var(--m-text)]">Tour On-Sale Campaign</div>
+                            <div className="text-[9px] m-text-dim">Apr 20, 2026 • 2m 14s</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[9px] bg-emerald-400/10 text-emerald-400 px-1.5 py-0.5 rounded font-mono font-bold">Ticket Intent</span>
+                            <button className="text-[10px] text-[var(--m-accent)] hover:underline flex items-center gap-0.5 font-semibold">
+                              <PlayCircle className="h-3 w-3" /> Play
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
+ 
               </div>
-
-              {/* Recommended Action */}
-              <div className="bg-[var(--m-accent)]/10 border border-[var(--m-accent)]/30 rounded-lg p-4">
-                <div className="text-sm font-bold text-[var(--m-accent)] mb-1">Recommended Next Action</div>
-                <div className="text-sm m-text-text">Add to <span className="font-semibold">Early Access VIP Waitlist</span> based on consistent engagement and recent ticket intent verification.</div>
-                <button 
-                  className="mt-3 w-full py-2 bg-[var(--m-accent)] text-white rounded text-sm font-semibold hover:bg-violet-600 transition-colors disabled:opacity-50"
-                  onClick={() => {
-                    const btn = document.getElementById('sms-btn-vip');
-                    if (btn) btn.innerText = 'Sent!';
-                    setTimeout(() => { if (btn) btn.innerText = 'Trigger VIP SMS Follow-Up'; }, 2000);
-                  }}
-                  id="sms-btn-vip"
-                >
-                  Trigger VIP SMS Follow-Up
-                </button>
-              </div>
-
             </div>
           </div>
         </div>

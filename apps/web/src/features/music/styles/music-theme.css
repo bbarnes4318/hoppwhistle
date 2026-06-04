@@ -1018,3 +1018,41 @@
   bottom: 0;
   width: 4px;
 }
+
+/* ── Telemetry Signal Wave Animations ── */
+@keyframes m-scan {
+  0% { left: 0%; opacity: 0.1; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { left: 100%; opacity: 0.1; }
+}
+
+.m-wave-1 {
+  stroke-dasharray: 300;
+  stroke-dashoffset: 0;
+  animation: m-dash-1 12s linear infinite;
+}
+
+.m-wave-2 {
+  stroke-dasharray: 300;
+  stroke-dashoffset: 100;
+  animation: m-dash-2 9s linear infinite;
+}
+
+.m-wave-3 {
+  stroke-dasharray: 300;
+  stroke-dashoffset: 200;
+  animation: m-dash-3 15s linear infinite;
+}
+
+@keyframes m-dash-1 {
+  to { stroke-dashoffset: -600; }
+}
+
+@keyframes m-dash-2 {
+  to { stroke-dashoffset: -600; }
+}
+
+@keyframes m-dash-3 {
+  to { stroke-dashoffset: -600; }
+}

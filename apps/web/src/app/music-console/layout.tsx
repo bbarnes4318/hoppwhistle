@@ -1,5 +1,6 @@
 import { MusicConsoleShell } from '@/features/music/components/music-console-shell';
 import '@/features/music/styles/music-theme.css';
+import 'maplibre-gl/dist/maplibre-gl.css';
 
 /**
  * Music Console Layout

@@ -17,7 +17,7 @@ import {
   BarChart3,
   Clock
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 import { fanCampaigns } from '@/features/music/data/demo-music-data';
 import { campaignTypeLabel, formatCompactNumber, formatCurrency, segmentLabel } from '@/features/music/lib/utils';
@@ -32,6 +32,14 @@ export default function MusicCampaignsPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [isLaunching, setIsLaunching] = useState(false);
   const [isComplianceChecked, setIsComplianceChecked] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSelectedCampaign(null);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const handleLaunch = async () => {
     setIsLaunching(true);
@@ -212,100 +220,115 @@ export default function MusicCampaignsPage() {
 
       {/* ─── Campaign Detail Drawer ─── */}
       {selectedCampaign && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm" onClick={() => setSelectedCampaign(null)}>
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs" onClick={() => setSelectedCampaign(null)}>
           <div 
-            className="w-full max-w-md bg-[var(--m-surface)] border-l border-[var(--m-border-2)] h-full overflow-y-auto flex flex-col shadow-2xl"
+            className="w-full max-w-2xl bg-[var(--m-surface)] border-l border-[var(--m-border-2)] h-screen fixed top-0 right-0 flex flex-col shadow-2xl overflow-hidden animate-[m-slide-in_0.2s_ease-out]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between p-6 border-b border-[var(--m-border-2)] bg-[var(--m-surface-2)]">
+            {/* Pinned Header */}
+            <div className="flex items-center justify-between p-3.5 border-b border-[var(--m-border-2)] bg-[var(--m-surface-2)] shrink-0">
               <div>
-                <h2 className="text-xl font-bold m-text-text truncate max-w-[280px]" title={selectedCampaign.name}>{selectedCampaign.name}</h2>
-                <div className="flex items-center gap-2 text-sm m-text-dim mt-1">
+                <h2 className="text-base font-bold m-text-text truncate max-w-[280px]" title={selectedCampaign.name}>{selectedCampaign.name}</h2>
+                <div className="flex items-center gap-2 text-xs m-text-dim mt-0.5">
                   <span>{selectedCampaign.artist}</span>
                   <span>•</span>
                   <span className={cn(
-                    "text-xs font-semibold uppercase",
+                    "text-[10px] font-bold uppercase",
                     selectedCampaign.status === 'active' ? 'text-[var(--m-accent)]' :
                     selectedCampaign.status === 'completed' ? 'text-emerald-400' : 'text-zinc-400'
                   )}>{selectedCampaign.status}</span>
                 </div>
               </div>
-              <button onClick={() => setSelectedCampaign(null)} className="p-2 hover:bg-[var(--m-border-2)] rounded-full transition-colors">
-                <X className="h-5 w-5 m-text-muted" />
+              <button 
+                onClick={() => setSelectedCampaign(null)} 
+                className="p-1.5 hover:bg-[var(--m-surface-3)] rounded-lg transition-colors border border-[var(--m-border)] flex items-center justify-center bg-[var(--m-surface)]"
+                title="Close"
+              >
+                <X className="h-4 w-4 text-[var(--m-text)]" />
               </button>
             </div>
-
-            <div className="p-6 space-y-8">
-              {/* Overview */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-[var(--m-bg)] p-3 rounded-md border border-[var(--m-border)]">
-                  <div className="text-xs m-text-muted uppercase tracking-wider mb-1 flex items-center gap-1"><Target className="h-3 w-3"/> Goal</div>
-                  <div className="font-semibold text-sm capitalize">{selectedCampaign.type.replace(/_/g, ' ')}</div>
-                </div>
-                <div className="bg-[var(--m-bg)] p-3 rounded-md border border-[var(--m-border)]">
-                  <div className="text-xs m-text-muted uppercase tracking-wider mb-1 flex items-center gap-1"><Users className="h-3 w-3"/> Audience</div>
-                  <div className="font-semibold text-sm capitalize">{selectedCampaign.segment.replace(/_/g, ' ')}</div>
-                </div>
-                <div className="bg-[var(--m-bg)] p-3 rounded-md border border-[var(--m-border)]">
-                  <div className="text-xs m-text-muted uppercase tracking-wider mb-1 flex items-center gap-1"><Clock className="h-3 w-3"/> Launched</div>
-                  <div className="font-semibold text-sm">{selectedCampaign.startDate}</div>
-                </div>
-                <div className="bg-[var(--m-bg)] p-3 rounded-md border border-[var(--m-border)]">
-                  <div className="text-xs m-text-muted uppercase tracking-wider mb-1 flex items-center gap-1"><BarChart3 className="h-3 w-3"/> CPA Target</div>
-                  <div className="font-semibold text-sm">{formatCurrency(selectedCampaign.cpa)}</div>
-                </div>
-              </div>
-
-              {/* Performance */}
-              <div>
-                <h3 className="text-sm font-bold uppercase tracking-wider m-text-muted mb-4 border-b border-[var(--m-border-2)] pb-2">Performance KPIs</h3>
+ 
+            {/* Scrollable Content (Compact 2-Column layout) */}
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                {/* Column 1: Info and Script */}
                 <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm m-text-dim">Fans Contacted</span>
-                    <span className="font-mono font-bold text-[var(--m-text)]">{formatCompactNumber(selectedCampaign.fansContacted)}</span>
+                  {/* Overview */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="bg-[var(--m-bg)] p-2 rounded border border-[var(--m-border)]">
+                      <div className="text-[9px] m-text-muted uppercase tracking-wider mb-0.5 flex items-center gap-1"><Target className="h-3 w-3"/> Goal</div>
+                      <div className="font-bold text-xs text-[var(--m-text)] capitalize">{selectedCampaign.type.replace(/_/g, ' ')}</div>
+                    </div>
+                    <div className="bg-[var(--m-bg)] p-2 rounded border border-[var(--m-border)]">
+                      <div className="text-[9px] m-text-muted uppercase tracking-wider mb-0.5 flex items-center gap-1"><Users className="h-3 w-3"/> Audience</div>
+                      <div className="font-bold text-xs text-[var(--m-text)] capitalize">{selectedCampaign.segment.replace(/_/g, ' ')}</div>
+                    </div>
+                    <div className="bg-[var(--m-bg)] p-2 rounded border border-[var(--m-border)]">
+                      <div className="text-[9px] m-text-muted uppercase tracking-wider mb-0.5 flex items-center gap-1"><Clock className="h-3 w-3"/> Launched</div>
+                      <div className="font-bold text-xs text-[var(--m-text)]">{selectedCampaign.startDate}</div>
+                    </div>
+                    <div className="bg-[var(--m-bg)] p-2 rounded border border-[var(--m-border)]">
+                      <div className="text-[9px] m-text-muted uppercase tracking-wider mb-0.5 flex items-center gap-1"><BarChart3 className="h-3 w-3"/> CPA Target</div>
+                      <div className="font-bold text-xs text-[var(--m-text)]">{formatCurrency(selectedCampaign.cpa)}</div>
+                    </div>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm m-text-dim">Human Answers</span>
-                    <span className="font-mono font-bold text-[var(--m-text)]">{formatCompactNumber(selectedCampaign.humanAnswers)} <span className="text-xs m-text-accent font-normal ml-1">({selectedCampaign.answerRate}%)</span></span>
+ 
+                  {/* Script / Message */}
+                  <div className="space-y-1">
+                    <h3 className="text-[10px] font-bold uppercase tracking-wider m-text-muted border-b border-[var(--m-border-2)] pb-1">Script Preview</h3>
+                    <div className="bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md p-2.5 text-xs font-mono m-text-dim leading-relaxed">
+                      "Hey, this is Nova's team reaching out. The new album 'Midnight Signal' drops Friday. Do you want me to set up a pre-save on Spotify for you?"
+                    </div>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm m-text-dim">Verified Engagements</span>
-                    <span className="font-mono font-bold text-emerald-400">{formatCompactNumber(selectedCampaign.verifiedEngagements)}</span>
+                </div>
+ 
+                {/* Column 2: KPIs & Actions */}
+                <div className="space-y-4">
+                  {/* Performance */}
+                  <div className="border border-[var(--m-border-2)] rounded-lg overflow-hidden">
+                    <div className="bg-[var(--m-surface-2)] px-2.5 py-1 border-b border-[var(--m-border-2)] flex items-center gap-2 font-bold text-[10px] uppercase tracking-wider text-[var(--m-text-2)]">
+                      Performance KPIs
+                    </div>
+                    <div className="p-2.5 space-y-1.5 text-xs">
+                      <div className="flex justify-between items-center border-b border-[var(--m-border-2)] pb-1">
+                        <span className="m-text-dim">Fans Contacted</span>
+                        <span className="font-mono font-bold text-[var(--m-text)]">{formatCompactNumber(selectedCampaign.fansContacted)}</span>
+                      </div>
+                      <div className="flex justify-between items-center border-b border-[var(--m-border-2)] pb-1">
+                        <span className="m-text-dim">Human Answers</span>
+                        <span className="font-mono font-bold text-[var(--m-text)]">{formatCompactNumber(selectedCampaign.humanAnswers)} <span className="text-[10px] m-text-accent font-normal ml-1">({selectedCampaign.answerRate}%)</span></span>
+                      </div>
+                      <div className="flex justify-between items-center border-b border-[var(--m-border-2)] pb-1">
+                        <span className="m-text-dim">Verified Engagements</span>
+                        <span className="font-mono font-bold text-emerald-400">{formatCompactNumber(selectedCampaign.verifiedEngagements)}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="m-text-dim">Proof Captured</span>
+                        <span className="font-mono font-bold text-[var(--m-text)]">{formatCompactNumber(selectedCampaign.proofCaptured)}</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm m-text-dim">Proof Captured</span>
-                    <span className="font-mono font-bold text-[var(--m-text)]">{formatCompactNumber(selectedCampaign.proofCaptured)}</span>
+ 
+                  {/* Actions */}
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[var(--m-border-2)] shrink-0">
+                    <Link href="/music-console/reports" className="col-span-2 flex items-center justify-center w-full py-1.5 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded text-xs font-bold hover:bg-[var(--m-border-2)] transition-colors text-center">
+                      View Full Report
+                    </Link>
+                    <button className="py-1.5 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded text-xs font-bold hover:bg-[var(--m-border-2)] transition-colors" onClick={handleExport}>
+                      Export Proof
+                    </button>
+                    {selectedCampaign.status === 'active' ? (
+                      <button className="py-1.5 bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded text-xs font-bold hover:bg-amber-500/20 transition-colors" onClick={(e) => { e.currentTarget.innerText = 'Paused'; }}>
+                        Pause Campaign
+                      </button>
+                    ) : (
+                      <button className="py-1.5 bg-[var(--m-accent)] text-white rounded text-xs font-bold hover:bg-violet-600 transition-colors" onClick={(e) => { e.currentTarget.innerText = 'Resumed'; }}>
+                        Resume Campaign
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
-
-              {/* Script / Message */}
-              <div>
-                <h3 className="text-sm font-bold uppercase tracking-wider m-text-muted mb-4 border-b border-[var(--m-border-2)] pb-2">Script Preview</h3>
-                <div className="bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md p-4 text-sm font-mono m-text-dim leading-relaxed">
-                  "Hey, this is Nova's team reaching out. The new album 'Midnight Signal' drops Friday. Do you want me to set up a pre-save on Spotify for you?"
-                </div>
-              </div>
-
-              {/* Actions */}
-              <div className="flex flex-col gap-3 pt-4 border-t border-[var(--m-border-2)]">
-                <Link href="/music-console/reports" className="flex items-center justify-center w-full py-2 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded text-sm font-semibold hover:bg-[var(--m-border-2)] transition-colors">
-                  View Full Report
-                </Link>
-                <button className="w-full py-2 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded text-sm font-semibold hover:bg-[var(--m-border-2)] transition-colors" onClick={handleExport}>
-                  Export Proof Log (.csv)
-                </button>
-                {selectedCampaign.status === 'active' ? (
-                  <button className="w-full py-2 bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded text-sm font-semibold hover:bg-amber-500/20 transition-colors" onClick={(e) => { e.currentTarget.innerText = 'Paused'; }}>
-                    Pause Campaign
-                  </button>
-                ) : (
-                  <button className="w-full py-2 bg-[var(--m-accent)] text-white rounded text-sm font-semibold hover:bg-violet-600 transition-colors" onClick={(e) => { e.currentTarget.innerText = 'Resumed'; }}>
-                    Resume Campaign
-                  </button>
-                )}
-              </div>
-
             </div>
           </div>
         </div>
