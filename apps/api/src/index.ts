@@ -75,6 +75,30 @@ async function buildServer() {
       return;
     }
 
+    const authHeader = request.headers.authorization;
+    const queryToken = (request.query as any)?.token;
+
+    // Try JWT first
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        await request.jwtVerify();
+        return;
+      } catch {
+        // JWT failed, try API key / demo tenant fallback
+      }
+    } else if (queryToken) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        const decoded = server.jwt.verify(queryToken);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        request.user = decoded as any;
+        return;
+      } catch {
+        // JWT failed, try API key / demo tenant fallback
+      }
+    }
+
+    // Fallback to Demo Tenant ID if present and JWT failed/absent
     const demoTenantId =
       (request.headers['x-demo-tenant-id'] as string | undefined) ||
       (request.query as any)?.demoTenantId;
@@ -87,32 +111,7 @@ async function buildServer() {
       return;
     }
 
-    const authHeader = request.headers.authorization;
     const apiKey = request.headers['x-api-key'] as string;
-    const queryToken = (request.query as any)?.token;
-
-    // Try JWT first
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      try {
-        await request.jwtVerify();
-        return;
-      } catch {
-        // JWT failed, try API key
-      }
-    } else if (queryToken) {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        const decoded = server.jwt.verify(queryToken);
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        request.user = decoded as any;
-        return;
-      } catch {
-        // JWT failed, try API key
-      }
-    }
-
-    // Try API key
-    if (apiKey) {
       try {
         const prisma = getPrismaClient();
         const keyHash = createHash('sha256').update(apiKey).digest('hex');

@@ -213,6 +213,17 @@ export function PhoneProvider({
       if (apiKey) {
         headers['x-api-key'] = apiKey;
       }
+      if (typeof window !== 'undefined') {
+        const token = localStorage.getItem('token');
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+        const demoMode = localStorage.getItem('demoMode') === 'true';
+        const demoTenantId = localStorage.getItem('demoTenantId');
+        if (demoMode && demoTenantId) {
+          headers['X-Demo-Tenant-Id'] = demoTenantId;
+        }
+      }
       return headers;
     },
     [apiKey]
@@ -1049,82 +1060,103 @@ export function PhoneProvider({
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    // SIP credentials (matches FreeSWITCH directory: /etc/freeswitch/directory/default/1000.xml)
-    const sipUser = '1000';
-    const sipPass = '1234';
-    // SIP realm must match FreeSWITCH's configured domain (the server's public IP)
-    const sipDomain = process.env.NEXT_PUBLIC_IP || '3.214.60.13';
-    // WebSocket host uses window hostname for SSL cert validation
-    const wsHost = window.location.hostname;
-    const isSecure = window.location.protocol === 'https:';
-    // Port 7443: FreeSWITCH native WSS (requires valid SSL certs)
-    // Port 8083: Direct WS for local/dev
-    const sipWsUrl = isSecure ? `wss://${wsHost}:7443` : `ws://${sipDomain}:8083`;
+    let ua: UserAgent | null = null;
+    let active = true;
 
-    console.log('[Phone] Initializing SIP UA:', { sipUser, sipDomain, sipWsUrl });
+    async function initSip() {
+      try {
+        console.log('[Phone] Fetching WebRTC credentials...');
+        const url = `${normalizedApiUrl}/api/v1/agent/webrtc/credentials`;
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: getApiHeaders(),
+        });
 
-    const uri = UserAgent.makeURI(`sip:${sipUser}@${sipDomain}`);
-    if (!uri) {
-      setError('Invalid SIP URI');
-      return;
-    }
+        if (!response.ok) {
+          throw new Error('Failed to fetch WebRTC credentials');
+        }
 
-    const options: UserAgentOptions = {
-      uri,
-      transportOptions: {
-        server: sipWsUrl,
-      },
-      authorizationUsername: sipUser,
-      authorizationPassword: sipPass,
-      reconnectionAttempts: 3,
-      reconnectionDelay: 4,
-      delegate: {
-        onConnect: () => {
-          console.log('[Phone] SIP Transport Connected');
-          setError(null);
-        },
-        onDisconnect: error => {
-          console.log('[Phone] SIP Transport Disconnected', error);
-          setIsRegistered(false);
-          if (error) setError('SIP connection lost');
-        },
-        onInvite: (invitation: Invitation) => {
-          console.log('[Phone] Incoming SIP Invite');
-          handleIncomingSipCall(invitation);
-        },
-      },
-    };
+        const creds = await response.json();
+        if (!active) return;
 
-    const ua = new UserAgent(options);
-    userAgentRef.current = ua;
+        // Extract extension from username (e.g. "1000@default-tenant-id" -> "1000")
+        const [sipUser] = creds.username.split('@');
+        const sipPass = creds.password;
 
-    ua.start()
-      .then(() => {
+        // SIP realm must match FreeSWITCH's configured domain
+        const sipDomain = creds.realm || process.env.NEXT_PUBLIC_IP || '3.214.60.13';
+        // WebSocket host uses window hostname for SSL cert validation
+        const wsHost = window.location.hostname;
+        const isSecure = window.location.protocol === 'https:';
+        // Use returned wsUrl or build fallback
+        // Port 7443: FreeSWITCH native WSS (requires valid SSL certs)
+        // Port 8083: Direct WS for local/dev
+        let sipWsUrl = creds.wsUrl;
+        if (!sipWsUrl) {
+          sipWsUrl = isSecure ? `wss://${wsHost}:7443` : `ws://${sipDomain}:8083`;
+        }
+
+        console.log('[Phone] Initializing SIP UA dynamically:', { sipUser, sipDomain, sipWsUrl });
+
+        const uri = UserAgent.makeURI(`sip:${sipUser}@${sipDomain}`);
+        if (!uri) {
+          setError('Invalid SIP URI');
+          return;
+        }
+
+        const options: UserAgentOptions = {
+          uri,
+          transportOptions: {
+            server: sipWsUrl,
+          },
+          authorizationUsername: sipUser,
+          authorizationPassword: sipPass,
+          reconnectionAttempts: 3,
+          reconnectionDelay: 4,
+          delegate: {
+            onConnect: () => {
+              console.log('[Phone] SIP Transport Connected');
+              setError(null);
+            },
+            onDisconnect: error => {
+              console.log('[Phone] SIP Transport Disconnected', error);
+              setIsRegistered(false);
+              if (error) setError('SIP connection lost');
+            },
+            onInvite: (invitation: Invitation) => {
+              console.log('[Phone] Incoming SIP Invite');
+              handleIncomingSipCall(invitation);
+            },
+          },
+        };
+
+        ua = new UserAgent(options);
+        userAgentRef.current = ua;
+
+        await ua.start();
         console.log('[Phone] SIP UA Started');
         const registerer = new Registerer(ua);
-        registerer
-          .register()
-          .then(() => {
-            console.log('[Phone] SIP Registered');
-            setIsRegistered(true);
-            setAgentStatusState('available');
-          })
-          .catch(e => {
-            console.error('[Phone] SIP Registration Failed', e);
-            setError('Registration failed');
-          });
-      })
-      .catch(e => {
-        console.error('[Phone] SIP UA Start Failed', e);
-        setError('Phone initialization failed');
-      });
+        await registerer.register();
+        console.log('[Phone] SIP Registered');
+        setIsRegistered(true);
+        setAgentStatusState('available');
+      } catch (e) {
+        console.error('[Phone] SIP UA Initialization/Start Failed', e);
+        if (active) {
+          setError('Phone initialization failed');
+        }
+      }
+    }
+
+    void initSip();
 
     return () => {
+      active = false;
       if (ua) {
         void ua.stop();
       }
     };
-  }, [handleIncomingSipCall]);
+  }, [handleIncomingSipCall, normalizedApiUrl, getApiHeaders]);
 
   const value: PhoneContextType = {
     agentStatus,

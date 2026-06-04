@@ -32,7 +32,53 @@ export class DidRouteService {
       }
 
       if (phoneNumber.userId && phoneNumber.status === 'ACTIVE') {
-        const extension = (phoneNumber.user?.metadata as any)?.extension;
+        let extension = (phoneNumber.user?.metadata as any)?.extension;
+
+        // If user has no extension, dynamically assign a free one from 1000-1019
+        if (!isValidPhoneDestination(extension) && phoneNumber.user) {
+          const allUsers = await prisma.user.findMany({
+            select: { metadata: true },
+          });
+          const usedExtensions = new Set<string>();
+          for (const u of allUsers) {
+            const ext = (u.metadata as any)?.extension;
+            if (ext) {
+              usedExtensions.add(ext.toString().trim());
+            }
+          }
+
+          let availableExtension: string | null = null;
+          for (let extNum = 1000; extNum <= 1019; extNum++) {
+            const extStr = extNum.toString();
+            if (!usedExtensions.has(extStr)) {
+              availableExtension = extStr;
+              break;
+            }
+          }
+
+          if (availableExtension) {
+            const currentMetadata = (phoneNumber.user.metadata as Record<string, any>) || {};
+            const updatedMetadata = {
+              ...currentMetadata,
+              extension: availableExtension,
+            };
+
+            await prisma.user.update({
+              where: { id: phoneNumber.userId },
+              data: { metadata: updatedMetadata },
+            });
+
+            logger.info({
+              msg: 'syncDidRouteForNumber: Automatically assigned free extension to user',
+              userId: phoneNumber.userId,
+              extension: availableExtension,
+              phoneNumber: phoneNumber.number,
+            });
+
+            extension = availableExtension;
+          }
+        }
+
         // Only use extension if it's a valid phone destination — never fall back to userId
         const autoDestination = isValidPhoneDestination(extension) ? extension : null;
 
