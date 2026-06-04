@@ -53,3 +53,42 @@ export function formatDurationMmSs(seconds: number): string {
   const s = seconds % 60;
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
+
+export function campaignStatusStyle(status: string) {
+  switch (status.toLowerCase()) {
+    case 'active':
+    case 'running':
+      return {
+        bg: 'bg-emerald-500/10',
+        text: 'text-emerald-400',
+        dot: 'bg-emerald-400',
+      };
+    case 'completed':
+      return {
+        bg: 'bg-blue-500/10',
+        text: 'text-blue-400',
+        dot: 'bg-blue-400',
+      };
+    case 'paused':
+      return {
+        bg: 'bg-amber-500/10',
+        text: 'text-amber-400',
+        dot: 'bg-amber-400',
+      };
+    case 'draft':
+    default:
+      return {
+        bg: 'bg-zinc-500/10',
+        text: 'text-zinc-400',
+        dot: 'bg-zinc-400',
+      };
+  }
+}
+
+export function formatChange(change: number): { label: string; positive: boolean } {
+  const positive = change >= 0;
+  const absVal = Math.abs(change);
+  const label = `${absVal.toFixed(1)}%`;
+  return { label, positive };
+}
+
