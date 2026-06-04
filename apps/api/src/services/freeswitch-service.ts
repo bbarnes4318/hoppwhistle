@@ -333,55 +333,81 @@ export class FreeSwitchService {
       throw new Error('Could not find active calls in FreeSWITCH');
     }
 
-    // Use the active UUID as the base for the conference name
-    const conferenceName = `conf_${activeUuid}`;
+    // Use the held UUID as the base for the conference name (held call is guaranteed ACTIVE)
+    const conferenceName = `conf_${heldUuid}`;
 
-    // Disable hangup_after_bridge so agent channels don't terminate when their bridges are transferred
-    try {
-      await this.executeApi('uuid_setvar', `${activeUuid} hangup_after_bridge false`);
-      await this.executeApi('uuid_setvar', `${heldUuid} hangup_after_bridge false`);
-      logger.info({ msg: 'Disabled hangup_after_bridge on active and held channels', activeUuid, heldUuid });
-    } catch (err) {
-      logger.warn({ msg: 'Failed to set hangup_after_bridge variable', error: err });
+    // Find B-leg UUIDs from the channel list.
+    // B-legs are channels where call_uuid points to an A-leg but uuid !== call_uuid.
+    const findBleg = (aLegUuid: string): string | null => {
+      const bleg = channels.find(c => c.call_uuid === aLegUuid && c.uuid !== aLegUuid);
+      return bleg?.uuid || null;
+    };
+
+    const heldBleg = findBleg(heldUuid);
+    const activeBleg = findBleg(activeUuid);
+
+    logger.info({
+      msg: 'Merge: resolved all legs',
+      activeAleg: activeUuid,
+      activeBleg,
+      heldAleg: heldUuid,
+      heldBleg,
+      conferenceName,
+    });
+
+    if (!heldBleg) {
+      logger.error({ msg: 'Could not find B-leg for held call', heldUuid });
+      throw new Error('Could not find remote party for held call');
     }
 
-    // 1. Transfer the HELD call's remote leg (B-leg) into the conference
+    // Prevent A-legs from hanging up when their bridges break
+    for (const uuid of [activeUuid, heldUuid]) {
+      try {
+        await this.executeApi('uuid_setvar', `${uuid} hangup_after_bridge false`);
+        await this.executeApi('uuid_setvar', `${uuid} park_after_bridge true`);
+      } catch (err) {
+        logger.warn({ msg: 'Failed to set bridge variables', uuid, error: err });
+      }
+    }
+
+    // 1. Transfer the HELD B-leg (remote party) directly into the conference
     try {
-      await this.executeApi(
-        'uuid_transfer',
-        `${heldUuid} -bleg conference:${conferenceName} inline`
-      );
+      await this.executeApi('uuid_transfer', `${heldBleg} conference:${conferenceName} inline`);
+      logger.info({ msg: 'Transferred held B-leg to conference', heldBleg });
     } catch (err) {
-      logger.error({ msg: 'Failed to transfer held call to conference', error: err });
+      logger.error({ msg: 'Failed to transfer held B-leg to conference', error: err });
       throw new Error('Failed to merge held call');
     }
 
-    // 2. Transfer the ACTIVE call's remote leg (B-leg) into the conference
+    // 2. Transfer the HELD A-leg (agent's first WebRTC session) into the conference
+    //    (it's now parked after its B-leg was pulled away)
     try {
-      await this.executeApi(
-        'uuid_transfer',
-        `${activeUuid} -bleg conference:${conferenceName} inline`
-      );
+      await this.executeApi('uuid_transfer', `${heldUuid} conference:${conferenceName} inline`);
+      logger.info({ msg: 'Transferred held A-leg to conference', heldUuid });
     } catch (err) {
-      logger.error({ msg: 'Failed to transfer active call remote leg to conference', error: err });
+      logger.warn({ msg: 'Failed to transfer held A-leg to conference (may already be parked/dead)', error: err });
     }
 
-    // 3. Transfer the AGENT (Active call A-leg) into the conference
+    // 3. If the active call has a B-leg (it's answered), transfer it into the conference too
+    if (activeBleg) {
+      try {
+        await this.executeApi('uuid_transfer', `${activeBleg} conference:${conferenceName} inline`);
+        logger.info({ msg: 'Transferred active B-leg to conference', activeBleg });
+      } catch (err) {
+        logger.warn({ msg: 'Failed to transfer active B-leg to conference', error: err });
+      }
+    }
+
+    // 4. Transfer the ACTIVE A-leg (agent's second WebRTC session) into the conference
     try {
       await this.executeApi('uuid_transfer', `${activeUuid} conference:${conferenceName} inline`);
+      logger.info({ msg: 'Transferred active A-leg to conference', activeUuid });
     } catch (err) {
-      logger.error({ msg: 'Failed to transfer agent to conference', error: err });
+      logger.error({ msg: 'Failed to transfer active A-leg to conference', error: err });
       throw new Error('Failed to join conference');
     }
 
-    // 4. Hangup the HELD agent leg (A-leg)
-    try {
-      await this.executeApi('uuid_kill', heldUuid);
-    } catch (err) {
-      logger.warn({ msg: 'Failed to kill held agent leg', error: err });
-    }
-
-    logger.info({ msg: 'Merge command sequence completed' });
+    logger.info({ msg: 'Merge command sequence completed', conferenceName });
   }
 }
 
