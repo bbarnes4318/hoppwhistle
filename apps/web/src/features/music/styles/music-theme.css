@@ -6,7 +6,7 @@
 
 .music-console {
   /* ── Core Palette (Warm Stone / Soft Neutral by Default) ── */
-  --m-bg:         #FAF9F6;               /* Clean warm off-white background */
+  --m-bg:         #F8F9FA;               /* Clean warm stone off-white background */
   --m-surface:    #FFFFFF;               /* Stark white card surfaces */
   --m-surface-2:  #F4F4F5;               /* Secondary light gray/stone panels */
   --m-surface-3:  #E4E4E7;               /* Deep border/hover highlights */
@@ -901,3 +901,120 @@
 .m-border-2      { border-color: var(--m-border-2); }
 
 .m-font-mono     { font-family: var(--m-font-mono); }
+
+/* ── Premium Sidebar (Deep Midnight Navy Ink Theme) ── */
+.m-sidebar {
+  background: linear-gradient(180deg, #0A0D16 0%, #05070B 100%);
+  border-right: 1px solid rgba(255, 255, 255, 0.04);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.2);
+}
+
+.m-sidebar-section-title {
+  font-size: 9px;
+  font-weight: 800;
+  color: #4B5B75; /* Premium muted steel blue */
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 1rem 1.25rem 0.35rem 1.25rem;
+  margin-top: 0.5rem;
+}
+
+.m-sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 1.25rem;
+  color: #7A8B9E; /* Soft slate/steel blue inactive text */
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border-radius: 6px;
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  margin-bottom: 0.15rem;
+  margin-left: 0.5rem;
+  margin-right: 0.5rem;
+  border-left: 3px solid transparent;
+}
+
+.m-sidebar-link svg {
+  color: #4A586B;
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.m-sidebar-link:hover {
+  color: #F8FAFC;
+  background-color: rgba(255, 255, 255, 0.025);
+  border-left-color: rgba(139, 92, 246, 0.3);
+}
+
+.m-sidebar-link:hover svg {
+  color: #A78BFA;
+  transform: translateX(1px);
+}
+
+.m-sidebar-link--active {
+  color: #FFFFFF;
+  background-color: rgba(139, 92, 246, 0.09); /* Subtle violet glow background */
+  border-left-color: #8B5CF6; /* Active violet accent indicator */
+}
+
+.m-sidebar-link--active svg {
+  color: #A78BFA !important;
+}
+
+/* ── Integrated Vinyl Radar Scope Mount ── */
+.m-signal-disc-container::before {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border-radius: 50%;
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+}
+
+.m-signal-disc-container::after {
+  content: '';
+  position: absolute;
+  inset: -15px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  pointer-events: none;
+}
+
+/* ── High-End Hardware Button Shadow Polish ── */
+.m-btn--primary {
+  background-color: var(--m-accent);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 2px 4px rgba(139, 92, 246, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+.m-btn--primary:hover {
+  background-color: #7C3AED;
+  box-shadow: 0 4px 10px rgba(139, 92, 246, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+/* ── Premium Proof Evidence Cards ── */
+.m-proof-card {
+  background-color: var(--m-surface);
+  border: 1px solid var(--m-border);
+  border-radius: var(--m-radius-lg);
+  padding: 1.25rem;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(9, 9, 11, 0.02);
+}
+.m-proof-card:hover {
+  border-color: var(--m-dim);
+  box-shadow: 0 8px 24px rgba(9, 9, 11, 0.06);
+  background-color: #ffffff;
+}
+.m-proof-card-accent-bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+}

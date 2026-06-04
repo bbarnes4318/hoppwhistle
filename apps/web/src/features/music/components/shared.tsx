@@ -25,17 +25,17 @@ export function PageHeader({
   return (
     <header
       className={cn(
-        'border-b border-[var(--m-border-2)] pb-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4',
+        'pb-8 border-b border-[var(--m-border-2)] mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4',
         className
       )}
     >
-      <div className="space-y-1">
+      <div className="space-y-1.5">
         <div className="flex items-center gap-3">
-          {Icon && <Icon className="h-6 w-6 m-text-accent shrink-0" />}
-          <h1 className="text-2xl font-bold tracking-tight m-text-text">{title}</h1>
+          {Icon && <Icon className="h-8 w-8 text-[var(--m-accent)] shrink-0" />}
+          <h1 className="text-3xl lg:text-4xl font-black tracking-tight text-[var(--m-text)] leading-tight">{title}</h1>
           {badge}
         </div>
-        {description && <p className="text-sm m-text-muted max-w-2xl">{description}</p>}
+        {description && <p className="text-sm lg:text-base text-[var(--m-muted)] font-medium max-w-3xl leading-relaxed">{description}</p>}
       </div>
       {actions && <div className="flex items-center gap-3 shrink-0">{actions}</div>}
     </header>
@@ -81,36 +81,42 @@ export function MetricCard({
   }
 
   return (
-    <div className="m-card p-5 flex flex-col justify-between min-h-[100px] relative overflow-hidden group hover:border-[var(--m-border)] transition-colors">
-      <div className="flex items-start justify-between gap-2">
-        <div className="space-y-1">
-          {tag && (
-            <span className="text-[9px] font-bold tracking-wider text-[var(--m-muted)] uppercase">
-              {tag}
-            </span>
-          )}
-          <div className="text-xs font-semibold m-text-muted uppercase tracking-wider">{label}</div>
+    <div className="relative bg-[var(--m-surface)] border border-[var(--m-border)] rounded-xl p-6 flex flex-col justify-between min-h-[140px] shadow-[0_1px_3px_rgba(9,9,11,0.01)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--m-dim)] hover:shadow-[0_8px_24px_rgba(9,9,11,0.04)] group">
+      {Icon && (
+        <div className="absolute top-5 right-5 p-2 rounded-lg bg-gradient-to-br from-[var(--m-surface-2)] to-[var(--m-surface-3)] border border-[var(--m-border)] text-[var(--m-muted)] group-hover:text-[var(--m-accent)] group-hover:border-[var(--m-accent)]/20 transition-all duration-200">
+          <Icon className="h-4.5 w-4.5" />
         </div>
-        {Icon && <Icon className="h-4 w-4 m-text-dim group-hover:m-text-accent transition-colors" />}
+      )}
+      <div className="space-y-1">
+        {tag && (
+          <div className="text-[9px] font-black tracking-widest text-[var(--m-muted)] uppercase">
+            {tag}
+          </div>
+        )}
+        <div className="text-xs font-bold text-[var(--m-text-2)] uppercase tracking-wider">{label}</div>
       </div>
-      <div className="mt-3 flex items-baseline justify-between gap-2">
-        <div className="text-2xl font-bold font-mono m-text-text">{value}</div>
+      <div className="mt-4 flex items-baseline justify-between gap-2">
+        <div className="text-3xl lg:text-4xl font-extrabold font-mono tracking-tight text-[var(--m-text)]">{value}</div>
         {change !== undefined && (
           <span
             className={cn(
-              'text-xs font-mono font-bold px-1.5 py-0.5 rounded',
+              'text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border',
               isGood
-                ? 'm-text-accent-2 bg-[var(--m-accent-2-dim)]'
+                ? 'text-[#10B981] bg-[#10B981]/10 border-[#10B981]/20'
                 : isBad
-                  ? 'm-text-danger bg-[var(--m-danger-dim)]'
-                  : 'm-text-muted bg-[var(--m-surface-2)]'
+                  ? 'text-[#EF4444] bg-[#EF4444]/10 border-[#EF4444]/20'
+                  : 'text-zinc-500 bg-zinc-500/10 border-zinc-500/20'
             )}
           >
-            {change > 0 ? '↑' : change < 0 ? '↓' : ''} {Math.abs(change)}%
+            {isGood ? '↑' : isBad ? '↓' : ''} {Math.abs(change)}%
           </span>
         )}
       </div>
-      {subtext && <p className="text-[10px] m-text-dim mt-1.5">{subtext}</p>}
+      {subtext && (
+        <div className="text-[10px] text-[var(--m-muted)] mt-3 pt-2.5 border-t border-[var(--m-border-2)] font-medium">
+          {subtext}
+        </div>
+      )}
     </div>
   );
 }
