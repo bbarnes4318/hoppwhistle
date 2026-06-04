@@ -112,6 +112,9 @@ async function buildServer() {
     }
 
     const apiKey = request.headers['x-api-key'] as string;
+
+    // Try API key
+    if (apiKey) {
       try {
         const prisma = getPrismaClient();
         const keyHash = createHash('sha256').update(apiKey).digest('hex');
