@@ -98,10 +98,10 @@ export default function MusicConsolePage() {
 
         <div className="relative z-10 space-y-6">
           {/* Header Row */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--m-border-2)] pb-5">
-            <div className="space-y-1">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-[var(--m-border-2)] pb-6">
+            <div className="space-y-2.5">
               <div className="flex items-center gap-3">
-                <span className="text-[9px] font-black tracking-[0.25em] text-[#A78BFA] uppercase">
+                <span className="text-[9px] font-black tracking-[0.25em] text-[#A78BFA] uppercase bg-[#A78BFA]/10 border border-[#A78BFA]/20 px-2.5 py-0.5 rounded">
                   ACTIVE CAMPAIGN
                 </span>
                 <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border border-[var(--m-accent-2)]/20 bg-[var(--m-accent-2)]/10 text-xs font-semibold text-[var(--m-accent-2)]">
@@ -109,15 +109,20 @@ export default function MusicConsolePage() {
                   <span className="font-mono text-[9px] uppercase tracking-wider">{livePulse.status}</span>
                 </span>
               </div>
-              <h1 className="text-xl font-black text-white leading-tight">
-                {livePulse.campaignName} <span className="text-zinc-500 font-medium font-sans text-sm ml-2">by {livePulse.artist}</span>
+              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-tight">
+                <span className="bg-clip-text text-transparent bg-gradient-to-r from-[var(--m-accent)] via-[#c084fc] to-[#d8b4fe]">
+                  {livePulse.campaignName}
+                </span>
+                <span className="text-[var(--m-text-2)] font-light font-sans text-xl lg:text-2xl block mt-1">
+                  by <span className="font-semibold text-[#A78BFA]">{livePulse.artist}</span>
+                </span>
               </h1>
             </div>
 
             {/* CTAs */}
-            <div className="flex items-center gap-3 shrink-0">
+            <div className="flex items-center gap-3 shrink-0 self-start md:self-end">
               <Link href="/music-console/proof">
-                <ActionButton variant="primary" className="text-xs font-semibold py-2 px-4 shadow-[0_4px_16px_rgba(139,92,246,0.2)] hover:shadow-[0_6px_20px_rgba(139,92,246,0.35)]">
+                <ActionButton variant="primary" className="text-xs font-semibold py-2.5 px-4 shadow-[0_4px_16px_rgba(139,92,246,0.2)] hover:shadow-[0_6px_20px_rgba(139,92,246,0.35)]">
                   View Proof Log <ArrowRight className="h-3.5 w-3.5" />
                 </ActionButton>
               </Link>
@@ -129,83 +134,258 @@ export default function MusicConsolePage() {
             </div>
           </div>
 
-          {/* 6 Core KPIs Grid (Premium Horizontal Strip) */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6 pt-2">
-            {/* KPI 1 */}
-            <div className="space-y-1">
-              <div className="text-[9px] font-black tracking-widest text-zinc-500 uppercase flex items-center gap-1.5">
-                <Users className="h-3.5 w-3.5 text-[#A78BFA]" /> Reached Fans
-              </div>
-              <div className="text-2xl font-black font-mono text-white">
-                {formatCompactNumber(topKpis.fansContacted.value)}
-              </div>
-              <div className="text-[10px] text-zinc-400">
-                <span className="text-[var(--m-accent-2)] font-semibold">+{topKpis.fansContacted.change}%</span> vs prev week
-              </div>
-            </div>
-
-            {/* KPI 2 */}
-            <div className="space-y-1 border-l-0 sm:border-l border-white/[0.06] pl-0 sm:pl-4">
-              <div className="text-[9px] font-black tracking-widest text-zinc-500 uppercase flex items-center gap-1.5">
-                <Headphones className="h-3.5 w-3.5 text-[#8B5CF6]" /> Human Answers
-              </div>
-              <div className="text-2xl font-black font-mono text-white">
-                {formatCompactNumber(topKpis.humanAnswers.value)}
-              </div>
-              <div className="text-[10px] text-zinc-400">
-                <span className="text-[var(--m-accent-2)] font-semibold">+{topKpis.humanAnswers.change}%</span> connects
-              </div>
-            </div>
-
-            {/* KPI 3 */}
-            <div className="space-y-1 border-l-0 md:border-l border-white/[0.06] pl-0 md:pl-4">
-              <div className="text-[9px] font-black tracking-widest text-zinc-500 uppercase flex items-center gap-1.5">
-                <ShieldCheck className="h-3.5 w-3.5 text-[var(--m-accent-2)]" /> Verified Actions
-              </div>
-              <div className="text-2xl font-black font-mono text-[var(--m-accent-2)]">
-                {formatCompactNumber(topKpis.verifiedEngagements.value)}
-              </div>
-              <div className="text-[10px] text-zinc-400">
-                <span className="text-[var(--m-accent-2)] font-semibold">+{topKpis.verifiedEngagements.change}%</span> conversions
-              </div>
-            </div>
-
-            {/* KPI 4 */}
-            <div className="space-y-1 border-l-0 lg:border-l border-white/[0.06] pl-0 lg:pl-4">
-              <div className="text-[9px] font-black tracking-widest text-zinc-500 uppercase flex items-center gap-1.5">
-                <CheckCircle2 className="h-3.5 w-3.5 text-sky-400" /> Pre-Saves
-              </div>
-              <div className="text-2xl font-black font-mono text-white">
-                {formatCompactNumber(topKpis.preSaves.value)}
-              </div>
-              <div className="text-[10px] text-zinc-400">
-                <span className="text-[var(--m-accent-2)] font-semibold">+{topKpis.preSaves.change}%</span> DSP actions
+          {/* 6 Core KPIs Grid (Premium Redesigned Horizontal Strip) */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6 pt-4">
+            
+            {/* KPI 1: Reached Fans */}
+            <div className="bg-[var(--m-surface-2)] border border-[var(--m-border)] hover:border-[var(--m-accent)]/30 rounded-2xl p-6 flex flex-col justify-between h-44 transition-all duration-500 hover:shadow-[0_12px_30px_rgba(0,0,0,0.4)] hover:-translate-y-1 relative overflow-hidden group">
+              <div className="absolute -right-10 -bottom-10 w-28 h-28 bg-[var(--m-accent)]/10 rounded-full blur-2xl group-hover:bg-[var(--m-accent)]/20 transition-all duration-500 pointer-events-none" />
+              <div className="relative z-10 flex flex-col h-full justify-between">
+                <div className="flex justify-between items-start">
+                  <div className="text-3xl lg:text-4xl font-extrabold font-mono text-[var(--m-text)] tracking-tight leading-none">
+                    {formatCompactNumber(topKpis.fansContacted.value)}
+                  </div>
+                  <div className="p-1.5 bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded-lg text-[var(--m-accent)] group-hover:scale-110 transition-transform duration-300">
+                    <Users className="h-4 w-4" />
+                  </div>
+                </div>
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="text-[10px] font-black text-[var(--m-muted)] uppercase tracking-wider">
+                    Reached Fans
+                  </span>
+                  <span className="text-[9px] text-[#A78BFA] font-mono font-bold flex items-center gap-0.5 bg-[#A78BFA]/10 border border-[#A78BFA]/20 px-1.5 py-0.5 rounded">
+                    <TrendingUp className="h-3 w-3" /> +{topKpis.fansContacted.change}%
+                  </span>
+                </div>
+                <div className="mt-4 w-full overflow-visible">
+                  <svg className="w-full h-8 overflow-visible" viewBox="0 0 100 24" preserveAspectRatio="none">
+                    <defs>
+                      <linearGradient id="glow-kpi-1" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="var(--m-accent)" stopOpacity="0.4" />
+                        <stop offset="100%" stopColor="var(--m-accent)" stopOpacity="0.0" />
+                      </linearGradient>
+                      <filter id="blur-kpi-1">
+                        <feGaussianBlur stdDeviation="1.2" result="blur" />
+                        <feMerge>
+                          <feMergeNode in="blur" />
+                          <feMergeNode in="SourceGraphic" />
+                        </feMerge>
+                      </filter>
+                    </defs>
+                    <path d="M0 18 Q20 22 40 10 T80 12 T100 2 L100 24 L0 24 Z" fill="url(#glow-kpi-1)" />
+                    <path d="M0 18 Q20 22 40 10 T80 12 T100 2" stroke="var(--m-accent)" strokeWidth="2" fill="none" strokeLinecap="round" filter="url(#blur-kpi-1)" />
+                  </svg>
+                </div>
               </div>
             </div>
 
-            {/* KPI 5 */}
-            <div className="space-y-1 border-l-0 md:border-l border-white/[0.06] pl-0 md:pl-4">
-              <div className="text-[9px] font-black tracking-widest text-zinc-500 uppercase flex items-center gap-1.5">
-                <DollarSign className="h-3.5 w-3.5 text-[var(--m-warning)]" /> Cost / Pre-Save
-              </div>
-              <div className="text-2xl font-black font-mono text-[var(--m-warning)]">
-                {formatCurrency(topKpis.costPerPreSave.value)}
-              </div>
-              <div className="text-[10px] text-zinc-400">
-                <span className="text-[var(--m-accent-2)] font-semibold">{topKpis.costPerPreSave.change}%</span> CPA yield
+            {/* KPI 2: Human Answers */}
+            <div className="bg-[var(--m-surface-2)] border border-[var(--m-border)] hover:border-[var(--m-accent)]/30 rounded-2xl p-6 flex flex-col justify-between h-44 transition-all duration-500 hover:shadow-[0_12px_30px_rgba(0,0,0,0.4)] hover:-translate-y-1 relative overflow-hidden group">
+              <div className="absolute -right-10 -bottom-10 w-28 h-28 bg-[var(--m-accent)]/10 rounded-full blur-2xl group-hover:bg-[var(--m-accent)]/20 transition-all duration-500 pointer-events-none" />
+              <div className="relative z-10 flex flex-col h-full justify-between">
+                <div className="flex justify-between items-start">
+                  <div className="text-3xl lg:text-4xl font-extrabold font-mono text-[var(--m-text)] tracking-tight leading-none">
+                    {formatCompactNumber(topKpis.humanAnswers.value)}
+                  </div>
+                  <div className="p-1.5 bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded-lg text-[var(--m-accent)] group-hover:scale-110 transition-transform duration-300">
+                    <Headphones className="h-4 w-4" />
+                  </div>
+                </div>
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="text-[10px] font-black text-[var(--m-muted)] uppercase tracking-wider">
+                    Human Answers
+                  </span>
+                  <span className="text-[9px] text-[#A78BFA] font-mono font-bold flex items-center gap-0.5 bg-[#A78BFA]/10 border border-[#A78BFA]/20 px-1.5 py-0.5 rounded">
+                    <TrendingUp className="h-3 w-3" /> +{topKpis.humanAnswers.change}%
+                  </span>
+                </div>
+                <div className="mt-4 w-full overflow-visible">
+                  <svg className="w-full h-8 overflow-visible" viewBox="0 0 100 24" preserveAspectRatio="none">
+                    <defs>
+                      <linearGradient id="glow-kpi-2" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="var(--m-accent)" stopOpacity="0.4" />
+                        <stop offset="100%" stopColor="var(--m-accent)" stopOpacity="0.0" />
+                      </linearGradient>
+                      <filter id="blur-kpi-2">
+                        <feGaussianBlur stdDeviation="1.2" result="blur" />
+                        <feMerge>
+                          <feMergeNode in="blur" />
+                          <feMergeNode in="SourceGraphic" />
+                        </feMerge>
+                      </filter>
+                    </defs>
+                    <path d="M0 16 Q15 6 45 18 T75 8 T100 2 L100 24 L0 24 Z" fill="url(#glow-kpi-2)" />
+                    <path d="M0 16 Q15 6 45 18 T75 8 T100 2" stroke="var(--m-accent)" strokeWidth="2" fill="none" strokeLinecap="round" filter="url(#blur-kpi-2)" />
+                  </svg>
+                </div>
               </div>
             </div>
 
-            {/* KPI 6 */}
-            <div className="space-y-1 border-l-0 lg:border-l border-white/[0.06] pl-0 lg:pl-4">
-              <div className="text-[9px] font-black tracking-widest text-zinc-500 uppercase flex items-center gap-1.5">
-                <FileText className="h-3.5 w-3.5 text-[#A78BFA]" /> Proof Records
+            {/* KPI 3: Verified Actions */}
+            <div className="bg-[var(--m-surface-2)] border border-[var(--m-border)] hover:border-[var(--m-accent-2)]/30 rounded-2xl p-6 flex flex-col justify-between h-44 transition-all duration-500 hover:shadow-[0_12px_30px_rgba(0,0,0,0.4)] hover:-translate-y-1 relative overflow-hidden group">
+              <div className="absolute -right-10 -bottom-10 w-28 h-28 bg-[var(--m-accent-2)]/10 rounded-full blur-2xl group-hover:bg-[var(--m-accent-2)]/20 transition-all duration-500 pointer-events-none" />
+              <div className="relative z-10 flex flex-col h-full justify-between">
+                <div className="flex justify-between items-start">
+                  <div className="text-3xl lg:text-4xl font-extrabold font-mono text-[var(--m-accent-2)] tracking-tight leading-none">
+                    {formatCompactNumber(topKpis.verifiedEngagements.value)}
+                  </div>
+                  <div className="p-1.5 bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded-lg text-[var(--m-accent-2)] group-hover:scale-110 transition-transform duration-300">
+                    <ShieldCheck className="h-4 w-4" />
+                  </div>
+                </div>
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="text-[10px] font-black text-[var(--m-muted)] uppercase tracking-wider">
+                    Verified Actions
+                  </span>
+                  <span className="text-[9px] text-[var(--m-accent-2)] font-mono font-bold flex items-center gap-0.5 bg-[var(--m-accent-2)]/10 border border-[var(--m-accent-2)]/20 px-1.5 py-0.5 rounded">
+                    <TrendingUp className="h-3 w-3" /> +{topKpis.verifiedEngagements.change}%
+                  </span>
+                </div>
+                <div className="mt-4 w-full overflow-visible">
+                  <svg className="w-full h-8 overflow-visible" viewBox="0 0 100 24" preserveAspectRatio="none">
+                    <defs>
+                      <linearGradient id="glow-kpi-3" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="var(--m-accent-2)" stopOpacity="0.4" />
+                        <stop offset="100%" stopColor="var(--m-accent-2)" stopOpacity="0.0" />
+                      </linearGradient>
+                      <filter id="blur-kpi-3">
+                        <feGaussianBlur stdDeviation="1.2" result="blur" />
+                        <feMerge>
+                          <feMergeNode in="blur" />
+                          <feMergeNode in="SourceGraphic" />
+                        </feMerge>
+                      </filter>
+                    </defs>
+                    <path d="M0 20 Q25 15 50 8 T75 12 T100 3 L100 24 L0 24 Z" fill="url(#glow-kpi-3)" />
+                    <path d="M0 20 Q25 15 50 8 T75 12 T100 3" stroke="var(--m-accent-2)" strokeWidth="2" fill="none" strokeLinecap="round" filter="url(#blur-kpi-3)" />
+                  </svg>
+                </div>
               </div>
-              <div className="text-2xl font-black font-mono text-[#A78BFA]">
-                {formatCompactNumber(topKpis.proofCaptured.value)}
+            </div>
+
+            {/* KPI 4: Pre-Saves */}
+            <div className="bg-[var(--m-surface-2)] border border-[var(--m-border)] hover:border-[var(--m-accent-2)]/30 rounded-2xl p-6 flex flex-col justify-between h-44 transition-all duration-500 hover:shadow-[0_12px_30px_rgba(0,0,0,0.4)] hover:-translate-y-1 relative overflow-hidden group">
+              <div className="absolute -right-10 -bottom-10 w-28 h-28 bg-[var(--m-accent-2)]/10 rounded-full blur-2xl group-hover:bg-[var(--m-accent-2)]/20 transition-all duration-500 pointer-events-none" />
+              <div className="relative z-10 flex flex-col h-full justify-between">
+                <div className="flex justify-between items-start">
+                  <div className="text-3xl lg:text-4xl font-extrabold font-mono text-[var(--m-text)] tracking-tight leading-none">
+                    {formatCompactNumber(topKpis.preSaves.value)}
+                  </div>
+                  <div className="p-1.5 bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded-lg text-[var(--m-accent-2)] group-hover:scale-110 transition-transform duration-300">
+                    <CheckCircle2 className="h-4 w-4" />
+                  </div>
+                </div>
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="text-[10px] font-black text-[var(--m-muted)] uppercase tracking-wider">
+                    Pre-Saves
+                  </span>
+                  <span className="text-[9px] text-[var(--m-accent-2)] font-mono font-bold flex items-center gap-0.5 bg-[var(--m-accent-2)]/10 border border-[var(--m-accent-2)]/20 px-1.5 py-0.5 rounded">
+                    <TrendingUp className="h-3 w-3" /> +{topKpis.preSaves.change}%
+                  </span>
+                </div>
+                <div className="mt-4 w-full overflow-visible">
+                  <svg className="w-full h-8 overflow-visible" viewBox="0 0 100 24" preserveAspectRatio="none">
+                    <defs>
+                      <linearGradient id="glow-kpi-4" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="var(--m-accent-2)" stopOpacity="0.4" />
+                        <stop offset="100%" stopColor="var(--m-accent-2)" stopOpacity="0.0" />
+                      </linearGradient>
+                      <filter id="blur-kpi-4">
+                        <feGaussianBlur stdDeviation="1.2" result="blur" />
+                        <feMerge>
+                          <feMergeNode in="blur" />
+                          <feMergeNode in="SourceGraphic" />
+                        </feMerge>
+                      </filter>
+                    </defs>
+                    <path d="M0 16 Q20 12 40 16 T80 6 T100 2 L100 24 L0 24 Z" fill="url(#glow-kpi-4)" />
+                    <path d="M0 16 Q20 12 40 16 T80 6 T100 2" stroke="var(--m-accent-2)" strokeWidth="2" fill="none" strokeLinecap="round" filter="url(#blur-kpi-4)" />
+                  </svg>
+                </div>
               </div>
-              <div className="text-[10px] text-zinc-400">
-                <span className="text-[var(--m-accent-2)] font-semibold">+{topKpis.proofCaptured.change}%</span> verbatims
+            </div>
+
+            {/* KPI 5: Cost / Pre-Save */}
+            <div className="bg-[var(--m-surface-2)] border border-[var(--m-border)] hover:border-[var(--m-warning)]/30 rounded-2xl p-6 flex flex-col justify-between h-44 transition-all duration-500 hover:shadow-[0_12px_30px_rgba(0,0,0,0.4)] hover:-translate-y-1 relative overflow-hidden group">
+              <div className="absolute -right-10 -bottom-10 w-28 h-28 bg-[var(--m-warning)]/10 rounded-full blur-2xl group-hover:bg-[var(--m-warning)]/20 transition-all duration-500 pointer-events-none" />
+              <div className="relative z-10 flex flex-col h-full justify-between">
+                <div className="flex justify-between items-start">
+                  <div className="text-3xl lg:text-4xl font-extrabold font-mono text-[var(--m-warning)] tracking-tight leading-none">
+                    {formatCurrency(topKpis.costPerPreSave.value)}
+                  </div>
+                  <div className="p-1.5 bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded-lg text-[var(--m-warning)] group-hover:scale-110 transition-transform duration-300">
+                    <DollarSign className="h-4 w-4" />
+                  </div>
+                </div>
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="text-[10px] font-black text-[var(--m-muted)] uppercase tracking-wider">
+                    Cost / Pre-Save
+                  </span>
+                  <span className="text-[9px] text-[var(--m-warning)] font-mono font-bold flex items-center gap-0.5 bg-[var(--m-warning)]/10 border border-[var(--m-warning)]/20 px-1.5 py-0.5 rounded">
+                    <TrendingUp className="h-3 w-3 rotate-180" /> {topKpis.costPerPreSave.change}%
+                  </span>
+                </div>
+                <div className="mt-4 w-full overflow-visible">
+                  <svg className="w-full h-8 overflow-visible" viewBox="0 0 100 24" preserveAspectRatio="none">
+                    <defs>
+                      <linearGradient id="glow-kpi-5" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="var(--m-warning)" stopOpacity="0.4" />
+                        <stop offset="100%" stopColor="var(--m-warning)" stopOpacity="0.0" />
+                      </linearGradient>
+                      <filter id="blur-kpi-5">
+                        <feGaussianBlur stdDeviation="1.2" result="blur" />
+                        <feMerge>
+                          <feMergeNode in="blur" />
+                          <feMergeNode in="SourceGraphic" />
+                        </feMerge>
+                      </filter>
+                    </defs>
+                    <path d="M0 2 Q20 4 40 16 T80 10 T100 20 L100 24 L0 24 Z" fill="url(#glow-kpi-5)" />
+                    <path d="M0 2 Q20 4 40 16 T80 10 T100 20" stroke="var(--m-warning)" strokeWidth="2" fill="none" strokeLinecap="round" filter="url(#blur-kpi-5)" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            {/* KPI 6: Proof Records */}
+            <div className="bg-[var(--m-surface-2)] border border-[var(--m-border)] hover:border-[var(--m-accent)]/30 rounded-2xl p-6 flex flex-col justify-between h-44 transition-all duration-500 hover:shadow-[0_12px_30px_rgba(0,0,0,0.4)] hover:-translate-y-1 relative overflow-hidden group">
+              <div className="absolute -right-10 -bottom-10 w-28 h-28 bg-[var(--m-accent)]/10 rounded-full blur-2xl group-hover:bg-[var(--m-accent)]/20 transition-all duration-500 pointer-events-none" />
+              <div className="relative z-10 flex flex-col h-full justify-between">
+                <div className="flex justify-between items-start">
+                  <div className="text-3xl lg:text-4xl font-extrabold font-mono text-[#A78BFA] tracking-tight leading-none">
+                    {formatCompactNumber(topKpis.proofCaptured.value)}
+                  </div>
+                  <div className="p-1.5 bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded-lg text-[var(--m-accent)] group-hover:scale-110 transition-transform duration-300">
+                    <FileText className="h-4 w-4" />
+                  </div>
+                </div>
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="text-[10px] font-black text-[var(--m-muted)] uppercase tracking-wider">
+                    Proof Records
+                  </span>
+                  <span className="text-[9px] text-[#A78BFA] font-mono font-bold flex items-center gap-0.5 bg-[#A78BFA]/10 border border-[#A78BFA]/20 px-1.5 py-0.5 rounded">
+                    <TrendingUp className="h-3 w-3" /> +{topKpis.proofCaptured.change}%
+                  </span>
+                </div>
+                <div className="mt-4 w-full overflow-visible">
+                  <svg className="w-full h-8 overflow-visible" viewBox="0 0 100 24" preserveAspectRatio="none">
+                    <defs>
+                      <linearGradient id="glow-kpi-6" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="var(--m-accent)" stopOpacity="0.4" />
+                        <stop offset="100%" stopColor="var(--m-accent)" stopOpacity="0.0" />
+                      </linearGradient>
+                      <filter id="blur-kpi-6">
+                        <feGaussianBlur stdDeviation="1.2" result="blur" />
+                        <feMerge>
+                          <feMergeNode in="blur" />
+                          <feMergeNode in="SourceGraphic" />
+                        </feMerge>
+                      </filter>
+                    </defs>
+                    <path d="M0 18 Q20 16 40 10 T80 8 T100 2 L100 24 L0 24 Z" fill="url(#glow-kpi-6)" />
+                    <path d="M0 18 Q20 16 40 10 T80 8 T100 2" stroke="var(--m-accent)" strokeWidth="2" fill="none" strokeLinecap="round" filter="url(#blur-kpi-6)" />
+                  </svg>
+                </div>
               </div>
             </div>
           </div>

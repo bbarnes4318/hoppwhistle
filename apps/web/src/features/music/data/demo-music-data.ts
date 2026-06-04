@@ -31,7 +31,7 @@ export const fanCampaigns: FanCampaign[] = [
   {
     id: 'c-1',
     name: 'Midnight Signal Pre-Save',
-    artist: 'Nova Ray',
+    artist: 'Nona Ray',
     type: 'album_presave',
     segment: 'stream_save',
     status: 'active',
@@ -118,7 +118,7 @@ const SENTIMENTS: Sentiment[] = ['positive', 'positive', 'neutral', 'negative'];
 const INTENTS: IntentLevel[] = ['high', 'high', 'medium', 'low', 'none'];
 
 const SNIPPETS = [
-  "AI: Nova Ray's new album drops Friday. Want me to set up a pre-save?\nFan: Yes! I've been waiting for this.",
+  "AI: Nona Ray's new album drops Friday. Want me to set up a pre-save?\nFan: Yes! I've been waiting for this.",
   "AI: Tickets for Jace Vale go on sale tomorrow. Want early access?\nFan: Absolutely. Send me the link.",
   "AI: We have a limited merch drop coming up. Interested?\nFan: Yeah, what kind of merch?",
   "AI: VIP upgrades are available for your upcoming show. Want to hear more?\nFan: Definitely, how much is it?",
@@ -176,7 +176,7 @@ export const funnelData: FunnelStage[] = [
 // ── Live Pulse ──
 export const livePulse: LivePulseData = {
   campaignName: 'Midnight Signal Pre-Save',
-  artist: 'Nova Ray',
+  artist: 'Nona Ray',
   segment: 'Superfans & Stream Savers',
   contactRate: 85.4,
   answerRate: 62.8,
@@ -223,7 +223,7 @@ export const fans: FanProfile[] = Array.from({ length: 45 }, (_, i) => {
     lastInteraction: `2026-04-${String(range(i * 37, 10, 24)).padStart(2, '0')}T14:30:00Z`,
     verifiedActions: range(i * 41, 0, 5),
     preSaves: range(i * 43, 0, 3),
-    favoriteArtist: pick(['Nova Ray', 'Jace Vale', 'Luma District', 'Aria Stone', 'The Afterhours'], i * 47),
+    favoriteArtist: pick(['Nona Ray', 'Jace Vale', 'Luma District', 'Aria Stone', 'The Afterhours'], i * 47),
     consentStatus: pick(CONSENT_STATUSES, i * 53) as any,
     totalInteractions: range(i * 59, 1, 12),
   };
@@ -242,7 +242,7 @@ export const defaultMusicSettings: MusicSettings = {
   emailReports: true,
   reportFrequency: 'weekly',
   
-  defaultArtist: 'Nova Ray',
+  defaultArtist: 'Nona Ray',
   defaultCampaignOwner: 'Marketing Team',
   reportingCurrency: 'USD',
   approvedVoicePersona: 'Artist-Approved Promo',
