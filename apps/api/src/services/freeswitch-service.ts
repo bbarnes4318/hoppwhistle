@@ -336,6 +336,15 @@ export class FreeSwitchService {
     // Use the active UUID as the base for the conference name
     const conferenceName = `conf_${activeUuid}`;
 
+    // Disable hangup_after_bridge so agent channels don't terminate when their bridges are transferred
+    try {
+      await this.executeApi('uuid_setvar', `${activeUuid} hangup_after_bridge false`);
+      await this.executeApi('uuid_setvar', `${heldUuid} hangup_after_bridge false`);
+      logger.info({ msg: 'Disabled hangup_after_bridge on active and held channels', activeUuid, heldUuid });
+    } catch (err) {
+      logger.warn({ msg: 'Failed to set hangup_after_bridge variable', error: err });
+    }
+
     // 1. Transfer the HELD call's remote leg (B-leg) into the conference
     try {
       await this.executeApi(
