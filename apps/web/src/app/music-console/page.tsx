@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   TrendingUp,
   Users,
+  Upload,
   ArrowRight,
   Volume2,
   Play,
@@ -137,6 +138,199 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
+function Interactive3DGlobe() {
+  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+
+  React.useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let animationId: number;
+    let width = canvas.width;
+    let height = canvas.height;
+
+    // Handle resize
+    const resize = () => {
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * window.devicePixelRatio;
+      canvas.height = rect.height * window.devicePixelRatio;
+      width = canvas.width;
+      height = canvas.height;
+      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    };
+    
+    resize();
+    window.addEventListener('resize', resize);
+
+    // Generate points on a sphere
+    const points: { x: number; y: number; z: number; type: 'grid' | 'hotspot'; pulse?: number }[] = [];
+    
+    // Grid points (dot mesh)
+    const numPoints = 280;
+    for (let i = 0; i < numPoints; i++) {
+      // Golden spiral distribution
+      const y = 1 - (i / (numPoints - 1)) * 2;
+      const radius = Math.sqrt(1 - y * y);
+      const theta = 2.39996 * i; // Golden angle
+      const x = Math.cos(theta) * radius;
+      const z = Math.sin(theta) * radius;
+      
+      points.push({ x: x * 76, y: y * 76, z: z * 76, type: 'grid' });
+    }
+
+    // Hotspots (Golden/Amber)
+    const hotspots = [
+      { lat: 0.6, lon: -1.2, name: 'LA' },
+      { lat: 0.7, lon: -0.7, name: 'NYC' },
+      { lat: 0.4, lon: -1.0, name: 'TX' },
+      { lat: 0.2, lon: 0.1, name: 'LON' },
+      { lat: 0.5, lon: 2.4, name: 'TKY' },
+    ];
+
+    hotspots.forEach(h => {
+      const cosLat = Math.cos(h.lat);
+      const x = cosLat * Math.sin(h.lon);
+      const y = Math.sin(h.lat);
+      const z = cosLat * Math.cos(h.lon);
+      points.push({ x: x * 76, y: y * 76, z: z * 76, type: 'hotspot', pulse: Math.random() });
+    });
+
+    let angleY = 0;
+    let angleX = 0.35; // slight tilt
+
+    const render = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      const w = width / window.devicePixelRatio;
+      const h = height / window.devicePixelRatio;
+      const centerX = w / 2;
+      const centerY = h / 2;
+      
+      // Draw dynamic outer radar scanning sweep
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, 88, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(245, 158, 11, 0.05)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, 76, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(139, 92, 246, 0.06)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // Rotate and project points
+      const rotatedPoints = points.map(p => {
+        let x1 = p.x * Math.cos(angleY) - p.z * Math.sin(angleY);
+        let z1 = p.x * Math.sin(angleY) + p.z * Math.cos(angleY);
+        
+        let y2 = p.y * Math.cos(angleX) - z1 * Math.sin(angleX);
+        let z2 = p.y * Math.sin(angleX) + z1 * Math.cos(angleX);
+
+        const focalLength = 250;
+        const scale = focalLength / (focalLength + z2);
+        const projX = centerX + x1 * scale;
+        const projY = centerY + y2 * scale;
+        
+        return {
+          projX,
+          projY,
+          z: z2,
+          type: p.type,
+          pulse: p.pulse,
+          orig: p
+        };
+      });
+
+      // Depth sort: background drawn first
+      rotatedPoints.sort((a, b) => b.z - a.z);
+
+      rotatedPoints.forEach(p => {
+        const isForeground = p.z < 0;
+        const opacity = isForeground 
+          ? Math.max(0.15, 0.8 * (1 - p.z / 76)) 
+          : Math.max(0.04, 0.15 * (1 - p.z / 76));
+
+        if (p.type === 'grid') {
+          ctx.beginPath();
+          ctx.arc(p.projX, p.projY, 1.1, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(167, 139, 250, ${opacity * 0.35})`; // translucent purple dots
+          ctx.fill();
+        } else {
+          // Hotspot
+          const size = isForeground ? 3.5 : 1.5;
+          ctx.beginPath();
+          ctx.arc(p.projX, p.projY, size, 0, Math.PI * 2);
+          ctx.fillStyle = '#F59E0B'; // golden/amber
+          ctx.fill();
+
+          if (isForeground) {
+            const pVal = (p.orig.pulse || 0) % 1;
+            ctx.beginPath();
+            ctx.arc(p.projX, p.projY, size + pVal * 16);
+            ctx.strokeStyle = `rgba(245, 158, 11, ${1 - pVal})`;
+            ctx.lineWidth = 1.2;
+            ctx.stroke();
+            
+            p.orig.pulse = (p.orig.pulse || 0) + 0.012;
+          }
+        }
+      });
+
+      // Draw connection lines
+      const foregroundHotspots = rotatedPoints.filter(p => p.type === 'hotspot' && p.z < 0);
+      for (let i = 0; i < foregroundHotspots.length; i++) {
+        for (let j = i + 1; j < foregroundHotspots.length; j++) {
+          const h1 = foregroundHotspots[i];
+          const h2 = foregroundHotspots[j];
+          const dist = Math.hypot(h1.projX - h2.projX, h1.projY - h2.projY);
+          
+          if (dist < 100) {
+            ctx.beginPath();
+            ctx.moveTo(h1.projX, h1.projY);
+            const midX = (h1.projX + h2.projX) / 2;
+            const midY = (h1.projY + h2.projY) / 2 - dist * 0.15;
+            ctx.quadraticCurveTo(midX, midY, h2.projX, h2.projY);
+            
+            ctx.strokeStyle = 'rgba(245, 158, 11, 0.12)';
+            ctx.lineWidth = 0.8;
+            ctx.setLineDash([2, 5]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+          }
+        }
+      }
+
+      angleY += 0.004;
+      animationId = requestAnimationFrame(render);
+    };
+
+    render();
+
+    return () => {
+      cancelAnimationFrame(animationId);
+      window.removeEventListener('resize', resize);
+    };
+  }, []);
+
+  return (
+    <div className="w-full h-full relative flex items-center justify-center bg-[#07090e]/40 rounded-t-2xl border-t border-x border-white/5 overflow-hidden">
+      <canvas ref={canvasRef} className="w-full h-full absolute inset-0 cursor-grab" />
+      {/* HUD indicators */}
+      <div className="absolute inset-x-0 bottom-6 flex justify-between px-6 pointer-events-none text-[8px] font-mono text-amber-500/50 uppercase tracking-[0.2em]">
+        <span>MAP INTEL: ONLINE</span>
+        <span>COORDINATES LOCK: 37.0902° N, 95.7129° W</span>
+      </div>
+      <div className="absolute top-4 left-6 pointer-events-none text-[8px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1.5">
+        <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+        <span>Live Telemetry Hotline Tracker</span>
+      </div>
+    </div>
+  );
+}
+
 export default function MusicConsolePage() {
   const [playingRecordId, setPlayingRecordId] = useState<string | null>(null);
   const [expandedTranscriptId, setExpandedTranscriptId] = useState<string | null>(null);
@@ -159,7 +353,7 @@ export default function MusicConsolePage() {
     <div className="space-y-12 pb-16">
       {/* ─── SECTION 1: Premium Hero Command Module (Dark Obsidian) ─── */}
       {/* ─── SECTION 1: Premium Hero Command Module (Dark Obsidian) ─── */}
-      <section className="bg-[var(--m-surface)] text-[var(--m-text)] rounded-2xl border border-[var(--m-border)] p-8 lg:p-10 relative overflow-hidden shadow-[0_12px_40px_-4px_rgba(0,0,0,0.35)] m-animate-fade-in m-anim-delay-100">
+      <section className="m-hardware-panel text-[var(--m-text)] p-8 lg:p-10 relative overflow-hidden m-animate-fade-in m-anim-delay-100">
         {/* Glow Highlights */}
         <div className="absolute top-0 right-0 w-96 h-96 bg-[#8B5CF6]/5 rounded-full blur-[120px] pointer-events-none opacity-40" />
         <div className="absolute bottom-0 left-0 w-80 h-80 bg-[var(--m-accent-2)]/5 rounded-full blur-[90px] pointer-events-none opacity-30" />
@@ -177,13 +371,8 @@ export default function MusicConsolePage() {
                   <span className="font-mono text-[9px] uppercase tracking-wider">{livePulse.status}</span>
                 </span>
               </div>
-              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-tight">
-                <span className="bg-clip-text text-transparent bg-gradient-to-r from-[var(--m-accent)] via-[#c084fc] to-[#d8b4fe]">
-                  {livePulse.campaignName}
-                </span>
-                <span className="text-[var(--m-text-2)] font-light font-sans text-xl lg:text-2xl block mt-1">
-                  by <span className="font-semibold text-[#A78BFA]">{livePulse.artist}</span>
-                </span>
+              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-tight m-title-glow">
+                {livePulse.campaignName} by {livePulse.artist}
               </h1>
             </div>
 
@@ -206,7 +395,7 @@ export default function MusicConsolePage() {
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6 pt-4">
             
             {/* KPI 1: Reached Fans */}
-            <div className="bg-[var(--m-surface-2)] border border-[var(--m-border)] hover:border-[var(--m-accent)]/30 rounded-2xl p-6 flex flex-col justify-between h-44 transition-all duration-500 hover:shadow-[0_12px_30px_rgba(0,0,0,0.4)] hover:-translate-y-1 relative overflow-hidden group">
+            <div className="m-inset-card hover:border-[var(--m-accent)]/30 p-6 flex flex-col justify-between h-44 transition-all duration-500 hover:-translate-y-1 relative overflow-hidden group">
               <div className="absolute -right-10 -bottom-10 w-28 h-28 bg-[var(--m-accent)]/10 rounded-full blur-2xl group-hover:bg-[var(--m-accent)]/20 transition-all duration-500 pointer-events-none" />
               <div className="relative z-10 flex flex-col h-full justify-between">
                 <div className="flex justify-between items-start">
@@ -248,7 +437,7 @@ export default function MusicConsolePage() {
             </div>
 
             {/* KPI 2: Human Answers */}
-            <div className="bg-[var(--m-surface-2)] border border-[var(--m-border)] hover:border-[var(--m-accent)]/30 rounded-2xl p-6 flex flex-col justify-between h-44 transition-all duration-500 hover:shadow-[0_12px_30px_rgba(0,0,0,0.4)] hover:-translate-y-1 relative overflow-hidden group">
+            <div className="m-inset-card hover:border-[var(--m-accent)]/30 p-6 flex flex-col justify-between h-44 transition-all duration-500 hover:-translate-y-1 relative overflow-hidden group">
               <div className="absolute -right-10 -bottom-10 w-28 h-28 bg-[var(--m-accent)]/10 rounded-full blur-2xl group-hover:bg-[var(--m-accent)]/20 transition-all duration-500 pointer-events-none" />
               <div className="relative z-10 flex flex-col h-full justify-between">
                 <div className="flex justify-between items-start">
@@ -290,7 +479,7 @@ export default function MusicConsolePage() {
             </div>
 
             {/* KPI 3: Verified Actions */}
-            <div className="bg-[var(--m-surface-2)] border border-[var(--m-border)] hover:border-[var(--m-accent-2)]/30 rounded-2xl p-6 flex flex-col justify-between h-44 transition-all duration-500 hover:shadow-[0_12px_30px_rgba(0,0,0,0.4)] hover:-translate-y-1 relative overflow-hidden group">
+            <div className="m-inset-card hover:border-[var(--m-accent-2)]/30 p-6 flex flex-col justify-between h-44 transition-all duration-500 hover:-translate-y-1 relative overflow-hidden group">
               <div className="absolute -right-10 -bottom-10 w-28 h-28 bg-[var(--m-accent-2)]/10 rounded-full blur-2xl group-hover:bg-[var(--m-accent-2)]/20 transition-all duration-500 pointer-events-none" />
               <div className="relative z-10 flex flex-col h-full justify-between">
                 <div className="flex justify-between items-start">
@@ -332,7 +521,7 @@ export default function MusicConsolePage() {
             </div>
 
             {/* KPI 4: Pre-Saves */}
-            <div className="bg-[var(--m-surface-2)] border border-[var(--m-border)] hover:border-[var(--m-accent-2)]/30 rounded-2xl p-6 flex flex-col justify-between h-44 transition-all duration-500 hover:shadow-[0_12px_30px_rgba(0,0,0,0.4)] hover:-translate-y-1 relative overflow-hidden group">
+            <div className="m-inset-card hover:border-[var(--m-accent-2)]/30 p-6 flex flex-col justify-between h-44 transition-all duration-500 hover:-translate-y-1 relative overflow-hidden group">
               <div className="absolute -right-10 -bottom-10 w-28 h-28 bg-[var(--m-accent-2)]/10 rounded-full blur-2xl group-hover:bg-[var(--m-accent-2)]/20 transition-all duration-500 pointer-events-none" />
               <div className="relative z-10 flex flex-col h-full justify-between">
                 <div className="flex justify-between items-start">
@@ -374,7 +563,7 @@ export default function MusicConsolePage() {
             </div>
 
             {/* KPI 5: Cost / Pre-Save */}
-            <div className="bg-[var(--m-surface-2)] border border-[var(--m-border)] hover:border-[var(--m-warning)]/30 rounded-2xl p-6 flex flex-col justify-between h-44 transition-all duration-500 hover:shadow-[0_12px_30px_rgba(0,0,0,0.4)] hover:-translate-y-1 relative overflow-hidden group">
+            <div className="m-inset-card hover:border-[var(--m-warning)]/30 p-6 flex flex-col justify-between h-44 transition-all duration-500 hover:-translate-y-1 relative overflow-hidden group">
               <div className="absolute -right-10 -bottom-10 w-28 h-28 bg-[var(--m-warning)]/10 rounded-full blur-2xl group-hover:bg-[var(--m-warning)]/20 transition-all duration-500 pointer-events-none" />
               <div className="relative z-10 flex flex-col h-full justify-between">
                 <div className="flex justify-between items-start">
@@ -416,7 +605,7 @@ export default function MusicConsolePage() {
             </div>
 
             {/* KPI 6: Proof Records */}
-            <div className="bg-[var(--m-surface-2)] border border-[var(--m-border)] hover:border-[var(--m-accent)]/30 rounded-2xl p-6 flex flex-col justify-between h-44 transition-all duration-500 hover:shadow-[0_12px_30px_rgba(0,0,0,0.4)] hover:-translate-y-1 relative overflow-hidden group">
+            <div className="m-inset-card hover:border-[var(--m-accent)]/30 p-6 flex flex-col justify-between h-44 transition-all duration-500 hover:-translate-y-1 relative overflow-hidden group">
               <div className="absolute -right-10 -bottom-10 w-28 h-28 bg-[var(--m-accent)]/10 rounded-full blur-2xl group-hover:bg-[var(--m-accent)]/20 transition-all duration-500 pointer-events-none" />
               <div className="relative z-10 flex flex-col h-full justify-between">
                 <div className="flex justify-between items-start">
@@ -476,17 +665,18 @@ export default function MusicConsolePage() {
           </span>
         </div>
 
-        <div className="overflow-x-auto m-scrollbar-thin pb-6 relative">
-          <div className="flex items-center justify-between min-w-[1000px] lg:min-w-0 px-4 py-8 relative">
+        <div className="m-hardware-panel p-6 overflow-hidden">
+          <div className="overflow-x-auto m-scrollbar-thin pb-2 relative">
+            <div className="flex items-center justify-between min-w-[1000px] lg:min-w-0 px-4 py-8 relative">
             {funnelData.map((stage, i) => {
               // Custom Lucide icons for each stage
               const icons = [
-                <Database className="h-4.5 w-4.5" style={{ color: stage.color }} />,
+                <Upload className="h-4.5 w-4.5" style={{ color: stage.color }} />,
                 <Phone className="h-4.5 w-4.5" style={{ color: stage.color }} />,
                 <Headphones className="h-4.5 w-4.5" style={{ color: stage.color }} />,
                 <MessageSquare className="h-4.5 w-4.5" style={{ color: stage.color }} />,
                 <ShieldCheck className="h-4.5 w-4.5" style={{ color: stage.color }} />,
-                <Award className="h-4.5 w-4.5" style={{ color: stage.color }} />,
+                <CheckCircle2 className="h-4.5 w-4.5" style={{ color: stage.color }} />,
               ];
 
               return (
@@ -562,8 +752,11 @@ export default function MusicConsolePage() {
 
                     {/* Circular milestone node */}
                     <div
-                      className="relative w-16 h-16 rounded-full flex items-center justify-center bg-[var(--m-surface-2)] border-2 transition-all duration-300 group-hover:scale-110 shadow-lg"
-                      style={{ borderColor: stage.color }}
+                      className="relative w-16 h-16 rounded-full flex items-center justify-center m-glass-node transition-all duration-300 group-hover:scale-110"
+                      style={{
+                        borderColor: stage.color,
+                        boxShadow: `0 0 16px ${stage.color}50, inset 0 1px 2px rgba(255, 255, 255, 0.15)`
+                      }}
                     >
                       {/* Pulsing ring animation */}
                       <div
@@ -572,8 +765,8 @@ export default function MusicConsolePage() {
                       />
 
                       {/* Icon container */}
-                      <div className="w-12 h-12 rounded-full flex items-center justify-center bg-[var(--m-surface)] border border-[var(--m-border)]">
-                        {icons[i] || <Activity className="h-4.5 w-4.5" />}
+                      <div className="w-11 h-11 rounded-full flex items-center justify-center bg-zinc-900/80 border border-white/5 shadow-inner">
+                        {icons[i] || <Activity className="h-4 w-4" />}
                       </div>
 
                       {/* Stage percentage floating badge */}
@@ -593,28 +786,42 @@ export default function MusicConsolePage() {
                       <span className="text-[10px] font-black text-[var(--m-text)] tracking-wider uppercase block max-w-[110px] truncate group-hover:text-[var(--m-accent)] transition-colors duration-300">
                         {stage.label}
                       </span>
-                      <span className="text-xs font-bold font-mono text-[var(--m-text-2)] block">
-                        {formatCompactNumber(stage.count)}
-                      </span>
+                      <div className="flex items-center justify-center gap-1.5 mt-0.5">
+                        <span className="text-xs font-bold font-mono text-[var(--m-text-2)]">
+                          {formatCompactNumber(stage.count)}
+                        </span>
+                        <span className="text-[9px] font-mono font-bold text-zinc-600">•</span>
+                        <span className="text-[10px] font-mono font-black text-[#A78BFA]" style={{ color: stage.color }}>
+                          {stage.percentage.toFixed(0)}%
+                        </span>
+                      </div>
                     </div>
                   </div>
 
                   {/* Connected line with running flow telemetry dot */}
                   {i < funnelData.length - 1 && (
-                    <div className="flex-1 min-w-[30px] max-w-[90px] h-[3px] bg-white/[0.04] relative rounded-full mx-2 z-0 hidden md:block">
-                      <div
-                        className="absolute top-0 bottom-0 left-0 rounded-full bg-gradient-to-r transition-all duration-300"
-                        style={{
-                          right: 0,
-                          backgroundImage: `linear-gradient(to right, ${stage.color}, ${funnelData[i+1]?.color || stage.color})`,
-                          boxShadow: `0 0 8px ${stage.color}25`
-                        }}
-                      />
+                    <div className="flex-1 min-w-[30px] max-w-[90px] h-[6px] relative mx-2 z-0 hidden md:block">
+                      <svg className="absolute inset-0 w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 100 6">
+                        <path 
+                          d="M 0,3 L 94,3 M 90,0 L 95,3 L 90,6" 
+                          stroke={`url(#arrow-grad-${i})`} 
+                          strokeWidth="2.5" 
+                          fill="none" 
+                          strokeLinecap="round" 
+                          strokeLinejoin="round" 
+                        />
+                        <defs>
+                          <linearGradient id={`arrow-grad-${i}`} x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stopColor={stage.color} />
+                            <stop offset="100%" stopColor={funnelData[i+1]?.color || stage.color} />
+                          </linearGradient>
+                        </defs>
+                      </svg>
                       <div
                         className="absolute top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full animate-flow-dot pointer-events-none"
                         style={{
                           backgroundColor: funnelData[i+1]?.color || stage.color,
-                          boxShadow: `0 0 6px ${funnelData[i+1]?.color || stage.color}`
+                          boxShadow: `0 0 8px ${funnelData[i+1]?.color || stage.color}`
                         }}
                       />
                     </div>
@@ -622,6 +829,7 @@ export default function MusicConsolePage() {
                 </React.Fragment>
               );
             })}
+            </div>
           </div>
         </div>
       </section>
@@ -710,7 +918,7 @@ export default function MusicConsolePage() {
             {/* Right Chart & Ticker Column */}
             <div className="md:col-span-3 flex flex-col justify-between space-y-6">
               {/* Chart Canvas */}
-              <div className="h-[340px] w-full relative flex items-center justify-center bg-[var(--m-surface-2)]/40 border border-[var(--m-border-2)] rounded-2xl p-4 overflow-hidden">
+              <div className="h-[220px] w-full relative flex items-center justify-center m-card-deep p-4 overflow-hidden">
                 {mounted ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart
@@ -785,44 +993,64 @@ export default function MusicConsolePage() {
                 )}
               </div>
 
-              {/* Real-Time Live Activity Terminal Ticker (Sleek macOS-Style CRT Terminal) */}
-              <div className="m-terminal-container rounded-2xl overflow-hidden shadow-2xl relative">
-                {/* macOS window title bar */}
-                <div className="bg-[#0D0E12]/80 px-4 py-2.5 flex items-center justify-between border-b border-white/5 relative z-10 backdrop-blur-md">
-                  <div className="flex items-center gap-1.5 select-none">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#EF4444]/90" />
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#F59E0B]/90" />
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#10B981]/90" />
-                  </div>
-                  <span className="text-[9px] font-mono font-bold tracking-widest text-[var(--m-muted)] uppercase select-none">
-                    telemetry@hopwhistle: ~/live-logs
-                  </span>
-                  <span className="text-[8px] font-mono px-2 py-0.5 rounded bg-[#10B981]/10 text-[#10B981] border border-[#10B981]/25 uppercase tracking-widest font-black animate-pulse">
-                    FEED NOMINAL
-                  </span>
+              {/* Globe & Terminal Collar Wrapper Container */}
+              <div className="flex flex-col relative">
+                {/* High-Performance Interactive 3D Globe */}
+                <div className="h-[240px] w-full relative z-0">
+                  <Interactive3DGlobe />
                 </div>
 
-                {/* CRT Terminal Screen content */}
-                <div className="p-5 space-y-2.5 font-mono text-[10px] leading-relaxed text-[#34D399] min-h-[140px] select-all relative z-10">
-                  <div className="flex items-start gap-2.5">
-                    <span className="text-emerald-500/40">[17:54:12]</span>
-                    <span className="m-terminal-text-purple font-black uppercase tracking-wider">▸ OUTBOUND:</span>
-                    <span className="m-terminal-text-green font-medium">Initiated contact route for +1865***1182 (Superfans tier) -> Ringing...</span>
+                {/* Cylindrical Terminal Collar */}
+                <div className="m-terminal-container m-terminal-collar rounded-b-2xl w-full overflow-hidden shadow-2xl relative -mt-6 z-10">
+                  {/* macOS window title bar */}
+                  <div className="bg-[#0D0E12]/80 px-4 py-2.5 flex items-center justify-between border-b border-white/5 relative z-10 backdrop-blur-md">
+                    <div className="flex items-center gap-1.5 select-none">
+                      <span className="w-2.5 h-2.5 rounded-full bg-[#EF4444]/90" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-[#F59E0B]/90" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-[#10B981]/90" />
+                    </div>
+                    <span className="text-[9px] font-mono font-bold tracking-widest text-[var(--m-muted)] uppercase select-none">
+                      telemetry@hopwhistle: ~/live-logs
+                    </span>
+                    <span className="text-[8px] font-mono px-2 py-0.5 rounded bg-[#10B981]/10 text-[#10B981] border border-[#10B981]/25 uppercase tracking-widest font-black animate-pulse">
+                      FEED NOMINAL
+                    </span>
                   </div>
-                  <div className="flex items-start gap-2.5">
-                    <span className="text-emerald-500/40">[17:54:18]</span>
-                    <span className="m-terminal-text-purple font-black uppercase tracking-wider">▸ ANSWERED:</span>
-                    <span className="m-terminal-text-green font-medium">Connect established on Node 02 for +1551***6220 -> Speech synthesis running...</span>
+
+                  {/* Active Live Metric Tickers */}
+                  <div className="bg-[#05070a]/90 px-4 py-1.5 border-b border-white/5 flex items-center justify-between text-[9px] font-mono text-amber-500/80 tracking-wider z-10 relative">
+                    <div className="flex gap-4">
+                      <span>QUEUE: <span className="text-[#34D399] font-bold">4,124</span></span>
+                      <span>LATENCY: <span className="text-[#34D399] font-bold">12ms</span></span>
+                      <span>ACTIVE CALLS: <span className="text-amber-400 font-bold">18</span></span>
+                    </div>
+                    <div>
+                      <span>STATUS: <span className="text-[#34D399] font-bold">ONLINE</span></span>
+                    </div>
                   </div>
-                  <div className="flex items-start gap-2.5">
-                    <span className="text-emerald-500/40">[17:54:25]</span>
-                    <span className="m-terminal-text-amber font-black uppercase tracking-wider">▸ INTENT:</span>
-                    <span className="m-terminal-text-amber font-bold">Fan verbal intent captured (Confidence: 94.2%) -> dispatching pre-save hook.</span>
-                  </div>
-                  <div className="flex items-start gap-2.5">
-                    <span className="text-emerald-500/40">[17:54:32]</span>
-                    <span className="text-[#10B981] font-black uppercase tracking-wider">✔ SUCCESS:</span>
-                    <span className="text-white drop-shadow-[0_0_6px_rgba(255,255,255,0.45)] font-extrabold">Pre-save completed. CPA attribution: $0.25 (Transaction ref: tx_815a5f70)<span className="m-terminal-cursor" /></span>
+
+                  {/* CRT Terminal Screen content with vertical scrolling logs */}
+                  <div className="p-5 space-y-2.5 font-mono text-[10px] leading-relaxed text-[#34D399] min-h-[140px] select-all relative z-10">
+                    <div className="flex items-start gap-2.5">
+                      <span className="text-emerald-500/40">[17:54:12]</span>
+                      <span className="m-terminal-text-purple font-black uppercase tracking-wider">▸ OUTBOUND:</span>
+                      <span className="m-terminal-text-green font-medium">Initiated contact route for +1865***1182 (Superfans tier) -> Ringing...</span>
+                    </div>
+                    <div className="flex items-start gap-2.5">
+                      <span className="text-emerald-500/40">[17:54:18]</span>
+                      <span className="m-terminal-text-purple font-black uppercase tracking-wider">▸ ANSWERED:</span>
+                      <span className="m-terminal-text-green font-medium">Connect established on Node 02 for +1551***6220 -> Speech synthesis running...</span>
+                    </div>
+                    <div className="flex items-start gap-2.5">
+                      <span className="text-emerald-500/40">[17:54:25]</span>
+                      <span className="m-terminal-text-amber font-black uppercase tracking-wider">▸ INTENT:</span>
+                      <span className="m-terminal-text-amber font-bold">Fan verbal intent captured (Confidence: 94.2%) -> dispatching pre-save hook.</span>
+                    </div>
+                    <div className="flex items-start gap-2.5">
+                      <span className="text-emerald-500/40">[17:54:32]</span>
+                      <span className="text-[#10B981] font-black uppercase tracking-wider">✔ SUCCESS:</span>
+                      <span className="text-white drop-shadow-[0_0_6px_rgba(255,255,255,0.45)] font-extrabold">Pre-save completed. CPA attribution: $0.25 (Transaction ref: tx_815a5f70)<span className="m-terminal-cursor" /></span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -893,7 +1121,7 @@ export default function MusicConsolePage() {
                 <div
                   key={seg.segment}
                   className={cn(
-                    "bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-2xl p-5 flex flex-col justify-between space-y-4 transition-all duration-500 hover:shadow-[0_20px_35px_-8px_rgba(0,0,0,0.55)] hover:-translate-y-1.5 hover:scale-[1.01] hover:bg-[var(--m-surface-3)] relative overflow-hidden group",
+                    "m-inset-card p-5 flex flex-col justify-between space-y-4 hover:shadow-[0_20px_35px_-8px_rgba(0,0,0,0.55)] hover:-translate-y-1.5 hover:scale-[1.01] relative overflow-hidden group",
                     borderHighlight
                   )}
                 >
@@ -941,51 +1169,27 @@ export default function MusicConsolePage() {
                   <div className="space-y-2.5 relative z-10">
                     <div className="flex justify-between items-center text-[8px] font-black tracking-wider text-[var(--m-muted)] uppercase">
                       <span>Goal Progress</span>
-                      <span className="font-mono text-[var(--m-text-2)]">{seg.engagement}%</span>
+                      <span className="font-mono text-amber-500 font-extrabold">{seg.engagement}%</span>
                     </div>
                     
-                    {/* LED segments */}
-                    <div className="flex items-center gap-1">
-                      {Array.from({ length: 10 }).map((_, idx) => {
-                        const threshold = (idx + 1) * 10;
+                    {/* Segmented Orange/Amber Multi-Bar Horizontal Meter */}
+                    <div className="flex items-center gap-1 bg-black/40 border border-white/[0.03] p-1 rounded-md h-4.5">
+                      {Array.from({ length: 15 }).map((_, idx) => {
+                        const threshold = ((idx + 1) / 15) * 100;
                         const isLit = seg.engagement >= threshold;
-                        
-                        let litClass = "";
-                        if (isLit) {
-                          if (isCrit) {
-                            litClass = "m-led-lit-amber";
-                          } else if (isWarm) {
-                            litClass = "m-led-lit-purple";
-                          } else {
-                            litClass = "m-led-lit-cyan";
-                          }
-                        }
                         
                         return (
                           <div
                             key={idx}
                             className={cn(
-                              "h-1.5 w-full rounded-xs transition-all duration-500",
-                              isLit ? litClass : "bg-white/[0.04] border border-white/5"
+                              "h-full w-full rounded-xs transition-all duration-300",
+                              isLit 
+                                ? "bg-gradient-to-t from-[#D97706] to-[#FBBF24] shadow-[0_0_4px_rgba(245,158,11,0.5)] opacity-100" 
+                                : "bg-amber-950/10 opacity-30"
                             )}
                           />
                         );
                       })}
-                    </div>
-                    
-                    {/* Glowing Progress bar */}
-                    <div className="h-1.5 w-full bg-[var(--m-surface-2)] rounded-full overflow-hidden border border-white/5 relative">
-                      <div
-                        className={cn(
-                          "h-full rounded-full transition-all duration-500",
-                          isCrit
-                            ? "bg-gradient-to-r from-[#FBBF24] to-[#EF4444]"
-                            : isWarm
-                              ? "bg-gradient-to-r from-[#C084FC] to-[#8B5CF6]"
-                              : "bg-gradient-to-r from-[#06B6D4] to-[#10B981]"
-                        )}
-                        style={{ width: `${seg.engagement}%` }}
-                      />
                     </div>
                   </div>
 
@@ -1034,7 +1238,7 @@ export default function MusicConsolePage() {
             return (
               <div
                 key={r.id}
-                className="m-proof-card pl-6 group relative overflow-hidden transition-all duration-300 hover:bg-[var(--m-surface-2)]/90 hover:border-[#8B5CF6]/30 hover:shadow-[0_8px_20px_-4px_rgba(0,0,0,0.35)]"
+                className="m-proof-track pl-6 p-5 group relative overflow-hidden"
               >
                 {/* Sentiment vertical bar indicator */}
                 <div className={cn('m-proof-card-accent-bar w-1.5', accentColor)} />
@@ -1044,7 +1248,7 @@ export default function MusicConsolePage() {
                   <div className="lg:col-span-4 space-y-1.5 min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-extrabold text-sm text-[var(--m-text)]">{r.fanName}</span>
-                      <span className="font-mono text-xs text-[var(--m-muted)] bg-[var(--m-surface-2)] border border-[var(--m-border-2)] px-1.5 py-0.5 rounded">
+                      <span className="font-mono text-xs text-[var(--m-muted)] bg-black/40 border border-white/5 px-1.5 py-0.5 rounded">
                         xxxxxx{r.fanPhone.slice(-4)}
                       </span>
                     </div>
@@ -1052,12 +1256,12 @@ export default function MusicConsolePage() {
                       <SegmentBadge segment={r.segment} />
                       <span
                         className={cn(
-                          'text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded border',
+                          'text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded border font-mono',
                           r.intent === 'high'
-                            ? 'bg-[#06B6D4]/10 text-[#06B6D4] border-[#06B6D4]/20'
+                            ? 'bg-[#06B6D4]/20 text-cyan-300 border-[#06B6D4]/30'
                             : r.intent === 'medium'
-                              ? 'bg-[#FBBF24]/10 text-[#FBBF24] border-[#FBBF24]/20'
-                              : 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20'
+                              ? 'bg-[#FBBF24]/20 text-amber-300 border-[#FBBF24]/30'
+                              : 'bg-zinc-800 text-zinc-400 border-zinc-700'
                         )}
                       >
                         {r.intent} intent
@@ -1088,10 +1292,10 @@ export default function MusicConsolePage() {
                         <button
                           onClick={() => togglePlay(r.id)}
                           className={cn(
-                            "text-xs font-semibold px-2.5 py-1.5 flex items-center gap-2 rounded-lg border transition-all duration-300",
+                            "text-[10px] font-bold px-3 py-1 flex items-center gap-2 rounded-full border transition-all duration-300 tracking-wider uppercase font-mono shadow-sm",
                             isPlaying
-                              ? "bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-[0_0_8px_rgba(139,92,246,0.4)]"
-                              : "bg-[#8B5CF6]/10 text-[#A78BFA] border-[#8B5CF6]/20 hover:bg-[#8B5CF6]/20"
+                              ? "bg-[#7C3AED] text-white border-[#8B5CF6] shadow-[0_0_8px_rgba(139,92,246,0.4)]"
+                              : "bg-[#8B5CF6] text-white border-[#7C3AED] hover:bg-[#7C3AED]"
                           )}
                         >
                           {isPlaying ? (
@@ -1105,7 +1309,7 @@ export default function MusicConsolePage() {
                             </>
                           ) : (
                             <>
-                              <Headphones className="h-3.5 w-3.5" />
+                              <Headphones className="h-3.5 w-3.5 text-white" />
                               <span>Audio Proof</span>
                             </>
                           )}
@@ -1117,19 +1321,19 @@ export default function MusicConsolePage() {
                         <button
                           onClick={() => toggleTranscript(r.id)}
                           className={cn(
-                            "px-2.5 py-1.5 rounded-lg border transition-all duration-300 flex items-center justify-center gap-1.5 text-xs font-semibold",
+                            "px-3 py-1 rounded-full border transition-all duration-300 flex items-center justify-center gap-1.5 text-[10px] font-bold tracking-wider uppercase font-mono shadow-sm",
                             isExpanded 
-                              ? "bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-[0_0_8px_rgba(139,92,246,0.4)]" 
-                              : "bg-[#8B5CF6]/10 text-[#A78BFA] border-[#8B5CF6]/20 hover:bg-[#8B5CF6]/20"
+                              ? "bg-[#4F46E5] text-white border-[#6366F1] shadow-[0_0_8px_rgba(99,102,241,0.4)]" 
+                              : "bg-[#6366F1] text-white border-[#4F46E5] hover:bg-[#4F46E5]"
                           )}
                           title="Verbatim Transcript"
                         >
-                          <FileText className="h-3.5 w-3.5" />
+                          <FileText className="h-3.5 w-3.5 text-white" />
                           <span>Audit</span>
                           {isExpanded ? (
-                            <ChevronUp className="h-3 w-3" />
+                            <ChevronUp className="h-3 w-3 text-white" />
                           ) : (
-                            <ChevronDown className="h-3 w-3" />
+                            <ChevronDown className="h-3 w-3 text-white" />
                           )}
                         </button>
                       )}

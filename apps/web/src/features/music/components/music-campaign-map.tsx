@@ -541,7 +541,7 @@ export default function MusicCampaignMap() {
 
         {/* Floating Glassmorphic HUD Controls Toolbar */}
         <div className={cn(
-          "absolute top-4 left-4 bg-[#0F0F11]/90 border border-white/10 rounded-2xl flex flex-wrap items-center justify-between px-4 py-2.5 z-20 backdrop-blur-md gap-3 shadow-2xl pointer-events-auto transition-all duration-300",
+          "absolute top-4 left-4 bg-[#0F1219]/75 border border-white/[0.08] rounded-xl flex items-center justify-between px-4 py-2.5 z-20 backdrop-blur-[12px] gap-4 shadow-2xl pointer-events-auto transition-all duration-300 overflow-x-auto m-scrollbar-thin flex-nowrap",
           sidebarOpen ? "right-4 lg:right-[416px]" : "right-4"
         )}>
           {/* Telemetry Badge */}
@@ -557,7 +557,7 @@ export default function MusicCampaignMap() {
           </div>
 
           {/* Custom Premium Control Row */}
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-4 flex-nowrap shrink-0">
             {/* Campaign Filter */}
             <div className="flex flex-col gap-0.5">
               <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Campaign</span>
@@ -567,7 +567,7 @@ export default function MusicCampaignMap() {
                   setSelectedCampaign(e.target.value);
                   setInspectedPoint(null);
                 }}
-                className="bg-[#18181B] border border-white/10 rounded-lg px-2.5 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-[var(--m-accent)] cursor-pointer h-7"
+                className="bg-[#18181B] border border-white/10 rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-[var(--m-accent)] cursor-pointer h-7 w-36"
               >
                 <option value="all">All Campaigns</option>
                 {musicCampaigns.map(c => (
@@ -585,7 +585,7 @@ export default function MusicCampaignMap() {
                   setSelectedArtist(e.target.value);
                   setInspectedPoint(null);
                 }}
-                className="bg-[#18181B] border border-white/10 rounded-lg px-2.5 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-[var(--m-accent)] cursor-pointer h-7"
+                className="bg-[#18181B] border border-white/10 rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-[var(--m-accent)] cursor-pointer h-7 w-28"
               >
                 <option value="all">All Artists</option>
                 {uniqueArtists.map(artist => (
@@ -621,7 +621,7 @@ export default function MusicCampaignMap() {
               <select
                 value={selectedMetric}
                 onChange={e => setSelectedMetric(e.target.value as LayerMetric)}
-                className="bg-[#18181B] border border-white/10 rounded-lg px-2.5 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-[var(--m-accent)] cursor-pointer h-7"
+                className="bg-[#18181B] border border-white/10 rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-[var(--m-accent)] cursor-pointer h-7 w-32"
               >
                 <option value="answerRate">Answer Rate</option>
                 <option value="verifiedActions">Verified Actions</option>
@@ -640,7 +640,7 @@ export default function MusicCampaignMap() {
                   setSelectedGranularity(e.target.value as Granularity);
                   setInspectedPoint(null);
                 }}
-                className="bg-[#18181B] border border-white/10 rounded-lg px-2.5 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-[var(--m-accent)] cursor-pointer h-7"
+                className="bg-[#18181B] border border-white/10 rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-[var(--m-accent)] cursor-pointer h-7 w-32"
               >
                 <option value="state">U.S. State</option>
                 <option value="area_code">Area Code (NPA)</option>
@@ -654,7 +654,7 @@ export default function MusicCampaignMap() {
               <select
                 value={confidenceFilter}
                 onChange={e => setConfidenceFilter(e.target.value)}
-                className="bg-[#18181B] border border-white/10 rounded-lg px-2.5 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-[var(--m-accent)] cursor-pointer h-7"
+                className="bg-[#18181B] border border-white/10 rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-[var(--m-accent)] cursor-pointer h-7 w-28"
               >
                 <option value="all">All Grades</option>
                 <option value="high">CRM Verified</option>
@@ -707,7 +707,7 @@ export default function MusicCampaignMap() {
                   placeholder="City, State, AC..."
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
-                  className="bg-[#18181B] border border-white/10 rounded-lg pl-7 pr-2.5 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-[var(--m-accent)] h-7 w-32 placeholder-zinc-600"
+                  className="bg-[#18181B] border border-white/10 rounded-lg pl-7 pr-2.5 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-[var(--m-accent)] h-7 w-28 placeholder-zinc-600"
                 />
               </div>
             </div>
@@ -715,7 +715,7 @@ export default function MusicCampaignMap() {
         </div>
         
         {/* SECTION 5: Right Diagnostics Inspector / Selected Market */}
-        <div className={cn("shrink-0 bg-[#0F0F11]/95 border border-white/10 rounded-2xl flex flex-col h-full overflow-hidden pointer-events-auto shadow-2xl z-20 transition-all duration-300", sidebarOpen ? "w-full lg:w-96" : "w-0 border-none opacity-0 pointer-events-none")}>
+        <div className={cn("shrink-0 m-hardware-panel flex flex-col h-full overflow-hidden pointer-events-auto shadow-2xl z-20 transition-all duration-300", sidebarOpen ? "w-full lg:w-96" : "w-0 border-none opacity-0 pointer-events-none")}>
           {inspectedPoint ? (
             <div className="flex flex-col h-full p-5 space-y-4 overflow-y-auto">
               {/* Detail Header */}
@@ -1032,7 +1032,7 @@ export default function MusicCampaignMap() {
 
         {/* ─── SECTION 4: Bottom Market Intelligence list panels (Floating and Toggled) ─── */}
         {showBottomPanel && (
-          <div className={cn("absolute left-4 bottom-4 h-44 bg-[#0F0F11]/95 border border-white/10 grid grid-cols-1 md:grid-cols-5 divide-y md:divide-y-0 md:divide-x divide-white/5 z-20 rounded-xl overflow-hidden shadow-2xl backdrop-blur-md pointer-events-auto animate-fadeIn transition-all duration-300", sidebarOpen ? "right-[416px]" : "right-4")}>
+          <div className={cn("absolute left-4 bottom-4 h-44 m-hardware-panel grid grid-cols-1 md:grid-cols-5 divide-y md:divide-y-0 md:divide-x divide-white/5 z-20 overflow-hidden shadow-2xl pointer-events-auto animate-fadeIn transition-all duration-300", sidebarOpen ? "right-[416px]" : "right-4")}>
             
             {/* Panel 1: Top Answer Rates */}
             <div className="p-3.5 flex flex-col justify-between min-w-0">

@@ -1,22 +1,24 @@
 /* ═══════════════════════════════════════════════════════════════
-   MUSIC CONSOLE — Redesigned Lighter/Parchment Design System
+   MUSIC CONSOLE — Scoped Ultra-Dark Skeuomorphic Design System
    Scoped to .music-console wrapper only.
    Does NOT contaminate the base Hopwhistle theme.
    ═══════════════════════════════════════════════════════════════ */
 
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
 .music-console {
   /* ── Core Palette (Unified Deep Navy / Charcoal Theme) ── */
-  --m-bg:         #0A0D14;               /* Rich, dark charcoal color */
-  --m-surface:    #121624;               /* Deep slate/navy card surfaces */
-  --m-surface-2:  #181D30;               /* Secondary dark panels */
-  --m-surface-3:  #20263F;               /* Deep border/hover highlights */
+  --m-bg:         #0b0d13;               /* Rich, deeply dark charcoal/navy background */
+  --m-surface:    #151824;               /* Deep slate/navy card surfaces */
+  --m-surface-2:  #0f121a;               /* Secondary dark panels */
+  --m-surface-3:  #1d2235;               /* Deep border/hover highlights */
   --m-text:       #FAFAFA;               /* Stark white text */
   --m-text-2:     #E2E8F0;               /* Zinc-200 / Slate-200 */
   --m-muted:      #94A3B8;               /* Muted slate-400 */
   --m-dim:        #64748B;               /* Dim slate-500 */
   --m-border:     rgba(255, 255, 255, 0.08); /* Faint white border on dark bg */
   --m-border-2:   rgba(255, 255, 255, 0.04);
-  --m-grid-line:  rgba(255, 255, 255, 0.012);
+  --m-grid-line:  rgba(255, 255, 255, 0.005);
   
   /* Music Native Accents (Electric Purple & Bright Teal) */
   --m-accent:     #9F7AEA;               /* Vibrant Electric Purple (primary) */
@@ -46,6 +48,30 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   transition: background-color 0.2s ease, color 0.2s ease;
+
+  /* Subtle background grid pattern */
+  background-image: 
+    radial-gradient(circle at center, rgba(139, 92, 246, 0.012) 0%, transparent 70%),
+    linear-gradient(rgba(255, 255, 255, 0.005) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.005) 1px, transparent 1px);
+  background-size: 100% 100%, 32px 32px, 32px 32px;
+  background-attachment: fixed;
+}
+
+/* ── Typography Orbitron overrides for headers and metric values ── */
+.music-console h1,
+.music-console h2,
+.music-console h3,
+.music-console h4,
+.music-console h5,
+.music-console h6,
+.music-console .m-section-title,
+.music-console .text-3xl,
+.music-console .text-4xl,
+.music-console .text-5xl,
+.music-console .m-heat-rank {
+  font-family: 'Orbitron', 'Inter', -apple-system, sans-serif !important;
+  letter-spacing: 0.04em !important;
 }
 
 /* ── Dark Mode Override (Scoped to support unified variables) ── */
@@ -53,41 +79,93 @@
 .music-console .m-dark-mode header,
 .music-console .m-dark-mode main,
 .music-console.m-dark-mode {
-  --m-bg:         #0A0D14;
-  --m-surface:    #121624;
-  --m-surface-2:  #181D30;
-  --m-surface-3:  #20263F;
+  --m-bg:         #0b0d13;
+  --m-surface:    #151824;
+  --m-surface-2:  #0f121a;
+  --m-surface-3:  #1d2235;
   --m-text:       #FAFAFA;
   --m-text-2:     #E2E8F0;
   --m-muted:      #94A3B8;
   --m-dim:        #64748B;
   --m-border:     rgba(255, 255, 255, 0.08);
   --m-border-2:   rgba(255, 255, 255, 0.04);
-  --m-grid-line:  rgba(255, 255, 255, 0.012);
+  --m-grid-line:  rgba(255, 255, 255, 0.005);
   --m-accent-dim: rgba(159, 122, 234, 0.12);
   --m-accent-2-dim: rgba(6, 182, 212, 0.12);
 }
 
-/* ── Card / Surface ─────────────────────────────────────────── */
-.m-card {
-  background-color: var(--m-surface);
-  border: 1px solid var(--m-border);
-  border-radius: var(--m-radius-xl);
-  backdrop-filter: blur(16px);
-  box-shadow: 0 12px 30px -4px rgba(0, 0, 0, 0.35), 0 4px 12px -2px rgba(0, 0, 0, 0.25);
+/* ── Hardware Console Panels with Corner Rivets ── */
+.m-card,
+.m-hardware-panel {
+  background: linear-gradient(135deg, #151824 0%, #0c0e14 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+  border-radius: 16px !important;
+  box-shadow: 
+    inset 0 1px 1px rgba(255, 255, 255, 0.08), 
+    inset 0 -1px 1px rgba(0, 0, 0, 0.4), 
+    0 12px 30px -4px rgba(0, 0, 0, 0.5), 
+    0 4px 12px -2px rgba(0, 0, 0, 0.4) !important;
+  position: relative !important;
   transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s ease;
 }
 
+/* Circular corner screws/rivets */
+.m-card::before,
+.m-hardware-panel::before {
+  content: '';
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  height: 6px;
+  background-image:
+    linear-gradient(to right, transparent 42%, #090b11 42%, #090b11 58%, transparent 58%),
+    linear-gradient(to right, transparent 42%, #090b11 42%, #090b11 58%, transparent 58%),
+    radial-gradient(circle at 2.5px 2.5px, #cbd5e1 15%, #64748b 55%, #1e293b 90%),
+    radial-gradient(circle at 2.5px 2.5px, #cbd5e1 15%, #64748b 55%, #1e293b 90%);
+  background-position: left center, right center, left center, right center;
+  background-size: 6px 6px;
+  background-repeat: no-repeat;
+  pointer-events: none;
+  opacity: 0.55;
+  z-index: 10;
+}
+
+.m-card::after,
+.m-hardware-panel::after {
+  content: '';
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  right: 8px;
+  height: 6px;
+  background-image:
+    linear-gradient(to right, transparent 42%, #090b11 42%, #090b11 58%, transparent 58%),
+    linear-gradient(to right, transparent 42%, #090b11 42%, #090b11 58%, transparent 58%),
+    radial-gradient(circle at 2.5px 2.5px, #cbd5e1 15%, #64748b 55%, #1e293b 90%),
+    radial-gradient(circle at 2.5px 2.5px, #cbd5e1 15%, #64748b 55%, #1e293b 90%);
+  background-position: left center, right center, left center, right center;
+  background-size: 6px 6px;
+  background-repeat: no-repeat;
+  pointer-events: none;
+  opacity: 0.55;
+  z-index: 10;
+}
+
 .m-card-flush {
-  background-color: var(--m-surface);
-  border: 1px solid var(--m-border-2);
+  background: linear-gradient(135deg, #12151e 0%, #0a0c10 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.04), inset 0 -1px 1px rgba(0, 0, 0, 0.4);
   border-radius: var(--m-radius);
+  position: relative;
 }
 
 .m-card-deep {
-  background-color: var(--m-surface-2);
-  border: 1px solid var(--m-border);
+  background: linear-gradient(135deg, #0f121b 0%, #080a0e 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.04) !important;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.02), inset 0 -1px 1px rgba(0, 0, 0, 0.5);
   border-radius: var(--m-radius);
+  position: relative;
 }
 
 /* ── Section Headers ────────────────────────────────────────── */
@@ -1207,6 +1285,109 @@
 .m-btn-interactive-glow:active {
   transform: translateY(0) scale(0.97) !important;
 }
+
+/* ── Premium Inset Hardware Modules ── */
+.m-inset-card {
+  background-color: #08090d !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  box-shadow: 
+    inset 0 3px 6px rgba(0, 0, 0, 0.9),
+    inset 0 -1px 0px rgba(255, 255, 255, 0.08),
+    0 4px 10px rgba(0, 0, 0, 0.45) !important;
+  border-radius: 12px !important;
+  position: relative !important;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s ease;
+}
+
+/* 4 smaller corner rivets for inset module */
+.m-inset-card::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  right: 6px;
+  height: 4px;
+  background-image:
+    linear-gradient(to right, transparent 42%, #000 42%, #000 58%, transparent 58%),
+    linear-gradient(to right, transparent 42%, #000 42%, #000 58%, transparent 58%),
+    radial-gradient(circle at 2px 2px, #888 15%, #444 60%, #111 95%),
+    radial-gradient(circle at 2px 2px, #888 15%, #444 60%, #111 95%);
+  background-position: left center, right center, left center, right center;
+  background-size: 4px 4px;
+  background-repeat: no-repeat;
+  pointer-events: none;
+  opacity: 0.45;
+  z-index: 10;
+}
+
+.m-inset-card::after {
+  content: '';
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+  right: 6px;
+  height: 4px;
+  background-image:
+    linear-gradient(to right, transparent 42%, #000 42%, #000 58%, transparent 58%),
+    linear-gradient(to right, transparent 42%, #000 42%, #000 58%, transparent 58%),
+    radial-gradient(circle at 2px 2px, #888 15%, #444 60%, #111 95%),
+    radial-gradient(circle at 2px 2px, #888 15%, #444 60%, #111 95%);
+  background-position: left center, right center, left center, right center;
+  background-size: 4px 4px;
+  background-repeat: no-repeat;
+  pointer-events: none;
+  opacity: 0.45;
+  z-index: 10;
+}
+
+/* Soft-glowing title style */
+.m-title-glow {
+  color: #C084FC !important;
+  text-shadow: 0 0 10px rgba(192, 132, 252, 0.65), 0 0 20px rgba(192, 132, 252, 0.3);
+}
+
+/* Translucent glassmorphic milestone nodes */
+.m-glass-node {
+  background: rgba(15, 18, 25, 0.5) !important;
+  backdrop-filter: blur(8px) !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 
+    inset 0 1px 2px rgba(255, 255, 255, 0.15),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.6),
+    0 4px 12px rgba(0, 0, 0, 0.5) !important;
+}
+
+.m-terminal-collar {
+  border-top-left-radius: 50% 24px !important;
+  border-top-right-radius: 50% 24px !important;
+  border-top: 1.5px solid rgba(245, 158, 11, 0.35) !important;
+  box-shadow: 
+    0 -12px 30px rgba(245, 158, 11, 0.08),
+    inset 0 12px 24px rgba(0, 0, 0, 0.95) !important;
+  background-color: #05070a !important;
+}
+
+.m-proof-track {
+  background: linear-gradient(135deg, #090b11 0%, #050608 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.04) !important;
+  box-shadow: 
+    inset 0 3px 6px rgba(0, 0, 0, 0.95),
+    inset 0 -1px 0px rgba(255, 255, 255, 0.05),
+    0 4px 10px rgba(0, 0, 0, 0.45) !important;
+  border-radius: 12px !important;
+  position: relative !important;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.m-proof-track:hover {
+  background: linear-gradient(135deg, #0f121a 0%, #090b0e 100%) !important;
+  border-color: rgba(139, 92, 246, 0.35) !important;
+  box-shadow: 
+    inset 0 2px 4px rgba(0, 0, 0, 0.8),
+    0 0 16px rgba(139, 92, 246, 0.2) !important;
+}
+
+
 
 
 

@@ -184,34 +184,34 @@ interface ProofBadgeProps {
 export function ProofBadge({ outcome, verified = true, className }: ProofBadgeProps) {
   const norm = outcome.toLowerCase().replace(/_/g, ' ');
   
-  // Custom styling per outcome
-  let outcomeIcon = <HelpCircle className="h-3.5 w-3.5" />;
-  let pillColorClass = "bg-zinc-500/10 text-zinc-400 border-zinc-500/20";
+  // Custom styling per outcome: Solid background fills with high-contrast text
+  let outcomeIcon = <HelpCircle className="h-3.5 w-3.5 text-white" />;
+  let pillColorClass = "bg-zinc-700 text-white border-zinc-600";
   
   if (norm === 'pre saved' || norm === 'pre_saved') {
-    outcomeIcon = <Check className="h-3.5 w-3.5 text-emerald-400" />;
-    pillColorClass = "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
+    outcomeIcon = <Check className="h-3.5 w-3.5 text-white" />;
+    pillColorClass = "bg-emerald-600 text-white border-emerald-500 shadow-[0_2px_6px_rgba(16,185,129,0.3)]";
   } else if (norm === 'ticket intent') {
-    outcomeIcon = <Ticket className="h-3.5 w-3.5 text-cyan-400" />;
-    pillColorClass = "bg-cyan-500/10 text-cyan-400 border-cyan-500/20";
+    outcomeIcon = <Ticket className="h-3.5 w-3.5 text-white" />;
+    pillColorClass = "bg-cyan-600 text-white border-cyan-500 shadow-[0_2px_6px_rgba(6,182,212,0.3)]";
   } else if (norm === 'merch intent') {
-    outcomeIcon = <ShoppingBag className="h-3.5 w-3.5 text-amber-400" />;
-    pillColorClass = "bg-amber-500/10 text-amber-400 border-amber-500/20";
+    outcomeIcon = <ShoppingBag className="h-3.5 w-3.5 text-white" />;
+    pillColorClass = "bg-amber-600 text-white border-amber-500 shadow-[0_2px_6px_rgba(245,158,11,0.3)]";
   } else if (norm === 'vip interest') {
-    outcomeIcon = <Sparkles className="h-3.5 w-3.5 text-purple-400" />;
-    pillColorClass = "bg-purple-500/10 text-purple-400 border-purple-500/20";
+    outcomeIcon = <Sparkles className="h-3.5 w-3.5 text-white" />;
+    pillColorClass = "bg-purple-600 text-white border-purple-500 shadow-[0_2px_6px_rgba(139,92,246,0.3)]";
   } else if (norm === 'needs follow up') {
-    outcomeIcon = <Clock className="h-3.5 w-3.5 text-rose-400" />;
-    pillColorClass = "bg-rose-500/10 text-rose-400 border-rose-500/20";
+    outcomeIcon = <Clock className="h-3.5 w-3.5 text-white" />;
+    pillColorClass = "bg-rose-600 text-white border-rose-500 shadow-[0_2px_6px_rgba(244,63,94,0.3)]";
   } else if (norm === 'no action') {
-    outcomeIcon = <AlertCircle className="h-3.5 w-3.5 text-zinc-400" />;
-    pillColorClass = "bg-zinc-500/10 text-zinc-400 border-zinc-500/20";
+    outcomeIcon = <AlertCircle className="h-3.5 w-3.5 text-white" />;
+    pillColorClass = "bg-zinc-700 text-white border-zinc-600";
   }
 
   return (
     <span
       className={cn(
-        'm-badge px-2.5 py-1 flex items-center gap-1.5 border rounded-full font-mono text-[9px] uppercase tracking-wider',
+        'm-badge px-3 py-1 flex items-center gap-1.5 border rounded-full font-mono text-[9px] uppercase tracking-wider font-extrabold shadow-sm',
         pillColorClass,
         className
       )}
@@ -219,8 +219,8 @@ export function ProofBadge({ outcome, verified = true, className }: ProofBadgePr
       {outcomeIcon}
       <span>{norm.toUpperCase()}</span>
       {verified && (
-        <span title="Verified Action" className="ml-0.5 flex items-center text-emerald-400">
-          <ShieldCheck className="h-3 w-3 fill-emerald-500/20" />
+        <span title="Verified Action" className="ml-1 flex items-center text-white">
+          <ShieldCheck className="h-3 w-3 fill-white/20" />
         </span>
       )}
     </span>
@@ -238,7 +238,7 @@ export function SegmentBadge({ segment, className }: SegmentBadgeProps) {
   return (
     <span
       className={cn(
-        'px-2 py-0.5 bg-[var(--m-surface-2)] border border-[var(--m-border-2)] rounded text-[11px] font-semibold m-text-muted uppercase tracking-wider',
+        'px-2 py-0.5 bg-zinc-950 border border-zinc-800 rounded text-[9px] font-mono font-black text-zinc-300 uppercase tracking-widest',
         className
       )}
     >
