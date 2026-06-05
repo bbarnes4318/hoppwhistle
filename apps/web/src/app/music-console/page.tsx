@@ -112,6 +112,30 @@ const activityLogs: Record<number, string[]> = {
   ]
 };
 
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-[#121624]/95 border border-[var(--m-border)] backdrop-blur-md rounded-xl p-4 shadow-[0_12px_40px_rgba(0,0,0,0.5)] space-y-2">
+        <p className="text-[10px] font-mono font-black text-[var(--m-muted)] uppercase tracking-wider">{label}</p>
+        <div className="space-y-1.5 font-sans">
+          {payload.map((pld: any) => (
+            <div key={pld.dataKey} className="flex items-center gap-6 justify-between">
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-[var(--m-text-2)]">
+                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: pld.stroke || pld.color }} />
+                {pld.name}:
+              </span>
+              <span className="font-mono text-xs font-black text-white">
+                {pld.value.toLocaleString()}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
+
 export default function MusicConsolePage() {
   const [playingRecordId, setPlayingRecordId] = useState<string | null>(null);
   const [expandedTranscriptId, setExpandedTranscriptId] = useState<string | null>(null);
@@ -683,9 +707,9 @@ export default function MusicConsolePage() {
             </div>
 
             {/* Right Chart & Ticker Column */}
-            <div className="md:col-span-3 flex flex-col justify-between space-y-4">
+            <div className="md:col-span-3 flex flex-col justify-between space-y-6">
               {/* Chart Canvas */}
-              <div className="h-[340px] w-full relative flex items-center justify-center">
+              <div className="h-[340px] w-full relative flex items-center justify-center bg-[var(--m-surface-2)]/40 border border-[var(--m-border-2)] rounded-2xl p-4 overflow-hidden">
                 {mounted ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart
@@ -694,18 +718,26 @@ export default function MusicConsolePage() {
                     >
                       <defs>
                         <linearGradient id="colorAnswers" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.15} />
-                          <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0} />
+                          <stop offset="5%" stopColor="var(--m-accent)" stopOpacity={0.2} />
+                          <stop offset="95%" stopColor="var(--m-accent)" stopOpacity={0} />
                         </linearGradient>
                         <linearGradient id="colorVerified" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#06B6D4" stopOpacity={0.15} />
-                          <stop offset="95%" stopColor="#06B6D4" stopOpacity={0} />
+                          <stop offset="5%" stopColor="var(--m-accent-2)" stopOpacity={0.2} />
+                          <stop offset="95%" stopColor="var(--m-accent-2)" stopOpacity={0} />
                         </linearGradient>
+                        {/* Glow filters for lines */}
+                        <filter id="chart-line-glow" x="-10%" y="-10%" width="120%" height="120%">
+                          <feGaussianBlur stdDeviation="2" result="blur" />
+                          <feMerge>
+                            <feMergeNode in="blur" />
+                            <feMergeNode in="SourceGraphic" />
+                          </feMerge>
+                        </filter>
                       </defs>
                       <CartesianGrid
-                        strokeDasharray="3 3"
+                        strokeDasharray="4 4"
                         vertical={false}
-                        stroke="var(--m-border)"
+                        stroke="rgba(255, 255, 255, 0.025)"
                       />
                       <XAxis
                         dataKey="date"
@@ -720,40 +752,26 @@ export default function MusicConsolePage() {
                         axisLine={false}
                         tickLine={false}
                       />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: 'var(--m-surface)',
-                          border: '1px solid var(--m-border)',
-                          borderRadius: '12px',
-                          boxShadow: '0 12px 32px rgba(9, 9, 11, 0.12)',
-                        }}
-                        itemStyle={{ fontSize: '11px', color: 'var(--m-text)', fontWeight: 600 }}
-                        labelStyle={{
-                          fontSize: '9px',
-                          color: 'var(--m-muted)',
-                          fontWeight: '850',
-                          marginBottom: '6px',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.08em'
-                        }}
-                      />
+                      <Tooltip content={<CustomTooltip />} />
                       <Area
                         type="monotone"
                         dataKey="humanAnswers"
                         name="Human Answers"
-                        stroke="#8B5CF6"
-                        strokeWidth={3}
+                        stroke="var(--m-accent)"
+                        strokeWidth={3.5}
                         fillOpacity={1}
                         fill="url(#colorAnswers)"
+                        filter="url(#chart-line-glow)"
                       />
                       <Area
                         type="monotone"
                         dataKey="verifiedEngagements"
                         name="Verified Actions"
-                        stroke="#06B6D4"
-                        strokeWidth={3}
+                        stroke="var(--m-accent-2)"
+                        strokeWidth={3.5}
                         fillOpacity={1}
                         fill="url(#colorVerified)"
+                        filter="url(#chart-line-glow)"
                       />
                     </AreaChart>
                   </ResponsiveContainer>
@@ -762,43 +780,44 @@ export default function MusicConsolePage() {
                 )}
               </div>
 
-              {/* Real-Time Live Activity Terminal Ticker */}
-              <div className="border border-[var(--m-border)] rounded-xl bg-[var(--m-surface-2)] p-4 space-y-3">
-                <div className="flex items-center justify-between border-b border-[var(--m-border)] pb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--m-accent)] opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-[var(--m-accent)]"></span>
-                    </span>
-                    <span className="text-[10px] font-black tracking-widest text-[var(--m-text)] uppercase">
-                      Live Telemetry Output
-                    </span>
+              {/* Real-Time Live Activity Terminal Ticker (Sleek macOS-Style CRT Terminal) */}
+              <div className="bg-[#05070B] border border-white/5 rounded-2xl overflow-hidden shadow-2xl relative">
+                {/* macOS window title bar */}
+                <div className="bg-[#0D0E12] px-4 py-2.5 flex items-center justify-between border-b border-white/5">
+                  <div className="flex items-center gap-1.5 select-none">
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#EF4444]/90" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#F59E0B]/90" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#10B981]/90" />
                   </div>
-                  <span className="text-[8px] font-mono text-[var(--m-muted)] bg-[var(--m-surface-3)] px-1.5 py-0.5 rounded border border-[var(--m-border)]">
-                    STREAM STATUS: NOMINAL
+                  <span className="text-[9px] font-mono font-bold tracking-widest text-[var(--m-muted)] uppercase select-none">
+                    telemetry@hopwhistle: ~/live-logs
+                  </span>
+                  <span className="text-[8px] font-mono px-2 py-0.5 rounded bg-[#10B981]/10 text-[#10B981] border border-[#10B981]/25 uppercase tracking-widest font-black">
+                    FEED NOMINAL
                   </span>
                 </div>
 
-                <div className="font-mono text-[10px] space-y-1.5 text-[var(--m-text-2)] leading-relaxed">
-                  <div className="flex items-start gap-2">
-                    <span className="text-[var(--m-muted)]">[17:54:12]</span>
-                    <span className="text-[#8B5CF6] font-bold">OUTBOUND:</span>
-                    <span>Initiated contact route for +1865***1182 (Superfans tier) -> Ringing...</span>
+                {/* CRT Terminal Screen content */}
+                <div className="p-5 space-y-2.5 font-mono text-[10px] leading-relaxed text-[#34D399] drop-shadow-[0_0_4px_rgba(52,211,153,0.35)] min-h-[140px] select-all">
+                  <div className="flex items-start gap-2.5">
+                    <span className="text-emerald-500/50">[17:54:12]</span>
+                    <span className="text-[var(--m-accent)] font-black uppercase tracking-wider">▸ OUTBOUND:</span>
+                    <span className="text-[#34D399] font-medium">Initiated contact route for +1865***1182 (Superfans tier) -> Ringing...</span>
                   </div>
-                  <div className="flex items-start gap-2">
-                    <span className="text-[var(--m-muted)]">[17:54:18]</span>
-                    <span className="text-[var(--m-accent-2)] font-bold">ANSWERED:</span>
-                    <span>Connect established on Node 02 for +1551***6220 -> Speech synthesis running...</span>
+                  <div className="flex items-start gap-2.5">
+                    <span className="text-emerald-500/50">[17:54:18]</span>
+                    <span className="text-[var(--m-accent-2)] font-black uppercase tracking-wider">▸ ANSWERED:</span>
+                    <span className="text-[#34D399] font-medium">Connect established on Node 02 for +1551***6220 -> Speech synthesis running...</span>
                   </div>
-                  <div className="flex items-start gap-2">
-                    <span className="text-[var(--m-muted)]">[17:54:25]</span>
-                    <span className="text-[var(--m-warning)] font-bold">INTENT:</span>
-                    <span>Fan verbal intent captured (Confidence: 94.2%) -> dispatching pre-save hook.</span>
+                  <div className="flex items-start gap-2.5">
+                    <span className="text-emerald-500/50">[17:54:25]</span>
+                    <span className="text-[var(--m-warning)] font-black uppercase tracking-wider">▸ INTENT:</span>
+                    <span className="text-[#FBBF24] drop-shadow-[0_0_4px_rgba(251,191,36,0.3)] font-bold">Fan verbal intent captured (Confidence: 94.2%) -> dispatching pre-save hook.</span>
                   </div>
-                  <div className="flex items-start gap-2">
-                    <span className="text-[var(--m-muted)]">[17:54:32]</span>
-                    <span className="text-[var(--m-accent-2)] font-bold">SUCCESS:</span>
-                    <span>Pre-save completed. CPA attribution: $0.25 (Transaction ref: tx_815a5f70)</span>
+                  <div className="flex items-start gap-2.5">
+                    <span className="text-emerald-500/50">[17:54:32]</span>
+                    <span className="text-[#10B981] font-black uppercase tracking-wider">✔ SUCCESS:</span>
+                    <span className="text-white drop-shadow-[0_0_6px_rgba(255,255,255,0.45)] font-extrabold">Pre-save completed. CPA attribution: $0.25 (Transaction ref: tx_815a5f70)</span>
                   </div>
                 </div>
               </div>
@@ -823,7 +842,7 @@ export default function MusicConsolePage() {
             <p className="m-section-subtitle">Ranked target cohorts sorted by engagement metrics.</p>
           </div>
 
-          <div className="space-y-3.5 flex-1 justify-center flex flex-col">
+          <div className="space-y-4 flex-1 justify-center flex flex-col mt-4">
             {topSegmentsData.map((seg, i) => {
               const captions: Record<string, string> = {
                 Superfans: 'High-frequency stream & social tier',
@@ -855,28 +874,46 @@ export default function MusicConsolePage() {
               return (
                 <div
                   key={seg.segment}
-                  className="p-4 bg-[var(--m-surface)] border border-[var(--m-border-2)] rounded-xl hover:border-[var(--m-accent-2)]/30 hover:shadow-lg transition-all duration-300 space-y-3.5 group relative overflow-hidden"
+                  className="bg-[var(--m-surface-2)] border border-[var(--m-border)] hover:border-[var(--m-accent-2)]/30 rounded-2xl p-5 flex flex-col justify-between space-y-3.5 transition-all duration-500 hover:shadow-[0_12px_24px_rgba(0,0,0,0.35)] hover:-translate-y-1 relative overflow-hidden group"
                 >
-                  <div className="flex items-center justify-between gap-3 relative z-10">
+                  {/* Subtle hover glow layer */}
+                  <div className="absolute -right-8 -bottom-8 w-20 h-20 bg-[var(--m-accent-2)]/5 rounded-full blur-xl group-hover:bg-[var(--m-accent-2)]/10 transition-all duration-500 pointer-events-none" />
+
+                  {/* Top: Rank, Title and Temp Badge */}
+                  <div className="flex items-start justify-between gap-3 relative z-10">
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="w-6 h-6 flex items-center justify-center bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-lg text-[10px] font-black text-[var(--m-muted)] shadow-2xs">
+                      <span className="w-7 h-7 flex items-center justify-center bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded-lg text-xs font-mono font-black text-[var(--m-accent)] shadow-2xs group-hover:scale-105 transition-transform">
                         0{i + 1}
                       </span>
-                      <span className="text-xs font-black text-[var(--m-text)] truncate">{seg.segment}</span>
+                      <div className="min-w-0">
+                        <span className="text-xs font-black text-[var(--m-text)] tracking-wide uppercase group-hover:text-[var(--m-accent-2)] transition-colors block truncate">{seg.segment}</span>
+                        <span className="text-[9px] text-[var(--m-muted)] leading-tight block truncate mt-0.5">{captions[seg.segment] || 'Target audience segment'}</span>
+                      </div>
                     </div>
-                    <span className={cn("text-[9px] font-mono font-black px-2 py-0.5 rounded-lg border tracking-wider", tempClass)}>
+                    <span className={cn("text-[8px] font-mono font-black px-2 py-0.5 rounded border tracking-wider shrink-0", tempClass)}>
                       {seg.engagement}% TEMP
                     </span>
                   </div>
 
-                  <div className="space-y-1.5 relative z-10">
-                    <div className="flex items-center justify-between text-[10px] text-[var(--m-muted)] font-bold">
-                      <span className="truncate pr-2">{captions[seg.segment] || 'Target audience segment'}</span>
-                      <span className="font-mono text-[var(--m-text-2)] whitespace-nowrap">{formatCompactNumber(seg.count)} FANS</span>
+                  {/* Mid: Stats Row */}
+                  <div className="grid grid-cols-2 gap-4 pt-1 relative z-10">
+                    <div className="bg-[var(--m-surface-3)]/40 border border-[var(--m-border-2)] rounded-lg p-2 flex flex-col">
+                      <span className="text-[8px] font-bold text-[var(--m-muted)] uppercase tracking-wider">Volume</span>
+                      <span className="font-mono text-[10px] font-extrabold text-[var(--m-text-2)] mt-0.5">{formatCompactNumber(seg.count)} Fans</span>
                     </div>
+                    <div className="bg-[var(--m-surface-3)]/40 border border-[var(--m-border-2)] rounded-lg p-2 flex flex-col">
+                      <span className="text-[8px] font-bold text-[var(--m-muted)] uppercase tracking-wider">Target Goal</span>
+                      <span className="font-mono text-[10px] font-extrabold text-[var(--m-accent-2)] mt-0.5">{seg.engagement}%</span>
+                    </div>
+                  </div>
 
-                    {/* Styled glowing cylinder progress bar */}
-                    <div className="h-1.5 w-full bg-[var(--m-surface-2)] rounded-full overflow-hidden border border-[var(--m-border-2)]">
+                  {/* Thicker Progress bar represent engagement */}
+                  <div className="space-y-1.5 relative z-10">
+                    <div className="flex justify-between items-center text-[8px] font-black tracking-wider text-[var(--m-muted)] uppercase">
+                      <span>Goal Progress</span>
+                      <span className="font-mono text-[var(--m-text-2)]">{seg.engagement}%</span>
+                    </div>
+                    <div className="h-2 w-full bg-[var(--m-surface-3)] rounded-full overflow-hidden border border-white/5 relative">
                       <div
                         className={cn(
                           "h-full rounded-full transition-all duration-500",
@@ -884,7 +921,7 @@ export default function MusicConsolePage() {
                             ? "bg-gradient-to-r from-[var(--m-warning)] to-[var(--m-danger)]"
                             : isWarm
                               ? "bg-gradient-to-r from-[var(--m-accent)] to-[var(--m-warning)]"
-                              : "bg-gradient-to-r from-[var(--m-accent-dim)] to-[var(--m-accent)]"
+                              : "bg-gradient-to-r from-[var(--m-accent-2)] to-[var(--m-accent)]"
                         )}
                         style={{ width: `${seg.engagement}%` }}
                       />
@@ -892,7 +929,7 @@ export default function MusicConsolePage() {
                   </div>
 
                   {/* Recommendation action tag: elegant small tag */}
-                  <div className="text-[8px] font-black text-[var(--m-muted)] bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-lg px-2.5 py-1 tracking-widest uppercase transition-colors duration-200 group-hover:border-[var(--m-accent)]/20 group-hover:bg-[var(--m-accent-dim)] group-hover:text-[var(--m-accent)] relative z-10">
+                  <div className="text-[8px] font-black text-center text-[var(--m-muted)] bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded-lg px-2.5 py-1.5 tracking-widest uppercase transition-all duration-300 group-hover:border-[var(--m-accent-2)]/30 group-hover:bg-[var(--m-accent-2-dim)] group-hover:text-[var(--m-accent-2)] relative z-10">
                     {recommendations[seg.segment] || 'ACTION REQ: DISPATCH OUTREACH'}
                   </div>
                 </div>
