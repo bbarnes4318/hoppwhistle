@@ -97,59 +97,25 @@
 /* ── Hardware Console Panels with Corner Rivets ── */
 .m-card,
 .m-hardware-panel {
-  background: linear-gradient(135deg, #151824 0%, #0c0e14 100%) !important;
-  border: 1px solid rgba(255, 255, 255, 0.07) !important;
-  border-radius: 16px !important;
-  box-shadow: 
-    inset 0 1px 1px rgba(255, 255, 255, 0.08), 
-    inset 0 -1px 1px rgba(0, 0, 0, 0.4), 
-    0 12px 30px -4px rgba(0, 0, 0, 0.5), 
-    0 4px 12px -2px rgba(0, 0, 0, 0.4) !important;
+  background: #0f121d !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3) !important;
   position: relative !important;
-  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s ease;
+  transition: all 0.2s ease-in-out !important;
 }
 
-/* Circular corner screws/rivets */
+/* Circular corner screws/rivets disabled for modern look */
 .m-card::before,
 .m-hardware-panel::before {
-  content: '';
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  right: 8px;
-  height: 6px;
-  background-image:
-    linear-gradient(to right, transparent 42%, #090b11 42%, #090b11 58%, transparent 58%),
-    linear-gradient(to right, transparent 42%, #090b11 42%, #090b11 58%, transparent 58%),
-    radial-gradient(circle at 2.5px 2.5px, #cbd5e1 15%, #64748b 55%, #1e293b 90%),
-    radial-gradient(circle at 2.5px 2.5px, #cbd5e1 15%, #64748b 55%, #1e293b 90%);
-  background-position: left center, right center, left center, right center;
-  background-size: 6px 6px;
-  background-repeat: no-repeat;
-  pointer-events: none;
-  opacity: 0.55;
-  z-index: 10;
+  content: none !important;
+  display: none !important;
 }
 
 .m-card::after,
 .m-hardware-panel::after {
-  content: '';
-  position: absolute;
-  bottom: 8px;
-  left: 8px;
-  right: 8px;
-  height: 6px;
-  background-image:
-    linear-gradient(to right, transparent 42%, #090b11 42%, #090b11 58%, transparent 58%),
-    linear-gradient(to right, transparent 42%, #090b11 42%, #090b11 58%, transparent 58%),
-    radial-gradient(circle at 2.5px 2.5px, #cbd5e1 15%, #64748b 55%, #1e293b 90%),
-    radial-gradient(circle at 2.5px 2.5px, #cbd5e1 15%, #64748b 55%, #1e293b 90%);
-  background-position: left center, right center, left center, right center;
-  background-size: 6px 6px;
-  background-repeat: no-repeat;
-  pointer-events: none;
-  opacity: 0.55;
-  z-index: 10;
+  content: none !important;
+  display: none !important;
 }
 
 .m-card-flush {
@@ -1286,59 +1252,23 @@
   transform: translateY(0) scale(0.97) !important;
 }
 
-/* ── Premium Inset Hardware Modules ── */
+/* ── Premium Inset SaaS Cards ── */
 .m-inset-card {
-  background-color: #08090d !important;
+  background-color: #0c0f17 !important;
   border: 1px solid rgba(255, 255, 255, 0.05) !important;
-  box-shadow: 
-    inset 0 3px 6px rgba(0, 0, 0, 0.9),
-    inset 0 -1px 0px rgba(255, 255, 255, 0.08),
-    0 4px 10px rgba(0, 0, 0, 0.45) !important;
-  border-radius: 12px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+  border-radius: 8px !important;
   position: relative !important;
-  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s ease;
+  transition: all 0.2s ease-in-out !important;
 }
 
-/* 4 smaller corner rivets for inset module */
+/* Corner rivets removed */
 .m-inset-card::before {
-  content: '';
-  position: absolute;
-  top: 6px;
-  left: 6px;
-  right: 6px;
-  height: 4px;
-  background-image:
-    linear-gradient(to right, transparent 42%, #000 42%, #000 58%, transparent 58%),
-    linear-gradient(to right, transparent 42%, #000 42%, #000 58%, transparent 58%),
-    radial-gradient(circle at 2px 2px, #888 15%, #444 60%, #111 95%),
-    radial-gradient(circle at 2px 2px, #888 15%, #444 60%, #111 95%);
-  background-position: left center, right center, left center, right center;
-  background-size: 4px 4px;
-  background-repeat: no-repeat;
-  pointer-events: none;
-  opacity: 0.45;
-  z-index: 10;
+  content: none !important;
+  display: none !important;
 }
 
 .m-inset-card::after {
-  content: '';
-  position: absolute;
-  bottom: 6px;
-  left: 6px;
-  right: 6px;
-  height: 4px;
-  background-image:
-    linear-gradient(to right, transparent 42%, #000 42%, #000 58%, transparent 58%),
-    linear-gradient(to right, transparent 42%, #000 42%, #000 58%, transparent 58%),
-    radial-gradient(circle at 2px 2px, #888 15%, #444 60%, #111 95%),
-    radial-gradient(circle at 2px 2px, #888 15%, #444 60%, #111 95%);
-  background-position: left center, right center, left center, right center;
-  background-size: 4px 4px;
-  background-repeat: no-repeat;
-  pointer-events: none;
-  opacity: 0.45;
-  z-index: 10;
-}
 
 /* Soft-glowing title style */
 .m-title-glow {
