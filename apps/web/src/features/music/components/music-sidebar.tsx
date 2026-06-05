@@ -10,6 +10,7 @@ import {
   Users,
   ArrowLeft,
   Map,
+  Volume2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -34,6 +35,7 @@ const sidebarSections: SidebarSection[] = [
       { name: 'Dashboard', href: '/music-console', icon: LayoutDashboard },
       { name: 'Fan Campaigns', href: '/music-console/campaigns', icon: Megaphone },
       { name: 'Campaign Map', href: '/music-console/map', icon: Map },
+      { name: 'AI Voice', href: '/music-console/voice', icon: Volume2 },
     ],
   },
   {
