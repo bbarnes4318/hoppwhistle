@@ -1058,3 +1058,33 @@
 @keyframes m-dash-3 {
   to { stroke-dashoffset: -600; }
 }
+
+/* ── Funnel Timeline Overhaul Styles ── */
+@keyframes flowLine {
+  0% { left: 0%; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { left: 100%; opacity: 0; }
+}
+
+.animate-flow-dot {
+  animation: flowLine 3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+/* Elegant custom scrollbar for horizontal scrolling panels */
+.m-scrollbar-thin::-webkit-scrollbar {
+  height: 6px;
+}
+.m-scrollbar-thin::-webkit-scrollbar-track {
+  background: var(--m-surface-2);
+  border-radius: 4px;
+}
+.m-scrollbar-thin::-webkit-scrollbar-thumb {
+  background: var(--m-surface-3);
+  border-radius: 4px;
+  border: 1px solid var(--m-border);
+}
+.m-scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: var(--m-accent);
+}
+

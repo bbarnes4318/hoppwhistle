@@ -70,9 +70,52 @@ const formatTimestamp = (ts: string) => {
   return `${displayHour}:${minStr} ${ampm}`;
 };
 
+const meanings: Record<string, string> = {
+  'Uploaded Fans': 'Audience list imported & normalized',
+  'Contacted': 'Dialer connects established',
+  'Human Answered': 'Human speech verified calls',
+  'Engaged': 'Convo sustained past initial drop',
+  'Verified Intent': 'Fan verbal opt-ins captured',
+  'Action Taken': 'Pre-saves written to Spotify API',
+};
+
+const activityLogs: Record<number, string[]> = {
+  0: [
+    "04:12:05 PM — Batch import complete: 25,000 records",
+    "04:12:05 PM — Consent validation check passed",
+    "04:12:06 PM — List assigned to Active Campaign auto-dialer"
+  ],
+  1: [
+    "07:51:33 PM — Outbound call initiated to +1 415-xxx-xxxx",
+    "07:51:35 PM — SIP trunk routing allocated",
+    "07:51:40 PM — Dial state: Ringing / No Ans (Voicemail left)"
+  ],
+  2: [
+    "07:51:12 PM — Voice detection: Human speech verified",
+    "07:51:13 PM — Live SIP stream mapped to AI audio handler",
+    "07:51:15 PM — Handshake greeting executed successfully"
+  ],
+  3: [
+    "07:50:45 PM — Conversation duration exceeded 25 seconds",
+    "07:50:50 PM — Natural language engagement scored: High",
+    "07:50:58 PM — Topic match: 'Midnight Signal Release'"
+  ],
+  4: [
+    "07:50:02 PM — AI agent: 'Shall I set up the Spotify pre-save?'",
+    "07:50:04 PM — Fan voice confirmed positive intent: 'Yes, do it'",
+    "07:50:05 PM — Semantic analysis marked intent: High Positive"
+  ],
+  5: [
+    "07:49:15 PM — Pre-save request payload sent to Spotify API",
+    "07:49:16 PM — OAuth credential handshake confirmed",
+    "07:49:16 PM — Spotify Pre-save database entry written (Success)"
+  ]
+};
+
 export default function MusicConsolePage() {
   const [playingRecordId, setPlayingRecordId] = useState<string | null>(null);
   const [expandedTranscriptId, setExpandedTranscriptId] = useState<string | null>(null);
+  const [hoveredStageIndex, setHoveredStageIndex] = useState<number | null>(null);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -392,7 +435,7 @@ export default function MusicConsolePage() {
         </div>
       </section>
 
-      {/* ─── SECTION 3: Stepped Fan Journey Path (Unified Attribution Card) ─── */}
+      {/* ─── SECTION 3: Stepped Fan Journey Path (Redesigned Flow Timeline) ─── */}
       <section className="space-y-4">
         <div className="flex items-center justify-between px-1">
           <div className="space-y-1">
@@ -408,85 +451,153 @@ export default function MusicConsolePage() {
           </span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 relative">
-          {funnelData.map((stage, i) => {
-            const meanings: Record<string, string> = {
-              'Uploaded Fans': 'Audience list uploaded',
-              Contacted: 'Fan contacts reached',
-              'Human Answered': 'Human connects verified',
-              Engaged: 'Convo continued past disclosure',
-              'Verified Intent': 'Fan verbal intent captured',
-              'Action Taken': 'Pre-save action completed',
-            };
+        <div className="overflow-x-auto m-scrollbar-thin pb-6 relative">
+          <div className="flex items-center justify-between min-w-[1000px] lg:min-w-0 px-4 py-8 relative">
+            {funnelData.map((stage, i) => {
+              // Custom Lucide icons for each stage
+              const icons = [
+                <Database className="h-4.5 w-4.5" style={{ color: stage.color }} />,
+                <Phone className="h-4.5 w-4.5" style={{ color: stage.color }} />,
+                <Headphones className="h-4.5 w-4.5" style={{ color: stage.color }} />,
+                <MessageSquare className="h-4.5 w-4.5" style={{ color: stage.color }} />,
+                <ShieldCheck className="h-4.5 w-4.5" style={{ color: stage.color }} />,
+                <Award className="h-4.5 w-4.5" style={{ color: stage.color }} />,
+              ];
 
-            // Custom Lucide icons for each stage
-            const icons = [
-              <Database className="h-4.5 w-4.5" style={{ color: stage.color }} />,
-              <Phone className="h-4.5 w-4.5" style={{ color: stage.color }} />,
-              <Headphones className="h-4.5 w-4.5" style={{ color: stage.color }} />,
-              <MessageSquare className="h-4.5 w-4.5" style={{ color: stage.color }} />,
-              <ShieldCheck className="h-4.5 w-4.5" style={{ color: stage.color }} />,
-              <Award className="h-4.5 w-4.5" style={{ color: stage.color }} />,
-            ];
+              return (
+                <React.Fragment key={stage.label}>
+                  {/* Milestone Node */}
+                  <div
+                    className="relative flex flex-col items-center group cursor-pointer"
+                    onMouseEnter={() => setHoveredStageIndex(i)}
+                    onMouseLeave={() => setHoveredStageIndex(null)}
+                  >
+                    {/* Rich Floating Tooltip */}
+                    {hoveredStageIndex === i && (
+                      <div className="absolute bottom-[110%] left-1/2 -translate-x-1/2 w-80 bg-[var(--m-surface)] border border-[var(--m-border)] rounded-2xl p-5 shadow-[0_20px_50px_rgba(0,0,0,0.6)] z-50 pointer-events-none animate-in fade-in slide-in-from-bottom-2 duration-200">
+                        <div className="flex items-center justify-between mb-3 border-b border-[var(--m-border-2)] pb-2">
+                          <span className="text-[9px] font-mono font-black tracking-wider uppercase text-[var(--m-muted)]">
+                            STAGE 0{i + 1} INTEL
+                          </span>
+                          <span
+                            className="px-2 py-0.5 rounded text-[9px] font-mono font-bold border"
+                            style={{
+                              backgroundColor: `${stage.color}15`,
+                              borderColor: `${stage.color}35`,
+                              color: stage.color
+                            }}
+                          >
+                            {stage.percentage.toFixed(1)}% Conversion
+                          </span>
+                        </div>
 
-            return (
-              <div
-                key={stage.label}
-                className="relative bg-[var(--m-surface)] border border-[var(--m-border-2)] hover:border-[var(--m-accent)]/30 rounded-2xl p-6 lg:p-7 flex flex-col justify-between space-y-5 transition-all duration-300 shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:shadow-[0_12px_40px_rgb(0,0,0,0.12)] group overflow-hidden"
-              >
-                {/* Visual decoration: light glow behind the icon */}
-                <div
-                  className="absolute -top-10 -left-10 w-24 h-24 rounded-full blur-2xl opacity-10 transition-opacity duration-300 group-hover:opacity-20 pointer-events-none"
-                  style={{ backgroundColor: stage.color }}
-                />
+                        <h4 className="text-xs font-black uppercase text-[var(--m-text)] tracking-wider">
+                          {stage.label}
+                        </h4>
+                        <p className="text-[10px] text-[var(--m-muted)] mt-0.5 leading-snug">
+                          {meanings[stage.label] || stage.label}
+                        </p>
 
-                <div className="flex justify-between items-start z-10">
-                  <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-[var(--m-surface-2)] border border-[var(--m-border)]">
-                    {icons[i] || <Activity className="h-4.5 w-4.5" />}
-                  </div>
-                  <span className="text-[10px] font-mono font-bold text-[var(--m-accent-2)] bg-[var(--m-accent-2-dim)] px-2 py-0.5 rounded border border-[var(--m-accent-2)]/15">
-                    {stage.percentage.toFixed(1)}%
-                  </span>
-                </div>
+                        <div className="grid grid-cols-2 gap-4 py-3 my-3 border-y border-[var(--m-border-2)]">
+                          <div>
+                            <div className="text-[8px] font-bold text-[var(--m-muted)] uppercase tracking-wider">Volume</div>
+                            <div className="text-base font-mono font-extrabold text-[var(--m-text)] mt-0.5">
+                              {stage.count.toLocaleString()}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[8px] font-bold text-[var(--m-muted)] uppercase tracking-wider">Drop-off</div>
+                            <div className="text-base font-mono font-extrabold text-[var(--m-danger)] mt-0.5">
+                              {i === 0 ? "0%" : `-${(((funnelData[i-1].count - stage.count) / funnelData[i-1].count) * 100).toFixed(0)}%`}
+                            </div>
+                          </div>
+                        </div>
 
-                <div className="space-y-1 z-10 pt-2">
-                  <div className="text-[10px] font-mono font-bold text-[var(--m-muted)] tracking-wider uppercase">
-                    STAGE 0{i + 1}
-                  </div>
-                  <div className="text-xs font-black text-[var(--m-text)] uppercase tracking-wide">
-                    {stage.label}
-                  </div>
-                  <div className="text-2xl font-black font-mono text-[var(--m-text-2)] pt-1">
-                    {formatCompactNumber(stage.count)}
-                  </div>
-                </div>
+                        <div className="space-y-2">
+                          <div className="text-[8px] font-black uppercase tracking-widest text-[var(--m-accent-2)]">
+                            Telemetry Feed
+                          </div>
+                          <div className="space-y-1 font-mono text-[9px] leading-relaxed text-[var(--m-muted)]">
+                            {activityLogs[i]?.map((log, index) => (
+                              <div key={index} className="flex items-start gap-1">
+                                <span className="text-[var(--m-accent-2)]">▸</span>
+                                <span className="truncate">{log}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
-                <div className="space-y-3 pt-2 border-t border-[var(--m-border-2)] z-10">
-                  <div className="text-[10px] text-[var(--m-muted)] leading-snug font-medium min-h-[30px]">
-                    {meanings[stage.label] || stage.label}
-                  </div>
-                  <div className="h-1.5 w-full bg-[var(--m-surface-2)] rounded-full overflow-hidden">
+                    {/* Diffused colored glow behind the milestone */}
                     <div
-                      className="h-full rounded-full transition-all duration-500"
-                      style={{ width: `${stage.percentage}%`, backgroundColor: stage.color }}
+                      className="absolute w-16 h-16 rounded-full blur-xl opacity-15 group-hover:opacity-30 transition-all duration-300 pointer-events-none"
+                      style={{ backgroundColor: stage.color }}
                     />
-                  </div>
-                </div>
 
-                {/* Floating drop-off rate pill on the right border (for layout connection) */}
-                {i < funnelData.length - 1 && (
-                  <div className="hidden lg:flex absolute top-1/2 -right-3 -translate-y-1/2 z-25 translate-x-1/2 items-center justify-center">
-                    <div className="flex flex-col items-center shadow-xs bg-[var(--m-surface)] border border-[var(--m-danger)]/25 rounded px-2 py-1 select-none text-center">
-                      <span className="text-[9px] font-mono font-black text-[var(--m-danger)]">
-                        -{(((stage.count - funnelData[i + 1].count) / stage.count) * 100).toFixed(0)}%
+                    {/* Circular milestone node */}
+                    <div
+                      className="relative w-16 h-16 rounded-full flex items-center justify-center bg-[var(--m-surface-2)] border-2 transition-all duration-300 group-hover:scale-110 shadow-lg"
+                      style={{ borderColor: stage.color }}
+                    >
+                      {/* Pulsing ring animation */}
+                      <div
+                        className="absolute inset-0 rounded-full animate-ping opacity-20 pointer-events-none"
+                        style={{ backgroundColor: stage.color, animationDuration: '3s' }}
+                      />
+
+                      {/* Icon container */}
+                      <div className="w-12 h-12 rounded-full flex items-center justify-center bg-[var(--m-surface)] border border-[var(--m-border)]">
+                        {icons[i] || <Activity className="h-4.5 w-4.5" />}
+                      </div>
+
+                      {/* Stage percentage floating badge */}
+                      <div
+                        className="absolute -top-1 -right-1 text-[8px] font-black font-mono px-1.5 py-0.5 rounded-full border text-white"
+                        style={{ backgroundColor: stage.color, borderColor: 'var(--m-bg)' }}
+                      >
+                        {stage.percentage.toFixed(0)}%
+                      </div>
+                    </div>
+
+                    {/* Label and numbers below */}
+                    <div className="mt-3.5 text-center space-y-1">
+                      <span className="text-[8px] font-mono font-black text-[var(--m-muted)] tracking-widest uppercase block">
+                        STAGE 0{i + 1}
                       </span>
-                      <span className="text-[7px] font-sans font-bold text-[var(--m-muted)] uppercase tracking-wider scale-90">drop</span>
+                      <span className="text-[10px] font-black text-[var(--m-text)] tracking-wider uppercase block max-w-[110px] truncate group-hover:text-[var(--m-accent)] transition-colors duration-300">
+                        {stage.label}
+                      </span>
+                      <span className="text-xs font-bold font-mono text-[var(--m-text-2)] block">
+                        {formatCompactNumber(stage.count)}
+                      </span>
                     </div>
                   </div>
-                )}
-              </div>
-            );
-          })}
+
+                  {/* Connected line with running flow telemetry dot */}
+                  {i < funnelData.length - 1 && (
+                    <div className="flex-1 min-w-[30px] max-w-[90px] h-[3px] bg-white/[0.04] relative rounded-full mx-2 z-0 hidden md:block">
+                      <div
+                        className="absolute top-0 bottom-0 left-0 rounded-full bg-gradient-to-r transition-all duration-300"
+                        style={{
+                          right: 0,
+                          backgroundImage: `linear-gradient(to right, ${stage.color}, ${funnelData[i+1]?.color || stage.color})`,
+                          boxShadow: `0 0 8px ${stage.color}25`
+                        }}
+                      />
+                      <div
+                        className="absolute top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full animate-flow-dot pointer-events-none"
+                        style={{
+                          backgroundColor: funnelData[i+1]?.color || stage.color,
+                          boxShadow: `0 0 6px ${funnelData[i+1]?.color || stage.color}`
+                        }}
+                      />
+                    </div>
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </div>
         </div>
       </section>
 
