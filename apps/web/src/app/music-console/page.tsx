@@ -158,7 +158,7 @@ export default function MusicConsolePage() {
     <div className="space-y-12 pb-16">
       {/* ─── SECTION 1: Premium Hero Command Module (Dark Obsidian) ─── */}
       {/* ─── SECTION 1: Premium Hero Command Module (Dark Obsidian) ─── */}
-      <section className="bg-[var(--m-surface)] text-[var(--m-text)] rounded-2xl border border-[var(--m-border)] p-8 lg:p-10 relative overflow-hidden shadow-[0_12px_40px_-4px_rgba(0,0,0,0.35)]">
+      <section className="bg-[var(--m-surface)] text-[var(--m-text)] rounded-2xl border border-[var(--m-border)] p-8 lg:p-10 relative overflow-hidden shadow-[0_12px_40px_-4px_rgba(0,0,0,0.35)] m-animate-fade-in m-anim-delay-100">
         {/* Glow Highlights */}
         <div className="absolute top-0 right-0 w-96 h-96 bg-[#8B5CF6]/5 rounded-full blur-[120px] pointer-events-none opacity-40" />
         <div className="absolute bottom-0 left-0 w-80 h-80 bg-[var(--m-accent-2)]/5 rounded-full blur-[90px] pointer-events-none opacity-30" />
@@ -189,12 +189,12 @@ export default function MusicConsolePage() {
             {/* CTAs */}
             <div className="flex items-center gap-3 shrink-0 self-start md:self-end">
               <Link href="/music-console/proof">
-                <ActionButton variant="primary" className="text-xs font-semibold py-2.5 px-4 shadow-[0_4px_16px_rgba(139,92,246,0.2)] hover:shadow-[0_6px_20px_rgba(139,92,246,0.35)]">
+                <ActionButton variant="primary" className="text-xs font-semibold py-2.5 px-4 shadow-[0_4px_16px_rgba(139,92,246,0.2)] hover:shadow-[0_6px_20px_rgba(139,92,246,0.35)] m-btn-interactive-glow">
                   View Proof Log <ArrowRight className="h-3.5 w-3.5" />
                 </ActionButton>
               </Link>
               <Link href="/music-console/reports">
-                <button className="text-xs font-semibold py-2.5 px-4 rounded-lg bg-white/[0.04] text-white border border-white/10 hover:bg-white/[0.08] hover:border-white/20 transition-all">
+                <button className="text-xs font-semibold py-2.5 px-4 rounded-lg bg-white/[0.04] text-white border border-white/10 hover:bg-white/[0.08] hover:border-white/20 transition-all m-btn-interactive-glow">
                   Open Reports
                 </button>
               </Link>
@@ -460,7 +460,7 @@ export default function MusicConsolePage() {
       </section>
 
       {/* ─── SECTION 3: Stepped Fan Journey Path (Redesigned Flow Timeline) ─── */}
-      <section className="space-y-4">
+      <section className="space-y-4 m-animate-fade-in m-anim-delay-200">
         <div className="flex items-center justify-between px-1">
           <div className="space-y-1">
             <h3 className="text-xs font-black tracking-[0.2em] text-[var(--m-muted)] uppercase">
@@ -626,7 +626,7 @@ export default function MusicConsolePage() {
       </section>
 
       {/* ─── SECTION 4: Timeline Chart & Section 5: Segment Heat ─── */}
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <section className="grid grid-cols-1 lg:grid-cols-3 gap-8 m-animate-fade-in m-anim-delay-300">
         {/* Live Campaign Movement with side-by-side grid composition */}
         <div className="lg:col-span-2 m-card p-8 lg:p-10 flex flex-col bg-[var(--m-surface)] relative overflow-hidden group">
           {/* Subtle background mesh glow */}
@@ -1000,7 +1000,7 @@ export default function MusicConsolePage() {
       </section>
 
       {/* ─── SECTION 6: Fan Proof Stream (Proof records coming back) ─── */}
-      <section className="m-card p-8 lg:p-10 bg-[var(--m-surface)]">
+      <section className="m-card p-8 lg:p-10 bg-[var(--m-surface)] m-animate-fade-in m-anim-delay-400">
         <div className="border-b border-[var(--m-border-2)] pb-4 mb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div className="space-y-1">
             <h2 className="m-section-title">
@@ -1011,7 +1011,7 @@ export default function MusicConsolePage() {
             </p>
           </div>
           <Link href="/music-console/proof">
-            <ActionButton variant="secondary" className="text-xs font-bold py-2 border border-black/10">
+            <ActionButton variant="secondary" className="text-xs font-bold py-2 border border-black/10 m-btn-interactive-glow">
               Open Full Proof Log <ArrowRight className="h-3.5 w-3.5" />
             </ActionButton>
           </Link>
@@ -1033,12 +1033,12 @@ export default function MusicConsolePage() {
             return (
               <div
                 key={r.id}
-                className="m-proof-card pl-6"
+                className="m-proof-card pl-6 group relative overflow-hidden transition-all duration-300 hover:bg-[var(--m-surface-2)]/90 hover:border-[#8B5CF6]/30 hover:shadow-[0_8px_20px_-4px_rgba(0,0,0,0.35)]"
               >
                 {/* Sentiment vertical bar indicator */}
                 <div className={cn('m-proof-card-accent-bar w-1.5', accentColor)} />
 
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center pr-2 group-hover:pr-24 transition-all duration-300">
                   {/* Left Column: Fan Identity */}
                   <div className="lg:col-span-4 space-y-1.5 min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
@@ -1053,9 +1053,9 @@ export default function MusicConsolePage() {
                         className={cn(
                           'text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded border',
                           r.intent === 'high'
-                            ? 'bg-[var(--m-accent-2)]/10 text-[var(--m-accent-2)] border-[var(--m-accent-2)]/20'
+                            ? 'bg-[#06B6D4]/10 text-[#06B6D4] border-[#06B6D4]/20'
                             : r.intent === 'medium'
-                              ? 'bg-[var(--m-warning)]/10 text-[var(--m-warning)] border-[var(--m-warning)]/20'
+                              ? 'bg-[#FBBF24]/10 text-[#FBBF24] border-[#FBBF24]/20'
                               : 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20'
                         )}
                       >
@@ -1081,30 +1081,34 @@ export default function MusicConsolePage() {
                   <div className="lg:col-span-4 flex items-center justify-between lg:justify-end gap-3">
                     <ProofBadge outcome={r.outcome} verified={r.verifiedAction} />
                     
-                    <div className="flex items-center gap-2 ml-auto lg:ml-0">
+                    <div className="flex items-center gap-2 ml-auto lg:ml-0 transition-opacity duration-300 group-hover:opacity-10">
                       {/* Audio Proof Toggle */}
                       {r.hasRecording && (
-                        <ActionButton
-                          variant={isPlaying ? 'primary' : 'secondary'}
+                        <button
                           onClick={() => togglePlay(r.id)}
-                          className="text-xs font-semibold px-2.5 py-1.5 flex items-center gap-2 shrink-0 border border-black/10"
+                          className={cn(
+                            "text-xs font-semibold px-2.5 py-1.5 flex items-center gap-2 rounded-lg border transition-all duration-300",
+                            isPlaying
+                              ? "bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-[0_0_8px_rgba(139,92,246,0.4)]"
+                              : "bg-[#8B5CF6]/10 text-[#A78BFA] border-[#8B5CF6]/20 hover:bg-[#8B5CF6]/20"
+                          )}
                         >
                           {isPlaying ? (
                             <>
                               <div className="m-equalizer mb-[1px]">
-                                <span className="m-equalizer-bar" />
-                                <span className="m-equalizer-bar" />
-                                <span className="m-equalizer-bar" />
+                                <span className="m-equalizer-bar" style={{ backgroundColor: '#fff' }} />
+                                <span className="m-equalizer-bar" style={{ backgroundColor: '#fff' }} />
+                                <span className="m-equalizer-bar" style={{ backgroundColor: '#fff' }} />
                               </div>
                               <span>Playing</span>
                             </>
                           ) : (
                             <>
-                              <Play className="h-3 w-3 text-[var(--m-accent)] fill-[var(--m-accent)]" />
+                              <Headphones className="h-3.5 w-3.5" />
                               <span>Audio Proof</span>
                             </>
                           )}
-                        </ActionButton>
+                        </button>
                       )}
 
                       {/* Transcript Toggle */}
@@ -1112,10 +1116,10 @@ export default function MusicConsolePage() {
                         <button
                           onClick={() => toggleTranscript(r.id)}
                           className={cn(
-                            "p-2 rounded border transition-colors flex items-center justify-center gap-1 text-xs font-semibold",
+                            "px-2.5 py-1.5 rounded-lg border transition-all duration-300 flex items-center justify-center gap-1.5 text-xs font-semibold",
                             isExpanded 
-                              ? "bg-[var(--m-surface-3)] border-[var(--m-dim)] text-[var(--m-text)]" 
-                              : "bg-[var(--m-surface-2)] border-[var(--m-border-2)] text-[var(--m-muted)] hover:text-[var(--m-text)]"
+                              ? "bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-[0_0_8px_rgba(139,92,246,0.4)]" 
+                              : "bg-[#8B5CF6]/10 text-[#A78BFA] border-[#8B5CF6]/20 hover:bg-[#8B5CF6]/20"
                           )}
                           title="Verbatim Transcript"
                         >
@@ -1134,6 +1138,43 @@ export default function MusicConsolePage() {
                       </span>
                     </div>
                   </div>
+                </div>
+
+                {/* Quick Slide-in Action Icons on Hover */}
+                <div className="absolute right-0 top-0 bottom-0 flex items-center gap-2 pl-4 pr-6 opacity-0 translate-x-4 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 bg-gradient-to-l from-[var(--m-surface-2)] via-[var(--m-surface-2)]/95 to-transparent z-20 pointer-events-none group-hover:pointer-events-auto">
+                  {r.hasRecording && (
+                    <button
+                      onClick={() => togglePlay(r.id)}
+                      className={cn(
+                        "p-2.5 rounded-lg border transition-all duration-300 hover:scale-105 active:scale-95 shadow-md",
+                        isPlaying 
+                          ? "bg-[#8B5CF6] border-[#8B5CF6] text-white" 
+                          : "bg-[var(--m-surface-3)] border-[var(--m-border)] text-[#A78BFA] hover:bg-[#8B5CF6]/20 hover:border-[#8B5CF6]/40"
+                      )}
+                      title={isPlaying ? "Stop Audio" : "Listen Audio Proof"}
+                    >
+                      <Headphones className="h-4.5 w-4.5" />
+                    </button>
+                  )}
+                  {r.hasTranscript && (
+                    <button
+                      onClick={() => toggleTranscript(r.id)}
+                      className={cn(
+                        "p-2.5 rounded-lg border transition-all duration-300 hover:scale-105 active:scale-95 shadow-md",
+                        isExpanded 
+                          ? "bg-[#8B5CF6] border-[#8B5CF6] text-white" 
+                          : "bg-[var(--m-surface-3)] border-[var(--m-border)] text-[#A78BFA] hover:bg-[#8B5CF6]/20 hover:border-[#8B5CF6]/40"
+                      )}
+                      title={isExpanded ? "Close Audit Logs" : "View Audit Logs"}
+                    >
+                      <ShieldCheck className="h-4.5 w-4.5" />
+                    </button>
+                  )}
+                  <Link href={`/music-console/proof?id=${r.id}`}>
+                    <button className="p-2.5 rounded-lg border bg-[var(--m-surface-3)] border-[var(--m-border)] text-[#A78BFA] hover:bg-[#8B5CF6]/20 hover:border-[#8B5CF6]/40 hover:scale-105 active:scale-95 transition-all duration-300 shadow-md" title="View Details">
+                      <Eye className="h-4.5 w-4.5" />
+                    </button>
+                  </Link>
                 </div>
 
                 {/* Simulated Audio Waveform player overlay */}

@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { ShieldCheck, HelpCircle, X } from 'lucide-react';
+import { ShieldCheck, HelpCircle, X, Check, Ticket, ShoppingBag, Sparkles, Clock, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // ── 1. PageHeader Component
@@ -183,20 +183,46 @@ interface ProofBadgeProps {
 
 export function ProofBadge({ outcome, verified = true, className }: ProofBadgeProps) {
   const norm = outcome.toLowerCase().replace(/_/g, ' ');
+  
+  // Custom styling per outcome
+  let outcomeIcon = <HelpCircle className="h-3.5 w-3.5" />;
+  let pillColorClass = "bg-zinc-500/10 text-zinc-400 border-zinc-500/20";
+  
+  if (norm === 'pre saved' || norm === 'pre_saved') {
+    outcomeIcon = <Check className="h-3.5 w-3.5 text-emerald-400" />;
+    pillColorClass = "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
+  } else if (norm === 'ticket intent') {
+    outcomeIcon = <Ticket className="h-3.5 w-3.5 text-cyan-400" />;
+    pillColorClass = "bg-cyan-500/10 text-cyan-400 border-cyan-500/20";
+  } else if (norm === 'merch intent') {
+    outcomeIcon = <ShoppingBag className="h-3.5 w-3.5 text-amber-400" />;
+    pillColorClass = "bg-amber-500/10 text-amber-400 border-amber-500/20";
+  } else if (norm === 'vip interest') {
+    outcomeIcon = <Sparkles className="h-3.5 w-3.5 text-purple-400" />;
+    pillColorClass = "bg-purple-500/10 text-purple-400 border-purple-500/20";
+  } else if (norm === 'needs follow up') {
+    outcomeIcon = <Clock className="h-3.5 w-3.5 text-rose-400" />;
+    pillColorClass = "bg-rose-500/10 text-rose-400 border-rose-500/20";
+  } else if (norm === 'no action') {
+    outcomeIcon = <AlertCircle className="h-3.5 w-3.5 text-zinc-400" />;
+    pillColorClass = "bg-zinc-500/10 text-zinc-400 border-zinc-500/20";
+  }
+
   return (
     <span
       className={cn(
-        'm-badge px-2.5 py-1 flex items-center gap-1.5',
-        verified ? 'm-badge--verified' : 'm-badge--neutral',
+        'm-badge px-2.5 py-1 flex items-center gap-1.5 border rounded-full font-mono text-[9px] uppercase tracking-wider',
+        pillColorClass,
         className
       )}
     >
-      {verified ? (
-        <ShieldCheck className="h-3.5 w-3.5 m-text-accent-2" />
-      ) : (
-        <HelpCircle className="h-3.5 w-3.5 m-text-muted" />
-      )}
+      {outcomeIcon}
       <span>{norm.toUpperCase()}</span>
+      {verified && (
+        <span title="Verified Action" className="ml-0.5 flex items-center text-emerald-400">
+          <ShieldCheck className="h-3 w-3 fill-emerald-500/20" />
+        </span>
+      )}
     </span>
   );
 }

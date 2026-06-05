@@ -1160,4 +1160,53 @@
   box-shadow: 0 0 8px rgba(251, 191, 36, 0.75);
 }
 
+/* ── Entrance & Fade-in Animations ── */
+.m-animate-fade-in {
+  opacity: 0;
+  transform: translateY(12px);
+  animation: m-fade-in 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.m-anim-delay-100 { animation-delay: 100ms; }
+.m-anim-delay-200 { animation-delay: 200ms; }
+.m-anim-delay-300 { animation-delay: 300ms; }
+.m-anim-delay-400 { animation-delay: 400ms; }
+
+@keyframes m-fade-in {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Interactive Hover Illumination & Glow ── */
+.m-card-interactive-glow {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.m-card-interactive-glow:hover {
+  transform: translateY(-4px) scale(1.005) !important;
+  box-shadow: 
+    0 20px 40px -15px rgba(0, 0, 0, 0.55), 
+    0 0 20px rgba(139, 92, 246, 0.12) !important;
+  border-color: rgba(139, 92, 246, 0.25) !important;
+}
+
+/* High-fidelity interactive button glows */
+.m-btn-interactive-glow {
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.m-btn-interactive-glow:hover {
+  transform: translateY(-1px) scale(1.02) !important;
+  box-shadow: 
+    0 4px 12px rgba(139, 92, 246, 0.25),
+    0 0 8px rgba(139, 92, 246, 0.15) !important;
+}
+
+.m-btn-interactive-glow:active {
+  transform: translateY(0) scale(0.97) !important;
+}
+
+
 
