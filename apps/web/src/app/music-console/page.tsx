@@ -269,7 +269,7 @@ function Interactive3DGlobe() {
           if (isForeground) {
             const pVal = (p.orig.pulse || 0) % 1;
             ctx.beginPath();
-            ctx.arc(p.projX, p.projY, size + pVal * 16);
+            ctx.arc(p.projX, p.projY, size + pVal * 16, 0, Math.PI * 2);
             ctx.strokeStyle = `rgba(245, 158, 11, ${1 - pVal})`;
             ctx.lineWidth = 1.2;
             ctx.stroke();
