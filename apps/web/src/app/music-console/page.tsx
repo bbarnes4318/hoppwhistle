@@ -718,12 +718,12 @@ export default function MusicConsolePage() {
                     >
                       <defs>
                         <linearGradient id="colorAnswers" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="var(--m-accent)" stopOpacity={0.2} />
-                          <stop offset="95%" stopColor="var(--m-accent)" stopOpacity={0} />
+                          <stop offset="5%" stopColor="#9F7AEA" stopOpacity={0.25} />
+                          <stop offset="95%" stopColor="#9F7AEA" stopOpacity={0} />
                         </linearGradient>
                         <linearGradient id="colorVerified" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="var(--m-accent-2)" stopOpacity={0.2} />
-                          <stop offset="95%" stopColor="var(--m-accent-2)" stopOpacity={0} />
+                          <stop offset="5%" stopColor="#06B6D4" stopOpacity={0.25} />
+                          <stop offset="95%" stopColor="#06B6D4" stopOpacity={0} />
                         </linearGradient>
                         {/* Glow filters for lines */}
                         <filter id="chart-line-glow" x="-10%" y="-10%" width="120%" height="120%">
@@ -757,21 +757,25 @@ export default function MusicConsolePage() {
                         type="monotone"
                         dataKey="humanAnswers"
                         name="Human Answers"
-                        stroke="var(--m-accent)"
+                        stroke="#9F7AEA"
                         strokeWidth={3.5}
                         fillOpacity={1}
                         fill="url(#colorAnswers)"
                         filter="url(#chart-line-glow)"
+                        activeDot={{ r: 6, stroke: '#121624', strokeWidth: 2, fill: '#9F7AEA' }}
+                        dot={{ r: 3, stroke: '#9F7AEA', strokeWidth: 1.5, fill: '#121624' }}
                       />
                       <Area
                         type="monotone"
                         dataKey="verifiedEngagements"
                         name="Verified Actions"
-                        stroke="var(--m-accent-2)"
+                        stroke="#06B6D4"
                         strokeWidth={3.5}
                         fillOpacity={1}
                         fill="url(#colorVerified)"
                         filter="url(#chart-line-glow)"
+                        activeDot={{ r: 6, stroke: '#121624', strokeWidth: 2, fill: '#06B6D4' }}
+                        dot={{ r: 3, stroke: '#06B6D4', strokeWidth: 1.5, fill: '#121624' }}
                       />
                     </AreaChart>
                   </ResponsiveContainer>
@@ -781,9 +785,9 @@ export default function MusicConsolePage() {
               </div>
 
               {/* Real-Time Live Activity Terminal Ticker (Sleek macOS-Style CRT Terminal) */}
-              <div className="bg-[#05070B] border border-white/5 rounded-2xl overflow-hidden shadow-2xl relative">
+              <div className="m-terminal-container rounded-2xl overflow-hidden shadow-2xl relative">
                 {/* macOS window title bar */}
-                <div className="bg-[#0D0E12] px-4 py-2.5 flex items-center justify-between border-b border-white/5">
+                <div className="bg-[#0D0E12]/80 px-4 py-2.5 flex items-center justify-between border-b border-white/5 relative z-10 backdrop-blur-md">
                   <div className="flex items-center gap-1.5 select-none">
                     <span className="w-2.5 h-2.5 rounded-full bg-[#EF4444]/90" />
                     <span className="w-2.5 h-2.5 rounded-full bg-[#F59E0B]/90" />
@@ -792,32 +796,32 @@ export default function MusicConsolePage() {
                   <span className="text-[9px] font-mono font-bold tracking-widest text-[var(--m-muted)] uppercase select-none">
                     telemetry@hopwhistle: ~/live-logs
                   </span>
-                  <span className="text-[8px] font-mono px-2 py-0.5 rounded bg-[#10B981]/10 text-[#10B981] border border-[#10B981]/25 uppercase tracking-widest font-black">
+                  <span className="text-[8px] font-mono px-2 py-0.5 rounded bg-[#10B981]/10 text-[#10B981] border border-[#10B981]/25 uppercase tracking-widest font-black animate-pulse">
                     FEED NOMINAL
                   </span>
                 </div>
 
                 {/* CRT Terminal Screen content */}
-                <div className="p-5 space-y-2.5 font-mono text-[10px] leading-relaxed text-[#34D399] drop-shadow-[0_0_4px_rgba(52,211,153,0.35)] min-h-[140px] select-all">
+                <div className="p-5 space-y-2.5 font-mono text-[10px] leading-relaxed text-[#34D399] min-h-[140px] select-all relative z-10">
                   <div className="flex items-start gap-2.5">
-                    <span className="text-emerald-500/50">[17:54:12]</span>
-                    <span className="text-[var(--m-accent)] font-black uppercase tracking-wider">▸ OUTBOUND:</span>
-                    <span className="text-[#34D399] font-medium">Initiated contact route for +1865***1182 (Superfans tier) -> Ringing...</span>
+                    <span className="text-emerald-500/40">[17:54:12]</span>
+                    <span className="m-terminal-text-purple font-black uppercase tracking-wider">▸ OUTBOUND:</span>
+                    <span className="m-terminal-text-green font-medium">Initiated contact route for +1865***1182 (Superfans tier) -> Ringing...</span>
                   </div>
                   <div className="flex items-start gap-2.5">
-                    <span className="text-emerald-500/50">[17:54:18]</span>
-                    <span className="text-[var(--m-accent-2)] font-black uppercase tracking-wider">▸ ANSWERED:</span>
-                    <span className="text-[#34D399] font-medium">Connect established on Node 02 for +1551***6220 -> Speech synthesis running...</span>
+                    <span className="text-emerald-500/40">[17:54:18]</span>
+                    <span className="m-terminal-text-purple font-black uppercase tracking-wider">▸ ANSWERED:</span>
+                    <span className="m-terminal-text-green font-medium">Connect established on Node 02 for +1551***6220 -> Speech synthesis running...</span>
                   </div>
                   <div className="flex items-start gap-2.5">
-                    <span className="text-emerald-500/50">[17:54:25]</span>
-                    <span className="text-[var(--m-warning)] font-black uppercase tracking-wider">▸ INTENT:</span>
-                    <span className="text-[#FBBF24] drop-shadow-[0_0_4px_rgba(251,191,36,0.3)] font-bold">Fan verbal intent captured (Confidence: 94.2%) -> dispatching pre-save hook.</span>
+                    <span className="text-emerald-500/40">[17:54:25]</span>
+                    <span className="m-terminal-text-amber font-black uppercase tracking-wider">▸ INTENT:</span>
+                    <span className="m-terminal-text-amber font-bold">Fan verbal intent captured (Confidence: 94.2%) -> dispatching pre-save hook.</span>
                   </div>
                   <div className="flex items-start gap-2.5">
-                    <span className="text-emerald-500/50">[17:54:32]</span>
+                    <span className="text-emerald-500/40">[17:54:32]</span>
                     <span className="text-[#10B981] font-black uppercase tracking-wider">✔ SUCCESS:</span>
-                    <span className="text-white drop-shadow-[0_0_6px_rgba(255,255,255,0.45)] font-extrabold">Pre-save completed. CPA attribution: $0.25 (Transaction ref: tx_815a5f70)</span>
+                    <span className="text-white drop-shadow-[0_0_6px_rgba(255,255,255,0.45)] font-extrabold">Pre-save completed. CPA attribution: $0.25 (Transaction ref: tx_815a5f70)<span className="m-terminal-cursor" /></span>
                   </div>
                 </div>
               </div>
@@ -863,65 +867,121 @@ export default function MusicConsolePage() {
               };
 
               // Determine Heat Colors and Icons based on engagement score
-              const isCrit = seg.engagement >= 90;
-              const isWarm = seg.engagement >= 75 && seg.engagement < 90;
-              const tempClass = isCrit
-                ? 'text-[var(--m-danger)] bg-[var(--m-danger)]/5 border-[var(--m-danger)]/15'
+              const isCrit = seg.engagement >= 80;
+              const isWarm = seg.engagement >= 60 && seg.engagement < 80;
+              
+              const borderHighlight = isCrit
+                ? 'hover:border-[#FBBF24]/50'
                 : isWarm
-                  ? 'text-[var(--m-warning)] bg-[var(--m-warning)]/5 border-[var(--m-warning)]/15'
-                  : 'text-[var(--m-accent)] bg-[var(--m-accent-dim)] border-[var(--m-accent)]/15';
+                  ? 'hover:border-[#C084FC]/50'
+                  : 'hover:border-[#06B6D4]/50';
+
+              const rankGlow = isCrit
+                ? 'text-[#FBBF24] border-[#FBBF24]/20 bg-[#FBBF24]/10 shadow-[0_0_6px_rgba(251,191,36,0.15)]'
+                : isWarm
+                  ? 'text-[#C084FC] border-[#C084FC]/20 bg-[#C084FC]/10 shadow-[0_0_6px_rgba(192,132,252,0.15)]'
+                  : 'text-[#06B6D4] border-[#06B6D4]/20 bg-[#06B6D4]/10 shadow-[0_0_6px_rgba(6,182,212,0.15)]';
+
+              const tempBadge = isCrit
+                ? 'text-[#FBBF24] bg-[#FBBF24]/10 border-[#FBBF24]/25 shadow-[0_0_8px_rgba(251,191,36,0.15)]'
+                : isWarm
+                  ? 'text-[#C084FC] bg-[#C084FC]/10 border-[#C084FC]/25 shadow-[0_0_8px_rgba(192,132,252,0.15)]'
+                  : 'text-[#06B6D4] bg-[#06B6D4]/10 border-[#06B6D4]/25 shadow-[0_0_8px_rgba(6,182,212,0.15)]';
 
               return (
                 <div
                   key={seg.segment}
-                  className="bg-[var(--m-surface-2)] border border-[var(--m-border)] hover:border-[var(--m-accent-2)]/30 rounded-2xl p-5 flex flex-col justify-between space-y-3.5 transition-all duration-500 hover:shadow-[0_12px_24px_rgba(0,0,0,0.35)] hover:-translate-y-1 relative overflow-hidden group"
+                  className={cn(
+                    "bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-2xl p-5 flex flex-col justify-between space-y-4 transition-all duration-500 hover:shadow-[0_20px_35px_-8px_rgba(0,0,0,0.55)] hover:-translate-y-1.5 hover:scale-[1.01] hover:bg-[var(--m-surface-3)] relative overflow-hidden group",
+                    borderHighlight
+                  )}
                 >
-                  {/* Subtle hover glow layer */}
-                  <div className="absolute -right-8 -bottom-8 w-20 h-20 bg-[var(--m-accent-2)]/5 rounded-full blur-xl group-hover:bg-[var(--m-accent-2)]/10 transition-all duration-500 pointer-events-none" />
+                  {/* Subtle dynamic hover glow layer that corresponds to cohort heat */}
+                  <div
+                    className={cn(
+                      "absolute -right-8 -bottom-8 w-24 h-24 rounded-full blur-xl transition-all duration-500 pointer-events-none opacity-5 group-hover:opacity-20",
+                      isCrit
+                        ? "bg-[#FBBF24]"
+                        : isWarm
+                          ? "bg-[#C084FC]"
+                          : "bg-[#06B6D4]"
+                    )}
+                  />
 
                   {/* Top: Rank, Title and Temp Badge */}
                   <div className="flex items-start justify-between gap-3 relative z-10">
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="w-7 h-7 flex items-center justify-center bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded-lg text-xs font-mono font-black text-[var(--m-accent)] shadow-2xs group-hover:scale-105 transition-transform">
+                      <span className={cn("w-7 h-7 flex items-center justify-center border rounded-lg text-xs font-mono font-black group-hover:scale-105 transition-transform", rankGlow)}>
                         0{i + 1}
                       </span>
                       <div className="min-w-0">
-                        <span className="text-xs font-black text-[var(--m-text)] tracking-wide uppercase group-hover:text-[var(--m-accent-2)] transition-colors block truncate">{seg.segment}</span>
+                        <span className="text-xs font-black text-[var(--m-text)] tracking-wide uppercase group-hover:text-[var(--m-text-2)] transition-colors block truncate">{seg.segment}</span>
                         <span className="text-[9px] text-[var(--m-muted)] leading-tight block truncate mt-0.5">{captions[seg.segment] || 'Target audience segment'}</span>
                       </div>
                     </div>
-                    <span className={cn("text-[8px] font-mono font-black px-2 py-0.5 rounded border tracking-wider shrink-0", tempClass)}>
-                      {seg.engagement}% TEMP
+                    <span className={cn("text-[8px] font-mono font-black px-2 py-0.5 rounded border tracking-wider shrink-0", tempBadge)}>
+                      {seg.engagement}% HEAT
                     </span>
                   </div>
 
                   {/* Mid: Stats Row */}
                   <div className="grid grid-cols-2 gap-4 pt-1 relative z-10">
-                    <div className="bg-[var(--m-surface-3)]/40 border border-[var(--m-border-2)] rounded-lg p-2 flex flex-col">
+                    <div className="bg-[var(--m-surface-2)]/60 border border-[var(--m-border-2)] rounded-lg p-2.5 flex flex-col group-hover:bg-[var(--m-surface-3)] transition-colors">
                       <span className="text-[8px] font-bold text-[var(--m-muted)] uppercase tracking-wider">Volume</span>
-                      <span className="font-mono text-[10px] font-extrabold text-[var(--m-text-2)] mt-0.5">{formatCompactNumber(seg.count)} Fans</span>
+                      <span className="font-mono text-[10.5px] font-extrabold text-[var(--m-text-2)] mt-0.5">{formatCompactNumber(seg.count)} Fans</span>
                     </div>
-                    <div className="bg-[var(--m-surface-3)]/40 border border-[var(--m-border-2)] rounded-lg p-2 flex flex-col">
+                    <div className="bg-[var(--m-surface-2)]/60 border border-[var(--m-border-2)] rounded-lg p-2.5 flex flex-col group-hover:bg-[var(--m-surface-3)] transition-colors">
                       <span className="text-[8px] font-bold text-[var(--m-muted)] uppercase tracking-wider">Target Goal</span>
-                      <span className="font-mono text-[10px] font-extrabold text-[var(--m-accent-2)] mt-0.5">{seg.engagement}%</span>
+                      <span className="font-mono text-[10.5px] font-extrabold text-[var(--m-text-2)] mt-0.5">{seg.engagement}% Engagement</span>
                     </div>
                   </div>
 
-                  {/* Thicker Progress bar represent engagement */}
-                  <div className="space-y-1.5 relative z-10">
+                  {/* Heat Map LED Indicator Grid & Progress bar */}
+                  <div className="space-y-2.5 relative z-10">
                     <div className="flex justify-between items-center text-[8px] font-black tracking-wider text-[var(--m-muted)] uppercase">
                       <span>Goal Progress</span>
                       <span className="font-mono text-[var(--m-text-2)]">{seg.engagement}%</span>
                     </div>
-                    <div className="h-2 w-full bg-[var(--m-surface-3)] rounded-full overflow-hidden border border-white/5 relative">
+                    
+                    {/* LED segments */}
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: 10 }).map((_, idx) => {
+                        const threshold = (idx + 1) * 10;
+                        const isLit = seg.engagement >= threshold;
+                        
+                        let litClass = "";
+                        if (isLit) {
+                          if (isCrit) {
+                            litClass = "m-led-lit-amber";
+                          } else if (isWarm) {
+                            litClass = "m-led-lit-purple";
+                          } else {
+                            litClass = "m-led-lit-cyan";
+                          }
+                        }
+                        
+                        return (
+                          <div
+                            key={idx}
+                            className={cn(
+                              "h-1.5 w-full rounded-xs transition-all duration-500",
+                              isLit ? litClass : "bg-white/[0.04] border border-white/5"
+                            )}
+                          />
+                        );
+                      })}
+                    </div>
+                    
+                    {/* Glowing Progress bar */}
+                    <div className="h-1.5 w-full bg-[var(--m-surface-2)] rounded-full overflow-hidden border border-white/5 relative">
                       <div
                         className={cn(
                           "h-full rounded-full transition-all duration-500",
                           isCrit
-                            ? "bg-gradient-to-r from-[var(--m-warning)] to-[var(--m-danger)]"
+                            ? "bg-gradient-to-r from-[#FBBF24] to-[#EF4444]"
                             : isWarm
-                              ? "bg-gradient-to-r from-[var(--m-accent)] to-[var(--m-warning)]"
-                              : "bg-gradient-to-r from-[var(--m-accent-2)] to-[var(--m-accent)]"
+                              ? "bg-gradient-to-r from-[#C084FC] to-[#8B5CF6]"
+                              : "bg-gradient-to-r from-[#06B6D4] to-[#10B981]"
                         )}
                         style={{ width: `${seg.engagement}%` }}
                       />
@@ -929,7 +989,7 @@ export default function MusicConsolePage() {
                   </div>
 
                   {/* Recommendation action tag: elegant small tag */}
-                  <div className="text-[8px] font-black text-center text-[var(--m-muted)] bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded-lg px-2.5 py-1.5 tracking-widest uppercase transition-all duration-300 group-hover:border-[var(--m-accent-2)]/30 group-hover:bg-[var(--m-accent-2-dim)] group-hover:text-[var(--m-accent-2)] relative z-10">
+                  <div className="text-[8px] font-black text-center text-[var(--m-muted)] bg-[var(--m-surface-2)]/60 border border-[var(--m-border)] rounded-lg px-2.5 py-1.5 tracking-widest uppercase transition-all duration-300 group-hover:border-[var(--m-accent-2)]/30 group-hover:bg-[var(--m-accent-2-dim)] group-hover:text-[var(--m-accent-2)] relative z-10">
                     {recommendations[seg.segment] || 'ACTION REQ: DISPATCH OUTREACH'}
                   </div>
                 </div>
