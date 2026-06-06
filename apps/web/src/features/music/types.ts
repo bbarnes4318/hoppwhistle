@@ -60,6 +60,8 @@ export interface FanCampaign {
   cpa: number;
   proofCaptured: number;
   startDate: string;
+  spent?: number;
+  engagementRate?: number;
 }
 
 export interface ProofRecord {
@@ -167,3 +169,11 @@ export interface MusicSettings {
   alertHighIntent: boolean;
   weeklyExecutiveReport: boolean;
 }
+
+export interface OutcomeBreakdown {
+  outcome: string;
+  count: number;
+  percentage: number;
+  color: string;
+}
+

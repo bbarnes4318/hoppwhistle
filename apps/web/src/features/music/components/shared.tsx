@@ -211,7 +211,7 @@ export function ProofBadge({ outcome, verified = true, className }: ProofBadgePr
   return (
     <span
       className={cn(
-        'm-badge px-3 py-1 flex items-center gap-1.5 border rounded-full font-mono text-[9px] uppercase tracking-wider font-extrabold shadow-sm',
+        'm-badge px-2.5 py-0.5 flex items-center gap-1.5 border rounded-full font-sans text-[10px] uppercase tracking-wider font-semibold',
         pillColorClass,
         className
       )}
@@ -219,8 +219,8 @@ export function ProofBadge({ outcome, verified = true, className }: ProofBadgePr
       {outcomeIcon}
       <span>{norm.toUpperCase()}</span>
       {verified && (
-        <span title="Verified Action" className="ml-1 flex items-center text-white">
-          <ShieldCheck className="h-3 w-3 fill-white/20" />
+        <span title="Verified Action" className="ml-1 flex items-center text-emerald-400">
+          <ShieldCheck className="h-3 w-3 fill-emerald-400/20" />
         </span>
       )}
     </span>
@@ -238,7 +238,7 @@ export function SegmentBadge({ segment, className }: SegmentBadgeProps) {
   return (
     <span
       className={cn(
-        'px-2 py-0.5 bg-zinc-950 border border-zinc-800 rounded text-[9px] font-mono font-black text-zinc-300 uppercase tracking-widest',
+        'px-2 py-0.5 bg-zinc-900 border border-zinc-800/80 rounded text-[10px] font-sans font-medium text-slate-350 uppercase tracking-wider',
         className
       )}
     >
