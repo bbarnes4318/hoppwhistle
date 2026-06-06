@@ -7,26 +7,26 @@
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
 .music-console {
-  /* ── Core Palette (Unified Deep Navy / Charcoal Theme) ── */
-  --m-bg:         #0b0d13;               /* Rich, deeply dark charcoal/navy background */
-  --m-surface:    #151824;               /* Deep slate/navy card surfaces */
-  --m-surface-2:  #0f121a;               /* Secondary dark panels */
-  --m-surface-3:  #1d2235;               /* Deep border/hover highlights */
-  --m-text:       #FAFAFA;               /* Stark white text */
-  --m-text-2:     #E2E8F0;               /* Zinc-200 / Slate-200 */
-  --m-muted:      #94A3B8;               /* Muted slate-400 */
-  --m-dim:        #64748B;               /* Dim slate-500 */
-  --m-border:     rgba(255, 255, 255, 0.08); /* Faint white border on dark bg */
-  --m-border-2:   rgba(255, 255, 255, 0.04);
+  /* ── Core Palette (Luxury Charcoal & Champagne Business Theme) ── */
+  --m-bg:         #0c0c0e;               /* Deep Charcoal Background */
+  --m-surface:    #0c0c0e;               /* Base Surface */
+  --m-surface-2:  #141417;               /* Elevated Card Surface */
+  --m-surface-3:  #1e1e22;               /* Hover States / Selected Actions */
+  --m-text:       #f5f5f7;               /* Soft Off-white Main Text */
+  --m-text-2:     #e2e2e7;               /* Subtitle / Body Gray */
+  --m-muted:      #8e8e93;               /* Muted Slate Secondary Text */
+  --m-dim:        #a1a1aa;               /* Dim Label Text */
+  --m-border:     #242427;               /* Card Borders */
+  --m-border-2:   #1b1b1e;               /* Inside Dividers */
   --m-grid-line:  rgba(255, 255, 255, 0.005);
   
-  /* Music Native Accents (Electric Purple & Bright Teal) */
-  --m-accent:     #9F7AEA;               /* Vibrant Electric Purple (primary) */
-  --m-accent-dim: rgba(159, 122, 234, 0.12);
-  --m-accent-2:   #06B6D4;               /* Bright Teal (secondary) */
-  --m-accent-2-dim: rgba(6, 182, 212, 0.12);
-  --m-warning:    #F59E0B;               /* Amber/Coral (Attention/CPA/Revenue) */
-  --m-danger:     #EF4444;               /* Coral/Red (Opt-Out/Failed/Risk) */
+  /* Luxury Accents */
+  --m-accent:     #dfc38c;               /* Champagne Gold primary */
+  --m-accent-dim: rgba(223, 195, 140, 0.05);
+  --m-accent-2:   #10b981;               /* Subtle Emerald success state */
+  --m-accent-2-dim: rgba(16, 185, 129, 0.05);
+  --m-warning:    #dfc38c;               /* Warning Champagne */
+  --m-danger:     #ef4444;               /* Restrained Red */
 
   /* ── Typography ── */
   --m-font-sans:  'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;

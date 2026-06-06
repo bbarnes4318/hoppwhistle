@@ -61,8 +61,8 @@ export function FanCampaignTable({ campaigns }: FanCampaignTableProps) {
                   <td className="px-4 py-3 text-right text-zinc-300 font-mono">{formatCompactNumber(c.fansContacted)}</td>
                   <td className="px-4 py-3 text-right text-zinc-300 font-mono">{formatCompactNumber(c.humanAnswers)}</td>
                   <td className="px-4 py-3 text-right text-emerald-400 font-mono">{formatCompactNumber(c.verifiedEngagements)}</td>
-                  <td className="px-4 py-3 text-right text-zinc-300 font-mono">{formatPercentage(c.engagementRate)}</td>
-                  <td className="px-4 py-3 text-right text-zinc-400 font-mono">{formatCurrency(c.spent)}</td>
+                  <td className="px-4 py-3 text-right text-zinc-300 font-mono">{formatPercentage(c.engagementRate ?? 0)}</td>
+                  <td className="px-4 py-3 text-right text-zinc-400 font-mono">{formatCurrency(c.spent ?? 0)}</td>
                   <td className="px-4 py-3 text-right text-zinc-400 font-mono">{formatCompactNumber(c.proofCaptured)}</td>
                 </tr>
               );
