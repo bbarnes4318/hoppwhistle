@@ -1269,6 +1269,9 @@
 }
 
 .m-inset-card::after {
+  content: none !important;
+  display: none !important;
+}
 
 /* Soft-glowing title style */
 .m-title-glow {
