@@ -7,26 +7,26 @@
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
 .music-console {
-  /* ── Core Palette (Unified Deep Navy / Charcoal Theme) ── */
-  --m-bg:         #0b0d13;               /* Rich, deeply dark charcoal/navy background */
-  --m-surface:    #151824;               /* Deep slate/navy card surfaces */
-  --m-surface-2:  #0f121a;               /* Secondary dark panels */
-  --m-surface-3:  #1d2235;               /* Deep border/hover highlights */
-  --m-text:       #FAFAFA;               /* Stark white text */
-  --m-text-2:     #E2E8F0;               /* Zinc-200 / Slate-200 */
-  --m-muted:      #94A3B8;               /* Muted slate-400 */
-  --m-dim:        #64748B;               /* Dim slate-500 */
-  --m-border:     rgba(255, 255, 255, 0.08); /* Faint white border on dark bg */
-  --m-border-2:   rgba(255, 255, 255, 0.04);
-  --m-grid-line:  rgba(255, 255, 255, 0.005);
+  /* ── Core Palette (Luxury Charcoal & Champagne Theme) ── */
+  --m-bg:         #0e0e11;               /* Deep charcoal background */
+  --m-surface:    #0e0e11;               /* Same as bg */
+  --m-surface-2:  #161619;               /* Elevated cards */
+  --m-surface-3:  #222226;               /* Hover slate/charcoal */
+  --m-text:       #f7f7f9;               /* Soft off-white */
+  --m-text-2:     #e4e4e7;               /* Secondary white */
+  --m-muted:      #8e8e93;               /* Muted slate text */
+  --m-dim:        #a1a1aa;               /* Dim zinc */
+  --m-border:     #242427;               /* Subtle dark border */
+  --m-border-2:   #1b1b1e;
+  --m-grid-line:  rgba(255, 255, 255, 0.003);
   
-  /* Music Native Accents (Electric Purple & Bright Teal) */
-  --m-accent:     #9F7AEA;               /* Vibrant Electric Purple (primary) */
-  --m-accent-dim: rgba(159, 122, 234, 0.12);
-  --m-accent-2:   #06B6D4;               /* Bright Teal (secondary) */
-  --m-accent-2-dim: rgba(6, 182, 212, 0.12);
-  --m-warning:    #F59E0B;               /* Amber/Coral (Attention/CPA/Revenue) */
-  --m-danger:     #EF4444;               /* Coral/Red (Opt-Out/Failed/Risk) */
+  /* Champagne & Emerald Accents */
+  --m-accent:     #dfc38c;               /* Champagne/gold primary */
+  --m-accent-dim: rgba(223, 195, 140, 0.06);
+  --m-accent-2:   #10b981;               /* Subtle emerald secondary */
+  --m-accent-2-dim: rgba(16, 185, 129, 0.06);
+  --m-warning:    #f59e0b;               /* Amber */
+  --m-danger:     #ef4444;               /* Red */
 
   /* ── Typography ── */
   --m-font-sans:  'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -51,14 +51,14 @@
 
   /* Subtle background grid pattern */
   background-image: 
-    radial-gradient(circle at center, rgba(139, 92, 246, 0.012) 0%, transparent 70%),
-    linear-gradient(rgba(255, 255, 255, 0.005) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.005) 1px, transparent 1px);
+    radial-gradient(circle at center, rgba(223, 195, 140, 0.01) 0%, transparent 70%),
+    linear-gradient(rgba(255, 255, 255, 0.002) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.002) 1px, transparent 1px);
   background-size: 100% 100%, 32px 32px, 32px 32px;
   background-attachment: fixed;
 }
 
-/* ── Typography Orbitron overrides for headers and metric values ── */
+/* ── Typography Inter overrides for all headers and values ── */
 .music-console h1,
 .music-console h2,
 .music-console h3,
@@ -70,8 +70,8 @@
 .music-console .text-4xl,
 .music-console .text-5xl,
 .music-console .m-heat-rank {
-  font-family: 'Orbitron', 'Inter', -apple-system, sans-serif !important;
-  letter-spacing: 0.04em !important;
+  font-family: var(--m-font-sans) !important;
+  letter-spacing: -0.02em !important;
 }
 
 /* ── Dark Mode Override (Scoped to support unified variables) ── */
@@ -79,28 +79,28 @@
 .music-console .m-dark-mode header,
 .music-console .m-dark-mode main,
 .music-console.m-dark-mode {
-  --m-bg:         #0b0d13;
-  --m-surface:    #151824;
-  --m-surface-2:  #0f121a;
-  --m-surface-3:  #1d2235;
-  --m-text:       #FAFAFA;
-  --m-text-2:     #E2E8F0;
-  --m-muted:      #94A3B8;
-  --m-dim:        #64748B;
-  --m-border:     rgba(255, 255, 255, 0.08);
-  --m-border-2:   rgba(255, 255, 255, 0.04);
+  --m-bg:         #0e0e11;
+  --m-surface:    #0e0e11;
+  --m-surface-2:  #161619;
+  --m-surface-3:  #222226;
+  --m-text:       #f7f7f9;
+  --m-text-2:     #e4e4e7;
+  --m-muted:      #8e8e93;
+  --m-dim:        #a1a1aa;
+  --m-border:     #242427;
+  --m-border-2:   #1b1b1e;
   --m-grid-line:  rgba(255, 255, 255, 0.005);
-  --m-accent-dim: rgba(159, 122, 234, 0.12);
-  --m-accent-2-dim: rgba(6, 182, 212, 0.12);
+  --m-accent-dim: rgba(223, 195, 140, 0.06);
+  --m-accent-2-dim: rgba(16, 185, 129, 0.06);
 }
 
 /* ── Hardware Console Panels with Corner Rivets ── */
 .m-card,
 .m-hardware-panel {
-  background: #0f121d !important;
-  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  background: var(--m-surface-2) !important;
+  border: 1px solid var(--m-border) !important;
   border-radius: 12px !important;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15) !important;
   position: relative !important;
   transition: all 0.2s ease-in-out !important;
 }
@@ -119,17 +119,17 @@
 }
 
 .m-card-flush {
-  background: linear-gradient(135deg, #12151e 0%, #0a0c10 100%) !important;
-  border: 1px solid rgba(255, 255, 255, 0.05) !important;
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.04), inset 0 -1px 1px rgba(0, 0, 0, 0.4);
+  background: var(--m-surface-2) !important;
+  border: 1px solid var(--m-border) !important;
+  box-shadow: none !important;
   border-radius: var(--m-radius);
   position: relative;
 }
 
 .m-card-deep {
-  background: linear-gradient(135deg, #0f121b 0%, #080a0e 100%) !important;
-  border: 1px solid rgba(255, 255, 255, 0.04) !important;
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.02), inset 0 -1px 1px rgba(0, 0, 0, 0.5);
+  background: var(--m-bg) !important;
+  border: 1px solid var(--m-border) !important;
+  box-shadow: none !important;
   border-radius: var(--m-radius);
   position: relative;
 }
