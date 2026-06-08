@@ -218,9 +218,9 @@ export default function CampaignDetailPage() {
       }
 
       // Fetch DID routes and filter by campaign
-      const didRes = await apiClient.get<{ data: DidRoute[] }>('/api/v1/did-routes');
-      if (didRes.data?.data) {
-        const filtered = didRes.data.data.filter((route: any) => route.campaignId === id);
+      const didRes = await apiClient.get<{ routes: DidRoute[] }>('/api/v1/did-routes');
+      if (didRes.data?.routes) {
+        const filtered = didRes.data.routes.filter((route: any) => route.campaignId === id);
         setDidRoutes(filtered);
       }
 

@@ -31,88 +31,105 @@ export class DidRouteService {
         return;
       }
 
-      if (phoneNumber.userId && phoneNumber.status === 'ACTIVE') {
-        let extension = (phoneNumber.user?.metadata as any)?.extension;
+      const hasCampaign = !!phoneNumber.campaignId;
+      const hasUser = !!phoneNumber.userId;
 
-        // If user has no extension, dynamically assign a free one from 1000-1019
-        if (!isValidPhoneDestination(extension) && phoneNumber.user) {
-          const allUsers = await prisma.user.findMany({
-            select: { metadata: true },
-          });
-          const usedExtensions = new Set<string>();
-          for (const u of allUsers) {
-            const ext = (u.metadata as any)?.extension;
-            if (ext) {
-              usedExtensions.add(ext.toString().trim());
+      if ((hasUser || hasCampaign) && phoneNumber.status === 'ACTIVE') {
+        let destination = '';
+        let label = '';
+        const campaignId = phoneNumber.campaignId || null;
+
+        if (phoneNumber.userId) {
+          let extension = (phoneNumber.user?.metadata as any)?.extension;
+
+          // If user has no extension, dynamically assign a free one from 1000-1019
+          if (!isValidPhoneDestination(extension) && phoneNumber.user) {
+            const allUsers = await prisma.user.findMany({
+              select: { metadata: true },
+            });
+            const usedExtensions = new Set<string>();
+            for (const u of allUsers) {
+              const ext = (u.metadata as any)?.extension;
+              if (ext) {
+                usedExtensions.add(ext.toString().trim());
+              }
+            }
+
+            let availableExtension: string | null = null;
+            for (let extNum = 1000; extNum <= 1019; extNum++) {
+              const extStr = extNum.toString();
+              if (!usedExtensions.has(extStr)) {
+                availableExtension = extStr;
+                break;
+              }
+            }
+
+            if (availableExtension) {
+              const currentMetadata = (phoneNumber.user.metadata as Record<string, any>) || {};
+              const updatedMetadata = {
+                ...currentMetadata,
+                extension: availableExtension,
+              };
+
+              await prisma.user.update({
+                where: { id: phoneNumber.userId },
+                data: { metadata: updatedMetadata },
+              });
+
+              logger.info({
+                msg: 'syncDidRouteForNumber: Automatically assigned free extension to user',
+                userId: phoneNumber.userId,
+                extension: availableExtension,
+                phoneNumber: phoneNumber.number,
+              });
+
+              extension = availableExtension;
             }
           }
 
-          let availableExtension: string | null = null;
-          for (let extNum = 1000; extNum <= 1019; extNum++) {
-            const extStr = extNum.toString();
-            if (!usedExtensions.has(extStr)) {
-              availableExtension = extStr;
-              break;
-            }
-          }
-
-          if (availableExtension) {
-            const currentMetadata = (phoneNumber.user.metadata as Record<string, any>) || {};
-            const updatedMetadata = {
-              ...currentMetadata,
-              extension: availableExtension,
-            };
-
-            await prisma.user.update({
-              where: { id: phoneNumber.userId },
-              data: { metadata: updatedMetadata },
-            });
-
-            logger.info({
-              msg: 'syncDidRouteForNumber: Automatically assigned free extension to user',
-              userId: phoneNumber.userId,
-              extension: availableExtension,
-              phoneNumber: phoneNumber.number,
-            });
-
-            extension = availableExtension;
-          }
+          // Only use extension if it's a valid phone destination — never fall back to userId
+          destination = isValidPhoneDestination(extension) ? extension : '';
+          label = `Auto-routed User (${phoneNumber.user?.email || 'Agent'})`;
+        } else {
+          destination = 'Campaign';
+          label = `Auto-routed Campaign`;
         }
 
-        // Only use extension if it's a valid phone destination — never fall back to userId
-        const autoDestination = isValidPhoneDestination(extension) ? extension : null;
-
-        const existingRoute = await prisma.didRoute.findFirst({
-          where: { phoneNumberId: phoneNumber.id },
-        });
-
-        if (existingRoute) {
-          // If autoDestination is null and the existing route has an invalid destination (e.g. UUID),
-          // delete the route entirely so we don't leave a corrupted route in the database.
-          if (!autoDestination && !isValidPhoneDestination(existingRoute.destination)) {
+        if (!destination) {
+          // If autoDestination is null/empty, delete the route entirely so we don't leave a corrupted route in the database.
+          const existingRoute = await prisma.didRoute.findFirst({
+            where: { phoneNumberId: phoneNumber.id },
+          });
+          if (existingRoute) {
             await prisma.didRoute.delete({
               where: { id: existingRoute.id },
             });
             logger.info({
               msg: 'syncDidRouteForNumber: Deleted existing DidRoute with invalid destination and no extension',
               number: phoneNumber.number,
-              invalidDestination: existingRoute.destination,
             });
-            return;
           }
+          return;
+        }
 
-          // If the route already has a valid destination (manually configured),
-          // do NOT overwrite it — only update status and label
+        const existingRoute = await prisma.didRoute.findFirst({
+          where: { phoneNumberId: phoneNumber.id },
+        });
+
+        if (existingRoute) {
+          // If the route already has a manually configured valid destination (and it's not a campaign),
+          // preserve it, except if we are now routing to a campaign.
           const shouldUpdateDestination =
-            autoDestination && !isValidPhoneDestination(existingRoute.destination);
+            hasCampaign || !isValidPhoneDestination(existingRoute.destination);
 
           const updateData: Record<string, unknown> = {
             status: 'ACTIVE',
-            label: existingRoute.label || `Auto-routed User (${phoneNumber.user?.email || 'Agent'})`,
+            label: existingRoute.label || label,
+            campaignId: campaignId,
           };
 
           if (shouldUpdateDestination) {
-            updateData.destination = autoDestination;
+            updateData.destination = destination;
           }
 
           await prisma.didRoute.update({
@@ -120,10 +137,8 @@ export class DidRouteService {
             data: updateData,
           });
           logger.info({
-            msg: 'syncDidRouteForNumber: Updated DidRoute (preserved existing destination)',
+            msg: 'syncDidRouteForNumber: Updated DidRoute',
             number: phoneNumber.number,
-            existingDestination: existingRoute.destination,
-            autoDestination,
             destinationUpdated: !!shouldUpdateDestination,
           });
         } else {
@@ -133,32 +148,18 @@ export class DidRouteService {
           });
 
           if (duplicate) {
-            // If autoDestination is null and the duplicate route has an invalid destination (e.g. UUID),
-            // delete the duplicate route entirely.
-            if (!autoDestination && !isValidPhoneDestination(duplicate.destination)) {
-              await prisma.didRoute.delete({
-                where: { id: duplicate.id },
-              });
-              logger.info({
-                msg: 'syncDidRouteForNumber: Deleted duplicate DidRoute with invalid destination and no extension',
-                number: phoneNumber.number,
-                invalidDestination: duplicate.destination,
-              });
-              return;
-            }
-
-            // A route already exists for this DID — preserve its destination if valid
             const shouldUpdateDestination =
-              autoDestination && !isValidPhoneDestination(duplicate.destination);
+              hasCampaign || !isValidPhoneDestination(duplicate.destination);
 
             const updateData: Record<string, unknown> = {
               phoneNumberId: phoneNumber.id,
               status: 'ACTIVE',
-              label: duplicate.label || `Auto-routed User (${phoneNumber.user?.email || 'Agent'})`,
+              label: duplicate.label || label,
+              campaignId: campaignId,
             };
 
             if (shouldUpdateDestination) {
-              updateData.destination = autoDestination;
+              updateData.destination = destination;
             }
 
             await prisma.didRoute.update({
@@ -166,21 +167,20 @@ export class DidRouteService {
               data: updateData,
             });
             logger.info({
-              msg: 'syncDidRouteForNumber: Reclaimed duplicate DidRoute (preserved destination)',
+              msg: 'syncDidRouteForNumber: Reclaimed duplicate DidRoute',
               number: phoneNumber.number,
-              existingDestination: duplicate.destination,
-              autoDestination,
               destinationUpdated: !!shouldUpdateDestination,
             });
-          } else if (autoDestination) {
-            // Brand new route — only create if we have a valid destination
+          } else {
+            // Brand new route
             await prisma.didRoute.create({
               data: {
                 tenantId,
                 phoneNumberId: phoneNumber.id,
                 did: phoneNumber.number,
-                destination: autoDestination,
-                label: `Auto-routed User (${phoneNumber.user?.email || 'Agent'})`,
+                destination: destination,
+                campaignId: campaignId,
+                label: label,
                 status: 'ACTIVE',
                 recordingEnabled: true,
               },
@@ -188,14 +188,7 @@ export class DidRouteService {
             logger.info({
               msg: 'syncDidRouteForNumber: Created DidRoute',
               number: phoneNumber.number,
-              destination: autoDestination,
-            });
-          } else {
-            // No valid auto-destination and no existing route — skip creating
-            logger.info({
-              msg: 'syncDidRouteForNumber: Skipped — no valid destination available (user has no extension)',
-              number: phoneNumber.number,
-              userId: phoneNumber.userId,
+              destination,
             });
           }
         }

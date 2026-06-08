@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -32,6 +32,11 @@ export interface AvailableNumber {
   campaign?: { id: string; name: string } | null;
 }
 
+interface Campaign {
+  id: string;
+  name: string;
+}
+
 interface CreateRouteDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -48,9 +53,33 @@ export function CreateRouteDialog({
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [phoneNumberId, setPhoneNumberId] = useState('');
+  const [routeType, setRouteType] = useState<'CAMPAIGN' | 'STATIC'>('STATIC');
   const [destination, setDestination] = useState('');
+  const [campaignId, setCampaignId] = useState('');
   const [label, setLabel] = useState('');
   const [recordingEnabled, setRecordingEnabled] = useState(true);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [loadingCampaigns, setLoadingCampaigns] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      void loadCampaigns();
+    }
+  }, [open]);
+
+  const loadCampaigns = async () => {
+    setLoadingCampaigns(true);
+    try {
+      const response = await apiClient.get<{ data: Campaign[] }>('/api/v1/campaigns');
+      if (response.data?.data) {
+        setCampaigns(response.data.data);
+      }
+    } catch (err) {
+      console.error('Failed to load campaigns:', err);
+    } finally {
+      setLoadingCampaigns(false);
+    }
+  };
 
   // We only want active numbers that don't already have routes or are not assigned exclusively to something else.
   // The API will reject duplicates anyway.
@@ -63,8 +92,12 @@ export function CreateRouteDialog({
       toast({ title: 'Error', description: 'Please select a phone number', variant: 'destructive' });
       return;
     }
-    if (!destination) {
+    if (routeType === 'STATIC' && !destination) {
       toast({ title: 'Error', description: 'Please enter a destination number', variant: 'destructive' });
+      return;
+    }
+    if (routeType === 'CAMPAIGN' && !campaignId) {
+      toast({ title: 'Error', description: 'Please select a campaign', variant: 'destructive' });
       return;
     }
 
@@ -72,7 +105,8 @@ export function CreateRouteDialog({
     try {
       await apiClient.post('/api/v1/did-routes', {
         phoneNumberId,
-        destination,
+        destination: routeType === 'CAMPAIGN' ? 'Campaign' : destination,
+        campaignId: routeType === 'CAMPAIGN' ? campaignId : undefined,
         label: label || undefined,
         recordingEnabled,
       });
@@ -85,6 +119,8 @@ export function CreateRouteDialog({
       // Reset form
       setPhoneNumberId('');
       setDestination('');
+      setCampaignId('');
+      setRouteType('STATIC');
       setLabel('');
       setRecordingEnabled(true);
       
@@ -108,7 +144,7 @@ export function CreateRouteDialog({
         <DialogHeader>
           <DialogTitle>Create Inbound Route</DialogTitle>
           <DialogDescription>
-            Map one of your purchased DIDs to a buyer's destination number.
+            Map one of your purchased DIDs to a buyer's destination number or campaign.
           </DialogDescription>
         </DialogHeader>
 
@@ -136,16 +172,58 @@ export function CreateRouteDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="destination">Buyer Destination Number</Label>
-            <Input
-              id="destination"
-              placeholder="+12345678900"
-              value={destination}
-              onChange={e => setDestination(e.target.value)}
+            <Label htmlFor="routeType">Route Type</Label>
+            <Select
+              value={routeType}
+              onValueChange={(val: 'CAMPAIGN' | 'STATIC') => setRouteType(val)}
               disabled={loading}
-            />
-            <p className="text-xs text-muted-foreground">The number where calls will be forwarded.</p>
+            >
+              <SelectTrigger id="routeType">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="STATIC">Static Forwarding Number</SelectItem>
+                <SelectItem value="CAMPAIGN">Route to Campaign</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
+
+          {routeType === 'STATIC' ? (
+            <div className="space-y-2">
+              <Label htmlFor="destination">Buyer Destination Number</Label>
+              <Input
+                id="destination"
+                placeholder="+12345678900"
+                value={destination}
+                onChange={e => setDestination(e.target.value)}
+                disabled={loading}
+                required
+              />
+              <p className="text-xs text-muted-foreground">The number where calls will be forwarded.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor="campaign">Campaign Routing</Label>
+              <Select
+                value={campaignId}
+                onValueChange={setCampaignId}
+                disabled={loading || loadingCampaigns}
+                required
+              >
+                <SelectTrigger id="campaign">
+                  <SelectValue placeholder="Select a campaign" />
+                </SelectTrigger>
+                <SelectContent>
+                  {campaigns.map(c => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">Calls will follow the dynamic buyer routing rules of the campaign.</p>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="label">Label (Optional)</Label>

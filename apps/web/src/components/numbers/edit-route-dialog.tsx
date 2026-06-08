@@ -72,6 +72,7 @@ export function EditRouteDialog({
   const [recordingEnabled, setRecordingEnabled] = useState(true);
   const [buyerId, setBuyerId] = useState('none');
   const [campaignId, setCampaignId] = useState('none');
+  const [routeType, setRouteType] = useState<'CAMPAIGN' | 'STATIC'>('STATIC');
 
   const [buyers, setBuyers] = useState<Buyer[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -85,6 +86,7 @@ export function EditRouteDialog({
       setRecordingEnabled(route.recordingEnabled);
       setBuyerId(route.buyer?.id || 'none');
       setCampaignId(route.campaign?.id || 'none');
+      setRouteType(route.campaign?.id ? 'CAMPAIGN' : 'STATIC');
       setConfirmDelete(false);
       void loadOptions();
     }
@@ -113,20 +115,24 @@ export function EditRouteDialog({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!destination) {
+    if (routeType === 'STATIC' && !destination) {
       toast({ title: 'Error', description: 'Please enter a destination number', variant: 'destructive' });
+      return;
+    }
+    if (routeType === 'CAMPAIGN' && (!campaignId || campaignId === 'none')) {
+      toast({ title: 'Error', description: 'Please select a campaign', variant: 'destructive' });
       return;
     }
 
     setSaving(true);
     try {
       await apiClient.patch(`/api/v1/did-routes/${route.id}`, {
-        destination,
+        destination: routeType === 'CAMPAIGN' ? 'Campaign' : destination,
         label: label || null,
         status,
         recordingEnabled,
-        buyerId: buyerId === 'none' ? null : buyerId,
-        campaignId: campaignId === 'none' ? null : campaignId,
+        buyerId: routeType === 'STATIC' && buyerId !== 'none' ? buyerId : null,
+        campaignId: routeType === 'CAMPAIGN' ? campaignId : null,
       });
 
       toast({
@@ -186,75 +192,72 @@ export function EditRouteDialog({
 
         <form onSubmit={handleSubmit} className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label htmlFor="edit-destination">Buyer Destination Number</Label>
-            <Input
-              id="edit-destination"
-              placeholder="+12345678900"
-              value={destination}
-              onChange={e => setDestination(e.target.value)}
+            <Label htmlFor="edit-routeType">Route Type</Label>
+            <Select
+              value={routeType}
+              onValueChange={(val: 'CAMPAIGN' | 'STATIC') => setRouteType(val)}
               disabled={saving || deleting}
-            />
-            <p className="text-xs text-muted-foreground">The number where calls will be forwarded.</p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="edit-label">Label (Optional)</Label>
-            <Input
-              id="edit-label"
-              placeholder="e.g. Medicare Buyer A"
-              value={label}
-              onChange={e => setLabel(e.target.value)}
-              disabled={saving || deleting}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="edit-status">Status</Label>
-            <Select value={status} onValueChange={setStatus} disabled={saving || deleting}>
-              <SelectTrigger id="edit-status">
+            >
+              <SelectTrigger id="edit-routeType">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="ACTIVE">Active</SelectItem>
-                <SelectItem value="PAUSED">Paused</SelectItem>
-                <SelectItem value="INACTIVE">Inactive</SelectItem>
+                <SelectItem value="STATIC">Static Forwarding Number</SelectItem>
+                <SelectItem value="CAMPAIGN">Route to Campaign</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="edit-buyer">Associated Buyer (Optional)</Label>
-            <Select value={buyerId} onValueChange={setBuyerId} disabled={saving || deleting || loadingOptions}>
-              <SelectTrigger id="edit-buyer">
-                <SelectValue placeholder="Select a buyer" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">None</SelectItem>
-                {buyers.map(b => (
-                  <SelectItem key={b.id} value={b.id}>
-                    {b.name} ({b.code})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {routeType === 'STATIC' ? (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="edit-destination">Buyer Destination Number</Label>
+                <Input
+                  id="edit-destination"
+                  placeholder="+12345678900"
+                  value={destination}
+                  onChange={e => setDestination(e.target.value)}
+                  disabled={saving || deleting}
+                  required
+                />
+                <p className="text-xs text-muted-foreground">The number where calls will be forwarded.</p>
+              </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="edit-campaign">Associated Campaign (Optional)</Label>
-            <Select value={campaignId} onValueChange={setCampaignId} disabled={saving || deleting || loadingOptions}>
-              <SelectTrigger id="edit-campaign">
-                <SelectValue placeholder="Select a campaign" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">None</SelectItem>
-                {campaigns.map(c => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-buyer">Associated Buyer (Optional)</Label>
+                <Select value={buyerId} onValueChange={setBuyerId} disabled={saving || deleting || loadingOptions}>
+                  <SelectTrigger id="edit-buyer">
+                    <SelectValue placeholder="Select a buyer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {buyers.map(b => (
+                      <SelectItem key={b.id} value={b.id}>
+                        {b.name} ({b.code})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor="edit-campaign">Associated Campaign</Label>
+              <Select value={campaignId} onValueChange={setCampaignId} disabled={saving || deleting || loadingOptions} required>
+                <SelectTrigger id="edit-campaign">
+                  <SelectValue placeholder="Select a campaign" />
+                </SelectTrigger>
+                <SelectContent>
+                  {campaigns.map(c => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">Calls will follow the dynamic buyer routing rules of the campaign.</p>
+            </div>
+          )}
 
           <div className="flex items-center justify-between space-x-2 pt-2">
             <Label htmlFor="edit-recording" className="flex flex-col space-y-1">

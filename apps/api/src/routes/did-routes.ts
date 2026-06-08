@@ -60,8 +60,8 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
       recordingEnabled?: boolean;
     };
 
-    if (!body.phoneNumberId || !body.destination) {
-      return reply.code(400).send({ error: 'phoneNumberId and destination are required' });
+    if (!body.phoneNumberId || (!body.destination && !body.campaignId)) {
+      return reply.code(400).send({ error: 'phoneNumberId and destination (or campaignId) are required' });
     }
 
     // Validate tenant ownership of buyer/campaign/publisher if provided
@@ -85,14 +85,19 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
     }
 
     // Validate destination is E.164 unless it contains commas or pipes or is a short extension
-    let destination = body.destination.trim();
-    if (!destination.includes(',') && !destination.includes('|') && destination.replace(/\D/g, '').length >= 10) {
-      const destClean = destination.replace(/\D/g, '');
-      destination = destClean.startsWith('1') && destClean.length === 11
-        ? `+${destClean}`
-        : `+1${destClean}`;
-    } else if (!destination) {
-      return reply.code(400).send({ error: 'destination is required' });
+    let destination = (body.destination || '').trim();
+    if (body.campaignId) {
+      destination = 'Campaign';
+    } else {
+      if (!destination) {
+        return reply.code(400).send({ error: 'destination is required' });
+      }
+      if (!destination.includes(',') && !destination.includes('|') && destination.replace(/\D/g, '').length >= 10) {
+        const destClean = destination.replace(/\D/g, '');
+        destination = destClean.startsWith('1') && destClean.length === 11
+          ? `+${destClean}`
+          : `+1${destClean}`;
+      }
     }
 
     // Lookup the phone number to get the DID
@@ -184,13 +189,22 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
 
       // Normalize destination if provided
       let destination = existing.destination;
-      if (body.destination) {
-        destination = body.destination.trim();
-        if (!destination.includes(',') && !destination.includes('|') && destination.replace(/\D/g, '').length >= 10) {
-          const destClean = destination.replace(/\D/g, '');
-          destination = destClean.startsWith('1') && destClean.length === 11
-            ? `+${destClean}`
-            : `+1${destClean}`;
+      const newCampaignId = body.campaignId !== undefined ? body.campaignId : existing.campaignId;
+
+      if (newCampaignId) {
+        destination = 'Campaign';
+      } else {
+        if (body.destination) {
+          destination = body.destination.trim();
+          if (!destination.includes(',') && !destination.includes('|') && destination.replace(/\D/g, '').length >= 10) {
+            const destClean = destination.replace(/\D/g, '');
+            destination = destClean.startsWith('1') && destClean.length === 11
+              ? `+${destClean}`
+              : `+1${destClean}`;
+          }
+        }
+        if (destination === 'Campaign') {
+          return reply.code(400).send({ error: 'A valid destination phone number is required when campaign routing is removed' });
         }
       }
 
