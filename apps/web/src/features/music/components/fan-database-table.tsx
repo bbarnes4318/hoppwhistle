@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { fans } from '../data/demo-music-data';
 import type { FanProfile } from '../types';
+import { cn } from '@/lib/utils';
 
 export function FanDatabaseTable() {
   const [search, setSearch] = useState('');
@@ -53,38 +54,38 @@ export function FanDatabaseTable() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 animate-fadeIn">
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <div className="m-card p-4">
-          <div className="text-xs font-semibold m-text-muted uppercase tracking-wider">Total Opted-In</div>
-          <div className="mt-2 text-2xl font-bold m-text-text">45,000</div>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="m-card p-3">
+          <div className="text-[9px] font-bold m-text-muted uppercase tracking-wider">Total Opted-In</div>
+          <div className="mt-1 text-lg font-bold m-text-text">45,000</div>
         </div>
-        <div className="m-card p-4">
-          <div className="text-xs font-semibold m-text-muted uppercase tracking-wider">Superfans</div>
-          <div className="mt-2 text-2xl font-bold m-text-accent">4,200</div>
+        <div className="m-card p-3">
+          <div className="text-[9px] font-bold m-text-muted uppercase tracking-wider">Superfans</div>
+          <div className="mt-1 text-lg font-bold m-text-accent">4,200</div>
         </div>
-        <div className="m-card p-4">
-          <div className="text-xs font-semibold m-text-muted uppercase tracking-wider">Avg Eng. Score</div>
-          <div className="mt-2 text-2xl font-bold m-text-text">72/100</div>
+        <div className="m-card p-3">
+          <div className="text-[9px] font-bold m-text-muted uppercase tracking-wider">Avg Eng. Score</div>
+          <div className="mt-1 text-lg font-bold m-text-text">72/100</div>
         </div>
-        <div className="m-card p-4">
-          <div className="text-xs font-semibold m-text-muted uppercase tracking-wider">Verified Actions</div>
-          <div className="mt-2 text-2xl font-bold m-text-text">18,450</div>
+        <div className="m-card p-3">
+          <div className="text-[9px] font-bold m-text-muted uppercase tracking-wider">Verified Actions</div>
+          <div className="mt-1 text-lg font-bold m-text-text">18,450</div>
         </div>
-        <div className="m-card p-4">
-          <div className="text-xs font-semibold m-text-muted uppercase tracking-wider">Opt-Out Rate</div>
-          <div className="mt-2 text-2xl font-bold m-text-text">1.2%</div>
+        <div className="m-card p-3">
+          <div className="text-[9px] font-bold m-text-muted uppercase tracking-wider">Opt-Out Rate</div>
+          <div className="mt-1 text-lg font-bold m-text-text">1.2%</div>
         </div>
-        <div className="m-card p-4">
-          <div className="text-xs font-semibold m-text-muted uppercase tracking-wider">Top Source</div>
-          <div className="mt-2 text-xl font-bold m-text-text truncate" title="Merch Checkout">Merch Checkout</div>
+        <div className="m-card p-3">
+          <div className="text-[9px] font-bold m-text-muted uppercase tracking-wider">Top Source</div>
+          <div className="mt-1 text-sm font-bold m-text-text truncate" title="Merch Checkout">Merch Checkout</div>
         </div>
       </div>
 
       {/* Controls */}
-      <div className="flex flex-col sm:flex-row gap-4 justify-between items-center bg-[var(--m-surface)] p-4 border border-[var(--m-border-2)] rounded-lg">
-        <div className="flex items-center gap-4 w-full sm:w-auto">
+      <div className="flex flex-col sm:flex-row gap-4 justify-between items-center bg-[var(--m-surface)] p-3 border border-[var(--m-border-2)] rounded-lg">
+        <div className="flex items-center gap-3 w-full sm:w-auto">
           <div className="relative w-full sm:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 m-text-dim" />
             <input 
@@ -92,43 +93,43 @@ export function FanDatabaseTable() {
               placeholder="Search fans..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md pl-9 pr-4 py-2 text-sm text-[var(--m-text)] focus:border-[var(--m-accent)] focus:outline-none transition-colors"
+              className="w-full bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded Pl-9 pr-4 py-1.5 text-xs text-[var(--m-text)] focus:border-[var(--m-accent)] focus:outline-none transition-colors"
             />
           </div>
           <button 
-            className="flex items-center gap-2 px-3 py-2 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md text-sm font-medium hover:bg-[var(--m-border-2)] transition-colors" 
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded text-xs font-semibold hover:bg-[var(--m-border-2)] transition-colors" 
             onClick={() => setShowFilters(!showFilters)}
           >
-            <Filter className="h-4 w-4" /> Filters
+            <Filter className="h-3.5 w-3.5" /> Filters
           </button>
         </div>
-        <div className="flex items-center gap-3 w-full sm:w-auto">
-          <label className="flex items-center gap-2 px-3 py-2 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md text-sm font-medium hover:bg-[var(--m-border-2)] transition-colors cursor-pointer">
-            <Upload className="h-4 w-4" /> Import
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          <label className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded text-xs font-semibold hover:bg-[var(--m-border-2)] transition-colors cursor-pointer">
+            <Upload className="h-3.5 w-3.5" /> Import
             <input type="file" className="hidden" accept=".csv" onChange={() => {}} />
           </label>
           <button 
-            className="flex items-center gap-2 px-3 py-2 bg-[var(--m-accent)] text-white rounded-md text-sm font-medium hover:bg-violet-600 transition-colors" 
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--m-accent)] text-white rounded text-xs font-bold hover:bg-[#008be5] transition-colors" 
             onClick={handleExport}
           >
-            <Download className="h-4 w-4" /> Export Segment
+            <Download className="h-3.5 w-3.5" /> Export Segment
           </button>
         </div>
       </div>
 
       {showFilters && (
-        <div className="p-4 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-lg grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="p-3 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-lg grid grid-cols-1 sm:grid-cols-3 gap-3 animate-fadeIn">
           <div>
-            <label className="block text-xs font-semibold m-text-muted mb-2 uppercase tracking-wider">Segment</label>
-            <select className="w-full bg-[var(--m-bg)] border border-[var(--m-border)] rounded p-2 text-sm text-[var(--m-text)] focus:outline-none focus:border-[var(--m-accent)]">
+            <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Segment</label>
+            <select className="w-full bg-[var(--m-bg)] border border-[var(--m-border)] rounded p-1.5 text-xs text-[var(--m-text)] focus:outline-none focus:border-[var(--m-accent)]">
               <option>All Segments</option>
               <option>Superfan</option>
               <option>Casual</option>
             </select>
           </div>
           <div>
-            <label className="block text-xs font-semibold m-text-muted mb-2 uppercase tracking-wider">Source</label>
-            <select className="w-full bg-[var(--m-bg)] border border-[var(--m-border)] rounded p-2 text-sm text-[var(--m-text)] focus:outline-none focus:border-[var(--m-accent)]">
+            <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Source</label>
+            <select className="w-full bg-[var(--m-bg)] border border-[var(--m-border)] rounded p-1.5 text-xs text-[var(--m-text)] focus:outline-none focus:border-[var(--m-accent)]">
               <option>All Sources</option>
               <option>Spotify Presave</option>
               <option>Merch Checkout</option>
@@ -138,67 +139,69 @@ export function FanDatabaseTable() {
       )}
 
       {/* Table */}
-      <div className="m-card overflow-x-auto">
-        <table className="w-full text-left text-sm whitespace-nowrap">
-          <thead className="bg-[var(--m-surface-2)] border-b border-[var(--m-border-2)] text-[11px] uppercase tracking-wider m-text-muted">
-            <tr>
-              <th className="px-4 py-3 font-semibold">Fan</th>
-              <th className="px-4 py-3 font-semibold">City / Market</th>
-              <th className="px-4 py-3 font-semibold">Segment</th>
-              <th className="px-4 py-3 font-semibold">Source</th>
-              <th className="px-4 py-3 font-semibold">Eng. Score</th>
-              <th className="px-4 py-3 font-semibold">Verified Actions</th>
-              <th className="px-4 py-3 font-semibold">Consent</th>
-              <th className="px-4 py-3 font-semibold">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[var(--m-border-2)]">
-            {filteredFans.map(fan => (
-              <tr 
-                key={fan.id} 
-                onClick={() => setSelectedFan(fan)}
-                className="hover:bg-[rgba(255,255,255,0.02)] transition-colors cursor-pointer"
-              >
-                <td className="px-4 py-3">
-                  <div className="font-semibold m-text-text">{fan.name}</div>
-                  <div className="text-xs m-text-dim">xxxxxx{fan.phone.slice(-4)}</div>
-                </td>
-                <td className="px-4 py-3 m-text-dim">{fan.city}</td>
-                <td className="px-4 py-3">
-                  <span className="px-2 py-1 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded text-xs">
-                    {fan.segment.replace(/_/g, ' ')}
-                  </span>
-                </td>
-                <td className="px-4 py-3 m-text-dim text-xs capitalize">{fan.source.replace(/_/g, ' ')}</td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-16 h-1.5 bg-[var(--m-surface-2)] rounded-full overflow-hidden">
-                      <div className="h-full bg-[var(--m-accent)]" style={{ width: `${fan.engagementScore}%` }} />
-                    </div>
-                    <span className="text-xs m-text-text font-mono">{fan.engagementScore}</span>
-                  </div>
-                </td>
-                <td className="px-4 py-3 font-mono m-text-dim">{fan.verifiedActions}</td>
-                <td className="px-4 py-3">
-                  {fan.consentStatus === 'opted_in' ? (
-                    <span className="inline-flex items-center gap-1 text-xs text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded">
-                      <CheckCircle2 className="h-3 w-3" /> Opted In
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 text-xs text-rose-400 bg-rose-400/10 px-2 py-1 rounded">
-                      <AlertTriangle className="h-3 w-3" /> {fan.consentStatus}
-                    </span>
-                  )}
-                </td>
-                <td className="px-4 py-3">
-                  <button className="p-1 hover:bg-[var(--m-surface-2)] rounded m-text-muted hover:text-[var(--m-text)] transition-colors" onClick={(e) => { e.stopPropagation(); setSelectedFan(fan); setShowFullPhone(false); }}>
-                    <MoreVertical className="h-4 w-4" />
-                  </button>
-                </td>
+      <div className="m-card overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs whitespace-nowrap border-collapse m-table m-dense-table">
+            <thead className="bg-[var(--m-surface-2)] border-b border-[var(--m-border-2)] text-[9px] uppercase tracking-wider m-text-muted">
+              <tr>
+                <th className="px-4 py-2 font-bold">Fan</th>
+                <th className="px-4 py-2 font-bold">City / Market</th>
+                <th className="px-4 py-2 font-bold">Segment</th>
+                <th className="px-4 py-2 font-bold">Source</th>
+                <th className="px-4 py-2 font-bold">Eng. Score</th>
+                <th className="px-4 py-2 font-bold">Verified Actions</th>
+                <th className="px-4 py-2 font-bold">Consent</th>
+                <th className="px-4 py-2 font-bold">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-[var(--m-border-2)]">
+              {filteredFans.map(fan => (
+                <tr 
+                  key={fan.id} 
+                  onClick={() => setSelectedFan(fan)}
+                  className="hover:bg-[rgba(255,255,255,0.015)] transition-colors cursor-pointer"
+                >
+                  <td className="px-4 py-2.5">
+                    <div className="font-bold m-text-text">{fan.name}</div>
+                    <div className="text-[10px] m-text-dim mt-0.5">xxxxxx{fan.phone.slice(-4)}</div>
+                  </td>
+                  <td className="px-4 py-2.5 m-text-dim font-medium">{fan.city}</td>
+                  <td className="px-4 py-2.5">
+                    <span className="px-1.5 py-0.5 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded text-[10px] font-semibold">
+                      {fan.segment.replace(/_/g, ' ')}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2.5 m-text-dim text-[10px] capitalize font-medium">{fan.source.replace(/_/g, ' ')}</td>
+                  <td className="px-4 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-16 h-1 bg-[var(--m-surface-2)] rounded-full overflow-hidden">
+                        <div className="h-full bg-[var(--m-accent)]" style={{ width: `${fan.engagementScore}%` }} />
+                      </div>
+                      <span className="text-[10px] m-text-text font-bold font-mono">{fan.engagementScore}</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-2.5 font-mono m-text-dim font-bold">{fan.verifiedActions}</td>
+                  <td className="px-4 py-2.5">
+                    {fan.consentStatus === 'opted_in' ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded">
+                        <CheckCircle2 className="h-2.5 w-2.5" /> Opted In
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-400 bg-rose-400/10 px-1.5 py-0.5 rounded">
+                        <AlertTriangle className="h-2.5 w-2.5" /> {fan.consentStatus}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <button className="p-1 hover:bg-[var(--m-surface-2)] rounded m-text-muted hover:text-[var(--m-text)] transition-colors flex items-center justify-center" onClick={(e) => { e.stopPropagation(); setSelectedFan(fan); setShowFullPhone(false); }}>
+                      <MoreVertical className="h-3.5 w-3.5" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Detail Drawer */}
@@ -211,13 +214,13 @@ export function FanDatabaseTable() {
             {/* Pinned Header */}
             <div className="flex items-center justify-between p-3.5 border-b border-[var(--m-border-2)] bg-[var(--m-surface-2)] shrink-0">
               <div>
-                <h2 className="text-base font-bold m-text-text">{selectedFan.name}</h2>
+                <h2 className="text-sm font-bold m-text-text">{selectedFan.name}</h2>
                 <div className="flex items-center gap-2 text-xs m-text-dim mt-0.5">
-                  <span className="font-mono">{selectedFan.id}</span>
+                  <span className="font-mono text-[10px]">{selectedFan.id}</span>
                   <span>•</span>
                   <span>{showFullPhone ? selectedFan.phone : `+1 XXX-XXX-${selectedFan.phone.slice(-4)}`}</span>
                   {!showFullPhone && (
-                    <button onClick={() => setShowFullPhone(true)} className="ml-2 text-[10px] text-[var(--m-accent)] hover:underline border border-[var(--m-border-2)] px-1.5 py-0.5 rounded bg-[var(--m-surface)]">Reveal</button>
+                    <button onClick={() => setShowFullPhone(true)} className="ml-2 text-[9px] text-[var(--m-accent)] hover:underline border border-[var(--m-border-2)] px-1.5 py-0.2 rounded bg-[var(--m-surface)] font-bold">Reveal</button>
                   )}
                 </div>
               </div>
@@ -238,19 +241,19 @@ export function FanDatabaseTable() {
                 <div className="space-y-4">
                   {/* Summary */}
                   <div className="grid grid-cols-2 gap-2">
-                    <div className="bg-[var(--m-bg)] p-2 rounded border border-[var(--m-border)]">
+                    <div className="bg-[var(--m-bg)] p-2.5 rounded border border-[var(--m-border)]">
                       <div className="text-[9px] m-text-muted uppercase tracking-wider mb-0.5 flex items-center gap-1"><MapPin className="h-3 w-3"/> City / Market</div>
                       <div className="font-bold text-xs text-[var(--m-text)]">{selectedFan.city}</div>
                     </div>
-                    <div className="bg-[var(--m-bg)] p-2 rounded border border-[var(--m-border)]">
+                    <div className="bg-[var(--m-bg)] p-2.5 rounded border border-[var(--m-border)]">
                       <div className="text-[9px] m-text-muted uppercase tracking-wider mb-0.5 flex items-center gap-1"><Star className="h-3 w-3"/> Segment</div>
                       <div className="font-bold text-xs text-[var(--m-text)] capitalize">{selectedFan.segment.replace(/_/g, ' ')}</div>
                     </div>
-                    <div className="bg-[var(--m-bg)] p-2 rounded border border-[var(--m-border)]">
+                    <div className="bg-[var(--m-bg)] p-2.5 rounded border border-[var(--m-border)]">
                       <div className="text-[9px] m-text-muted uppercase tracking-wider mb-0.5 flex items-center gap-1"><Music className="h-3 w-3"/> Top Artist</div>
                       <div className="font-bold text-xs text-[var(--m-text)] truncate">{selectedFan.favoriteArtist}</div>
                     </div>
-                    <div className="bg-[var(--m-bg)] p-2 rounded border border-[var(--m-border)]">
+                    <div className="bg-[var(--m-bg)] p-2.5 rounded border border-[var(--m-border)]">
                       <div className="text-[9px] m-text-muted uppercase tracking-wider mb-0.5 flex items-center gap-1"><Activity className="h-3 w-3"/> Eng. Score</div>
                       <div className="font-bold text-xs text-[var(--m-accent)]">{selectedFan.engagementScore}/100</div>
                     </div>
@@ -261,7 +264,7 @@ export function FanDatabaseTable() {
                     <div className="text-xs font-bold text-[var(--m-accent)] mb-1">Recommended Next Action</div>
                     <div className="text-xs m-text-text leading-normal">Add to <span className="font-semibold">Early Access VIP Waitlist</span> based on consistent engagement and recent ticket intent verification.</div>
                     <button 
-                      className="mt-3 w-full py-1.5 bg-[var(--m-accent)] text-white rounded text-xs font-bold hover:bg-violet-600 transition-colors disabled:opacity-50"
+                      className="mt-3 w-full py-1.5 bg-[var(--m-accent)] text-white rounded text-xs font-bold hover:bg-[#008be5] transition-colors disabled:opacity-50"
                       onClick={() => {
                         const btn = document.getElementById('sms-btn-vip');
                         if (btn) btn.innerText = 'Sent!';
@@ -278,8 +281,8 @@ export function FanDatabaseTable() {
                 <div className="space-y-4">
                   {/* Compliance */}
                   <div className="border border-[var(--m-border-2)] rounded-lg overflow-hidden">
-                    <div className="bg-[var(--m-surface-2)] px-2.5 py-1 border-b border-[var(--m-border-2)] flex items-center gap-2 font-bold text-[10px] uppercase tracking-wider text-[var(--m-text-2)]">
-                      <ShieldCheck className="h-3.5 w-3.5 m-text-accent" /> Consent & Compliance
+                    <div className="bg-[var(--m-surface-2)] px-2.5 py-1.5 border-b border-[var(--m-border-2)] flex items-center gap-2 font-bold text-[9px] uppercase tracking-wider text-[var(--m-text-2)]">
+                      <ShieldCheck className="h-3.5 w-3.5 m-text-accent-2" /> Consent & Compliance
                     </div>
                     <div className="p-2.5 space-y-1.5 text-xs">
                       <div className="flex justify-between border-b border-[var(--m-border-2)] pb-1">
@@ -299,7 +302,7 @@ export function FanDatabaseTable() {
  
                   {/* Proof Records (Campaign History) */}
                   <div className="space-y-1.5">
-                    <h3 className="text-[10px] font-bold uppercase tracking-wider m-text-muted border-b border-[var(--m-border-2)] pb-1">Recent Campaign Proof</h3>
+                    <h3 className="text-[9px] font-bold uppercase tracking-wider m-text-muted border-b border-[var(--m-border-2)] pb-1">Recent Campaign Proof</h3>
                     <div className="space-y-1.5">
                       {[1, 2].map(i => (
                         <div key={i} className="bg-[var(--m-bg)] border border-[var(--m-border)] p-2 rounded-md flex justify-between items-center text-xs">
@@ -309,8 +312,8 @@ export function FanDatabaseTable() {
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-[9px] bg-emerald-400/10 text-emerald-400 px-1.5 py-0.5 rounded font-mono font-bold">Ticket Intent</span>
-                            <button className="text-[10px] text-[var(--m-accent)] hover:underline flex items-center gap-0.5 font-semibold">
-                              <PlayCircle className="h-3 w-3" /> Play
+                            <button className="text-[10px] text-[var(--m-accent)] hover:underline flex items-center gap-0.5 font-bold">
+                              <PlayCircle className="h-3.5 w-3.5" /> Play
                             </button>
                           </div>
                         </div>

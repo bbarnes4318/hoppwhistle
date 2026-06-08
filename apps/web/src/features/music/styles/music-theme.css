@@ -7,24 +7,26 @@
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
 .music-console {
-  /* ── Core Palette (Luxury Charcoal & Champagne Theme) ── */
-  --m-bg:         #0e0e11;               /* Deep charcoal background */
-  --m-surface:    #0e0e11;               /* Same as bg */
-  --m-surface-2:  #161619;               /* Elevated cards */
-  --m-surface-3:  #222226;               /* Hover slate/charcoal */
+  /* ── Core Palette (Luxury Navy Charcoal & Electric Blue Theme) ── */
+  --m-bg:         #060709;               /* Deep navy charcoal background */
+  --m-surface:    #060709;               /* Same as bg */
+  --m-surface-2:  #0e1017;               /* Elevated cards */
+  --m-surface-3:  #181b26;               /* Hover slate */
   --m-text:       #f7f7f9;               /* Soft off-white */
   --m-text-2:     #e4e4e7;               /* Secondary white */
   --m-muted:      #8e8e93;               /* Muted slate text */
   --m-dim:        #a1a1aa;               /* Dim zinc */
-  --m-border:     #242427;               /* Subtle dark border */
-  --m-border-2:   #1b1b1e;
+  --m-border:     #1e2232;               /* Subtle dark border */
+  --m-border-2:   #12151f;
   --m-grid-line:  rgba(255, 255, 255, 0.003);
   
-  /* Champagne & Emerald Accents */
-  --m-accent:     #dfc38c;               /* Champagne/gold primary */
-  --m-accent-dim: rgba(223, 195, 140, 0.06);
+  /* Electric Blue & Emerald Accents */
+  --m-accent:     #00a3ff;               /* Electric Blue primary */
+  --m-accent-dim: rgba(0, 163, 255, 0.06);
   --m-accent-2:   #10b981;               /* Subtle emerald secondary */
   --m-accent-2-dim: rgba(16, 185, 129, 0.06);
+  --m-accent-gold: #dfc38c;              /* Gold for revenue/yield/payout */
+  --m-accent-gold-dim: rgba(223, 195, 140, 0.06);
   --m-warning:    #f59e0b;               /* Amber */
   --m-danger:     #ef4444;               /* Red */
 
@@ -51,7 +53,7 @@
 
   /* Subtle background grid pattern */
   background-image: 
-    radial-gradient(circle at center, rgba(223, 195, 140, 0.01) 0%, transparent 70%),
+    radial-gradient(circle at center, rgba(0, 163, 255, 0.015) 0%, transparent 70%),
     linear-gradient(rgba(255, 255, 255, 0.002) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.002) 1px, transparent 1px);
   background-size: 100% 100%, 32px 32px, 32px 32px;
@@ -79,18 +81,18 @@
 .music-console .m-dark-mode header,
 .music-console .m-dark-mode main,
 .music-console.m-dark-mode {
-  --m-bg:         #0e0e11;
-  --m-surface:    #0e0e11;
-  --m-surface-2:  #161619;
-  --m-surface-3:  #222226;
+  --m-bg:         #060709;
+  --m-surface:    #060709;
+  --m-surface-2:  #0e1017;
+  --m-surface-3:  #181b26;
   --m-text:       #f7f7f9;
   --m-text-2:     #e4e4e7;
   --m-muted:      #8e8e93;
   --m-dim:        #a1a1aa;
-  --m-border:     #242427;
-  --m-border-2:   #1b1b1e;
+  --m-border:     #1e2232;
+  --m-border-2:   #12151f;
   --m-grid-line:  rgba(255, 255, 255, 0.005);
-  --m-accent-dim: rgba(223, 195, 140, 0.06);
+  --m-accent-dim: rgba(0, 163, 255, 0.06);
   --m-accent-2-dim: rgba(16, 185, 129, 0.06);
 }
 
@@ -255,11 +257,11 @@
 .m-btn--primary {
   background-color: var(--m-accent);
   color: #fff;
-  box-shadow: 0 4px 16px rgba(109, 61, 255, 0.22);
+  box-shadow: 0 4px 16px rgba(0, 163, 255, 0.22);
 }
 .m-btn--primary:hover {
-  background-color: #5B2FE6;
-  box-shadow: 0 6px 20px rgba(109, 61, 255, 0.30);
+  background-color: #008be5;
+  box-shadow: 0 6px 20px rgba(0, 163, 255, 0.30);
 }
 
 .m-btn--secondary {
@@ -779,7 +781,7 @@
   transition: all 0.2s ease;
 }
 .m-journey-step:hover {
-  border-color: rgba(159, 122, 234, 0.3);
+  border-color: rgba(0, 163, 255, 0.3);
   background-color: var(--m-surface-2);
   box-shadow: 0 12px 30px -4px rgba(0, 0, 0, 0.35);
 }
@@ -836,7 +838,7 @@
   transition: all 0.15s ease;
 }
 .m-heat-row:hover {
-  border-color: rgba(159, 122, 234, 0.3);
+  border-color: rgba(0, 163, 255, 0.3);
   transform: translateX(2px);
   background-color: var(--m-surface-2);
 }
@@ -881,7 +883,7 @@
   overflow: hidden;
 }
 .m-proof-card:hover {
-  border-color: rgba(159, 122, 234, 0.3);
+  border-color: rgba(0, 163, 255, 0.3);
   box-shadow: 0 12px 30px -4px rgba(0, 0, 0, 0.35);
   background-color: var(--m-surface-2);
 }
@@ -992,22 +994,22 @@
 .m-sidebar-link:hover {
   color: #F8FAFC;
   background-color: rgba(255, 255, 255, 0.025);
-  border-left-color: rgba(139, 92, 246, 0.3);
+  border-left-color: rgba(0, 163, 255, 0.3);
 }
 
 .m-sidebar-link:hover svg {
-  color: #A78BFA;
+  color: #00a3ff;
   transform: translateX(1px);
 }
 
 .m-sidebar-link--active {
   color: #FFFFFF;
-  background-color: rgba(139, 92, 246, 0.09); /* Subtle violet glow background */
-  border-left-color: #8B5CF6; /* Active violet accent indicator */
+  background-color: rgba(0, 163, 255, 0.09); /* Subtle blue glow background */
+  border-left-color: #00a3ff; /* Active blue accent indicator */
 }
 
 .m-sidebar-link--active svg {
-  color: #A78BFA !important;
+  color: #00a3ff !important;
 }
 
 /* ── Integrated Vinyl Radar Scope Mount ── */
@@ -1034,11 +1036,11 @@
   background-color: var(--m-accent);
   color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 2px 4px rgba(139, 92, 246, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  box-shadow: 0 2px 4px rgba(0, 163, 255, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.15);
 }
 .m-btn--primary:hover {
-  background-color: #7C3AED;
-  box-shadow: 0 4px 10px rgba(139, 92, 246, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  background-color: #008be5;
+  box-shadow: 0 4px 10px rgba(0, 163, 255, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 /* ── Premium Proof Evidence Cards ── */
@@ -1053,7 +1055,7 @@
   box-shadow: 0 2px 8px rgba(9, 9, 11, 0.02);
 }
 .m-proof-card:hover {
-  border-color: rgba(159, 122, 234, 0.3);
+  border-color: rgba(0, 163, 255, 0.3);
   box-shadow: 0 12px 30px -4px rgba(0, 0, 0, 0.35);
   background-color: var(--m-surface-2);
 }
@@ -1232,8 +1234,8 @@
   transform: translateY(-4px) scale(1.005) !important;
   box-shadow: 
     0 20px 40px -15px rgba(0, 0, 0, 0.55), 
-    0 0 20px rgba(139, 92, 246, 0.12) !important;
-  border-color: rgba(139, 92, 246, 0.25) !important;
+    0 0 20px rgba(0, 163, 255, 0.12) !important;
+  border-color: rgba(0, 163, 255, 0.25) !important;
 }
 
 /* High-fidelity interactive button glows */
@@ -1244,8 +1246,8 @@
 .m-btn-interactive-glow:hover {
   transform: translateY(-1px) scale(1.02) !important;
   box-shadow: 
-    0 4px 12px rgba(139, 92, 246, 0.25),
-    0 0 8px rgba(139, 92, 246, 0.15) !important;
+    0 4px 12px rgba(0, 163, 255, 0.25),
+    0 0 8px rgba(0, 163, 255, 0.15) !important;
 }
 
 .m-btn-interactive-glow:active {
@@ -1314,10 +1316,147 @@
 
 .m-proof-track:hover {
   background: linear-gradient(135deg, #0f121a 0%, #090b0e 100%) !important;
-  border-color: rgba(139, 92, 246, 0.35) !important;
+  border-color: rgba(0, 163, 255, 0.35) !important;
   box-shadow: 
     inset 0 2px 4px rgba(0, 0, 0, 0.8),
-    0 0 16px rgba(139, 92, 246, 0.2) !important;
+    0 0 16px rgba(0, 163, 255, 0.2) !important;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   RPS UTILITY & BRANDED INTERFACE STYLING
+   ───────────────────────────────────────────────────────────── */
+
+/* ── Branded RPS Card ── */
+.music-console .rps-card {
+  background: var(--m-surface-2);
+  border: 1px solid var(--m-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  padding: 1.25rem;
+  transition: all 0.2s ease;
+}
+.music-console .rps-card:hover {
+  border-color: rgba(0, 163, 255, 0.25);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+/* ── Compact Trend & Metrics ── */
+.music-console .m-trend-chip {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--m-font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 0.125rem 0.375rem;
+  border-radius: 4px;
+}
+.music-console .m-trend-chip--positive {
+  color: var(--m-accent-2);
+  background-color: var(--m-accent-2-dim);
+  border: 1px solid rgba(16, 185, 129, 0.15);
+}
+.music-console .m-trend-chip--negative {
+  color: var(--m-danger);
+  background-color: rgba(239, 68, 68, 0.06);
+  border: 1px solid rgba(239, 68, 68, 0.15);
+}
+
+/* ── Status Pill ── */
+.music-console .m-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background-color: var(--m-surface-3);
+  border: 1px solid var(--m-border);
+  color: var(--m-text-2);
+}
+.music-console .m-status-pill--active {
+  background-color: var(--m-accent-dim);
+  border-color: rgba(0, 163, 255, 0.2);
+  color: var(--m-accent);
+}
+.music-console .m-status-pill--success {
+  background-color: var(--m-accent-2-dim);
+  border-color: rgba(16, 185, 129, 0.2);
+  color: var(--m-accent-2);
+}
+
+/* ── Executive Section Header ── */
+.music-console .m-executive-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--m-border-2);
+  padding-bottom: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+.music-console .m-executive-title {
+  font-size: 1.125rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  color: var(--m-text);
+}
+
+/* ── Split Panel ── */
+.music-console .m-split-panel {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
+}
+@media (min-width: 1024px) {
+  .music-console .m-split-panel {
+    grid-template-columns: 320px 1fr;
+  }
+  .music-console .m-split-panel--reversed {
+    grid-template-columns: 1fr 320px;
+  }
+  .music-console .m-split-panel--equal {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* ── Tab Button ── */
+.music-console .m-tab-btn {
+  padding: 0.5rem 1rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--m-muted);
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s ease;
+  background: transparent;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  cursor: pointer;
+}
+.music-console .m-tab-btn:hover {
+  color: var(--m-text-2);
+}
+.music-console .m-tab-btn--active {
+  color: var(--m-accent);
+  border-bottom-color: var(--m-accent);
+}
+
+/* ── Dense Table ── */
+.music-console .m-dense-table {
+  width: 100%;
+}
+.music-console .m-dense-table th {
+  padding: 0.5rem 0.75rem !important;
+  font-size: 9px !important;
+}
+.music-console .m-dense-table td {
+  padding: 0.5rem 0.75rem !important;
+  font-size: 11px !important;
 }
 
 

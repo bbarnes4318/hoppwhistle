@@ -2,7 +2,7 @@
 
 import {
   BarChart3,
-  Disc3,
+  Radio,
   LayoutDashboard,
   Megaphone,
   Settings,
@@ -35,14 +35,14 @@ const sidebarSections: SidebarSection[] = [
       { name: 'Dashboard', href: '/music-console', icon: LayoutDashboard },
       { name: 'Fan Campaigns', href: '/music-console/campaigns', icon: Megaphone },
       { name: 'Campaign Map', href: '/music-console/map', icon: Map },
-      { name: 'AI Voice', href: '/music-console/voice', icon: Volume2 },
+      { name: 'RPS Voice', href: '/music-console/voice', icon: Volume2 },
     ],
   },
   {
     title: 'Intelligence & Proof',
     items: [
       { name: 'Fan Database', href: '/music-console/fans', icon: Users },
-      { name: 'Proof Log', href: '/music-console/proof', icon: ShieldCheck },
+      { name: 'Voice Proof', href: '/music-console/proof', icon: ShieldCheck },
     ],
   },
   {
@@ -60,20 +60,24 @@ export function MusicSidebar() {
   return (
     <div className="m-sidebar flex h-full w-64 flex-col z-20 animate-fadeIn">
       {/* Brand Logo area */}
-      <div className="flex h-14 lg:h-16 items-center px-6 border-b border-white/[0.04] shrink-0">
+      <div className="flex flex-col justify-center px-6 py-4 border-b border-white/[0.04] shrink-0 gap-2">
         <Link href="/music-console" className="flex items-center gap-3 group">
-          <div className="relative p-1.5 bg-gradient-to-br from-[#8B5CF6]/20 to-[#6D28D9]/10 rounded-lg border border-[#8B5CF6]/30 shadow-[0_0_12px_rgba(139,92,246,0.1)] transition-all duration-300 group-hover:border-[#8B5CF6]/50">
-            <Disc3 className="h-4.5 w-4.5 text-[#A78BFA] animate-[spin_10s_linear_infinite]" />
+          <div className="relative p-1.5 bg-gradient-to-br from-[#00a3ff]/20 to-[#00d2ff]/10 rounded-lg border border-[#00a3ff]/30 shadow-[0_0_12px_rgba(0,163,255,0.15)] transition-all duration-300 group-hover:border-[#00a3ff]/50">
+            <Radio className="h-4.5 w-4.5 text-[#00a3ff] animate-pulse" />
           </div>
           <div className="flex flex-col">
-            <span className="text-xs font-black tracking-[0.18em] text-[#FFFFFF] uppercase leading-none">
-              HOPWHISTLE
+            <span className="text-[10px] font-black tracking-[0.12em] text-[#FFFFFF] uppercase leading-none">
+              RADIO PHONE STATION
             </span>
-            <span className="text-[9px] font-extrabold text-[#A78BFA] uppercase tracking-[0.15em] mt-1 leading-none">
-              MUSIC CONSOLE
+            <span className="text-[8px] font-extrabold text-[#00a3ff] uppercase tracking-[0.12em] mt-1.5 leading-none">
+              RPS MEDIA NETWORK
             </span>
           </div>
         </Link>
+        <div className="flex items-center gap-1.5 px-2 py-0.5 w-fit bg-[#10b981]/10 border border-[#10b981]/20 rounded text-[8px] font-bold text-[#10b981]">
+          <span className="h-1 w-1 rounded-full bg-[#10b981] animate-pulse" />
+          <span className="uppercase tracking-wider">LIVE STATION NETWORK</span>
+        </div>
       </div>
 
       {/* Navigation menu */}
@@ -112,7 +116,7 @@ export function MusicSidebar() {
         >
           <ArrowLeft className="h-3.5 w-3.5 text-[#4A586B] group-hover:text-white transition-colors" />
           <span className="flex-1">Core Platform</span>
-          <span className="text-[8px] font-black uppercase tracking-wider text-[#A78BFA] bg-[#8B5CF6]/10 px-1.5 py-0.5 rounded border border-[#8B5CF6]/20">
+          <span className="text-[8px] font-black uppercase tracking-wider text-[#00a3ff] bg-[#00a3ff]/10 px-1.5 py-0.5 rounded border border-[#00a3ff]/20">
             Exit
           </span>
         </Link>

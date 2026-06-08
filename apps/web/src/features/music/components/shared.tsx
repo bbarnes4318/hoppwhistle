@@ -25,19 +25,19 @@ export function PageHeader({
   return (
     <header
       className={cn(
-        'pb-8 border-b border-[var(--m-border-2)] mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4',
+        'pb-4 border-b border-[var(--m-border-2)] mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4',
         className
       )}
     >
-      <div className="space-y-1.5">
+      <div className="space-y-1">
         <div className="flex items-center gap-3">
-          {Icon && <Icon className="h-8 w-8 text-[var(--m-accent)] shrink-0" />}
-          <h1 className="text-3xl lg:text-4xl font-black tracking-tight text-[var(--m-text)] leading-tight">{title}</h1>
+          {Icon && <Icon className="h-6 w-6 text-[var(--m-accent)] shrink-0" />}
+          <h1 className="text-xl lg:text-2xl font-black tracking-tight text-[var(--m-text)] leading-tight">{title}</h1>
           {badge}
         </div>
-        {description && <p className="text-sm lg:text-base text-[var(--m-muted)] font-medium max-w-3xl leading-relaxed">{description}</p>}
+        {description && <p className="text-xs text-[var(--m-muted)] font-medium max-w-3xl leading-relaxed">{description}</p>}
       </div>
-      {actions && <div className="flex items-center gap-3 shrink-0">{actions}</div>}
+      {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
     </header>
   );
 }
