@@ -1120,7 +1120,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
           tenantId,
           campaignId,
           publisherId,
-          payoutPerBillableCall: payoutPerBillableCall !== undefined ? new Prisma.Decimal(payoutPerBillableCall) : null,
+          payoutPerBillableCall: payoutPerBillableCall !== undefined && payoutPerBillableCall !== null ? new Prisma.Decimal(payoutPerBillableCall) : null,
           status: status || 'ACTIVE',
         },
         include: {
@@ -1309,7 +1309,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
           buyerId,
           buyerEndpointId: buyerEndpointId || null,
           destinationNumber: normalizedDestination,
-          pricePerBillableCall: pricePerBillableCall !== undefined ? new Prisma.Decimal(pricePerBillableCall) : null,
+          pricePerBillableCall: pricePerBillableCall !== undefined && pricePerBillableCall !== null ? new Prisma.Decimal(pricePerBillableCall) : null,
           priority: priority || 0,
           weight: weight !== undefined ? weight : 100,
           status: status || 'ACTIVE',
