@@ -52,7 +52,7 @@ export default function MusicLandingPage() {
       <main className="relative z-10 flex flex-col items-center">
         
         {/* ─── 1. Hero Section ─── */}
-        <section className="w-full max-w-6xl px-6 pt-44 pb-24 md:pt-52 md:pb-32 flex flex-col items-center text-center">
+        <section className="w-full max-w-6xl px-6 pt-32 pb-24 md:pt-40 md:pb-32 flex flex-col items-center text-center">
           <div className="inline-flex items-center gap-2 rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1 mb-8">
             <Volume2 className="h-3.5 w-3.5 text-violet-400" />
             <span className="text-[11px] font-semibold tracking-wider text-violet-300 uppercase">
