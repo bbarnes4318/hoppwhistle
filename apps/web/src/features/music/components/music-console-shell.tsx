@@ -71,8 +71,8 @@ export function MusicConsoleShell({ children }: { children: React.ReactNode }) {
           </header>
 
           {/* Main content scrolls vertically, except for Map page which is full viewport */}
-          <main className={cn("flex-1 relative bg-[var(--m-bg)]", pathname === '/music-console/map' ? "h-[calc(100vh-56px)] overflow-hidden flex flex-col" : "overflow-y-auto")}>
-            {pathname === '/music-console/map' ? (
+          <main className={cn("flex-1 relative bg-[var(--m-bg)]", (pathname === '/music-console/map' || pathname === '/music-console/customer-demo') ? "h-[calc(100vh-56px)] overflow-hidden flex flex-col" : "overflow-y-auto")}>
+            {(pathname === '/music-console/map' || pathname === '/music-console/customer-demo') ? (
               <div className="w-full h-full flex-grow flex flex-col">{children}</div>
             ) : (
               <div className="max-w-[1600px] mx-auto w-full px-5 lg:px-6 py-5">{children}</div>
