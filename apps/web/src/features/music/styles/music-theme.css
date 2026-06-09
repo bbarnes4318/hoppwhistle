@@ -1478,6 +1478,20 @@
   font-size: 11px !important;
 }
 
+/* ── Live Wave Visualizer Animation ── */
+@keyframes m-wave-bounce {
+  0%, 100% {
+    transform: scaleY(0.25);
+  }
+  50% {
+    transform: scaleY(1.15);
+  }
+}
+.music-console .m-wave-bar-anim {
+  animation: m-wave-bounce 0.8s ease-in-out infinite;
+  transform-origin: bottom;
+}
+
 
 
 

@@ -541,12 +541,12 @@ export default function MusicCampaignMap() {
         {/* ─── Left KPI Rail (Floating HUD) ─── */}
         {showTelemetry && (
           <div className="absolute left-4 top-24 w-44 bg-[#0F1219]/80 border border-white/[0.08] p-3.5 rounded-xl backdrop-blur-md shadow-2xl flex flex-col gap-2.5 z-20 pointer-events-auto text-left">
-            <div className="text-[9px] font-black uppercase tracking-widest text-[var(--m-accent-2)] border-b border-white/5 pb-1 mb-0.5 font-mono">
+            <div className="text-[9.5px] font-black uppercase tracking-widest text-cyan-400 border-b border-white/5 pb-1 mb-0.5 font-mono">
               Market Telemetry
             </div>
             
             <div className="space-y-0.5">
-              <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider">
+              <div className="text-[8.5px] text-slate-400 uppercase font-bold tracking-wider">
                 Active Markets
               </div>
               <div className="text-sm font-mono font-bold text-white">
@@ -555,7 +555,7 @@ export default function MusicCampaignMap() {
             </div>
 
             <div className="space-y-0.5">
-              <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider font-sans">
+              <div className="text-[8.5px] text-slate-400 uppercase font-bold tracking-wider font-sans">
                 Fans Reached
               </div>
               <div className="text-sm font-mono font-bold text-white">
@@ -564,7 +564,7 @@ export default function MusicCampaignMap() {
             </div>
 
             <div className="space-y-0.5">
-              <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider font-sans">
+              <div className="text-[8.5px] text-slate-400 uppercase font-bold tracking-wider font-sans">
                 Verified Actions
               </div>
               <div className="text-sm font-mono font-bold text-emerald-400">
@@ -573,16 +573,16 @@ export default function MusicCampaignMap() {
             </div>
 
             <div className="space-y-0.5">
-              <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider">
+              <div className="text-[8.5px] text-slate-400 uppercase font-bold tracking-wider">
                 Avg CPA
               </div>
-              <div className="text-sm font-mono font-bold text-[var(--m-warning)]">
+              <div className="text-sm font-mono font-bold text-amber-400">
                 {formatCurrency(metricsStats.cpa)}
               </div>
             </div>
 
             <div className="space-y-0.5">
-              <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider font-sans">
+              <div className="text-[8.5px] text-slate-400 uppercase font-bold tracking-wider font-sans">
                 Unattributed Spend
               </div>
               <div className="text-sm font-mono font-bold text-slate-300">
@@ -591,7 +591,7 @@ export default function MusicCampaignMap() {
             </div>
 
             <div className="space-y-0.5">
-              <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider font-sans">
+              <div className="text-[8.5px] text-slate-400 uppercase font-bold tracking-wider font-sans">
                 Best Market
               </div>
               <div className="text-[10px] font-bold text-sky-300 truncate" title={bestMarketName}>
@@ -602,34 +602,37 @@ export default function MusicCampaignMap() {
         )}
 
         {/* Floating Glassmorphic HUD Controls Toolbar */}
-        <div className={cn(
-          "absolute top-4 left-4 bg-[#0F1219]/75 border border-white/[0.08] rounded-xl flex flex-wrap items-center justify-between px-4 py-2.5 z-20 backdrop-blur-[12px] gap-4 shadow-2xl pointer-events-auto transition-all duration-300 overflow-visible",
-          sidebarOpen ? "right-4 lg:right-[416px]" : "right-4"
-        )}>
+        <div 
+          className={cn(
+            "absolute top-4 left-4 bg-[#0F1219]/80 border border-white/[0.08] rounded-xl flex flex-wrap items-center justify-between px-4 py-2.5 z-20 backdrop-blur-[12px] gap-4 shadow-2xl pointer-events-auto transition-all duration-300 overflow-visible",
+            sidebarOpen ? "right-4 lg:right-[416px]" : "right-4"
+          )}
+          style={{ color: '#E2E8F0' }}
+        >
           {/* Telemetry Badge */}
           <div className="flex items-center gap-2.5 bg-zinc-900/60 border border-white/5 px-3 py-1.5 rounded-xl shrink-0">
             <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--m-accent)] opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-[var(--m-accent)]"></span>
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-400"></span>
             </span>
-            <div className="flex flex-col leading-none">
-              <span className="text-[9px] font-black uppercase tracking-widest text-[#FAFAFA] font-mono">RPS MARKET SIGNAL</span>
-              <span className="text-[7.5px] font-mono text-[var(--m-accent-2)] tracking-wider font-bold">AUDIENCE HEATMAP LIVE</span>
+            <div className="flex flex-col leading-none text-left">
+              <span className="text-[9px] font-black uppercase tracking-widest text-[#FAFAFA] font-mono" style={{ color: '#FAFAFA' }}>RPS Market Signal</span>
+              <span className="text-[7.5px] font-mono text-cyan-400 tracking-wider font-bold" style={{ color: '#22D3EE' }}>AUDIENCE HEATMAP LIVE</span>
             </div>
           </div>
 
           {/* Custom Premium Control Row */}
           <div className="flex flex-wrap items-center gap-4 shrink-0">
             {/* Campaign Filter */}
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Campaign</span>
+            <div className="flex flex-col gap-0.5 text-left">
+              <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest">Campaign</span>
               <select
                 value={selectedCampaign}
                 onChange={e => {
                   setSelectedCampaign(e.target.value);
                   setInspectedPoint(null);
                 }}
-                className="bg-[#18181B] border border-white/10 rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-[var(--m-accent)] cursor-pointer h-7 w-36"
+                className="bg-[#18181B] border border-white/10 rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-cyan-500 cursor-pointer h-7 w-36"
               >
                 <option value="all">All Campaigns</option>
                 {musicCampaigns.map(c => (
@@ -639,15 +642,15 @@ export default function MusicCampaignMap() {
             </div>
 
             {/* Artist Filter */}
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Artist</span>
+            <div className="flex flex-col gap-0.5 text-left">
+              <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest">Artist</span>
               <select
                 value={selectedArtist}
                 onChange={e => {
                   setSelectedArtist(e.target.value);
                   setInspectedPoint(null);
                 }}
-                className="bg-[#18181B] border border-white/10 rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-[var(--m-accent)] cursor-pointer h-7 w-28"
+                className="bg-[#18181B] border border-white/10 rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-cyan-500 cursor-pointer h-7 w-28"
               >
                 <option value="all">All Artists</option>
                 {uniqueArtists.map(artist => (
@@ -657,19 +660,20 @@ export default function MusicCampaignMap() {
             </div>
 
             {/* Date Selector */}
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Timeline</span>
+            <div className="flex flex-col gap-0.5 text-left">
+              <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest" style={{ color: '#A1A1AA' }}>Timeline</span>
               <div className="bg-[#18181B] border border-white/10 rounded-lg p-0.5 flex h-7">
                 {(['day', 'week', 'month'] as DatePreset[]).map(preset => (
                   <button
                     key={preset}
                     onClick={() => setSelectedPreset(preset)}
                     className={cn(
-                      "px-2.5 text-[9px] font-bold rounded-md uppercase transition-all",
+                      "px-2.5 text-[9px] font-extrabold rounded-md uppercase transition-all",
                       selectedPreset === preset
-                        ? "bg-[#27272A] text-[var(--m-accent)] shadow-xs"
-                        : "text-[#71717A] hover:text-slate-300"
+                        ? "bg-[#27272A] text-cyan-400 shadow-xs"
+                        : "text-zinc-500 hover:text-slate-300"
                     )}
+                    style={{ color: selectedPreset === preset ? '#22D3EE' : '#A1A1AA' }}
                   >
                     {preset}
                   </button>
@@ -678,12 +682,13 @@ export default function MusicCampaignMap() {
             </div>
 
             {/* Layer Selector */}
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Visual Layer</span>
+            <div className="flex flex-col gap-0.5 text-left">
+              <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest" style={{ color: '#A1A1AA' }}>Visual Layer</span>
               <select
                 value={selectedMetric}
                 onChange={e => setSelectedMetric(e.target.value as LayerMetric)}
-                className="bg-[#18181B] border border-white/10 rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-[var(--m-accent)] cursor-pointer h-7 w-32"
+                className="bg-[#18181B] border border-white/10 rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-cyan-500 cursor-pointer h-7 w-32"
+                style={{ color: '#E2E8F0' }}
               >
                 <option value="answerRate">Answer Rate</option>
                 <option value="verifiedActions">Verified Actions</option>
@@ -694,15 +699,16 @@ export default function MusicCampaignMap() {
             </div>
 
             {/* Granularity Selector */}
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Granularity</span>
+            <div className="flex flex-col gap-0.5 text-left">
+              <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest" style={{ color: '#A1A1AA' }}>Granularity</span>
               <select
                 value={selectedGranularity}
                 onChange={e => {
                   setSelectedGranularity(e.target.value as Granularity);
                   setInspectedPoint(null);
                 }}
-                className="bg-[#18181B] border border-white/10 rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-[var(--m-accent)] cursor-pointer h-7 w-32"
+                className="bg-[#18181B] border border-white/10 rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-cyan-500 cursor-pointer h-7 w-32"
+                style={{ color: '#E2E8F0' }}
               >
                 <option value="state">U.S. State</option>
                 <option value="area_code">Area Code (NPA)</option>
@@ -711,12 +717,13 @@ export default function MusicCampaignMap() {
             </div>
 
             {/* Confidence Filter */}
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Confidence</span>
+            <div className="flex flex-col gap-0.5 text-left">
+              <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest" style={{ color: '#A1A1AA' }}>Confidence</span>
               <select
                 value={confidenceFilter}
                 onChange={e => setConfidenceFilter(e.target.value)}
-                className="bg-[#18181B] border border-white/10 rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-[var(--m-accent)] cursor-pointer h-7 w-28"
+                className="bg-[#18181B] border border-white/10 rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-cyan-500 cursor-pointer h-7 w-28"
+                style={{ color: '#E2E8F0' }}
               >
                 <option value="all">All Grades</option>
                 <option value="high">CRM Verified</option>
@@ -726,33 +733,35 @@ export default function MusicCampaignMap() {
             </div>
 
             {/* Live Pulse Radar Toggle */}
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Active Pulse</span>
+            <div className="flex flex-col gap-0.5 text-left">
+              <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest" style={{ color: '#A1A1AA' }}>Active Pulse</span>
               <button
                 onClick={() => setLiveMode(!liveMode)}
                 className={cn(
-                  "h-7 px-3 rounded-lg text-[10px] font-bold border transition-all flex items-center gap-1.5",
+                  "h-7 px-3 rounded-lg text-[10px] font-extrabold border transition-all flex items-center gap-1.5",
                   liveMode
-                    ? "bg-[var(--m-accent-dim)] border-[var(--m-accent)]/30 text-[var(--m-accent-2)] shadow-[0_0_12px_rgba(20,92,255,0.15)]"
-                    : "bg-[#18181B] border-white/5 text-[#71717A]"
+                    ? "bg-cyan-950/40 border-cyan-500/40 text-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.15)]"
+                    : "bg-[#18181B] border-white/5 text-zinc-500"
                 )}
+                style={{ color: liveMode ? '#22D3EE' : '#71717A' }}
               >
-                <span className={cn("h-1.5 w-1.5 rounded-full", liveMode ? "bg-[var(--m-accent)] animate-pulse" : "bg-zinc-600")} />
+                <span className={cn("h-1.5 w-1.5 rounded-full", liveMode ? "bg-cyan-400 animate-pulse" : "bg-zinc-600")} style={{ backgroundColor: liveMode ? '#22D3EE' : '#71717A' }} />
                 Live {liveMode ? 'Active' : 'Off'}
               </button>
             </div>
 
             {/* Bottom lists toggle */}
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Market Plays</span>
+            <div className="flex flex-col gap-0.5 text-left">
+              <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest" style={{ color: '#A1A1AA' }}>Market Plays</span>
               <button
                 onClick={() => setShowBottomPanel(!showBottomPanel)}
                 className={cn(
-                  "h-7 px-3 rounded-lg text-[10px] font-bold border transition-all flex items-center gap-1.5",
+                  "h-7 px-3 rounded-lg text-[10px] font-extrabold border transition-all flex items-center gap-1.5",
                   showBottomPanel
-                    ? "bg-[var(--m-accent-dim)] border-[var(--m-accent)]/30 text-[var(--m-accent-2)] shadow-[0_0_12px_rgba(20,92,255,0.15)]"
+                    ? "bg-emerald-950/40 border-emerald-500/40 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.15)]"
                     : "bg-[#18181B] border-white/5 text-slate-300"
                 )}
+                style={{ color: showBottomPanel ? '#34D399' : '#CBD5E1' }}
               >
                 <Sliders className="h-3 w-3" />
                 {showBottomPanel ? 'Visible' : 'Hidden'}
@@ -760,16 +769,17 @@ export default function MusicCampaignMap() {
             </div>
 
             {/* Telemetry HUD toggle */}
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Telemetry HUD</span>
+            <div className="flex flex-col gap-0.5 text-left">
+              <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest" style={{ color: '#A1A1AA' }}>Telemetry HUD</span>
               <button
                 onClick={() => setShowTelemetry(!showTelemetry)}
                 className={cn(
-                  "h-7 px-3 rounded-lg text-[10px] font-bold border transition-all flex items-center gap-1.5",
+                  "h-7 px-3 rounded-lg text-[10px] font-extrabold border transition-all flex items-center gap-1.5",
                   showTelemetry
-                    ? "bg-[var(--m-accent-dim)] border-[var(--m-accent)]/30 text-[var(--m-accent-2)] shadow-[0_0_12px_rgba(20,92,255,0.15)]"
+                    ? "bg-sky-950/40 border-sky-500/40 text-sky-400 shadow-[0_0_12px_rgba(56,189,248,0.15)]"
                     : "bg-[#18181B] border-white/5 text-slate-300"
                 )}
+                style={{ color: showTelemetry ? '#38BDF8' : '#CBD5E1' }}
               >
                 <TrendingUp className="h-3 w-3" />
                 {showTelemetry ? 'Visible' : 'Hidden'}
@@ -777,16 +787,17 @@ export default function MusicCampaignMap() {
             </div>
 
             {/* Search Field */}
-            <div className="flex flex-col gap-0.5 relative">
-              <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Filter Market</span>
+            <div className="flex flex-col gap-0.5 relative text-left">
+              <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest" style={{ color: '#A1A1AA' }}>Filter Market</span>
               <div className="relative">
-                <Search className="absolute left-2.5 top-2 h-3 w-3 text-[#71717A]" />
+                <Search className="absolute left-2.5 top-2 h-3 w-3 text-zinc-500" />
                 <input
                   type="text"
                   placeholder="City, State, AC..."
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
-                  className="bg-[#18181B] border border-white/10 rounded-lg pl-7 pr-2.5 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-[var(--m-accent)] h-7 w-28 placeholder-zinc-600"
+                  className="bg-[#18181B] border border-white/10 rounded-lg pl-7 pr-2.5 py-1 text-[11px] font-semibold text-slate-200 outline-none focus:border-cyan-500 h-7 w-28 placeholder-zinc-600"
+                  style={{ color: '#E2E8F0' }}
                 />
               </div>
             </div>
@@ -794,19 +805,19 @@ export default function MusicCampaignMap() {
         </div>
         
         {/* SECTION 5: Right Diagnostics Inspector / Selected Market */}
-        <div className={cn("shrink-0 m-hardware-panel flex flex-col h-full overflow-hidden pointer-events-auto shadow-2xl z-20 transition-all duration-300", sidebarOpen ? "w-full lg:w-96" : "w-0 border-none opacity-0 pointer-events-none")}>
+        <div className={cn("shrink-0 bg-zinc-950/95 border border-white/10 rounded-xl backdrop-blur-md flex flex-col h-full overflow-hidden pointer-events-auto shadow-2xl z-20 transition-all duration-300", sidebarOpen ? "w-full lg:w-96" : "w-0 border-none opacity-0 pointer-events-none")} style={{ color: '#E2E8F0' }}>
           {inspectedPoint ? (
             <div className="flex flex-col h-full p-5 space-y-4 overflow-y-auto">
               {/* Detail Header */}
               <div className="flex items-start justify-between">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-1.5 text-[8px] font-bold text-[var(--m-accent-2)] tracking-wider uppercase font-mono">
+                <div className="space-y-1 text-left">
+                  <div className="flex items-center gap-1.5 text-[8.5px] font-bold text-cyan-400 tracking-wider uppercase font-mono" style={{ color: '#22D3EE' }}>
                     <MapPin className="h-3.5 w-3.5" /> Market Activation Detail
                   </div>
-                  <h2 className="text-base font-bold text-white leading-tight">
+                  <h2 className="text-base font-bold text-white leading-tight" style={{ color: '#FFFFFF' }}>
                     {inspectedPoint.label}
                   </h2>
-                  <span className="px-1.5 py-0.5 rounded text-[8px] font-mono border bg-zinc-900 border-white/5 text-[#A1A1AA] uppercase tracking-wider">
+                  <span className="px-1.5 py-0.5 rounded text-[8px] font-mono border bg-zinc-900 border-white/5 text-slate-300 uppercase tracking-wider" style={{ color: '#CBD5E1', borderColor: 'rgba(255, 255, 255, 0.05)' }}>
                     Market Score: {calculateMarketScore(inspectedPoint)}/100
                   </span>
                 </div>
@@ -816,60 +827,61 @@ export default function MusicCampaignMap() {
                     setInspectedPoint(null);
                   }}
                   className="text-[#71717A] hover:text-white bg-[#18181B] border border-white/5 p-1 rounded h-6 w-6 flex items-center justify-center font-bold text-sm"
+                  style={{ color: '#71717A' }}
                 >
                   &times;
                 </button>
               </div>
 
               {/* Score and Recommendation */}
-              <div className="bg-black/20 border border-white/5 rounded-xl p-3.5 space-y-2.5">
+              <div className="bg-black/30 border border-white/10 rounded-xl p-3.5 space-y-2.5 text-left" style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}>
                 <div className="flex justify-between items-center">
-                  <span className="text-[8px] font-bold text-[#71717A] uppercase tracking-widest font-mono">Recommendation</span>
+                  <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-widest font-mono" style={{ color: '#94A3B8' }}>Recommendation</span>
                   {getMusicBadge(calculateMarketScore(inspectedPoint))}
                 </div>
-                <p className="text-[10px] leading-relaxed text-[#A1A1AA] pt-2 border-t border-white/5 font-medium">
+                <p className="text-[10.5px] leading-relaxed text-slate-300 pt-2 border-t border-white/5 font-medium" style={{ color: '#CBD5E1', borderTopColor: 'rgba(255, 255, 255, 0.05)' }}>
                   {getMusicRecommendationText(inspectedPoint)}
                 </p>
               </div>
 
               {/* Performance Stats */}
-              <div className="space-y-2">
-                <span className="text-[8px] font-bold text-[#71717A] uppercase tracking-wider font-mono">Audience Telemetry</span>
-                <div className="space-y-1.5 font-mono text-[10px] text-[#A1A1AA] bg-[#18181B]/40 p-3.5 rounded-xl border border-white/5">
-                  <div className="flex justify-between items-center py-0.5 border-b border-white/5">
-                    <span className="text-[#71717A] font-sans text-[9px] uppercase tracking-wider font-bold">Fan Density (Reach)</span>
-                    <span className="text-white font-bold">{inspectedPoint.contacted}</span>
+              <div className="space-y-2 text-left">
+                <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider font-mono" style={{ color: '#94A3B8' }}>Audience Telemetry</span>
+                <div className="space-y-1.5 font-mono text-[10px] text-slate-200 bg-[#18181B]/70 p-3.5 rounded-xl border border-white/5" style={{ borderColor: 'rgba(255, 255, 255, 0.05)' }}>
+                  <div className="flex justify-between items-center py-0.5 border-b border-white/5" style={{ borderBottomColor: 'rgba(255, 255, 255, 0.05)' }}>
+                    <span className="text-slate-400 font-sans text-[9px] uppercase tracking-wider font-bold" style={{ color: '#94A3B8' }}>Fan Density (Reach)</span>
+                    <span className="text-white font-bold" style={{ color: '#FFFFFF' }}>{inspectedPoint.contacted}</span>
                   </div>
-                  <div className="flex justify-between items-center py-0.5 border-b border-white/5">
-                    <span className="text-[#71717A] font-sans text-[9px] uppercase tracking-wider font-bold">Answer Rate</span>
-                    <span className="text-[var(--m-accent-2)] font-bold">{inspectedPoint.answerRate || 0}%</span>
+                  <div className="flex justify-between items-center py-0.5 border-b border-white/5" style={{ borderBottomColor: 'rgba(255, 255, 255, 0.05)' }}>
+                    <span className="text-slate-400 font-sans text-[9px] uppercase tracking-wider font-bold" style={{ color: '#94A3B8' }}>Answer Rate</span>
+                    <span className="text-cyan-400 font-bold" style={{ color: '#22D3EE' }}>{inspectedPoint.answerRate || 0}%</span>
                   </div>
-                  <div className="flex justify-between items-center py-0.5 border-b border-white/5">
-                    <span className="text-[#71717A] font-sans text-[9px] uppercase tracking-wider font-bold">Verified Actions</span>
-                    <span className="text-emerald-400 font-bold">{inspectedPoint.conversions}</span>
+                  <div className="flex justify-between items-center py-0.5 border-b border-white/5" style={{ borderBottomColor: 'rgba(255, 255, 255, 0.05)' }}>
+                    <span className="text-slate-400 font-sans text-[9px] uppercase tracking-wider font-bold" style={{ color: '#94A3B8' }}>Verified Actions</span>
+                    <span className="text-emerald-400 font-bold" style={{ color: '#10B981' }}>{inspectedPoint.conversions}</span>
                   </div>
-                  <div className="flex justify-between items-center py-0.5 border-b border-white/5">
-                    <span className="text-[#71717A] font-sans text-[9px] uppercase tracking-wider font-bold">Cost per Verified Action</span>
-                    <span className="text-[var(--m-warning)] font-bold">{formatCurrency(inspectedPoint.costPerConversion || 0)}</span>
+                  <div className="flex justify-between items-center py-0.5 border-b border-white/5" style={{ borderBottomColor: 'rgba(255, 255, 255, 0.05)' }}>
+                    <span className="text-slate-400 font-sans text-[9px] uppercase tracking-wider font-bold" style={{ color: '#94A3B8' }}>Cost per Verified Action</span>
+                    <span className="text-amber-400 font-bold" style={{ color: '#FBBF24' }}>{formatCurrency(inspectedPoint.costPerConversion || 0)}</span>
                   </div>
                   <div className="flex justify-between items-center py-0.5">
-                    <span className="text-[#71717A] font-sans text-[9px] uppercase tracking-wider font-bold">Proof Captured</span>
-                    <span className="text-zinc-300 font-bold">{inspectedPoint.verifiedListens} logs</span>
+                    <span className="text-slate-400 font-sans text-[9px] uppercase tracking-wider font-bold" style={{ color: '#94A3B8' }}>Proof Captured</span>
+                    <span className="text-white font-bold" style={{ color: '#FFFFFF' }}>{inspectedPoint.verifiedListens} logs</span>
                   </div>
                 </div>
               </div>
 
               {/* Market Activation Economics */}
-              <div className="space-y-2">
-                <span className="text-[8px] font-bold text-[#71717A] uppercase tracking-wider font-mono">Market Play Economics</span>
+              <div className="space-y-2 text-left">
+                <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider font-mono" style={{ color: '#94A3B8' }}>Market Play Economics</span>
                 <div className="grid grid-cols-2 gap-2 text-center text-xs font-mono font-bold">
-                  <div className="bg-[#18181B]/40 border border-white/5 rounded-xl p-2.5">
-                    <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider font-sans mb-0.5">Spend</div>
-                    <div className="text-[#FAFAFA] font-semibold">{formatCurrency(inspectedPoint.spend)}</div>
+                  <div className="bg-[#18181B]/70 border border-white/5 rounded-xl p-2.5" style={{ borderColor: 'rgba(255, 255, 255, 0.05)' }}>
+                    <div className="text-[8px] text-slate-400 uppercase font-bold tracking-wider font-sans mb-0.5" style={{ color: '#94A3B8' }}>Spend</div>
+                    <div className="text-[#FAFAFA] font-semibold" style={{ color: '#FAFAFA' }}>{formatCurrency(inspectedPoint.spend)}</div>
                   </div>
-                  <div className="bg-[#18181B]/40 border border-white/5 rounded-xl p-2.5">
-                    <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider font-sans mb-0.5">Yield Value</div>
-                    <div className={cn("font-semibold", inspectedPoint.revenueMovement >= 0 ? "text-[#10B981]" : "text-red-400")}>
+                  <div className="bg-[#18181B]/70 border border-white/5 rounded-xl p-2.5" style={{ borderColor: 'rgba(255, 255, 255, 0.05)' }}>
+                    <div className="text-[8px] text-slate-400 uppercase font-bold tracking-wider font-sans mb-0.5" style={{ color: '#94A3B8' }}>Yield Value</div>
+                    <div className={cn("font-semibold", inspectedPoint.revenueMovement >= 0 ? "text-[#10B981]" : "text-red-400")} style={{ color: inspectedPoint.revenueMovement >= 0 ? '#10B981' : '#F87171' }}>
                       {formatCurrency(inspectedPoint.revenueMovement)}
                     </div>
                   </div>
@@ -877,100 +889,101 @@ export default function MusicCampaignMap() {
               </div>
 
               {/* Suggested Next Actions */}
-              <div className="space-y-2 pt-2 flex-grow">
-                <span className="text-[8px] font-bold text-[#71717A] uppercase tracking-wider font-mono">Deploy Market Plays</span>
+              <div className="space-y-2 pt-2 flex-grow text-left">
+                <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider font-mono">Deploy Market Plays</span>
                 <div className="grid grid-cols-2 gap-2 text-[10px] font-bold font-sans">
-                  <button className="py-2 bg-[var(--m-accent)] hover:bg-[#008be5] text-white rounded uppercase tracking-wider transition-colors">
-                    Increase Campaign Weight
+                  <button className="py-2 bg-blue-600 hover:bg-blue-500 text-white rounded uppercase tracking-wider transition-colors">
+                    Increase Weight
                   </button>
                   <button className="py-2 bg-amber-600/20 hover:bg-amber-600/30 border border-amber-500/30 text-amber-400 rounded uppercase tracking-wider transition-colors">
                     Pause Market
                   </button>
                   <button className="py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 rounded uppercase tracking-wider transition-colors">
-                    Route to VIP Offer
+                    Route VIP Offer
                   </button>
                   <button className="py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 rounded uppercase tracking-wider transition-colors">
-                    Local Event Push
+                    Local Push
                   </button>
                 </div>
               </div>
 
               {/* Geo-Coordinates footer */}
-              <div className="flex justify-between text-[8px] text-[#71717A] uppercase font-mono border-t border-white/5 pt-3 mt-auto">
+              <div className="flex justify-between text-[8px] text-slate-500 uppercase font-mono border-t border-white/5 pt-3 mt-auto">
                 <span>Latitude: {inspectedPoint.latitude.toFixed(4)}</span>
                 <span>Longitude: {inspectedPoint.longitude.toFixed(4)}</span>
               </div>
             </div>
           ) : (
-            <div className="flex-grow flex flex-col items-center p-5 text-center text-[#71717A] space-y-3 overflow-y-auto relative w-full">
-              <div className="pt-2 w-full">
-                <div className="flex justify-between items-center w-full border-b border-white/5 pb-2 mb-2">
-                  <h3 className="text-xs font-bold text-slate-200">Diagnostics Terminal</h3>
+            <div className="flex-grow flex flex-col items-center p-5 text-center text-[#71717A] space-y-3 overflow-y-auto relative w-full" style={{ color: '#A1A1AA' }}>
+              <div className="pt-2 w-full text-left">
+                <div className="flex justify-between items-center w-full border-b border-white/5 pb-2 mb-2" style={{ borderBottomColor: 'rgba(255, 255, 255, 0.05)' }}>
+                  <h3 className="text-xs font-bold text-slate-200" style={{ color: '#E2E8F0' }}>Diagnostics Terminal</h3>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       e.preventDefault();
                       setSidebarOpen(false);
                     }}
-                    className="text-[#71717A] hover:text-white bg-[#18181B] border border-white/5 hover:border-white/10 px-2 py-1 rounded-lg transition-all text-[10px] font-semibold"
+                    className="text-slate-400 hover:text-white bg-[#18181B] border border-white/5 hover:border-white/10 px-2 py-1 rounded-lg transition-all text-[10px] font-semibold"
+                    style={{ color: '#CBD5E1' }}
                     title="Collapse Sidebar"
                   >
                     Hide
                   </button>
                 </div>
-                <p className="text-[10px] mt-1 leading-normal text-zinc-400">
+                <p className="text-[10px] mt-1 leading-normal text-zinc-400" style={{ color: '#A1A1AA' }}>
                   Select a market node on the map to run localized geo-intelligence diagnostics.
                 </p>
               </div>
 
               {/* ─── 6 Global Metrics Grid ─── */}
               <div className="w-full grid grid-cols-2 gap-2 mt-1">
-                <div className="bg-[#18181B]/60 border border-white/5 rounded-xl p-2.5 text-left">
-                  <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider mb-0.5">Reached Fans</div>
-                  <div className="text-sm font-mono font-bold text-slate-100">{metricsStats.contacted.toLocaleString()}</div>
+                <div className="bg-[#18181B]/70 border border-white/5 rounded-xl p-2.5 text-left" style={{ borderColor: 'rgba(255, 255, 255, 0.05)' }}>
+                  <div className="text-[8.5px] text-slate-400 uppercase font-bold tracking-wider mb-0.5" style={{ color: '#94A3B8' }}>Reached Fans</div>
+                  <div className="text-sm font-mono font-bold text-slate-100" style={{ color: '#F1F5F9' }}>{metricsStats.contacted.toLocaleString()}</div>
                 </div>
-                <div className="bg-[#18181B]/60 border border-white/5 rounded-xl p-2.5 text-left">
-                  <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider mb-0.5">Verified Actions</div>
-                  <div className="text-sm font-mono font-bold text-[#10B981]">{metricsStats.saves.toLocaleString()}</div>
+                <div className="bg-[#18181B]/70 border border-white/5 rounded-xl p-2.5 text-left" style={{ borderColor: 'rgba(255, 255, 255, 0.05)' }}>
+                  <div className="text-[8.5px] text-slate-400 uppercase font-bold tracking-wider mb-0.5" style={{ color: '#94A3B8' }}>Verified Actions</div>
+                  <div className="text-sm font-mono font-bold text-[#10B981]" style={{ color: '#10B981' }}>{metricsStats.saves.toLocaleString()}</div>
                 </div>
-                <div className="bg-[#18181B]/60 border border-white/5 rounded-xl p-2.5 text-left">
-                  <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider mb-0.5">Proof Records</div>
-                  <div className="text-sm font-mono font-bold text-sky-400">{metricsStats.listens.toLocaleString()}</div>
+                <div className="bg-[#18181B]/70 border border-white/5 rounded-xl p-2.5 text-left" style={{ borderColor: 'rgba(255, 255, 255, 0.05)' }}>
+                  <div className="text-[8.5px] text-slate-400 uppercase font-bold tracking-wider mb-0.5" style={{ color: '#94A3B8' }}>Proof Records</div>
+                  <div className="text-sm font-mono font-bold text-sky-400" style={{ color: '#38BDF8' }}>{metricsStats.listens.toLocaleString()}</div>
                 </div>
-                <div className="bg-[#18181B]/60 border border-white/5 rounded-xl p-2.5 text-left">
-                  <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider mb-0.5">Average CPA</div>
-                  <div className="text-sm font-mono font-bold text-[var(--m-warning)]">${metricsStats.cpa.toFixed(2)}</div>
+                <div className="bg-[#18181B]/70 border border-white/5 rounded-xl p-2.5 text-left" style={{ borderColor: 'rgba(255, 255, 255, 0.05)' }}>
+                  <div className="text-[8.5px] text-slate-400 uppercase font-bold tracking-wider mb-0.5" style={{ color: '#94A3B8' }}>Average CPA</div>
+                  <div className="text-sm font-mono font-bold text-amber-400" style={{ color: '#FBBF24' }}>${metricsStats.cpa.toFixed(2)}</div>
                 </div>
-                <div className="bg-[#18181B]/60 border border-white/5 rounded-xl p-2.5 text-left">
-                  <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider mb-0.5">Active Markets</div>
-                  <div className="text-sm font-mono font-bold text-[var(--m-accent-2)]">{metricsStats.activeMarketsCount}</div>
+                <div className="bg-[#18181B]/70 border border-white/5 rounded-xl p-2.5 text-left" style={{ borderColor: 'rgba(255, 255, 255, 0.05)' }}>
+                  <div className="text-[8.5px] text-slate-400 uppercase font-bold tracking-wider mb-0.5" style={{ color: '#94A3B8' }}>Active Markets</div>
+                  <div className="text-sm font-mono font-bold text-cyan-400" style={{ color: '#22D3EE' }}>{metricsStats.activeMarketsCount}</div>
                 </div>
-                <div className="bg-[#18181B]/60 border border-white/5 rounded-xl p-2.5 text-left">
-                  <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider mb-0.5">Unattributed Spend</div>
-                  <div className="text-sm font-mono font-bold text-slate-300">${metricsStats.wastedSpend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                <div className="bg-[#18181B]/70 border border-white/5 rounded-xl p-2.5 text-left" style={{ borderColor: 'rgba(255, 255, 255, 0.05)' }}>
+                  <div className="text-[8.5px] text-slate-400 uppercase font-bold tracking-wider mb-0.5" style={{ color: '#94A3B8' }}>Unattributed Spend</div>
+                  <div className="text-sm font-mono font-bold text-slate-300" style={{ color: '#CBD5E1' }}>${metricsStats.wastedSpend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                 </div>
               </div>
 
               {/* ─── Compact Live Operations Status ─── */}
-              <div className="w-full bg-[#18181B]/40 border border-white/5 rounded-xl p-3 text-left space-y-1.5 mt-auto">
-                <div className="flex items-center justify-between border-b border-white/5 pb-1">
-                  <span className="text-[8px] font-bold text-slate-300 uppercase tracking-widest flex items-center gap-1">
+              <div className="w-full bg-[#18181B]/40 border border-white/5 rounded-xl p-3 text-left space-y-1.5 mt-auto" style={{ borderColor: 'rgba(255, 255, 255, 0.05)' }}>
+                <div className="flex items-center justify-between border-b border-white/5 pb-1" style={{ borderBottomColor: 'rgba(255, 255, 255, 0.05)' }}>
+                  <span className="text-[8.5px] font-bold text-slate-300 uppercase tracking-widest flex items-center gap-1" style={{ color: '#CBD5E1' }}>
                     <Radio className="h-3 w-3 text-[#10B981]" /> Operations Status
                   </span>
                   <span className="h-1.5 w-1.5 rounded-full bg-[#10B981]" />
                 </div>
                 <div className="space-y-1 font-mono text-[9px] text-[#A1A1AA]">
                   <div className="flex justify-between">
-                    <span>Active nodes:</span>
-                    <span className="text-slate-300">{aggregatedData.length}</span>
+                    <span style={{ color: '#A1A1AA' }}>Active nodes:</span>
+                    <span className="text-white" style={{ color: '#FFFFFF' }}>{aggregatedData.length}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Routing health:</span>
-                    <span className="text-[#10B981]">99.8%</span>
+                    <span style={{ color: '#A1A1AA' }}>Routing health:</span>
+                    <span className="text-[#10B981]" style={{ color: '#10B981' }}>99.8%</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Sync delay:</span>
-                    <span className="text-slate-300">0.4s</span>
+                    <span style={{ color: '#A1A1AA' }}>Sync delay:</span>
+                    <span className="text-white" style={{ color: '#FFFFFF' }}>0.4s</span>
                   </div>
                 </div>
               </div>
@@ -1008,7 +1021,7 @@ export default function MusicCampaignMap() {
                 bearing: -5,
               })
             }
-            className="w-7 h-7 text-[8px] font-bold text-[var(--m-accent)] bg-[#18181B] border border-white/5 hover:border-white/10 rounded-lg flex items-center justify-center transition-all"
+            className="w-7 h-7 text-[8px] font-bold text-cyan-400 bg-[#18181B] border border-white/5 hover:border-white/10 rounded-lg flex items-center justify-center transition-all"
             title="Center View"
           >
             CTR
@@ -1033,17 +1046,17 @@ export default function MusicCampaignMap() {
           style={{ bottom: showBottomPanel ? '200px' : '16px' }}
         >
           <div className="flex items-center gap-1.5 mb-1">
-            <div className="h-1.5 w-1.5 rounded-full bg-[var(--m-accent-2)] animate-pulse" />
-            <h3 className="text-[9px] font-bold uppercase tracking-wider text-slate-200">
+            <div className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" />
+            <h3 className="text-[9px] font-bold uppercase tracking-wider text-slate-200 text-left">
               Layer Intensity
             </h3>
           </div>
-          <div className="space-y-1 text-[8.5px] text-[#A1A1AA]">
+          <div className="space-y-1 text-[8.5px] text-[#A1A1AA] text-left">
             <p>
               Colors reflect the <span className="font-semibold text-slate-200">{selectedMetric}</span> layer. Nodes are sized based on activation volume.
             </p>
-            <div className="h-1.5 w-full bg-gradient-to-r from-zinc-800 to-[var(--m-accent)] rounded border border-white/5" />
-            <div className="flex justify-between text-[8px] font-mono text-[#71717A]">
+            <div className="h-1.5 w-full bg-gradient-to-r from-zinc-800 to-cyan-400 rounded border border-white/5" />
+            <div className="flex justify-between text-[8px] font-mono text-slate-500">
               <span>Low</span>
               <span>High ({maxVal.toLocaleString()})</span>
             </div>
@@ -1053,7 +1066,7 @@ export default function MusicCampaignMap() {
         {/* Hover tooltips */}
         {hoveredPoint && hoverInfo && (
           <div
-            className="absolute pointer-events-none bg-[#0F0F11]/95 border border-white/10 p-2.5 rounded-xl shadow-xl backdrop-blur-md z-30 w-52 font-sans"
+            className="absolute pointer-events-none bg-[#0F0F11]/95 border border-white/10 p-2.5 rounded-xl shadow-xl backdrop-blur-md z-30 w-52 text-left font-sans"
             style={{ left: hoverInfo.x + 15, top: hoverInfo.y - 45 }}
           >
             <div className="flex justify-between items-start gap-2 mb-1">
@@ -1085,7 +1098,7 @@ export default function MusicCampaignMap() {
               </div>
               <div className="flex justify-between border-t border-white/5 pt-1 mt-1 text-[8.5px] uppercase font-bold text-[#FAFAFA]">
                 <span>Market Index:</span>
-                <span className="text-[var(--m-accent)]">{calculateMarketScore(hoveredPoint)}/100</span>
+                <span className="text-cyan-400">{calculateMarketScore(hoveredPoint)}/100</span>
               </div>
             </div>
           </div>
@@ -1093,13 +1106,13 @@ export default function MusicCampaignMap() {
 
         {/* ─── SECTION 4: Bottom Market Intelligence list panels (Floating and Toggled) ─── */}
         {showBottomPanel && (
-          <div className={cn("absolute left-4 bottom-4 h-44 m-hardware-panel grid grid-cols-1 md:grid-cols-5 divide-y md:divide-y-0 md:divide-x divide-white/5 z-20 overflow-hidden shadow-2xl pointer-events-auto animate-fadeIn transition-all duration-300", sidebarOpen ? "right-[416px]" : "right-4")}>
+          <div className={cn("absolute left-4 bottom-4 h-44 bg-zinc-950/95 border border-white/10 rounded-xl backdrop-blur-md grid grid-cols-1 md:grid-cols-5 divide-y md:divide-y-0 md:divide-x divide-white/5 z-20 overflow-hidden shadow-2xl pointer-events-auto animate-fadeIn transition-all duration-300", sidebarOpen ? "right-[416px]" : "right-4")} style={{ color: '#E2E8F0' }}>
             
             {/* Panel 1: Top Answer Rates */}
             <div className="p-3.5 flex flex-col justify-between min-w-0">
               <div className="flex items-center gap-1.5 shrink-0">
-                <Zap className="h-3.5 w-3.5 text-cyan-400" />
-                <span className="text-[9px] font-bold uppercase tracking-widest text-[#FAFAFA]">Answer Rate</span>
+                <Zap className="h-3.5 w-3.5 text-cyan-400" style={{ color: '#22D3EE' }} />
+                <span className="text-[9px] font-bold uppercase tracking-widest text-[#FAFAFA]" style={{ color: '#FAFAFA' }}>Answer Rate</span>
               </div>
               <div className="space-y-1 mt-2 flex-grow overflow-y-auto">
                 {marketLists.sortedByAnswers.map((p, idx) => (
@@ -1107,9 +1120,10 @@ export default function MusicCampaignMap() {
                     key={p.id}
                     onClick={() => handleInspectMarket(p)}
                     className="flex justify-between text-[10px] items-center text-[#A1A1AA] hover:text-[#FAFAFA] cursor-pointer transition-colors"
+                    style={{ color: '#A1A1AA' }}
                   >
                     <span className="truncate pr-2">{idx + 1}. {p.label}</span>
-                    <span className="font-mono font-bold text-cyan-400 shrink-0">{p.answerRate}%</span>
+                    <span className="font-mono font-bold text-cyan-400 shrink-0" style={{ color: '#22D3EE' }}>{p.answerRate}%</span>
                   </div>
                 ))}
               </div>
@@ -1118,8 +1132,8 @@ export default function MusicCampaignMap() {
             {/* Panel 2: Top Verified Actions */}
             <div className="p-3.5 flex flex-col justify-between min-w-0">
               <div className="flex items-center gap-1.5 shrink-0">
-                <Volume2 className="h-3.5 w-3.5 text-emerald-400" />
-                <span className="text-[9px] font-bold uppercase tracking-widest text-[#FAFAFA]">Verified Actions</span>
+                <Volume2 className="h-3.5 w-3.5 text-emerald-400" style={{ color: '#10B981' }} />
+                <span className="text-[9px] font-bold uppercase tracking-widest text-[#FAFAFA]" style={{ color: '#FAFAFA' }}>Verified Actions</span>
               </div>
               <div className="space-y-1 mt-2 flex-grow overflow-y-auto">
                 {marketLists.sortedByActions.map((p, idx) => (
@@ -1127,9 +1141,10 @@ export default function MusicCampaignMap() {
                     key={p.id}
                     onClick={() => handleInspectMarket(p)}
                     className="flex justify-between text-[10px] items-center text-[#A1A1AA] hover:text-[#FAFAFA] cursor-pointer transition-colors"
+                    style={{ color: '#A1A1AA' }}
                   >
                     <span className="truncate pr-2">{idx + 1}. {p.label}</span>
-                    <span className="font-mono font-bold text-emerald-400 shrink-0">{p.conversions}</span>
+                    <span className="font-mono font-bold text-emerald-400 shrink-0" style={{ color: '#10B981' }}>{p.conversions}</span>
                   </div>
                 ))}
               </div>
@@ -1138,8 +1153,8 @@ export default function MusicCampaignMap() {
             {/* Panel 3: Top CPA Efficiency */}
             <div className="p-3.5 flex flex-col justify-between min-w-0">
               <div className="flex items-center gap-1.5 shrink-0">
-                <Target className="h-3.5 w-3.5 text-[var(--m-warning)]" />
-                <span className="text-[9px] font-bold uppercase tracking-widest text-[#FAFAFA]">CPA Efficiency</span>
+                <Target className="h-3.5 w-3.5 text-amber-400" style={{ color: '#F59E0B' }} />
+                <span className="text-[9px] font-bold uppercase tracking-widest text-[#FAFAFA]" style={{ color: '#FAFAFA' }}>CPA Efficiency</span>
               </div>
               <div className="space-y-1 mt-2 flex-grow overflow-y-auto">
                 {marketLists.sortedByCpa.map((p, idx) => (
@@ -1147,9 +1162,10 @@ export default function MusicCampaignMap() {
                     key={p.id}
                     onClick={() => handleInspectMarket(p)}
                     className="flex justify-between text-[10px] items-center text-[#A1A1AA] hover:text-[#FAFAFA] cursor-pointer transition-colors"
+                    style={{ color: '#A1A1AA' }}
                   >
                     <span className="truncate pr-2">{idx + 1}. {p.label}</span>
-                    <span className="font-mono font-bold text-[var(--m-warning)] shrink-0">${p.costPerConversion?.toFixed(2)}</span>
+                    <span className="font-mono font-bold text-amber-400 shrink-0" style={{ color: '#FBBF24' }}>${p.costPerConversion?.toFixed(2)}</span>
                   </div>
                 ))}
               </div>
@@ -1158,8 +1174,8 @@ export default function MusicCampaignMap() {
             {/* Panel 4: Underperforming Markets */}
             <div className="p-3.5 flex flex-col justify-between min-w-0">
               <div className="flex items-center gap-1.5 shrink-0">
-                <TrendingDown className="h-3.5 w-3.5 text-red-400" />
-                <span className="text-[9px] font-bold uppercase tracking-widest text-[#FAFAFA]">Underperforming</span>
+                <TrendingDown className="h-3.5 w-3.5 text-red-400" style={{ color: '#F87171' }} />
+                <span className="text-[9px] font-bold uppercase tracking-widest text-[#FAFAFA]" style={{ color: '#FAFAFA' }}>Underperforming</span>
               </div>
               <div className="space-y-1 mt-2 flex-grow overflow-y-auto">
                 {marketLists.underperforming.map((p, idx) => (
@@ -1167,9 +1183,10 @@ export default function MusicCampaignMap() {
                     key={p.id}
                     onClick={() => handleInspectMarket(p)}
                     className="flex justify-between text-[10px] items-center text-[#A1A1AA] hover:text-[#FAFAFA] cursor-pointer transition-colors"
+                    style={{ color: '#A1A1AA' }}
                   >
-                    <span className="truncate pr-2 text-red-400/80">{idx + 1}. {p.label}</span>
-                    <span className="font-mono font-bold text-red-400 shrink-0">${Math.round(p.spend)}</span>
+                    <span className="truncate pr-2 text-red-400/80" style={{ color: '#F87171' }}>{idx + 1}. {p.label}</span>
+                    <span className="font-mono font-bold text-red-400 shrink-0" style={{ color: '#F87171' }}>${Math.round(p.spend)}</span>
                   </div>
                 ))}
               </div>
@@ -1178,8 +1195,8 @@ export default function MusicCampaignMap() {
             {/* Panel 5: Next Markets to Activate */}
             <div className="p-3.5 flex flex-col justify-between min-w-0">
               <div className="flex items-center gap-1.5 shrink-0">
-                <Sliders className="h-3.5 w-3.5 text-sky-400" />
-                <span className="text-[9px] font-bold uppercase tracking-widest text-[#FAFAFA]">Next to Activate</span>
+                <Sliders className="h-3.5 w-3.5 text-sky-400" style={{ color: '#38BDF8' }} />
+                <span className="text-[9px] font-bold uppercase tracking-widest text-[#FAFAFA]" style={{ color: '#FAFAFA' }}>Next to Activate</span>
               </div>
               <div className="space-y-1 mt-2 flex-grow overflow-y-auto">
                 {marketLists.nextToActivate.map((p, idx) => (
@@ -1187,9 +1204,10 @@ export default function MusicCampaignMap() {
                     key={p.id}
                     onClick={() => handleInspectMarket(p)}
                     className="flex justify-between text-[10px] items-center text-[#A1A1AA] hover:text-[#FAFAFA] cursor-pointer transition-colors"
+                    style={{ color: '#A1A1AA' }}
                   >
-                    <span className="truncate pr-2 text-sky-300">{idx + 1}. {p.label}</span>
-                    <span className="font-mono font-bold text-[var(--m-accent-2)] shrink-0">{p.answerRate}%</span>
+                    <span className="truncate pr-2 text-sky-300" style={{ color: '#7DD3FC' }}>{idx + 1}. {p.label}</span>
+                    <span className="font-mono font-bold text-cyan-400 shrink-0" style={{ color: '#22D3EE' }}>{p.answerRate}%</span>
                   </div>
                 ))}
               </div>

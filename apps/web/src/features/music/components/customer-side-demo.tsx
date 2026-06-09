@@ -18,12 +18,136 @@ import {
   Share2, 
   Smartphone, 
   Sparkles, 
-  Users
+  Users,
+  Mic,
+  Video,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 import React, { useState, useEffect, useRef } from 'react';
 
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
+
+// Ringtone generator using Web Audio API
+const playRingtone = () => {
+  if (typeof window === 'undefined') return () => {};
+  try {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return () => {};
+    const ctx = new AudioContextClass();
+    
+    const osc1 = ctx.createOscillator();
+    const osc2 = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+    
+    osc1.frequency.value = 440;
+    osc2.frequency.value = 480;
+    
+    osc1.connect(gainNode);
+    osc2.connect(gainNode);
+    gainNode.connect(ctx.destination);
+    
+    gainNode.gain.setValueAtTime(0, ctx.currentTime);
+    
+    const now = ctx.currentTime;
+    // Ring cycle: 2s on, 2s off
+    gainNode.gain.linearRampToValueAtTime(0.04, now + 0.1);
+    gainNode.gain.setValueAtTime(0.04, now + 1.8);
+    gainNode.gain.linearRampToValueAtTime(0, now + 2.0);
+    
+    gainNode.gain.linearRampToValueAtTime(0.04, now + 2.1);
+    gainNode.gain.setValueAtTime(0.04, now + 3.8);
+    gainNode.gain.linearRampToValueAtTime(0, now + 4.0);
+    
+    osc1.start(now);
+    osc2.start(now);
+    
+    osc1.stop(now + 4.0);
+    osc2.stop(now + 4.0);
+    
+    return () => {
+      try {
+        ctx.close();
+      } catch (e) {}
+    };
+  } catch (e) {
+    console.warn('Ringtone failed:', e);
+    return () => {};
+  }
+};
+
+// Interactive call controls helper
+const CallControlsGrid = ({ isMuted, setIsMuted, isSpeakerOn, setIsSpeakerOn }: {
+  isMuted: boolean;
+  setIsMuted: (m: boolean) => void;
+  isSpeakerOn: boolean;
+  setIsSpeakerOn: (s: boolean) => void;
+}) => {
+  return (
+    <div className="grid grid-cols-3 gap-y-2 gap-x-1.5 my-1 px-4 select-none shrink-0">
+      {/* Mute Button */}
+      <button 
+        onClick={() => setIsMuted(!isMuted)} 
+        className="flex flex-col items-center gap-0.5 group animate-fadeIn"
+      >
+        <div className={cn(
+          "h-7 w-7 rounded-full flex items-center justify-center transition-all duration-200 border border-slate-800/40",
+          isMuted ? "bg-white text-zinc-950 scale-105" : "bg-slate-900/60 text-zinc-100 hover:bg-slate-800/80"
+        )}>
+          <Mic className="h-3 w-3" />
+        </div>
+        <span className="text-[6.5px] text-zinc-400 font-medium">{isMuted ? 'Muted' : 'Mute'}</span>
+      </button>
+
+      {/* Keypad (Disabled) */}
+      <button className="flex flex-col items-center gap-0.5 opacity-30 cursor-not-allowed">
+        <div className="h-7 w-7 rounded-full bg-slate-900/60 text-zinc-400 flex items-center justify-center border border-slate-800/40">
+          <span className="text-[9px] font-bold font-mono">#</span>
+        </div>
+        <span className="text-[6.5px] text-zinc-400 font-medium">Keypad</span>
+      </button>
+
+      {/* Speaker Button */}
+      <button 
+        onClick={() => setIsSpeakerOn(!isSpeakerOn)} 
+        className="flex flex-col items-center gap-0.5 group animate-fadeIn"
+      >
+        <div className={cn(
+          "h-7 w-7 rounded-full flex items-center justify-center transition-all duration-200 border border-slate-800/40",
+          isSpeakerOn ? "bg-white text-zinc-950 scale-105" : "bg-slate-900/60 text-zinc-100 hover:bg-slate-800/80"
+        )}>
+          <Volume2 className="h-3 w-3" />
+        </div>
+        <span className="text-[6.5px] text-zinc-400 font-medium">Speaker</span>
+      </button>
+
+      {/* Add Call (Disabled) */}
+      <button className="flex flex-col items-center gap-0.5 opacity-30 cursor-not-allowed">
+        <div className="h-7 w-7 rounded-full bg-slate-900/60 text-zinc-400 flex items-center justify-center border border-slate-800/40">
+          <span className="text-[9px] font-bold">+</span>
+        </div>
+        <span className="text-[6.5px] text-zinc-400 font-medium">Add Call</span>
+      </button>
+
+      {/* FaceTime (Disabled) */}
+      <button className="flex flex-col items-center gap-0.5 opacity-30 cursor-not-allowed">
+        <div className="h-7 w-7 rounded-full bg-slate-900/60 text-zinc-400 flex items-center justify-center border border-slate-800/40">
+          <Video className="h-3 w-3" />
+        </div>
+        <span className="text-[6.5px] text-zinc-400 font-medium">FaceTime</span>
+      </button>
+
+      {/* Contacts (Disabled) */}
+      <button className="flex flex-col items-center gap-0.5 opacity-30 cursor-not-allowed">
+        <div className="h-7 w-7 rounded-full bg-slate-900/60 text-zinc-400 flex items-center justify-center border border-slate-800/40">
+          <Users className="h-3 w-3" />
+        </div>
+        <span className="text-[6.5px] text-zinc-400 font-medium">Contacts</span>
+      </button>
+    </div>
+  );
+};
 
 // Define the stages
 interface StageConfig {
@@ -53,6 +177,11 @@ export function CustomerSideDemo() {
   const [previewProgress, setPreviewProgress] = useState<number>(0);
   const [feedbackSelected, setFeedbackSelected] = useState<'love' | 'ok' | 'skip' | null>(null);
   
+  // Call Controls State
+  const [isMuted, setIsMuted] = useState<boolean>(false);
+  const [isSpeakerOn, setIsSpeakerOn] = useState<boolean>(true);
+  const [audioFeedbackEnabled, setAudioFeedbackEnabled] = useState<boolean>(true);
+  
   // Registration Form State
   const [name, setName] = useState<string>('Jimbo Barnes');
   const [city, setCity] = useState<string>('Dallas, TX');
@@ -67,6 +196,51 @@ export function CustomerSideDemo() {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const callTimerIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const previewIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Speak text helper using SpeechSynthesis API
+  const speakText = (text: string) => {
+    if (!audioFeedbackEnabled || typeof window === 'undefined' || !window.speechSynthesis) return;
+    try {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      const voices = window.speechSynthesis.getVoices();
+      const naturalVoice = voices.find(v => v.lang.startsWith('en') && v.name.toLowerCase().includes('natural')) ||
+                            voices.find(v => v.lang.startsWith('en') && v.name.toLowerCase().includes('google')) ||
+                            voices.find(v => v.lang.startsWith('en'));
+      if (naturalVoice) {
+        utterance.voice = naturalVoice;
+      }
+      utterance.rate = 1.02; // SNappy speaking rate
+      utterance.pitch = 1.0;
+      window.speechSynthesis.speak(utterance);
+    } catch (e) {
+      console.warn('Speech synthesis failed:', e);
+    }
+  };
+
+  // Ringtone simulation hook
+  useEffect(() => {
+    let cleanupRing: (() => void) | null = null;
+    if (stage === 1 && audioFeedbackEnabled) {
+      cleanupRing = playRingtone();
+    }
+    return () => {
+      if (cleanupRing) cleanupRing();
+    };
+  }, [stage, audioFeedbackEnabled]);
+
+  // Speech synthesis stage trigger hook
+  useEffect(() => {
+    if (stage === 2) {
+      speakText("Hey, this is the Arrested Development station line. We're testing out 'Mr. Wendell' for their new release. Can I play you a short preview and you tell us if you like it?");
+    } else if (stage === 4) {
+      speakText("What did you think of Mr. Wendell? Keep it, skip it, or should we send you the link to the full track?");
+    } else {
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    }
+  }, [stage, audioFeedbackEnabled]);
 
   // Sync audio with Stage 3 and Stage 6
   useEffect(() => {
@@ -94,6 +268,9 @@ export function CustomerSideDemo() {
     return () => {
       if (audioRef.current) {
         audioRef.current.pause();
+      }
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
       }
     };
   }, []);
@@ -271,12 +448,62 @@ export function CustomerSideDemo() {
     return stage >= itemStage;
   };
 
+  const getSimulatedLogs = () => {
+    const logs = [
+      { time: '22:05:01', level: 'SYS', msg: 'System initialized. Waiting for inbound call signal.' },
+    ];
+    if (stage >= 1) {
+      logs.push({ time: '22:05:03', level: 'SIP', msg: 'Inbound session request from +1 281-***-9460. Routing to voice agent node.' });
+    }
+    if (stage >= 2) {
+      logs.push({ time: '22:05:07', level: 'AI', msg: 'Voice agent channel active. Executing verified introductory script.' });
+      logs.push({ time: '22:05:09', level: 'STT', msg: 'Speech-to-text response recognized: "Sure, I\'ll listen."' });
+    }
+    if (stage >= 3) {
+      logs.push({ time: '22:05:12', level: 'DSP', msg: 'Streaming 9-second high-fidelity preview of "Mr. Wendell".' });
+      logs.push({ time: '22:05:18', level: 'SYS', msg: 'Audio packet stream transmission completed. Packet loss: 0%.' });
+    }
+    if (stage >= 4) {
+      logs.push({ time: '22:05:21', level: 'AI', msg: 'Voice agent prompts for feedback signal. Awaiting user response.' });
+      if (feedbackSelected) {
+        logs.push({ time: '22:05:23', level: 'NLU', msg: `NLU classification: "${feedbackSelected}" sentiment recognized.` });
+      }
+    }
+    if (stage >= 5) {
+      logs.push({ time: '22:05:26', level: 'SMS', msg: 'Dispatching branded SMS text payload: rps.fm/arrested/mr-wendell.' });
+      logs.push({ time: '22:05:28', level: 'SYS', msg: 'Carrier SMS delivery receipt verified.' });
+    }
+    if (stage >= 6) {
+      logs.push({ time: '22:05:31', level: 'HTTP', msg: 'GET /arrested/mr-wendell from client IP. Direct attribution validated.' });
+      if (likeClicked) {
+        logs.push({ time: '22:05:33', level: 'DSP', msg: 'Spotify API pre-save request queued for Jimbo Barnes.' });
+      }
+    }
+    if (stage >= 7) {
+      logs.push({ time: '22:05:36', level: 'CRM', msg: 'Rendering fan club opt-in form. Session validated.' });
+      if (isRegistered) {
+        logs.push({ time: '22:05:39', level: 'CRM', msg: `First-party lead created. Lead name: "${name}", City: "${city}".` });
+      }
+    }
+    if (stage >= 8) {
+      logs.push({ time: '22:05:42', level: 'SYS', msg: 'Attributed viral sharing loop initialized. Attribution code: loop-34a' });
+      if (sharesCount > 0) {
+        logs.push({ time: '22:05:44', level: 'NET', msg: `Attributed share complete. 4 new nodes added to referral graph.` });
+      }
+    }
+    if (stage >= 9) {
+      logs.push({ time: '22:05:46', level: 'SYS', msg: 'Generating attribution packet rps-packet-ea712f009b.' });
+      logs.push({ time: '22:05:48', level: 'SYS', msg: 'Sponsor verification signature attached. Campaign closed.' });
+    }
+    return logs.slice(-4);
+  };
+
   return (
-    <div className="flex flex-col h-full w-full space-y-4 overflow-hidden">
+    <div className="flex flex-col h-full w-full space-y-3 overflow-hidden p-4 lg:p-6 text-[var(--m-text)]">
       {/* ─── Page Header ─── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[var(--m-border-2)] pb-4">
         <div>
-          <h1 className="text-lg font-black tracking-tight flex items-center gap-2 m-text-text uppercase">
+          <h1 className="text-lg font-black tracking-tight flex items-center gap-2 text-[var(--m-text)] uppercase">
             <Smartphone className="h-5 w-5 text-[var(--m-accent)]" /> Customer-Side Fan Journey
           </h1>
           <p className="text-xs text-[var(--m-muted)] mt-1 max-w-2xl">
@@ -307,6 +534,25 @@ export function CustomerSideDemo() {
           </button>
 
           <button
+            onClick={() => {
+              setAudioFeedbackEnabled(!audioFeedbackEnabled);
+              toast({
+                title: !audioFeedbackEnabled ? 'Audio Assist Enabled' : 'Audio Assist Disabled',
+                description: !audioFeedbackEnabled 
+                  ? 'Simulated voice agent speech and phone ringtones will play.' 
+                  : 'Audio assist silenced.',
+              });
+            }}
+            className={cn(
+              "p-1.5 rounded hover:bg-[var(--m-surface-3)] transition-all",
+              audioFeedbackEnabled ? "text-[var(--m-accent)] font-bold" : "text-[var(--m-muted)]"
+            )}
+            title={audioFeedbackEnabled ? "Mute Voice Assist" : "Enable Voice Assist"}
+          >
+            {audioFeedbackEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+          </button>
+
+          <button
             onClick={handleReplay}
             className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold bg-[var(--m-surface-3)] border border-[var(--m-border)] hover:border-[var(--m-text-2)] text-[var(--m-text)] rounded transition-all"
           >
@@ -326,27 +572,30 @@ export function CustomerSideDemo() {
       </div>
 
       {/* ─── Main 2-Column Grid ─── */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch min-h-0 overflow-hidden pb-4">
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch min-h-0 overflow-hidden pb-4">
         
         {/* Left Column: Phone Mockup Frame (5 cols) */}
         <div className="lg:col-span-5 flex flex-col items-center justify-center min-h-0">
-          {/* Phone Frame wrapper */}
-          <div className="relative w-72 h-[520px] bg-black rounded-[36px] p-2.5 border-4 border-slate-800 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.8)] ring-1 ring-white/10 flex flex-col overflow-hidden shrink-0">
+          {/* Phone Frame wrapper with metallic details */}
+          <div className="relative w-64 h-[430px] bg-zinc-950 rounded-[28px] p-2 border-[4px] border-slate-800 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10 flex flex-col overflow-hidden shrink-0">
+            {/* Glossy reflection line */}
+            <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-transparent pointer-events-none z-50 rounded-[24px]" />
+
             {/* Speaker & Sensor Notch */}
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 w-36 h-6 bg-black rounded-b-2xl z-50 flex items-center justify-center gap-1.5 px-4">
-              <div className="w-12 h-1 bg-zinc-800 rounded-full" />
-              <div className="w-2.5 h-2.5 bg-zinc-900 rounded-full" />
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-28 h-4.5 bg-black rounded-b-lg z-50 flex items-center justify-center gap-1.5 px-3">
+              <div className="w-10 h-0.5 bg-zinc-800 rounded-full" />
+              <div className="w-1.5 h-1.5 bg-zinc-900 rounded-full" />
             </div>
 
             {/* Simulated Status Bar */}
             <div className={cn(
-              "flex justify-between items-center px-6 pt-1 text-[10px] font-bold z-40 shrink-0 select-none",
+              "flex justify-between items-center px-5 pt-1.5 text-[9px] font-bold z-40 shrink-0 select-none",
               (stage >= 1 && stage <= 4) ? "bg-[#061A2F]/95 text-white" : "bg-white text-zinc-900"
             )}>
               <span>22:05</span>
               <div className="flex items-center gap-1">
                 <span className="tracking-wide">5G</span>
-                <div className="w-4 h-2 border rounded-xs p-[1px] flex items-center">
+                <div className="w-3.5 h-1.5 border rounded-xs p-[1px] flex items-center">
                   <div className="w-full h-full bg-current rounded-3xs" />
                 </div>
               </div>
@@ -354,45 +603,45 @@ export function CustomerSideDemo() {
 
             {/* Screen Content Area (Always White Background except Call Stages) */}
             <div className={cn(
-              "flex-grow rounded-[28px] overflow-hidden flex flex-col relative transition-all duration-300 shadow-inner",
+              "flex-grow rounded-[24px] overflow-hidden flex flex-col relative transition-all duration-300 shadow-inner",
               (stage >= 1 && stage <= 4) ? "bg-gradient-to-b from-[#061A2F] via-[#020817] to-[#071B36]" : "bg-zinc-50"
             )}>
               
               {/* STAGE 1: Incoming Call */}
               {stage === 1 && (
-                <div className="flex-grow flex flex-col justify-between p-4 text-white text-center animate-fadeIn select-none">
-                  <div className="pt-6 space-y-1">
-                    <span className="text-[9px] text-[var(--m-accent-2)] font-black tracking-[0.2em] uppercase block">Incoming Call</span>
-                    <h2 className="text-lg font-bold tracking-tight">Arrested Dev Station</h2>
-                    <p className="text-[9px] text-slate-400">RPS Media Line</p>
+                <div className="flex-grow flex flex-col justify-between p-3.5 text-white text-center animate-fadeIn select-none">
+                  <div className="pt-4 space-y-0.5">
+                    <span className="text-[8px] text-cyan-400 font-black tracking-[0.2em] uppercase block">Incoming Call</span>
+                    <h2 className="text-sm font-bold tracking-tight">Arrested Dev Station</h2>
+                    <p className="text-[8px] text-slate-400">RPS Media Line</p>
                   </div>
 
-                  <div className="flex flex-col items-center gap-2">
-                    <div className="h-14 w-14 rounded-full bg-[var(--m-accent-dim)] border border-[var(--m-accent)]/30 flex items-center justify-center relative">
-                      <Phone className="h-5 w-5 text-[var(--m-accent-2)] animate-pulse" />
-                      <div className="absolute inset-0 rounded-full border border-[var(--m-accent-2)]/40 animate-ping opacity-60" />
+                  <div className="flex flex-col items-center gap-1.5 my-2">
+                    <div className="h-11 w-11 rounded-full bg-cyan-950/40 border border-cyan-500/30 flex items-center justify-center relative">
+                      <Phone className="h-4 w-4 text-cyan-400 animate-pulse" />
+                      <div className="absolute inset-0 rounded-full border border-cyan-400/40 animate-ping opacity-60" />
                     </div>
-                    <span className="text-[8px] text-slate-400 animate-pulse">RPS Voice Agent dialling in...</span>
+                    <span className="text-[7.5px] text-slate-400 animate-pulse">RPS Voice Agent dialling in...</span>
                   </div>
 
-                  <div className="flex justify-around items-center pb-4 shrink-0">
+                  <div className="flex justify-around items-center pb-2 shrink-0">
                     <button
                       onClick={() => handleStageChange(1)}
-                      className="flex flex-col items-center gap-1 group"
+                      className="flex flex-col items-center gap-0.5 group"
                     >
-                      <div className="h-10 w-10 rounded-full bg-red-600 hover:bg-red-500 flex items-center justify-center shadow-lg transition-all">
-                        <PhoneOff className="h-4.5 w-4.5 text-white" />
+                      <div className="h-8.5 w-8.5 rounded-full bg-red-600 hover:bg-red-500 flex items-center justify-center shadow-lg transition-all">
+                        <PhoneOff className="h-4 w-4 text-white" />
                       </div>
-                      <span className="text-[8px] text-slate-400 font-medium group-hover:text-white transition-colors">Decline</span>
+                      <span className="text-[7.5px] text-slate-400 font-medium group-hover:text-white transition-colors">Decline</span>
                     </button>
                     <button
                       onClick={() => handleStageChange(2)}
-                      className="flex flex-col items-center gap-1 group"
+                      className="flex flex-col items-center gap-0.5 group"
                     >
-                      <div className="h-10 w-10 rounded-full bg-emerald-600 hover:bg-emerald-500 flex items-center justify-center shadow-lg transition-all animate-bounce">
-                        <Phone className="h-4.5 w-4.5 text-white" />
+                      <div className="h-8.5 w-8.5 rounded-full bg-emerald-600 hover:bg-emerald-500 flex items-center justify-center shadow-lg transition-all animate-bounce">
+                        <Phone className="h-4 w-4 text-white" />
                       </div>
-                      <span className="text-[8px] text-slate-400 font-medium group-hover:text-white transition-colors">Accept</span>
+                      <span className="text-[7.5px] text-slate-400 font-medium group-hover:text-white transition-colors">Accept</span>
                     </button>
                   </div>
                 </div>
@@ -400,43 +649,57 @@ export function CustomerSideDemo() {
 
               {/* STAGE 2: Agent Intro */}
               {stage === 2 && (
-                <div className="flex-grow flex flex-col justify-between p-3 text-white text-center animate-fadeIn">
+                <div className="flex-grow flex flex-col justify-between p-2.5 text-white text-center animate-fadeIn">
                   {/* Call status header */}
-                  <div className="pt-2 space-y-0.5">
-                    <h2 className="text-sm font-bold text-zinc-100">Arrested Dev Station</h2>
-                    <div className="flex items-center justify-center gap-1 text-[8px] text-emerald-400 font-mono">
+                  <div className="pt-1 space-y-0.5 shrink-0">
+                    <h2 className="text-xs font-bold text-zinc-100">Arrested Dev Station</h2>
+                    <div className="flex items-center justify-center gap-1 text-[7.5px] text-emerald-400 font-mono">
                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
                       <span>{formatCallTime(callTimer)}</span>
                     </div>
                   </div>
 
+                  {/* Call controls */}
+                  <CallControlsGrid 
+                    isMuted={isMuted} 
+                    setIsMuted={setIsMuted} 
+                    isSpeakerOn={isSpeakerOn} 
+                    setIsSpeakerOn={setIsSpeakerOn} 
+                  />
+
                   {/* Waveform graphic */}
-                  <div className="my-1.5 h-10 flex items-center justify-center gap-0.5 px-3">
-                    {Array.from({ length: 15 }).map((_, i) => (
-                      <div 
-                        key={i} 
-                        className="w-1 bg-[var(--m-accent-2)] rounded-full transition-all duration-300"
-                        style={{ 
-                          height: `${Math.sin(callTimer * 2 + i) * 15 + 22}px`,
-                          opacity: 0.4 + (Math.sin(callTimer + i) + 1) * 0.3
-                        }}
-                      />
-                    ))}
+                  <div className="my-1 h-6 flex items-end justify-center gap-[3px] px-3 shrink-0">
+                    {Array.from({ length: 18 }).map((_, i) => {
+                      const delays = [0.1, 0.4, 0.2, 0.6, 0.3, 0.5, 0.8, 0.2, 0.4, 0.7, 0.1, 0.5, 0.3, 0.9, 0.4, 0.2, 0.6, 0.1];
+                      const heights = [8, 18, 12, 22, 14, 10, 20, 10, 16, 18, 8, 14, 12, 24, 12, 10, 16, 6];
+                      const dur = 0.6 + delays[i % delays.length] * 0.5;
+                      return (
+                        <div 
+                          key={i} 
+                          className="w-0.5 bg-cyan-400 rounded-full m-wave-bar-anim"
+                          style={{ 
+                            height: `${heights[i % heights.length]}px`,
+                            animationDelay: `${delays[i % delays.length]}s`,
+                            animationDuration: `${dur}s`,
+                          }}
+                        />
+                      );
+                    })}
                   </div>
 
                   {/* Live Dialogue Transcript */}
-                  <div className="flex-grow flex flex-col justify-end gap-2 text-left px-1 pb-2">
-                    <div className="bg-[var(--m-surface-3)] border border-[var(--m-border)] p-2 rounded-lg text-[9px] space-y-1 animate-fadeIn max-w-[92%]">
-                      <div className="text-[7px] font-black uppercase text-[var(--m-accent-2)] tracking-wider">RPS Voice Agent</div>
-                      <p className="text-zinc-200 leading-normal">
-                        {"\"Hey, this is the Arrested Development station line. We're testing out 'Mr. Wendell' for their new release. Can I play you a short preview and you tell us if you like it?\""}
+                  <div className="flex-grow flex flex-col justify-end gap-1.5 text-left px-1 pb-1.5">
+                    <div className="bg-slate-900/90 border border-slate-800/80 p-2 rounded-lg text-[9px] space-y-1 animate-fadeIn max-w-[92%]" style={{ borderColor: 'rgba(255, 255, 255, 0.05)' }}>
+                      <div className="text-[7px] font-black uppercase text-cyan-400 tracking-wider" style={{ color: '#22D3EE' }}>RPS Voice Agent</div>
+                      <p className="text-zinc-200 leading-normal" style={{ color: '#E4E4E7' }}>
+                        {"\"Hey, this is the Arrested Development station line. We\'re testing out \'Mr. Wendell\' for their new release. Can I play you a short preview and you tell us if you like it?\""}
                       </p>
                     </div>
 
-                    <div className="bg-zinc-800/80 border border-zinc-700/50 p-2 rounded-lg text-[9px] space-y-1 animate-fadeIn max-w-[92%] self-end">
-                      <div className="text-[7px] font-black uppercase text-zinc-400 tracking-wider">Fan</div>
-                      <p className="text-zinc-200 leading-normal">
-                        {"\"Sure, I'll listen.\""}
+                    <div className="bg-slate-800/70 border border-slate-700/50 p-2 rounded-lg text-[9px] space-y-1 animate-fadeIn max-w-[92%] self-end" style={{ borderColor: 'rgba(255, 255, 255, 0.05)' }}>
+                      <div className="text-[7px] font-black uppercase text-zinc-400 tracking-wider" style={{ color: '#A1A1AA' }}>Fan</div>
+                      <p className="text-zinc-200 leading-normal" style={{ color: '#E4E4E7' }}>
+                        {"\"Sure, I\'ll listen.\""}
                       </p>
                     </div>
                   </div>
@@ -453,38 +716,66 @@ export function CustomerSideDemo() {
 
               {/* STAGE 3: Song Preview Plays */}
               {stage === 3 && (
-                <div className="flex-grow flex flex-col justify-between p-3 text-white animate-fadeIn">
+                <div className="flex-grow flex flex-col justify-between p-2.5 text-white animate-fadeIn">
                   {/* Call header */}
-                  <div className="text-center pt-2 space-y-0.5">
-                    <h2 className="text-sm font-bold text-zinc-300">Arrested Dev Station</h2>
+                  <div className="text-center pt-1 space-y-0.5 shrink-0">
+                    <h2 className="text-xs font-bold text-zinc-300">Arrested Dev Station</h2>
                     <span className="text-[8px] text-emerald-400 font-mono">{formatCallTime(callTimer)}</span>
                   </div>
 
+                  {/* Call controls */}
+                  <CallControlsGrid 
+                    isMuted={isMuted} 
+                    setIsMuted={setIsMuted} 
+                    isSpeakerOn={isSpeakerOn} 
+                    setIsSpeakerOn={setIsSpeakerOn} 
+                  />
+
                   {/* Premium Music Player Card */}
-                  <div className="my-auto bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-xl p-3 flex flex-col items-center gap-3 shadow-xl">
-                    <div className="h-20 w-20 rounded-lg bg-gradient-to-tr from-amber-500 via-emerald-800 to-amber-700 flex items-center justify-center relative overflow-hidden shadow-md group">
-                      <Music className="h-7 w-7 text-white animate-pulse" />
+                  <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-2.5 flex flex-col items-center gap-2 shadow-xl my-1.5">
+                    <div className="h-12 w-12 rounded-lg bg-gradient-to-tr from-amber-500 via-emerald-800 to-amber-700 flex items-center justify-center relative overflow-hidden shadow-md group shrink-0">
+                      <Music className="h-4.5 w-4.5 text-white animate-pulse" />
                       <div className="absolute inset-0 bg-black/20" />
                     </div>
 
                     <div className="text-center space-y-0.5">
-                      <h3 className="text-[10px] font-bold text-zinc-100">Mr. Wendell</h3>
-                      <p className="text-[8px] text-[var(--m-accent-2)] font-semibold">Arrested Development</p>
+                      <h3 className="text-[9px] font-bold text-white">Mr. Wendell</h3>
+                      <p className="text-[8px] text-cyan-400 font-semibold">Arrested Development</p>
                     </div>
 
                     {/* Custom progress bar */}
-                    <div className="w-full space-y-1 pt-1">
+                    <div className="w-full space-y-1">
                       <div className="h-1 w-full bg-zinc-800 rounded-full overflow-hidden">
                         <div 
-                          className="h-full bg-[var(--m-accent-2)] rounded-full transition-all duration-100" 
+                          className="h-full bg-cyan-400 rounded-full transition-all duration-100" 
                           style={{ width: `${previewProgress}%` }}
                         />
                       </div>
-                      <div className="flex justify-between text-[7px] text-zinc-500 font-mono">
+                      <div className="flex justify-between text-[6px] text-zinc-500 font-mono">
                         <span>0:00</span>
-                        <span className="animate-pulse text-[var(--m-accent-2)] font-bold">Preview playing...</span>
+                        <span className="animate-pulse text-cyan-400 font-bold">Preview playing...</span>
                         <span>0:09</span>
                       </div>
+                    </div>
+
+                    {/* Audio visualizer */}
+                    <div className="h-4.5 flex items-end justify-center gap-[2px] w-full px-2 mt-0.5 shrink-0">
+                      {Array.from({ length: 24 }).map((_, i) => {
+                        const delays = [0.2, 0.5, 0.1, 0.7, 0.3, 0.6, 0.2, 0.8, 0.4, 0.1, 0.5, 0.9, 0.3, 0.6, 0.2, 0.7, 0.4, 0.8, 0.1, 0.5, 0.3, 0.6, 0.2, 0.4];
+                        const heights = [6, 14, 10, 18, 12, 8, 16, 10, 14, 16, 6, 12, 10, 20, 8, 6, 14, 10, 4, 12, 8, 14, 6, 10];
+                        const dur = 0.5 + delays[i % delays.length] * 0.7;
+                        return (
+                          <div 
+                            key={i} 
+                            className="w-0.5 bg-cyan-400 rounded-full m-wave-bar-anim"
+                            style={{ 
+                              height: `${heights[i % heights.length]}px`,
+                              animationDelay: `${delays[i % delays.length]}s`,
+                              animationDuration: `${dur}s`,
+                            }}
+                          />
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -500,59 +791,70 @@ export function CustomerSideDemo() {
 
               {/* STAGE 4: Feedback Capture */}
               {stage === 4 && (
-                <div className="flex-grow flex flex-col justify-between p-3 text-white animate-fadeIn">
+                <div className="flex-grow flex flex-col justify-between p-2.5 text-white animate-fadeIn">
                   {/* Call header */}
-                  <div className="text-center pt-2 space-y-0.5">
-                    <h2 className="text-sm font-bold text-zinc-300">Arrested Dev Station</h2>
+                  <div className="text-center pt-1 space-y-0.5 shrink-0">
+                    <h2 className="text-xs font-bold text-zinc-300">Arrested Dev Station</h2>
                     <span className="text-[8px] text-emerald-400 font-mono">{formatCallTime(callTimer)}</span>
                   </div>
 
+                  {/* Call controls */}
+                  <CallControlsGrid 
+                    isMuted={isMuted} 
+                    setIsMuted={setIsMuted} 
+                    isSpeakerOn={isSpeakerOn} 
+                    setIsSpeakerOn={setIsSpeakerOn} 
+                  />
+
                   {/* Feedback UI Dialogue */}
-                  <div className="my-auto space-y-3">
-                    <div className="bg-[var(--m-surface-3)] border border-[var(--m-border)] p-2 rounded-lg text-[9px] space-y-1 max-w-[92%]">
-                      <div className="text-[7px] font-black uppercase text-[var(--m-accent-2)] tracking-wider">RPS Voice Agent</div>
-                      <p className="text-zinc-200 leading-normal">
+                  <div className="space-y-1.5 my-1.5 flex-grow flex flex-col justify-center">
+                    <div className="bg-slate-900/90 border border-slate-800/80 p-2 rounded-lg text-[9px] space-y-1 max-w-[92%]" style={{ borderColor: 'rgba(255, 255, 255, 0.05)' }}>
+                      <div className="text-[7px] font-black uppercase text-cyan-400 tracking-wider" style={{ color: '#22D3EE' }}>RPS Voice Agent</div>
+                      <p className="text-zinc-200 leading-normal" style={{ color: '#E4E4E7' }}>
                         {"\"What did you think of Mr. Wendell? Keep it, skip it, or should we send you the link to the full track?\""}
                       </p>
                     </div>
 
-                    <div className="space-y-1.5 pt-1 px-0.5">
-                      <div className="text-[7px] font-black uppercase text-zinc-500 tracking-wider mb-0.5">Simulated Feedback</div>
+                    <div className="space-y-1 pt-0.5 px-0.5">
+                      <div className="text-[7px] font-bold uppercase text-slate-400 tracking-wider mb-1" style={{ color: '#94A3B8' }}>Simulated Feedback</div>
                       <button
                         onClick={() => handleFeedback('love')}
                         className={cn(
-                          "w-full py-1.5 rounded-md text-[10px] font-bold flex items-center justify-between px-2 border transition-all",
+                          "w-full py-1 rounded-md text-[9px] font-bold flex items-center justify-between px-2 border transition-all",
                           feedbackSelected === 'love' 
                             ? "bg-emerald-600 border-emerald-500 text-white" 
-                            : "bg-[var(--m-surface-2)] border-[var(--m-border)] hover:border-emerald-500 text-zinc-200"
+                            : "bg-slate-900/60 border-slate-800 hover:border-emerald-500 text-zinc-300"
                         )}
+                        style={{ color: feedbackSelected === 'love' ? '#FFFFFF' : '#D4D4D8' }}
                       >
                         <span>Love Mr. Wendell! Send link</span>
-                        <span className="text-[8px] text-emerald-400 font-mono font-bold">Positive</span>
+                        <span className="text-[7px] text-emerald-400 font-mono font-bold" style={{ color: '#10B981' }}>Positive</span>
                       </button>
                       <button
                         onClick={() => handleFeedback('ok')}
                         className={cn(
-                          "w-full py-1.5 rounded-md text-[10px] font-bold flex items-center justify-between px-2 border transition-all",
+                          "w-full py-1 rounded-md text-[9px] font-bold flex items-center justify-between px-2 border transition-all",
                           feedbackSelected === 'ok' 
                             ? "bg-amber-600 border-amber-500 text-white" 
-                            : "bg-[var(--m-surface-2)] border-[var(--m-border)] hover:border-amber-500 text-zinc-200"
+                            : "bg-slate-900/60 border-slate-800 hover:border-amber-500 text-zinc-300"
                         )}
+                        style={{ color: feedbackSelected === 'ok' ? '#FFFFFF' : '#D4D4D8' }}
                       >
                         <span>{"It's okay"}</span>
-                        <span className="text-[8px] text-amber-400 font-mono font-bold">Neutral</span>
+                        <span className="text-[7px] text-amber-400 font-mono font-bold" style={{ color: '#FBBF24' }}>Neutral</span>
                       </button>
                       <button
                         onClick={() => handleFeedback('skip')}
                         className={cn(
-                          "w-full py-1.5 rounded-md text-[10px] font-bold flex items-center justify-between px-2 border transition-all",
+                          "w-full py-1 rounded-md text-[9px] font-bold flex items-center justify-between px-2 border transition-all",
                           feedbackSelected === 'skip' 
                             ? "bg-red-600 border-red-500 text-white" 
-                            : "bg-[var(--m-surface-2)] border-[var(--m-border)] hover:border-red-500 text-zinc-200"
+                            : "bg-slate-900/60 border-slate-800 hover:border-red-500 text-zinc-300"
                         )}
+                        style={{ color: feedbackSelected === 'skip' ? '#FFFFFF' : '#D4D4D8' }}
                       >
                         <span>Not for me, skip it</span>
-                        <span className="text-[8px] text-red-400 font-mono font-bold">Negative</span>
+                        <span className="text-[7px] text-red-400 font-mono font-bold" style={{ color: '#F87171' }}>Negative</span>
                       </button>
                     </div>
                   </div>
@@ -561,10 +863,10 @@ export function CustomerSideDemo() {
                   <div className="flex justify-center shrink-0 mt-auto">
                     <button
                       onClick={() => handleStageChange(5)}
-                      className="h-9 w-9 rounded-full bg-red-600 hover:bg-red-500 flex items-center justify-center shadow-lg transition-all"
+                      className="h-8 w-8 rounded-full bg-red-600 hover:bg-red-500 flex items-center justify-center shadow-lg transition-all"
                       title="End Call"
                     >
-                      <PhoneOff className="h-4 w-4 text-white" />
+                      <PhoneOff className="h-3.5 w-3.5 text-white" />
                     </button>
                   </div>
                 </div>
@@ -634,13 +936,29 @@ export function CustomerSideDemo() {
                   </div>
 
                   <div className="flex-grow overflow-y-auto px-3 py-2 space-y-2.5">
-                    {/* Hero Artwork */}
-                    <div className="w-full h-24 rounded-lg bg-gradient-to-tr from-amber-500 via-emerald-800 to-amber-700 flex flex-col justify-end p-2 relative overflow-hidden shadow-lg border border-white/5">
-                      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
-                      <div className="relative z-10 space-y-0.5">
-                        <span className="text-[7px] font-black text-[var(--m-accent-2)] uppercase tracking-wider">Arrested Dev</span>
-                        <h2 className="text-xs font-bold leading-tight text-white">Mr. Wendell</h2>
-                        <p className="text-[7px] text-zinc-400">Classic Single Release</p>
+                    {/* Hero Artwork with sliding vinyl disk */}
+                    <div className="relative flex justify-center items-center py-1.5 shrink-0 overflow-hidden">
+                      {/* Vinyl Disc */}
+                      <div className={cn(
+                        "absolute w-18 h-18 rounded-full bg-zinc-900 border-2 border-zinc-800 flex items-center justify-center transition-all duration-[800ms] shadow-md z-0",
+                        portalAudioPlaying ? "translate-x-9 rotate-[360deg] m-signal-disc-spin" : "translate-x-0"
+                      )}>
+                        {/* Vinyl grooves */}
+                        <div className="absolute inset-1.5 rounded-full border border-white/5 bg-[radial-gradient(circle,_transparent_30%,_rgba(255,255,255,0.02)_40%,_transparent_50%)]" />
+                        {/* Vinyl label */}
+                        <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-amber-500 to-emerald-700 flex items-center justify-center border border-zinc-900">
+                          <div className="w-1 h-1 rounded-full bg-zinc-950" />
+                        </div>
+                      </div>
+
+                      {/* Album Cover */}
+                      <div className="relative z-10 w-20 h-20 rounded-lg bg-gradient-to-tr from-amber-500 via-emerald-800 to-amber-700 flex flex-col justify-end p-2 overflow-hidden shadow-lg border border-white/10">
+                        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent" />
+                        <div className="relative z-20 space-y-0.5 text-left">
+                          <span className="text-[6px] font-black text-cyan-400 uppercase tracking-wider block">Arrested Dev</span>
+                          <h3 className="text-[9px] font-extrabold leading-tight text-white">Mr. Wendell</h3>
+                          <p className="text-[6px] text-zinc-400 leading-none">RPS Records</p>
+                        </div>
                       </div>
                     </div>
 
@@ -793,7 +1111,7 @@ export function CustomerSideDemo() {
 
                   <div className="flex-grow overflow-y-auto px-3 py-3 space-y-3">
                     <div className="text-center space-y-2">
-                      <div className="h-8 w-8 bg-[var(--m-accent-dim)] border border-[var(--m-accent)]/20 rounded-full flex items-center justify-center mx-auto text-[var(--m-accent-2)]">
+                      <div className="h-8 w-8 bg-cyan-950/40 border border-cyan-500/20 rounded-full flex items-center justify-center mx-auto text-cyan-400">
                         <Share2 className="h-3.5 w-3.5" />
                       </div>
                       <div className="space-y-0.5">
@@ -846,9 +1164,33 @@ export function CustomerSideDemo() {
                         </button>
                       </div>
 
-                      {sharesCount > 0 && (
-                        <div className="bg-emerald-950/20 border border-emerald-800/30 rounded-md p-1.5 text-center text-[9px] text-emerald-400 font-semibold animate-bounce">
-                          ✓ Shared with 4 friends!
+                      {sharesCount > 0 ? (
+                        <div className="bg-emerald-950/20 border border-emerald-800/30 rounded-md p-2 text-center text-[9px] text-emerald-400 font-semibold space-y-2 animate-fadeIn shrink-0">
+                          <span>✓ Shared with 4 friends!</span>
+                          <div className="flex justify-center items-center h-10 relative">
+                            {/* Animated SVG Network Graph */}
+                            <svg className="w-24 h-10" viewBox="0 0 100 40">
+                              {/* Connector Lines */}
+                              <line x1="50" y1="20" x2="15" y2="8" stroke="#10B981" strokeWidth="1" className="opacity-80 animate-pulse" />
+                              <line x1="50" y1="20" x2="15" y2="32" stroke="#10B981" strokeWidth="1" className="opacity-80 animate-pulse" />
+                              <line x1="50" y1="20" x2="85" y2="8" stroke="#10B981" strokeWidth="1" className="opacity-80 animate-pulse" />
+                              <line x1="50" y1="20" x2="85" y2="32" stroke="#10B981" strokeWidth="1" className="opacity-80 animate-pulse" />
+                              
+                              {/* Center Node (You) */}
+                              <circle cx="50" cy="20" r="4.5" fill="#145CFF" />
+                              <text x="50" y="26" fontSize="5" fill="#FFF" textAnchor="middle" fontWeight="bold">You</text>
+                              
+                              {/* Friend Nodes */}
+                              <circle cx="15" cy="8" r="3.5" fill="#10B981" />
+                              <circle cx="15" cy="32" r="3.5" fill="#10B981" />
+                              <circle cx="85" cy="8" r="3.5" fill="#10B981" />
+                              <circle cx="85" cy="32" r="3.5" fill="#10B981" />
+                            </svg>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-[7px] text-zinc-500 text-center animate-pulse py-1">
+                          Click messaging icons above to share
                         </div>
                       )}
                     </div>
@@ -869,7 +1211,7 @@ export function CustomerSideDemo() {
               {stage === 9 && (
                 <div className="flex-grow flex flex-col bg-zinc-950 text-white animate-fadeIn">
                   <div className="bg-zinc-900 border-b border-zinc-800 px-3 py-1.5 text-center shrink-0">
-                    <h3 className="text-[8px] font-black uppercase text-[var(--m-accent-2)] tracking-widest">Attribution Receipt</h3>
+                    <h3 className="text-[8px] font-black uppercase text-cyan-400 tracking-widest">Attribution Receipt</h3>
                   </div>
 
                   <div className="flex-grow overflow-y-auto p-3 space-y-3">
@@ -949,120 +1291,185 @@ export function CustomerSideDemo() {
             </div>
 
             {/* Vertically stacked timeline events */}
-            <div className="relative border-l border-[var(--m-border)] pl-4 space-y-2.5 py-1 ml-2">
+            <div className="relative border-l border-[var(--m-border)] pl-4 space-y-3 py-1 ml-2">
               
               {/* Event 1 */}
-              <div className="relative">
+              <div 
+                onClick={() => handleStageChange(2)}
+                className="relative cursor-pointer hover:bg-[var(--m-surface-3)]/50 transition-colors rounded-md p-1.5 -ml-1.5"
+              >
                 <div className={cn(
-                  "absolute -left-[21px] top-1 h-3 w-3 rounded-full border-2 flex items-center justify-center transition-all duration-300",
+                  "absolute -left-[20px] top-2.5 h-3 w-3 rounded-full border-2 flex items-center justify-center transition-all duration-300",
                   isTimelineItemActive(2) ? "bg-emerald-600 border-emerald-500 text-white scale-110" : "bg-[var(--m-surface)] border-[var(--m-border)]"
                 )}>
                   {isTimelineItemActive(2) && <span className="text-[7px] font-bold">✓</span>}
                 </div>
-                <div className={cn("space-y-0.5 transition-opacity duration-300", isTimelineItemActive(2) ? "opacity-100" : "opacity-35")}>
+                <div className={cn("space-y-0.5 transition-opacity duration-300", isTimelineItemActive(2) ? "opacity-100" : "opacity-35 hover:opacity-75")}>
                   <h3 className="text-xs font-semibold text-[var(--m-text)] leading-none">1. Human Answer Verified</h3>
                   <p className="text-[9px] text-[var(--m-muted)]">Call connected to opted-in mobile line. Audio channel validated.</p>
                 </div>
               </div>
 
               {/* Event 2 */}
-              <div className="relative">
+              <div 
+                onClick={() => handleStageChange(3)}
+                className="relative cursor-pointer hover:bg-[var(--m-surface-3)]/50 transition-colors rounded-md p-1.5 -ml-1.5"
+              >
                 <div className={cn(
-                  "absolute -left-[21px] top-1 h-3 w-3 rounded-full border-2 flex items-center justify-center transition-all duration-300",
+                  "absolute -left-[20px] top-2.5 h-3 w-3 rounded-full border-2 flex items-center justify-center transition-all duration-300",
                   isTimelineItemActive(3) ? "bg-emerald-600 border-emerald-500 text-white scale-110" : "bg-[var(--m-surface)] border-[var(--m-border)]"
                 )}>
                   {isTimelineItemActive(3) && <span className="text-[7px] font-bold">✓</span>}
                 </div>
-                <div className={cn("space-y-0.5 transition-opacity duration-300", isTimelineItemActive(3) ? "opacity-100" : "opacity-35")}>
+                <div className={cn("space-y-0.5 transition-opacity duration-300", isTimelineItemActive(3) ? "opacity-100" : "opacity-35 hover:opacity-75")}>
                   <h3 className="text-xs font-semibold text-[var(--m-text)] leading-none">2. Song Preview Delivered</h3>
                   <p className="text-[9px] text-[var(--m-muted)]">Audio Preview of {"\"Mr. Wendell\""} streamed to caller handset.</p>
                 </div>
               </div>
 
               {/* Event 3 */}
-              <div className="relative">
+              <div 
+                onClick={() => handleStageChange(4)}
+                className="relative cursor-pointer hover:bg-[var(--m-surface-3)]/50 transition-colors rounded-md p-1.5 -ml-1.5"
+              >
                 <div className={cn(
-                  "absolute -left-[21px] top-1 h-3 w-3 rounded-full border-2 flex items-center justify-center transition-all duration-300",
+                  "absolute -left-[20px] top-2.5 h-3 w-3 rounded-full border-2 flex items-center justify-center transition-all duration-300",
                   isTimelineItemActive(4) ? "bg-emerald-600 border-emerald-500 text-white scale-110" : "bg-[var(--m-surface)] border-[var(--m-border)]"
                 )}>
                   {isTimelineItemActive(4) && <span className="text-[7px] font-bold">✓</span>}
                 </div>
-                <div className={cn("space-y-0.5 transition-opacity duration-300", isTimelineItemActive(4) ? "opacity-100" : "opacity-35")}>
+                <div className={cn("space-y-0.5 transition-opacity duration-300", isTimelineItemActive(4) ? "opacity-100" : "opacity-35 hover:opacity-75")}>
                   <h3 className="text-xs font-semibold text-[var(--m-text)] leading-none">3. Fan Feedback Captured</h3>
                   <p className="text-[9px] text-[var(--m-muted)]">Voice feedback converted into positive sentiment score.</p>
                 </div>
               </div>
 
               {/* Event 4 */}
-              <div className="relative">
+              <div 
+                onClick={() => handleStageChange(5)}
+                className="relative cursor-pointer hover:bg-[var(--m-surface-3)]/50 transition-colors rounded-md p-1.5 -ml-1.5"
+              >
                 <div className={cn(
-                  "absolute -left-[21px] top-1 h-3 w-3 rounded-full border-2 flex items-center justify-center transition-all duration-300",
+                  "absolute -left-[20px] top-2.5 h-3 w-3 rounded-full border-2 flex items-center justify-center transition-all duration-300",
                   isTimelineItemActive(5) ? "bg-emerald-600 border-emerald-500 text-white scale-110" : "bg-[var(--m-surface)] border-[var(--m-border)]"
                 )}>
                   {isTimelineItemActive(5) && <span className="text-[7px] font-bold">✓</span>}
                 </div>
-                <div className={cn("space-y-0.5 transition-opacity duration-300", isTimelineItemActive(5) ? "opacity-100" : "opacity-35")}>
+                <div className={cn("space-y-0.5 transition-opacity duration-300", isTimelineItemActive(5) ? "opacity-100" : "opacity-35 hover:opacity-75")}>
                   <h3 className="text-xs font-semibold text-[var(--m-text)] leading-none">4. Branded Link Delivered</h3>
                   <p className="text-[9px] text-[var(--m-muted)]">Sponsor landing page url dispatched to client mobile via SMS payload.</p>
                 </div>
               </div>
 
               {/* Event 5 */}
-              <div className="relative">
+              <div 
+                onClick={() => handleStageChange(6)}
+                className="relative cursor-pointer hover:bg-[var(--m-surface-3)]/50 transition-colors rounded-md p-1.5 -ml-1.5"
+              >
                 <div className={cn(
-                  "absolute -left-[21px] top-1 h-3 w-3 rounded-full border-2 flex items-center justify-center transition-all duration-300",
+                  "absolute -left-[20px] top-2.5 h-3 w-3 rounded-full border-2 flex items-center justify-center transition-all duration-300",
                   isTimelineItemActive(6) ? "bg-emerald-600 border-emerald-500 text-white scale-110" : "bg-[var(--m-surface)] border-[var(--m-border)]"
                 )}>
                   {isTimelineItemActive(6) && <span className="text-[7px] font-bold">✓</span>}
                 </div>
-                <div className={cn("space-y-0.5 transition-opacity duration-300", isTimelineItemActive(6) ? "opacity-100" : "opacity-35")}>
+                <div className={cn("space-y-0.5 transition-opacity duration-300", isTimelineItemActive(6) ? "opacity-100" : "opacity-35 hover:opacity-75")}>
                   <h3 className="text-xs font-semibold text-[var(--m-text)] leading-none">5. Link Opened & Verified</h3>
                   <p className="text-[9px] text-[var(--m-muted)]">Link click registered on node server with UTM campaign codes.</p>
                 </div>
               </div>
 
               {/* Event 6 */}
-              <div className="relative">
+              <div 
+                onClick={() => handleStageChange(7)}
+                className="relative cursor-pointer hover:bg-[var(--m-surface-3)]/50 transition-colors rounded-md p-1.5 -ml-1.5"
+              >
                 <div className={cn(
-                  "absolute -left-[21px] top-1 h-3 w-3 rounded-full border-2 flex items-center justify-center transition-all duration-300",
+                  "absolute -left-[20px] top-2.5 h-3 w-3 rounded-full border-2 flex items-center justify-center transition-all duration-300",
                   isTimelineItemActive(7) ? "bg-emerald-600 border-emerald-500 text-white scale-110" : "bg-[var(--m-surface)] border-[var(--m-border)]"
                 )}>
                   {isTimelineItemActive(7) && <span className="text-[7px] font-bold">✓</span>}
                 </div>
-                <div className={cn("space-y-0.5 transition-opacity duration-300", isTimelineItemActive(7) ? "opacity-100" : "opacity-35")}>
+                <div className={cn("space-y-0.5 transition-opacity duration-300", isTimelineItemActive(7) ? "opacity-100" : "opacity-35 hover:opacity-75")}>
                   <h3 className="text-xs font-semibold text-[var(--m-text)] leading-none">6. Platform Save Attribute</h3>
                   <p className="text-[9px] text-[var(--m-muted)]">Fan liked and pre-saved the song. DSP API sync validated.</p>
                 </div>
               </div>
 
               {/* Event 7 */}
-              <div className="relative">
+              <div 
+                onClick={() => handleStageChange(8)}
+                className="relative cursor-pointer hover:bg-[var(--m-surface-3)]/50 transition-colors rounded-md p-1.5 -ml-1.5"
+              >
                 <div className={cn(
-                  "absolute -left-[21px] top-1 h-3 w-3 rounded-full border-2 flex items-center justify-center transition-all duration-300",
+                  "absolute -left-[20px] top-2.5 h-3 w-3 rounded-full border-2 flex items-center justify-center transition-all duration-300",
                   isTimelineItemActive(8) ? "bg-emerald-600 border-emerald-500 text-white scale-110" : "bg-[var(--m-surface)] border-[var(--m-border)]"
                 )}>
                   {isTimelineItemActive(8) && <span className="text-[7px] font-bold">✓</span>}
                 </div>
-                <div className={cn("space-y-0.5 transition-opacity duration-300", isTimelineItemActive(8) ? "opacity-100" : "opacity-35")}>
+                <div className={cn("space-y-0.5 transition-opacity duration-300", isTimelineItemActive(8) ? "opacity-100" : "opacity-35 hover:opacity-75")}>
                   <h3 className="text-xs font-semibold text-[var(--m-text)] leading-none">7. Fan Club Registration Completed</h3>
                   <p className="text-[9px] text-[var(--m-muted)]">Verified first-party contact lead logged inside the CRM data layer.</p>
                 </div>
               </div>
 
               {/* Event 8 */}
-              <div className="relative">
+              <div 
+                onClick={() => handleStageChange(9)}
+                className="relative cursor-pointer hover:bg-[var(--m-surface-3)]/50 transition-colors rounded-md p-1.5 -ml-1.5"
+              >
                 <div className={cn(
-                  "absolute -left-[21px] top-1 h-3 w-3 rounded-full border-2 flex items-center justify-center transition-all duration-300",
+                  "absolute -left-[20px] top-2.5 h-3 w-3 rounded-full border-2 flex items-center justify-center transition-all duration-300",
                   isTimelineItemActive(9) ? "bg-emerald-600 border-emerald-500 text-white scale-110" : "bg-[var(--m-surface)] border-[var(--m-border)]"
                 )}>
                   {isTimelineItemActive(9) && <span className="text-[7px] font-bold">✓</span>}
                 </div>
-                <div className={cn("space-y-0.5 transition-opacity duration-300", isTimelineItemActive(9) ? "opacity-100" : "opacity-35")}>
+                <div className={cn("space-y-0.5 transition-opacity duration-300", isTimelineItemActive(9) ? "opacity-100" : "opacity-35 hover:opacity-75")}>
                   <h3 className="text-xs font-semibold text-[var(--m-text)] leading-none">8. Viral Share Attributed</h3>
                   <p className="text-[9px] text-[var(--m-muted)]">Mock share tracking loop recorded 4 referral actions and generated a proof packet.</p>
                 </div>
               </div>
 
+            </div>
+          </div>
+
+          {/* Telemetry Console */}
+          <div className="shrink-0 bg-zinc-950 border border-zinc-900 rounded-xl p-3 font-mono text-[9px] text-zinc-300 space-y-1.5 shadow-inner">
+            <div className="flex justify-between items-center border-b border-zinc-800 pb-1 mb-1" style={{ borderBottomColor: 'rgba(255, 255, 255, 0.05)' }}>
+              <span className="text-cyan-400 font-bold uppercase tracking-wider flex items-center gap-1.5" style={{ color: '#22D3EE' }}>
+                <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" style={{ backgroundColor: '#22D3EE' }} />
+                Live Node Log / Telemetry Console
+              </span>
+              <span className="text-[7.5px] text-zinc-500 uppercase">Port 8080</span>
+            </div>
+            <div className="space-y-1 max-h-20 overflow-y-auto">
+              {getSimulatedLogs().map((log, index) => (
+                <div key={index} className="flex gap-2 leading-relaxed">
+                  <span className="text-zinc-500">{log.time}</span>
+                  <span className={cn(
+                    "font-bold shrink-0",
+                    log.level === 'SYS' ? 'text-blue-400' :
+                    log.level === 'SIP' ? 'text-purple-400' :
+                    log.level === 'AI' ? 'text-cyan-400' :
+                    log.level === 'STT' ? 'text-amber-400' :
+                    log.level === 'DSP' ? 'text-emerald-400' :
+                    log.level === 'SMS' ? 'text-pink-400' :
+                    log.level === 'HTTP' ? 'text-sky-400' :
+                    log.level === 'CRM' ? 'text-teal-400' : 'text-zinc-400'
+                  )}
+                    style={{
+                      color: log.level === 'SYS' ? '#60A5FA' :
+                             log.level === 'SIP' ? '#C084FC' :
+                             log.level === 'AI' ? '#22D3EE' :
+                             log.level === 'STT' ? '#FBBF24' :
+                             log.level === 'DSP' ? '#34D399' :
+                             log.level === 'SMS' ? '#F472B6' :
+                             log.level === 'HTTP' ? '#38BDF8' :
+                             log.level === 'CRM' ? '#2DD4BF' : '#A1A1AA'
+                    }}
+                  >[{log.level}]</span>
+                  <span className="text-zinc-300" style={{ color: '#D4D4D8' }}>{log.msg}</span>
+                </div>
+              ))}
             </div>
           </div>
 
