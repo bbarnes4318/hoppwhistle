@@ -41,30 +41,37 @@ export function MusicConsoleShell({ children }: { children: React.ReactNode }) {
               </div>
             </div>
             {/* Live Status Area */}
+            {/* Live Status Capsule */}
             <div className="flex items-center gap-3 shrink-0 ml-4">
-              <div className="flex items-center gap-3 shrink-0 text-[10px] font-semibold text-[var(--m-text-2)]">
+              <div className="flex items-center gap-3 px-3 py-1 bg-[var(--m-surface-2)] border border-[var(--m-border-2)] rounded-full text-[10px] font-semibold text-[var(--m-text-2)] shadow-xs">
                 {/* Network Live */}
-                <div className="flex items-center gap-1.5 px-2 py-0.5 bg-[rgba(16,185,129,0.06)] border border-[rgba(16,185,129,0.15)] rounded text-[#10b981]">
+                <div className="flex items-center gap-1.5 text-[#10b981] font-bold">
                   <span className="h-1.5 w-1.5 rounded-full bg-[#10b981] animate-pulse" />
-                  <span className="text-[9px] uppercase tracking-wider">Network: Live</span>
+                  <span className="text-[9px] uppercase tracking-wider">LIVE</span>
                 </div>
                 
+                <span className="h-3.5 w-[1px] bg-[var(--m-border-2)]" />
+
                 {/* Stations */}
-                <div className="hidden sm:flex items-center gap-1 px-2 py-0.5 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded text-[var(--m-text)]">
-                  <span className="text-[9px] text-[var(--m-muted)] uppercase tracking-wider">Stations:</span>
-                  <span className="font-bold">25</span>
+                <div className="hidden sm:flex items-center gap-1.5">
+                  <span className="text-[9px] text-[var(--m-muted)] font-bold uppercase tracking-wider">STATIONS:</span>
+                  <span className="font-extrabold text-[var(--m-text)]">25</span>
                 </div>
+
+                <span className="hidden sm:inline h-3.5 w-[1px] bg-[var(--m-border-2)]" />
 
                 {/* Media Inventory */}
-                <div className="hidden md:flex items-center gap-1 px-2 py-0.5 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded text-[var(--m-text)]">
-                  <span className="text-[9px] text-[var(--m-muted)] uppercase tracking-wider">Inventory:</span>
-                  <span className="font-bold text-[#00a3ff]">Active</span>
+                <div className="hidden md:flex items-center gap-1.5">
+                  <span className="text-[9px] text-[var(--m-muted)] font-bold uppercase tracking-wider">INVENTORY:</span>
+                  <span className="font-extrabold text-[var(--m-accent)]">Active</span>
                 </div>
 
+                <span className="hidden md:inline h-3.5 w-[1px] bg-[var(--m-border-2)]" />
+
                 {/* Label */}
-                <div className="flex items-center gap-1.5 px-2 py-0.5 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded shadow-xs text-[var(--m-text)]">
-                  <span className="text-[9px] text-[var(--m-muted)] uppercase tracking-wider">Node:</span>
-                  <span className="font-bold text-[10px]">Demo Label / RPS Records</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[9px] text-[var(--m-muted)] font-bold uppercase tracking-wider">NODE:</span>
+                  <span className="font-extrabold text-[var(--m-text)]">Demo Label / RPS Records</span>
                 </div>
               </div>
             </div>

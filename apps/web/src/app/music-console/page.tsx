@@ -269,20 +269,12 @@ export default function MusicConsolePage() {
               </span>
             </div>
 
-            {/* Premium Pipeline Chevron/Timeline Flow */}
-            <div className="relative flex flex-col xl:flex-row items-stretch justify-between gap-3 pt-2">
-              {/* Connected glowing line behind steps on large screen layout */}
-              <div className="hidden xl:block absolute top-[28px] left-[5%] right-[5%] h-[1.5px] bg-gradient-to-r from-[var(--m-accent)] to-[var(--m-accent-2)] opacity-20 z-0" />
-
-              {/* Pulsing telemetry dot animation inside the connector line */}
-              <div className="hidden xl:block absolute top-[27px] left-[5%] right-[5%] h-[3px] z-0 overflow-hidden opacity-30">
-                <div className="h-full w-24 bg-gradient-to-r from-transparent via-[var(--m-accent)] to-transparent animate-flow-dot absolute" />
-              </div>
-
+            {/* Premium Pipeline Grid Flow */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-2">
               {funnelData.map((stage, i) => (
                 <div
                   key={stage.label}
-                  className="flex-1 min-w-[140px] p-3 bg-[var(--m-surface-2)] border border-[var(--m-border-2)] rounded-lg hover:border-[var(--m-accent)]/30 hover:bg-[var(--m-surface-3)] hover:-translate-y-0.5 transition-all duration-200 flex flex-col justify-between min-h-[110px] relative z-10 shadow-sm"
+                  className="p-3 bg-[var(--m-surface-2)] border border-[var(--m-border-2)] rounded-lg hover:border-[var(--m-accent)]/30 hover:bg-[var(--m-surface-3)] hover:-translate-y-0.5 transition-all duration-200 flex flex-col justify-between min-h-[110px] relative z-10 shadow-sm"
                 >
                   <div>
                     <div className="flex items-center justify-between">
