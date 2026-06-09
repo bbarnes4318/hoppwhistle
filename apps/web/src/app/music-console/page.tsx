@@ -126,7 +126,7 @@ export default function MusicConsolePage() {
         <div className="absolute right-0 top-0 h-full w-1/3 bg-gradient-to-l from-[var(--m-accent-dim)] to-transparent pointer-events-none opacity-40" />
         <div className="space-y-1 relative z-10">
           <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-xl lg:text-2xl font-black tracking-tight text-white uppercase">
+            <h1 className="text-xl lg:text-2xl font-black tracking-tight text-[var(--m-text)] uppercase">
               RPS Network Command Center
             </h1>
             <div className="flex items-center gap-1.5 px-2.5 py-0.5 bg-[rgba(16,185,129,0.06)] border border-[rgba(16,185,129,0.15)] rounded-full text-[#10b981] text-[9px] font-bold">
@@ -258,13 +258,13 @@ export default function MusicConsolePage() {
       {/* ─── 3. Main 2-Column Operating View ─── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Media Inventory Pipeline (col-span-2) */}
-        <div className="lg:col-span-2 flex flex-col justify-between bg-[var(--m-surface-2)] border border-[var(--m-border)] p-5 rounded-lg">
+        <div className="lg:col-span-2 flex flex-col justify-between bg-[var(--m-surface)] border border-[var(--m-border)] p-5 rounded-lg shadow-sm">
           <div>
             <div className="m-executive-header">
-              <h3 className="m-executive-title flex items-center gap-2">
+              <h3 className="m-executive-title flex items-center gap-2 text-[var(--m-text)]">
                 <Coins className="h-4.5 w-4.5 text-[var(--m-accent)]" /> Media Inventory Pipeline
               </h3>
-              <span className="text-[10px] font-bold text-emerald-400 bg-emerald-400/10 border border-emerald-500/15 px-2 py-0.5 rounded uppercase font-mono tracking-wider">
+              <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded uppercase font-mono tracking-wider">
                 Live Funnel Tracking
               </span>
             </div>
@@ -282,7 +282,7 @@ export default function MusicConsolePage() {
               {funnelData.map((stage, i) => (
                 <div
                   key={stage.label}
-                  className="flex-1 min-w-[140px] p-3 bg-black/30 border border-[var(--m-border-2)] rounded-lg hover:border-[var(--m-accent)]/30 hover:-translate-y-0.5 transition-all duration-200 flex flex-col justify-between min-h-[110px] relative z-10 shadow-lg"
+                  className="flex-1 min-w-[140px] p-3 bg-[var(--m-surface-2)] border border-[var(--m-border-2)] rounded-lg hover:border-[var(--m-accent)]/30 hover:bg-[var(--m-surface-3)] hover:-translate-y-0.5 transition-all duration-200 flex flex-col justify-between min-h-[110px] relative z-10 shadow-sm"
                 >
                   <div>
                     <div className="flex items-center justify-between">
@@ -291,7 +291,7 @@ export default function MusicConsolePage() {
                       </span>
                       {getFunnelIcon(i)}
                     </div>
-                    <div className="font-extrabold text-white text-[11px] uppercase tracking-wider mt-2.5 leading-snug">
+                    <div className="font-extrabold text-[var(--m-text)] text-[11px] uppercase tracking-wider mt-2.5 leading-snug">
                       {stage.label}
                     </div>
                     <div className="text-[9px] text-[var(--m-muted)] leading-tight mt-1.5 font-medium">
@@ -300,7 +300,7 @@ export default function MusicConsolePage() {
                   </div>
 
                   <div className="pt-2 border-t border-[var(--m-border-2)] mt-3 flex justify-between items-baseline">
-                    <span className="font-mono text-zinc-300 font-bold text-[11px]">
+                    <span className="font-mono text-[var(--m-text-2)] font-bold text-[11px]">
                       {formatCompactNumber(stage.count)}
                     </span>
                     <span
@@ -318,13 +318,13 @@ export default function MusicConsolePage() {
 
         {/* Right Column: Live Station Pulse (col-span-1) */}
         <div className="lg:col-span-1">
-          <div className="m-card p-5 bg-[var(--m-surface-2)] h-full flex flex-col justify-between border-l-4 border-[var(--m-accent)]">
+          <div className="m-card p-5 bg-[var(--m-surface)] h-full flex flex-col justify-between border-l-4 border-[var(--m-accent)] shadow-sm">
             <div className="m-executive-header">
-              <h3 className="m-executive-title flex items-center gap-2">
+              <h3 className="m-executive-title flex items-center gap-2 text-[var(--m-text)]">
                 <Volume2 className="h-4.5 w-4.5 text-[var(--m-accent)] animate-pulse" /> Live
                 Station Pulse
               </h3>
-              <div className="flex items-center gap-1.5 px-2 py-0.5 bg-[rgba(16,185,129,0.06)] border border-[rgba(16,185,129,0.15)] rounded text-[#10b981] text-[9px] font-bold font-mono tracking-wider">
+              <div className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50 border border-emerald-150 rounded text-emerald-700 text-[9px] font-bold font-mono tracking-wider">
                 DIALING
               </div>
             </div>
@@ -332,33 +332,33 @@ export default function MusicConsolePage() {
             <div className="space-y-3 flex-1 flex flex-col justify-center">
               <div className="flex justify-between items-center border-b border-[var(--m-border-2)] pb-2 text-xs">
                 <span className="text-[var(--m-muted)] font-semibold">Active Campaign</span>
-                <span className="font-bold text-white text-right max-w-[160px] truncate">
+                <span className="font-bold text-[var(--m-text)] text-right max-w-[160px] truncate">
                   {livePulse.campaignName}
                 </span>
               </div>
               <div className="flex justify-between items-center border-b border-[var(--m-border-2)] pb-2 text-xs">
                 <span className="text-[var(--m-muted)] font-semibold">Artist Channel</span>
-                <span className="font-bold text-white">{livePulse.artist}</span>
+                <span className="font-bold text-[var(--m-text)]">{livePulse.artist}</span>
               </div>
               <div className="flex justify-between items-center border-b border-[var(--m-border-2)] pb-2 text-xs">
                 <span className="text-[var(--m-muted)] font-semibold">Sponsor Target</span>
-                <span className="font-semibold text-zinc-300 text-right max-w-[160px] truncate">
+                <span className="font-semibold text-[var(--m-text-2)] text-right max-w-[160px] truncate">
                   {livePulse.segment}
                 </span>
               </div>
               <div className="flex justify-between items-center border-b border-[var(--m-border-2)] pb-2 text-xs">
                 <span className="text-[var(--m-muted)] font-semibold">Answer Rate</span>
-                <span className="font-bold text-white font-mono">{livePulse.answerRate}%</span>
+                <span className="font-bold text-[var(--m-text)] font-mono">{livePulse.answerRate}%</span>
               </div>
               <div className="flex justify-between items-center border-b border-[var(--m-border-2)] pb-2 text-xs">
                 <span className="text-[var(--m-muted)] font-semibold">Verified Action Rate</span>
-                <span className="font-bold text-emerald-400 font-mono">
+                <span className="font-bold text-emerald-600 font-mono">
                   {livePulse.verifiedRate}%
                 </span>
               </div>
               <div className="flex justify-between items-center border-b border-[var(--m-border-2)] pb-2 text-xs">
                 <span className="text-[var(--m-muted)] font-semibold">Cost per Action (CPVA)</span>
-                <span className="font-bold text-[var(--m-accent-gold)] font-mono">
+                <span className="font-bold text-[#D97706] font-mono">
                   ${livePulse.cpa.toFixed(2)}
                 </span>
               </div>
@@ -366,11 +366,11 @@ export default function MusicConsolePage() {
                 <span className="text-[var(--m-muted)] font-semibold">Proof Captured</span>
                 <div className="flex items-center gap-2">
                   <div className="m-equalizer shrink-0">
-                    <span className="m-equalizer-bar" />
-                    <span className="m-equalizer-bar" />
-                    <span className="m-equalizer-bar" />
+                    <span className="m-equalizer-bar bg-[var(--m-accent)]" />
+                    <span className="m-equalizer-bar bg-[var(--m-accent)]" />
+                    <span className="m-equalizer-bar bg-[var(--m-accent)]" />
                   </div>
-                  <span className="font-bold text-white font-mono">
+                  <span className="font-bold text-[var(--m-text)] font-mono">
                     {formatCompactNumber(7750)}
                   </span>
                 </div>
@@ -392,9 +392,9 @@ export default function MusicConsolePage() {
       {/* ─── 4. Bottom Row: Campaigns, Markets, and Proof Stream ─── */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Top Campaigns Table */}
-        <div className="m-card p-5 bg-[var(--m-surface-2)]">
+        <div className="m-card p-5 bg-[var(--m-surface)] shadow-sm">
           <div className="m-executive-header">
-            <h3 className="m-executive-title flex items-center gap-1.5">
+            <h3 className="m-executive-title flex items-center gap-1.5 text-[var(--m-text)]">
               <TrendingUp className="h-4.5 w-4.5 text-[var(--m-accent)]" /> Active Fan Stations
             </h3>
             <span className="text-[9px] font-bold text-[var(--m-muted)] font-mono">5 STATIONS</span>
@@ -412,10 +412,10 @@ export default function MusicConsolePage() {
               </thead>
               <tbody className="divide-y divide-[var(--m-border-2)]">
                 {fanCampaigns.slice(0, 5).map(camp => (
-                  <tr key={camp.id} className="hover:bg-white/[0.01] transition-colors">
+                  <tr key={camp.id} className="hover:bg-black/[0.015] transition-colors">
                     <td className="py-2.5">
                       <div
-                        className="font-bold text-white max-w-[130px] truncate"
+                        className="font-bold text-[var(--m-text)] max-w-[130px] truncate"
                         title={camp.name}
                       >
                         {camp.name}
@@ -425,10 +425,10 @@ export default function MusicConsolePage() {
                     <td className="py-2.5">
                       <StatusBadge status={camp.status} className="text-[8px]" />
                     </td>
-                    <td className="py-2.5 text-right font-mono font-bold text-zinc-300">
+                    <td className="py-2.5 text-right font-mono font-bold text-[var(--m-text-2)]">
                       {formatCompactNumber(camp.verifiedEngagements)}
                     </td>
-                    <td className="py-2.5 text-right font-mono font-bold text-[var(--m-accent-gold)]">
+                    <td className="py-2.5 text-right font-mono font-bold text-[#D97706]">
                       {camp.cpa > 0 ? `$${camp.cpa.toFixed(2)}` : '—'}
                     </td>
                   </tr>
@@ -439,9 +439,9 @@ export default function MusicConsolePage() {
         </div>
 
         {/* Sponsor Cohort Markets */}
-        <div className="m-card p-5 bg-[var(--m-surface-2)]">
+        <div className="m-card p-5 bg-[var(--m-surface)] shadow-sm">
           <div className="m-executive-header">
-            <h3 className="m-executive-title flex items-center gap-1.5">
+            <h3 className="m-executive-title flex items-center gap-1.5 text-[var(--m-text)]">
               <MapPin className="h-4.5 w-4.5 text-[var(--m-accent)]" /> Sponsor Cohorts
             </h3>
             <span className="text-[9px] font-bold text-[var(--m-accent-2)] font-mono">
@@ -453,24 +453,24 @@ export default function MusicConsolePage() {
             {topSegmentsData.slice(0, 4).map((seg, i) => (
               <div
                 key={seg.segment}
-                className="space-y-1.5 bg-black/15 p-2.5 border border-[var(--m-border-2)] rounded-lg"
+                className="space-y-1.5 bg-[var(--m-surface-2)] p-2.5 border border-[var(--m-border-2)] rounded-lg"
               >
                 <div className="flex justify-between items-center text-xs">
-                  <div className="flex items-center gap-2 font-bold text-white">
-                    <span className="w-4 h-4 flex items-center justify-center border border-[var(--m-border-2)] rounded bg-black/40 text-[9px] font-mono text-[var(--m-muted)]">
+                  <div className="flex items-center gap-2 font-bold text-[var(--m-text)]">
+                    <span className="w-4 h-4 flex items-center justify-center border border-[var(--m-border-2)] rounded bg-[var(--m-surface-3)] text-[9px] font-mono text-[var(--m-muted)]">
                       {i + 1}
                     </span>
                     <span className="max-w-[120px] truncate" title={seg.segment}>
                       {seg.segment}
                     </span>
                   </div>
-                  <span className="text-[10px] font-bold text-emerald-400 font-mono">
+                  <span className="text-[10px] font-bold text-emerald-600 font-mono">
                     {seg.engagement}% Yield
                   </span>
                 </div>
 
                 <div className="space-y-1">
-                  <div className="h-1.5 w-full bg-zinc-950 rounded-full overflow-hidden">
+                  <div className="h-1.5 w-full bg-[var(--m-surface-3)] rounded-full overflow-hidden">
                     <div
                       className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 rounded-full"
                       style={{ width: `${seg.engagement}%` }}
@@ -486,9 +486,9 @@ export default function MusicConsolePage() {
         </div>
 
         {/* Live Proof Stream Preview */}
-        <div className="m-card p-5 bg-[var(--m-surface-2)]">
+        <div className="m-card p-5 bg-[var(--m-surface)] shadow-sm">
           <div className="m-executive-header">
-            <h3 className="m-executive-title flex items-center gap-1.5">
+            <h3 className="m-executive-title flex items-center gap-1.5 text-[var(--m-text)]">
               <Flame className="h-4.5 w-4.5 text-[var(--m-accent)] animate-pulse" /> Live Proof
               Stream
             </h3>
@@ -504,10 +504,10 @@ export default function MusicConsolePage() {
             {proofRecords.slice(0, 3).map(r => (
               <div
                 key={r.id}
-                className="p-2.5 bg-black/15 border border-[var(--m-border-2)] rounded-lg hover:border-[var(--m-border)] transition-colors flex items-center justify-between gap-3 text-xs"
+                className="p-2.5 bg-[var(--m-surface-2)] border border-[var(--m-border-2)] rounded-lg hover:border-[var(--m-accent)]/30 hover:bg-[var(--m-surface-3)] transition-colors flex items-center justify-between gap-3 text-xs"
               >
                 <div className="min-w-0">
-                  <div className="font-bold text-white truncate">{r.fanName}</div>
+                  <div className="font-bold text-[var(--m-text)] truncate">{r.fanName}</div>
                   <div className="text-[9px] text-[var(--m-muted)] mt-0.5 font-mono font-medium">
                     {new Date(r.timestamp).toLocaleTimeString('en-US', {
                       hour: '2-digit',
@@ -530,13 +530,13 @@ export default function MusicConsolePage() {
       </div>
 
       {/* ─── 5. Investor Narrative Card ─── */}
-      <div className="border border-[var(--m-accent-gold)]/20 bg-[var(--m-accent-gold-dim)]/5 p-4 rounded-lg flex items-start gap-3 mt-6">
-        <Shield className="h-5 w-5 text-[var(--m-accent-gold)] shrink-0 mt-0.5" />
+      <div className="border border-amber-200 bg-amber-50 p-4 rounded-lg flex items-start gap-3 mt-6 shadow-xs">
+        <Shield className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
         <div className="space-y-1">
-          <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+          <h4 className="text-xs font-bold text-amber-900 uppercase tracking-wider">
             Why This Matters (Investor Context)
           </h4>
-          <p className="text-xs text-[var(--m-dim)] leading-relaxed font-medium">
+          <p className="text-xs text-amber-800 leading-relaxed font-medium">
             RPS turns artist fanbases into measurable media inventory. Every verified call creates
             proof, attribution, and sponsor-ready reporting.
           </p>

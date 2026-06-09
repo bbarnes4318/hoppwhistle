@@ -7,28 +7,29 @@
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
 .music-console {
-  /* ── Core Palette (RPS Deep Navy & Royal/Electric Blue Theme) ── */
-  --m-bg:         #020817;               /* Midnight navy background */
-  --m-surface:    #061A2F;               /* Deep navy surface */
-  --m-surface-2:  #071B36;               /* Panel navy */
-  --m-surface-3:  #0B2447;               /* Elevated panel */
-  --m-text:       #F8FAFC;               /* Primary slate text */
-  --m-text-2:     #CBD5E1;               /* Secondary text */
+  /* ── Core Palette (RPS Light Executive Theme) ── */
+  --m-bg:         #F5F8FC;               /* Light off-white background */
+  --m-surface:    #FFFFFF;               /* Card background */
+  --m-surface-2:  #F8FAFC;               /* Subtle panel background */
+  --m-surface-3:  #EEF4FB;               /* Secondary page background */
+  --m-text:       #061A2F;               /* Primary deep navy text */
+  --m-text-2:     #334155;               /* Secondary slate text */
   --m-muted:      #64748B;               /* Muted text */
-  --m-dim:        #475569;               /* Dim text */
-  --m-border:     rgba(47, 125, 255, 0.16); /* Border navy-blue */
-  --m-border-2:   rgba(148, 163, 184, 0.10);
-  --m-grid-line:  rgba(47, 125, 255, 0.015);
+  --m-dim:        #94A3B8;               /* Dim text */
+  --m-border:     #D8E2EF;               /* Main border */
+  --m-border-2:   #E2E8F0;               /* Soft border */
+  --m-grid-line:  rgba(20, 92, 255, 0.01);
   
   /* Primary brand blues & accents */
   --m-accent:     #145CFF;               /* Royal blue primary */
-  --m-accent-dim: rgba(20, 92, 255, 0.12);
+  --m-accent-dim: rgba(20, 92, 255, 0.08);
   --m-accent-2:   #2F7DFF;               /* Electric blue secondary */
-  --m-accent-2-dim: rgba(47, 125, 255, 0.14);
+  --m-accent-2-dim: rgba(47, 125, 255, 0.10);
   --m-accent-gold: #F59E0B;              /* Gold/Amber sparingly for warning/revenue */
   --m-accent-gold-dim: rgba(245, 158, 11, 0.08);
   --m-warning:    #F59E0B;               /* Warning/watch */
   --m-danger:     #EF4444;               /* Red */
+  --m-success:    #10B981;               /* Success/verified */
 
   /* ── Typography ── */
   --m-font-sans:  'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -99,10 +100,10 @@
 /* ── Hardware Console Panels with Corner Rivets ── */
 .m-card,
 .m-hardware-panel {
-  background: var(--m-surface-2) !important;
+  background: var(--m-surface) !important;
   border: 1px solid var(--m-border) !important;
   border-radius: 12px !important;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15) !important;
+  box-shadow: 0 4px 18px rgba(20, 92, 255, 0.03), 0 2px 6px rgba(0, 0, 0, 0.02) !important;
   position: relative !important;
   transition: all 0.2s ease-in-out !important;
 }
@@ -952,7 +953,25 @@
 .m-font-mono     { font-family: var(--m-font-mono); }
 
 .m-sidebar {
-  background: linear-gradient(180deg, #07090F 0%, #030408 100%);
+  --m-sidebar-bg: #020817;
+  --m-sidebar-surface: #061A2F;
+  --m-sidebar-text: #F8FAFC;
+  --m-sidebar-muted: #94A3B8;
+  --m-sidebar-active: #145CFF;
+
+  /* Scoped overrides for generic components inside sidebar */
+  --m-bg: #020817;
+  --m-surface: #061A2F;
+  --m-surface-2: #071B36;
+  --m-surface-3: #0B2447;
+  --m-text: #F8FAFC;
+  --m-text-2: #CBD5E1;
+  --m-muted: #94A3B8;
+  --m-dim: #475569;
+  --m-border: rgba(47, 125, 255, 0.16);
+  --m-border-2: rgba(148, 163, 184, 0.10);
+
+  background: var(--m-sidebar-bg);
   border-right: 1px solid rgba(255, 255, 255, 0.04);
   display: flex;
   flex-direction: column;
@@ -963,7 +982,7 @@
 .m-sidebar-section-title {
   font-size: 9px;
   font-weight: 800;
-  color: #4B5B75; /* Premium muted steel blue */
+  color: var(--m-sidebar-muted); /* Clear steel blue contrast */
   letter-spacing: 0.12em;
   text-transform: uppercase;
   padding: 1rem 1.25rem 0.35rem 1.25rem;
@@ -975,7 +994,7 @@
   align-items: center;
   gap: 0.75rem;
   padding: 0.65rem 1.25rem;
-  color: #7A8B9E; /* Soft slate/steel blue inactive text */
+  color: var(--m-sidebar-muted); /* Clear inactive contrast */
   font-size: 0.8125rem;
   font-weight: 600;
   border-radius: 6px;
@@ -992,24 +1011,24 @@
 }
 
 .m-sidebar-link:hover {
-  color: #F8FAFC;
+  color: var(--m-sidebar-text);
   background-color: rgba(255, 255, 255, 0.025);
-  border-left-color: rgba(0, 163, 255, 0.3);
+  border-left-color: rgba(20, 92, 255, 0.4);
 }
 
 .m-sidebar-link:hover svg {
-  color: #00a3ff;
+  color: var(--m-sidebar-active);
   transform: translateX(1px);
 }
 
 .m-sidebar-link--active {
-  color: #FFFFFF;
-  background-color: rgba(0, 163, 255, 0.09); /* Subtle blue glow background */
-  border-left-color: #00a3ff; /* Active blue accent indicator */
+  color: var(--m-sidebar-text);
+  background-color: rgba(20, 92, 255, 0.12); /* Royal blue active background */
+  border-left-color: var(--m-sidebar-active); /* Royal blue active border */
 }
 
 .m-sidebar-link--active svg {
-  color: #00a3ff !important;
+  color: var(--m-sidebar-active) !important;
 }
 
 /* ── Integrated Vinyl Radar Scope Mount ── */
@@ -1256,9 +1275,9 @@
 
 /* ── Premium Inset SaaS Cards ── */
 .m-inset-card {
-  background-color: #0c0f17 !important;
-  border: 1px solid rgba(255, 255, 255, 0.05) !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+  background-color: var(--m-surface-3) !important;
+  border: 1px solid var(--m-border) !important;
+  box-shadow: none !important;
   border-radius: 8px !important;
   position: relative !important;
   transition: all 0.2s ease-in-out !important;

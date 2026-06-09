@@ -25,10 +25,11 @@ import {
   YAxis,
 } from 'recharts';
 
+import { useToast } from '@/components/ui/use-toast';
+
 import { campaignTimeSeries } from '../../../features/music/data/demo-music-data';
 import { formatCompactNumber, formatCurrency } from '../../../features/music/lib/utils';
 
-import { useToast } from '@/components/ui/use-toast';
 
 // ─── Campaign Reports Data Mapper ───────────────────────────
 interface CampaignReportData {
@@ -218,10 +219,10 @@ export default function MusicReportsPage() {
           <select 
             value={selectedCampaignId}
             onChange={(e) => setSelectedCampaignId(e.target.value)}
-            className="bg-black/30 border border-white/10 rounded px-2.5 py-1 text-[10px] text-zinc-300 font-bold focus:outline-none focus:border-[var(--m-accent)] cursor-pointer"
+            className="bg-[var(--m-surface)] border border-[var(--m-border)] rounded px-2.5 py-1 text-[10px] text-[var(--m-text)] font-bold focus:outline-none focus:border-[var(--m-accent)] cursor-pointer"
           >
             {Object.values(CAMPAIGN_REPORTS).map(c => (
-              <option key={c.id} value={c.id}>{c.name} ({c.artist})</option>
+              <option key={c.id} value={c.id} className="bg-[var(--m-surface)] text-[var(--m-text)]">{c.name} ({c.artist})</option>
             ))}
           </select>
 
@@ -229,47 +230,47 @@ export default function MusicReportsPage() {
           <select
             value={selectedDateRange}
             onChange={(e) => setSelectedDateRange(e.target.value)}
-            className="bg-black/30 border border-white/10 rounded px-2.5 py-1 text-[10px] text-zinc-300 font-bold focus:outline-none focus:border-[var(--m-accent)] cursor-pointer"
+            className="bg-[var(--m-surface)] border border-[var(--m-border)] rounded px-2.5 py-1 text-[10px] text-[var(--m-text)] font-bold focus:outline-none focus:border-[var(--m-accent)] cursor-pointer"
           >
-            <option value="Last 14 Days">Last 14 Days</option>
-            <option value="Last 30 Days">Last 30 Days</option>
-            <option value="All Time">All Time</option>
+            <option value="Last 14 Days" className="bg-[var(--m-surface)] text-[var(--m-text)]">Last 14 Days</option>
+            <option value="Last 30 Days" className="bg-[var(--m-surface)] text-[var(--m-text)]">Last 30 Days</option>
+            <option value="All Time" className="bg-[var(--m-surface)] text-[var(--m-text)]">All Time</option>
           </select>
 
           <button 
             onClick={handleExportPDF}
-            className="flex items-center gap-1 px-2.5 py-1 bg-zinc-900/60 border border-zinc-800 rounded text-[10px] font-bold hover:bg-zinc-850 hover:text-white transition-colors"
+            className="flex items-center gap-1 px-2.5 py-1 bg-[var(--m-surface)] hover:bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded text-[10px] font-bold text-[var(--m-text-2)] hover:text-[var(--m-text)] transition-colors"
           >
-            <Printer className="h-3 w-3" /> PDF
+            <Printer className="h-3 w-3 text-[var(--m-accent)]" /> PDF
           </button>
           
           <button 
             onClick={handleExportCSV}
-            className="flex items-center gap-1 px-2.5 py-1 bg-zinc-900/60 border border-zinc-800 rounded text-[10px] font-bold hover:bg-zinc-850 hover:text-white transition-colors"
+            className="flex items-center gap-1 px-2.5 py-1 bg-[var(--m-surface)] hover:bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded text-[10px] font-bold text-[var(--m-text-2)] hover:text-[var(--m-text)] transition-colors"
           >
-            <FileSpreadsheet className="h-3 w-3" /> CSV
+            <FileSpreadsheet className="h-3 w-3 text-[var(--m-accent-2)]" /> CSV
           </button>
 
           <button 
             onClick={handleCopySummary}
-            className="flex items-center gap-1 px-2.5 py-1 bg-zinc-900/60 border border-zinc-800 rounded text-[10px] font-bold hover:bg-zinc-850 hover:text-white transition-colors"
+            className="flex items-center gap-1 px-2.5 py-1 bg-[var(--m-surface)] hover:bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded text-[10px] font-bold text-[var(--m-text-2)] hover:text-[var(--m-text)] transition-colors"
           >
-            <Copy className="h-3 w-3" /> Copy Summary
+            <Copy className="h-3 w-3 text-[var(--m-muted)]" /> Copy Summary
           </button>
 
-          <div className="flex items-center gap-1 px-2.5 py-1 bg-emerald-950/20 border border-emerald-800/30 rounded text-emerald-400 font-bold text-[9px] uppercase tracking-wider">
-            <CheckCircle2 className="h-3 w-3" /> Sponsor Ready
+          <div className="flex items-center gap-1 px-2.5 py-1 bg-emerald-50 border border-emerald-200 rounded text-emerald-700 font-bold text-[9px] uppercase tracking-wider">
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Sponsor Ready
           </div>
         </div>
       </div>
 
       {/* Executive Summary Card */}
-      <div className="bg-zinc-950/50 border border-zinc-850 rounded-lg p-3.5 relative group overflow-hidden">
+      <div className="bg-[var(--m-surface)] border border-[var(--m-border)] rounded-lg p-3.5 relative group overflow-hidden shadow-xs">
         <div className="absolute top-0 left-0 w-1.5 h-full bg-[var(--m-accent)]" />
-        <h2 className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5 flex items-center gap-1.5">
+        <h2 className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-text-2)] mb-1.5 flex items-center gap-1.5">
           <FileText className="h-3.5 w-3.5 text-[var(--m-accent)]" /> Campaign Executive Analysis
         </h2>
-        <p className="text-xs leading-relaxed text-zinc-300 font-serif italic max-w-5xl">
+        <p className="text-xs leading-relaxed text-[var(--m-text-2)] font-serif italic max-w-5xl">
           &ldquo;{selectedData.narrative}&rdquo;
         </p>
       </div>
@@ -278,15 +279,15 @@ export default function MusicReportsPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
         <div className="m-inset-card p-2 flex flex-col justify-between h-[52px]">
           <span className="text-[8px] font-bold m-text-muted uppercase tracking-wider block">Audience Size</span>
-          <span className="text-sm font-bold text-white block mt-0.5 font-mono">{selectedData.audienceSize.toLocaleString()}</span>
+          <span className="text-sm font-bold text-[var(--m-text)] block mt-0.5 font-mono">{selectedData.audienceSize.toLocaleString()}</span>
         </div>
         <div className="m-inset-card p-2 flex flex-col justify-between h-[52px]">
           <span className="text-[8px] font-bold m-text-muted uppercase tracking-wider block">Fans Reached</span>
-          <span className="text-sm font-bold text-white block mt-0.5 font-mono">{selectedData.fansContacted.toLocaleString()}</span>
+          <span className="text-sm font-bold text-[var(--m-text)] block mt-0.5 font-mono">{selectedData.fansContacted.toLocaleString()}</span>
         </div>
         <div className="m-inset-card p-2 flex flex-col justify-between h-[52px]">
           <span className="text-[8px] font-bold m-text-muted uppercase tracking-wider block">Human Answers</span>
-          <span className="text-sm font-bold text-white block mt-0.5 font-mono">{selectedData.humanAnswers.toLocaleString()}</span>
+          <span className="text-sm font-bold text-[var(--m-text)] block mt-0.5 font-mono">{selectedData.humanAnswers.toLocaleString()}</span>
         </div>
         <div className="m-inset-card p-2 flex flex-col justify-between h-[52px] border-l-2 border-l-[var(--m-accent-2)]">
           <span className="text-[8px] font-bold m-text-muted uppercase tracking-wider block">Verified Actions</span>
@@ -294,19 +295,19 @@ export default function MusicReportsPage() {
         </div>
         <div className="m-inset-card p-2 flex flex-col justify-between h-[52px]">
           <span className="text-[8px] font-bold m-text-muted uppercase tracking-wider block">Cost / Action</span>
-          <span className="text-sm font-bold text-white block mt-0.5 font-mono">{formatCurrency(selectedData.cpa)}</span>
+          <span className="text-sm font-bold text-[var(--m-text)] block mt-0.5 font-mono">{formatCurrency(selectedData.cpa)}</span>
         </div>
         <div className="m-inset-card p-2 flex flex-col justify-between h-[52px]">
           <span className="text-[8px] font-bold m-text-muted uppercase tracking-wider block">Campaign Spend</span>
-          <span className="text-sm font-bold text-white block mt-0.5 font-mono">{formatCurrency(selectedData.spend)}</span>
+          <span className="text-sm font-bold text-[var(--m-text)] block mt-0.5 font-mono">{formatCurrency(selectedData.spend)}</span>
         </div>
         <div className="m-inset-card p-2 flex flex-col justify-between h-[52px] border-l-2 border-l-emerald-500">
           <span className="text-[8px] font-bold m-text-muted uppercase tracking-wider block">Sponsor Revenue</span>
-          <span className="text-sm font-bold text-emerald-400 block mt-0.5 font-mono">{formatCurrency(selectedData.sponsorRevenue)}</span>
+          <span className="text-sm font-bold text-emerald-700 block mt-0.5 font-mono">{formatCurrency(selectedData.sponsorRevenue)}</span>
         </div>
         <div className="m-inset-card p-2 flex flex-col justify-between h-[52px]">
           <span className="text-[8px] font-bold m-text-muted uppercase tracking-wider block">Artist Payout (70%)</span>
-          <span className="text-sm font-bold text-white block mt-0.5 font-mono">{formatCurrency(selectedData.artistPayout)}</span>
+          <span className="text-sm font-bold text-[var(--m-text)] block mt-0.5 font-mono">{formatCurrency(selectedData.artistPayout)}</span>
         </div>
         <div className="m-inset-card p-2 flex flex-col justify-between h-[52px]">
           <span className="text-[8px] font-bold m-text-muted uppercase tracking-wider block">RPS Share (30%)</span>
@@ -314,15 +315,15 @@ export default function MusicReportsPage() {
         </div>
         <div className="m-inset-card p-2 flex flex-col justify-between h-[52px]">
           <span className="text-[8px] font-bold m-text-muted uppercase tracking-wider block">Proof Captured</span>
-          <span className="text-sm font-bold text-white block mt-0.5 font-mono">{selectedData.proofCaptured.toLocaleString()}</span>
+          <span className="text-sm font-bold text-[var(--m-text)] block mt-0.5 font-mono">{selectedData.proofCaptured.toLocaleString()}</span>
         </div>
         <div className="m-inset-card p-2 flex flex-col justify-between h-[52px]">
           <span className="text-[8px] font-bold m-text-muted uppercase tracking-wider block">Opt-Out Rate</span>
-          <span className="text-sm font-bold text-red-400 block mt-0.5 font-mono">{selectedData.optOutRate}</span>
+          <span className="text-sm font-bold text-red-600 block mt-0.5 font-mono">{selectedData.optOutRate}</span>
         </div>
         <div className="m-inset-card p-2 flex flex-col justify-between h-[52px]">
           <span className="text-[8px] font-bold m-text-muted uppercase tracking-wider block">Top Segment</span>
-          <span className="text-[10px] font-bold text-white block mt-1 truncate">{selectedData.topSegment}</span>
+          <span className="text-[10px] font-bold text-[var(--m-text)] block mt-1 truncate">{selectedData.topSegment}</span>
         </div>
       </div>
 
@@ -333,7 +334,7 @@ export default function MusicReportsPage() {
           
           {/* Timeline Chart */}
           <div className="m-card p-3 h-[210px] flex flex-col justify-between">
-            <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-200 flex items-center gap-1.5 border-b border-[var(--m-border-2)] pb-1 mb-2">
+            <h3 className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-text)] flex items-center gap-1.5 border-b border-[var(--m-border-2)] pb-1 mb-2">
               <Activity className="h-3.5 w-3.5 text-[var(--m-accent)]" /> Campaign Timeline
             </h3>
             <div className="flex-1 w-full min-h-0">
@@ -341,24 +342,24 @@ export default function MusicReportsPage() {
                 <AreaChart data={chartData} margin={{ top: 5, right: 0, left: -25, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorAnswersRep" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#7C5CFF" stopOpacity={0.2}/>
-                      <stop offset="95%" stopColor="#7C5CFF" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="#145CFF" stopOpacity={0.15}/>
+                      <stop offset="95%" stopColor="#145CFF" stopOpacity={0}/>
                     </linearGradient>
                     <linearGradient id="colorVerifiedRep" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#18D6A3" stopOpacity={0.2}/>
-                      <stop offset="95%" stopColor="#18D6A3" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="#10B981" stopOpacity={0.15}/>
+                      <stop offset="95%" stopColor="#10B981" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148,163,184,0.06)" />
-                  <XAxis dataKey="date" stroke="rgba(148,163,184,0.2)" tick={{ fontSize: 9, fill: '#475569' }} axisLine={false} tickLine={false} />
-                  <YAxis stroke="rgba(148,163,184,0.2)" tick={{ fontSize: 9, fill: '#475569' }} axisLine={false} tickLine={false} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--m-border-2)" />
+                  <XAxis dataKey="date" stroke="var(--m-border)" tick={{ fontSize: 9, fill: 'var(--m-muted)' }} axisLine={false} tickLine={false} />
+                  <YAxis stroke="var(--m-border)" tick={{ fontSize: 9, fill: 'var(--m-muted)' }} axisLine={false} tickLine={false} />
                   <Tooltip 
-                    contentStyle={{ backgroundColor: '#06080D', border: '1px solid rgba(148,163,184,0.1)', borderRadius: '6px' }}
-                    itemStyle={{ fontSize: '11px' }}
-                    labelStyle={{ fontSize: '9px', color: '#9AA8BD', marginBottom: '3px' }}
+                    contentStyle={{ backgroundColor: 'var(--m-surface)', border: '1px solid var(--m-border)', borderRadius: '6px', color: 'var(--m-text)' }}
+                    itemStyle={{ fontSize: '11px', color: 'var(--m-text)' }}
+                    labelStyle={{ fontSize: '9px', color: 'var(--m-muted)', marginBottom: '3px' }}
                   />
-                  <Area type="monotone" dataKey="humanAnswers" name="Human Answers" stroke="#7C5CFF" strokeWidth={1.5} fillOpacity={1} fill="url(#colorAnswersRep)" />
-                  <Area type="monotone" dataKey="verifiedEngagements" name="Verified Actions" stroke="#18D6A3" strokeWidth={1.5} fillOpacity={1} fill="url(#colorVerifiedRep)" />
+                  <Area type="monotone" dataKey="humanAnswers" name="Human Answers" stroke="#145CFF" strokeWidth={1.5} fillOpacity={1} fill="url(#colorAnswersRep)" />
+                  <Area type="monotone" dataKey="verifiedEngagements" name="Verified Actions" stroke="#10B981" strokeWidth={1.5} fillOpacity={1} fill="url(#colorVerifiedRep)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -366,14 +367,14 @@ export default function MusicReportsPage() {
 
           {/* Engagement Funnel */}
           <div className="m-card p-3 flex flex-col justify-between">
-            <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-200 flex items-center gap-1.5 border-b border-[var(--m-border-2)] pb-1 mb-2.5">
+            <h3 className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-text)] flex items-center gap-1.5 border-b border-[var(--m-border-2)] pb-1 mb-2.5">
               <BarChart3 className="h-3.5 w-3.5 text-[var(--m-accent-2)]" /> Engagement Funnel
             </h3>
             <div className="space-y-2.5">
               {funnelSteps.map((stage) => (
                 <div key={stage.label} className="flex items-center gap-4">
-                  <div className="w-28 text-[10px] font-bold text-slate-400 text-right">{stage.label}</div>
-                  <div className="flex-grow h-8 rounded bg-[var(--m-surface-2)] flex items-center overflow-hidden">
+                  <div className="w-28 text-[10px] font-bold text-[var(--m-text-2)] text-right">{stage.label}</div>
+                  <div className="flex-grow h-8 rounded bg-[var(--m-surface-2)] flex items-center overflow-hidden border border-[var(--m-border-2)]">
                     <div 
                       className="h-full flex items-center justify-end px-3 transition-all duration-550 rounded"
                       style={{ width: `${stage.percentage}%`, backgroundColor: stage.color }}
@@ -383,7 +384,7 @@ export default function MusicReportsPage() {
                       </span>
                     </div>
                   </div>
-                  <div className="w-10 text-right text-[10px] font-mono font-bold text-zinc-400">
+                  <div className="w-10 text-right text-[10px] font-mono font-bold text-[var(--m-muted)]">
                     {stage.percentage.toFixed(0)}%
                   </div>
                 </div>
@@ -394,36 +395,36 @@ export default function MusicReportsPage() {
           {/* Outcome Economics Table */}
           <div className="m-card overflow-hidden">
             <div className="p-3 border-b border-[var(--m-border-2)] bg-[var(--m-surface-2)] flex justify-between items-center">
-              <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-200 flex items-center gap-1.5">
+              <h3 className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-text)] flex items-center gap-1.5">
                 <FileSpreadsheet className="h-3.5 w-3.5 text-[var(--m-accent-2)]" /> Detailed Outcome Economics
               </h3>
-              <span className="text-[8px] font-bold text-zinc-500 uppercase tracking-widest">Calculated Splits (70 / 30)</span>
+              <span className="text-[8px] font-bold text-[var(--m-muted)] uppercase tracking-widest">Calculated Splits (70 / 30)</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs whitespace-nowrap border-collapse m-table m-dense-table">
                 <thead>
-                  <tr className="border-b border-white/5 bg-black/40 text-[8px] uppercase tracking-wider m-text-muted">
-                    <th className="py-1 px-3">Verified Outcome</th>
-                    <th className="text-right py-1 px-3">Count</th>
-                    <th className="text-right py-1 px-3">Conv. Rate</th>
-                    <th className="text-right py-1 px-3">Spend</th>
-                    <th className="text-right py-1 px-3">CPA</th>
-                    <th className="text-right py-1 px-3">Sponsor Value</th>
-                    <th className="text-right py-1 px-3">Artist Share</th>
-                    <th className="text-right py-1 px-3">RPS Share</th>
-                    <th className="text-right py-1 px-3">Proof Logs</th>
+                  <tr className="border-b border-[var(--m-border-2)] bg-[var(--m-surface-3)] text-[8px] uppercase tracking-wider text-[var(--m-muted)]">
+                    <th className="py-1.5 px-3">Verified Outcome</th>
+                    <th className="text-right py-1.5 px-3">Count</th>
+                    <th className="text-right py-1.5 px-3">Conv. Rate</th>
+                    <th className="text-right py-1.5 px-3">Spend</th>
+                    <th className="text-right py-1.5 px-3">CPA</th>
+                    <th className="text-right py-1.5 px-3">Sponsor Value</th>
+                    <th className="text-right py-1.5 px-3">Artist Share</th>
+                    <th className="text-right py-1.5 px-3">RPS Share</th>
+                    <th className="text-right py-1.5 px-3">Proof Logs</th>
                   </tr>
                 </thead>
                 <tbody>
                   {selectedData.outcomes.map((row) => (
-                    <tr key={row.label} className="border-b border-white/[0.03] hover:bg-white/[0.01] transition-colors">
-                      <td className="font-bold text-white py-1.5 px-3 text-[10px]">{row.label}</td>
-                      <td className="text-right font-mono py-1.5 px-3 font-semibold text-[10px]">{row.count.toLocaleString()}</td>
-                      <td className="text-right font-mono py-1.5 px-3 font-semibold text-[10px] text-[var(--m-accent-2)]">{row.rate}%</td>
-                      <td className="text-right font-mono py-1.5 px-3 text-zinc-400 text-[10px]">{formatCurrency(row.spend)}</td>
-                      <td className="text-right font-mono py-1.5 px-3 text-white text-[10px]">{formatCurrency(row.cpa)}</td>
-                      <td className="text-right font-mono py-1.5 px-3 text-emerald-400 font-bold text-[10px]">{formatCurrency(row.sponsorValue)}</td>
-                      <td className="text-right font-mono py-1.5 px-3 text-zinc-300 text-[10px]">{formatCurrency(row.artistShare)}</td>
+                    <tr key={row.label} className="border-b border-[var(--m-border-2)] hover:bg-[var(--m-surface-2)] transition-colors">
+                      <td className="font-bold text-[var(--m-text)] py-1.5 px-3 text-[10px]">{row.label}</td>
+                      <td className="text-right font-mono py-1.5 px-3 font-semibold text-[10px] text-[var(--m-text)]">{row.count.toLocaleString()}</td>
+                      <td className="text-right font-mono py-1.5 px-3 font-semibold text-[10px] text-[var(--m-accent)]">{row.rate}%</td>
+                      <td className="text-right font-mono py-1.5 px-3 text-[var(--m-text-2)] text-[10px]">{formatCurrency(row.spend)}</td>
+                      <td className="text-right font-mono py-1.5 px-3 text-[var(--m-text)] text-[10px]">{formatCurrency(row.cpa)}</td>
+                      <td className="text-right font-mono py-1.5 px-3 text-emerald-700 font-bold text-[10px]">{formatCurrency(row.sponsorValue)}</td>
+                      <td className="text-right font-mono py-1.5 px-3 text-[var(--m-text-2)] text-[10px]">{formatCurrency(row.artistShare)}</td>
                       <td className="text-right font-mono py-1.5 px-3 text-[var(--m-accent)] text-[10px]">{formatCurrency(row.rpsShare)}</td>
                       <td className="text-right font-mono py-1.5 px-3 text-[var(--m-accent-2)] text-[10px]">{row.proof.toLocaleString()}</td>
                     </tr>
@@ -440,63 +441,63 @@ export default function MusicReportsPage() {
           
           {/* Sponsor Readiness Checklist */}
           <div className="m-card p-3 bg-[var(--m-surface-2)]">
-            <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-200 flex items-center gap-1.5 border-b border-[var(--m-border-2)] pb-1.5 mb-2.5">
-              <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" /> Sponsor-Readiness Checklist
+            <h3 className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-text)] flex items-center gap-1.5 border-b border-[var(--m-border-2)] pb-1.5 mb-2.5">
+              <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" /> Sponsor-Readiness Checklist
             </h3>
             
-            <div className="space-y-2 text-[10px] font-semibold text-zinc-300">
-              <div className="flex items-center justify-between bg-black/20 p-1.5 border border-white/5 rounded">
+            <div className="space-y-2 text-[10px] font-semibold text-[var(--m-text-2)]">
+              <div className="flex items-center justify-between bg-[var(--m-surface)] p-1.5 border border-[var(--m-border-2)] rounded">
                 <span className="flex items-center gap-1.5">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Proof Coverage
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-650" /> Proof Coverage
                 </span>
-                <span className="text-[9px] font-mono text-emerald-400 font-extrabold uppercase">100% Verified</span>
+                <span className="text-[9px] font-mono text-emerald-700 font-extrabold uppercase">100% Verified</span>
               </div>
               
-              <div className="flex items-center justify-between bg-black/20 p-1.5 border border-white/5 rounded">
+              <div className="flex items-center justify-between bg-[var(--m-surface)] p-1.5 border border-[var(--m-border-2)] rounded">
                 <span className="flex items-center gap-1.5">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Consent Quality
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-650" /> Consent Quality
                 </span>
-                <span className="text-[9px] font-mono text-emerald-400 font-extrabold uppercase">TCPA Cleared</span>
+                <span className="text-[9px] font-mono text-emerald-700 font-extrabold uppercase">TCPA Cleared</span>
               </div>
               
-              <div className="flex items-center justify-between bg-black/20 p-1.5 border border-white/5 rounded">
+              <div className="flex items-center justify-between bg-[var(--m-surface)] p-1.5 border border-[var(--m-border-2)] rounded">
                 <span className="flex items-center gap-1.5">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Attribution Completeness
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-650" /> Attribution Completeness
                 </span>
-                <span className="text-[9px] font-mono text-emerald-400 font-extrabold uppercase">Active Ad Slots</span>
+                <span className="text-[9px] font-mono text-emerald-700 font-extrabold uppercase">Active Ad Slots</span>
               </div>
 
-              <div className="flex items-center justify-between bg-black/20 p-1.5 border border-white/5 rounded">
+              <div className="flex items-center justify-between bg-[var(--m-surface)] p-1.5 border border-[var(--m-border-2)] rounded">
                 <span className="flex items-center gap-1.5">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Audio/Transcript Archive
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-650" /> Audio/Transcript Archive
                 </span>
-                <span className="text-[9px] font-mono text-emerald-400 font-extrabold uppercase">Archived</span>
+                <span className="text-[9px] font-mono text-emerald-700 font-extrabold uppercase">Archived</span>
               </div>
 
-              <div className="flex items-center justify-between bg-black/20 p-1.5 border border-white/5 rounded">
+              <div className="flex items-center justify-between bg-[var(--m-surface)] p-1.5 border border-[var(--m-border-2)] rounded">
                 <span className="flex items-center gap-1.5">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Brand Safety Status
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-650" /> Brand Safety Status
                 </span>
-                <span className="text-[9px] font-mono text-emerald-400 font-extrabold uppercase">Cleared</span>
+                <span className="text-[9px] font-mono text-emerald-700 font-extrabold uppercase">Cleared</span>
               </div>
             </div>
           </div>
 
           {/* Segment Analysis */}
           <div className="m-card p-3 bg-[var(--m-surface-2)]">
-            <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-200 flex items-center gap-1.5 border-b border-[var(--m-border-2)] pb-1.5 mb-2">
+            <h3 className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-text)] flex items-center gap-1.5 border-b border-[var(--m-border-2)] pb-1.5 mb-2">
               <Users className="h-3.5 w-3.5 text-[var(--m-accent)]" /> Segment Analysis
             </h3>
             <div className="space-y-1.5">
               {selectedData.topSegments.map((seg) => (
-                <div key={seg.segment} className="flex items-center justify-between bg-black/20 px-2 py-1.5 rounded border border-white/5 text-[10px] font-semibold text-zinc-300">
+                <div key={seg.segment} className="flex items-center justify-between bg-[var(--m-surface)] px-2 py-1.5 rounded border border-[var(--m-border-2)] text-[10px] font-semibold text-[var(--m-text-2)]">
                   <div>
-                    <div className="text-white font-bold">{seg.segment}</div>
-                    <div className="text-[8px] text-zinc-550 uppercase tracking-widest mt-0.2">{formatCompactNumber(seg.count)} Reached</div>
+                    <div className="text-[var(--m-text)] font-bold">{seg.segment}</div>
+                    <div className="text-[8px] text-[var(--m-muted)] uppercase tracking-widest mt-0.2">{formatCompactNumber(seg.count)} Reached</div>
                   </div>
                   <div className="text-right shrink-0">
-                    <div className="font-bold text-[var(--m-accent-2)] font-mono text-[11px]">{seg.engagement}%</div>
-                    <div className="text-[7px] text-zinc-550 uppercase tracking-widest">Conversion</div>
+                    <div className="font-bold text-[var(--m-accent)] font-mono text-[11px]">{seg.engagement}%</div>
+                    <div className="text-[7px] text-[var(--m-muted)] uppercase tracking-widest">Conversion</div>
                   </div>
                 </div>
               ))}
@@ -505,19 +506,19 @@ export default function MusicReportsPage() {
 
           {/* Market Analysis */}
           <div className="m-card p-3 bg-[var(--m-surface-2)]">
-            <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-200 flex items-center gap-1.5 border-b border-[var(--m-border-2)] pb-1.5 mb-2">
+            <h3 className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-text)] flex items-center gap-1.5 border-b border-[var(--m-border-2)] pb-1.5 mb-2">
               <Target className="h-3.5 w-3.5 text-[var(--m-accent-2)]" /> Market Analysis
             </h3>
             <div className="space-y-1.5">
               {selectedData.topMarkets.map((m) => (
-                <div key={m.city} className="flex items-center justify-between bg-black/20 px-2 py-1.5 rounded border border-white/5 text-[10px] font-semibold text-zinc-300">
+                <div key={m.city} className="flex items-center justify-between bg-[var(--m-surface)] px-2 py-1.5 rounded border border-[var(--m-border-2)] text-[10px] font-semibold text-[var(--m-text-2)]">
                   <div>
-                    <div className="text-white font-bold">{m.city} Market</div>
-                    <div className="text-[8px] text-zinc-550 uppercase tracking-widest mt-0.2">{formatCompactNumber(m.count)} Actions</div>
+                    <div className="text-[var(--m-text)] font-bold">{m.city} Market</div>
+                    <div className="text-[8px] text-[var(--m-muted)] uppercase tracking-widest mt-0.2">{formatCompactNumber(m.count)} Actions</div>
                   </div>
                   <div className="text-right shrink-0">
                     <div className="font-bold text-[var(--m-accent-2)] font-mono text-[11px]">{m.conversion}%</div>
-                    <div className="text-[7px] text-zinc-550 uppercase tracking-widest">Rate</div>
+                    <div className="text-[7px] text-[var(--m-muted)] uppercase tracking-widest">Rate</div>
                   </div>
                 </div>
               ))}
@@ -526,7 +527,7 @@ export default function MusicReportsPage() {
 
           {/* Recommended plays actions */}
           <div className="m-card p-3 bg-[var(--m-surface-2)] space-y-2">
-            <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-200 flex items-center gap-1.5 border-b border-[var(--m-border-2)] pb-1.5 mb-1">
+            <h3 className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-text)] flex items-center gap-1.5 border-b border-[var(--m-border-2)] pb-1.5 mb-1">
               <Briefcase className="h-3.5 w-3.5 text-[var(--m-warning)]" /> Recommended Next Action Plays
             </h3>
             
@@ -538,7 +539,7 @@ export default function MusicReportsPage() {
                     description: `Initiated VIP Pre-Sale Voice Broadcast campaign targeting top conversion markets.`,
                   });
                 }}
-                className="flex items-center justify-between px-2.5 py-1.5 bg-black/40 hover:bg-black/60 border border-white/5 hover:border-[var(--m-accent)]/40 rounded text-[10px] font-bold text-white transition-all text-left"
+                className="flex items-center justify-between px-2.5 py-1.5 bg-[var(--m-surface)] hover:bg-[var(--m-surface-3)] border border-[var(--m-border)] hover:border-[var(--m-accent)] rounded text-[10px] font-bold text-[var(--m-text)] transition-all text-left"
               >
                 <span>Deploy VIP Pre-Sale Play</span>
                 <PlayCircle className="w-3.5 h-3.5 text-[var(--m-accent)] shrink-0" />
@@ -551,7 +552,7 @@ export default function MusicReportsPage() {
                     description: `Initiated Capsule Merchandise broadcast play targeting inactive fan club segments.`,
                   });
                 }}
-                className="flex items-center justify-between px-2.5 py-1.5 bg-black/40 hover:bg-black/60 border border-white/5 hover:border-[var(--m-accent)]/40 rounded text-[10px] font-bold text-white transition-all text-left"
+                className="flex items-center justify-between px-2.5 py-1.5 bg-[var(--m-surface)] hover:bg-[var(--m-surface-3)] border border-[var(--m-border)] hover:border-[var(--m-accent)] rounded text-[10px] font-bold text-[var(--m-text)] transition-all text-left"
               >
                 <span>Deploy Merch Drop Play</span>
                 <PlayCircle className="w-3.5 h-3.5 text-[var(--m-accent)] shrink-0" />
@@ -564,10 +565,10 @@ export default function MusicReportsPage() {
                     description: `Allocated active sponsor ad inventory slots to Dallas & Nashville markets.`,
                   });
                 }}
-                className="flex items-center justify-between px-2.5 py-1.5 bg-black/40 hover:bg-black/60 border border-white/5 hover:border-emerald-500/40 rounded text-[10px] font-bold text-emerald-400 transition-all text-left"
+                className="flex items-center justify-between px-2.5 py-1.5 bg-[var(--m-surface)] hover:bg-emerald-50 border border-[var(--m-border)] hover:border-emerald-500 rounded text-[10px] font-bold text-emerald-700 transition-all text-left"
               >
                 <span>Deploy Sponsor Ad Inventory Play</span>
-                <PlayCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <PlayCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
               </button>
             </div>
           </div>

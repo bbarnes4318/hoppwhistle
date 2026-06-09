@@ -13,11 +13,12 @@ import {
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
+import { useToast } from '@/components/ui/use-toast';
+import { cn } from '@/lib/utils';
+
 import { defaultMusicSettings } from '../../../features/music/data/demo-music-data';
 import type { MusicCampaignType } from '../../../features/music/types';
 
-import { useToast } from '@/components/ui/use-toast';
-import { cn } from '@/lib/utils';
 
 // ─── Extended Music Settings Type Definition ─────────────────
 interface ExtendedMusicSettings {
@@ -181,7 +182,7 @@ export default function MusicSettingsPage() {
                 "flex items-center gap-2 px-2.5 py-1.5 rounded font-black text-[9px] uppercase tracking-wider transition-all text-left border shrink-0 lg:shrink-1",
                 activeTab === tab.id 
                   ? "bg-[var(--m-surface)] text-[var(--m-accent)] border-[var(--m-border)] shadow-xs" 
-                  : "text-zinc-500 hover:text-white border-transparent hover:bg-white/[0.02]"
+                  : "text-[var(--m-muted)] hover:text-[var(--m-text)] border-transparent hover:bg-[var(--m-surface-3)]"
               )}
             >
               <tab.icon className="h-3.5 w-3.5 shrink-0" />
@@ -191,12 +192,12 @@ export default function MusicSettingsPage() {
         </div>
 
         {/* Right: Tab content forms scrollable */}
-        <div className="flex-1 bg-[var(--m-surface-2)] border border-[var(--m-border-2)] rounded p-4 overflow-y-auto min-h-0">
+        <div className="flex-grow bg-[var(--m-surface-2)] border border-[var(--m-border-2)] rounded p-4 overflow-y-auto min-h-0">
           
           {/* Tab 1: Organization */}
           {activeTab === 'organization' && (
             <div className="space-y-4 animate-fadeIn">
-              <h2 className="text-[10px] font-bold uppercase tracking-wider text-slate-200 border-b border-[var(--m-border-2)] pb-1.5 flex items-center gap-1.5">
+              <h2 className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-text)] border-b border-[var(--m-border-2)] pb-1.5 flex items-center gap-1.5">
                 <Building className="h-4 w-4 text-[var(--m-accent)]" /> Organization Profile
               </h2>
               
@@ -279,223 +280,223 @@ export default function MusicSettingsPage() {
           {/* Tab 2: Voice & Brand Safety */}
           {activeTab === 'voice_safety' && (
             <div className="space-y-4 animate-fadeIn">
-              <h2 className="text-[10px] font-bold uppercase tracking-wider text-slate-200 border-b border-[var(--m-border-2)] pb-1.5 flex items-center gap-1.5">
+              <h2 className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-text)] border-b border-[var(--m-border-2)] pb-1.5 flex items-center gap-1.5">
                 <ShieldAlert className="h-4 w-4 text-[var(--m-accent)]" /> Voice & Brand Safety
               </h2>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Approved Voice Persona</label>
-                    <select 
-                      className="m-select text-xs" 
-                      value={settings.approvedVoicePersona} 
-                      onChange={e => handleUpdate('approvedVoicePersona', e.target.value)}
-                    >
-                      <option value="Artist-Approved Promo">Artist-Approved Promo (Sarah - Studio Voice)</option>
-                      <option value="Tour Manager">Tour Manager (Marcus - Studio Voice)</option>
-                      <option value="Merch Concierge">Merch Concierge (Brian - Studio Voice)</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Max Interaction Length (seconds)</label>
-                    <input 
-                      type="number" 
-                      className="m-input text-xs" 
-                      value={settings.maxCallDuration} 
-                      onChange={e => handleUpdate('maxCallDuration', Number(e.target.value))} 
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 pt-1.5">
-                    <label className="flex items-center gap-2 p-1.5 border border-white/5 rounded bg-black/10 cursor-pointer hover:bg-black/20 transition-all text-[10px]">
-                      <input 
-                        type="checkbox" 
-                        checked={settings.artistSafeMode} 
-                        onChange={e => handleUpdate('artistSafeMode', e.target.checked)} 
-                        className="w-3.5 h-3.5 accent-[var(--m-accent)] rounded border-white/20 bg-black" 
-                      />
-                      <span>Artist-Safe Mode</span>
-                    </label>
-
-                    <label className="flex items-center gap-2 p-1.5 border border-white/5 rounded bg-black/10 cursor-pointer hover:bg-black/20 transition-all text-[10px]">
-                      <input 
-                        type="checkbox" 
-                        checked={settings.requireScriptApproval} 
-                        onChange={e => handleUpdate('requireScriptApproval', e.target.checked)} 
-                        className="w-3.5 h-3.5 accent-[var(--m-accent)] rounded border-white/20 bg-black" 
-                      />
-                      <span>Require Script Approval</span>
-                    </label>
-
-                    <label className="flex items-center gap-2 p-1.5 border border-white/5 rounded bg-black/10 cursor-pointer hover:bg-black/20 transition-all text-[10px]">
-                      <input 
-                        type="checkbox" 
-                        checked={settings.boundedScriptMode} 
-                        onChange={e => handleUpdate('boundedScriptMode', e.target.checked)} 
-                        className="w-3.5 h-3.5 accent-[var(--m-accent)] rounded border-white/20 bg-black" 
-                      />
-                      <span>Bounded Script Mode</span>
-                    </label>
-
-                    <label className="flex items-center gap-2 p-1.5 border border-white/5 rounded bg-black/10 cursor-pointer hover:bg-black/20 transition-all text-[10px]">
-                      <input 
-                        type="checkbox" 
-                        checked={settings.allowFreeformAi} 
-                        onChange={e => handleUpdate('allowFreeformAi', e.target.checked)} 
-                        className="w-3.5 h-3.5 accent-[var(--m-accent)] rounded border-white/20 bg-black" 
-                      />
-                      <span>Allow Freeform AI</span>
-                    </label>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Brand Safety Rules / Prompts</label>
-                    <textarea 
-                      rows={3}
-                      className="m-textarea text-xs" 
-                      value={settings.brandSafetyNotes} 
-                      onChange={e => handleUpdate('brandSafetyNotes', e.target.value)} 
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Prohibited Broadcast Phrases</label>
-                    <textarea 
-                      rows={2}
-                      className="m-textarea text-xs" 
-                      value={settings.prohibitedPhrases} 
-                      onChange={e => handleUpdate('prohibitedPhrases', e.target.value)} 
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Tab 3: Compliance */}
-          {activeTab === 'compliance' && (
-            <div className="space-y-4 animate-fadeIn">
-              <h2 className="text-[10px] font-bold uppercase tracking-wider text-slate-200 border-b border-[var(--m-border-2)] pb-1.5 flex items-center gap-1.5">
-                <ShieldCheck className="h-4 w-4 text-[var(--m-accent-2)]" /> Compliance & Consent
-              </h2>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-2">
-                    <label className="flex items-center gap-2 p-2 border border-emerald-500/20 rounded bg-emerald-500/5 cursor-pointer text-[10px]">
-                      <input 
-                        type="checkbox" 
-                        checked={settings.requireOptInConsent} 
-                        onChange={e => handleUpdate('requireOptInConsent', e.target.checked)} 
-                        className="w-3.5 h-3.5 accent-emerald-500 rounded border-emerald-500/20 bg-black" 
-                      />
-                      <span className="font-bold text-emerald-400">Strict Opt-In Consent</span>
-                    </label>
-
-                    <label className="flex items-center gap-2 p-2 border border-white/5 rounded bg-black/10 cursor-pointer text-[10px]">
-                      <input 
-                        type="checkbox" 
-                        checked={settings.consentSourceRequired} 
-                        onChange={e => handleUpdate('consentSourceRequired', e.target.checked)} 
-                        className="w-3.5 h-3.5 accent-[var(--m-accent)] rounded border-white/20 bg-black" 
-                      />
-                      <span>Enforce Consent Log</span>
-                    </label>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">TCPA Consent Mode</label>
-                      <select 
-                        className="m-select text-xs" 
-                        value={settings.tcpaConsentMode} 
-                        onChange={e => handleUpdate('tcpaConsentMode', e.target.value)}
-                      >
-                        <option value="strict">Strict (Double Opt-In)</option>
-                        <option value="standard">Standard (Single Opt-In)</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Recording Disclosure</label>
-                      <select 
-                        className="m-select text-xs" 
-                        value={settings.recordingDisclosure} 
-                        onChange={e => handleUpdate('recordingDisclosure', e.target.value)}
-                      >
-                        <option value="single_party">Single-Party Consent State</option>
-                        <option value="all_party">All-Party Mandatory Announcement</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Data Retention Window</label>
-                      <select 
-                        className="m-select text-xs" 
-                        value={settings.dataRetentionWindow} 
-                        onChange={e => handleUpdate('dataRetentionWindow', e.target.value)}
-                      >
-                        <option value="30_days">30 Days</option>
-                        <option value="90_days">90 Days</option>
-                        <option value="1_year">1 Year</option>
-                        <option value="indefinite">Indefinite</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Opt-Out Handling</label>
-                      <select 
-                        className="m-select text-xs" 
-                        value={settings.optOutHandling} 
-                        onChange={e => handleUpdate('optOutHandling', e.target.value)}
-                      >
-                        <option value="auto_blacklist">Auto-Suppression DNC</option>
-                        <option value="manual_review">Manual operator review</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Global Suppression CSV Upload</label>
-                    <div className="border border-dashed border-white/10 rounded bg-black/25 p-5 text-center cursor-pointer hover:bg-black/40 hover:border-[var(--m-accent)]/50 transition-all">
-                      <Upload className="h-5 w-5 mx-auto mb-1 text-slate-500 animate-pulse" />
-                      <span className="block text-[10px] font-bold text-slate-400">Load Suppression List (.CSV)</span>
-                      <span className="block text-[8px] text-slate-600 mt-0.5">Mutes specific DIDs globally across active campaigns</span>
-                    </div>
-                  </div>
-
-                  <div className="bg-black/10 rounded p-2 border border-white/5 space-y-1">
-                    <span className="block text-[8px] font-bold uppercase tracking-wider text-slate-400 mb-1">Suppression Checklist</span>
-                    <div className="flex items-center gap-2 text-[9px] text-zinc-400 font-semibold">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                      <span>TCPA opt-in check verified</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-[9px] text-zinc-400 font-semibold">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                      <span>Audio disclosure check configured</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-[9px] text-zinc-400 font-semibold">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                      <span>Compliance suppression lists loaded</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+ 
+               <div className="grid grid-cols-2 gap-4">
+                 <div className="space-y-3">
+                   <div>
+                     <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Approved Voice Persona</label>
+                     <select 
+                       className="m-select text-xs" 
+                       value={settings.approvedVoicePersona} 
+                       onChange={e => handleUpdate('approvedVoicePersona', e.target.value)}
+                     >
+                       <option value="Artist-Approved Promo">Artist-Approved Promo (Sarah - Studio Voice)</option>
+                       <option value="Tour Manager">Tour Manager (Marcus - Studio Voice)</option>
+                       <option value="Merch Concierge">Merch Concierge (Brian - Studio Voice)</option>
+                     </select>
+                   </div>
+ 
+                   <div>
+                     <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Max Interaction Length (seconds)</label>
+                     <input 
+                       type="number" 
+                       className="m-input text-xs" 
+                       value={settings.maxCallDuration} 
+                       onChange={e => handleUpdate('maxCallDuration', Number(e.target.value))} 
+                     />
+                   </div>
+ 
+                   <div className="grid grid-cols-2 gap-2 pt-1.5">
+                     <label className="flex items-center gap-2 p-1.5 border border-[var(--m-border-2)] rounded bg-[var(--m-surface)] cursor-pointer hover:bg-[var(--m-surface-3)] transition-all text-[10px]">
+                       <input 
+                         type="checkbox" 
+                         checked={settings.artistSafeMode} 
+                         onChange={e => handleUpdate('artistSafeMode', e.target.checked)} 
+                         className="w-3.5 h-3.5 accent-[var(--m-accent)] rounded border-[var(--m-border)] bg-[var(--m-surface)]" 
+                       />
+                       <span>Artist-Safe Mode</span>
+                     </label>
+ 
+                     <label className="flex items-center gap-2 p-1.5 border border-[var(--m-border-2)] rounded bg-[var(--m-surface)] cursor-pointer hover:bg-[var(--m-surface-3)] transition-all text-[10px]">
+                       <input 
+                         type="checkbox" 
+                         checked={settings.requireScriptApproval} 
+                         onChange={e => handleUpdate('requireScriptApproval', e.target.checked)} 
+                         className="w-3.5 h-3.5 accent-[var(--m-accent)] rounded border-[var(--m-border)] bg-[var(--m-surface)]" 
+                       />
+                       <span>Require Script Approval</span>
+                     </label>
+ 
+                     <label className="flex items-center gap-2 p-1.5 border border-[var(--m-border-2)] rounded bg-[var(--m-surface)] cursor-pointer hover:bg-[var(--m-surface-3)] transition-all text-[10px]">
+                       <input 
+                         type="checkbox" 
+                         checked={settings.boundedScriptMode} 
+                         onChange={e => handleUpdate('boundedScriptMode', e.target.checked)} 
+                         className="w-3.5 h-3.5 accent-[var(--m-accent)] rounded border-[var(--m-border)] bg-[var(--m-surface)]" 
+                       />
+                       <span>Bounded Script Mode</span>
+                     </label>
+ 
+                     <label className="flex items-center gap-2 p-1.5 border border-[var(--m-border-2)] rounded bg-[var(--m-surface)] cursor-pointer hover:bg-[var(--m-surface-3)] transition-all text-[10px]">
+                       <input 
+                         type="checkbox" 
+                         checked={settings.allowFreeformAi} 
+                         onChange={e => handleUpdate('allowFreeformAi', e.target.checked)} 
+                         className="w-3.5 h-3.5 accent-[var(--m-accent)] rounded border-[var(--m-border)] bg-[var(--m-surface)]" 
+                       />
+                       <span>Allow Freeform AI</span>
+                     </label>
+                   </div>
+                 </div>
+ 
+                 <div className="space-y-3">
+                   <div>
+                     <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Brand Safety Rules / Prompts</label>
+                     <textarea 
+                       rows={3}
+                       className="m-textarea text-xs" 
+                       value={settings.brandSafetyNotes} 
+                       onChange={e => handleUpdate('brandSafetyNotes', e.target.value)} 
+                     />
+                   </div>
+ 
+                   <div>
+                     <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Prohibited Broadcast Phrases</label>
+                     <textarea 
+                       rows={2}
+                       className="m-textarea text-xs" 
+                       value={settings.prohibitedPhrases} 
+                       onChange={e => handleUpdate('prohibitedPhrases', e.target.value)} 
+                     />
+                   </div>
+                 </div>
+               </div>
+             </div>
+           )}
+ 
+           {/* Tab 3: Compliance */}
+           {activeTab === 'compliance' && (
+             <div className="space-y-4 animate-fadeIn">
+               <h2 className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-text)] border-b border-[var(--m-border-2)] pb-1.5 flex items-center gap-1.5">
+                 <ShieldCheck className="h-4 w-4 text-[var(--m-accent-2)]" /> Compliance & Consent
+               </h2>
+ 
+               <div className="grid grid-cols-2 gap-4">
+                 <div className="space-y-3">
+                   <div className="grid grid-cols-2 gap-2">
+                     <label className="flex items-center gap-2 p-2 border border-emerald-200 rounded bg-emerald-50 cursor-pointer text-[10px] transition-colors hover:bg-emerald-100/50">
+                       <input 
+                         type="checkbox" 
+                         checked={settings.requireOptInConsent} 
+                         onChange={e => handleUpdate('requireOptInConsent', e.target.checked)} 
+                         className="w-3.5 h-3.5 accent-emerald-600 rounded border-emerald-300 bg-[var(--m-surface)]" 
+                       />
+                       <span className="font-bold text-emerald-800">Strict Opt-In Consent</span>
+                     </label>
+ 
+                     <label className="flex items-center gap-2 p-2 border border-[var(--m-border-2)] rounded bg-[var(--m-surface)] cursor-pointer hover:bg-[var(--m-surface-3)] text-[10px] transition-colors">
+                       <input 
+                         type="checkbox" 
+                         checked={settings.consentSourceRequired} 
+                         onChange={e => handleUpdate('consentSourceRequired', e.target.checked)} 
+                         className="w-3.5 h-3.5 accent-[var(--m-accent)] rounded border-[var(--m-border)] bg-[var(--m-surface)]" 
+                       />
+                       <span>Enforce Consent Log</span>
+                     </label>
+                   </div>
+ 
+                   <div className="grid grid-cols-2 gap-3">
+                     <div>
+                       <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">TCPA Consent Mode</label>
+                       <select 
+                         className="m-select text-xs" 
+                         value={settings.tcpaConsentMode} 
+                         onChange={e => handleUpdate('tcpaConsentMode', e.target.value)}
+                       >
+                         <option value="strict">Strict (Double Opt-In)</option>
+                         <option value="standard">Standard (Single Opt-In)</option>
+                       </select>
+                     </div>
+ 
+                     <div>
+                       <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Recording Disclosure</label>
+                       <select 
+                         className="m-select text-xs" 
+                         value={settings.recordingDisclosure} 
+                         onChange={e => handleUpdate('recordingDisclosure', e.target.value)}
+                       >
+                         <option value="single_party">Single-Party Consent State</option>
+                         <option value="all_party">All-Party Mandatory Announcement</option>
+                       </select>
+                     </div>
+                   </div>
+ 
+                   <div className="grid grid-cols-2 gap-3">
+                     <div>
+                       <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Data Retention Window</label>
+                       <select 
+                         className="m-select text-xs" 
+                         value={settings.dataRetentionWindow} 
+                         onChange={e => handleUpdate('dataRetentionWindow', e.target.value)}
+                       >
+                         <option value="30_days">30 Days</option>
+                         <option value="90_days">90 Days</option>
+                         <option value="1_year">1 Year</option>
+                         <option value="indefinite">Indefinite</option>
+                       </select>
+                     </div>
+ 
+                     <div>
+                       <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Opt-Out Handling</label>
+                       <select 
+                         className="m-select text-xs" 
+                         value={settings.optOutHandling} 
+                         onChange={e => handleUpdate('optOutHandling', e.target.value)}
+                       >
+                         <option value="auto_blacklist">Auto-Suppression DNC</option>
+                         <option value="manual_review">Manual operator review</option>
+                       </select>
+                     </div>
+                   </div>
+                 </div>
+ 
+                 <div className="space-y-3">
+                   <div>
+                     <label className="block text-[9px] font-bold m-text-muted mb-1 uppercase tracking-wider">Global Suppression CSV Upload</label>
+                     <div className="border border-dashed border-[var(--m-border)] rounded bg-[var(--m-surface)] p-5 text-center cursor-pointer hover:bg-[var(--m-surface-3)] hover:border-[var(--m-accent)] transition-all">
+                       <Upload className="h-5 w-5 mx-auto mb-1 text-[var(--m-muted)]" />
+                       <span className="block text-[10px] font-bold text-[var(--m-text-2)]">Load Suppression List (.CSV)</span>
+                       <span className="block text-[8px] text-[var(--m-muted)] mt-0.5">Mutes specific DIDs globally across active campaigns</span>
+                     </div>
+                   </div>
+ 
+                   <div className="bg-[var(--m-surface)] rounded p-2 border border-[var(--m-border-2)] space-y-1">
+                     <span className="block text-[8px] font-bold uppercase tracking-wider text-[var(--m-text-2)] mb-1">Suppression Checklist</span>
+                     <div className="flex items-center gap-2 text-[9px] text-[var(--m-text-2)] font-semibold">
+                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                       <span>TCPA opt-in check verified</span>
+                     </div>
+                     <div className="flex items-center gap-2 text-[9px] text-[var(--m-text-2)] font-semibold">
+                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                       <span>Audio disclosure check configured</span>
+                     </div>
+                     <div className="flex items-center gap-2 text-[9px] text-[var(--m-text-2)] font-semibold">
+                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                       <span>Compliance suppression lists loaded</span>
+                     </div>
+                   </div>
+                 </div>
+               </div>
+             </div>
+           )}
 
           {/* Tab 4: Campaign Defaults */}
           {activeTab === 'campaign_defaults' && (
             <div className="space-y-4 animate-fadeIn">
-              <h2 className="text-[10px] font-bold uppercase tracking-wider text-slate-200 border-b border-[var(--m-border-2)] pb-1.5 flex items-center gap-1.5">
+              <h2 className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-text)] border-b border-[var(--m-border-2)] pb-1.5 flex items-center gap-1.5">
                 <Target className="h-4 w-4 text-[var(--m-accent)]" /> Campaign Defaults
               </h2>
 
@@ -605,39 +606,39 @@ export default function MusicSettingsPage() {
           {/* Tab 5: Reporting */}
           {activeTab === 'reporting' && (
             <div className="space-y-4 animate-fadeIn">
-              <h2 className="text-[10px] font-bold uppercase tracking-wider text-slate-200 border-b border-[var(--m-border-2)] pb-1.5 flex items-center gap-1.5">
+              <h2 className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-text)] border-b border-[var(--m-border-2)] pb-1.5 flex items-center gap-1.5">
                 <FileText className="h-4 w-4 text-[var(--m-accent)]" /> Platform Reporting Defaults
               </h2>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-3">
-                  <label className="flex items-center justify-between p-2 border border-white/5 rounded bg-black/10 cursor-pointer text-xs font-semibold">
+                  <label className="flex items-center justify-between p-2 border border-[var(--m-border-2)] rounded bg-[var(--m-surface)] cursor-pointer text-xs font-semibold text-[var(--m-text-2)] hover:bg-[var(--m-surface-3)] transition-colors">
                     <span>Email Automated Reports</span>
                     <input 
                       type="checkbox" 
                       checked={settings.emailReports} 
                       onChange={e => handleUpdate('emailReports', e.target.checked)} 
-                      className="w-3.5 h-3.5 accent-[var(--m-accent)] rounded border-white/20 bg-black" 
+                      className="w-3.5 h-3.5 accent-[var(--m-accent)] rounded border-[var(--m-border)] bg-[var(--m-surface)]" 
                     />
                   </label>
 
-                  <label className="flex items-center justify-between p-2 border border-white/5 rounded bg-black/10 cursor-pointer text-xs font-semibold">
+                  <label className="flex items-center justify-between p-2 border border-[var(--m-border-2)] rounded bg-[var(--m-surface)] cursor-pointer text-xs font-semibold text-[var(--m-text-2)] hover:bg-[var(--m-surface-3)] transition-colors">
                     <span>Sponsor-Ready Report Mode</span>
                     <input 
                       type="checkbox" 
                       checked={settings.sponsorReadyReportMode} 
                       onChange={e => handleUpdate('sponsorReadyReportMode', e.target.checked)} 
-                      className="w-3.5 h-3.5 accent-[var(--m-accent)] rounded border-white/20 bg-black" 
+                      className="w-3.5 h-3.5 accent-[var(--m-accent)] rounded border-[var(--m-border)] bg-[var(--m-surface)]" 
                     />
                   </label>
 
-                  <label className="flex items-center justify-between p-2 border border-white/5 rounded bg-black/10 cursor-pointer text-xs font-semibold">
+                  <label className="flex items-center justify-between p-2 border border-[var(--m-border-2)] rounded bg-[var(--m-surface)] cursor-pointer text-xs font-semibold text-[var(--m-text-2)] hover:bg-[var(--m-surface-3)] transition-colors">
                     <span>Auto-Generate Artist Summaries</span>
                     <input 
                       type="checkbox" 
                       checked={settings.autoGenerateArtistSummaries} 
                       onChange={e => handleUpdate('autoGenerateArtistSummaries', e.target.checked)} 
-                      className="w-3.5 h-3.5 accent-[var(--m-accent)] rounded border-white/20 bg-black" 
+                      className="w-3.5 h-3.5 accent-[var(--m-accent)] rounded border-[var(--m-border)] bg-[var(--m-surface)]" 
                     />
                   </label>
                 </div>
@@ -676,7 +677,7 @@ export default function MusicSettingsPage() {
           {/* Tab 6: Integrations */}
           {activeTab === 'integrations' && (
             <div className="space-y-4 animate-fadeIn">
-              <h2 className="text-[10px] font-bold uppercase tracking-wider text-slate-200 border-b border-[var(--m-border-2)] pb-1.5 flex items-center gap-1.5">
+              <h2 className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-text)] border-b border-[var(--m-border-2)] pb-1.5 flex items-center gap-1.5">
                 <Link2 className="h-4 w-4 text-[var(--m-accent)]" /> Platform Integrations
               </h2>
 
@@ -716,28 +717,28 @@ export default function MusicSettingsPage() {
                 <div className="space-y-2">
                   <span className="block text-[9px] font-bold m-text-muted uppercase tracking-wider mb-1">Dynamic API Gateway Feeds</span>
                   
-                  <div className="p-2.5 border border-white/5 rounded bg-black/15 flex items-center justify-between text-xs">
+                  <div className="p-2.5 border border-[var(--m-border-2)] rounded bg-[var(--m-surface)] flex items-center justify-between text-xs">
                     <div>
-                      <div className="font-bold text-white text-[11px]">Artist Stream DSP Gateway</div>
-                      <div className="text-[8px] text-emerald-400 mt-0.5 flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" /> Connected</div>
+                      <div className="font-bold text-[var(--m-text)] text-[11px]">Artist Stream DSP Gateway</div>
+                      <div className="text-[8px] text-emerald-700 mt-0.5 flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse" /> Connected</div>
                     </div>
-                    <button className="text-[9px] font-bold border border-white/10 px-2 py-0.5 rounded hover:bg-white/5 text-zinc-300">Configure</button>
+                    <button className="text-[9px] font-bold border border-[var(--m-border)] px-2 py-0.5 rounded hover:bg-[var(--m-surface-3)] text-[var(--m-text-2)] transition-colors">Configure</button>
                   </div>
                   
-                  <div className="p-2.5 border border-white/5 rounded bg-black/15 flex items-center justify-between text-xs">
+                  <div className="p-2.5 border border-[var(--m-border-2)] rounded bg-[var(--m-surface)] flex items-center justify-between text-xs">
                     <div>
-                      <div className="font-bold text-white text-[11px]">Audience Ticketing Webhook</div>
-                      <div className="text-[8px] text-zinc-500 mt-0.5 flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-zinc-650" /> Disconnected</div>
+                      <div className="font-bold text-[var(--m-text)] text-[11px]">Audience Ticketing Webhook</div>
+                      <div className="text-[8px] text-[var(--m-muted)] mt-0.5 flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-[var(--m-muted)]" /> Disconnected</div>
                     </div>
-                    <button className="text-[9px] font-bold bg-white text-black px-2.5 py-0.5 rounded hover:bg-gray-200">Connect</button>
+                    <button className="text-[9px] font-bold bg-[var(--m-accent)] hover:bg-[var(--m-accent-2)] text-white px-2.5 py-0.5 rounded transition-colors">Connect</button>
                   </div>
                   
-                  <div className="p-2.5 border border-white/5 rounded bg-black/15 flex items-center justify-between text-xs">
+                  <div className="p-2.5 border border-[var(--m-border-2)] rounded bg-[var(--m-surface)] flex items-center justify-between text-xs">
                     <div>
-                      <div className="font-bold text-white text-[11px]">E-Commerce Monetization Sync</div>
-                      <div className="text-[8px] text-emerald-400 mt-0.5 flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" /> Connected</div>
+                      <div className="font-bold text-[var(--m-text)] text-[11px]">E-Commerce Monetization Sync</div>
+                      <div className="text-[8px] text-emerald-700 mt-0.5 flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse" /> Connected</div>
                     </div>
-                    <button className="text-[9px] font-bold border border-white/10 px-2 py-0.5 rounded hover:bg-white/5 text-zinc-300">Configure</button>
+                    <button className="text-[9px] font-bold border border-[var(--m-border)] px-2 py-0.5 rounded hover:bg-[var(--m-surface-3)] text-[var(--m-text-2)] transition-colors">Configure</button>
                   </div>
                 </div>
               </div>
@@ -749,3 +750,4 @@ export default function MusicSettingsPage() {
     </div>
   );
 }
+

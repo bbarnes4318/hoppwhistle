@@ -936,33 +936,32 @@ export function CustomerSideDemo() {
             </div>
           </div>
         </div>
-
-        {/* Right Column: Live Event Timeline & Business Context (7 cols) */}
+          {/* Right Column: Live Event Timeline & Business Context (7 cols) */}
         <div className="lg:col-span-7 flex flex-col h-full min-h-0 space-y-3 text-left">
           
           {/* Timeline Panel */}
-          <div className="flex-1 min-h-0 overflow-y-auto m-card p-4 space-y-3 scrollbar-thin">
+          <div className="flex-1 min-h-0 overflow-y-auto m-card p-4 space-y-3 scrollbar-thin shadow-sm">
             <div className="flex items-center justify-between border-b border-[var(--m-border-2)] pb-2">
-              <h2 className="text-xs font-black text-zinc-200 uppercase tracking-wider flex items-center gap-1.5">
-                <FileText className="h-3.5 w-3.5 text-[var(--m-accent-2)]" /> Live Event Attribution Timeline
+              <h2 className="text-xs font-black text-[var(--m-text)] uppercase tracking-wider flex items-center gap-1.5">
+                <FileText className="h-3.5 w-3.5 text-[var(--m-accent)]" /> Live Event Attribution Timeline
               </h2>
               <span className="text-[9px] font-mono text-[var(--m-muted)]">Stage {stage} of 9</span>
             </div>
 
             {/* Vertically stacked timeline events */}
-            <div className="relative border-l border-zinc-800 pl-4 space-y-2.5 py-1 ml-2">
+            <div className="relative border-l border-[var(--m-border)] pl-4 space-y-2.5 py-1 ml-2">
               
               {/* Event 1 */}
               <div className="relative">
                 <div className={cn(
                   "absolute -left-[21px] top-1 h-3 w-3 rounded-full border-2 flex items-center justify-center transition-all duration-300",
-                  isTimelineItemActive(2) ? "bg-emerald-600 border-emerald-500 text-white scale-110" : "bg-[var(--m-bg)] border-zinc-700"
+                  isTimelineItemActive(2) ? "bg-emerald-600 border-emerald-500 text-white scale-110" : "bg-[var(--m-surface)] border-[var(--m-border)]"
                 )}>
                   {isTimelineItemActive(2) && <span className="text-[7px] font-bold">✓</span>}
                 </div>
                 <div className={cn("space-y-0.5 transition-opacity duration-300", isTimelineItemActive(2) ? "opacity-100" : "opacity-35")}>
-                  <h3 className="text-xs font-semibold text-zinc-200 leading-none">1. Human Answer Verified</h3>
-                  <p className="text-[9px] text-zinc-500">Call connected to opted-in mobile line. Audio channel validated.</p>
+                  <h3 className="text-xs font-semibold text-[var(--m-text)] leading-none">1. Human Answer Verified</h3>
+                  <p className="text-[9px] text-[var(--m-muted)]">Call connected to opted-in mobile line. Audio channel validated.</p>
                 </div>
               </div>
 
@@ -970,13 +969,13 @@ export function CustomerSideDemo() {
               <div className="relative">
                 <div className={cn(
                   "absolute -left-[21px] top-1 h-3 w-3 rounded-full border-2 flex items-center justify-center transition-all duration-300",
-                  isTimelineItemActive(3) ? "bg-emerald-600 border-emerald-500 text-white scale-110" : "bg-[var(--m-bg)] border-zinc-700"
+                  isTimelineItemActive(3) ? "bg-emerald-600 border-emerald-500 text-white scale-110" : "bg-[var(--m-surface)] border-[var(--m-border)]"
                 )}>
                   {isTimelineItemActive(3) && <span className="text-[7px] font-bold">✓</span>}
                 </div>
                 <div className={cn("space-y-0.5 transition-opacity duration-300", isTimelineItemActive(3) ? "opacity-100" : "opacity-35")}>
-                  <h3 className="text-xs font-semibold text-zinc-200 leading-none">2. Song Preview Delivered</h3>
-                  <p className="text-[9px] text-zinc-500">Audio Preview of {"\"Mr. Wendell\""} streamed to caller handset.</p>
+                  <h3 className="text-xs font-semibold text-[var(--m-text)] leading-none">2. Song Preview Delivered</h3>
+                  <p className="text-[9px] text-[var(--m-muted)]">Audio Preview of {"\"Mr. Wendell\""} streamed to caller handset.</p>
                 </div>
               </div>
 
@@ -984,13 +983,13 @@ export function CustomerSideDemo() {
               <div className="relative">
                 <div className={cn(
                   "absolute -left-[21px] top-1 h-3 w-3 rounded-full border-2 flex items-center justify-center transition-all duration-300",
-                  isTimelineItemActive(4) ? "bg-emerald-600 border-emerald-500 text-white scale-110" : "bg-[var(--m-bg)] border-zinc-700"
+                  isTimelineItemActive(4) ? "bg-emerald-600 border-emerald-500 text-white scale-110" : "bg-[var(--m-surface)] border-[var(--m-border)]"
                 )}>
                   {isTimelineItemActive(4) && <span className="text-[7px] font-bold">✓</span>}
                 </div>
                 <div className={cn("space-y-0.5 transition-opacity duration-300", isTimelineItemActive(4) ? "opacity-100" : "opacity-35")}>
-                  <h3 className="text-xs font-semibold text-zinc-200 leading-none">3. Fan Feedback Captured</h3>
-                  <p className="text-[9px] text-zinc-500">Voice feedback converted into positive sentiment score.</p>
+                  <h3 className="text-xs font-semibold text-[var(--m-text)] leading-none">3. Fan Feedback Captured</h3>
+                  <p className="text-[9px] text-[var(--m-muted)]">Voice feedback converted into positive sentiment score.</p>
                 </div>
               </div>
 
@@ -998,13 +997,13 @@ export function CustomerSideDemo() {
               <div className="relative">
                 <div className={cn(
                   "absolute -left-[21px] top-1 h-3 w-3 rounded-full border-2 flex items-center justify-center transition-all duration-300",
-                  isTimelineItemActive(5) ? "bg-emerald-600 border-emerald-500 text-white scale-110" : "bg-[var(--m-bg)] border-zinc-700"
+                  isTimelineItemActive(5) ? "bg-emerald-600 border-emerald-500 text-white scale-110" : "bg-[var(--m-surface)] border-[var(--m-border)]"
                 )}>
                   {isTimelineItemActive(5) && <span className="text-[7px] font-bold">✓</span>}
                 </div>
                 <div className={cn("space-y-0.5 transition-opacity duration-300", isTimelineItemActive(5) ? "opacity-100" : "opacity-35")}>
-                  <h3 className="text-xs font-semibold text-zinc-200 leading-none">4. Branded Link Delivered</h3>
-                  <p className="text-[9px] text-zinc-500">Sponsor landing page url dispatched to client mobile via SMS payload.</p>
+                  <h3 className="text-xs font-semibold text-[var(--m-text)] leading-none">4. Branded Link Delivered</h3>
+                  <p className="text-[9px] text-[var(--m-muted)]">Sponsor landing page url dispatched to client mobile via SMS payload.</p>
                 </div>
               </div>
 
@@ -1012,13 +1011,13 @@ export function CustomerSideDemo() {
               <div className="relative">
                 <div className={cn(
                   "absolute -left-[21px] top-1 h-3 w-3 rounded-full border-2 flex items-center justify-center transition-all duration-300",
-                  isTimelineItemActive(6) ? "bg-emerald-600 border-emerald-500 text-white scale-110" : "bg-[var(--m-bg)] border-zinc-700"
+                  isTimelineItemActive(6) ? "bg-emerald-600 border-emerald-500 text-white scale-110" : "bg-[var(--m-surface)] border-[var(--m-border)]"
                 )}>
                   {isTimelineItemActive(6) && <span className="text-[7px] font-bold">✓</span>}
                 </div>
                 <div className={cn("space-y-0.5 transition-opacity duration-300", isTimelineItemActive(6) ? "opacity-100" : "opacity-35")}>
-                  <h3 className="text-xs font-semibold text-zinc-200 leading-none">5. Link Opened & Verified</h3>
-                  <p className="text-[9px] text-zinc-500">Link click registered on node server with UTM campaign codes.</p>
+                  <h3 className="text-xs font-semibold text-[var(--m-text)] leading-none">5. Link Opened & Verified</h3>
+                  <p className="text-[9px] text-[var(--m-muted)]">Link click registered on node server with UTM campaign codes.</p>
                 </div>
               </div>
 
@@ -1026,13 +1025,13 @@ export function CustomerSideDemo() {
               <div className="relative">
                 <div className={cn(
                   "absolute -left-[21px] top-1 h-3 w-3 rounded-full border-2 flex items-center justify-center transition-all duration-300",
-                  isTimelineItemActive(7) ? "bg-emerald-600 border-emerald-500 text-white scale-110" : "bg-[var(--m-bg)] border-zinc-700"
+                  isTimelineItemActive(7) ? "bg-emerald-600 border-emerald-500 text-white scale-110" : "bg-[var(--m-surface)] border-[var(--m-border)]"
                 )}>
                   {isTimelineItemActive(7) && <span className="text-[7px] font-bold">✓</span>}
                 </div>
                 <div className={cn("space-y-0.5 transition-opacity duration-300", isTimelineItemActive(7) ? "opacity-100" : "opacity-35")}>
-                  <h3 className="text-xs font-semibold text-zinc-200 leading-none">6. Platform Save Attribute</h3>
-                  <p className="text-[9px] text-zinc-500">Fan liked and pre-saved the song. DSP API sync validated.</p>
+                  <h3 className="text-xs font-semibold text-[var(--m-text)] leading-none">6. Platform Save Attribute</h3>
+                  <p className="text-[9px] text-[var(--m-muted)]">Fan liked and pre-saved the song. DSP API sync validated.</p>
                 </div>
               </div>
 
@@ -1040,13 +1039,13 @@ export function CustomerSideDemo() {
               <div className="relative">
                 <div className={cn(
                   "absolute -left-[21px] top-1 h-3 w-3 rounded-full border-2 flex items-center justify-center transition-all duration-300",
-                  isTimelineItemActive(8) ? "bg-emerald-600 border-emerald-500 text-white scale-110" : "bg-[var(--m-bg)] border-zinc-700"
+                  isTimelineItemActive(8) ? "bg-emerald-600 border-emerald-500 text-white scale-110" : "bg-[var(--m-surface)] border-[var(--m-border)]"
                 )}>
                   {isTimelineItemActive(8) && <span className="text-[7px] font-bold">✓</span>}
                 </div>
                 <div className={cn("space-y-0.5 transition-opacity duration-300", isTimelineItemActive(8) ? "opacity-100" : "opacity-35")}>
-                  <h3 className="text-xs font-semibold text-zinc-200 leading-none">7. Fan Club Registration Completed</h3>
-                  <p className="text-[9px] text-zinc-500">Verified first-party contact lead logged inside the CRM data layer.</p>
+                  <h3 className="text-xs font-semibold text-[var(--m-text)] leading-none">7. Fan Club Registration Completed</h3>
+                  <p className="text-[9px] text-[var(--m-muted)]">Verified first-party contact lead logged inside the CRM data layer.</p>
                 </div>
               </div>
 
@@ -1054,13 +1053,13 @@ export function CustomerSideDemo() {
               <div className="relative">
                 <div className={cn(
                   "absolute -left-[21px] top-1 h-3 w-3 rounded-full border-2 flex items-center justify-center transition-all duration-300",
-                  isTimelineItemActive(9) ? "bg-emerald-600 border-emerald-500 text-white scale-110" : "bg-[var(--m-bg)] border-zinc-700"
+                  isTimelineItemActive(9) ? "bg-emerald-600 border-emerald-500 text-white scale-110" : "bg-[var(--m-surface)] border-[var(--m-border)]"
                 )}>
                   {isTimelineItemActive(9) && <span className="text-[7px] font-bold">✓</span>}
                 </div>
                 <div className={cn("space-y-0.5 transition-opacity duration-300", isTimelineItemActive(9) ? "opacity-100" : "opacity-35")}>
-                  <h3 className="text-xs font-semibold text-zinc-200 leading-none">8. Viral Share Attributed</h3>
-                  <p className="text-[9px] text-zinc-500">Mock share tracking loop recorded 4 referral actions and generated a proof packet.</p>
+                  <h3 className="text-xs font-semibold text-[var(--m-text)] leading-none">8. Viral Share Attributed</h3>
+                  <p className="text-[9px] text-[var(--m-muted)]">Mock share tracking loop recorded 4 referral actions and generated a proof packet.</p>
                 </div>
               </div>
 
@@ -1068,31 +1067,31 @@ export function CustomerSideDemo() {
           </div>
 
           {/* Business Impact Card */}
-          <div className="shrink-0 m-card p-4 bg-gradient-to-br from-[#071B36] to-[#0B2447] border-[var(--m-border)] space-y-2.5">
-            <h3 className="text-[10px] font-black uppercase text-[var(--m-accent-2)] tracking-widest flex items-center gap-1.5 font-mono">
+          <div className="shrink-0 m-card p-4 bg-gradient-to-br from-[var(--m-surface)] to-[var(--m-surface-2)] border border-[var(--m-border)] space-y-2.5 shadow-sm">
+            <h3 className="text-[10px] font-black uppercase text-[var(--m-accent)] tracking-widest flex items-center gap-1.5 font-mono">
               <Sparkles className="h-3.5 w-3.5 text-amber-500 fill-current" /> Why This Matters
             </h3>
-            <p className="text-xs text-zinc-200 leading-normal">
+            <p className="text-xs text-[var(--m-text-2)] leading-normal">
               RPS turns one fan phone interaction into a measurable media event: listen, feedback, click, like, signup, share, and proof. Every action becomes sponsor-ready attribution.
             </p>
             
             {/* Metric widgets */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pt-1">
-              <div className="bg-[#020817]/60 border border-[var(--m-border)] rounded p-1.5 text-center">
-                <span className="text-[8px] font-black uppercase text-zinc-500 tracking-wider block">Est. Action Value</span>
-                <span className="text-xs font-bold m-font-mono text-white mt-0.5 block">$3.40</span>
+              <div className="bg-[var(--m-surface-3)] border border-[var(--m-border-2)] rounded p-1.5 text-center">
+                <span className="text-[8px] font-black uppercase text-[var(--m-muted)] tracking-wider block">Est. Action Value</span>
+                <span className="text-xs font-bold m-font-mono text-[var(--m-text)] mt-0.5 block">$3.40</span>
               </div>
-              <div className="bg-[#020817]/60 border border-[var(--m-border)] rounded p-1.5 text-center">
-                <span className="text-[8px] font-black uppercase text-zinc-500 tracking-wider block">Opt-In Rate</span>
-                <span className="text-xs font-bold m-font-mono text-emerald-400 mt-0.5 block">100%</span>
+              <div className="bg-[var(--m-surface-3)] border border-[var(--m-border-2)] rounded p-1.5 text-center">
+                <span className="text-[8px] font-black uppercase text-[var(--m-muted)] tracking-wider block">Opt-In Rate</span>
+                <span className="text-xs font-bold m-font-mono text-emerald-700 mt-0.5 block">100%</span>
               </div>
-              <div className="bg-[#020817]/60 border border-[var(--m-border)] rounded p-1.5 text-center">
-                <span className="text-[8px] font-black uppercase text-zinc-500 tracking-wider block">Virality Coeff.</span>
-                <span className="text-xs font-bold m-font-mono text-cyan-400 mt-0.5 block">4.0x</span>
+              <div className="bg-[var(--m-surface-3)] border border-[var(--m-border-2)] rounded p-1.5 text-center">
+                <span className="text-[8px] font-black uppercase text-[var(--m-muted)] tracking-wider block">Virality Coeff.</span>
+                <span className="text-xs font-bold m-font-mono text-blue-700 mt-0.5 block">4.0x</span>
               </div>
-              <div className="bg-[#020817]/60 border border-[var(--m-border)] rounded p-1.5 text-center">
-                <span className="text-[8px] font-black uppercase text-zinc-500 tracking-wider block">Attribution</span>
-                <span className="text-[10px] font-bold text-emerald-400 mt-0.5 block uppercase font-mono leading-none">Complete</span>
+              <div className="bg-[var(--m-surface-3)] border border-[var(--m-border-2)] rounded p-1.5 text-center">
+                <span className="text-[8px] font-black uppercase text-[var(--m-muted)] tracking-wider block">Attribution</span>
+                <span className="text-[10px] font-bold text-emerald-700 mt-0.5 block uppercase font-mono leading-none">Complete</span>
               </div>
             </div>
           </div>
@@ -1104,3 +1103,4 @@ export function CustomerSideDemo() {
     </div>
   );
 }
+

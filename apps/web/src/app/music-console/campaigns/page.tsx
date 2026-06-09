@@ -91,7 +91,7 @@ export default function MusicCampaignsPage() {
       {/* ─── Header ─── */}
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-[var(--m-border-2)] pb-4">
         <div className="space-y-1.5">
-          <h1 className="text-xl lg:text-2xl font-black tracking-tight flex items-center gap-3 text-white uppercase">
+          <h1 className="text-xl lg:text-2xl font-black tracking-tight flex items-center gap-3 text-[var(--m-text)] uppercase">
             <Megaphone className="h-6 w-6 text-[var(--m-accent)]" /> Fan Campaigns
           </h1>
           <p className="text-xs text-[var(--m-muted)] font-medium max-w-xl">
@@ -101,17 +101,17 @@ export default function MusicCampaignsPage() {
             <span className="px-2 py-0.5 bg-[var(--m-accent-dim)] border border-[var(--m-accent)]/20 rounded text-[9px] text-[var(--m-accent)] font-bold uppercase tracking-wider font-mono">
               Active Media Inventory
             </span>
-            <span className="px-2 py-0.5 bg-[#10b981]/5 border border-[#10b981]/25 rounded text-[9px] text-[#10b981] font-bold uppercase tracking-wider font-mono">
+            <span className="px-2 py-0.5 bg-emerald-50 border border-emerald-250 rounded text-[9px] text-emerald-700 font-bold uppercase tracking-wider font-mono">
               Proof Enabled
             </span>
-            <span className="px-2 py-0.5 bg-[var(--m-accent-gold-dim)] border border-[var(--m-accent-gold)]/20 rounded text-[9px] text-[var(--m-accent-gold)] font-bold uppercase tracking-wider font-mono">
+            <span className="px-2 py-0.5 bg-[var(--m-accent-gold-dim)] border border-[var(--m-accent-gold)]/20 rounded text-[9px] text-[#B45309] font-bold uppercase tracking-wider font-mono">
               Sponsor Ready
             </span>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <button
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded text-xs font-semibold hover:bg-[var(--m-surface-3)] transition-colors text-zinc-300"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded text-xs font-semibold hover:bg-[var(--m-surface-3)] transition-colors text-[var(--m-text-2)]"
             onClick={() => setShowFilters(!showFilters)}
           >
             <ListFilter className="h-3.5 w-3.5" /> Filter
@@ -169,7 +169,7 @@ export default function MusicCampaignsPage() {
           <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-muted)]">
             Fans Reached
           </div>
-          <div className="mt-2 text-2xl font-black text-white">{formatCompactNumber(totalContacted)}</div>
+          <div className="mt-2 text-2xl font-black text-[var(--m-text)]">{formatCompactNumber(totalContacted)}</div>
           <div className="text-[9px] text-[var(--m-muted)] mt-1 font-medium">Total Connections</div>
         </div>
         {/* Card 3: Verified Actions */}
@@ -177,7 +177,7 @@ export default function MusicCampaignsPage() {
           <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-muted)]">
             Verified Actions
           </div>
-          <div className="mt-2 text-2xl font-black text-emerald-400">
+          <div className="mt-2 text-2xl font-black text-emerald-600">
             {formatCompactNumber(totalVerified)}
           </div>
           <div className="text-[9px] text-[var(--m-muted)] mt-1 font-medium">Verified Actions Logged</div>
@@ -187,7 +187,7 @@ export default function MusicCampaignsPage() {
           <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-muted)]">
             Sponsor-Ready Proof
           </div>
-          <div className="mt-2 text-2xl font-black text-zinc-300">
+          <div className="mt-2 text-2xl font-black text-[var(--m-text)]">
             {formatCompactNumber(totalProof)}
           </div>
           <div className="text-[9px] text-[var(--m-muted)] mt-1 font-medium">Attributed Records</div>
@@ -197,7 +197,7 @@ export default function MusicCampaignsPage() {
           <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-muted)]">
             Blended CPA
           </div>
-          <div className="mt-2 text-2xl font-black font-mono text-[var(--m-accent-gold)]">
+          <div className="mt-2 text-2xl font-black font-mono text-[#D97706]">
             {formatCurrency(blendedCpa)}
           </div>
           <div className="text-[9px] text-[var(--m-muted)] mt-1 font-medium">Cost per Action</div>
@@ -207,7 +207,7 @@ export default function MusicCampaignsPage() {
           <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-muted)]">
             Est. Campaign Value
           </div>
-          <div className="mt-2 text-2xl font-black font-mono text-[var(--m-accent-gold)]">
+          <div className="mt-2 text-2xl font-black font-mono text-[#D97706]">
             {formatCurrency(totalVerified * 2.8)}
           </div>
           <div className="text-[9px] text-[var(--m-muted)] mt-1 font-medium">Network Yield</div>
@@ -215,7 +215,7 @@ export default function MusicCampaignsPage() {
       </div>
 
       {/* ─── Campaign Table ─── */}
-      <section className="m-card overflow-x-auto bg-[var(--m-surface-2)]">
+      <section className="m-card overflow-x-auto bg-[var(--m-surface)] shadow-sm">
         <table className="w-full text-left text-xs border-collapse m-dense-table">
           <thead>
             <tr className="border-b border-[var(--m-border-2)] text-[9px] uppercase tracking-wider m-text-muted">
@@ -238,13 +238,13 @@ export default function MusicCampaignsPage() {
               <tr
                 key={c.id}
                 onClick={() => setSelectedCampaign(c)}
-                className="hover:bg-white/[0.015] transition-colors cursor-pointer"
+                className="hover:bg-black/[0.015] transition-colors cursor-pointer"
                 title={`Click to view full performance logs & economics for ${c.name}`}
               >
-                <td className="py-2.5 font-bold text-white max-w-[130px] truncate" title={c.name}>
+                <td className="py-2.5 font-bold text-[var(--m-text)] max-w-[130px] truncate" title={c.name}>
                   {c.name}
                 </td>
-                <td className="py-2.5 text-zinc-300">{c.artist}</td>
+                <td className="py-2.5 text-[var(--m-text-2)]">{c.artist}</td>
                 <td className="py-2.5">
                   <span className="px-1.5 py-0.5 bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded text-[9px] m-text-dim">
                     {campaignTypeLabel(c.type)}
@@ -254,27 +254,27 @@ export default function MusicCampaignsPage() {
                 <td className="py-2.5">
                   <StatusBadge status={c.status} className="text-[8px]" />
                 </td>
-                <td className="py-2.5 text-right font-mono text-zinc-300 font-semibold">
+                <td className="py-2.5 text-right font-mono text-[var(--m-text-2)] font-semibold">
                   {formatCompactNumber(c.fansContacted)}
                 </td>
                 <td className="py-2.5 text-right font-mono text-[var(--m-accent)] font-semibold">
                   {c.answerRate}%
                 </td>
-                <td className="py-2.5 text-right font-mono text-white font-bold">
+                <td className="py-2.5 text-right font-mono text-[var(--m-text)] font-bold">
                   {formatCompactNumber(c.verifiedEngagements)}
                 </td>
-                <td className="py-2.5 text-right font-mono text-zinc-300">
+                <td className="py-2.5 text-right font-mono text-[var(--m-text-2)]">
                   {c.cpa > 0 ? formatCurrency(c.cpa) : '—'}
                 </td>
                 <td className="py-2.5 text-right font-mono text-[var(--m-muted)]">
                   {formatCompactNumber(c.proofCaptured)}
                 </td>
-                <td className="py-2.5 text-right font-mono font-bold text-[var(--m-accent-gold)]">
+                <td className="py-2.5 text-right font-mono font-bold text-[#D97706]">
                   {formatCurrency(c.verifiedEngagements * 2.8)}
                 </td>
                 <td className="py-2.5 text-right">
                   <button
-                    className="p-1 hover:bg-[var(--m-surface-3)] rounded text-zinc-400 hover:text-white transition-colors"
+                    className="p-1 hover:bg-[var(--m-surface-3)] rounded text-zinc-400 hover:text-[var(--m-text)] transition-colors"
                     onClick={e => {
                       e.stopPropagation();
                       setSelectedCampaign(c);
@@ -296,14 +296,14 @@ export default function MusicCampaignsPage() {
           onClick={() => setSelectedCampaign(null)}
         >
           <div
-            className="w-full max-w-xl bg-[var(--m-surface-2)] border-l border-[var(--m-border)] h-screen fixed top-0 right-0 flex flex-col shadow-2xl overflow-hidden animate-[m-slide-in_0.2s_ease-out]"
+            className="w-full max-w-xl bg-[var(--m-surface)] border-l border-[var(--m-border-2)] h-screen fixed top-0 right-0 flex flex-col shadow-2xl overflow-hidden animate-[m-slide-in_0.2s_ease-out]"
             onClick={e => e.stopPropagation()}
           >
             {/* Drawer Header */}
-            <div className="flex items-center justify-between p-5 border-b border-[var(--m-border-2)] bg-[var(--m-surface-3)] shrink-0">
+            <div className="flex items-center justify-between p-5 border-b border-[var(--m-border-2)] bg-[var(--m-surface-2)] shrink-0">
               <div>
                 <h2
-                  className="text-base font-bold text-white truncate max-w-[280px]"
+                  className="text-base font-bold text-[var(--m-text)] truncate max-w-[280px]"
                   title={selectedCampaign.name}
                 >
                   {selectedCampaign.name}
@@ -315,7 +315,7 @@ export default function MusicCampaignsPage() {
                     className={cn(
                       'text-[10px] font-bold uppercase',
                       selectedCampaign.status === 'active' ? 'text-[var(--m-accent)]' :
-                      selectedCampaign.status === 'completed' ? 'text-emerald-400' : 'text-zinc-400'
+                      selectedCampaign.status === 'completed' ? 'text-emerald-600' : 'text-[var(--m-dim)]'
                     )}
                   >
                     {selectedCampaign.status}
@@ -326,7 +326,7 @@ export default function MusicCampaignsPage() {
                 onClick={() => setSelectedCampaign(null)}
                 className="p-1.5 hover:bg-[var(--m-surface-3)] rounded-lg transition-colors border border-[var(--m-border)] flex items-center justify-center bg-[var(--m-surface-2)]"
               >
-                <X className="h-4 w-4 text-white" />
+                <X className="h-4 w-4 text-[var(--m-text)]" />
               </button>
             </div>
 
@@ -334,15 +334,15 @@ export default function MusicCampaignsPage() {
             <div className="flex-1 overflow-y-auto p-5 space-y-5">
               {/* KPI Strip */}
               <div className="grid grid-cols-4 gap-2 pb-4 border-b border-[var(--m-border-2)]">
-                <div className="bg-black/20 p-2.5 border border-[var(--m-border-2)] rounded">
+                <div className="bg-[var(--m-surface-2)] p-2.5 border border-[var(--m-border-2)] rounded">
                   <div className="text-[9px] text-[var(--m-muted)] uppercase tracking-wider font-semibold">
                     Reached
                   </div>
-                  <div className="font-mono font-bold text-sm text-white mt-1">
+                  <div className="font-mono font-bold text-sm text-[var(--m-text)] mt-1">
                     {formatCompactNumber(selectedCampaign.fansContacted)}
                   </div>
                 </div>
-                <div className="bg-black/20 p-2.5 border border-[var(--m-border-2)] rounded">
+                <div className="bg-[var(--m-surface-2)] p-2.5 border border-[var(--m-border-2)] rounded">
                   <div className="text-[9px] text-[var(--m-muted)] uppercase tracking-wider font-semibold">
                     Answers
                   </div>
@@ -350,19 +350,19 @@ export default function MusicCampaignsPage() {
                     {selectedCampaign.answerRate}%
                   </div>
                 </div>
-                <div className="bg-black/20 p-2.5 border border-[var(--m-border-2)] rounded">
+                <div className="bg-[var(--m-surface-2)] p-2.5 border border-[var(--m-border-2)] rounded">
                   <div className="text-[9px] text-[var(--m-muted)] uppercase tracking-wider font-semibold">
                     Verified
                   </div>
-                  <div className="font-mono font-bold text-sm text-emerald-400 mt-1">
+                  <div className="font-mono font-bold text-sm text-emerald-600 mt-1">
                     {formatCompactNumber(selectedCampaign.verifiedEngagements)}
                   </div>
                 </div>
-                <div className="bg-black/20 p-2.5 border border-[var(--m-border-2)] rounded">
+                <div className="bg-[var(--m-surface-2)] p-2.5 border border-[var(--m-border-2)] rounded">
                   <div className="text-[9px] text-[var(--m-muted)] uppercase tracking-wider font-semibold">
                     Proof
                   </div>
-                  <div className="font-mono font-bold text-sm text-zinc-300 mt-1">
+                  <div className="font-mono font-bold text-sm text-[var(--m-text-2)] mt-1">
                     {formatCompactNumber(selectedCampaign.proofCaptured)}
                   </div>
                 </div>
@@ -374,31 +374,31 @@ export default function MusicCampaignsPage() {
                   <Coins className="h-3.5 w-3.5" /> Campaign Economics
                 </h3>
                 <div className="grid grid-cols-2 gap-3 text-xs">
-                  <div className="flex justify-between items-center bg-black/10 p-2.5 border border-[var(--m-border-2)] rounded">
+                  <div className="flex justify-between items-center bg-[var(--m-surface-2)] p-2.5 border border-[var(--m-border-2)] rounded">
                     <span className="text-[var(--m-muted)] font-medium">Total Spend</span>
-                    <span className="font-mono font-bold text-white">
+                    <span className="font-mono font-bold text-[var(--m-text)]">
                       {formatCurrency(selectedCampaign.fansContacted * 0.4)}
                     </span>
                   </div>
-                  <div className="flex justify-between items-center bg-black/10 p-2.5 border border-[var(--m-border-2)] rounded">
+                  <div className="flex justify-between items-center bg-[var(--m-surface-2)] p-2.5 border border-[var(--m-border-2)] rounded">
                     <span className="text-[var(--m-muted)] font-medium">CPA Target</span>
-                    <span className="font-mono font-bold text-white">
+                    <span className="font-mono font-bold text-[var(--m-text)]">
                       {selectedCampaign.cpa > 0 ? formatCurrency(selectedCampaign.cpa) : '—'}
                     </span>
                   </div>
-                  <div className="flex justify-between items-center bg-black/10 p-2.5 border border-[var(--m-border-2)] rounded">
+                  <div className="flex justify-between items-center bg-[var(--m-surface-2)] p-2.5 border border-[var(--m-border-2)] rounded">
                     <span className="text-[var(--m-muted)] font-medium">Est. Sponsor Value</span>
-                    <span className="font-mono font-bold text-[var(--m-accent-gold)]">
+                    <span className="font-mono font-bold text-[#D97706]">
                       {formatCurrency(selectedCampaign.verifiedEngagements * 2.8)}
                     </span>
                   </div>
-                  <div className="flex justify-between items-center bg-black/10 p-2.5 border border-[var(--m-border-2)] rounded">
+                  <div className="flex justify-between items-center bg-[var(--m-surface-2)] p-2.5 border border-[var(--m-border-2)] rounded">
                     <span className="text-[var(--m-muted)] font-medium">Artist Share (70%)</span>
-                    <span className="font-mono font-bold text-[var(--m-accent-gold)]">
+                    <span className="font-mono font-bold text-[#D97706]">
                       {formatCurrency(selectedCampaign.verifiedEngagements * 2.8 * 0.7)}
                     </span>
                   </div>
-                  <div className="flex justify-between items-center bg-black/10 p-2.5 border border-[var(--m-border-2)] rounded col-span-2">
+                  <div className="flex justify-between items-center bg-[var(--m-surface-2)] p-2.5 border border-[var(--m-border-2)] rounded col-span-2">
                     <span className="text-[var(--m-muted)] font-medium">RPS Share (30%)</span>
                     <span className="font-mono font-bold text-[var(--m-accent)]">
                       {formatCurrency(selectedCampaign.verifiedEngagements * 2.8 * 0.3)}
@@ -409,24 +409,24 @@ export default function MusicCampaignsPage() {
 
               {/* Proof Readiness Check */}
               <div className="space-y-3 pb-4 border-b border-[var(--m-border-2)]">
-                <h3 className="text-[10px] font-bold uppercase tracking-wider text-[#10b981] flex items-center gap-1.5">
+                <h3 className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 flex items-center gap-1.5">
                   <ShieldCheck className="h-3.5 w-3.5" /> Proof Readiness Checklist
                 </h3>
                 <div className="grid grid-cols-2 gap-2.5 text-xs">
-                  <div className="flex items-center gap-2 text-[11px] text-zinc-300">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                  <div className="flex items-center gap-2 text-[11px] text-[var(--m-text-2)]">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
                     <span>TCPA Opt-In Consent Checked</span>
                   </div>
-                  <div className="flex items-center gap-2 text-[11px] text-zinc-300">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                  <div className="flex items-center gap-2 text-[11px] text-[var(--m-text-2)]">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
                     <span>Recording Consent Active</span>
                   </div>
-                  <div className="flex items-center gap-2 text-[11px] text-zinc-300">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                  <div className="flex items-center gap-2 text-[11px] text-[var(--m-text-2)]">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
                     <span>Dialing Safe-Time Check</span>
                   </div>
-                  <div className="flex items-center gap-2 text-[11px] text-zinc-300">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                  <div className="flex items-center gap-2 text-[11px] text-[var(--m-text-2)]">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
                     <span>Proof Audit Trail Ready</span>
                   </div>
                 </div>
@@ -437,14 +437,14 @@ export default function MusicCampaignsPage() {
                 <h3 className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-muted)] border-b border-[var(--m-border-2)] pb-1">
                   Approved Conversational Script
                 </h3>
-                <div className="bg-black/15 border border-[var(--m-border-2)] rounded p-3 text-xs font-mono m-text-dim leading-relaxed">
+                <div className="bg-[var(--m-surface-2)] border border-[var(--m-border-2)] rounded p-3 text-xs font-mono m-text-dim leading-relaxed">
                   {"\"Hey, this is Nova's team reaching out. The new album 'Midnight Signal' drops Friday. Do you want me to set up a pre-save on Spotify for you?\""}
                 </div>
               </div>
             </div>
 
             {/* Drawer Actions */}
-            <div className="p-4 border-t border-[var(--m-border-2)] bg-[var(--m-surface-3)] shrink-0 space-y-3">
+            <div className="p-4 border-t border-[var(--m-border-2)] bg-[var(--m-surface-2)] shrink-0 space-y-3">
               <div className="text-[8px] font-black uppercase text-[var(--m-accent)] tracking-widest font-mono">
                 Next Recommended Action
               </div>
@@ -470,14 +470,14 @@ export default function MusicCampaignsPage() {
                   </button>
                 )}
                 <button
-                  className="py-2 bg-[var(--m-surface-2)] border border-[var(--m-border)] text-zinc-300 rounded text-xs font-bold hover:bg-[var(--m-surface-3)] transition-colors"
+                  className="py-2 bg-[var(--m-surface-2)] border border-[var(--m-border)] text-[var(--m-text-2)] rounded text-xs font-bold hover:bg-[var(--m-surface-3)] transition-colors"
                   onClick={handleExport}
                 >
                   Export Proof
                 </button>
                 <Link
                   href="/music-console/reports"
-                  className="flex items-center justify-center py-2 bg-[var(--m-surface-2)] border border-[var(--m-border)] text-zinc-300 rounded text-xs font-bold hover:bg-[var(--m-surface-3)] transition-colors text-center"
+                  className="flex items-center justify-center py-2 bg-[var(--m-surface-2)] border border-[var(--m-border)] text-[var(--m-text-2)] rounded text-xs font-bold hover:bg-[var(--m-surface-3)] transition-colors text-center"
                 >
                   View Full Report
                 </Link>
@@ -490,10 +490,10 @@ export default function MusicCampaignsPage() {
       {/* ─── Campaign Builder Modal ─── */}
       {isBuilderOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 md:p-6">
-          <div className="w-full max-w-4xl bg-[var(--m-surface-2)] border border-[var(--m-border-2)] rounded-lg shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+          <div className="w-full max-w-4xl bg-[var(--m-surface)] border border-[var(--m-border-2)] rounded-lg shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
             
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--m-border-2)] bg-[var(--m-surface-3)]">
-              <h2 className="text-lg font-bold flex items-center gap-2 text-white uppercase tracking-wide">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--m-border-2)] bg-[var(--m-surface-2)]">
+              <h2 className="text-lg font-bold flex items-center gap-2 text-[var(--m-text)] uppercase tracking-wide">
                 <Mic className="h-5 w-5 text-[var(--m-accent)]" /> New Fan Campaign
               </h2>
               <button
@@ -532,7 +532,7 @@ export default function MusicCampaignsPage() {
                       <div
                         className={cn(
                           'text-xs font-semibold whitespace-nowrap',
-                          builderStep === step.num ? 'text-white' : 'text-zinc-500'
+                          builderStep === step.num ? 'text-[var(--m-text)]' : 'text-zinc-500'
                         )}
                       >
                         {step.title}
@@ -549,7 +549,7 @@ export default function MusicCampaignsPage() {
                 {builderStep === 1 && (
                   <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                     <div>
-                      <h3 className="text-xl font-bold text-white">Select Artist & Station Profile</h3>
+                      <h3 className="text-xl font-bold text-[var(--m-text)]">Select Artist & Station Profile</h3>
                       <p className="text-sm text-[var(--m-muted)] mt-1">
                         Select the active broadcast profile and phone node for this outreach campaign.
                       </p>
@@ -562,14 +562,14 @@ export default function MusicCampaignsPage() {
                         <input
                           type="text"
                           placeholder="e.g., Nova Ray"
-                          className="w-full bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-white"
+                          className="w-full bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-[var(--m-text)]"
                         />
                       </div>
                       <div>
                         <label className="block text-xs font-semibold m-text-muted mb-2 uppercase tracking-wider font-mono">
                           Broadcast Station ID Node
                         </label>
-                        <select className="w-full bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-white">
+                        <select className="w-full bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-[var(--m-text)]">
                           <option>RPS Station #25 - (Nova Ray Main Node)</option>
                           <option>RPS Station #02 - (Jace Vale Main Node)</option>
                           <option>RPS Station #11 - (Aria Stone Main Node)</option>
@@ -581,7 +581,7 @@ export default function MusicCampaignsPage() {
                         </label>
                         <input
                           type="date"
-                          className="w-full bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-white [&::-webkit-calendar-picker-indicator]:invert"
+                          className="w-full bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-[var(--m-text)]"
                         />
                       </div>
                     </div>
@@ -592,7 +592,7 @@ export default function MusicCampaignsPage() {
                 {builderStep === 2 && (
                   <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                     <div>
-                      <h3 className="text-xl font-bold text-white">Campaign Objective</h3>
+                      <h3 className="text-xl font-bold text-[var(--m-text)]">Campaign Objective</h3>
                       <p className="text-sm text-[var(--m-muted)] mt-1">
                         Select the primary conversion action to drive and track.
                       </p>
@@ -610,7 +610,7 @@ export default function MusicCampaignsPage() {
                           key={obj.label}
                           className="p-4 border border-[var(--m-border)] rounded-md bg-[var(--m-surface-3)] hover:bg-[var(--m-surface-2)] hover:border-[var(--m-accent)] cursor-pointer transition-all space-y-1"
                         >
-                          <span className="text-sm font-bold text-white">{obj.label}</span>
+                          <span className="text-sm font-bold text-[var(--m-text)]">{obj.label}</span>
                           <p className="text-[10px] text-[var(--m-muted)]">{obj.desc}</p>
                         </div>
                       ))}
@@ -622,7 +622,7 @@ export default function MusicCampaignsPage() {
                 {builderStep === 3 && (
                   <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                     <div>
-                      <h3 className="text-xl font-bold text-white">Target Audience Segment</h3>
+                      <h3 className="text-xl font-bold text-[var(--m-text)]">Target Audience Segment</h3>
                       <p className="text-sm text-[var(--m-muted)] mt-1">
                         Define the opt-in audience to queue for conversational dialing.
                       </p>
@@ -630,11 +630,11 @@ export default function MusicCampaignsPage() {
                     <div className="space-y-6">
                       <div className="p-6 border-2 border-dashed border-[var(--m-border)] rounded-md bg-[var(--m-surface-3)] text-center hover:bg-[var(--m-surface-2)] cursor-pointer transition-colors">
                         <Users className="h-8 w-8 text-zinc-500 mx-auto mb-3" />
-                        <span className="text-sm font-semibold text-white">
+                        <span className="text-sm font-semibold text-[var(--m-text)]">
                           Upload Opted-In Fan List (CSV)
                         </span>
                         <p className="text-xs text-[var(--m-muted)] mt-2 max-w-sm mx-auto">
-                          CSV must include phone numbers and matching TCPA consent timestamps.
+                           CSV must include phone numbers and matching TCPA consent timestamps.
                         </p>
                       </div>
                       <div className="relative">
@@ -642,7 +642,7 @@ export default function MusicCampaignsPage() {
                           <div className="w-full border-t border-[var(--m-border-2)]"></div>
                         </div>
                         <div className="relative flex justify-center">
-                          <span className="bg-[var(--m-surface-2)] px-3 text-xs uppercase font-semibold text-zinc-500 tracking-wider">
+                          <span className="bg-[var(--m-surface)] px-3 text-xs uppercase font-semibold text-zinc-500 tracking-wider">
                             Or Select Existing Cohort
                           </span>
                         </div>
@@ -659,7 +659,7 @@ export default function MusicCampaignsPage() {
                           ].map(s => (
                             <span
                               key={s}
-                              className="px-3 py-1.5 bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded text-xs font-semibold text-zinc-200 cursor-pointer hover:border-[var(--m-accent)] transition-colors"
+                              className="px-3 py-1.5 bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded text-xs font-semibold text-[var(--m-text-2)] cursor-pointer hover:border-[var(--m-accent)] transition-colors"
                             >
                               {s}
                             </span>
@@ -674,7 +674,7 @@ export default function MusicCampaignsPage() {
                 {builderStep === 4 && (
                   <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                     <div>
-                      <h3 className="text-xl font-bold text-white">Market & Dialer Configuration</h3>
+                      <h3 className="text-xl font-bold text-[var(--m-text)]">Market & Dialer Configuration</h3>
                       <p className="text-sm text-[var(--m-muted)] mt-1">
                         Configure conversational bounds, timezone guards, and voice pacing.
                       </p>
@@ -685,7 +685,7 @@ export default function MusicCampaignsPage() {
                           <label className="block text-xs font-semibold m-text-muted mb-2 uppercase tracking-wider font-mono">
                             Timezone Dialing Window
                           </label>
-                          <select className="w-full bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-white">
+                          <select className="w-full bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-[var(--m-text)]">
                             <option>Strict Safe Hours (10:00 AM - 6:00 PM Local)</option>
                             <option>Standard TCPA Window (8:00 AM - 9:00 PM Local)</option>
                           </select>
@@ -694,7 +694,7 @@ export default function MusicCampaignsPage() {
                           <label className="block text-xs font-semibold m-text-muted mb-2 uppercase tracking-wider font-mono">
                             Dialing Pacing Pacing
                           </label>
-                          <select className="w-full bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-white">
+                          <select className="w-full bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-[var(--m-text)]">
                             <option>Balanced Conversational (Default)</option>
                             <option>High Velocity (Tour Sales/Merch Drops)</option>
                           </select>
@@ -704,7 +704,7 @@ export default function MusicCampaignsPage() {
                         <label className="block text-xs font-semibold m-text-muted mb-2 uppercase tracking-wider font-mono">
                           Station Voice Persona
                         </label>
-                        <select className="w-full bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-white">
+                        <select className="w-full bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-[var(--m-text)]">
                           <option>Luna (Warm / Conversational)</option>
                           <option>Blaze (Energetic / Promo Focused)</option>
                         </select>
@@ -716,7 +716,7 @@ export default function MusicCampaignsPage() {
                         <textarea
                           rows={2}
                           placeholder="Hey, this is Nova's team reaching out..."
-                          className="w-full bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-white resize-none"
+                          className="w-full bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-[var(--m-text)] resize-none"
                         />
                       </div>
                     </div>
@@ -727,7 +727,7 @@ export default function MusicCampaignsPage() {
                 {builderStep === 5 && (
                   <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                     <div>
-                      <h3 className="text-xl font-bold text-white">Sponsor Connection & Split</h3>
+                      <h3 className="text-xl font-bold text-[var(--m-text)]">Sponsor Connection & Split</h3>
                       <p className="text-sm text-[var(--m-muted)] mt-1">
                         Link sponsor inventory to monetize verified fan interactions.
                       </p>
@@ -737,7 +737,7 @@ export default function MusicCampaignsPage() {
                         <label className="block text-xs font-semibold m-text-muted mb-2 uppercase tracking-wider font-mono">
                           Active Ad Sponsor Partner
                         </label>
-                        <select className="w-full bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-white">
+                        <select className="w-full bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-[var(--m-text)]">
                           <option>Spotify Pre-Save Advertising Pool</option>
                           <option>Live Nation Concert On-Sale Campaign</option>
                           <option>Direct Brand Merchandise Sponsor</option>
@@ -752,14 +752,14 @@ export default function MusicCampaignsPage() {
                           type="number"
                           step="0.05"
                           placeholder="$1.20"
-                          className="w-full bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-white"
+                          className="w-full bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-[var(--m-text)]"
                         />
                       </div>
-                      <div className="p-4 bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded flex gap-3 text-xs text-[var(--m-accent-gold)]">
-                        <Coins className="h-5 w-5 shrink-0" />
+                      <div className="p-4 bg-amber-50 border border-amber-255 rounded flex gap-3 text-xs text-amber-900">
+                        <Coins className="h-5 w-5 text-amber-600 shrink-0" />
                         <div>
                           <p className="font-bold">Monetization Split Ratio</p>
-                          <p className="text-[10px] mt-1 text-zinc-300">
+                          <p className="text-[10px] mt-1 text-amber-800">
                             Split ratio defaults to 70% Artist Payout / 30% RPS Network Share. Revenue is computed on verified intent payload syncs.
                           </p>
                         </div>
@@ -772,7 +772,7 @@ export default function MusicCampaignsPage() {
                 {builderStep === 6 && (
                   <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                     <div>
-                      <h3 className="text-xl font-bold text-white">Compliance Review & Verification</h3>
+                      <h3 className="text-xl font-bold text-[var(--m-text)]">Compliance Review & Verification</h3>
                       <p className="text-sm text-[var(--m-muted)] mt-1">
                         Review dialing architecture safety protocols.
                       </p>
@@ -783,7 +783,7 @@ export default function MusicCampaignsPage() {
                           <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--m-muted)] mb-1">
                             Audience Size
                           </p>
-                          <p className="text-xl font-bold text-white">12,400 fans</p>
+                          <p className="text-xl font-bold text-[var(--m-text)]">12,400 fans</p>
                         </div>
                         <div className="bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded p-4">
                           <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--m-muted)] mb-1">
@@ -793,32 +793,32 @@ export default function MusicCampaignsPage() {
                         </div>
                       </div>
                       
-                      <div className="bg-[#10b981]/5 border border-[#10b981]/25 rounded-md p-6">
-                        <h4 className="text-sm font-bold mb-4 uppercase tracking-wider flex items-center gap-2 text-emerald-400">
-                          <ShieldCheck className="h-5 w-5" /> Compliance Checkmarks
+                      <div className="bg-emerald-50 border border-emerald-250 rounded-md p-6">
+                        <h4 className="text-sm font-bold mb-4 uppercase tracking-wider flex items-center gap-2 text-emerald-900">
+                          <ShieldCheck className="h-5 w-5 text-emerald-600" /> Compliance Checkmarks
                         </h4>
-                        <ul className="space-y-3 text-xs text-emerald-400/80 mb-6">
+                        <ul className="space-y-3 text-xs text-emerald-800 mb-6">
                           <li className="flex items-center gap-2">
-                            <CheckCircle2 className="h-4 w-4" /> DNC Registry Scrubbed
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600" /> DNC Registry Scrubbed
                           </li>
                           <li className="flex items-center gap-2">
-                            <CheckCircle2 className="h-4 w-4" /> Regional Safe Dialing Hours Locked
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600" /> Regional Safe Dialing Hours Locked
                           </li>
                           <li className="flex items-center gap-2">
-                            <CheckCircle2 className="h-4 w-4" /> AI Opening Disclosure Active
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600" /> AI Opening Disclosure Active
                           </li>
                           <li className="flex items-center gap-2">
-                            <CheckCircle2 className="h-4 w-4" /> Opt-out 블랙리스트 Auto-sync Active
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600" /> Opt-out 블랙리스트 Auto-sync Active
                           </li>
                         </ul>
-                        <label className="flex items-start gap-3 p-3 bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded cursor-pointer hover:border-[var(--m-accent)] transition-colors">
+                        <label className="flex items-start gap-3 p-3 bg-[var(--m-surface)] border border-[var(--m-border)] rounded cursor-pointer hover:border-[var(--m-accent)] transition-colors">
                           <input
                             type="checkbox"
                             className="accent-[var(--m-accent)] w-4 h-4 mt-0.5 shrink-0"
                             checked={isComplianceChecked}
                             onChange={e => setIsComplianceChecked(e.target.checked)}
                           />
-                          <span className="text-[11px] text-zinc-300 leading-snug">
+                          <span className="text-[11px] text-[var(--m-text-2)] leading-snug">
                             I verify that this campaign cohort complies with TCPA opt-in consent parameters and authorize launching this station stream.
                           </span>
                         </label>
@@ -831,14 +831,14 @@ export default function MusicCampaignsPage() {
             </div>
 
             {/* Footer Actions */}
-            <div className="flex items-center justify-between px-6 py-4 border-t border-[var(--m-border-2)] bg-[var(--m-surface-3)]">
+            <div className="flex items-center justify-between px-6 py-4 border-t border-[var(--m-border-2)] bg-[var(--m-surface-2)]">
               <button
                 onClick={() => setBuilderStep(Math.max(1, builderStep - 1))}
                 className={cn(
                   'px-4 py-2 text-sm font-semibold rounded transition-colors',
                   builderStep === 1
                     ? 'invisible'
-                    : 'text-zinc-400 hover:text-white hover:bg-[var(--m-surface-2)]'
+                    : 'text-[var(--m-muted)] hover:text-[var(--m-text)] hover:bg-[var(--m-surface-3)]'
                 )}
               >
                 Back
@@ -847,7 +847,7 @@ export default function MusicCampaignsPage() {
               {builderStep < 6 ? (
                 <button
                   onClick={() => setBuilderStep(builderStep + 1)}
-                  className="flex items-center gap-1.5 px-5 py-2 bg-[var(--m-surface-2)] border border-[var(--m-border)] text-white rounded text-sm font-semibold hover:border-[var(--m-accent)] transition-colors"
+                  className="flex items-center gap-1.5 px-5 py-2 bg-[var(--m-surface)] border border-[var(--m-border)] text-[var(--m-text-2)] rounded text-sm font-semibold hover:border-[var(--m-accent)] transition-colors"
                 >
                   Continue <ChevronRight className="h-4 w-4" />
                 </button>

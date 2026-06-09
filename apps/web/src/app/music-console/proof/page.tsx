@@ -169,14 +169,14 @@ export default function MusicProofPage() {
       const isFan = line.startsWith('Fan:');
       const content = line.replace(/^(AI|Fan):\s*/, '');
       return (
-        <div key={i} className="m-transcript-line py-1 border-b border-white/[0.02] last:border-b-0">
+        <div key={i} className="m-transcript-line py-1 border-b border-[var(--m-border-2)] last:border-b-0">
           <div className={cn(
             "text-[9px] font-black uppercase tracking-wider mb-0.5",
-            isAI ? "text-[var(--m-accent)]" : isFan ? "text-[var(--m-accent-2)]" : "text-zinc-400"
+            isAI ? "text-[var(--m-accent)]" : isFan ? "text-[var(--m-accent-2)]" : "text-[var(--m-muted)]"
           )}>
             {isAI ? 'RPS Voice Agent' : isFan ? 'Fan' : ''}
           </div>
-          <div className="text-[10px] text-zinc-300 leading-normal">{content}</div>
+          <div className="text-[10px] text-[var(--m-text-2)] leading-normal">{content}</div>
         </div>
       );
     });
@@ -197,25 +197,25 @@ export default function MusicProofPage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-[var(--m-border-2)] pb-2 mb-1">
         <div>
-          <h1 className="text-lg font-black tracking-tight flex items-center gap-2 m-text-text uppercase">
-            <ShieldCheck className="h-4.5 w-4.5 m-text-accent-2" /> RPS Proof Records
+          <h1 className="text-lg font-black tracking-tight flex items-center gap-2 text-[var(--m-text)] uppercase">
+            <ShieldCheck className="h-4.5 w-4.5 text-[var(--m-accent)]" /> RPS Proof Records
           </h1>
-          <p className="text-[10px] m-text-muted mt-0.5">
+          <p className="text-[10px] text-[var(--m-muted)] mt-0.5">
             Verified fan interactions with timestamped recordings, transcripts, intent, sentiment, consent source, and outcome attribution.
           </p>
         </div>
         
         <div className="flex flex-col items-end gap-1.5 shrink-0">
-          <label className="flex items-center gap-2 px-2.5 py-1 bg-zinc-900/60 border border-zinc-800 rounded text-[10px] font-bold cursor-pointer hover:bg-zinc-850 hover:text-white transition-colors">
+          <label className="flex items-center gap-2 px-2.5 py-1 bg-[var(--m-surface-2)] border border-[var(--m-border-2)] rounded text-[10px] font-bold text-[var(--m-text-2)] cursor-pointer hover:bg-[var(--m-surface-3)] hover:text-[var(--m-text)] transition-colors">
             <input 
               type="checkbox" 
-              className="accent-[var(--m-accent)] h-3 w-3 rounded bg-black border-white/20 cursor-pointer" 
+              className="accent-[var(--m-accent)] h-3 w-3 rounded bg-[var(--m-surface)] border-[var(--m-border-2)] cursor-pointer" 
               checked={liveMode} 
               onChange={e => setLiveMode(e.target.checked)} 
             />
             <span className="uppercase tracking-wider">Live Voice Data</span>
           </label>
-          <span className="text-[9px] text-zinc-500 font-semibold">
+          <span className="text-[9px] text-[var(--m-muted)] font-semibold">
             Pulls recent provider-synced voice interactions into the proof table.
           </span>
         </div>
@@ -224,51 +224,51 @@ export default function MusicProofPage() {
       {/* Top proof summary strip */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 mb-1">
         <div className="m-inset-card p-2 flex flex-col justify-between h-[52px]">
-          <span className="text-[8px] font-bold m-text-muted uppercase tracking-wider block">Total Proof Records</span>
-          <span className="text-sm font-bold text-white block mt-0.5 font-mono">{totalCount.toLocaleString()}</span>
+          <span className="text-[8px] font-bold text-[var(--m-muted)] uppercase tracking-wider block">Total Proof Records</span>
+          <span className="text-sm font-bold text-[var(--m-text)] block mt-0.5 font-mono">{totalCount.toLocaleString()}</span>
         </div>
         <div className="m-inset-card p-2 flex flex-col justify-between h-[52px] border-l-2 border-l-[var(--m-accent-2)]">
-          <span className="text-[8px] font-bold m-text-muted uppercase tracking-wider block">Verified Actions</span>
+          <span className="text-[8px] font-bold text-[var(--m-muted)] uppercase tracking-wider block">Verified Actions</span>
           <span className="text-sm font-bold text-[var(--m-accent-2)] block mt-0.5 font-mono">{verifiedCount.toLocaleString()}</span>
         </div>
         <div className="m-inset-card p-2 flex flex-col justify-between h-[52px]">
-          <span className="text-[8px] font-bold m-text-muted uppercase tracking-wider block">Recording Coverage</span>
-          <span className="text-sm font-bold text-white block mt-0.5 font-mono">{recordingCoverage}%</span>
+          <span className="text-[8px] font-bold text-[var(--m-muted)] uppercase tracking-wider block">Recording Coverage</span>
+          <span className="text-sm font-bold text-[var(--m-text)] block mt-0.5 font-mono">{recordingCoverage}%</span>
         </div>
         <div className="m-inset-card p-2 flex flex-col justify-between h-[52px]">
-          <span className="text-[8px] font-bold m-text-muted uppercase tracking-wider block">Transcript Coverage</span>
-          <span className="text-sm font-bold text-white block mt-0.5 font-mono">{transcriptCoverage}%</span>
+          <span className="text-[8px] font-bold text-[var(--m-muted)] uppercase tracking-wider block">Transcript Coverage</span>
+          <span className="text-sm font-bold text-[var(--m-text)] block mt-0.5 font-mono">{transcriptCoverage}%</span>
         </div>
         <div className="m-inset-card p-2 flex flex-col justify-between h-[52px]">
-          <span className="text-[8px] font-bold m-text-muted uppercase tracking-wider block">Positive Intent</span>
+          <span className="text-[8px] font-bold text-[var(--m-muted)] uppercase tracking-wider block">Positive Intent</span>
           <span className="text-sm font-bold text-[var(--m-warning)] block mt-0.5 font-mono">{positiveIntentCount.toLocaleString()}</span>
         </div>
         <div className="m-inset-card p-2 flex flex-col justify-between h-[52px] border-l-2 border-l-emerald-500">
-          <span className="text-[8px] font-bold m-text-muted uppercase tracking-wider block">Sponsor-Ready Proof</span>
-          <span className="text-sm font-bold text-emerald-400 block mt-0.5 font-mono">{sponsorReadyCount.toLocaleString()}</span>
+          <span className="text-[8px] font-bold text-[var(--m-muted)] uppercase tracking-wider block">Sponsor-Ready Proof</span>
+          <span className="text-sm font-bold text-emerald-700 block mt-0.5 font-mono">{sponsorReadyCount.toLocaleString()}</span>
         </div>
       </div>
 
       {/* Filters */}
       <div className="bg-[var(--m-surface)] p-2 border border-[var(--m-border-2)] rounded flex flex-wrap items-center gap-2 mb-1.5 animate-fadeIn">
         <div className="relative flex-1 min-w-[150px]">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--m-muted)]" />
           <input 
             type="text" 
             placeholder="Search fans, artists, campaigns, IDs..." 
-            className="w-full bg-black/30 border border-white/10 rounded pl-8 pr-3 py-1 text-[11px] text-white focus:border-[var(--m-accent)] focus:outline-none transition-colors font-medium placeholder-zinc-550"
+            className="w-full bg-[var(--m-surface-2)] border border-[var(--m-border-2)] rounded pl-8 pr-3 py-1 text-[11px] text-[var(--m-text)] focus:border-[var(--m-accent)] focus:outline-none transition-colors font-medium placeholder-[var(--m-dim)]"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
           {searchQuery && (
-            <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white">
+            <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--m-muted)] hover:text-[var(--m-text)]">
               <X className="w-3 h-3" />
             </button>
           )}
         </div>
         
         <select 
-          className="bg-black/30 border border-white/10 rounded px-2 py-1 text-[10px] text-zinc-300 font-bold focus:outline-none focus:border-[var(--m-accent)] cursor-pointer"
+          className="bg-[var(--m-surface-2)] border border-[var(--m-border-2)] rounded px-2 py-1 text-[10px] text-[var(--m-text-2)] font-bold focus:outline-none focus:border-[var(--m-accent)] cursor-pointer"
           value={filterOutcome}
           onChange={(e) => setFilterOutcome(e.target.value)}
         >
@@ -284,7 +284,7 @@ export default function MusicProofPage() {
         </select>
         
         <select 
-          className="bg-black/30 border border-white/10 rounded px-2 py-1 text-[10px] text-zinc-300 font-bold focus:outline-none focus:border-[var(--m-accent)] cursor-pointer"
+          className="bg-[var(--m-surface-2)] border border-[var(--m-border-2)] rounded px-2 py-1 text-[10px] text-[var(--m-text-2)] font-bold focus:outline-none focus:border-[var(--m-accent)] cursor-pointer"
           value={filterIntent}
           onChange={(e) => setFilterIntent(e.target.value)}
         >
@@ -293,9 +293,9 @@ export default function MusicProofPage() {
           <option value="medium">Medium Intent</option>
           <option value="low">Low Intent</option>
         </select>
-
+ 
         <select 
-          className="bg-black/30 border border-white/10 rounded px-2 py-1 text-[10px] text-zinc-300 font-bold focus:outline-none focus:border-[var(--m-accent)] cursor-pointer"
+          className="bg-[var(--m-surface-2)] border border-[var(--m-border-2)] rounded px-2 py-1 text-[10px] text-[var(--m-text-2)] font-bold focus:outline-none focus:border-[var(--m-accent)] cursor-pointer"
           value={requireRecording}
           onChange={(e) => setRequireRecording(e.target.value)}
         >
@@ -303,9 +303,9 @@ export default function MusicProofPage() {
           <option value="With Audio">With Voice Recording</option>
           <option value="No Audio">No Audio</option>
         </select>
-
+ 
         <select 
-          className="bg-black/30 border border-white/10 rounded px-2 py-1 text-[10px] text-zinc-300 font-bold focus:outline-none focus:border-[var(--m-accent)] cursor-pointer"
+          className="bg-[var(--m-surface-2)] border border-[var(--m-border-2)] rounded px-2 py-1 text-[10px] text-[var(--m-text-2)] font-bold focus:outline-none focus:border-[var(--m-accent)] cursor-pointer"
           value={filterDateRange}
           onChange={(e) => setFilterDateRange(e.target.value)}
         >
@@ -314,9 +314,9 @@ export default function MusicProofPage() {
           <option value="Last 7 Days">Last 7 Days</option>
           <option value="Last 30 Days">Last 30 Days</option>
         </select>
-
+ 
         <select 
-          className="bg-black/30 border border-white/10 rounded px-2 py-1 text-[10px] text-zinc-300 font-bold focus:outline-none focus:border-[var(--m-accent)] cursor-pointer"
+          className="bg-[var(--m-surface-2)] border border-[var(--m-border-2)] rounded px-2 py-1 text-[10px] text-[var(--m-text-2)] font-bold focus:outline-none focus:border-[var(--m-accent)] cursor-pointer"
           value={filterArtist}
           onChange={(e) => setFilterArtist(e.target.value)}
         >
@@ -325,9 +325,9 @@ export default function MusicProofPage() {
             <option key={a} value={a}>{a}</option>
           ))}
         </select>
-
+ 
         <select 
-          className="bg-black/30 border border-white/10 rounded px-2 py-1 text-[10px] text-zinc-300 font-bold focus:outline-none focus:border-[var(--m-accent)] cursor-pointer"
+          className="bg-[var(--m-surface-2)] border border-[var(--m-border-2)] rounded px-2 py-1 text-[10px] text-[var(--m-text-2)] font-bold focus:outline-none focus:border-[var(--m-accent)] cursor-pointer"
           value={filterCampaign}
           onChange={(e) => setFilterCampaign(e.target.value)}
         >
@@ -336,7 +336,7 @@ export default function MusicProofPage() {
             <option key={c} value={c}>{c}</option>
           ))}
         </select>
-
+ 
         {(searchQuery || filterOutcome !== 'All Outcomes' || filterIntent !== 'All Intents' || requireRecording !== 'All Records' || filterDateRange !== 'All Time' || filterArtist !== 'All Artists' || filterCampaign !== 'All Campaigns') && (
           <button 
             onClick={() => {
@@ -353,13 +353,11 @@ export default function MusicProofPage() {
             Clear
           </button>
         )}
-      </div>
-
-      {/* Table */}
-      <div className="m-card overflow-hidden flex flex-col h-[480px]">
+      </div>      {/* Table */}
+      <div className="m-card overflow-hidden flex flex-col h-[480px] shadow-sm">
         <div className="flex-grow overflow-y-auto pr-0.5">
           <table className="w-full text-left text-xs whitespace-nowrap border-collapse m-table m-dense-table sticky-header">
-            <thead className="bg-[var(--m-surface-2)] border-b border-[var(--m-border-2)] text-[8px] uppercase tracking-wider m-text-muted sticky top-0 z-10">
+            <thead className="bg-[var(--m-surface-2)] border-b border-[var(--m-border-2)] text-[8px] uppercase tracking-wider text-[var(--m-muted)] sticky top-0 z-10">
               <tr>
                 <th className="px-3 py-2 font-black">Timestamp</th>
                 <th className="px-3 py-2 font-black">Fan Profile</th>
@@ -373,10 +371,10 @@ export default function MusicProofPage() {
                 <th className="px-3 py-2 font-black text-right">Proof ID</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[var(--m-border-2)]">
+            <tbody className="divide-y divide-[var(--m-border-2)] bg-[var(--m-surface)]">
               {filteredRecords.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="text-center py-20 text-zinc-550 text-xs font-semibold">
+                  <td colSpan={10} className="text-center py-20 text-[var(--m-muted)] text-xs font-semibold">
                     No verified voice proof records matching active filters.
                   </td>
                 </tr>
@@ -387,29 +385,29 @@ export default function MusicProofPage() {
                     onClick={() => {
                       setSelectedProof(r);
                     }}
-                    className="cursor-pointer hover:bg-[rgba(255,255,255,0.015)] transition-colors"
+                    className="cursor-pointer hover:bg-[var(--m-surface-2)] transition-colors"
                   >
-                    <td className="px-3 py-2 m-font-mono text-[9px] text-zinc-400 font-semibold">
+                    <td className="px-3 py-2 font-mono text-[9px] text-[var(--m-muted)] font-semibold">
                       {new Date(r.timestamp).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' })}
                     </td>
-                    <td className="px-3 py-2 font-bold text-white text-[11px]">
+                    <td className="px-3 py-2 font-bold text-[var(--m-text)] text-[11px]">
                       <div className="flex flex-col">
                         <span>{maskFanName(r.fanName)}</span>
-                        <span className="text-[9px] text-zinc-500 font-normal font-mono">{maskPhoneNumber(r.fanPhone)}</span>
+                        <span className="text-[9px] text-[var(--m-muted)] font-normal font-mono">{maskPhoneNumber(r.fanPhone)}</span>
                       </div>
                     </td>
-                    <td className="px-3 py-2 text-zinc-300 font-semibold text-[10px]">{r.artist}</td>
-                    <td className="px-3 py-2 text-zinc-400 font-medium truncate max-w-[140px]" title={r.campaignName}>
+                    <td className="px-3 py-2 text-[var(--m-text-2)] font-semibold text-[10px]">{r.artist}</td>
+                    <td className="px-3 py-2 text-[var(--m-muted)] font-medium truncate max-w-[140px]" title={r.campaignName}>
                       {r.campaignName}
                     </td>
                     <td className="px-3 py-2 text-center">
                       <span className={cn(
                         "text-[9px] font-extrabold uppercase tracking-wider px-1.5 py-0.2 rounded border",
                         r.intent === 'high' 
-                          ? 'bg-[var(--m-accent-2-dim)] text-[var(--m-accent-2)] border-[var(--m-accent-2)]/20' 
+                          ? 'bg-blue-55 text-blue-700 border-blue-200' 
                           : r.intent === 'medium' 
-                            ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' 
-                            : 'bg-zinc-900 text-zinc-500 border-zinc-800'
+                            ? 'bg-amber-50 text-amber-700 border-amber-250' 
+                            : 'bg-[var(--m-surface-3)] text-[var(--m-muted)] border-[var(--m-border-2)]'
                       )}>
                         {r.intent}
                       </span>
@@ -419,10 +417,10 @@ export default function MusicProofPage() {
                         <span className={cn(
                           "h-2 w-2 rounded-full",
                           r.sentiment === 'positive' 
-                            ? 'bg-[var(--m-accent-2)] shadow-[0_0_6px_#10b981]' 
+                            ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.3)]' 
                             : r.sentiment === 'negative' 
-                              ? 'bg-[var(--m-danger)] shadow-[0_0_6px_#EF4444]' 
-                              : 'bg-zinc-500'
+                              ? 'bg-[var(--m-danger)] shadow-[0_0_6px_rgba(239,68,68,0.3)]' 
+                              : 'bg-[var(--m-dim)]'
                         )} />
                       </div>
                     </td>
@@ -430,14 +428,14 @@ export default function MusicProofPage() {
                       <span className={cn(
                         "px-2 py-0.5 text-[8px] font-extrabold uppercase rounded border", 
                         r.verifiedAction 
-                          ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" 
-                          : "bg-zinc-800 text-zinc-400 border-zinc-700"
+                          ? "bg-emerald-55 text-emerald-700 border-emerald-250" 
+                          : "bg-[var(--m-surface-3)] text-[var(--m-muted)] border-[var(--m-border-2)]"
                       )}>
                         {outcomeLabel(r.outcome)}
                       </span>
                     </td>
                     <td className="px-3 py-2">
-                      <div className="flex items-center justify-center gap-2 text-zinc-500">
+                      <div className="flex items-center justify-center gap-2 text-[var(--m-muted)]">
                         {r.hasRecording && (
                           <span title="Voice Recording Available">
                             <Mic className="h-3 w-3 text-[var(--m-accent)]" />
@@ -450,8 +448,8 @@ export default function MusicProofPage() {
                         )}
                       </div>
                     </td>
-                    <td className="px-3 py-2 text-[10px] font-semibold text-zinc-400">{r.consentSource}</td>
-                    <td className="px-3 py-2 text-right m-font-mono text-[9px] uppercase font-bold text-[var(--m-accent)]">
+                    <td className="px-3 py-2 text-[10px] font-semibold text-[var(--m-text-2)]">{r.consentSource}</td>
+                    <td className="px-3 py-2 text-right font-mono text-[9px] uppercase font-bold text-[var(--m-accent)]">
                       {r.id.includes('-') ? r.id.split('-')[1].toUpperCase() : r.id.substring(0, 4).toUpperCase()}A9F
                     </td>
                   </tr>
@@ -464,7 +462,7 @@ export default function MusicProofPage() {
 
       {/* Detail Drawer: Proof Packet */}
       {selectedProof && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs" onClick={() => setSelectedProof(undefined)}>
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs" onClick={() => setSelectedProof(undefined)}>
           <div 
             className="w-full max-w-xl bg-[var(--m-surface)] border-l border-[var(--m-border-2)] h-screen fixed top-0 right-0 flex flex-col shadow-2xl overflow-hidden animate-[m-slide-in_0.2s_ease-out]"
             onClick={(e) => e.stopPropagation()}
@@ -474,30 +472,30 @@ export default function MusicProofPage() {
             <div className="flex items-center justify-between p-3.5 border-b border-[var(--m-border-2)] bg-[var(--m-surface-2)] shrink-0">
               <div>
                 <div className="flex items-center gap-2.5">
-                  <h2 className="text-sm font-bold text-white uppercase tracking-tight flex items-center gap-1.5">
+                  <h2 className="text-sm font-bold text-[var(--m-text)] uppercase tracking-tight flex items-center gap-1.5">
                     <ShieldCheck className="h-4 w-4 text-[var(--m-accent-2)]" /> Fan Voice Proof Packet
                   </h2>
                   <span className={cn(
                     "px-2 py-0.5 text-[8px] font-black uppercase rounded border", 
-                    selectedProof.verifiedAction ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-zinc-800 text-zinc-400 border-zinc-700"
+                    selectedProof.verifiedAction ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-[var(--m-surface-3)] text-[var(--m-muted)] border-[var(--m-border-2)]"
                   )}>
                     {outcomeLabel(selectedProof.outcome)}
                   </span>
                 </div>
-                <div className="flex items-center gap-3 text-[10px] m-text-muted mt-1 font-semibold flex-wrap">
-                  <span className="flex items-center gap-1"><User className="h-3 w-3 text-zinc-500" /> {maskFanName(selectedProof.fanName)}</span>
+                <div className="flex items-center gap-3 text-[10px] text-[var(--m-muted)] mt-1 font-semibold flex-wrap">
+                  <span className="flex items-center gap-1"><User className="h-3 w-3 text-[var(--m-muted)]" /> {maskFanName(selectedProof.fanName)}</span>
                   <span>•</span>
-                  <span className="font-mono text-[9px] text-zinc-400 bg-zinc-900 border border-zinc-800 px-1.5 py-0.2 rounded font-black">
+                  <span className="font-mono text-[9px] text-[var(--m-text-2)] bg-[var(--m-surface-3)] border border-[var(--m-border-2)] px-1.5 py-0.2 rounded font-black">
                     PROOF ID: #{selectedProof.id.toUpperCase()}
                   </span>
                 </div>
               </div>
               <button 
                 onClick={() => setSelectedProof(undefined)} 
-                className="p-1.5 hover:bg-zinc-850 rounded border border-white/10 flex items-center justify-center bg-zinc-900 transition-colors"
+                className="p-1.5 hover:bg-[var(--m-surface-3)] rounded border border-[var(--m-border-2)] flex items-center justify-center bg-[var(--m-surface-2)] transition-colors"
                 title="Close"
               >
-                <X className="h-3.5 w-3.5 text-slate-400" />
+                <X className="h-3.5 w-3.5 text-[var(--m-muted)]" />
               </button>
             </div>
  
@@ -506,33 +504,33 @@ export default function MusicProofPage() {
               
               {/* Info grid */}
               <div className="grid grid-cols-2 gap-2.5">
-                <div className="bg-black/20 p-2.5 rounded border border-white/5 text-xs">
-                  <span className="text-[8px] text-zinc-500 font-bold uppercase tracking-wider block mb-0.5">Campaign Name</span>
-                  <span className="font-bold text-white">{selectedProof.campaignName}</span>
+                <div className="bg-[var(--m-surface-2)] p-2.5 rounded border border-[var(--m-border-2)] text-xs">
+                  <span className="text-[8px] text-[var(--m-muted)] font-bold uppercase tracking-wider block mb-0.5">Campaign Name</span>
+                  <span className="font-bold text-[var(--m-text)]">{selectedProof.campaignName}</span>
                 </div>
-                <div className="bg-black/20 p-2.5 rounded border border-white/5 text-xs">
-                  <span className="text-[8px] text-zinc-500 font-bold uppercase tracking-wider block mb-0.5">Station Affinity</span>
-                  <span className="font-bold text-white">{selectedProof.artist}</span>
+                <div className="bg-[var(--m-surface-2)] p-2.5 rounded border border-[var(--m-border-2)] text-xs">
+                  <span className="text-[8px] text-[var(--m-muted)] font-bold uppercase tracking-wider block mb-0.5">Station Affinity</span>
+                  <span className="font-bold text-[var(--m-text)]">{selectedProof.artist}</span>
                 </div>
-                <div className="bg-black/20 p-2.5 rounded border border-white/5 text-xs">
-                  <span className="text-[8px] text-zinc-500 font-bold uppercase tracking-wider block mb-0.5">Intent Attribution</span>
+                <div className="bg-[var(--m-surface-2)] p-2.5 rounded border border-[var(--m-border-2)] text-xs">
+                  <span className="text-[8px] text-[var(--m-muted)] font-bold uppercase tracking-wider block mb-0.5">Intent Attribution</span>
                   <span className={cn(
                     "font-bold uppercase text-[10px]",
-                    selectedProof.intent === 'high' ? "text-[var(--m-accent-2)]" : selectedProof.intent === 'medium' ? "text-amber-400" : "text-zinc-500"
+                    selectedProof.intent === 'high' ? "text-[var(--m-accent-2)]" : selectedProof.intent === 'medium' ? "text-amber-600" : "text-[var(--m-muted)]"
                   )}>{selectedProof.intent} Intent</span>
                 </div>
-                <div className="bg-black/20 p-2.5 rounded border border-white/5 text-xs">
-                  <span className="text-[8px] text-zinc-500 font-bold uppercase tracking-wider block mb-0.5">Sentiment Capture</span>
-                  <span className="font-semibold capitalize flex items-center gap-1.5 text-white">
-                    <span className={cn("h-1.5 w-1.5 rounded-full", selectedProof.sentiment === 'positive' ? 'bg-[var(--m-accent-2)]' : selectedProof.sentiment === 'negative' ? 'bg-[var(--m-danger)]' : 'bg-zinc-500')} />
+                <div className="bg-[var(--m-surface-2)] p-2.5 rounded border border-[var(--m-border-2)] text-xs">
+                  <span className="text-[8px] text-[var(--m-muted)] font-bold uppercase tracking-wider block mb-0.5">Sentiment Capture</span>
+                  <span className="font-semibold capitalize flex items-center gap-1.5 text-[var(--m-text)]">
+                    <span className={cn("h-1.5 w-1.5 rounded-full", selectedProof.sentiment === 'positive' ? 'bg-[var(--m-accent-2)]' : selectedProof.sentiment === 'negative' ? 'bg-[var(--m-danger)]' : 'bg-[var(--m-dim)]')} />
                     {selectedProof.sentiment}
                   </span>
                 </div>
               </div>
-
+ 
               {/* Waveform visualizer */}
-              <div className="bg-black/20 border border-white/5 p-3 rounded-lg">
-                <span className="text-[8px] text-zinc-500 font-bold uppercase tracking-wider block mb-2">Voice Recording</span>
+              <div className="bg-[var(--m-surface-2)] border border-[var(--m-border-2)] p-3 rounded-lg">
+                <span className="text-[8px] text-[var(--m-muted)] font-bold uppercase tracking-wider block mb-2">Voice Recording</span>
                 {selectedProof.hasRecording ? (
                   <div className="space-y-2">
                     <div className="flex items-center gap-3">
@@ -540,7 +538,7 @@ export default function MusicProofPage() {
                         <audio 
                           src={selectedProof.recordingUrl} 
                           controls
-                          className="w-full h-8 bg-zinc-950/60 rounded border border-zinc-800"
+                          className="w-full h-8 bg-[var(--m-surface-3)] rounded border border-[var(--m-border-2)]"
                         />
                       ) : (
                         <>
@@ -549,31 +547,31 @@ export default function MusicProofPage() {
                           </button>
                           <div className="m-waveform flex-1 flex items-end gap-0.5 h-8">
                             {Array.from({ length: 24 }).map((_, i) => (
-                              <div key={i} className="m-waveform-bar flex-1 bg-zinc-700" style={{ height: `${getWaveformHeight(selectedProof.id, i)}%` }} />
+                              <div key={i} className="m-waveform-bar flex-1 bg-[var(--m-accent)] opacity-60" style={{ height: `${getWaveformHeight(selectedProof.id, i)}%` }} />
                             ))}
                           </div>
                         </>
                       )}
                     </div>
-                    <div className="flex justify-between text-[9px] text-zinc-500 font-mono font-bold">
+                    <div className="flex justify-between text-[9px] text-[var(--m-muted)] font-mono font-bold">
                       <span>0:00</span>
                       <span>{selectedProof.duration > 0 ? `${selectedProof.duration}s` : '—'}</span>
                     </div>
                   </div>
                 ) : (
-                  <div className="text-xs text-zinc-500 py-3 font-semibold">Voice recording archive unavailable.</div>
+                  <div className="text-xs text-[var(--m-dim)] py-3 font-semibold">Voice recording archive unavailable.</div>
                 )}
               </div>
-
+ 
               {/* Verbatim Transcript */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-[8px] font-bold uppercase tracking-wider text-slate-400">
+                  <h3 className="text-[8px] font-bold uppercase tracking-wider text-[var(--m-muted)]">
                     Fan Transcript
                   </h3>
                   {selectedProof.hasTranscript && selectedProof.transcriptSnippet && (
                     <button 
-                      className="flex items-center gap-1 text-[8px] font-extrabold text-[var(--m-accent)] hover:underline border border-white/10 px-2 py-0.5 rounded bg-zinc-900/60"
+                      className="flex items-center gap-1 text-[8px] font-extrabold text-[var(--m-text-2)] hover:underline border border-[var(--m-border-2)] px-2 py-0.5 rounded bg-[var(--m-surface-2)] hover:bg-[var(--m-surface-3)]"
                       onClick={() => {
                         const txtContent = `RPS Transcript - Proof Record ${selectedProof.id}\n${selectedProof.transcriptSnippet}`;
                         const link = document.createElement('a');
@@ -590,42 +588,42 @@ export default function MusicProofPage() {
                   )}
                 </div>
                 {selectedProof.hasTranscript && selectedProof.transcriptSnippet ? (
-                  <div className="max-h-[160px] overflow-y-auto space-y-2 p-3 bg-zinc-950/60 border border-zinc-900 rounded-lg">
+                  <div className="max-h-[160px] overflow-y-auto space-y-2 p-3 bg-[var(--m-surface-2)] border border-[var(--m-border-2)] rounded-lg">
                     {renderTranscript(selectedProof.transcriptSnippet)}
                   </div>
                 ) : (
-                  <div className="p-6 text-center text-xs text-zinc-500 border border-dashed border-white/5 rounded-lg bg-black/10">
+                  <div className="p-6 text-center text-xs text-[var(--m-dim)] border border-dashed border-[var(--m-border-2)] rounded-lg bg-[var(--m-surface-3)]">
                     Verbatim transcript unavailable.
                   </div>
                 )}
               </div>
-
+ 
               {/* Consent & Compliance telemetry */}
-              <div className="grid grid-cols-3 gap-2 border border-zinc-900 rounded p-2.5 bg-zinc-950/60 text-[10px]">
+              <div className="grid grid-cols-3 gap-2 border border-[var(--m-border-2)] rounded p-2.5 bg-[var(--m-surface-2)] text-[10px]">
                 <div className="space-y-1">
-                  <h4 className="font-bold uppercase tracking-wider text-slate-500 border-b border-zinc-900 pb-0.5 text-[8px]">Sponsor Attribution</h4>
-                  <div className="flex flex-col"><span className="text-[8px] text-zinc-500">Segment</span><span className="font-bold text-white truncate" title={segmentLabel(selectedProof.segment)}>{segmentLabel(selectedProof.segment)}</span></div>
-                  <div className="flex flex-col"><span className="text-[8px] text-zinc-500">Engagement</span><span className="m-font-mono font-bold text-white">{selectedProof.engagementScore}/100</span></div>
+                  <h4 className="font-bold uppercase tracking-wider text-[var(--m-muted)] border-b border-[var(--m-border-2)] pb-0.5 text-[8px]">Sponsor Attribution</h4>
+                  <div className="flex flex-col"><span className="text-[8px] text-[var(--m-muted)]">Segment</span><span className="font-bold text-[var(--m-text)] truncate" title={segmentLabel(selectedProof.segment)}>{segmentLabel(selectedProof.segment)}</span></div>
+                  <div className="flex flex-col"><span className="text-[8px] text-[var(--m-muted)]">Engagement</span><span className="font-mono font-bold text-[var(--m-text)]">{selectedProof.engagementScore}/100</span></div>
                 </div>
-
-                <div className="space-y-1 border-l border-zinc-900 pl-2">
-                  <h4 className="font-bold uppercase tracking-wider text-slate-500 border-b border-zinc-900 pb-0.5 text-[8px]">Consent Evidence</h4>
-                  <div className="flex flex-col"><span className="text-[8px] text-zinc-500">Attributed Source</span><span className="font-bold text-white truncate">{selectedProof.consentSource}</span></div>
-                  <div className="flex flex-col"><span className="text-[8px] text-zinc-500">Verification State</span><span className="text-emerald-400 font-bold">TCPA Cleared</span></div>
+ 
+                <div className="space-y-1 border-l border-[var(--m-border-2)] pl-2">
+                  <h4 className="font-bold uppercase tracking-wider text-[var(--m-muted)] border-b border-[var(--m-border-2)] pb-0.5 text-[8px]">Consent Evidence</h4>
+                  <div className="flex flex-col"><span className="text-[8px] text-[var(--m-muted)]">Attributed Source</span><span className="font-bold text-[var(--m-text)] truncate">{selectedProof.consentSource}</span></div>
+                  <div className="flex flex-col"><span className="text-[8px] text-[var(--m-muted)]">Verification State</span><span className="text-emerald-700 font-bold">TCPA Cleared</span></div>
                 </div>
                 
-                <div className="space-y-1 border-l border-zinc-900 pl-2">
-                  <h4 className="font-bold uppercase tracking-wider text-slate-500 border-b border-zinc-900 pb-0.5 text-[8px]">Telemetry Diagnostics</h4>
-                  <div className="flex flex-col"><span className="text-[8px] text-zinc-500">SIP Status</span><span className="font-bold text-emerald-400">200 OK Connection</span></div>
-                  <div className="flex flex-col"><span className="text-[8px] text-zinc-500">SIP Jitter</span><span className="m-font-mono font-bold text-white">{getJitter(selectedProof.id)}ms</span></div>
+                <div className="space-y-1 border-l border-[var(--m-border-2)] pl-2">
+                  <h4 className="font-bold uppercase tracking-wider text-[var(--m-muted)] border-b border-[var(--m-border-2)] pb-0.5 text-[8px]">Telemetry Diagnostics</h4>
+                  <div className="flex flex-col"><span className="text-[8px] text-[var(--m-muted)]">SIP Status</span><span className="font-bold text-emerald-700">200 OK Connection</span></div>
+                  <div className="flex flex-col"><span className="text-[8px] text-[var(--m-muted)]">SIP Jitter</span><span className="font-mono font-bold text-[var(--m-text)]">{getJitter(selectedProof.id)}ms</span></div>
                 </div>
               </div>
-
+ 
               {/* Destination Action Link */}
-              <div className="bg-zinc-900/60 border border-zinc-800 rounded-lg p-2.5 flex items-center justify-between text-xs">
+              <div className="bg-[var(--m-surface-3)] border border-[var(--m-border-2)] rounded-lg p-2.5 flex items-center justify-between text-xs">
                 <div>
-                  <span className="text-[8px] text-zinc-500 font-bold uppercase tracking-wider block mb-0.5">Attributed Campaign Link</span>
-                  <span className="font-semibold text-zinc-300 font-mono truncate max-w-[200px] block">
+                  <span className="text-[8px] text-[var(--m-muted)] font-bold uppercase tracking-wider block mb-0.5">Attributed Campaign Link</span>
+                  <span className="font-semibold text-[var(--m-text-2)] font-mono truncate max-w-[200px] block">
                     {selectedProof.cpaAttribution > 0 ? 'https://ffm.to/midnight-signal-presave' : '—'}
                   </span>
                 </div>
@@ -638,9 +636,9 @@ export default function MusicProofPage() {
                   <LinkIcon className="w-3 h-3" /> Visit Action Link
                 </a>
               </div>
-
+ 
               {/* Drawer bottom buttons */}
-              <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-white/5">
+              <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-[var(--m-border-2)]">
                 <button 
                   onClick={() => {
                     toast({
@@ -655,12 +653,12 @@ export default function MusicProofPage() {
                 
                 <button 
                   onClick={() => handleCopySummary(selectedProof)}
-                  className="flex items-center justify-center gap-1.5 py-2 rounded text-[10px] font-bold text-zinc-300 border border-white/10 hover:border-zinc-700 bg-zinc-900 hover:text-white transition-all"
+                  className="flex items-center justify-center gap-1.5 py-2 rounded text-[10px] font-bold text-[var(--m-text-2)] border border-[var(--m-border-2)] hover:border-[var(--m-muted)] bg-[var(--m-surface-2)] hover:bg-[var(--m-surface-3)] transition-all"
                 >
                   <Copy className="h-3.5 w-3.5" /> Copy Proof Summary
                 </button>
               </div>
-
+ 
             </div>
           </div>
         </div>
