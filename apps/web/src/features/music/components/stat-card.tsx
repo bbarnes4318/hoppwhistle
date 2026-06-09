@@ -17,16 +17,16 @@ export function StatCard({
   value,
   change,
   icon: Icon,
-  accentColor = 'violet',
+  accentColor = 'blue',
 }: StatCardProps) {
   const { label, positive } = formatChange(change);
 
   const accentMap: Record<string, { bg: string; border: string; iconBg: string; iconText: string }> = {
-    violet: {
-      bg: 'from-violet-500/10 to-transparent',
-      border: 'border-violet-500/20',
-      iconBg: 'bg-violet-500/15',
-      iconText: 'text-violet-400',
+    blue: {
+      bg: 'from-blue-500/10 to-transparent',
+      border: 'border-blue-500/20',
+      iconBg: 'bg-blue-500/15',
+      iconText: 'text-blue-400',
     },
     fuchsia: {
       bg: 'from-fuchsia-500/10 to-transparent',
@@ -60,7 +60,7 @@ export function StatCard({
     },
   };
 
-  const accent = accentMap[accentColor] || accentMap.violet;
+  const accent = accentMap[accentColor] || accentMap.blue;
 
   return (
     <div
@@ -69,7 +69,7 @@ export function StatCard({
         accent.border,
         accent.bg,
         'bg-card/50 backdrop-blur-sm',
-        'transition-all duration-300 hover:scale-[1.02] hover:shadow-lg hover:shadow-violet-500/5'
+        'transition-all duration-300 hover:scale-[1.02] hover:shadow-lg hover:shadow-blue-500/5'
       )}
     >
       <div className="flex items-start justify-between">

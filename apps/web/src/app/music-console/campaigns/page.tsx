@@ -13,17 +13,22 @@ import {
   ShieldCheck,
   Users,
   X,
-  Target,
-  BarChart3,
-  Clock
+  Coins,
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
-
-import { fanCampaigns } from '@/features/music/data/demo-music-data';
-import { campaignTypeLabel, formatCompactNumber, formatCurrency, segmentLabel } from '@/features/music/lib/utils';
-import { cn } from '@/lib/utils';
-import type { FanCampaign } from '@/features/music/types';
 import Link from 'next/link';
+import React, { useState, useEffect } from 'react';
+
+import { StatusBadge } from '../../../features/music/components';
+import { fanCampaigns } from '../../../features/music/data/demo-music-data';
+import {
+  campaignTypeLabel,
+  formatCompactNumber,
+  formatCurrency,
+  segmentLabel,
+} from '../../../features/music/lib/utils';
+import type { FanCampaign } from '../../../features/music/types';
+
+import { cn } from '@/lib/utils';
 
 export default function MusicCampaignsPage() {
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
@@ -49,9 +54,9 @@ export default function MusicCampaignsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           campaignId: 'new-campaign',
-          assistantId: 'vapi-assistant-mock',
-          contacts: Array(12400).fill({ phone: '+1234567890' })
-        })
+          assistantId: 'rps-assistant-mock',
+          contacts: Array(12400).fill({ phone: '+1234567890' }),
+        }),
       });
       if (res.ok) {
         setIsBuilderOpen(false);
@@ -64,7 +69,8 @@ export default function MusicCampaignsPage() {
   };
 
   const handleExport = () => {
-    const csvContent = 'data:text/csv;charset=utf-8,ProofID,Campaign,Result\nPR123,Midnightsignal,Verified';
+    const csvContent =
+      'data:text/csv;charset=utf-8,ProofID,Campaign,Result\nPR123,Midnightsignal,Verified';
     const link = document.createElement('a');
     link.setAttribute('href', encodeURI(csvContent));
     link.setAttribute('download', 'proof_log.csv');
@@ -84,26 +90,40 @@ export default function MusicCampaignsPage() {
       
       {/* ─── Header ─── */}
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-[var(--m-border-2)] pb-4">
-        <div>
-          <h1 className="text-[28px] font-bold tracking-tight flex items-center gap-3 m-text-text">
-            <Megaphone className="h-7 w-7 m-text-accent" /> Fan Campaigns
+        <div className="space-y-1.5">
+          <h1 className="text-xl lg:text-2xl font-black tracking-tight flex items-center gap-3 text-white uppercase">
+            <Megaphone className="h-6 w-6 text-[var(--m-accent)]" /> Fan Campaigns
           </h1>
-          <p className="mt-2 text-sm m-text-muted max-w-xl">
-            Design, deploy, and monitor direct-to-fan AI voice campaigns.
+          <p className="text-xs text-[var(--m-muted)] font-medium max-w-xl">
+            “Create measurable fan engagement campaigns across RPS stations, sponsors, markets, and artist audiences.”
           </p>
+          <div className="flex items-center gap-2 pt-1 flex-wrap">
+            <span className="px-2 py-0.5 bg-[var(--m-accent-dim)] border border-[var(--m-accent)]/20 rounded text-[9px] text-[var(--m-accent)] font-bold uppercase tracking-wider font-mono">
+              Active Media Inventory
+            </span>
+            <span className="px-2 py-0.5 bg-[#10b981]/5 border border-[#10b981]/25 rounded text-[9px] text-[#10b981] font-bold uppercase tracking-wider font-mono">
+              Proof Enabled
+            </span>
+            <span className="px-2 py-0.5 bg-[var(--m-accent-gold-dim)] border border-[var(--m-accent-gold)]/20 rounded text-[9px] text-[var(--m-accent-gold)] font-bold uppercase tracking-wider font-mono">
+              Sponsor Ready
+            </span>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          <button 
-            className="flex items-center gap-2 px-4 py-2 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md text-sm font-medium hover:bg-[var(--m-border-2)] transition-colors" 
+        <div className="flex items-center gap-2">
+          <button
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded text-xs font-semibold hover:bg-[var(--m-surface-3)] transition-colors text-zinc-300"
             onClick={() => setShowFilters(!showFilters)}
           >
-            <ListFilter className="h-4 w-4" /> Filter
+            <ListFilter className="h-3.5 w-3.5" /> Filter
           </button>
-          <button 
-            onClick={() => { setIsBuilderOpen(true); setBuilderStep(1); }}
-            className="flex items-center gap-2 px-4 py-2 bg-[var(--m-accent)] text-white rounded-md text-sm font-medium hover:bg-violet-600 transition-colors"
+          <button
+            onClick={() => {
+              setIsBuilderOpen(true);
+              setBuilderStep(1);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--m-accent)] text-white rounded text-xs font-semibold hover:bg-[#008be5] transition-colors"
           >
-            <Plus className="h-4 w-4" /> New Campaign
+            <Plus className="h-3.5 w-3.5" /> Launch RPS Campaign
           </button>
         </div>
       </header>
@@ -111,7 +131,9 @@ export default function MusicCampaignsPage() {
       {showFilters && (
         <div className="p-4 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-lg grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
-            <label className="block text-xs font-semibold m-text-muted mb-2 uppercase tracking-wider">Status</label>
+            <label className="block text-xs font-semibold m-text-muted mb-2 uppercase tracking-wider">
+              Status
+            </label>
             <select className="w-full bg-[var(--m-bg)] border border-[var(--m-border)] rounded p-2 text-sm text-[var(--m-text)] focus:outline-none focus:border-[var(--m-accent)]">
               <option>All Statuses</option>
               <option>Active</option>
@@ -120,7 +142,9 @@ export default function MusicCampaignsPage() {
             </select>
           </div>
           <div>
-            <label className="block text-xs font-semibold m-text-muted mb-2 uppercase tracking-wider">Campaign Type</label>
+            <label className="block text-xs font-semibold m-text-muted mb-2 uppercase tracking-wider">
+              Campaign Type
+            </label>
             <select className="w-full bg-[var(--m-bg)] border border-[var(--m-border)] rounded p-2 text-sm text-[var(--m-text)] focus:outline-none focus:border-[var(--m-accent)]">
               <option>All Types</option>
               <option>Album Pre-Save</option>
@@ -131,84 +155,131 @@ export default function MusicCampaignsPage() {
       )}
 
       {/* ─── Summary Cards ─── */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <div className="m-card p-4">
-          <div className="text-xs font-semibold m-text-muted uppercase tracking-wider">Active Campaigns</div>
-          <div className="mt-2 text-2xl font-bold m-text-accent">{totalActive}</div>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        {/* Card 1: Active Campaigns */}
+        <div className="m-metric-tile">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-muted)]">
+            Active Campaigns
+          </div>
+          <div className="mt-2 text-2xl font-black text-[var(--m-accent)]">{totalActive}</div>
+          <div className="text-[9px] text-[var(--m-muted)] mt-1 font-medium">Deployments Live</div>
         </div>
-        <div className="m-card p-4">
-          <div className="text-xs font-semibold m-text-muted uppercase tracking-wider">Fans Contacted</div>
-          <div className="mt-2 text-2xl font-bold m-text-text">{formatCompactNumber(totalContacted)}</div>
+        {/* Card 2: Fans Reached */}
+        <div className="m-metric-tile">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-muted)]">
+            Fans Reached
+          </div>
+          <div className="mt-2 text-2xl font-black text-white">{formatCompactNumber(totalContacted)}</div>
+          <div className="text-[9px] text-[var(--m-muted)] mt-1 font-medium">Total Connections</div>
         </div>
-        <div className="m-card p-4">
-          <div className="text-xs font-semibold m-text-muted uppercase tracking-wider">Verified Actions</div>
-          <div className="mt-2 text-2xl font-bold m-text-text">{formatCompactNumber(totalVerified)}</div>
+        {/* Card 3: Verified Actions */}
+        <div className="m-metric-tile">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-muted)]">
+            Verified Actions
+          </div>
+          <div className="mt-2 text-2xl font-black text-emerald-400">
+            {formatCompactNumber(totalVerified)}
+          </div>
+          <div className="text-[9px] text-[var(--m-muted)] mt-1 font-medium">Verified Actions Logged</div>
         </div>
-        <div className="m-card p-4">
-          <div className="text-xs font-semibold m-text-muted uppercase tracking-wider">Blended CPA</div>
-          <div className="mt-2 text-2xl font-bold m-text-text">{formatCurrency(blendedCpa)}</div>
+        {/* Card 4: Sponsor-Ready Proof */}
+        <div className="m-metric-tile">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-muted)]">
+            Sponsor-Ready Proof
+          </div>
+          <div className="mt-2 text-2xl font-black text-zinc-300">
+            {formatCompactNumber(totalProof)}
+          </div>
+          <div className="text-[9px] text-[var(--m-muted)] mt-1 font-medium">Attributed Records</div>
         </div>
-        <div className="m-card p-4">
-          <div className="text-xs font-semibold m-text-muted uppercase tracking-wider">Proof Records</div>
-          <div className="mt-2 text-2xl font-bold m-text-text">{formatCompactNumber(totalProof)}</div>
+        {/* Card 5: Blended CPA */}
+        <div className="m-metric-tile">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-muted)]">
+            Blended CPA
+          </div>
+          <div className="mt-2 text-2xl font-black font-mono text-[var(--m-accent-gold)]">
+            {formatCurrency(blendedCpa)}
+          </div>
+          <div className="text-[9px] text-[var(--m-muted)] mt-1 font-medium">Cost per Action</div>
+        </div>
+        {/* Card 6: Est. Campaign Value */}
+        <div className="m-metric-tile">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-muted)]">
+            Est. Campaign Value
+          </div>
+          <div className="mt-2 text-2xl font-black font-mono text-[var(--m-accent-gold)]">
+            {formatCurrency(totalVerified * 2.8)}
+          </div>
+          <div className="text-[9px] text-[var(--m-muted)] mt-1 font-medium">Network Yield</div>
         </div>
       </div>
 
       {/* ─── Campaign Table ─── */}
-      <section className="m-card overflow-x-auto">
-        <table className="w-full text-left text-sm whitespace-nowrap">
-          <thead className="bg-[var(--m-surface-2)] border-b border-[var(--m-border-2)] text-[11px] uppercase tracking-wider m-text-muted">
-            <tr>
-              <th className="px-4 py-3 font-semibold">Campaign</th>
-              <th className="px-4 py-3 font-semibold">Artist</th>
-              <th className="px-4 py-3 font-semibold">Type</th>
-              <th className="px-4 py-3 font-semibold">Segment</th>
-              <th className="px-4 py-3 font-semibold">Status</th>
-              <th className="px-4 py-3 font-semibold text-right">Contacted</th>
-              <th className="px-4 py-3 font-semibold text-right">Answer Rate</th>
-              <th className="px-4 py-3 font-semibold text-right">Verified</th>
-              <th className="px-4 py-3 font-semibold text-right">CPA</th>
-              <th className="px-4 py-3 font-semibold text-right">Proof</th>
-              <th className="px-4 py-3 font-semibold">Start Date</th>
-              <th className="px-4 py-3 font-semibold text-right">Actions</th>
+      <section className="m-card overflow-x-auto bg-[var(--m-surface-2)]">
+        <table className="w-full text-left text-xs border-collapse m-dense-table">
+          <thead>
+            <tr className="border-b border-[var(--m-border-2)] text-[9px] uppercase tracking-wider m-text-muted">
+              <th className="py-2.5 font-bold">Campaign</th>
+              <th className="py-2.5 font-bold">Artist / Station</th>
+              <th className="py-2.5 font-bold">Campaign Type</th>
+              <th className="py-2.5 font-bold">Audience Segment</th>
+              <th className="py-2.5 font-bold">Status</th>
+              <th className="py-2.5 font-bold text-right">Fans Reached</th>
+              <th className="py-2.5 font-bold text-right">Answer Rate</th>
+              <th className="py-2.5 font-bold text-right">Verified Actions</th>
+              <th className="py-2.5 font-bold text-right">Cost / Action</th>
+              <th className="py-2.5 font-bold text-right">Proof</th>
+              <th className="py-2.5 font-bold text-right">Campaign Value</th>
+              <th className="py-2.5 font-bold text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--m-border-2)]">
-            {fanCampaigns.map((c) => (
-              <tr 
-                key={c.id} 
+            {fanCampaigns.map(c => (
+              <tr
+                key={c.id}
                 onClick={() => setSelectedCampaign(c)}
-                className="hover:bg-[rgba(255,255,255,0.02)] transition-colors cursor-pointer"
+                className="hover:bg-white/[0.015] transition-colors cursor-pointer"
+                title={`Click to view full performance logs & economics for ${c.name}`}
               >
-                <td className="px-4 py-3">
-                  <div className="font-semibold m-text-text truncate max-w-[150px] lg:max-w-[200px]" title={c.name}>{c.name}</div>
+                <td className="py-2.5 font-bold text-white max-w-[130px] truncate" title={c.name}>
+                  {c.name}
                 </td>
-                <td className="px-4 py-3 m-text-muted">{c.artist}</td>
-                <td className="px-4 py-3">
-                  <span className="px-2 py-1 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded text-[10px] m-text-dim">
+                <td className="py-2.5 text-zinc-300">{c.artist}</td>
+                <td className="py-2.5">
+                  <span className="px-1.5 py-0.5 bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded text-[9px] m-text-dim">
                     {campaignTypeLabel(c.type)}
                   </span>
                 </td>
-                <td className="px-4 py-3 m-text-muted text-[11px]">{segmentLabel(c.segment)}</td>
-                <td className="px-4 py-3">
-                  <span className={cn(
-                    "inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold border",
-                    c.status === 'active' ? 'bg-[var(--m-accent)]/10 text-[var(--m-accent)] border-[var(--m-accent)]/20' :
-                    c.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                    c.status === 'paused' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'
-                  )}>
-                    {c.status === 'active' && <span className="m-pulse-dot" style={{ width: '6px', height: '6px' }} />}
-                    {c.status.toUpperCase()}
-                  </span>
+                <td className="py-2.5 text-[var(--m-muted)]">{segmentLabel(c.segment)}</td>
+                <td className="py-2.5">
+                  <StatusBadge status={c.status} className="text-[8px]" />
                 </td>
-                <td className="px-4 py-3 text-right m-font-mono m-text-dim">{formatCompactNumber(c.fansContacted)}</td>
-                <td className="px-4 py-3 text-right m-font-mono text-[var(--m-accent)]">{c.answerRate}%</td>
-                <td className="px-4 py-3 text-right m-font-mono m-text-text">{formatCompactNumber(c.verifiedEngagements)}</td>
-                <td className="px-4 py-3 text-right m-font-mono">{c.cpa > 0 ? formatCurrency(c.cpa) : '\u2014'}</td>
-                <td className="px-4 py-3 text-right m-font-mono m-text-muted">{formatCompactNumber(c.proofCaptured)}</td>
-                <td className="px-4 py-3 m-text-dim m-font-mono text-[11px]">{c.startDate}</td>
-                <td className="px-4 py-3 text-right">
-                  <button className="p-1 hover:bg-[var(--m-surface-2)] rounded m-text-muted hover:text-[var(--m-text)] transition-colors" onClick={(e) => { e.stopPropagation(); setSelectedCampaign(c); }}>
+                <td className="py-2.5 text-right font-mono text-zinc-300 font-semibold">
+                  {formatCompactNumber(c.fansContacted)}
+                </td>
+                <td className="py-2.5 text-right font-mono text-[var(--m-accent)] font-semibold">
+                  {c.answerRate}%
+                </td>
+                <td className="py-2.5 text-right font-mono text-white font-bold">
+                  {formatCompactNumber(c.verifiedEngagements)}
+                </td>
+                <td className="py-2.5 text-right font-mono text-zinc-300">
+                  {c.cpa > 0 ? formatCurrency(c.cpa) : '—'}
+                </td>
+                <td className="py-2.5 text-right font-mono text-[var(--m-muted)]">
+                  {formatCompactNumber(c.proofCaptured)}
+                </td>
+                <td className="py-2.5 text-right font-mono font-bold text-[var(--m-accent-gold)]">
+                  {formatCurrency(c.verifiedEngagements * 2.8)}
+                </td>
+                <td className="py-2.5 text-right">
+                  <button
+                    className="p-1 hover:bg-[var(--m-surface-3)] rounded text-zinc-400 hover:text-white transition-colors"
+                    onClick={e => {
+                      e.stopPropagation();
+                      setSelectedCampaign(c);
+                    }}
+                  >
                     <MoreHorizontal className="h-4 w-4" />
                   </button>
                 </td>
@@ -218,116 +289,198 @@ export default function MusicCampaignsPage() {
         </table>
       </section>
 
-      {/* ─── Campaign Detail Drawer ─── */}
+      {/* ─── Campaign Detail Side Panel ─── */}
       {selectedCampaign && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs" onClick={() => setSelectedCampaign(null)}>
-          <div 
-            className="w-full max-w-2xl bg-[var(--m-surface)] border-l border-[var(--m-border-2)] h-screen fixed top-0 right-0 flex flex-col shadow-2xl overflow-hidden animate-[m-slide-in_0.2s_ease-out]"
-            onClick={(e) => e.stopPropagation()}
+        <div
+          className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs"
+          onClick={() => setSelectedCampaign(null)}
+        >
+          <div
+            className="w-full max-w-xl bg-[var(--m-surface-2)] border-l border-[var(--m-border)] h-screen fixed top-0 right-0 flex flex-col shadow-2xl overflow-hidden animate-[m-slide-in_0.2s_ease-out]"
+            onClick={e => e.stopPropagation()}
           >
-            {/* Pinned Header */}
-            <div className="flex items-center justify-between p-3.5 border-b border-[var(--m-border-2)] bg-[var(--m-surface-2)] shrink-0">
+            {/* Drawer Header */}
+            <div className="flex items-center justify-between p-5 border-b border-[var(--m-border-2)] bg-[var(--m-surface-3)] shrink-0">
               <div>
-                <h2 className="text-base font-bold m-text-text truncate max-w-[280px]" title={selectedCampaign.name}>{selectedCampaign.name}</h2>
-                <div className="flex items-center gap-2 text-xs m-text-dim mt-0.5">
+                <h2
+                  className="text-base font-bold text-white truncate max-w-[280px]"
+                  title={selectedCampaign.name}
+                >
+                  {selectedCampaign.name}
+                </h2>
+                <div className="flex items-center gap-2 text-xs text-[var(--m-muted)] mt-1">
                   <span>{selectedCampaign.artist}</span>
                   <span>•</span>
-                  <span className={cn(
-                    "text-[10px] font-bold uppercase",
-                    selectedCampaign.status === 'active' ? 'text-[var(--m-accent)]' :
-                    selectedCampaign.status === 'completed' ? 'text-emerald-400' : 'text-zinc-400'
-                  )}>{selectedCampaign.status}</span>
+                  <span
+                    className={cn(
+                      'text-[10px] font-bold uppercase',
+                      selectedCampaign.status === 'active' ? 'text-[var(--m-accent)]' :
+                      selectedCampaign.status === 'completed' ? 'text-emerald-400' : 'text-zinc-400'
+                    )}
+                  >
+                    {selectedCampaign.status}
+                  </span>
                 </div>
               </div>
-              <button 
-                onClick={() => setSelectedCampaign(null)} 
-                className="p-1.5 hover:bg-[var(--m-surface-3)] rounded-lg transition-colors border border-[var(--m-border)] flex items-center justify-center bg-[var(--m-surface)]"
-                title="Close"
+              <button
+                onClick={() => setSelectedCampaign(null)}
+                className="p-1.5 hover:bg-[var(--m-surface-3)] rounded-lg transition-colors border border-[var(--m-border)] flex items-center justify-center bg-[var(--m-surface-2)]"
               >
-                <X className="h-4 w-4 text-[var(--m-text)]" />
+                <X className="h-4 w-4 text-white" />
               </button>
             </div>
- 
-            {/* Scrollable Content (Compact 2-Column layout) */}
-            <div className="flex-1 overflow-y-auto p-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-                {/* Column 1: Info and Script */}
-                <div className="space-y-4">
-                  {/* Overview */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="bg-[var(--m-bg)] p-2 rounded border border-[var(--m-border)]">
-                      <div className="text-[9px] m-text-muted uppercase tracking-wider mb-0.5 flex items-center gap-1"><Target className="h-3 w-3"/> Goal</div>
-                      <div className="font-bold text-xs text-[var(--m-text)] capitalize">{selectedCampaign.type.replace(/_/g, ' ')}</div>
-                    </div>
-                    <div className="bg-[var(--m-bg)] p-2 rounded border border-[var(--m-border)]">
-                      <div className="text-[9px] m-text-muted uppercase tracking-wider mb-0.5 flex items-center gap-1"><Users className="h-3 w-3"/> Audience</div>
-                      <div className="font-bold text-xs text-[var(--m-text)] capitalize">{selectedCampaign.segment.replace(/_/g, ' ')}</div>
-                    </div>
-                    <div className="bg-[var(--m-bg)] p-2 rounded border border-[var(--m-border)]">
-                      <div className="text-[9px] m-text-muted uppercase tracking-wider mb-0.5 flex items-center gap-1"><Clock className="h-3 w-3"/> Launched</div>
-                      <div className="font-bold text-xs text-[var(--m-text)]">{selectedCampaign.startDate}</div>
-                    </div>
-                    <div className="bg-[var(--m-bg)] p-2 rounded border border-[var(--m-border)]">
-                      <div className="text-[9px] m-text-muted uppercase tracking-wider mb-0.5 flex items-center gap-1"><BarChart3 className="h-3 w-3"/> CPA Target</div>
-                      <div className="font-bold text-xs text-[var(--m-text)]">{formatCurrency(selectedCampaign.cpa)}</div>
-                    </div>
+
+            {/* Scrollable Content */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-5">
+              {/* KPI Strip */}
+              <div className="grid grid-cols-4 gap-2 pb-4 border-b border-[var(--m-border-2)]">
+                <div className="bg-black/20 p-2.5 border border-[var(--m-border-2)] rounded">
+                  <div className="text-[9px] text-[var(--m-muted)] uppercase tracking-wider font-semibold">
+                    Reached
                   </div>
- 
-                  {/* Script / Message */}
-                  <div className="space-y-1">
-                    <h3 className="text-[10px] font-bold uppercase tracking-wider m-text-muted border-b border-[var(--m-border-2)] pb-1">Script Preview</h3>
-                    <div className="bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md p-2.5 text-xs font-mono m-text-dim leading-relaxed">
-                      "Hey, this is Nova's team reaching out. The new album 'Midnight Signal' drops Friday. Do you want me to set up a pre-save on Spotify for you?"
-                    </div>
+                  <div className="font-mono font-bold text-sm text-white mt-1">
+                    {formatCompactNumber(selectedCampaign.fansContacted)}
                   </div>
                 </div>
- 
-                {/* Column 2: KPIs & Actions */}
-                <div className="space-y-4">
-                  {/* Performance */}
-                  <div className="border border-[var(--m-border-2)] rounded-lg overflow-hidden">
-                    <div className="bg-[var(--m-surface-2)] px-2.5 py-1 border-b border-[var(--m-border-2)] flex items-center gap-2 font-bold text-[10px] uppercase tracking-wider text-[var(--m-text-2)]">
-                      Performance KPIs
-                    </div>
-                    <div className="p-2.5 space-y-1.5 text-xs">
-                      <div className="flex justify-between items-center border-b border-[var(--m-border-2)] pb-1">
-                        <span className="m-text-dim">Fans Contacted</span>
-                        <span className="font-mono font-bold text-[var(--m-text)]">{formatCompactNumber(selectedCampaign.fansContacted)}</span>
-                      </div>
-                      <div className="flex justify-between items-center border-b border-[var(--m-border-2)] pb-1">
-                        <span className="m-text-dim">Human Answers</span>
-                        <span className="font-mono font-bold text-[var(--m-text)]">{formatCompactNumber(selectedCampaign.humanAnswers)} <span className="text-[10px] m-text-accent font-normal ml-1">({selectedCampaign.answerRate}%)</span></span>
-                      </div>
-                      <div className="flex justify-between items-center border-b border-[var(--m-border-2)] pb-1">
-                        <span className="m-text-dim">Verified Engagements</span>
-                        <span className="font-mono font-bold text-emerald-400">{formatCompactNumber(selectedCampaign.verifiedEngagements)}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="m-text-dim">Proof Captured</span>
-                        <span className="font-mono font-bold text-[var(--m-text)]">{formatCompactNumber(selectedCampaign.proofCaptured)}</span>
-                      </div>
-                    </div>
+                <div className="bg-black/20 p-2.5 border border-[var(--m-border-2)] rounded">
+                  <div className="text-[9px] text-[var(--m-muted)] uppercase tracking-wider font-semibold">
+                    Answers
                   </div>
- 
-                  {/* Actions */}
-                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[var(--m-border-2)] shrink-0">
-                    <Link href="/music-console/reports" className="col-span-2 flex items-center justify-center w-full py-1.5 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded text-xs font-bold hover:bg-[var(--m-border-2)] transition-colors text-center">
-                      View Full Report
-                    </Link>
-                    <button className="py-1.5 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded text-xs font-bold hover:bg-[var(--m-border-2)] transition-colors" onClick={handleExport}>
-                      Export Proof
-                    </button>
-                    {selectedCampaign.status === 'active' ? (
-                      <button className="py-1.5 bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded text-xs font-bold hover:bg-amber-500/20 transition-colors" onClick={(e) => { e.currentTarget.innerText = 'Paused'; }}>
-                        Pause Campaign
-                      </button>
-                    ) : (
-                      <button className="py-1.5 bg-[var(--m-accent)] text-white rounded text-xs font-bold hover:bg-violet-600 transition-colors" onClick={(e) => { e.currentTarget.innerText = 'Resumed'; }}>
-                        Resume Campaign
-                      </button>
-                    )}
+                  <div className="font-mono font-bold text-sm text-[var(--m-accent)] mt-1">
+                    {selectedCampaign.answerRate}%
                   </div>
                 </div>
+                <div className="bg-black/20 p-2.5 border border-[var(--m-border-2)] rounded">
+                  <div className="text-[9px] text-[var(--m-muted)] uppercase tracking-wider font-semibold">
+                    Verified
+                  </div>
+                  <div className="font-mono font-bold text-sm text-emerald-400 mt-1">
+                    {formatCompactNumber(selectedCampaign.verifiedEngagements)}
+                  </div>
+                </div>
+                <div className="bg-black/20 p-2.5 border border-[var(--m-border-2)] rounded">
+                  <div className="text-[9px] text-[var(--m-muted)] uppercase tracking-wider font-semibold">
+                    Proof
+                  </div>
+                  <div className="font-mono font-bold text-sm text-zinc-300 mt-1">
+                    {formatCompactNumber(selectedCampaign.proofCaptured)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Economics Section */}
+              <div className="space-y-3 pb-4 border-b border-[var(--m-border-2)]">
+                <h3 className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-accent)] flex items-center gap-1.5">
+                  <Coins className="h-3.5 w-3.5" /> Campaign Economics
+                </h3>
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div className="flex justify-between items-center bg-black/10 p-2.5 border border-[var(--m-border-2)] rounded">
+                    <span className="text-[var(--m-muted)] font-medium">Total Spend</span>
+                    <span className="font-mono font-bold text-white">
+                      {formatCurrency(selectedCampaign.fansContacted * 0.4)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center bg-black/10 p-2.5 border border-[var(--m-border-2)] rounded">
+                    <span className="text-[var(--m-muted)] font-medium">CPA Target</span>
+                    <span className="font-mono font-bold text-white">
+                      {selectedCampaign.cpa > 0 ? formatCurrency(selectedCampaign.cpa) : '—'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center bg-black/10 p-2.5 border border-[var(--m-border-2)] rounded">
+                    <span className="text-[var(--m-muted)] font-medium">Est. Sponsor Value</span>
+                    <span className="font-mono font-bold text-[var(--m-accent-gold)]">
+                      {formatCurrency(selectedCampaign.verifiedEngagements * 2.8)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center bg-black/10 p-2.5 border border-[var(--m-border-2)] rounded">
+                    <span className="text-[var(--m-muted)] font-medium">Artist Share (70%)</span>
+                    <span className="font-mono font-bold text-[var(--m-accent-gold)]">
+                      {formatCurrency(selectedCampaign.verifiedEngagements * 2.8 * 0.7)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center bg-black/10 p-2.5 border border-[var(--m-border-2)] rounded col-span-2">
+                    <span className="text-[var(--m-muted)] font-medium">RPS Share (30%)</span>
+                    <span className="font-mono font-bold text-[var(--m-accent)]">
+                      {formatCurrency(selectedCampaign.verifiedEngagements * 2.8 * 0.3)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Proof Readiness Check */}
+              <div className="space-y-3 pb-4 border-b border-[var(--m-border-2)]">
+                <h3 className="text-[10px] font-bold uppercase tracking-wider text-[#10b981] flex items-center gap-1.5">
+                  <ShieldCheck className="h-3.5 w-3.5" /> Proof Readiness Checklist
+                </h3>
+                <div className="grid grid-cols-2 gap-2.5 text-xs">
+                  <div className="flex items-center gap-2 text-[11px] text-zinc-300">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                    <span>TCPA Opt-In Consent Checked</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-[11px] text-zinc-300">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                    <span>Recording Consent Active</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-[11px] text-zinc-300">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                    <span>Dialing Safe-Time Check</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-[11px] text-zinc-300">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                    <span>Proof Audit Trail Ready</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Opening script preview */}
+              <div className="space-y-1.5">
+                <h3 className="text-[10px] font-bold uppercase tracking-wider text-[var(--m-muted)] border-b border-[var(--m-border-2)] pb-1">
+                  Approved Conversational Script
+                </h3>
+                <div className="bg-black/15 border border-[var(--m-border-2)] rounded p-3 text-xs font-mono m-text-dim leading-relaxed">
+                  {"\"Hey, this is Nova's team reaching out. The new album 'Midnight Signal' drops Friday. Do you want me to set up a pre-save on Spotify for you?\""}
+                </div>
+              </div>
+            </div>
+
+            {/* Drawer Actions */}
+            <div className="p-4 border-t border-[var(--m-border-2)] bg-[var(--m-surface-3)] shrink-0 space-y-3">
+              <div className="text-[8px] font-black uppercase text-[var(--m-accent)] tracking-widest font-mono">
+                Next Recommended Action
+              </div>
+              <div className="grid grid-cols-2 gap-2.5">
+                {selectedCampaign.status === 'active' && (
+                  <button className="col-span-2 py-2 bg-[var(--m-accent)] text-white text-xs font-bold hover:bg-[#008be5] rounded tracking-wider uppercase transition-colors">
+                    OPTIMIZE DIALER VELOCITY
+                  </button>
+                )}
+                {selectedCampaign.status === 'completed' && (
+                  <button className="col-span-2 py-2 bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-500 rounded tracking-wider uppercase transition-colors">
+                    ARCHIVE & EXPORT PROOF LOGS
+                  </button>
+                )}
+                {selectedCampaign.status === 'paused' && (
+                  <button className="col-span-2 py-2 bg-amber-600 text-white text-xs font-bold hover:bg-amber-500 rounded tracking-wider uppercase transition-colors">
+                    RESUME DIALER STREAM
+                  </button>
+                )}
+                {selectedCampaign.status === 'draft' && (
+                  <button className="col-span-2 py-2 bg-[var(--m-accent)] text-white text-xs font-bold hover:bg-[#008be5] rounded tracking-wider uppercase transition-colors">
+                    CONFIRM COMPLIANCE & LAUNCH
+                  </button>
+                )}
+                <button
+                  className="py-2 bg-[var(--m-surface-2)] border border-[var(--m-border)] text-zinc-300 rounded text-xs font-bold hover:bg-[var(--m-surface-3)] transition-colors"
+                  onClick={handleExport}
+                >
+                  Export Proof
+                </button>
+                <Link
+                  href="/music-console/reports"
+                  className="flex items-center justify-center py-2 bg-[var(--m-surface-2)] border border-[var(--m-border)] text-zinc-300 rounded text-xs font-bold hover:bg-[var(--m-surface-3)] transition-colors text-center"
+                >
+                  View Full Report
+                </Link>
               </div>
             </div>
           </div>
@@ -337,42 +490,51 @@ export default function MusicCampaignsPage() {
       {/* ─── Campaign Builder Modal ─── */}
       {isBuilderOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 md:p-6">
-          <div className="w-full max-w-4xl bg-[var(--m-surface)] border border-[var(--m-border-2)] rounded-lg shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+          <div className="w-full max-w-4xl bg-[var(--m-surface-2)] border border-[var(--m-border-2)] rounded-lg shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
             
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--m-border-2)] bg-[var(--m-surface-2)]">
-              <h2 className="text-lg font-bold flex items-center gap-2 m-text-text">
-                <Mic className="h-5 w-5 m-text-accent" /> New Fan Campaign
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--m-border-2)] bg-[var(--m-surface-3)]">
+              <h2 className="text-lg font-bold flex items-center gap-2 text-white uppercase tracking-wide">
+                <Mic className="h-5 w-5 text-[var(--m-accent)]" /> New Fan Campaign
               </h2>
-              <button onClick={() => setIsBuilderOpen(false)} className="p-1.5 m-text-dim hover:bg-[var(--m-border-2)] rounded-full transition-colors">
+              <button
+                onClick={() => setIsBuilderOpen(false)}
+                className="p-1.5 text-zinc-400 hover:bg-[var(--m-surface-3)] rounded-full transition-colors"
+              >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
               {/* Sidebar Steps */}
-              <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-[var(--m-border-2)] p-6 bg-[var(--m-surface-2)] overflow-y-auto shrink-0">
+              <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-[var(--m-border-2)] p-6 bg-[var(--m-surface-3)] overflow-y-auto shrink-0">
                 <div className="flex md:flex-col gap-4 md:gap-6 overflow-x-auto md:overflow-visible">
                   {[
-                    { num: 1, title: 'Campaign Goal' },
-                    { num: 2, title: 'Artist / Project' },
-                    { num: 3, title: 'Audience' },
-                    { num: 4, title: 'Message & Script' },
-                    { num: 5, title: 'Proof & Tracking' },
-                    { num: 6, title: 'Review & Launch' },
-                  ].map((step) => (
+                    { num: 1, title: 'Artist / Station' },
+                    { num: 2, title: 'Campaign Objective' },
+                    { num: 3, title: 'Audience Segment' },
+                    { num: 4, title: 'Market Targeting' },
+                    { num: 5, title: 'Sponsor / Monetization' },
+                    { num: 6, title: 'Compliance Review' },
+                  ].map(step => (
                     <div key={step.num} className="flex items-start gap-3 shrink-0">
-                      <div className={cn(
-                        "flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold border transition-colors",
-                        builderStep === step.num ? "bg-[var(--m-accent)] border-[var(--m-accent)] text-white" :
-                        builderStep > step.num ? "bg-[var(--m-surface)] border-[var(--m-border-2)] m-text-dim" :
-                        "bg-transparent border-[var(--m-border)] m-text-dim"
-                      )}>
+                      <div
+                        className={cn(
+                          'flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold border transition-colors',
+                          builderStep === step.num
+                            ? 'bg-[var(--m-accent)] border-[var(--m-accent)] text-white'
+                            : builderStep > step.num
+                              ? 'bg-[var(--m-surface-2)] border-[var(--m-border-2)] text-zinc-400'
+                              : 'bg-transparent border-[var(--m-border)] text-zinc-500'
+                        )}
+                      >
                         {builderStep > step.num ? <Check className="h-3 w-3" /> : step.num}
                       </div>
-                      <div className={cn(
-                        "text-xs font-semibold whitespace-nowrap",
-                        builderStep === step.num ? "text-[var(--m-text)]" : "m-text-dim"
-                      )}>
+                      <div
+                        className={cn(
+                          'text-xs font-semibold whitespace-nowrap',
+                          builderStep === step.num ? 'text-white' : 'text-zinc-500'
+                        )}
+                      >
                         {step.title}
                       </div>
                     </div>
@@ -383,76 +545,124 @@ export default function MusicCampaignsPage() {
               {/* Step Content */}
               <div className="flex-1 p-6 md:p-8 overflow-y-auto">
                 
+                {/* Step 1: Artist / Station */}
                 {builderStep === 1 && (
                   <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                     <div>
-                      <h3 className="text-xl font-bold m-text-text">Select Campaign Goal</h3>
-                      <p className="text-sm m-text-muted mt-1">What is the primary verified action you want to drive?</p>
+                      <h3 className="text-xl font-bold text-white">Select Artist & Station Profile</h3>
+                      <p className="text-sm text-[var(--m-muted)] mt-1">
+                        Select the active broadcast profile and phone node for this outreach campaign.
+                      </p>
+                    </div>
+                    <div className="space-y-5">
+                      <div>
+                        <label className="block text-xs font-semibold m-text-muted mb-2 uppercase tracking-wider font-mono">
+                          Artist Name
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g., Nova Ray"
+                          className="w-full bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold m-text-muted mb-2 uppercase tracking-wider font-mono">
+                          Broadcast Station ID Node
+                        </label>
+                        <select className="w-full bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-white">
+                          <option>RPS Station #25 - (Nova Ray Main Node)</option>
+                          <option>RPS Station #02 - (Jace Vale Main Node)</option>
+                          <option>RPS Station #11 - (Aria Stone Main Node)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold m-text-muted mb-2 uppercase tracking-wider font-mono">
+                          Target Launch Date
+                        </label>
+                        <input
+                          type="date"
+                          className="w-full bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-white [&::-webkit-calendar-picker-indicator]:invert"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Step 2: Campaign Objective */}
+                {builderStep === 2 && (
+                  <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                    <div>
+                      <h3 className="text-xl font-bold text-white">Campaign Objective</h3>
+                      <p className="text-sm text-[var(--m-muted)] mt-1">
+                        Select the primary conversion action to drive and track.
+                      </p>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {['Drive pre-saves', 'Sell tickets', 'Promote merch', 'Generate VIP interest', 'Reactivate fan club', 'Capture feedback'].map((goal) => (
-                        <div key={goal} className="p-4 border border-[var(--m-border)] rounded-md bg-[var(--m-surface-2)] hover:bg-[var(--m-surface)] hover:border-[var(--m-accent)] cursor-pointer transition-all">
-                          <span className="text-sm font-semibold m-text-text">{goal}</span>
+                      {[
+                        { label: 'Drive Spotify Pre-Saves', desc: 'Auto-verify Spotify API actions' },
+                        { label: 'Sell Concert Tickets', desc: 'Secure early-access ticket intent' },
+                        { label: 'Promote Merch Drops', desc: 'Broadcast exclusive merch passcodes' },
+                        { label: 'Generate VIP Interest', desc: 'Collect phone sign-ups for VIP passes' },
+                        { label: 'Reactivate Fan Club', desc: 'Follow-up with cold member database' },
+                        { label: 'Capture Fan Feedback', desc: 'Conduct short surveys and responses' },
+                      ].map(obj => (
+                        <div
+                          key={obj.label}
+                          className="p-4 border border-[var(--m-border)] rounded-md bg-[var(--m-surface-3)] hover:bg-[var(--m-surface-2)] hover:border-[var(--m-accent)] cursor-pointer transition-all space-y-1"
+                        >
+                          <span className="text-sm font-bold text-white">{obj.label}</span>
+                          <p className="text-[10px] text-[var(--m-muted)]">{obj.desc}</p>
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
 
-                {builderStep === 2 && (
-                  <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-                    <div>
-                      <h3 className="text-xl font-bold m-text-text">Artist & Project Details</h3>
-                      <p className="text-sm m-text-muted mt-1">Define the core entity for this campaign.</p>
-                    </div>
-                    <div className="space-y-5">
-                      <div>
-                        <label className="block text-xs font-semibold m-text-muted mb-2 uppercase tracking-wider">Artist Name</label>
-                        <input type="text" placeholder="e.g., Nova Ray" className="w-full bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-[var(--m-text)]" />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold m-text-muted mb-2 uppercase tracking-wider">Release / Tour Name</label>
-                        <input type="text" placeholder="e.g., Midnight Signal" className="w-full bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-[var(--m-text)]" />
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                        <div>
-                          <label className="block text-xs font-semibold m-text-muted mb-2 uppercase tracking-wider">Launch Date</label>
-                          <input type="date" className="w-full bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-[var(--m-text)] [&::-webkit-calendar-picker-indicator]:invert" />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold m-text-muted mb-2 uppercase tracking-wider">Market / City</label>
-                          <input type="text" placeholder="Optional" className="w-full bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-[var(--m-text)]" />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
+                {/* Step 3: Audience Segment */}
                 {builderStep === 3 && (
                   <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                     <div>
-                      <h3 className="text-xl font-bold m-text-text">Target Audience</h3>
-                      <p className="text-sm m-text-muted mt-1">Select the opted-in fan segments for outreach.</p>
+                      <h3 className="text-xl font-bold text-white">Target Audience Segment</h3>
+                      <p className="text-sm text-[var(--m-muted)] mt-1">
+                        Define the opt-in audience to queue for conversational dialing.
+                      </p>
                     </div>
                     <div className="space-y-6">
-                      <div className="p-6 border-2 border-dashed border-[var(--m-border)] rounded-md bg-[var(--m-surface-2)] text-center hover:bg-[var(--m-surface)] cursor-pointer transition-colors">
-                        <Users className="h-8 w-8 m-text-dim mx-auto mb-3" />
-                        <span className="text-sm font-semibold text-[var(--m-text)]">Upload Opted-In Fan List (CSV)</span>
-                        <p className="text-xs m-text-muted mt-2 max-w-sm mx-auto">Must contain phone numbers and explicit TCPA consent logs.</p>
+                      <div className="p-6 border-2 border-dashed border-[var(--m-border)] rounded-md bg-[var(--m-surface-3)] text-center hover:bg-[var(--m-surface-2)] cursor-pointer transition-colors">
+                        <Users className="h-8 w-8 text-zinc-500 mx-auto mb-3" />
+                        <span className="text-sm font-semibold text-white">
+                          Upload Opted-In Fan List (CSV)
+                        </span>
+                        <p className="text-xs text-[var(--m-muted)] mt-2 max-w-sm mx-auto">
+                          CSV must include phone numbers and matching TCPA consent timestamps.
+                        </p>
                       </div>
                       <div className="relative">
                         <div className="absolute inset-0 flex items-center">
                           <div className="w-full border-t border-[var(--m-border-2)]"></div>
                         </div>
                         <div className="relative flex justify-center">
-                          <span className="bg-[var(--m-surface)] px-3 text-xs uppercase font-semibold m-text-dim tracking-wider">Or</span>
+                          <span className="bg-[var(--m-surface-2)] px-3 text-xs uppercase font-semibold text-zinc-500 tracking-wider">
+                            Or Select Existing Cohort
+                          </span>
                         </div>
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold m-text-muted mb-3 uppercase tracking-wider">Select Existing Segment</label>
                         <div className="flex flex-wrap gap-2.5">
-                          {['Superfans', 'Previous merch buyers', 'Tour city fans', 'Stream save audience', 'VIP List', 'Fan club inactive'].map(s => (
-                            <span key={s} className="px-3 py-1.5 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded text-xs font-medium m-text-text cursor-pointer hover:border-[var(--m-accent)] transition-colors">{s}</span>
+                          {[
+                            'Superfans',
+                            'Previous merch buyers',
+                            'Tour city fans',
+                            'Stream save audience',
+                            'VIP List',
+                            'Fan club inactive',
+                          ].map(s => (
+                            <span
+                              key={s}
+                              className="px-3 py-1.5 bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded text-xs font-semibold text-zinc-200 cursor-pointer hover:border-[var(--m-accent)] transition-colors"
+                            >
+                              {s}
+                            </span>
                           ))}
                         </div>
                       </div>
@@ -460,121 +670,158 @@ export default function MusicCampaignsPage() {
                   </div>
                 )}
 
+                {/* Step 4: Market Targeting */}
                 {builderStep === 4 && (
                   <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                     <div>
-                      <h3 className="text-xl font-bold m-text-text">Message & Scripting</h3>
-                      <p className="text-sm m-text-muted mt-1">Configure the AI voice persona and conversational bounds.</p>
+                      <h3 className="text-xl font-bold text-white">Market & Dialer Configuration</h3>
+                      <p className="text-sm text-[var(--m-muted)] mt-1">
+                        Configure conversational bounds, timezone guards, and voice pacing.
+                      </p>
                     </div>
                     <div className="space-y-5">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                         <div>
-                          <label className="block text-xs font-semibold m-text-muted mb-2 uppercase tracking-wider">Voice Persona</label>
-                          <select className="w-full bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-[var(--m-text)]">
-                            <option>Luna (Warm / Authentic)</option>
-                            <option>Blaze (Energetic / Direct)</option>
+                          <label className="block text-xs font-semibold m-text-muted mb-2 uppercase tracking-wider font-mono">
+                            Timezone Dialing Window
+                          </label>
+                          <select className="w-full bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-white">
+                            <option>Strict Safe Hours (10:00 AM - 6:00 PM Local)</option>
+                            <option>Standard TCPA Window (8:00 AM - 9:00 PM Local)</option>
                           </select>
                         </div>
                         <div>
-                          <label className="block text-xs font-semibold m-text-muted mb-2 uppercase tracking-wider">Pacing</label>
-                          <select className="w-full bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-[var(--m-text)]">
-                            <option>Conversational (Standard)</option>
-                            <option>Urgent (Ticket Drops)</option>
+                          <label className="block text-xs font-semibold m-text-muted mb-2 uppercase tracking-wider font-mono">
+                            Dialing Pacing Pacing
+                          </label>
+                          <select className="w-full bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-white">
+                            <option>Balanced Conversational (Default)</option>
+                            <option>High Velocity (Tour Sales/Merch Drops)</option>
                           </select>
                         </div>
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold m-text-muted mb-2 uppercase tracking-wider">Artist-Approved Opening Line</label>
-                        <textarea rows={2} placeholder="Hey, this is Nova's team reaching out..." className="w-full bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-[var(--m-text)] resize-none" />
+                        <label className="block text-xs font-semibold m-text-muted mb-2 uppercase tracking-wider font-mono">
+                          Station Voice Persona
+                        </label>
+                        <select className="w-full bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-white">
+                          <option>Luna (Warm / Conversational)</option>
+                          <option>Blaze (Energetic / Promo Focused)</option>
+                        </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold m-text-muted mb-2 uppercase tracking-wider">Primary Call to Action (CTA)</label>
-                        <input type="text" placeholder="Want me to set up a pre-save on Spotify for you?" className="w-full bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-[var(--m-text)]" />
-                      </div>
-                      <div className="p-4 bg-[var(--m-surface-2)] border border-emerald-500/20 rounded-md flex gap-3 text-sm text-emerald-400">
-                        <ShieldCheck className="h-5 w-5 shrink-0" />
-                        <p>Mandatory compliance disclosures (AI disclosure, opt-out instructions) are automatically injected based on regional dialing codes.</p>
+                        <label className="block text-xs font-semibold m-text-muted mb-2 uppercase tracking-wider font-mono">
+                          Opening Script Phrasing
+                        </label>
+                        <textarea
+                          rows={2}
+                          placeholder="Hey, this is Nova's team reaching out..."
+                          className="w-full bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-white resize-none"
+                        />
                       </div>
                     </div>
                   </div>
                 )}
 
+                {/* Step 5: Sponsor / Monetization */}
                 {builderStep === 5 && (
                   <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                     <div>
-                      <h3 className="text-xl font-bold m-text-text">Proof & Tracking</h3>
-                      <p className="text-sm m-text-muted mt-1">Map conversational outcomes to measurable links and evidence.</p>
+                      <h3 className="text-xl font-bold text-white">Sponsor Connection & Split</h3>
+                      <p className="text-sm text-[var(--m-muted)] mt-1">
+                        Link sponsor inventory to monetize verified fan interactions.
+                      </p>
                     </div>
-                    <div className="space-y-6">
+                    <div className="space-y-5">
                       <div>
-                        <label className="block text-xs font-semibold m-text-muted mb-2 uppercase tracking-wider">Destination Link (SMS Fallback)</label>
-                        <input type="url" placeholder="https://ffm.to/midnightsignal" className="w-full bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-[var(--m-text)]" />
+                        <label className="block text-xs font-semibold m-text-muted mb-2 uppercase tracking-wider font-mono">
+                          Active Ad Sponsor Partner
+                        </label>
+                        <select className="w-full bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-white">
+                          <option>Spotify Pre-Save Advertising Pool</option>
+                          <option>Live Nation Concert On-Sale Campaign</option>
+                          <option>Direct Brand Merchandise Sponsor</option>
+                          <option>None (Self-Funded Engagement)</option>
+                        </select>
                       </div>
-                      <div className="space-y-4 pt-4 border-t border-[var(--m-border-2)]">
-                        <h4 className="text-xs font-bold uppercase tracking-wider m-text-text mb-3">Interaction Evidence Collection</h4>
-                        {[
-                          'Record all fan audio (where legally permitted)',
-                          'Transcribe interactions verbatim',
-                          'Run real-time sentiment analysis',
-                          'Capture strict intent flags (High/Medium/Low)',
-                        ].map(opt => (
-                          <label key={opt} className="flex items-center gap-3 text-sm m-text-dim hover:text-[var(--m-text)] cursor-pointer">
-                            <input type="checkbox" defaultChecked className="accent-[var(--m-accent)] h-4 w-4" />
-                            {opt}
-                          </label>
-                        ))}
+                      <div>
+                        <label className="block text-xs font-semibold m-text-muted mb-2 uppercase tracking-wider font-mono">
+                          Target Cost per Action (CPA) Payout
+                        </label>
+                        <input
+                          type="number"
+                          step="0.05"
+                          placeholder="$1.20"
+                          className="w-full bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded px-4 py-3 text-sm focus:outline-none focus:border-[var(--m-accent)] text-white"
+                        />
+                      </div>
+                      <div className="p-4 bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded flex gap-3 text-xs text-[var(--m-accent-gold)]">
+                        <Coins className="h-5 w-5 shrink-0" />
+                        <div>
+                          <p className="font-bold">Monetization Split Ratio</p>
+                          <p className="text-[10px] mt-1 text-zinc-300">
+                            Split ratio defaults to 70% Artist Payout / 30% RPS Network Share. Revenue is computed on verified intent payload syncs.
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
                 )}
 
+                {/* Step 6: Compliance Review */}
                 {builderStep === 6 && (
                   <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                     <div>
-                      <h3 className="text-xl font-bold m-text-text">Review & Launch</h3>
-                      <p className="text-sm m-text-muted mt-1">Verify your campaign architecture before live dialing.</p>
+                      <h3 className="text-xl font-bold text-white">Compliance Review & Verification</h3>
+                      <p className="text-sm text-[var(--m-muted)] mt-1">
+                        Review dialing architecture safety protocols.
+                      </p>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                       <div className="space-y-4">
-                        <div className="bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md p-4">
-                          <p className="text-xs font-semibold uppercase tracking-wider m-text-muted mb-1">Total Audience</p>
-                          <p className="text-2xl font-bold m-text-text">12,400 <span className="text-sm font-normal m-text-dim">fans</span></p>
+                        <div className="bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded p-4">
+                          <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--m-muted)] mb-1">
+                            Audience Size
+                          </p>
+                          <p className="text-xl font-bold text-white">12,400 fans</p>
                         </div>
-                        <div className="bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md p-4">
-                          <p className="text-xs font-semibold uppercase tracking-wider m-text-muted mb-1">Estimated Contact Rate</p>
-                          <p className="text-2xl font-bold m-text-accent">65% <span className="text-sm font-normal m-text-dim">~8,060 answers</span></p>
-                        </div>
-                        <div className="bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md p-4">
-                          <p className="text-xs font-semibold uppercase tracking-wider m-text-muted mb-1">Projected Verified Actions</p>
-                          <p className="text-2xl font-bold text-emerald-400">4,200 <span className="text-sm font-normal m-text-dim">actions</span></p>
+                        <div className="bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded p-4">
+                          <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--m-muted)] mb-1">
+                            Expected Contact Yield
+                          </p>
+                          <p className="text-xl font-bold text-[var(--m-accent)]">~8,060 answers</p>
                         </div>
                       </div>
                       
-                      <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-md p-6">
+                      <div className="bg-[#10b981]/5 border border-[#10b981]/25 rounded-md p-6">
                         <h4 className="text-sm font-bold mb-4 uppercase tracking-wider flex items-center gap-2 text-emerald-400">
-                          <ShieldCheck className="h-5 w-5" /> Compliance Gate
+                          <ShieldCheck className="h-5 w-5" /> Compliance Checkmarks
                         </h4>
-                        <ul className="space-y-3 text-sm text-emerald-400/80 mb-6">
-                          <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4" /> DNC Registry scrubbed</li>
-                          <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4" /> AI disclosure present</li>
-                          <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4" /> Timezone bounds checked</li>
-                          <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4" /> Opt-out phrasing verified</li>
+                        <ul className="space-y-3 text-xs text-emerald-400/80 mb-6">
+                          <li className="flex items-center gap-2">
+                            <CheckCircle2 className="h-4 w-4" /> DNC Registry Scrubbed
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <CheckCircle2 className="h-4 w-4" /> Regional Safe Dialing Hours Locked
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <CheckCircle2 className="h-4 w-4" /> AI Opening Disclosure Active
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <CheckCircle2 className="h-4 w-4" /> Opt-out 블랙리스트 Auto-sync Active
+                          </li>
                         </ul>
-                        <label className="flex items-start gap-3 p-3 bg-[var(--m-surface-2)] border border-[var(--m-border)] rounded-md cursor-pointer hover:border-[var(--m-accent)] transition-colors">
-                          <input 
-                            type="checkbox" 
-                            className="accent-[var(--m-accent)] w-4 h-4 mt-0.5 shrink-0" 
+                        <label className="flex items-start gap-3 p-3 bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded cursor-pointer hover:border-[var(--m-accent)] transition-colors">
+                          <input
+                            type="checkbox"
+                            className="accent-[var(--m-accent)] w-4 h-4 mt-0.5 shrink-0"
                             checked={isComplianceChecked}
-                            onChange={(e) => setIsComplianceChecked(e.target.checked)}
+                            onChange={e => setIsComplianceChecked(e.target.checked)}
                           />
-                          <span className="text-xs text-[var(--m-text)] leading-tight">
-                            I verify that all opted-in records conform to internal TCPA standards, and I authorize the Hopwhistle dialer to dispatch these interactions live.
+                          <span className="text-[11px] text-zinc-300 leading-snug">
+                            I verify that this campaign cohort complies with TCPA opt-in consent parameters and authorize launching this station stream.
                           </span>
                         </label>
-                        <div className="mt-6 pt-4 border-t border-emerald-500/20">
-                          <p className="text-xs font-semibold uppercase tracking-wider m-text-muted mb-1">Estimated CPA</p>
-                          <p className="text-2xl font-mono text-[var(--m-text)]">$1.15 - $1.40</p>
-                        </div>
                       </div>
                     </div>
                   </div>
@@ -584,29 +831,35 @@ export default function MusicCampaignsPage() {
             </div>
 
             {/* Footer Actions */}
-            <div className="flex items-center justify-between px-6 py-4 border-t border-[var(--m-border-2)] bg-[var(--m-surface-2)]">
-              <button 
+            <div className="flex items-center justify-between px-6 py-4 border-t border-[var(--m-border-2)] bg-[var(--m-surface-3)]">
+              <button
                 onClick={() => setBuilderStep(Math.max(1, builderStep - 1))}
-                className={cn("px-4 py-2 text-sm font-semibold rounded-md transition-colors", builderStep === 1 ? "invisible" : "m-text-dim hover:text-[var(--m-text)] hover:bg-[var(--m-border-2)]")}
+                className={cn(
+                  'px-4 py-2 text-sm font-semibold rounded transition-colors',
+                  builderStep === 1
+                    ? 'invisible'
+                    : 'text-zinc-400 hover:text-white hover:bg-[var(--m-surface-2)]'
+                )}
               >
                 Back
               </button>
               
               {builderStep < 6 ? (
-                <button 
+                <button
                   onClick={() => setBuilderStep(builderStep + 1)}
-                  className="flex items-center gap-2 px-6 py-2 bg-[var(--m-surface)] border border-[var(--m-border)] text-white rounded-md text-sm font-semibold hover:border-[var(--m-accent)] transition-colors"
+                  className="flex items-center gap-1.5 px-5 py-2 bg-[var(--m-surface-2)] border border-[var(--m-border)] text-white rounded text-sm font-semibold hover:border-[var(--m-accent)] transition-colors"
                 >
                   Continue <ChevronRight className="h-4 w-4" />
                 </button>
               ) : (
-                <button 
-                  onClick={handleLaunch}
+                <button
+                  onClick={() => { void handleLaunch(); }}
                   disabled={isLaunching || !isComplianceChecked}
-                  className="flex items-center gap-2 px-6 py-2 bg-[var(--m-accent)] text-white rounded-md text-sm font-semibold hover:bg-violet-600 transition-colors disabled:opacity-50"
-                  title={!isComplianceChecked ? "Please verify compliance requirements above" : ""}
+                  className="flex items-center gap-1.5 px-6 py-2 bg-[var(--m-accent)] text-white rounded text-sm font-bold hover:bg-[#008be5] transition-colors disabled:opacity-50"
+                  title={!isComplianceChecked ? 'Please verify compliance requirements above' : ''}
                 >
-                  <Play className="h-4 w-4 fill-current" /> {isLaunching ? 'Launching...' : 'Launch Campaign'}
+                  <Play className="h-4 w-4 fill-current" />{' '}
+                  {isLaunching ? 'Launching...' : 'Launch RPS Campaign'}
                 </button>
               )}
             </div>

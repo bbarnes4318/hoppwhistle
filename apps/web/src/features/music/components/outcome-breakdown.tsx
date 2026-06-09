@@ -1,13 +1,13 @@
 'use client';
 
-import type { OutcomeBreakdown } from '../types';
 import { outcomeLabel } from '../lib/utils';
+import type { OutcomeBreakdown } from '../types';
 
 export function OutcomeBreakdownCard({ data }: { data: OutcomeBreakdown[] }) {
   const total = data.reduce((s, d) => s + d.count, 0);
 
   return (
-    <div className="rounded-lg border border-violet-500/20 bg-card/50 p-4 backdrop-blur-sm">
+    <div className="rounded-lg border border-[var(--m-border)] bg-card/50 p-4 backdrop-blur-sm">
       <h3 className="mb-4 text-sm font-semibold text-zinc-200">Verified Action Breakdown</h3>
       <div className="space-y-3">
         {data.map(item => (

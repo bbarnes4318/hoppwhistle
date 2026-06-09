@@ -60,6 +60,14 @@ export interface FanCampaign {
   cpa: number;
   proofCaptured: number;
   startDate: string;
+
+  // Enriched campaign economics for business storytelling
+  campaignValue?: number;
+  sponsorRevenue?: number;
+  artistShare?: number;
+  rpsShare?: number;
+  mediaInventoryUnits?: number;
+  proofReadinessScore?: number;
 }
 
 export interface ProofRecord {
@@ -79,6 +87,7 @@ export interface ProofRecord {
   timestamp: string;
   verifiedAction: boolean;
   hasRecording: boolean;
+  recordingUrl?: string;
   hasTranscript: boolean;
   transcriptSnippet: string;
   engagementScore: number;
@@ -167,3 +176,50 @@ export interface MusicSettings {
   alertHighIntent: boolean;
   weeklyExecutiveReport: boolean;
 }
+
+export interface OutcomeBreakdown {
+  outcome: string;
+  color: string;
+  count: number;
+  percentage: number;
+}
+
+export interface RpsNetworkSummary {
+  activeStations: number;
+  activeArtists: number;
+  monthlyFanInteractions: number;
+  verifiedActions: number;
+  sponsorRevenue: number;
+  artistPayout: number;
+  rpsShare: number;
+  mediaInventorySold: number;
+  sponsorReadyProofRecords: number;
+  optOutRate: number;
+  averageCostPerVerifiedAction: number;
+}
+
+export type ArtistTier = 'Discovery' | 'Growth' | 'Partner' | 'Bronze' | 'Silver' | 'Gold' | 'Platinum';
+
+export interface ArtistTierConfig {
+  tier: ArtistTier;
+  minMonthlyInteractions: number;
+  payoutRate: number; // percentage (e.g., 70 for 70%)
+  description: string;
+}
+
+export interface RevenueSourceDistribution {
+  source: string;
+  totalRevenue: number;
+  artistSharePercent: number;
+  rpsSharePercent: number;
+  description: string;
+}
+
+export interface SponsorPackage {
+  tier: 'Bronze' | 'Silver' | 'Gold' | 'Platinum';
+  calls: number;
+  price: number;
+  cpaTarget: number;
+  description: string;
+}
+

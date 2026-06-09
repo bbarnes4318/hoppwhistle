@@ -1,7 +1,8 @@
 'use client';
 
-import React from 'react';
 import { ShieldCheck, HelpCircle, X, Check, Ticket, ShoppingBag, Sparkles, Clock, AlertCircle } from 'lucide-react';
+import React from 'react';
+
 import { cn } from '@/lib/utils';
 
 // ── 1. PageHeader Component
@@ -199,7 +200,7 @@ export function ProofBadge({ outcome, verified = true, className }: ProofBadgePr
     pillColorClass = "bg-amber-600 text-white border-amber-500 shadow-[0_2px_6px_rgba(245,158,11,0.3)]";
   } else if (norm === 'vip interest') {
     outcomeIcon = <Sparkles className="h-3.5 w-3.5 text-white" />;
-    pillColorClass = "bg-purple-600 text-white border-purple-500 shadow-[0_2px_6px_rgba(139,92,246,0.3)]";
+    pillColorClass = "bg-blue-600 text-white border-blue-500 shadow-[0_2px_6px_rgba(20,92,255,0.3)]";
   } else if (norm === 'needs follow up') {
     outcomeIcon = <Clock className="h-3.5 w-3.5 text-white" />;
     pillColorClass = "bg-rose-600 text-white border-rose-500 shadow-[0_2px_6px_rgba(244,63,94,0.3)]";

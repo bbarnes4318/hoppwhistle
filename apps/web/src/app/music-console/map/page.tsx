@@ -11,7 +11,7 @@ const DynamicMusicCampaignMap = dynamic(
     loading: () => (
       <div className="h-screen w-full flex flex-col items-center justify-center bg-[#09090B] text-slate-400">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--m-accent)] mb-2" />
-        <span className="font-mono text-xs uppercase tracking-wider">Loading WebGL Map Canvas...</span>
+        <span className="font-mono text-xs uppercase tracking-wider">Loading RPS Market Map...</span>
       </div>
     ),
   }

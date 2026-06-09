@@ -1,18 +1,15 @@
 'use client';
 
-import React from 'react';
 import { usePathname } from 'next/navigation';
-import { MusicSidebar } from './music-sidebar';
-import { MusicAuthGuard } from './music-auth-guard';
-import { cn } from '@/lib/utils';
+import React from 'react';
 
-interface MusicConsoleShellProps {
-  children: React.ReactNode;
-}
+import { MusicAuthGuard } from './music-auth-guard';
+import { MusicSidebar } from './music-sidebar';
+
+import { cn } from '@/lib/utils';
 
 export function MusicConsoleShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isDarkPage = pathname === '/music-console/map' || pathname === '/music-console/proof';
 
   // Breadcrumb mapping
   const getBreadcrumbName = () => {

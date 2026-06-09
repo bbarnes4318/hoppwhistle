@@ -7,28 +7,28 @@
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
 .music-console {
-  /* ── Core Palette (Luxury Navy Charcoal & Electric Blue Theme) ── */
-  --m-bg:         #060709;               /* Deep navy charcoal background */
-  --m-surface:    #060709;               /* Same as bg */
-  --m-surface-2:  #0e1017;               /* Elevated cards */
-  --m-surface-3:  #181b26;               /* Hover slate */
-  --m-text:       #f7f7f9;               /* Soft off-white */
-  --m-text-2:     #e4e4e7;               /* Secondary white */
-  --m-muted:      #8e8e93;               /* Muted slate text */
-  --m-dim:        #a1a1aa;               /* Dim zinc */
-  --m-border:     #1e2232;               /* Subtle dark border */
-  --m-border-2:   #12151f;
-  --m-grid-line:  rgba(255, 255, 255, 0.003);
+  /* ── Core Palette (RPS Deep Navy & Royal/Electric Blue Theme) ── */
+  --m-bg:         #020817;               /* Midnight navy background */
+  --m-surface:    #061A2F;               /* Deep navy surface */
+  --m-surface-2:  #071B36;               /* Panel navy */
+  --m-surface-3:  #0B2447;               /* Elevated panel */
+  --m-text:       #F8FAFC;               /* Primary slate text */
+  --m-text-2:     #CBD5E1;               /* Secondary text */
+  --m-muted:      #64748B;               /* Muted text */
+  --m-dim:        #475569;               /* Dim text */
+  --m-border:     rgba(47, 125, 255, 0.16); /* Border navy-blue */
+  --m-border-2:   rgba(148, 163, 184, 0.10);
+  --m-grid-line:  rgba(47, 125, 255, 0.015);
   
-  /* Electric Blue & Emerald Accents */
-  --m-accent:     #00a3ff;               /* Electric Blue primary */
-  --m-accent-dim: rgba(0, 163, 255, 0.06);
-  --m-accent-2:   #10b981;               /* Subtle emerald secondary */
-  --m-accent-2-dim: rgba(16, 185, 129, 0.06);
-  --m-accent-gold: #dfc38c;              /* Gold for revenue/yield/payout */
-  --m-accent-gold-dim: rgba(223, 195, 140, 0.06);
-  --m-warning:    #f59e0b;               /* Amber */
-  --m-danger:     #ef4444;               /* Red */
+  /* Primary brand blues & accents */
+  --m-accent:     #145CFF;               /* Royal blue primary */
+  --m-accent-dim: rgba(20, 92, 255, 0.12);
+  --m-accent-2:   #2F7DFF;               /* Electric blue secondary */
+  --m-accent-2-dim: rgba(47, 125, 255, 0.14);
+  --m-accent-gold: #F59E0B;              /* Gold/Amber sparingly for warning/revenue */
+  --m-accent-gold-dim: rgba(245, 158, 11, 0.08);
+  --m-warning:    #F59E0B;               /* Warning/watch */
+  --m-danger:     #EF4444;               /* Red */
 
   /* ── Typography ── */
   --m-font-sans:  'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -81,19 +81,19 @@
 .music-console .m-dark-mode header,
 .music-console .m-dark-mode main,
 .music-console.m-dark-mode {
-  --m-bg:         #060709;
-  --m-surface:    #060709;
-  --m-surface-2:  #0e1017;
-  --m-surface-3:  #181b26;
-  --m-text:       #f7f7f9;
-  --m-text-2:     #e4e4e7;
-  --m-muted:      #8e8e93;
-  --m-dim:        #a1a1aa;
-  --m-border:     #1e2232;
-  --m-border-2:   #12151f;
-  --m-grid-line:  rgba(255, 255, 255, 0.005);
-  --m-accent-dim: rgba(0, 163, 255, 0.06);
-  --m-accent-2-dim: rgba(16, 185, 129, 0.06);
+  --m-bg:         #020817;
+  --m-surface:    #061A2F;
+  --m-surface-2:  #071B36;
+  --m-surface-3:  #0B2447;
+  --m-text:       #F8FAFC;
+  --m-text-2:     #CBD5E1;
+  --m-muted:      #64748B;
+  --m-dim:        #475569;
+  --m-border:     rgba(47, 125, 255, 0.16);
+  --m-border-2:   rgba(148, 163, 184, 0.10);
+  --m-grid-line:  rgba(47, 125, 255, 0.015);
+  --m-accent-dim: rgba(20, 92, 255, 0.12);
+  --m-accent-2-dim: rgba(47, 125, 255, 0.14);
 }
 
 /* ── Hardware Console Panels with Corner Rivets ── */
@@ -423,7 +423,7 @@
   margin-bottom: 0.5rem;
 }
 .m-transcript-line--ai {
-  background-color: rgba(109, 61, 255, 0.04);
+  background-color: rgba(20, 92, 255, 0.04);
 }
 .m-transcript-speaker {
   width: 3.5rem;

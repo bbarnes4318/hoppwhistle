@@ -1,4 +1,5 @@
 import { GeoMetricPoint, calculateRates } from '@hopwhistle/shared';
+
 import { areaCodeCentroids } from '@/features/campaign-map/data/areaCodeCentroids';
 import { npaNxxSample } from '@/features/campaign-map/data/npaNxxSample';
 

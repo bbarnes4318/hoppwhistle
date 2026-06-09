@@ -28,6 +28,7 @@ import {
   topKpis,
   topSegmentsData,
   campaignTimeSeries,
+  networkSummary,
 } from '@/features/music/data/demo-music-data';
 import { formatCompactNumber } from '@/features/music/lib/utils';
 
@@ -68,7 +69,7 @@ function Sparkline({ data, color = 'var(--m-accent)' }: { data: number[]; color?
 const funnelMeanings: Record<string, string> = {
   'Uploaded Fans': 'Normalized audience list',
   Contacted: 'RPS voice engine streams initiated',
-  'Human Answered': 'Human speech verified calls',
+  'Human Answered': 'Human speech verified connections',
   Engaged: 'Active natural convo sustained',
   'Verified Intent': 'Explicit sponsor action opt-in',
   'Action Taken': 'API payload written to platform',
@@ -76,11 +77,11 @@ const funnelMeanings: Record<string, string> = {
 
 // Colors matching each stage in the pipeline
 const funnelColors: Record<number, string> = {
-  0: '#00a3ff', // electric blue
-  1: '#00d2ff', // cyan
-  2: '#6366f1', // indigo
-  3: '#8b5cf6', // purple
-  4: '#f59e0b', // gold
+  0: '#0B46D9', // signal blue
+  1: '#145CFF', // royal blue
+  2: '#2F7DFF', // electric blue
+  3: '#38BDF8', // sky blue
+  4: '#F59E0B', // gold
   5: '#10b981', // emerald
 };
 
@@ -160,10 +161,10 @@ export default function MusicConsolePage() {
             <span className="m-trend-chip m-trend-chip--positive">+12.0%</span>
           </div>
           <div className="flex items-baseline justify-between gap-1.5 mt-2">
-            <div className="m-metric-tile-value">25</div>
+            <div className="m-metric-tile-value">{networkSummary.activeStations}</div>
             <Sparkline data={[18, 19, 21, 20, 22, 24, 25]} color="var(--m-accent)" />
           </div>
-          <div className="m-metric-tile-subtext mt-1 text-[var(--m-muted)]">Active Media Nodes</div>
+          <div className="m-metric-tile-subtext mt-1 text-[var(--m-muted)]">Active Station DIDs</div>
         </div>
 
         {/* KPI 2: Fan Interactions */}
@@ -176,12 +177,12 @@ export default function MusicConsolePage() {
           </div>
           <div className="flex items-baseline justify-between gap-1.5 mt-2">
             <div className="m-metric-tile-value">
-              {formatCompactNumber(topKpis.fansContacted.value)}
+              {formatCompactNumber(networkSummary.monthlyFanInteractions)}
             </div>
             <Sparkline data={fanInteractionsSeries} color="var(--m-accent)" />
           </div>
           <div className="m-metric-tile-subtext mt-1 text-[var(--m-muted)]">
-            Monthly Connections
+            Monthly Interactions
           </div>
         </div>
 
@@ -195,11 +196,11 @@ export default function MusicConsolePage() {
           </div>
           <div className="flex items-baseline justify-between gap-1.5 mt-2">
             <div className="m-metric-tile-value text-emerald-400">
-              {formatCompactNumber(topKpis.humanAnswers.value)}
+              {formatCompactNumber(networkSummary.verifiedActions)}
             </div>
             <Sparkline data={verifiedActionsSeries} color="#10b981" />
           </div>
-          <div className="m-metric-tile-subtext mt-1 text-[var(--m-muted)]">Conversions Logged</div>
+          <div className="m-metric-tile-subtext mt-1 text-[var(--m-muted)]">Verified Actions Logged</div>
         </div>
 
         {/* KPI 4: Sponsor Revenue */}
@@ -211,10 +212,12 @@ export default function MusicConsolePage() {
             </span>
           </div>
           <div className="flex items-baseline justify-between gap-1.5 mt-2">
-            <div className="m-metric-tile-value font-mono text-[var(--m-accent-gold)]">$13,640</div>
+            <div className="m-metric-tile-value font-mono text-[var(--m-accent-gold)]">
+              ${formatCompactNumber(networkSummary.sponsorRevenue)}
+            </div>
             <Sparkline data={sponsorRevenueSeries} color="#dfc38c" />
           </div>
-          <div className="m-metric-tile-subtext mt-1 text-[var(--m-muted)]">Ad Sponsor Spend</div>
+          <div className="m-metric-tile-subtext mt-1 text-[var(--m-muted)]">Total Sponsor Revenue</div>
         </div>
 
         {/* KPI 5: Artist Payout */}
@@ -224,11 +227,13 @@ export default function MusicConsolePage() {
             <span className="m-trend-chip m-trend-chip--positive">+{topKpis.preSaves.change}%</span>
           </div>
           <div className="flex items-baseline justify-between gap-1.5 mt-2">
-            <div className="m-metric-tile-value font-mono text-[var(--m-accent-gold)]">$9,548</div>
+            <div className="m-metric-tile-value font-mono text-[var(--m-accent-gold)]">
+              ${formatCompactNumber(networkSummary.artistPayout)}
+            </div>
             <Sparkline data={artistPayoutSeries} color="#dfc38c" />
           </div>
           <div className="m-metric-tile-subtext mt-1 text-[var(--m-muted)] font-medium">
-            Recurring Yield (70%)
+            Artist Payout (70%)
           </div>
         </div>
 
@@ -239,11 +244,13 @@ export default function MusicConsolePage() {
             <span className="m-trend-chip m-trend-chip--positive">+10.5%</span>
           </div>
           <div className="flex items-baseline justify-between gap-1.5 mt-2">
-            <div className="m-metric-tile-value font-mono text-[var(--m-accent)]">$4,092</div>
+            <div className="m-metric-tile-value font-mono text-[var(--m-accent)]">
+              ${formatCompactNumber(networkSummary.rpsShare)}
+            </div>
             <Sparkline data={rpsShareSeries} color="var(--m-accent)" />
           </div>
           <div className="m-metric-tile-subtext mt-1 text-[var(--m-muted)]">
-            Network Yield (30%)
+            RPS Network Share (30%)
           </div>
         </div>
       </div>

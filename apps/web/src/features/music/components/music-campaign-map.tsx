@@ -1,38 +1,31 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   aggregateByAreaCode,
   aggregateByState,
   calculateMarketScore,
-  calculateRates,
-  calculateRecommendation,
   GeoMetricPoint,
 } from '@hopwhistle/shared';
 import {
   AlertTriangle,
   CheckCircle2,
-  Compass,
-  DollarSign,
-  Globe,
-  HelpCircle,
   MapPin,
   PauseCircle,
   Search,
   TrendingDown,
-  TrendingUp,
   Volume2,
   Zap,
-  ShieldCheck,
-  RefreshCw,
   Sliders,
   Radio,
   Target,
-  Maximize2,
   Plus,
   Minus
 } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+
 import { generateMusicCampaignGeoMetrics, musicCampaigns } from '../data/music-campaign-geo-metrics';
+import { formatCompactNumber, formatCurrency } from '../lib/utils';
+
 import { cn } from '@/lib/utils';
 
 // Client-only lazy loaders for map dependencies to ensure Next.js SSR builds don't crash
@@ -40,6 +33,7 @@ let DeckGL: any = null;
 let ScatterplotLayer: any = null;
 let maplibregl: any = null;
 
+/* eslint-disable @typescript-eslint/no-var-requires */
 if (typeof window !== 'undefined') {
   DeckGL = require('@deck.gl/react').default;
   const layers = require('@deck.gl/layers');
@@ -47,6 +41,7 @@ if (typeof window !== 'undefined') {
   maplibregl = require('maplibre-gl');
   require('maplibre-gl/dist/maplibre-gl.css');
 }
+/* eslint-enable @typescript-eslint/no-var-requires */
 
 type LayerMetric = 'answerRate' | 'verifiedActions' | 'proofRecords' | 'cpa' | 'fanDensity';
 type DatePreset = 'day' | 'week' | 'month';
@@ -170,7 +165,7 @@ export default function MusicCampaignMap() {
     let saves = 0;
     let spend = 0;
     let dnc = 0;
-    let activeMarkets = new Set<string>();
+    const activeMarkets = new Set<string>();
     let wastedSpend = 0;
 
     filteredPoints.forEach(p => {
@@ -206,6 +201,15 @@ export default function MusicCampaignMap() {
     };
   }, [filteredPoints]);
 
+  const bestMarketPoint = useMemo(() => {
+    if (filteredPoints.length === 0) return null;
+    return [...filteredPoints].sort((a, b) => b.conversions - a.conversions)[0];
+  }, [filteredPoints]);
+
+  const bestMarketName = useMemo(() => {
+    return bestMarketPoint ? `${bestMarketPoint.city}, ${bestMarketPoint.state}` : 'N/A';
+  }, [bestMarketPoint]);
+
   // Animated live radar pulse triggers
   const [pulses, setPulses] = useState<
     Array<{ id: string; lat: number; lng: number; size: number; color: number[] }>
@@ -229,12 +233,12 @@ export default function MusicCampaignMap() {
       const colors = {
         answerRate: [34, 211, 238],       // Cyan
         verifiedActions: [16, 185, 129],  // Emerald
-        proofRecords: [139, 92, 246],     // Violet
+        proofRecords: [20, 92, 255],      // Royal Blue
         cpa: [245, 158, 11],              // Amber
-        fanDensity: [139, 92, 246],       // Violet
+        fanDensity: [47, 125, 255],        // Electric Blue
       };
 
-      const c = colors[selectedMetric] || [139, 92, 246];
+      const c = colors[selectedMetric] || [47, 125, 255];
 
       const newPulse = {
         id: `m-pulse-${Date.now()}-${Math.random()}`,
@@ -297,15 +301,15 @@ export default function MusicCampaignMap() {
         return [16, Math.round(130 + 55 * intensity), Math.round(180 + 30 * intensity)];
       }
       if (selectedMetric === 'proofRecords') {
-        // Violet Gradient
-        return [Math.round(110 + 30 * intensity), 60, 255];
+        // Royal Blue Gradient
+        return [20, Math.round(92 + 80 * intensity), 255];
       }
       if (selectedMetric === 'answerRate') {
         // Cyan / Sky Gradient
         return [34, Math.round(160 + 51 * intensity), 238];
       }
-      // Fan Density: Deep Violet to bright magenta-violet
-      return [Math.round(139 + 30 * intensity), 92, Math.round(200 + 46 * intensity)];
+      // Fan Density: Deep Navy to bright electric blue
+      return [Math.round(6 + 41 * intensity), Math.round(26 + 99 * intensity), Math.round(47 + 208 * intensity)];
     },
     [selectedMetric]
   );
@@ -405,14 +409,7 @@ export default function MusicCampaignMap() {
     return layersList;
   }, [aggregatedData, selectedMetric, maxVal, liveMode, pulses, selectedGranularity, getMetricColor]);
 
-  // Dynamic values formatting helper
-  const getLayerMetricValue = (d: GeoMetricPoint) => {
-    if (selectedMetric === 'answerRate') return `${d.answerRate || 0}%`;
-    if (selectedMetric === 'verifiedActions') return `${d.conversions} saves`;
-    if (selectedMetric === 'proofRecords') return `${d.verifiedListens} logs`;
-    if (selectedMetric === 'cpa') return `$${(d.costPerConversion || 0).toFixed(2)}`;
-    return `${d.contacted} fans`;
-  };
+
 
   // Compile lists for the Bottom Market Intelligence panels
   const marketLists = useMemo(() => {
@@ -475,13 +472,13 @@ export default function MusicCampaignMap() {
     const label = p.label || 'Market';
     
     if (score >= 70) {
-      return `${label} shows top-tier fan conversion metrics (Score: ${score}/100) with solid stream-save engagement. Recommended: Increase dialing intensity and allocate local Tour Ticket Pre-Sale priority.`;
+      return `${label} shows top-tier fan conversion metrics (Score: ${score}/100) with solid stream-save engagement. Recommended: Increase campaign weight and allocate local Tour Ticket Pre-Sale priority.`;
     }
     if (score < 40) {
-      return `${label} underperforms (Score: ${score}/100) with elevated opt-outs or high acquisition cost. Recommended: Mute dialer routing in this prefix sector immediately to protect sender reputation.`;
+      return `${label} underperforms (Score: ${score}/100) with elevated opt-outs or high acquisition cost. Recommended: Mute audience signal in this prefix sector immediately to protect compliance and sender reputation.`;
     }
     if (p.verifiedListens > 15 && p.conversions === 0) {
-      return `${label} reports listener verifications but zero completed pre-saves. Recommended: Audit the voice-agent DSP redirect node or verify link attributions.`;
+      return `${label} reports listener verifications but zero completed pre-saves. Recommended: Audit the station routing and redirect node or verify link attributions.`;
     }
     return `Early fan activity in ${label} is stable. Watch saves trends ahead of the next release window before expanding seating.`;
   };
@@ -489,15 +486,15 @@ export default function MusicCampaignMap() {
   const getMusicBadge = (score: number) => {
     if (score >= 70) {
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-emerald-500/20 bg-emerald-500/10 text-[10px] font-bold text-emerald-400">
-          <CheckCircle2 className="h-3 w-3" /> Scale Market
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-emerald-500/20 bg-emerald-500/10 text-[10px] font-bold text-emerald-400 font-mono tracking-wider uppercase">
+          <CheckCircle2 className="h-3 w-3" /> Increase Campaign Weight
         </span>
       );
     }
     if (score < 40) {
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-red-500/20 bg-red-500/10 text-[10px] font-bold text-red-400">
-          <PauseCircle className="h-3 w-3" /> Dial Hold
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-red-500/20 bg-red-500/10 text-[10px] font-bold text-red-400 font-mono tracking-wider uppercase">
+          <PauseCircle className="h-3 w-3" /> Pause Market
         </span>
       );
     }
@@ -539,6 +536,67 @@ export default function MusicCampaignMap() {
       {/* ─── SECTION 2: Floating Panels Content Overlay Area ─── */}
       <div className="flex-grow min-h-0 flex relative z-10 p-4 justify-end items-stretch pointer-events-none">
 
+        {/* ─── Left KPI Rail (Floating HUD) ─── */}
+        <div className="absolute left-4 top-24 w-44 bg-[#0F1219]/80 border border-white/[0.08] p-3.5 rounded-xl backdrop-blur-md shadow-2xl flex flex-col gap-2.5 z-20 pointer-events-auto text-left">
+          <div className="text-[9px] font-black uppercase tracking-widest text-[var(--m-accent)] border-b border-white/5 pb-1 mb-0.5 font-mono">
+            Market Telemetry
+          </div>
+          
+          <div className="space-y-0.5">
+            <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider">
+              Active Markets
+            </div>
+            <div className="text-sm font-mono font-bold text-white">
+              {metricsStats.activeMarketsCount}
+            </div>
+          </div>
+
+          <div className="space-y-0.5">
+            <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider font-sans">
+              Fans Reached
+            </div>
+            <div className="text-sm font-mono font-bold text-white">
+              {formatCompactNumber(metricsStats.contacted)}
+            </div>
+          </div>
+
+          <div className="space-y-0.5">
+            <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider font-sans">
+              Verified Actions
+            </div>
+            <div className="text-sm font-mono font-bold text-emerald-400">
+              {formatCompactNumber(metricsStats.saves)}
+            </div>
+          </div>
+
+          <div className="space-y-0.5">
+            <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider">
+              Avg CPA
+            </div>
+            <div className="text-sm font-mono font-bold text-[var(--m-warning)]">
+              {formatCurrency(metricsStats.cpa)}
+            </div>
+          </div>
+
+          <div className="space-y-0.5">
+            <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider font-sans">
+              Wasted Spend
+            </div>
+            <div className="text-sm font-mono font-bold text-red-400">
+              {formatCurrency(metricsStats.wastedSpend)}
+            </div>
+          </div>
+
+          <div className="space-y-0.5">
+            <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider font-sans">
+              Best Market
+            </div>
+            <div className="text-[10px] font-bold text-indigo-300 truncate" title={bestMarketName}>
+              {bestMarketName}
+            </div>
+          </div>
+        </div>
+
         {/* Floating Glassmorphic HUD Controls Toolbar */}
         <div className={cn(
           "absolute top-4 left-4 bg-[#0F1219]/75 border border-white/[0.08] rounded-xl flex items-center justify-between px-4 py-2.5 z-20 backdrop-blur-[12px] gap-4 shadow-2xl pointer-events-auto transition-all duration-300 overflow-x-auto m-scrollbar-thin flex-nowrap",
@@ -551,8 +609,8 @@ export default function MusicCampaignMap() {
               <span className="relative inline-flex rounded-full h-2 w-2 bg-[var(--m-accent)]"></span>
             </span>
             <div className="flex flex-col leading-none">
-              <span className="text-[9px] font-black uppercase tracking-widest text-[#FAFAFA] font-mono">TELEMETRY ACTIVE</span>
-              <span className="text-[7.5px] font-mono text-[var(--m-accent)] tracking-wider">LIVE MAP CONTROL</span>
+              <span className="text-[9px] font-black uppercase tracking-widest text-[#FAFAFA] font-mono">RPS MARKET SIGNAL</span>
+              <span className="text-[7.5px] font-mono text-[var(--m-accent)] tracking-wider font-bold">AUDIENCE HEATMAP LIVE</span>
             </div>
           </div>
 
@@ -682,7 +740,7 @@ export default function MusicCampaignMap() {
 
             {/* Bottom lists toggle */}
             <div className="flex flex-col gap-0.5">
-              <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Market Lists</span>
+              <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Market Plays</span>
               <button
                 onClick={() => setShowBottomPanel(!showBottomPanel)}
                 className={cn(
@@ -721,116 +779,98 @@ export default function MusicCampaignMap() {
               {/* Detail Header */}
               <div className="flex items-start justify-between">
                 <div className="space-y-1">
-                  <div className="flex items-center gap-1 text-[8px] font-bold text-[var(--m-accent)] tracking-wider uppercase">
-                    <MapPin className="h-3.5 w-3.5" /> Local fan telemetry
+                  <div className="flex items-center gap-1.5 text-[8px] font-bold text-[var(--m-accent)] tracking-wider uppercase font-mono">
+                    <MapPin className="h-3.5 w-3.5" /> Market Activation Detail
                   </div>
-                  <h2 className="text-base font-bold text-slate-100 leading-tight">
+                  <h2 className="text-base font-bold text-white leading-tight">
                     {inspectedPoint.label}
                   </h2>
-                  <span className="px-1.5 py-0.5 rounded text-[8px] font-mono border bg-zinc-800 border-white/5 text-[#A1A1AA] uppercase tracking-wider">
-                    Confidence: {inspectedPoint.locationConfidence}
+                  <span className="px-1.5 py-0.5 rounded text-[8px] font-mono border bg-zinc-900 border-white/5 text-[#A1A1AA] uppercase tracking-wider">
+                    Market Score: {calculateMarketScore(inspectedPoint)}/100
                   </span>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      e.preventDefault();
-                      setSidebarOpen(false);
-                      setInspectedPoint(null);
-                    }}
-                    className="text-[#71717A] hover:text-white bg-[#18181B] border border-white/5 hover:border-white/10 px-2 py-1 rounded-lg transition-all text-[10px] font-semibold"
-                    title="Collapse Sidebar"
-                  >
-                    Hide
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      e.preventDefault();
-                      setInspectedPoint(null);
-                    }}
-                    className="text-[#71717A] hover:text-white bg-[#18181B] border border-white/5 hover:border-white/10 p-1 rounded-lg transition-all text-sm leading-none h-6 w-6 flex items-center justify-center font-bold"
-                  >
-                    &times;
-                  </button>
-                </div>
+                <button
+                  onClick={() => {
+                    setSidebarOpen(false);
+                    setInspectedPoint(null);
+                  }}
+                  className="text-[#71717A] hover:text-white bg-[#18181B] border border-white/5 p-1 rounded h-6 w-6 flex items-center justify-center font-bold text-sm"
+                >
+                  &times;
+                </button>
               </div>
 
-              {/* Geo Recommendation Block */}
-              <div className="bg-[#18181B]/70 border border-white/5 rounded-xl p-4 space-y-2">
-                <span className="text-[8px] font-bold text-[#71717A] uppercase tracking-widest">Recommended action</span>
-                <div className="pt-0.5">
+              {/* Score and Recommendation */}
+              <div className="bg-black/20 border border-white/5 rounded-xl p-3.5 space-y-2.5">
+                <div className="flex justify-between items-center">
+                  <span className="text-[8px] font-bold text-[#71717A] uppercase tracking-widest font-mono">Recommendation</span>
                   {getMusicBadge(calculateMarketScore(inspectedPoint))}
                 </div>
-                <p className="text-[10px] leading-relaxed text-[#A1A1AA] pt-2 border-t border-white/5">
+                <p className="text-[10px] leading-relaxed text-[#A1A1AA] pt-2 border-t border-white/5 font-medium">
                   {getMusicRecommendationText(inspectedPoint)}
                 </p>
               </div>
 
-              {/* Localized Dial Funnel */}
+              {/* Performance Stats */}
               <div className="space-y-2">
-                <span className="text-[8px] font-bold text-[#71717A] uppercase tracking-wider">Localized Funnel</span>
+                <span className="text-[8px] font-bold text-[#71717A] uppercase tracking-wider font-mono">Audience Telemetry</span>
                 <div className="space-y-1.5 font-mono text-[10px] text-[#A1A1AA] bg-[#18181B]/40 p-3.5 rounded-xl border border-white/5">
                   <div className="flex justify-between items-center py-0.5 border-b border-white/5">
-                    <span className="text-[#71717A] font-sans text-[9px] uppercase tracking-wider">Outbound Dials</span>
-                    <span className="text-[#FAFAFA] font-bold">{inspectedPoint.contacted}</span>
+                    <span className="text-[#71717A] font-sans text-[9px] uppercase tracking-wider font-bold">Fan Density (Reach)</span>
+                    <span className="text-white font-bold">{inspectedPoint.contacted}</span>
                   </div>
                   <div className="flex justify-between items-center py-0.5 border-b border-white/5">
-                    <span className="text-[#FAFAFA]">{inspectedPoint.answered} <span className="text-[#71717A] text-[8px]">({inspectedPoint.answerRate || 0}%)</span></span>
+                    <span className="text-[#71717A] font-sans text-[9px] uppercase tracking-wider font-bold">Answer Rate</span>
+                    <span className="text-[var(--m-accent)] font-bold">{inspectedPoint.answerRate || 0}%</span>
                   </div>
                   <div className="flex justify-between items-center py-0.5 border-b border-white/5">
-                    <span className="text-[#71717A] font-sans text-[9px] uppercase tracking-wider">Verified Listens</span>
-                    <span className="text-sky-400 font-bold">{inspectedPoint.verifiedListens} <span className="text-[#71717A] text-[8px]">({inspectedPoint.listenRate || 0}%)</span></span>
+                    <span className="text-[#71717A] font-sans text-[9px] uppercase tracking-wider font-bold">Verified Actions</span>
+                    <span className="text-emerald-400 font-bold">{inspectedPoint.conversions}</span>
                   </div>
                   <div className="flex justify-between items-center py-0.5 border-b border-white/5">
-                    <span className="text-[#71717A] font-sans text-[9px] uppercase tracking-wider">VIP Opt-Ins</span>
-                    <span className="text-[var(--m-warning)] font-bold">{inspectedPoint.optIns || 0}</span>
-                  </div>
-                  <div className="flex justify-between items-center py-0.5 border-b border-white/5">
-                    <span className="text-[#71717A] font-sans text-[9px] uppercase tracking-wider">DSP Clickthroughs</span>
-                    <span className="text-indigo-400 font-bold">{inspectedPoint.transfers} <span className="text-[#71717A] text-[8px]">({inspectedPoint.transferRate || 0}%)</span></span>
-                  </div>
-                  <div className="flex justify-between items-center py-0.5 border-b border-white/5">
-                    <span className="text-[#71717A] font-sans text-[9px] uppercase tracking-wider">Pre-Saves</span>
-                    <span className="text-[#10B981] font-bold">{inspectedPoint.conversions}</span>
+                    <span className="text-[#71717A] font-sans text-[9px] uppercase tracking-wider font-bold">Cost per Verified Action</span>
+                    <span className="text-[var(--m-warning)] font-bold">{formatCurrency(inspectedPoint.costPerConversion || 0)}</span>
                   </div>
                   <div className="flex justify-between items-center py-0.5">
-                    <span className="text-[#71717A] font-sans text-[9px] uppercase tracking-wider">Opt-outs (DNC)</span>
-                    <span className="text-red-400 font-bold">{inspectedPoint.dnc || 0}</span>
+                    <span className="text-[#71717A] font-sans text-[9px] uppercase tracking-wider font-bold">Proof Captured</span>
+                    <span className="text-zinc-300 font-bold">{inspectedPoint.verifiedListens} logs</span>
                   </div>
                 </div>
               </div>
 
-              {/* Economic Attribution */}
+              {/* Market Activation Economics */}
               <div className="space-y-2">
-                <span className="text-[8px] font-bold text-[#71717A] uppercase tracking-wider">Local budget yield</span>
+                <span className="text-[8px] font-bold text-[#71717A] uppercase tracking-wider font-mono">Market Play Economics</span>
                 <div className="grid grid-cols-2 gap-2 text-center text-xs font-mono font-bold">
                   <div className="bg-[#18181B]/40 border border-white/5 rounded-xl p-2.5">
                     <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider font-sans mb-0.5">Spend</div>
-                    <div className="text-[#FAFAFA] font-semibold">${inspectedPoint.spend.toFixed(2)}</div>
+                    <div className="text-[#FAFAFA] font-semibold">{formatCurrency(inspectedPoint.spend)}</div>
                   </div>
                   <div className="bg-[#18181B]/40 border border-white/5 rounded-xl p-2.5">
-                    <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider font-sans mb-0.5">Yield value</div>
+                    <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider font-sans mb-0.5">Yield Value</div>
                     <div className={cn("font-semibold", inspectedPoint.revenueMovement >= 0 ? "text-[#10B981]" : "text-red-400")}>
-                      ${inspectedPoint.revenueMovement.toFixed(2)}
+                      {formatCurrency(inspectedPoint.revenueMovement)}
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Efficiency telemetry */}
-              <div className="space-y-2 flex-grow">
-                <span className="text-[8px] font-bold text-[#71717A] uppercase tracking-wider">Efficiency analysis</span>
-                <div className="space-y-1.5 font-mono text-[9px] text-[#A1A1AA] bg-[#18181B]/20 p-3 rounded-xl border border-white/5">
-                  <div className="flex justify-between">
-                    <span>Cost Per Connect:</span>
-                    <span className="text-slate-300">${inspectedPoint.costPerAnswer?.toFixed(2) || '0.00'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Cost Per Save:</span>
-                    <span className="text-[#10B981] font-bold">${inspectedPoint.costPerConversion?.toFixed(2) || '0.00'}</span>
-                  </div>
+              {/* Suggested Next Actions */}
+              <div className="space-y-2 pt-2 flex-grow">
+                <span className="text-[8px] font-bold text-[#71717A] uppercase tracking-wider font-mono">Deploy Market Plays</span>
+                <div className="grid grid-cols-2 gap-2 text-[10px] font-bold font-sans">
+                  <button className="py-2 bg-[var(--m-accent)] hover:bg-[#008be5] text-white rounded uppercase tracking-wider transition-colors">
+                    Increase Campaign Weight
+                  </button>
+                  <button className="py-2 bg-amber-600/20 hover:bg-amber-600/30 border border-amber-500/30 text-amber-400 rounded uppercase tracking-wider transition-colors">
+                    Pause Market
+                  </button>
+                  <button className="py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 rounded uppercase tracking-wider transition-colors">
+                    Route to VIP Offer
+                  </button>
+                  <button className="py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 rounded uppercase tracking-wider transition-colors">
+                    Local Event Push
+                  </button>
                 </div>
               </div>
 
@@ -979,7 +1019,7 @@ export default function MusicCampaignMap() {
           </div>
           <div className="space-y-1 text-[8.5px] text-[#A1A1AA]">
             <p>
-              Colors reflect the <span className="font-semibold text-slate-200">{selectedMetric}</span> layer. Nodes are sized based on dial volume.
+              Colors reflect the <span className="font-semibold text-slate-200">{selectedMetric}</span> layer. Nodes are sized based on activation volume.
             </p>
             <div className="h-1.5 w-full bg-gradient-to-r from-zinc-800 to-[var(--m-accent)] rounded border border-white/5" />
             <div className="flex justify-between text-[8px] font-mono text-[#71717A]">

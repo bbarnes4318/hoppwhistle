@@ -2,7 +2,6 @@
 
 import {
   BarChart3,
-  Radio,
   LayoutDashboard,
   Megaphone,
   Settings,
@@ -60,24 +59,21 @@ export function MusicSidebar() {
   return (
     <div className="m-sidebar flex h-full w-64 flex-col z-20 animate-fadeIn">
       {/* Brand Logo area */}
-      <div className="flex flex-col justify-center px-6 py-4 border-b border-white/[0.04] shrink-0 gap-2">
-        <Link href="/music-console" className="flex items-center gap-3 group">
-          <div className="relative p-1.5 bg-gradient-to-br from-[#00a3ff]/20 to-[#00d2ff]/10 rounded-lg border border-[#00a3ff]/30 shadow-[0_0_12px_rgba(0,163,255,0.15)] transition-all duration-300 group-hover:border-[#00a3ff]/50">
-            <Radio className="h-4.5 w-4.5 text-[#00a3ff] animate-pulse" />
+      <div className="flex flex-col justify-center px-5 py-5 border-b border-white/[0.04] shrink-0 gap-2.5">
+        <Link href="/music-console" className="block group">
+          <div className="bg-white rounded-lg p-2.5 flex items-center justify-center border border-white/10 shadow-[0_4px_12px_rgba(0,0,0,0.3)] transition-all duration-300 group-hover:shadow-[0_4px_16px_rgba(20,92,255,0.15)]">
+            <img src="/rps-logo.png" alt="RPS / Radio Phone Station" className="h-5.5 w-auto object-contain" />
           </div>
-          <div className="flex flex-col">
-            <span className="text-[10px] font-black tracking-[0.12em] text-[#FFFFFF] uppercase leading-none">
-              RADIO PHONE STATION
-            </span>
-            <span className="text-[8px] font-extrabold text-[#00a3ff] uppercase tracking-[0.12em] mt-1.5 leading-none">
+          <div className="flex items-center justify-between mt-2.5 px-0.5">
+            <span className="text-[9px] font-black tracking-[0.08em] text-[#CBD5E1] uppercase leading-none">
               RPS MEDIA NETWORK
             </span>
+            <div className="flex items-center gap-1 px-1.5 py-0.5 bg-[#10b981]/15 border border-[#10b981]/20 rounded text-[8px] font-bold text-[#10b981]">
+              <span className="h-1 w-1 rounded-full bg-[#10b981] animate-pulse" />
+              <span className="uppercase tracking-wider">LIVE</span>
+            </div>
           </div>
         </Link>
-        <div className="flex items-center gap-1.5 px-2 py-0.5 w-fit bg-[#10b981]/10 border border-[#10b981]/20 rounded text-[8px] font-bold text-[#10b981]">
-          <span className="h-1 w-1 rounded-full bg-[#10b981] animate-pulse" />
-          <span className="uppercase tracking-wider">LIVE STATION NETWORK</span>
-        </div>
       </div>
 
       {/* Navigation menu */}

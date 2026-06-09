@@ -11,7 +11,11 @@ import type {
   FanProfile,
   MusicSettings,
   FanSource,
-  FanSegment
+  FanSegment,
+  RpsNetworkSummary,
+  ArtistTierConfig,
+  RevenueSourceDistribution,
+  SponsorPackage
 } from '../types';
 
 // ── Seeded PRNG
@@ -43,6 +47,12 @@ export const fanCampaigns: FanCampaign[] = [
     cpa: 1.12,
     proofCaptured: 5100,
     startDate: '2026-04-20',
+    campaignValue: 10124.8,
+    sponsorRevenue: 12300,
+    artistShare: 8610,
+    rpsShare: 3690,
+    mediaInventoryUnits: 8200,
+    proofReadinessScore: 94.5,
   },
   {
     id: 'c-2',
@@ -59,6 +69,12 @@ export const fanCampaigns: FanCampaign[] = [
     cpa: 2.45,
     proofCaptured: 8900,
     startDate: '2026-04-22',
+    campaignValue: 28350.0,
+    sponsorRevenue: 33750,
+    artistShare: 23625,
+    rpsShare: 10125,
+    mediaInventoryUnits: 15000,
+    proofReadinessScore: 92.0,
   },
   {
     id: 'c-3',
@@ -75,6 +91,12 @@ export const fanCampaigns: FanCampaign[] = [
     cpa: 1.85,
     proofCaptured: 3450,
     startDate: '2026-04-10',
+    campaignValue: 13587.6,
+    sponsorRevenue: 15600,
+    artistShare: 10920,
+    rpsShare: 4680,
+    mediaInventoryUnits: 5200,
+    proofReadinessScore: 88.5,
   },
   {
     id: 'c-4',
@@ -91,6 +113,12 @@ export const fanCampaigns: FanCampaign[] = [
     cpa: 0,
     proofCaptured: 0,
     startDate: '2026-05-01',
+    campaignValue: 0,
+    sponsorRevenue: 0,
+    artistShare: 0,
+    rpsShare: 0,
+    mediaInventoryUnits: 0,
+    proofReadinessScore: 0,
   },
   {
     id: 'c-5',
@@ -107,6 +135,12 @@ export const fanCampaigns: FanCampaign[] = [
     cpa: 3.10,
     proofCaptured: 4400,
     startDate: '2026-03-15',
+    campaignValue: 11934.0,
+    sponsorRevenue: 26350,
+    artistShare: 18445,
+    rpsShare: 7905,
+    mediaInventoryUnits: 8500,
+    proofReadinessScore: 99.1,
   },
 ];
 
@@ -165,12 +199,12 @@ export const topKpis = {
 
 // ── Funnel ──
 export const funnelData: FunnelStage[] = [
-  { label: 'Uploaded Fans', count: 25000, percentage: 100, color: '#4c1d95' }, // violet-900
-  { label: 'Contacted', count: 12450, percentage: 49.8, color: '#6d28d9' }, // violet-700
-  { label: 'Human Answered', count: 7820, percentage: 31.3, color: '#8b5cf6' }, // violet-500
-  { label: 'Engaged', count: 6200, percentage: 24.8, color: '#a78bfa' }, // violet-400
-  { label: 'Verified Intent', count: 4892, percentage: 19.6, color: '#06b6d4' }, // cyan-500
-  { label: 'Action Taken', count: 3450, percentage: 13.8, color: '#10b981' }, // emerald-500
+  { label: 'Uploaded Fans', count: 25000, percentage: 100, color: '#0B46D9' }, // signal blue
+  { label: 'Contacted', count: 12450, percentage: 49.8, color: '#145CFF' }, // royal blue
+  { label: 'Human Answered', count: 7820, percentage: 31.3, color: '#2F7DFF' }, // electric blue
+  { label: 'Engaged', count: 6200, percentage: 24.8, color: '#38BDF8' }, // sky blue
+  { label: 'Verified Intent', count: 4892, percentage: 19.6, color: '#F59E0B' }, // amber/gold
+  { label: 'Action Taken', count: 3450, percentage: 13.8, color: '#10B981' }, // emerald-500
 ];
 
 // ── Live Pulse ──
@@ -268,4 +302,182 @@ export const defaultMusicSettings: MusicSettings = {
   alertHighIntent: true,
   weeklyExecutiveReport: true,
 };
+
+// ── RPS Business Model Network Summary ──
+export const networkSummary: RpsNetworkSummary = {
+  activeStations: 18,
+  activeArtists: 42,
+  monthlyFanInteractions: 1420000,
+  verifiedActions: 954000,
+  sponsorRevenue: 6850000,
+  artistPayout: 4795000, // 70% artist share
+  rpsShare: 2055000,     // 30% RPS platform share
+  mediaInventorySold: 1210000, // units sold
+  sponsorReadyProofRecords: 924000,
+  optOutRate: 2.1,
+  averageCostPerVerifiedAction: 1.10,
+};
+
+// ── RPS Artist Tiers ──
+export const artistTierConfigs: ArtistTierConfig[] = [
+  {
+    tier: 'Discovery',
+    minMonthlyInteractions: 1000,
+    payoutRate: 65,
+    description: 'Rising indie artists establishing active fan channels.',
+  },
+  {
+    tier: 'Growth',
+    minMonthlyInteractions: 10000,
+    payoutRate: 68,
+    description: 'Breakout artists building recurring media activations.',
+  },
+  {
+    tier: 'Partner',
+    minMonthlyInteractions: 50000,
+    payoutRate: 70,
+    description: 'Established artists with high-density station affinity.',
+  },
+  {
+    tier: 'Bronze',
+    minMonthlyInteractions: 100000,
+    payoutRate: 72,
+    description: 'Bronze tier media channel with verified sponsor proof.',
+  },
+  {
+    tier: 'Silver',
+    minMonthlyInteractions: 500000,
+    payoutRate: 74,
+    description: 'Silver tier channel unlocking premium brand sponsorships.',
+  },
+  {
+    tier: 'Gold',
+    minMonthlyInteractions: 1000000,
+    payoutRate: 75,
+    description: 'Gold tier channel with live audience heatmaps and custom voice personas.',
+  },
+  {
+    tier: 'Platinum',
+    minMonthlyInteractions: 5000000,
+    payoutRate: 80,
+    description: 'Enterprise media channel with exclusive sync licensing and dedicated line pool.',
+  },
+];
+
+// ── RPS Revenue Share Model ──
+export const revenueShareDistribution: RevenueSourceDistribution[] = [
+  {
+    source: 'Cost per call advertising',
+    totalRevenue: 2450000,
+    artistSharePercent: 70,
+    rpsSharePercent: 30,
+    description: 'Sponsored voice engagements and call-to-action payouts.',
+  },
+  {
+    source: 'Sponsored audio',
+    totalRevenue: 1850000,
+    artistSharePercent: 68,
+    rpsSharePercent: 32,
+    description: 'Direct brand sponsor audio drop plays during fan stream dial.',
+  },
+  {
+    source: 'Audience insights',
+    totalRevenue: 920000,
+    artistSharePercent: 60,
+    rpsSharePercent: 40,
+    description: 'Monetized aggregate fan segment profile data for sponsors.',
+  },
+  {
+    source: 'Music streaming',
+    totalRevenue: 550000,
+    artistSharePercent: 85,
+    rpsSharePercent: 15,
+    description: 'Inbound Spotify/Apple DSP pre-save gateway clicks.',
+  },
+  {
+    source: 'Merchandise',
+    totalRevenue: 680000,
+    artistSharePercent: 75,
+    rpsSharePercent: 25,
+    description: 'Voice-agent-driven custom apparel drop purchases.',
+  },
+  {
+    source: 'Live events',
+    totalRevenue: 820000,
+    artistSharePercent: 70,
+    rpsSharePercent: 30,
+    description: 'Early access tour ticketing verification sales.',
+  },
+  {
+    source: 'Brand partnerships',
+    totalRevenue: 1200000,
+    artistSharePercent: 65,
+    rpsSharePercent: 35,
+    description: 'Direct artist-exclusive voice persona sponsorships.',
+  },
+  {
+    source: 'Licensing / sync',
+    totalRevenue: 450000,
+    artistSharePercent: 80,
+    rpsSharePercent: 20,
+    description: 'Broadcast usage royalty rights and station routing.',
+  },
+];
+
+// ── RPS Sponsor Package Examples ──
+export const sponsorPackages: SponsorPackage[] = [
+  {
+    tier: 'Bronze',
+    calls: 100000,
+    price: 75000,
+    cpaTarget: 1.20,
+    description: 'Regional brand activation utilizing standard voice engine line pools.',
+  },
+  {
+    tier: 'Silver',
+    calls: 500000,
+    price: 300000,
+    cpaTarget: 1.15,
+    description: 'Multi-market campaigns with specialized brand-safe voice scripting.',
+  },
+  {
+    tier: 'Gold',
+    calls: 1000000,
+    price: 600000,
+    cpaTarget: 1.10,
+    description: 'National campaigns unlocking dedicated caller IDs and custom artist voice cloning.',
+  },
+  {
+    tier: 'Platinum',
+    calls: 5000000,
+    price: 2000000,
+    cpaTarget: 1.05,
+    description: 'Enterprise media partnerships with continuous DSP sync, custom APIs, and guaranteed CPA margins.',
+  },
+];
+
+// ── Safely derive Campaign Economics ──
+export function getCampaignEconomics(campaign: FanCampaign) {
+  const campaignValue = campaign.campaignValue ?? (campaign.verifiedEngagements * 2.80);
+  const sponsorRevenue = campaign.sponsorRevenue ?? (campaign.fansContacted * 1.50);
+  const artistShare = campaign.artistShare ?? (sponsorRevenue * 0.70);
+  const rpsShare = campaign.rpsShare ?? (sponsorRevenue * 0.30);
+  const mediaInventoryUnits = campaign.mediaInventoryUnits ?? campaign.fansContacted;
+  
+  // Guard against division by zero
+  const rawReadiness = campaign.verifiedEngagements > 0 
+    ? (campaign.proofCaptured / campaign.verifiedEngagements) * 100 
+    : 0;
+  const proofReadinessScore = campaign.proofReadinessScore ?? rawReadiness;
+
+  return {
+    campaignValue,
+    sponsorRevenue,
+    artistShare,
+    rpsShare,
+    mediaInventoryUnits,
+    proofReadinessScore: Math.min(100, Number(proofReadinessScore.toFixed(1))),
+  };
+}
+
 
