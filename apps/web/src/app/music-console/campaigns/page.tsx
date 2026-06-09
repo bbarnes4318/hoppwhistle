@@ -24,6 +24,7 @@ import {
   campaignTypeLabel,
   formatCompactNumber,
   formatCurrency,
+  formatCurrencyInt,
   segmentLabel,
 } from '../../../features/music/lib/utils';
 import type { FanCampaign } from '../../../features/music/types';
@@ -208,7 +209,7 @@ export default function MusicCampaignsPage() {
             Est. Campaign Value
           </div>
           <div className="mt-2 text-2xl font-black font-mono text-[#D97706]">
-            {formatCurrency(totalVerified * 2.8)}
+            {formatCurrencyInt(totalVerified * 2.8)}
           </div>
           <div className="text-[9px] text-[var(--m-muted)] mt-1 font-medium">Network Yield</div>
         </div>
@@ -241,12 +242,12 @@ export default function MusicCampaignsPage() {
                 className="hover:bg-black/[0.015] transition-colors cursor-pointer"
                 title={`Click to view full performance logs & economics for ${c.name}`}
               >
-                <td className="py-2.5 font-bold text-[var(--m-text)] max-w-[130px] truncate" title={c.name}>
+                <td className="py-2.5 font-bold text-[var(--m-text)] pr-3" title={c.name}>
                   {c.name}
                 </td>
                 <td className="py-2.5 text-[var(--m-text-2)]">{c.artist}</td>
                 <td className="py-2.5">
-                  <span className="px-1.5 py-0.5 bg-[var(--m-surface-3)] border border-[var(--m-border)] rounded text-[9px] m-text-dim">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[var(--m-accent-dim)] text-[var(--m-accent)] border border-[var(--m-accent)]/10">
                     {campaignTypeLabel(c.type)}
                   </span>
                 </td>
@@ -270,7 +271,7 @@ export default function MusicCampaignsPage() {
                   {formatCompactNumber(c.proofCaptured)}
                 </td>
                 <td className="py-2.5 text-right font-mono font-bold text-[#D97706]">
-                  {formatCurrency(c.verifiedEngagements * 2.8)}
+                  {formatCurrencyInt(c.verifiedEngagements * 2.8)}
                 </td>
                 <td className="py-2.5 text-right">
                   <button

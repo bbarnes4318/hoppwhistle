@@ -13,6 +13,7 @@ import {
   PauseCircle,
   Search,
   TrendingDown,
+  TrendingUp,
   Volume2,
   Zap,
   Sliders,
@@ -58,6 +59,7 @@ export default function MusicCampaignMap() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [showBottomPanel, setShowBottomPanel] = useState<boolean>(false);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
+  const [showTelemetry, setShowTelemetry] = useState<boolean>(false);
 
   // Selected point and hover states
   const [inspectedPoint, setInspectedPoint] = useState<GeoMetricPoint | null>(null);
@@ -537,69 +539,71 @@ export default function MusicCampaignMap() {
       <div className="flex-grow min-h-0 flex relative z-10 p-4 justify-end items-stretch pointer-events-none">
 
         {/* ─── Left KPI Rail (Floating HUD) ─── */}
-        <div className="absolute left-4 top-24 w-44 bg-[#0F1219]/80 border border-white/[0.08] p-3.5 rounded-xl backdrop-blur-md shadow-2xl flex flex-col gap-2.5 z-20 pointer-events-auto text-left">
-          <div className="text-[9px] font-black uppercase tracking-widest text-[var(--m-accent)] border-b border-white/5 pb-1 mb-0.5 font-mono">
-            Market Telemetry
-          </div>
-          
-          <div className="space-y-0.5">
-            <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider">
-              Active Markets
+        {showTelemetry && (
+          <div className="absolute left-4 top-24 w-44 bg-[#0F1219]/80 border border-white/[0.08] p-3.5 rounded-xl backdrop-blur-md shadow-2xl flex flex-col gap-2.5 z-20 pointer-events-auto text-left">
+            <div className="text-[9px] font-black uppercase tracking-widest text-[var(--m-accent-2)] border-b border-white/5 pb-1 mb-0.5 font-mono">
+              Market Telemetry
             </div>
-            <div className="text-sm font-mono font-bold text-white">
-              {metricsStats.activeMarketsCount}
+            
+            <div className="space-y-0.5">
+              <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider">
+                Active Markets
+              </div>
+              <div className="text-sm font-mono font-bold text-white">
+                {metricsStats.activeMarketsCount}
+              </div>
             </div>
-          </div>
 
-          <div className="space-y-0.5">
-            <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider font-sans">
-              Fans Reached
+            <div className="space-y-0.5">
+              <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider font-sans">
+                Fans Reached
+              </div>
+              <div className="text-sm font-mono font-bold text-white">
+                {formatCompactNumber(metricsStats.contacted)}
+              </div>
             </div>
-            <div className="text-sm font-mono font-bold text-white">
-              {formatCompactNumber(metricsStats.contacted)}
-            </div>
-          </div>
 
-          <div className="space-y-0.5">
-            <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider font-sans">
-              Verified Actions
+            <div className="space-y-0.5">
+              <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider font-sans">
+                Verified Actions
+              </div>
+              <div className="text-sm font-mono font-bold text-emerald-400">
+                {formatCompactNumber(metricsStats.saves)}
+              </div>
             </div>
-            <div className="text-sm font-mono font-bold text-emerald-400">
-              {formatCompactNumber(metricsStats.saves)}
-            </div>
-          </div>
 
-          <div className="space-y-0.5">
-            <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider">
-              Avg CPA
+            <div className="space-y-0.5">
+              <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider">
+                Avg CPA
+              </div>
+              <div className="text-sm font-mono font-bold text-[var(--m-warning)]">
+                {formatCurrency(metricsStats.cpa)}
+              </div>
             </div>
-            <div className="text-sm font-mono font-bold text-[var(--m-warning)]">
-              {formatCurrency(metricsStats.cpa)}
-            </div>
-          </div>
 
-          <div className="space-y-0.5">
-            <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider font-sans">
-              Wasted Spend
+            <div className="space-y-0.5">
+              <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider font-sans">
+                Unattributed Spend
+              </div>
+              <div className="text-sm font-mono font-bold text-slate-300">
+                {formatCurrency(metricsStats.wastedSpend)}
+              </div>
             </div>
-            <div className="text-sm font-mono font-bold text-red-400">
-              {formatCurrency(metricsStats.wastedSpend)}
-            </div>
-          </div>
 
-          <div className="space-y-0.5">
-            <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider font-sans">
-              Best Market
-            </div>
-            <div className="text-[10px] font-bold text-indigo-300 truncate" title={bestMarketName}>
-              {bestMarketName}
+            <div className="space-y-0.5">
+              <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider font-sans">
+                Best Market
+              </div>
+              <div className="text-[10px] font-bold text-sky-300 truncate" title={bestMarketName}>
+                {bestMarketName}
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Floating Glassmorphic HUD Controls Toolbar */}
         <div className={cn(
-          "absolute top-4 left-4 bg-[#0F1219]/75 border border-white/[0.08] rounded-xl flex items-center justify-between px-4 py-2.5 z-20 backdrop-blur-[12px] gap-4 shadow-2xl pointer-events-auto transition-all duration-300 overflow-x-auto m-scrollbar-thin flex-nowrap",
+          "absolute top-4 left-4 bg-[#0F1219]/75 border border-white/[0.08] rounded-xl flex flex-wrap items-center justify-between px-4 py-2.5 z-20 backdrop-blur-[12px] gap-4 shadow-2xl pointer-events-auto transition-all duration-300 overflow-visible",
           sidebarOpen ? "right-4 lg:right-[416px]" : "right-4"
         )}>
           {/* Telemetry Badge */}
@@ -610,12 +614,12 @@ export default function MusicCampaignMap() {
             </span>
             <div className="flex flex-col leading-none">
               <span className="text-[9px] font-black uppercase tracking-widest text-[#FAFAFA] font-mono">RPS MARKET SIGNAL</span>
-              <span className="text-[7.5px] font-mono text-[var(--m-accent)] tracking-wider font-bold">AUDIENCE HEATMAP LIVE</span>
+              <span className="text-[7.5px] font-mono text-[var(--m-accent-2)] tracking-wider font-bold">AUDIENCE HEATMAP LIVE</span>
             </div>
           </div>
 
           {/* Custom Premium Control Row */}
-          <div className="flex items-center gap-4 flex-nowrap shrink-0">
+          <div className="flex flex-wrap items-center gap-4 shrink-0">
             {/* Campaign Filter */}
             <div className="flex flex-col gap-0.5">
               <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Campaign</span>
@@ -729,7 +733,7 @@ export default function MusicCampaignMap() {
                 className={cn(
                   "h-7 px-3 rounded-lg text-[10px] font-bold border transition-all flex items-center gap-1.5",
                   liveMode
-                    ? "bg-[var(--m-accent-dim)] border-[var(--m-accent)]/30 text-[var(--m-accent)] shadow-[0_0_12px_rgba(139,92,246,0.15)]"
+                    ? "bg-[var(--m-accent-dim)] border-[var(--m-accent)]/30 text-[var(--m-accent-2)] shadow-[0_0_12px_rgba(20,92,255,0.15)]"
                     : "bg-[#18181B] border-white/5 text-[#71717A]"
                 )}
               >
@@ -746,12 +750,29 @@ export default function MusicCampaignMap() {
                 className={cn(
                   "h-7 px-3 rounded-lg text-[10px] font-bold border transition-all flex items-center gap-1.5",
                   showBottomPanel
-                    ? "bg-[var(--m-accent-dim)] border-[var(--m-accent)]/30 text-[var(--m-accent)] shadow-[0_0_12px_rgba(139,92,246,0.15)]"
+                    ? "bg-[var(--m-accent-dim)] border-[var(--m-accent)]/30 text-[var(--m-accent-2)] shadow-[0_0_12px_rgba(20,92,255,0.15)]"
                     : "bg-[#18181B] border-white/5 text-slate-300"
                 )}
               >
                 <Sliders className="h-3 w-3" />
                 {showBottomPanel ? 'Visible' : 'Hidden'}
+              </button>
+            </div>
+
+            {/* Telemetry HUD toggle */}
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[7.5px] font-bold text-[#71717A] uppercase tracking-widest">Telemetry HUD</span>
+              <button
+                onClick={() => setShowTelemetry(!showTelemetry)}
+                className={cn(
+                  "h-7 px-3 rounded-lg text-[10px] font-bold border transition-all flex items-center gap-1.5",
+                  showTelemetry
+                    ? "bg-[var(--m-accent-dim)] border-[var(--m-accent)]/30 text-[var(--m-accent-2)] shadow-[0_0_12px_rgba(20,92,255,0.15)]"
+                    : "bg-[#18181B] border-white/5 text-slate-300"
+                )}
+              >
+                <TrendingUp className="h-3 w-3" />
+                {showTelemetry ? 'Visible' : 'Hidden'}
               </button>
             </div>
 
@@ -779,7 +800,7 @@ export default function MusicCampaignMap() {
               {/* Detail Header */}
               <div className="flex items-start justify-between">
                 <div className="space-y-1">
-                  <div className="flex items-center gap-1.5 text-[8px] font-bold text-[var(--m-accent)] tracking-wider uppercase font-mono">
+                  <div className="flex items-center gap-1.5 text-[8px] font-bold text-[var(--m-accent-2)] tracking-wider uppercase font-mono">
                     <MapPin className="h-3.5 w-3.5" /> Market Activation Detail
                   </div>
                   <h2 className="text-base font-bold text-white leading-tight">
@@ -821,7 +842,7 @@ export default function MusicCampaignMap() {
                   </div>
                   <div className="flex justify-between items-center py-0.5 border-b border-white/5">
                     <span className="text-[#71717A] font-sans text-[9px] uppercase tracking-wider font-bold">Answer Rate</span>
-                    <span className="text-[var(--m-accent)] font-bold">{inspectedPoint.answerRate || 0}%</span>
+                    <span className="text-[var(--m-accent-2)] font-bold">{inspectedPoint.answerRate || 0}%</span>
                   </div>
                   <div className="flex justify-between items-center py-0.5 border-b border-white/5">
                     <span className="text-[#71717A] font-sans text-[9px] uppercase tracking-wider font-bold">Verified Actions</span>
@@ -922,11 +943,11 @@ export default function MusicCampaignMap() {
                 </div>
                 <div className="bg-[#18181B]/60 border border-white/5 rounded-xl p-2.5 text-left">
                   <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider mb-0.5">Active Markets</div>
-                  <div className="text-sm font-mono font-bold text-indigo-400">{metricsStats.activeMarketsCount}</div>
+                  <div className="text-sm font-mono font-bold text-[var(--m-accent-2)]">{metricsStats.activeMarketsCount}</div>
                 </div>
                 <div className="bg-[#18181B]/60 border border-white/5 rounded-xl p-2.5 text-left">
-                  <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider mb-0.5">Wasted Spend</div>
-                  <div className="text-sm font-mono font-bold text-red-400">${metricsStats.wastedSpend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                  <div className="text-[8px] text-[#71717A] uppercase font-bold tracking-wider mb-0.5">Unattributed Spend</div>
+                  <div className="text-sm font-mono font-bold text-slate-300">${metricsStats.wastedSpend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                 </div>
               </div>
 
@@ -1157,7 +1178,7 @@ export default function MusicCampaignMap() {
             {/* Panel 5: Next Markets to Activate */}
             <div className="p-3.5 flex flex-col justify-between min-w-0">
               <div className="flex items-center gap-1.5 shrink-0">
-                <Sliders className="h-3.5 w-3.5 text-indigo-400" />
+                <Sliders className="h-3.5 w-3.5 text-sky-400" />
                 <span className="text-[9px] font-bold uppercase tracking-widest text-[#FAFAFA]">Next to Activate</span>
               </div>
               <div className="space-y-1 mt-2 flex-grow overflow-y-auto">
@@ -1167,8 +1188,8 @@ export default function MusicCampaignMap() {
                     onClick={() => handleInspectMarket(p)}
                     className="flex justify-between text-[10px] items-center text-[#A1A1AA] hover:text-[#FAFAFA] cursor-pointer transition-colors"
                   >
-                    <span className="truncate pr-2 text-indigo-300">{idx + 1}. {p.label}</span>
-                    <span className="font-mono font-bold text-indigo-400 shrink-0">{p.answerRate}%</span>
+                    <span className="truncate pr-2 text-sky-300">{idx + 1}. {p.label}</span>
+                    <span className="font-mono font-bold text-[var(--m-accent-2)] shrink-0">{p.answerRate}%</span>
                   </div>
                 ))}
               </div>
