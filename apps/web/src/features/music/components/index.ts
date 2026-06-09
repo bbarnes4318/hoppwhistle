@@ -10,3 +10,4 @@ export { ProofLogTable } from './proof-log-table';
 export { StatCard } from './stat-card';
 export { MusicConsoleShell } from './music-console-shell';
 export * from './shared';
+export { CustomerSideDemo } from './customer-side-demo';
