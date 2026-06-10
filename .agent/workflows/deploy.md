@@ -119,8 +119,8 @@ sudo docker compose -f docker-compose.yml build api --no-cache
 # Remove any auto-created redis that causes conflicts
 sudo docker rm -f docker-redis-1 2>/dev/null
 
-# Start API only (not redis - it already exists)
-sudo docker compose -f docker-compose.yml up -d api --no-deps
+# Start Redis and API containers
+sudo docker compose -f docker-compose.yml up -d redis api
 ```
 
 ### 5. Fix Network Connections (REQUIRED AFTER REBUILD)
@@ -155,7 +155,7 @@ curl -s http://localhost:3001/api/v1/buyers -H "x-demo-tenant-id: 00000000-0000-
 ## ONE-LINER: Full API Rebuild (Copy-Paste This)
 
 ```bash
-cd /opt/hopwhistle && sudo git pull origin main && cd infra/docker && sudo docker stop docker-api-1 2>/dev/null; sudo docker rm docker-api-1 2>/dev/null; sudo docker rm -f docker-redis-1 2>/dev/null; sudo docker compose -f docker-compose.yml build api --no-cache && sudo docker compose -f docker-compose.yml up -d api --no-deps && sudo docker network connect docker_default hopwhistle-postgres-dev 2>/dev/null; sudo docker network connect --alias redis docker_default docker-redis-1 2>/dev/null; sudo docker restart docker-api-1 && sleep 5 && sudo docker exec docker-api-1 npx prisma db push --accept-data-loss && curl -s http://localhost:3001/health
+cd /opt/hopwhistle && sudo git pull origin main && cd infra/docker && sudo docker stop docker-api-1 2>/dev/null; sudo docker rm docker-api-1 2>/dev/null; sudo docker rm -f docker-redis-1 2>/dev/null; sudo docker compose -f docker-compose.yml build api --no-cache && sudo docker compose -f docker-compose.yml up -d redis api && sudo docker network connect docker_default hopwhistle-postgres-dev 2>/dev/null; sudo docker network connect --alias redis docker_default docker-redis-1 2>/dev/null; sudo docker restart docker-api-1 && sleep 5 && sudo docker exec docker-api-1 npx prisma db push --accept-data-loss && curl -s http://localhost:3001/health
 ```
 
 ## ONE-LINER: Full Web Rebuild (Copy-Paste This)

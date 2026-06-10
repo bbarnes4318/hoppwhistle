@@ -6,9 +6,9 @@ export function getRedisClient(): Redis {
   if (!redisClient) {
     const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
     redisClient = new Redis(redisUrl, {
-      maxRetriesPerRequest: 3,
-      connectTimeout: 5000,
-      commandTimeout: 3000,
+      maxRetriesPerRequest: 1,
+      connectTimeout: 500,
+      commandTimeout: 500,
       retryStrategy: (times) => {
         // Never give up reconnecting — exponential backoff capped at 5s
         const delay = Math.min(times * 200, 5000);
