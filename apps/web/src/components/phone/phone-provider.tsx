@@ -750,6 +750,18 @@ export function PhoneProvider({
 
         const inviter = new Inviter(userAgentRef.current, target, {
           extraHeaders,
+          sessionDescriptionHandlerOptions: {
+            constraints: { audio: true, video: false },
+            peerConnectionConfiguration: {
+              iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:stun3.l.google.com:19302' },
+                { urls: 'stun:stun4.l.google.com:19302' }
+              ]
+            }
+          }
         });
         sessionRef.current = inviter;
 
@@ -827,6 +839,15 @@ export function PhoneProvider({
         .accept({
           sessionDescriptionHandlerOptions: {
             constraints: { audio: true, video: false },
+            peerConnectionConfiguration: {
+              iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:stun3.l.google.com:19302' },
+                { urls: 'stun:stun4.l.google.com:19302' }
+              ]
+            }
           },
         })
         .then(() => {
@@ -1185,6 +1206,17 @@ export function PhoneProvider({
           authorizationPassword: sipPass,
           reconnectionAttempts: 1000,
           reconnectionDelay: 5,
+          sessionDescriptionHandlerFactoryOptions: {
+            peerConnectionConfiguration: {
+              iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:stun3.l.google.com:19302' },
+                { urls: 'stun:stun4.l.google.com:19302' }
+              ]
+            }
+          },
           delegate: {
             onConnect: () => {
               console.log('[Phone] SIP Transport Connected');
