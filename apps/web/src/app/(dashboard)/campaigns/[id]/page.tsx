@@ -163,6 +163,7 @@ export default function CampaignDetailPage() {
   // Dialog States
   const [pubDialogOpen, setPubDialogOpen] = useState(false);
   const [buyerDialogOpen, setBuyerDialogOpen] = useState(false);
+  const [editingBuyerId, setEditingBuyerId] = useState<string | null>(null);
   const [loadingEndpoints, setLoadingEndpoints] = useState(false);
 
   // Dialog Form States
@@ -185,6 +186,22 @@ export default function CampaignDetailPage() {
   // Action states
   const [submittingPub, setSubmittingPub] = useState(false);
   const [submittingBuyer, setSubmittingBuyer] = useState(false);
+
+  const handleOpenBuyerDialog = (open: boolean) => {
+    setBuyerDialogOpen(open);
+    if (!open) {
+      setEditingBuyerId(null);
+      setBuyerForm({
+        buyerId: '',
+        buyerEndpointId: '',
+        destinationNumber: '',
+        pricePerBillableCall: '',
+        priority: 0,
+        weight: 100,
+        status: 'ACTIVE',
+      });
+    }
+  };
 
   // Load Campaign and Sub-resources
   const fetchCampaignData = useCallback(async () => {
@@ -413,45 +430,64 @@ export default function CampaignDetailPage() {
 
     setSubmittingBuyer(true);
     try {
-      const res = await apiClient.post(`/api/v1/campaigns/${id}/buyers`, {
-        buyerId: buyerForm.buyerId,
-        buyerEndpointId: buyerForm.buyerEndpointId || null,
-        destinationNumber: dest,
-        pricePerBillableCall: buyerForm.pricePerBillableCall ? Number(buyerForm.pricePerBillableCall) : null,
-        priority: Number(buyerForm.priority) || 0,
-        weight: Number(buyerForm.weight) || 100,
-        status: buyerForm.status,
-      });
+      let res;
+      if (editingBuyerId) {
+        res = await apiClient.patch(`/api/v1/campaigns/${id}/buyers/${editingBuyerId}`, {
+          buyerEndpointId: buyerForm.buyerEndpointId || null,
+          destinationNumber: dest,
+          pricePerBillableCall: buyerForm.pricePerBillableCall ? Number(buyerForm.pricePerBillableCall) : null,
+          priority: Number(buyerForm.priority) || 0,
+          weight: Number(buyerForm.weight) || 100,
+          status: buyerForm.status,
+        });
+      } else {
+        res = await apiClient.post(`/api/v1/campaigns/${id}/buyers`, {
+          buyerId: buyerForm.buyerId,
+          buyerEndpointId: buyerForm.buyerEndpointId || null,
+          destinationNumber: dest,
+          pricePerBillableCall: buyerForm.pricePerBillableCall ? Number(buyerForm.pricePerBillableCall) : null,
+          priority: Number(buyerForm.priority) || 0,
+          weight: Number(buyerForm.weight) || 100,
+          status: buyerForm.status,
+        });
+      }
 
       if (res.error) {
         toast({
-          title: 'Assignment Failed',
+          title: editingBuyerId ? 'Update Failed' : 'Assignment Failed',
           description: res.error.message,
           variant: 'destructive',
         });
       } else {
         toast({
-          title: 'Buyer Assigned',
-          description: 'Buyer destination has been assigned to this campaign.',
+          title: editingBuyerId ? 'Buyer Updated' : 'Buyer Assigned',
+          description: editingBuyerId 
+            ? 'Buyer routing configuration has been updated.' 
+            : 'Buyer destination has been assigned to this campaign.',
           variant: 'success',
         });
-        setBuyerDialogOpen(false);
-        setBuyerForm({
-          buyerId: '',
-          buyerEndpointId: '',
-          destinationNumber: '',
-          pricePerBillableCall: '',
-          priority: 0,
-          weight: 100,
-          status: 'ACTIVE',
-        });
+        handleOpenBuyerDialog(false);
         void fetchCampaignData();
       }
     } catch (err) {
-      console.error('Failed to assign buyer:', err);
+      console.error('Failed to save buyer assignment:', err);
     } finally {
       setSubmittingBuyer(false);
     }
+  };
+
+  const handleEditBuyerClick = (cb: CampaignBuyer) => {
+    setEditingBuyerId(cb.id);
+    setBuyerForm({
+      buyerId: cb.buyerId,
+      buyerEndpointId: cb.buyerEndpointId || '',
+      destinationNumber: cb.destinationNumber,
+      pricePerBillableCall: cb.pricePerBillableCall ? String(cb.pricePerBillableCall) : '',
+      priority: cb.priority,
+      weight: cb.weight || 100,
+      status: cb.status,
+    });
+    setBuyerDialogOpen(true);
   };
 
   // Remove Buyer Assignment
@@ -809,7 +845,7 @@ export default function CampaignDetailPage() {
                   Configure buyer target numbers and destination routing rules. Priority controls routing order (lower = higher priority).
                 </CardDescription>
               </div>
-              <Button size="sm" onClick={() => setBuyerDialogOpen(true)}>
+              <Button size="sm" onClick={() => { setEditingBuyerId(null); setBuyerDialogOpen(true); }}>
                 <Plus className="h-4 w-4 mr-2" />
                 Add Buyer Destination
               </Button>
@@ -878,6 +914,15 @@ export default function CampaignDetailPage() {
                           )}
                         </TableCell>
                         <TableCell className="text-right">
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-muted mr-1"
+                            onClick={() => handleEditBuyerClick(cb)}
+                            title="Edit Buyer Assignment"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
                           <Button 
                             variant="ghost" 
                             size="icon" 
@@ -1065,13 +1110,15 @@ export default function CampaignDetailPage() {
       </Dialog>
 
       {/* Assign Buyer Dialog */}
-      <Dialog open={buyerDialogOpen} onOpenChange={setBuyerDialogOpen}>
+      <Dialog open={buyerDialogOpen} onOpenChange={handleOpenBuyerDialog}>
         <DialogContent className="sm:max-w-[500px]">
           <form onSubmit={handleAssignBuyer} className="space-y-4">
             <DialogHeader>
-              <DialogTitle>Add Buyer Routing Assignment</DialogTitle>
+              <DialogTitle>{editingBuyerId ? 'Edit Buyer Routing Assignment' : 'Add Buyer Routing Assignment'}</DialogTitle>
               <DialogDescription>
-                Configure a destination phone number and routing rules for a buyer.
+                {editingBuyerId 
+                  ? 'Modify destination phone number and routing rules for this buyer.' 
+                  : 'Configure a destination phone number and routing rules for a buyer.'}
               </DialogDescription>
             </DialogHeader>
 
@@ -1083,6 +1130,7 @@ export default function CampaignDetailPage() {
                     value={buyerForm.buyerId}
                     onValueChange={(val) => setBuyerForm({ ...buyerForm, buyerId: val, buyerEndpointId: '' })}
                     required
+                    disabled={editingBuyerId !== null}
                   >
                     <SelectTrigger id="buyer-select">
                       <SelectValue placeholder="Choose buyer" />
@@ -1102,7 +1150,7 @@ export default function CampaignDetailPage() {
                   <Select
                     value={buyerForm.buyerEndpointId}
                     onValueChange={handleEndpointChange}
-                    disabled={!buyerForm.buyerId || loadingEndpoints}
+                    disabled={(!buyerForm.buyerId && !editingBuyerId) || loadingEndpoints}
                   >
                     <SelectTrigger id="endpoint-select">
                       <SelectValue placeholder={loadingEndpoints ? "Loading..." : "Choose endpoint"} />
@@ -1191,12 +1239,12 @@ export default function CampaignDetailPage() {
             </div>
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setBuyerDialogOpen(false)}>
+              <Button type="button" variant="outline" onClick={() => handleOpenBuyerDialog(false)}>
                 Cancel
               </Button>
               <Button type="submit" disabled={submittingBuyer || !buyerForm.buyerId || !buyerForm.destinationNumber}>
                 {submittingBuyer && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Add Assignment
+                {editingBuyerId ? 'Save Changes' : 'Add Assignment'}
               </Button>
             </DialogFooter>
           </form>

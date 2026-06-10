@@ -93,7 +93,15 @@ class ApiClient {
         headers,
       });
 
-      const data = await response.json();
+      let data: any = null;
+      const text = await response.text();
+      if (text) {
+        try {
+          data = JSON.parse(text);
+        } catch (e) {
+          data = text;
+        }
+      }
 
       if (!response.ok) {
         // Auto-logout on 401 Unauthorized - clear invalid token and redirect to login
@@ -106,8 +114,8 @@ class ApiClient {
         }
         return {
           error: {
-            code: data.error?.code || 'UNKNOWN_ERROR',
-            message: data.error?.message || 'An error occurred',
+            code: data?.error?.code || 'UNKNOWN_ERROR',
+            message: data?.error?.message || 'An error occurred',
           },
         };
       }
