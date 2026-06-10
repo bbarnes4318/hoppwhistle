@@ -69,6 +69,7 @@ interface Buyer {
 interface BuyerEndpoint {
   id: string;
   name: string;
+  type?: 'SIP' | 'PSTN' | 'WEBRTC';
   destination: string;
   basePrice: string;
 }
@@ -419,7 +420,21 @@ export default function CampaignDetailPage() {
 
     // Basic E.164 regex check for PSTN
     const dest = buyerForm.destinationNumber.trim();
-    if (!dest.startsWith('+')) {
+    
+    // Determine if this is a PSTN destination (requires E.164 formatting)
+    let isPstn = true;
+    if (buyerForm.buyerEndpointId) {
+      const ep = buyerEndpoints.find(el => el.id === buyerForm.buyerEndpointId);
+      if (ep && (ep.type === 'SIP' || ep.type === 'WEBRTC')) {
+        isPstn = false;
+      }
+    }
+    // Allow short internal extensions (e.g. 4 digits) or UUIDs without requiring +
+    if (/^\d{4}$/.test(dest) || /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(dest)) {
+      isPstn = false;
+    }
+
+    if (isPstn && !dest.startsWith('+')) {
       toast({
         title: 'Validation Error',
         description: 'Destination number must be in E.164 format (starting with +). e.g., +18652637582',
