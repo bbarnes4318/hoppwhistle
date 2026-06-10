@@ -1167,6 +1167,15 @@ export function PhoneProvider({
           return;
         }
 
+        // Request persistent mic stream to prevent browser sleep / tab suspension
+        try {
+          console.log('[Phone] Requesting persistent mic stream to prevent browser sleep...');
+          persistentMicStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          console.log('[Phone] Persistent mic stream acquired successfully');
+        } catch (err) {
+          console.warn('[Phone] Failed to acquire persistent mic stream (will continue initializing):', err);
+        }
+
         const options: UserAgentOptions = {
           uri,
           transportOptions: {
@@ -1174,8 +1183,8 @@ export function PhoneProvider({
           },
           authorizationUsername: sipUser,
           authorizationPassword: sipPass,
-          reconnectionAttempts: 3,
-          reconnectionDelay: 4,
+          reconnectionAttempts: 1000,
+          reconnectionDelay: 5,
           delegate: {
             onConnect: () => {
               console.log('[Phone] SIP Transport Connected');
@@ -1211,12 +1220,17 @@ export function PhoneProvider({
       }
     }
 
+    let persistentMicStream: MediaStream | null = null;
     void initSip();
 
     return () => {
       active = false;
       if (ua) {
         void ua.stop();
+      }
+      if (persistentMicStream) {
+        console.log('[Phone] Stopping persistent mic stream tracks...');
+        persistentMicStream.getTracks().forEach(track => track.stop());
       }
     };
   }, [handleIncomingSipCall, normalizedApiUrl, getApiHeaders]);
