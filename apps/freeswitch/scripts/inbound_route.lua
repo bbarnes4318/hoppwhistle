@@ -145,6 +145,11 @@ if recording_enabled then
   recording_path = RECORDING_DIR .. "/in_" .. call_uuid .. ".wav"
   session:setVariable("x_recording_path", recording_path)
   
+  -- Prevent record_session from forcing a pre-answer, so the caller hears a ringtone
+  session:setVariable("media_bug_answer_req", "true")
+  session:setVariable("media_bug_answer", "true")
+  session:setVariable("RECORD_ANSWER_REQ", "true")
+  
   log("INFO", "Recording to: " .. recording_path)
   session:execute("record_session", recording_path)
 end
