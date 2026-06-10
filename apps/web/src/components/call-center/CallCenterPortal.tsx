@@ -317,6 +317,37 @@ export function CallCenterPortal(): JSX.Element {
   };
 
   // Call Handlers
+  // Pre-create and unlock ringtone on first user interaction to bypass autoplay restrictions
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (!ringtoneRef.current) {
+        ringtoneRef.current = new Audio('/sounds/ringtone.mp3');
+        ringtoneRef.current.loop = true;
+      }
+
+      const unlock = () => {
+        if (ringtoneRef.current) {
+          ringtoneRef.current.play()
+            .then(() => {
+              ringtoneRef.current?.pause();
+              ringtoneRef.current!.currentTime = 0;
+            })
+            .catch(() => {});
+        }
+        window.removeEventListener('click', unlock);
+        window.removeEventListener('keydown', unlock);
+      };
+
+      window.addEventListener('click', unlock);
+      window.addEventListener('keydown', unlock);
+
+      return () => {
+        window.removeEventListener('click', unlock);
+        window.removeEventListener('keydown', unlock);
+      };
+    }
+  }, []);
+
   // ─────────────────────────────────────────────────────────────────────────
   // RINGTONE AUDIO - Play/stop ringtone on incoming call
   // ─────────────────────────────────────────────────────────────────────────

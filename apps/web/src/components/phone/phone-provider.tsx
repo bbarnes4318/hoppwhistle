@@ -301,14 +301,49 @@ export function PhoneProvider({
   // Audio Utilities
   // ============================================================================
 
-  const playRingtone = useCallback(() => {
-    if (typeof window !== 'undefined' && !ringtoneRef.current) {
-      ringtoneRef.current = new Audio('/sounds/ringtone.mp3');
-      ringtoneRef.current.loop = true;
+  // Pre-create and unlock ringtone on first user interaction to bypass autoplay restrictions
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (!ringtoneRef.current) {
+        ringtoneRef.current = new Audio('/sounds/ringtone.mp3');
+        ringtoneRef.current.loop = true;
+      }
+
+      const unlock = () => {
+        if (ringtoneRef.current) {
+          ringtoneRef.current.play()
+            .then(() => {
+              ringtoneRef.current?.pause();
+              ringtoneRef.current!.currentTime = 0;
+            })
+            .catch((err) => {
+              console.log('[Phone] Ringtone unlock failed, will retry on next interaction:', err);
+            });
+        }
+        window.removeEventListener('click', unlock);
+        window.removeEventListener('keydown', unlock);
+      };
+
+      window.addEventListener('click', unlock);
+      window.addEventListener('keydown', unlock);
+
+      return () => {
+        window.removeEventListener('click', unlock);
+        window.removeEventListener('keydown', unlock);
+      };
     }
-    ringtoneRef.current?.play().catch(() => {
-      // Ignore audio play errors
-    });
+  }, []);
+
+  const playRingtone = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      if (!ringtoneRef.current) {
+        ringtoneRef.current = new Audio('/sounds/ringtone.mp3');
+        ringtoneRef.current.loop = true;
+      }
+      ringtoneRef.current.play().catch((err) => {
+        console.warn('[Phone] Ringtone play blocked or failed:', err);
+      });
+    }
   }, []);
 
   const stopRingtone = useCallback(() => {
