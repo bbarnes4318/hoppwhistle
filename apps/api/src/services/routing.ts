@@ -307,7 +307,7 @@ export class RoutingService {
         return null;
       }
 
-      // 2. Group eligible endpoints by priority (descending)
+      // 2. Group eligible endpoints by priority
       const priorityGroups = new Map<number, EligibleEndpoint[]>();
       for (const ep of eligibleEndpoints) {
         const p = ep.priority;
@@ -317,46 +317,53 @@ export class RoutingService {
         priorityGroups.get(p)!.push(ep);
       }
 
-      // Get sorted list of unique priorities descending
-      const sortedPriorities = [...priorityGroups.keys()].sort((a, b) => b - a);
+      // Get sorted list of unique priorities ascending (lower number = higher priority)
+      const sortedPriorities = [...priorityGroups.keys()].sort((a, b) => a - b);
 
-      // Select highest priority group that is not empty
-      const bestGroup = priorityGroups.get(sortedPriorities[0])!;
-
-      // 3. Weighted Random Selection within the selected priority group
-      let totalWeight = 0;
-      for (const ep of bestGroup) {
-        totalWeight += Math.max(1, ep.weight);
-      }
-
-      const randomValue = Math.random() * totalWeight;
-      let currentSum = 0;
-      let selectedEndpoint = bestGroup[0];
-
-      for (const ep of bestGroup) {
-        currentSum += Math.max(1, ep.weight);
-        if (randomValue <= currentSum) {
-          selectedEndpoint = ep;
-          break;
+      // 3. Weighted Random Selection within each priority group to choose a representative
+      const failoverEndpoints: EligibleEndpoint[] = [];
+      for (const p of sortedPriorities) {
+        const group = priorityGroups.get(p)!;
+        let totalWeight = 0;
+        for (const ep of group) {
+          totalWeight += Math.max(1, ep.weight);
         }
+
+        const randomValue = Math.random() * totalWeight;
+        let currentSum = 0;
+        let selectedEndpoint = group[0];
+
+        for (const ep of group) {
+          currentSum += Math.max(1, ep.weight);
+          if (randomValue <= currentSum) {
+            selectedEndpoint = ep;
+            break;
+          }
+        }
+        failoverEndpoints.push(selectedEndpoint);
       }
+
+      const primaryEndpoint = failoverEndpoints[0];
+      const failoverDestinationString = failoverEndpoints
+        .map(ep => ep.destination)
+        .join('|');
 
       logger.info({
-        msg: 'Selected buyer via priority and weight routing',
+        msg: 'Selected buyer via priority and weight routing with failover chain',
         campaignId,
-        buyerId: selectedEndpoint.buyerId,
-        buyerName: selectedEndpoint.buyerName,
-        endpointId: selectedEndpoint.endpointId,
-        destination: selectedEndpoint.destination,
-        weight: selectedEndpoint.weight,
-        priority: selectedEndpoint.priority,
+        buyerId: primaryEndpoint.buyerId,
+        buyerName: primaryEndpoint.buyerName,
+        endpointId: primaryEndpoint.endpointId,
+        destination: failoverDestinationString,
+        weight: primaryEndpoint.weight,
+        priority: primaryEndpoint.priority,
         callerState: this.resolveCallerState(callData),
       });
 
       return {
-        buyerId: selectedEndpoint.buyerId,
-        endpoint: selectedEndpoint.destination,
-        targetId: selectedEndpoint.endpointId,
+        buyerId: primaryEndpoint.buyerId,
+        endpoint: failoverDestinationString,
+        targetId: primaryEndpoint.endpointId,
         callerState: this.resolveCallerState(callData),
       };
     } catch (error) {
