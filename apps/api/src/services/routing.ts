@@ -199,6 +199,74 @@ export class RoutingService {
       }
     }
 
+    // Step 5: Filter out local agent endpoints if agent is not available or on a call
+    try {
+      const users = await this.prisma.user.findMany({
+        where: { tenantId, status: 'ACTIVE' },
+        select: { id: true, metadata: true },
+      });
+      
+      const extensionToUserMap = new Map<string, string>();
+      for (const u of users) {
+        const ext = (u.metadata as any)?.extension;
+        if (ext) {
+          extensionToUserMap.set(ext.toString().trim(), u.id);
+        }
+      }
+
+      if (extensionToUserMap.size > 0) {
+        const { getRedisClient } = await import('./redis.js');
+        const redis = getRedisClient();
+
+        const statuses = await Promise.all(
+          eligibleEndpoints.map(async (ep) => {
+            const dest = ep.destination.trim();
+            const userId = extensionToUserMap.get(dest);
+            if (!userId) return { ep, eligible: true };
+
+            const key = `agent:status:${userId}`;
+            try {
+              const data = await redis.get(key);
+              if (data) {
+                const statusData = JSON.parse(data);
+                // Agent must be available and not have a call in progress
+                if (statusData.status !== 'available' || statusData.currentCallId) {
+                  logger.info({
+                    msg: 'Agent-status: Endpoint EXCLUDED (agent busy/offline)',
+                    buyerId: ep.buyerId,
+                    buyerName: ep.buyerName,
+                    destination: ep.destination,
+                    agentStatus: statusData.status,
+                    currentCallId: statusData.currentCallId,
+                  });
+                  return { ep, eligible: false };
+                }
+              } else {
+                logger.info({
+                  msg: 'Agent-status: Endpoint EXCLUDED (agent offline/no Redis status)',
+                  buyerId: ep.buyerId,
+                  buyerName: ep.buyerName,
+                  destination: ep.destination,
+                });
+                return { ep, eligible: false };
+              }
+            } catch (redisErr) {
+              logger.warn({
+                msg: 'Agent-status: Redis lookup error (fail-open)',
+                userId,
+                error: (redisErr as Error).message,
+              });
+            }
+            return { ep, eligible: true };
+          })
+        );
+
+        eligibleEndpoints = statuses.filter(s => s.eligible).map(s => s.ep);
+      }
+    } catch (err) {
+      logger.error('Error applying agent status filter:', err);
+    }
+
     logger.info({
       msg: 'Geo/Concurrency-routing: Filtering complete',
       campaignId,
