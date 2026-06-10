@@ -336,15 +336,28 @@ export class FreeSwitchService {
     // Use the held UUID as the base for the conference name (held call is guaranteed ACTIVE)
     const conferenceName = `conf_${heldUuid}`;
 
-    // Find B-leg UUIDs from the channel list.
-    // B-legs are channels where call_uuid points to an A-leg but uuid !== call_uuid.
-    const findBleg = (aLegUuid: string): string | null => {
-      const bleg = channels.find(c => c.call_uuid === aLegUuid && c.uuid !== aLegUuid);
-      return bleg?.uuid || null;
+    // Find B-leg (peer) UUIDs from the channel list.
+    // Handles both inbound (agent is child leg) and outbound (agent is parent leg) calls.
+    const findPeerLeg = (uuid: string): string | null => {
+      const chan = channels.find(c => c.uuid === uuid);
+      if (chan) {
+        if (chan.call_uuid && chan.uuid !== chan.call_uuid) {
+          // If this channel is the child leg, its peer is the parent leg (whose uuid matches call_uuid)
+          const parentExists = channels.some(c => c.uuid === chan.call_uuid);
+          if (parentExists) return chan.call_uuid;
+        }
+        // Otherwise, if this channel is the parent leg, its peer is the child leg
+        const child = channels.find(c => c.call_uuid === uuid && c.uuid !== uuid);
+        if (child) return child.uuid;
+      }
+      
+      // Fallback: search for child leg by call_uuid
+      const child = channels.find(c => c.call_uuid === uuid && c.uuid !== uuid);
+      return child?.uuid || null;
     };
 
-    const heldBleg = findBleg(heldUuid);
-    const activeBleg = findBleg(activeUuid);
+    const heldBleg = findPeerLeg(heldUuid);
+    const activeBleg = findPeerLeg(activeUuid);
 
     logger.info({
       msg: 'Merge: resolved all legs',
