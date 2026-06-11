@@ -1176,8 +1176,8 @@ export function PhoneProvider({
         let sipWsUrl = creds.wsUrl;
         if (isSecure) {
           sipWsUrl = `wss://${wsHost}:7443`;
-        } else if (!sipWsUrl) {
-          sipWsUrl = `ws://${sipDomain}:8083`;
+        } else {
+          sipWsUrl = `ws://${wsHost}:8083`;
         }
 
         console.log('[Phone] Initializing SIP UA dynamically:', { sipUser, sipDomain, sipWsUrl });
