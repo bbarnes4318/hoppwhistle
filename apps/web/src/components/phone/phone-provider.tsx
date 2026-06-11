@@ -463,62 +463,80 @@ export function PhoneProvider({
   const wiredPcsRef = useRef<WeakSet<RTCPeerConnection>>(new WeakSet());
 
   const wireRemoteAudio = useCallback((pc: RTCPeerConnection) => {
-    // Idempotency guard — never wire the same PC twice
-    if (wiredPcsRef.current.has(pc)) {
-      console.log('[Phone] wireRemoteAudio: already wired this PC, skipping');
-      return;
-    }
-    wiredPcsRef.current.add(pc);
-
     const audioEl = remoteAudioRef.current;
     if (!audioEl) {
       console.warn('[Phone] wireRemoteAudio: no audio element');
       return;
     }
 
-    // Create a single MediaStream that accumulates tracks
-    const stream = new MediaStream();
+    // Only install ontrack listener once per PC, but always check for existing tracks
+    const alreadyWired = wiredPcsRef.current.has(pc);
 
-    // Helper: attach stream/tracks to audio element and play
+    // Helper: attach stream to audio element and play
     const attachAndPlay = (src: MediaStream) => {
+      if (src.getAudioTracks().length === 0) return;
       audioEl.srcObject = src;
       audioEl.play().catch(e => console.warn('[Phone] audio.play() blocked:', e));
     };
 
-    // 1. Grab tracks already present on the receivers (covers late-call to this fn)
+    if (!alreadyWired) {
+      wiredPcsRef.current.add(pc);
+
+      // Create a single MediaStream that accumulates tracks
+      const stream = new MediaStream();
+
+      // Install ontrack for any tracks that arrive (covers async ICE negotiation)
+      pc.addEventListener('track', (event: RTCTrackEvent) => {
+        console.log(
+          '[Phone] ontrack fired:',
+          event.track.kind,
+          event.track.id,
+          'readyState:',
+          event.track.readyState
+        );
+        // Prefer the event's stream if available
+        if (event.streams?.[0]) {
+          attachAndPlay(event.streams[0]);
+        } else {
+          stream.addTrack(event.track);
+          attachAndPlay(stream);
+        }
+      });
+    }
+
+    // ALWAYS check for existing tracks (even on repeated calls) — this catches
+    // tracks that arrived between wiring and the stateChange Established event
+    const existingStream = new MediaStream();
     pc.getReceivers().forEach(r => {
       if (r.track && r.track.readyState === 'live') {
         console.log('[Phone] wireRemoteAudio: existing receiver track', r.track.kind, r.track.id);
-        stream.addTrack(r.track);
+        existingStream.addTrack(r.track);
       }
     });
 
-    // 2. Install ontrack for any tracks that arrive later
-    pc.addEventListener('track', (event: RTCTrackEvent) => {
-      console.log(
-        '[Phone] ontrack fired:',
-        event.track.kind,
-        event.track.id,
-        'readyState:',
-        event.track.readyState
-      );
-      // Prefer the event's stream if available
-      if (event.streams?.[0]) {
-        attachAndPlay(event.streams[0]);
-      } else {
-        stream.addTrack(event.track);
-        attachAndPlay(stream);
-      }
-    });
-
-    // 3. Attach whatever we have immediately
-    if (stream.getTracks().length > 0) {
+    if (existingStream.getAudioTracks().length > 0) {
       console.log(
         '[Phone] wireRemoteAudio: attaching',
-        stream.getTracks().length,
+        existingStream.getAudioTracks().length,
         'existing tracks'
       );
-      attachAndPlay(stream);
+      attachAndPlay(existingStream);
+    } else {
+      // No tracks yet — retry in 500ms (covers late ICE negotiation on inbound calls)
+      setTimeout(() => {
+        const retryStream = new MediaStream();
+        try {
+          pc.getReceivers().forEach(r => {
+            if (r.track && r.track.readyState === 'live') {
+              console.log('[Phone] wireRemoteAudio retry: found track', r.track.kind, r.track.id);
+              retryStream.addTrack(r.track);
+            }
+          });
+          if (retryStream.getAudioTracks().length > 0) {
+            attachAndPlay(retryStream);
+          }
+        } catch { /* PC may be closed */ }
+      }, 500);
     }
   }, []);
 
