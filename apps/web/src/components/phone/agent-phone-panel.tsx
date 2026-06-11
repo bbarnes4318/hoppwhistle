@@ -44,6 +44,9 @@ export function AgentPhonePanel(): JSX.Element {
  setDialerNumber,
  error,
  clearError,
+ userNumbers,
+ selectedCallerId,
+ setSelectedCallerId,
  } = usePhone();
 
  // Customer Intake Context - shares data with CustomerIntakeForm
@@ -434,7 +437,12 @@ export function AgentPhonePanel(): JSX.Element {
  </div>
 
  {/* Tab Content */}
- {activeTab === 'dialpad' && <DialPad />}
+ {activeTab === 'dialpad' && (
+ <>
+   <CallerIdSelector />
+   <DialPad />
+ </>
+ )}
  {activeTab === 'history' && <CallHistory />}
  {activeTab === 'settings' && <PhoneSettings />}
  </div>
@@ -587,6 +595,61 @@ function PhoneSettings(): JSX.Element {
  </Button>
  </div>
  </div>
+ );
+}
+
+// ============================================================================
+// Caller ID Selector Component
+// ============================================================================
+
+function CallerIdSelector(): JSX.Element | null {
+ const { userNumbers, selectedCallerId, setSelectedCallerId } = usePhone();
+
+ // Format phone number for display
+ const formatPhone = (num: string): string => {
+   const digits = num.replace(/\D/g, '');
+   const d = digits.length === 11 ? digits.slice(1) : digits;
+   if (d.length === 10) {
+     return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
+   }
+   return num;
+ };
+
+ if (userNumbers.length === 0) return null;
+
+ if (userNumbers.length === 1) {
+   return (
+     <div className="flex items-center gap-2 px-3 py-2 mb-2 rounded-lg bg-white/5 border border-white/10">
+       <Phone className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
+       <span className="text-xs text-gray-400">Calling from:</span>
+       <span className="text-xs text-white font-medium">{formatPhone(userNumbers[0].number)}</span>
+     </div>
+   );
+ }
+
+ return (
+   <div className="mb-2">
+     <label className="flex items-center gap-2 text-xs text-gray-400 mb-1.5">
+       <Phone className="w-3 h-3 text-cyan-400" />
+       Calling from:
+     </label>
+     <select
+       value={selectedCallerId || ''}
+       onChange={e => setSelectedCallerId(e.target.value)}
+       className={cn(
+         'w-full px-3 py-2 rounded-lg text-sm',
+         'bg-white/5 border border-white/10',
+         'text-white focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500',
+         'outline-none transition-all cursor-pointer'
+       )}
+     >
+       {userNumbers.map(num => (
+         <option key={num.id} value={num.number}>
+           {formatPhone(num.number)}
+         </option>
+       ))}
+     </select>
+   </div>
  );
 }
 

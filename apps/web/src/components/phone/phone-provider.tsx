@@ -128,6 +128,8 @@ export interface PhoneContextType {
   isRegistered: boolean; // SIP Registration status
   dialerNumber: string; // Pre-filled dialer number
   pendingDispositionCall: PendingDispositionCall | null; // Post-call disposition data
+  userNumbers: Array<{ id: string; number: string; provider?: string | null }>;
+  selectedCallerId: string | null;
 
   // Actions
   setAgentStatus: (status: AgentStatus) => void;
@@ -150,6 +152,8 @@ export interface PhoneContextType {
   updateScreenPopFields: (fields: ScreenPopField[]) => void;
   clearError: () => void;
   clearPendingDispositionCall: () => void;
+  setSelectedCallerId: (callerId: string) => void;
+  refreshUserNumbers: () => Promise<void>;
 }
 
 // ============================================================================
@@ -291,6 +295,13 @@ export function PhoneProvider({
   const [pendingDispositionCall, setPendingDispositionCall] =
     useState<PendingDispositionCall | null>(null);
   const [dialerNumber, setDialerNumber] = useState<string>('');
+  const [userNumbers, setUserNumbers] = useState<Array<{ id: string; number: string; provider?: string | null }>>([]);
+  const [selectedCallerId, setSelectedCallerId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('selectedCallerId');
+    }
+    return null;
+  });
 
   // Refs
 
@@ -341,6 +352,35 @@ export function PhoneProvider({
       };
     }
   }, []);
+
+  // Fetch user's assigned phone numbers for caller ID selection
+  const refreshUserNumbers = useCallback(async () => {
+    try {
+      const url = `${normalizedApiUrl}/api/v1/agent/my-numbers`;
+      const response = await fetch(url, { headers: getApiHeaders() });
+      if (response.ok) {
+        const data = await response.json();
+        setUserNumbers(data.numbers || []);
+        // Auto-select first number if no selection stored
+        if (data.numbers?.length > 0 && !selectedCallerId) {
+          setSelectedCallerId(data.numbers[0].number);
+        }
+      }
+    } catch (err) {
+      console.error('[Phone] Failed to fetch user numbers:', err);
+    }
+  }, [normalizedApiUrl, getApiHeaders, selectedCallerId]);
+
+  useEffect(() => {
+    refreshUserNumbers();
+  }, [refreshUserNumbers]);
+
+  // Persist selected caller ID to localStorage
+  useEffect(() => {
+    if (selectedCallerId && typeof window !== 'undefined') {
+      localStorage.setItem('selectedCallerId', selectedCallerId);
+    }
+  }, [selectedCallerId]);
 
   const playRingtone = useCallback(() => {
     if (typeof window !== 'undefined') {
@@ -728,7 +768,7 @@ export function PhoneProvider({
         const response = await fetch(url, {
           method: 'POST',
           headers: getApiHeaders(),
-          body: JSON.stringify({ phoneNumber }),
+          body: JSON.stringify({ phoneNumber, callerId: selectedCallerId || undefined }),
         });
 
         if (!response.ok) {
@@ -820,7 +860,7 @@ export function PhoneProvider({
         setIsConnecting(false);
       }
     },
-    [normalizedApiUrl, getApiHeaders, isRegistered]
+    [normalizedApiUrl, getApiHeaders, isRegistered, selectedCallerId]
   );
 
   const answerCall = useCallback(() => {
@@ -1289,6 +1329,8 @@ export function PhoneProvider({
     isRegistered, // Exported for UI
     dialerNumber, // Pre-filled dialer number
     pendingDispositionCall, // Post-call disposition data
+    userNumbers,
+    selectedCallerId,
     setAgentStatus,
     openPhonePanel,
     closePhonePanel,
@@ -1309,6 +1351,8 @@ export function PhoneProvider({
     updateScreenPopFields,
     clearError,
     clearPendingDispositionCall,
+    setSelectedCallerId,
+    refreshUserNumbers,
   };
 
   return <PhoneContext.Provider value={value}>{children}</PhoneContext.Provider>;

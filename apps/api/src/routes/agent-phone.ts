@@ -201,6 +201,39 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
     }
   );
 
+  /**
+   * GET /api/v1/agent/my-numbers
+   * Returns the authenticated user's assigned phone numbers for caller ID selection
+   */
+  fastify.get(
+    '/api/v1/agent/my-numbers',
+    async (request, reply: FastifyReply) => {
+      const { userId, tenantId } = getUser(request);
+
+      if (userId === 'demo-agent') {
+        return { numbers: [{ id: 'demo-1', number: '12816991120', provider: 'local' }] };
+      }
+
+      const prisma = getPrismaClient();
+      const numbers = await prisma.phoneNumber.findMany({
+        where: {
+          tenantId,
+          userId,
+          status: 'ACTIVE',
+        },
+        select: {
+          id: true,
+          number: true,
+          provider: true,
+          purchasedAt: true,
+        },
+        orderBy: { purchasedAt: 'asc' },
+      });
+
+      return { numbers };
+    }
+  );
+
   // ============================================================================
   // Call Control Endpoints
   // ============================================================================
