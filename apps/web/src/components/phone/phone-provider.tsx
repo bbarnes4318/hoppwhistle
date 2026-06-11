@@ -222,10 +222,18 @@ interface PhoneProviderProps {
 
 export function PhoneProvider({
   children,
-  apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001',
+  apiUrl,
 }: PhoneProviderProps): JSX.Element {
+  // In the browser, always derive the API base from the current origin so
+  // requests use the same protocol/domain (avoids Mixed Content when the
+  // build-time NEXT_PUBLIC_API_URL was baked with an http:// address).
+  const resolvedApiUrl =
+    apiUrl ||
+    (typeof window !== 'undefined'
+      ? window.location.origin
+      : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001');
   // Normalize apiUrl to just be the base (remove trailing /api/v1 if present)
-  const normalizedApiUrl = apiUrl.replace(/\/api\/v1\/?$/, '');
+  const normalizedApiUrl = resolvedApiUrl.replace(/\/api\/v1\/?$/, '');
 
   // API key for authenticated requests
   const apiKey = process.env.NEXT_PUBLIC_API_KEY || '';

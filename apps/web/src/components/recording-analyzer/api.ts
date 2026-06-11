@@ -59,7 +59,7 @@ export async function rerunAnalysisForItem(itemId: string, params: { selectedFie
 export async function downloadBatchCsv(batchId: string) {
   // For CSV download, we need to use fetch directly since apiClient returns JSON
   // But we still need to include auth headers
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+  const API_URL = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001');
   const apiKey = process.env.NEXT_PUBLIC_API_KEY;
 
   const headers: HeadersInit = {};

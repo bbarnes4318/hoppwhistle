@@ -199,7 +199,7 @@ export default function CallLogsPage() {
       if (response.data?.url) {
         let playableUrl = response.data.url;
         if (playableUrl.startsWith('/')) {
-          const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+          const apiBaseUrl = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001');
           playableUrl = `${apiBaseUrl.replace(/\/$/, '')}${playableUrl}`;
         }
         window.open(playableUrl, '_blank');
@@ -223,7 +223,7 @@ export default function CallLogsPage() {
       } else {
         let url = call.recordingUrl;
         if (url.startsWith('/')) {
-          const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+          const apiBaseUrl = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001');
           url = `${apiBaseUrl.replace(/\/$/, '')}${url}`;
         }
         window.open(url, '_blank');
@@ -327,7 +327,7 @@ export default function CallLogsPage() {
         headers['X-Demo-Tenant-Id'] = demoTenantId;
       }
 
-      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const apiBaseUrl = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001');
       const url = `${apiBaseUrl.replace(/\/$/, '')}/api/v1/calls/export.csv?${queryParams.toString()}`;
 
       const res = await fetch(url, {

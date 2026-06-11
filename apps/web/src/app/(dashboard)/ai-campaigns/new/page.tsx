@@ -31,7 +31,7 @@ import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/components/ui/use-toast';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
+const API_URL = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_API_URL || '');
 
 // ============================================================================
 // Types

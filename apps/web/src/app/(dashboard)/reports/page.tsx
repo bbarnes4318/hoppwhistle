@@ -258,7 +258,7 @@ export default function ReportsPage() {
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const apiUrl = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001');
       const endpoint = `${apiUrl}/api/v1/reports/${activeTab}/export.csv?${params.toString()}`;
 
       const res = await fetch(endpoint, {

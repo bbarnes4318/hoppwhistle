@@ -1,4 +1,10 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+// Use window.location.origin in the browser so requests always match the
+// current protocol/domain (avoids Mixed Content blocks when the build-time
+// NEXT_PUBLIC_API_URL was baked with an http:// address).
+const API_URL =
+  typeof window !== 'undefined'
+    ? window.location.origin
+    : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 export interface ApiResponse<T> {
   data?: T;

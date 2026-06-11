@@ -93,7 +93,7 @@ export function ApplicationSubmission({
  cleanupSSE();
  setState('running');
 
- const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
+ const apiBase = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_API_URL || '');
  const streamUrl = `${apiBase}/api/automation/stream/${streamJobId}`;
 
  const eventSource = new EventSource(streamUrl);
@@ -239,7 +239,7 @@ export function ApplicationSubmission({
  ilDesigneeChoice: prospectData.ilDesigneeChoice ?? null,
  };
 
- const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
+ const apiBase = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_API_URL || '');
  const response = await fetch(`${apiBase}/api/automation/run-carrier-app`, {
  method: 'POST',
  headers: {

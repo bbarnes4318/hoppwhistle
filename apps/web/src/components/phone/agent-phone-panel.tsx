@@ -104,7 +104,7 @@ export function AgentPhonePanel(): JSX.Element {
  if (digits.length < 10) return;
 
  try {
- const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+ const apiUrl = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001');
  const response = await fetch(`${apiUrl}/api/v1/prospects/by-phone/${digits}`);
  const data = await response.json();
 

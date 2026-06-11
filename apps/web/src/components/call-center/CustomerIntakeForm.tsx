@@ -164,7 +164,7 @@ export function CustomerIntakeForm(): JSX.Element {
  setSubmitMessage('');
 
  try {
- const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+ const apiUrl = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001');
 
  // Build beneficiaries array for API (only if full form)
  const beneficiaries = showFullApplication
