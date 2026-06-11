@@ -758,6 +758,18 @@ export function PhoneProvider({
         return;
       }
 
+      // Clean up any leftover session from a previous call to prevent
+      // "Peer connection closed" errors when re-dialing quickly after hangup
+      if (sessionRef.current) {
+        try {
+          if (sessionRef.current.state !== SessionState.Terminated) {
+            console.log('[Phone] Cleaning up stale session before new call');
+            sessionRef.current.dispose();
+          }
+        } catch { /* ignore disposal errors */ }
+        sessionRef.current = null;
+      }
+
       console.log('[Phone] Initiating call to:', phoneNumber);
       setIsConnecting(true);
       setError(null);
