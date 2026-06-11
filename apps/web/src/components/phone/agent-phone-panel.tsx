@@ -460,68 +460,138 @@ export function AgentPhonePanel(): JSX.Element {
 
 function CallHistory(): JSX.Element {
  const { callHistory, makeCall } = usePhone();
+ const [apiCalls, setApiCalls] = useState<Array<{
+   id: string;
+   direction: string;
+   phoneNumber?: string;
+   callerNumber?: string;
+   destinationNumber?: string;
+   callerName?: string;
+   duration?: number;
+   status?: string;
+   startedAt?: string;
+   createdAt?: string;
+ }>>([]);
+ const [loading, setLoading] = useState(true);
 
- const formatTime = (date?: Date): string => {
- if (!date) return '';
- return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+ useEffect(() => {
+   const fetchCalls = async () => {
+     try {
+       const apiUrl = typeof window !== 'undefined' ? window.location.origin : '';
+       const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+       const headers: Record<string, string> = {};
+       if (token) headers['Authorization'] = `Bearer ${token}`;
+       const response = await fetch(`${apiUrl}/api/v1/calls?limit=20`, { headers });
+       if (response.ok) {
+         const data = await response.json();
+         setApiCalls(data.calls || data || []);
+       }
+     } catch (err) {
+       console.error('[CallHistory] Failed to fetch calls:', err);
+     } finally {
+       setLoading(false);
+     }
+   };
+   fetchCalls();
+ }, []);
+
+ const formatTime = (dateStr?: string | Date): string => {
+   if (!dateStr) return '';
+   const date = typeof dateStr === 'string' ? new Date(dateStr) : dateStr;
+   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
  };
 
  const handleCallClick = (phoneNumber: string) => {
- void makeCall(phoneNumber);
+   void makeCall(phoneNumber);
  };
 
- if (callHistory.length === 0) {
- return (
- <div className="text-center py-8">
- <Clock className="w-10 h-10 mx-auto mb-3 text-gray-600" />
- <p className="text-gray-500 text-sm">No recent calls</p>
- </div>
- );
+ // Merge: session calls + API calls, deduped
+ const apiCallIds = new Set(apiCalls.map(c => c.id));
+ const sessionCalls = callHistory.filter(c => !apiCallIds.has(c.callId));
+
+ if (loading) {
+   return (
+     <div className="text-center py-8">
+       <Clock className="w-10 h-10 mx-auto mb-3 text-gray-600 animate-pulse" />
+       <p className="text-gray-500 text-sm">Loading calls...</p>
+     </div>
+   );
+ }
+
+ if (apiCalls.length === 0 && sessionCalls.length === 0) {
+   return (
+     <div className="text-center py-8">
+       <Clock className="w-10 h-10 mx-auto mb-3 text-gray-600" />
+       <p className="text-gray-500 text-sm">No recent calls</p>
+     </div>
+   );
  }
 
  return (
- <div className="space-y-2 max-h-[300px] overflow-y-auto">
- {callHistory.map((call: CallInfo, index: number) => (
- <button
- key={`${call.callId}-${index}`}
- onClick={() => handleCallClick(call.phoneNumber)}
- className={cn(
- 'w-full p-3 rounded-lg text-left transition-all',
- 'bg-white/5 hover:bg-white/10 border border-transparent hover:border-white/10'
- )}
- >
- <div className="flex items-center justify-between">
- <div className="flex items-center gap-3">
- <div
- className={cn(
- 'w-8 h-8 rounded-full flex items-center justify-center',
- call.direction === 'inbound'
- ? 'bg-cyan-500/20 text-cyan-400'
- : 'bg-blue-500/20 text-blue-400'
- )}
- >
- {call.direction === 'inbound' ? (
- <Phone className="w-4 h-4" />
- ) : (
- <PhoneForwarded className="w-4 h-4" />
- )}
- </div>
- <div>
- <p className="text-white text-sm font-medium">
- {call.callerName || call.phoneNumber}
- </p>
- <p className="text-gray-500 text-xs">
- {call.direction === 'inbound' ? 'Incoming' : 'Outgoing'}
- {call.duration > 0 &&
- ` • ${Math.floor(call.duration / 60)}m ${call.duration % 60}s`}
- </p>
- </div>
- </div>
- <span className="text-gray-500 text-xs">{formatTime(call.startTime)}</span>
- </div>
- </button>
- ))}
- </div>
+   <div className="space-y-2 max-h-[300px] overflow-y-auto">
+     {/* Current session calls not yet in DB */}
+     {sessionCalls.map((call: CallInfo, index: number) => {
+       const isInbound = call.direction === 'inbound';
+       return (
+         <button
+           key={`s-${call.callId}-${index}`}
+           onClick={() => handleCallClick(call.phoneNumber)}
+           className={cn(
+             'w-full p-3 rounded-lg text-left transition-all',
+             'bg-white/5 hover:bg-white/10 border border-transparent hover:border-white/10'
+           )}
+         >
+           <div className="flex items-center justify-between">
+             <div className="flex items-center gap-3">
+               <div className={cn('w-8 h-8 rounded-full flex items-center justify-center', isInbound ? 'bg-cyan-500/20 text-cyan-400' : 'bg-blue-500/20 text-blue-400')}>
+                 {isInbound ? <Phone className="w-4 h-4" /> : <PhoneForwarded className="w-4 h-4" />}
+               </div>
+               <div>
+                 <p className="text-white text-sm font-medium">{call.callerName || call.phoneNumber}</p>
+                 <p className="text-gray-500 text-xs">
+                   {isInbound ? 'Incoming' : 'Outgoing'}
+                   {call.duration > 0 && ` • ${Math.floor(call.duration / 60)}m ${call.duration % 60}s`}
+                 </p>
+               </div>
+             </div>
+             <span className="text-gray-500 text-xs">{formatTime(call.startTime)}</span>
+           </div>
+         </button>
+       );
+     })}
+     {/* API-backed calls from database */}
+     {apiCalls.map((call) => {
+       const isInbound = call.direction === 'INBOUND';
+       const phone = isInbound ? (call.callerNumber || call.phoneNumber || '') : (call.destinationNumber || call.phoneNumber || '');
+       const dur = call.duration || 0;
+       return (
+         <button
+           key={call.id}
+           onClick={() => handleCallClick(phone)}
+           className={cn(
+             'w-full p-3 rounded-lg text-left transition-all',
+             'bg-white/5 hover:bg-white/10 border border-transparent hover:border-white/10'
+           )}
+         >
+           <div className="flex items-center justify-between">
+             <div className="flex items-center gap-3">
+               <div className={cn('w-8 h-8 rounded-full flex items-center justify-center', isInbound ? 'bg-cyan-500/20 text-cyan-400' : 'bg-blue-500/20 text-blue-400')}>
+                 {isInbound ? <Phone className="w-4 h-4" /> : <PhoneForwarded className="w-4 h-4" />}
+               </div>
+               <div>
+                 <p className="text-white text-sm font-medium">{phone || 'Unknown'}</p>
+                 <p className="text-gray-500 text-xs">
+                   {isInbound ? 'Incoming' : 'Outgoing'}
+                   {dur > 0 && ` • ${Math.floor(dur / 60)}m ${dur % 60}s`}
+                 </p>
+               </div>
+             </div>
+             <span className="text-gray-500 text-xs">{formatTime(call.startedAt || call.createdAt)}</span>
+           </div>
+         </button>
+       );
+     })}
+   </div>
  );
 }
 
