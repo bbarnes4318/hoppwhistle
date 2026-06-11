@@ -61,9 +61,15 @@ LE_ARCHIVE="/etc/letsencrypt/archive/hopwhistle.com"
 FS_TLS_DIR="/etc/freeswitch/tls"
 FS_LE_DIR="/etc/freeswitch/letsencrypt"
 
-if [ -f "$LE_ARCHIVE/fullchain1.pem" ] && [ -f "$LE_ARCHIVE/privkey1.pem" ]; then
+# Find the latest (highest-numbered) fullchain and privkey in the archive.
+# After renewals, certbot creates fullchain2.pem, fullchain3.pem, etc.
+LATEST_FULLCHAIN=$(ls -v "$LE_ARCHIVE"/fullchain*.pem 2>/dev/null | tail -1)
+LATEST_PRIVKEY=$(ls -v "$LE_ARCHIVE"/privkey*.pem 2>/dev/null | tail -1)
+
+if [ -n "$LATEST_FULLCHAIN" ] && [ -n "$LATEST_PRIVKEY" ]; then
     echo "Generating combined wss.pem from Let's Encrypt archive certs..."
-    cat "$LE_ARCHIVE/fullchain1.pem" "$LE_ARCHIVE/privkey1.pem" > "$FS_LE_DIR/wss.pem"
+    echo "  Using: $(basename $LATEST_FULLCHAIN) + $(basename $LATEST_PRIVKEY)"
+    cat "$LATEST_FULLCHAIN" "$LATEST_PRIVKEY" > "$FS_LE_DIR/wss.pem"
     # Overwrite FreeSWITCH default self-signed certs
     mkdir -p "$FS_TLS_DIR"
     cp "$FS_LE_DIR/wss.pem" "$FS_TLS_DIR/wss.pem"
