@@ -383,6 +383,15 @@ export class FreeSwitchService {
       }
     }
 
+    // Ensure all channels are answered before transferring to conference
+    for (const uuid of [heldBleg, activeBleg, activeUuid].filter(Boolean) as string[]) {
+      try {
+        await this.executeApi('uuid_answer', uuid);
+      } catch (err) {
+        logger.warn({ msg: 'Failed to answer channel before merge', uuid, error: err });
+      }
+    }
+
     // 1. Transfer the HELD B-leg (remote party) directly into the conference
     try {
       await this.executeApi('uuid_transfer', `${heldBleg} conference:${conferenceName} inline`);
@@ -392,13 +401,13 @@ export class FreeSwitchService {
       throw new Error('Failed to merge held call');
     }
 
-    // 2. Transfer the HELD A-leg (agent's first WebRTC session) into the conference
-    //    (it's now parked after its B-leg was pulled away)
+    // 2. Kill the HELD A-leg (agent's first WebRTC session)
+    //    We don't need it because the agent will communicate via the active A-leg.
     try {
-      await this.executeApi('uuid_transfer', `${heldUuid} conference:${conferenceName} inline`);
-      logger.info({ msg: 'Transferred held A-leg to conference', heldUuid });
+      await this.executeApi('uuid_kill', heldUuid);
+      logger.info({ msg: 'Killed held A-leg to prevent duplicate agent audio', heldUuid });
     } catch (err) {
-      logger.warn({ msg: 'Failed to transfer held A-leg to conference (may already be parked/dead)', error: err });
+      logger.warn({ msg: 'Failed to kill held A-leg', error: err });
     }
 
     // 3. If the active call has a B-leg (it's answered), transfer it into the conference too

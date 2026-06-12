@@ -481,10 +481,20 @@ function CallHistory(): JSX.Element {
        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
        const headers: Record<string, string> = {};
        if (token) headers['Authorization'] = `Bearer ${token}`;
+       if (typeof window !== 'undefined') {
+         const demoMode = localStorage.getItem('demoMode') === 'true';
+         const demoTenantId = localStorage.getItem('demoTenantId');
+         if (demoMode && demoTenantId) {
+           headers['X-Demo-Tenant-Id'] = demoTenantId;
+         }
+       }
        const response = await fetch(`${apiUrl}/api/v1/calls?limit=20`, { headers });
        if (response.ok) {
          const data = await response.json();
-         setApiCalls(data.calls || data || []);
+         const callsArray = Array.isArray(data.data)
+           ? data.data
+           : (Array.isArray(data) ? data : (data.calls || []));
+         setApiCalls(callsArray);
        }
      } catch (err) {
        console.error('[CallHistory] Failed to fetch calls:', err);
@@ -562,7 +572,9 @@ function CallHistory(): JSX.Element {
      {/* API-backed calls from database */}
      {apiCalls.map((call) => {
        const isInbound = call.direction === 'INBOUND';
-       const phone = isInbound ? (call.callerNumber || call.phoneNumber || '') : (call.destinationNumber || call.phoneNumber || '');
+       const phone = isInbound
+         ? (call.callerId || call.callerNumber || call.phoneNumber || '')
+         : (call.toNumber || call.destinationNumber || call.phoneNumber || '');
        const dur = call.duration || 0;
        return (
          <button

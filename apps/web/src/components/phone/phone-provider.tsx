@@ -610,7 +610,9 @@ export function PhoneProvider({
       invitation.stateChange.addListener(newState => {
         console.log('[Phone] Invitation state changed:', newState);
         if (newState === SessionState.Terminated) {
-          handleCallEndedRef.current();
+          if (sessionRef.current === invitation) {
+            handleCallEndedRef.current();
+          }
         } else if (newState === SessionState.Established) {
           handleCallAnsweredRef.current();
           // Re-wire as a safety net — the primary wire is in answerCall
@@ -865,7 +867,9 @@ export function PhoneProvider({
             handleCallAnsweredRef.current();
             setupRemoteAudio(inviter);
           } else if (newState === SessionState.Terminated) {
-            handleCallEndedRef.current();
+            if (sessionRef.current === inviter) {
+              handleCallEndedRef.current();
+            }
           }
         });
 
@@ -1186,8 +1190,15 @@ export function PhoneProvider({
       }
 
       // On success, the held session is effectively consumed/merged.
-      // We should probably rely on the backend events, but simpler to clean up local state
-      heldSessionRef.current = null;
+      // Hang up the held session locally to clean up WebRTC state in the browser
+      if (heldSessionRef.current) {
+        try {
+          heldSessionRef.current.bye();
+        } catch (e) {
+          console.warn('[Phone] Failed to send BYE for held session:', e);
+        }
+        heldSessionRef.current = null;
+      }
       setHasHeldCalls(false);
 
       // The active session remains as the "Conference" session
