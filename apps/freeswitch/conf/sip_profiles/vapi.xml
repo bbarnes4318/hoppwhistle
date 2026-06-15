@@ -10,8 +10,8 @@
     <param name="sip-ip" value="$${local_ip_v4}"/>
     <param name="sip-port" value="5070"/>
     <param name="rtp-ip" value="$${local_ip_v4}"/>
-    <param name="ext-rtp-ip" value="3.214.60.13"/>
-    <param name="ext-sip-ip" value="3.214.60.13"/>
+    <param name="ext-rtp-ip" value="$${sip_public_ip}"/>
+    <param name="ext-sip-ip" value="$${sip_public_ip}"/>
 
     <!-- Dialplan - ONLY vapi_outbound context -->
     <param name="dialplan" value="XML"/>

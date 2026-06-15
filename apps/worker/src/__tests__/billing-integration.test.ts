@@ -16,7 +16,7 @@ describe('Billing Integration Tests', () => {
     pool = new Pool({
       connectionString:
         process.env.DATABASE_URL ||
-        'postgresql://hopwhistle:ChangeMe123!@45.32.213.201:5432/hopwhistle',
+        'postgresql://hopwhistle:hopwhistle_dev@localhost:5432/hopwhistle',
     });
     redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
     invoiceGenerator = new InvoiceGeneratorService();

@@ -15,7 +15,7 @@
     <extension name="inbound-legacy-anveo">
       <condition field="destination_number" expression="^(\+?1?8652809894)$">
         <action application="log" data="INFO [PUBLIC] Legacy Anveo DID - routing to agent"/>
-        <action application="set" data="domain_name=3.214.60.13"/>
+        <action application="set" data="domain_name=$${domain}"/>
         <action application="set" data="call_direction=inbound"/>
         <action application="ring_ready"/>
         <action application="set" data="hangup_after_bridge=true"/>
@@ -24,7 +24,7 @@
         <action application="set" data="bypass_media=false"/>
         <action application="set" data="ringback=%(2000,4000,440,480)"/>
         <action application="set" data="call_timeout=120"/>
-        <action application="bridge" data="${sofia_contact(internal/1000@3.214.60.13)}"/>
+        <action application="bridge" data="${sofia_contact(internal/1000@$${domain})}"/>
         <action application="hangup" data="NORMAL_CLEARING"/>
       </condition>
     </extension>
@@ -39,7 +39,7 @@
     <extension name="inbound-dynamic-route">
       <condition field="destination_number" expression="^(\+?1?[2-9]\d{9})$">
         <action application="log" data="INFO [PUBLIC] Dynamic inbound routing for ${destination_number} from ${caller_id_number}"/>
-        <action application="set" data="domain_name=3.214.60.13"/>
+        <action application="set" data="domain_name=$${domain}"/>
         <action application="lua" data="inbound_route.lua"/>
       </condition>
     </extension>

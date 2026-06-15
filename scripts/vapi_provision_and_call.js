@@ -22,14 +22,14 @@ const https = require('https');
 
 // Configuration
 const CONFIG = {
-  VAPI_API_TOKEN: process.env.VAPI_API_TOKEN || 'b8c9e434-32ca-4cbc-ae39-b6c4583622c2',
-  VAPI_ASSISTANT_ID: 'f6bcf4b4-8323-4bf8-a87d-a57d8dd9cd39',
-  VAPI_PHONE_NUMBER_ID: '2a20e3b4-651e-4c8e-bcc8-9d9dd884785f', // Pre-provisioned phone number ID
-  VAPI_FROM_NUMBER: '+18652809894',
-  FREESWITCH_HOST: '45.32.213.201',
-  FREESWITCH_PORT: 5070,
-  SIP_USERNAME: 'vapi',
-  SIP_PASSWORD: 'VapiFS_5070_StrongPass!9xQ2',
+  VAPI_API_TOKEN: process.env.VAPI_API_TOKEN || '',
+  VAPI_ASSISTANT_ID: process.env.VAPI_ASSISTANT_ID || '',
+  VAPI_PHONE_NUMBER_ID: process.env.VAPI_PHONE_NUMBER_ID || '',
+  VAPI_FROM_NUMBER: process.env.VAPI_FROM_NUMBER || '+18652809894',
+  FREESWITCH_HOST: process.env.PUBLIC_IP || '',
+  FREESWITCH_PORT: parseInt(process.env.FREESWITCH_PORT || '5070', 10),
+  SIP_USERNAME: process.env.SIP_USERNAME || 'vapi',
+  SIP_PASSWORD: process.env.VAPI_SIP_PASSWORD || '',
 };
 
 /**

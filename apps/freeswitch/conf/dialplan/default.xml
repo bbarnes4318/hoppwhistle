@@ -9,7 +9,7 @@
         <action application="set" data="bypass_media=false"/>
         <action application="set" data="inbound_codec_negotiation=generous"/>
         <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA,OPUS,G722"/>
-        <action application="bridge" data="${sofia_contact(internal/${destination_number}@3.214.60.13)}"/>
+        <action application="bridge" data="${sofia_contact(internal/${destination_number}@$${domain})}"/>
         <action application="hangup" data="NORMAL_CLEARING"/>
       </condition>
     </extension>
@@ -29,7 +29,7 @@
         <action application="set" data="ringback=%(2000,4000,440,480)"/>
         <action application="set" data="instant_ringback=true"/>
         <action application="set" data="call_timeout=120"/>
-        <action application="bridge" data="${sofia_contact(internal/1000@3.214.60.13)}"/>
+        <action application="bridge" data="${sofia_contact(internal/1000@$${domain})}"/>
         <action application="hangup" data="NORMAL_CLEARING"/>
       </condition>
     </extension>

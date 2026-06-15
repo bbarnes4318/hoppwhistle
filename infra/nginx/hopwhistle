@@ -7,7 +7,7 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
-        proxy_set_header Host 45.32.213.201;
+        proxy_set_header Host $host;
         proxy_set_header Sec-WebSocket-Protocol sip;
         proxy_read_timeout 86400;
         proxy_send_timeout 86400;
@@ -63,7 +63,7 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
-        proxy_set_header Host 45.32.213.201;
+        proxy_set_header Host $host;
         proxy_set_header Sec-WebSocket-Protocol sip;
         proxy_read_timeout 86400;
         proxy_send_timeout 86400;

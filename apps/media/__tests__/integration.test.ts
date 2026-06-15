@@ -16,7 +16,7 @@ describe('Transcription Integration Tests', () => {
     pool = new Pool({
       connectionString:
         process.env.DATABASE_URL ||
-        'postgresql://hopwhistle:ChangeMe123!@45.32.213.201:5432/hopwhistle',
+        'postgresql://hopwhistle:hopwhistle_dev@localhost:5432/hopwhistle',
     });
     transcriber = new TranscriberService();
     repository = new TranscriptRepository();
