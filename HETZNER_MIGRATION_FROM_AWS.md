@@ -51,11 +51,11 @@ We will perform a binary custom-format dump of the `callfabric` PostgreSQL datab
 
 1.  On the AWS EC2 instance, execute `pg_dump` to create a backup file:
     ```bash
-    docker exec -t hopwhistle-postgres-1 pg_dump -U callfabric -d callfabric -F c -b -v -f /tmp/callfabric_backup.dump
+    docker exec -t hopwhistle-postgres-dev pg_dump -U callfabric -d callfabric -F c -b -v -f /tmp/callfabric_backup.dump
     ```
 2.  Copy the backup file from the container to the host filesystem:
     ```bash
-    docker cp hopwhistle-postgres-1:/tmp/callfabric_backup.dump ./callfabric_backup.dump
+    docker cp hopwhistle-postgres-dev:/tmp/callfabric_backup.dump ./callfabric_backup.dump
     ```
 3.  Verify the dump file was created and has non-zero size:
     ```bash
@@ -65,21 +65,25 @@ We will perform a binary custom-format dump of the `callfabric` PostgreSQL datab
 ---
 
 ### Step 2.3: Sync S3 Recordings to Hetzner MinIO/S3
-Recordings are stored in AWS S3 (`hopwhistle-recordings-prod`). We need to sync them to the Hetzner S3-compatible storage or local MinIO instance.
+Recordings are stored in AWS S3 (`hopwhistle-recordings-prod`). We need to sync them to the Hetzner S3-compatible storage (or local MinIO instance). AWS is the single source of truth; do not pull or migrate any recordings from Vultr.
 
-#### Option A: Direct Sync via `aws-cli` (Recommended)
-If your target S3-compatible storage supports direct multi-part uploads:
+#### Method A: Sync using `rclone` (Recommended Primary Method)
+Configure `rclone` with two remotes (`aws` and `hetzner`) and execute the following to sync with optimal performance parameters:
 ```bash
-aws s3 sync s3://hopwhistle-recordings-prod s3://[HETZNER_BUCKET_NAME] \
-  --endpoint-url [HETZNER_S3_ENDPOINT] \
-  --source-region us-east-1
+rclone sync aws:hopwhistle-recordings-prod hetzner:hopwhistle-recordings --progress --transfers 16 --checkers 32
 ```
 
-#### Option B: Sync using `rclone` (Robust for MinIO)
-Configure `rclone` with two remotes (`aws` and `hetzner`) and run:
+#### Method B: Two-Step Fallback Sync via Local Storage (AWS CLI)
+If `rclone` is unavailable, use this safe two-step fallback using the `aws-cli`:
 ```bash
-rclone sync aws:hopwhistle-recordings-prod hetzner:[HETZNER_BUCKET_NAME] --progress
+# Step 1: Sync from AWS S3 to local temporary backup folder
+aws s3 sync s3://hopwhistle-recordings-prod ./recordings-backup --source-region us-east-1
+
+# Step 2: Sync from local temporary backup folder to Hetzner S3-compatible recordings bucket
+aws --endpoint-url "$HETZNER_S3_ENDPOINT" s3 sync ./recordings-backup s3://hopwhistle-recordings
 ```
+
+*Note: Verify object counts and spot-check playback of recordings after the synchronization has completed.*
 
 ---
 
@@ -109,6 +113,37 @@ Copy the configuration files, certificates, and TLS files from the AWS host to t
     docker exec -it [HETZNER_POSTGRES_CONTAINER_ID] createdb -U callfabric callfabric
     docker exec -it [HETZNER_POSTGRES_CONTAINER_ID] pg_restore -U callfabric -d callfabric -v /tmp/callfabric_backup.dump
     ```
+
+### Step 2.5.1: Database and Recordings Verification Checklist
+
+Perform these checks immediately after database restoration and recordings sync.
+
+#### Database verification:
+```bash
+# List all tables in the database
+docker exec -it [HETZNER_POSTGRES_CONTAINER_ID] psql -U callfabric -d callfabric -c "\dt"
+
+# Count total records in the Call table
+docker exec -it [HETZNER_POSTGRES_CONTAINER_ID] psql -U callfabric -d callfabric -c "select count(*) from \"Call\";"
+```
+
+> [!NOTE]
+> Database table names may differ depending on the schema version. If the `Call` table does not exist or errors out, list the tables first using the `\dt` command above to verify the actual call/recording-related table names (such as lowercase `calls` or plural `Call`).
+
+#### Recordings verification:
+```bash
+# Verify AWS source size and object count
+rclone size aws:hopwhistle-recordings-prod
+
+# Verify Hetzner target size and object count
+rclone size hetzner:hopwhistle-recordings
+
+# Compare source and target buckets
+rclone check aws:hopwhistle-recordings-prod hetzner:hopwhistle-recordings --one-way
+```
+
+> [!IMPORTANT]
+> Verify that the object counts match or are within expected ranges, and spot-check/validate the playback of a few migrated recording files. Do not pull or sync any recordings from Vultr.
 
 ---
 
