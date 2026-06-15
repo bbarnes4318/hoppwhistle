@@ -1,5 +1,8 @@
 # Hopwhistle Quick Reference Card
 
+> [!IMPORTANT]
+> **LEGACY/STALE NOTE**: References to the Vultr server (IP `45.32.213.201`) in this document are obsolete. AWS (IP `3.214.60.13`) is the single source of truth for database and recordings, and Hetzner is the new target production environment. For active deployment and migration instructions, see [HETZNER_MIGRATION_FROM_AWS.md](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/HETZNER_MIGRATION_FROM_AWS.md).
+
 ## 🚀 ONE-LINER: Full API Rebuild (Copy-Paste This)
 
 ```bash

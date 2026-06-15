@@ -1,6 +1,6 @@
 -- Geo-Routing Migration: Add acceptedStates to BuyerEndpoint, callerZipCode to Call
 --
--- Run on production (Vultr 45.32.213.201):
+-- Run on production (Legacy Vultr 45.32.213.201):
 --   docker exec -i hopwhistle-postgres-dev psql -U callfabric -d callfabric < add_geo_routing_fields.sql
 --
 -- Or run inline:
