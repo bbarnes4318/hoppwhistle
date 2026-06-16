@@ -1,6 +1,6 @@
-# BLOCKER: Hetzner Cloud server_limit is 0
+# BLOCKER: Hetzner Cloud server_limit is 0 (RETRY FAILED)
 
-Provisioning failed because the Hetzner Cloud project rejected server creation with `resource_limit_exceeded` / `server_limit` reached.
+Provisioning was retried, but the Hetzner Cloud project still rejected server creation with `resource_limit_exceeded` / `server_limit` reached. The limit increase has either not taken effect, or the project remains restricted.
 
 Current impact:
 - No Hetzner VM can be created.
@@ -26,9 +26,9 @@ This report documents the status of the Hetzner server validation checks execute
 
 ## 1. Executive Summary
 
-During the initial server provisioning stage, the Hetzner Cloud API returned a **Forbidden / Resource Limit Exceeded** error when attempting to create the target virtual server instance. No virtual servers currently exist in the project, indicating that the current limit is set to zero (0). Because of this blocker, we cannot access the Hetzner host or execute any server-level validation checks.
+During the initial server provisioning stage and the subsequent retry attempt, the Hetzner Cloud API returned a **Forbidden / Resource Limit Exceeded** error when attempting to create the target virtual server instance. No virtual servers currently exist in the project, indicating that the current limit is set to zero (0). Because of this blocker, we cannot access the Hetzner host or execute any server-level validation checks.
 
-*   **Final Status**: **NOT READY — BLOCKERS FOUND**
+*   **Final Status**: **NOT READY — BLOCKERS FOUND (BLOCKED — Hetzner server_limit still prevents provisioning)**
 *   **Recommendation**: Contact Hetzner Cloud support or the account administrator to request a limit increase for the `server_limit` parameter in the `hopwhistle` project.
 
 ---
@@ -94,6 +94,6 @@ During the initial server provisioning stage, the Hetzner Cloud API returned a *
 
 ## 3. Final Recommendation
 
-**NOT READY — BLOCKERS FOUND**
+**NOT READY — BLOCKERS FOUND (BLOCKED — Hetzner server_limit still prevents provisioning)**
 
 *This branch must not be used for DNS/carrier cutover until the Hetzner host is provisioned, and all validation steps in `HETZNER_DEPLOYMENT_VALIDATION.md` successfully pass.*
