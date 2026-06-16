@@ -34,7 +34,7 @@ git pull origin edit-campaign-buyer-fix
 git rev-parse HEAD
 git status
 ```
-*Expected Commit SHA:* `5073c288efb3b1f6f4289f3df53b726f314a0d72`
+*Expected Commit SHA:* `561623972cb2d54ed0bbe872390414f9fd32484d`
 
 ---
 
