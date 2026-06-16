@@ -58,8 +58,8 @@ This confirms the project is still unable to create any server. The limit increa
 
 ### B. Branch
 - **Branch**: `edit-campaign-buyer-fix`
-- **Branch verification on Hetzner host**: `BLOCKED — no server exists.`
-- **Latest repo blocker commit**: `196f0a4658b705f5b40c71ac76c15ebc61b72cec`
+- **Latest blocker status**: Documented on branch edit-campaign-buyer-fix. Use the current remote branch tip as the source of truth.
+- **Branch verification on Hetzner host**: Remains blocked because no Hetzner server exists yet.
 - **Match**: `BLOCKED`
 - **Working tree clean**: `BLOCKED`
 
