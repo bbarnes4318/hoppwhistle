@@ -33,6 +33,20 @@ During the initial server provisioning stage and the subsequent retry attempt, t
 
 ---
 
+## Retry Attempt Result
+
+A provisioning retry was attempted after the initial blocker was documented. The retry failed with the same Hetzner Cloud API error:
+
+```
+resource_limit_exceeded
+server limit reached
+The project limit for server_limit has been exceeded.
+```
+
+This confirms the project is still unable to create any server. The limit increase has not taken effect, was not applied to this project, or the account/project/token remains restricted.
+
+---
+
 ## 2. Detailed Validation Report
 
 ### A. Server
@@ -44,8 +58,8 @@ During the initial server provisioning stage and the subsequent retry attempt, t
 
 ### B. Branch
 - **Branch**: `edit-campaign-buyer-fix`
-- **Local SHA**: `799f7f55c5a60f4ce1f5407e71ad9e37b6fa987c`
-- **Remote SHA**: `799f7f55c5a60f4ce1f5407e71ad9e37b6fa987c`
+- **Branch verification on Hetzner host**: `BLOCKED — no server exists.`
+- **Latest repo blocker commit**: `196f0a4658b705f5b40c71ac76c15ebc61b72cec`
 - **Match**: `BLOCKED`
 - **Working tree clean**: `BLOCKED`
 
