@@ -34,7 +34,7 @@ docker exec -it hopwhistle-api-1 npx prisma generate
 ssh root@45.32.213.201
 
 # Connect to PostgreSQL
-docker exec -it hopwhistle-postgres-1 psql -U hopwhistle -d hopwhistle
+docker exec -it hopwhistle-postgres-dev psql -U hopwhistle -d hopwhistle
 
 # Then paste the contents of:
 # apps/api/prisma/migrations/20260126_add_buyer_targets_and_stats/migration.sql
