@@ -31,10 +31,22 @@ cd /opt/hopwhistle
 git fetch origin
 git checkout edit-campaign-buyer-fix
 git pull origin edit-campaign-buyer-fix
-git rev-parse HEAD
+
+ACTUAL_SHA="$(git rev-parse HEAD)"
+EXPECTED_SHA="$(git rev-parse origin/edit-campaign-buyer-fix)"
+
+echo "Actual local HEAD:   $ACTUAL_SHA"
+echo "Expected remote tip: $EXPECTED_SHA"
+
+if [ "$ACTUAL_SHA" = "$EXPECTED_SHA" ]; then
+  echo "OK: local branch matches origin/edit-campaign-buyer-fix"
+else
+  echo "ERROR: local branch does not match origin/edit-campaign-buyer-fix"
+  exit 1
+fi
+
 git status
 ```
-*Expected Commit SHA:* `561623972cb2d54ed0bbe872390414f9fd32484d`
 
 ---
 
