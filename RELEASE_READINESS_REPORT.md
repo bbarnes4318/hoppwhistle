@@ -37,7 +37,7 @@ This report summarizes the audit, build, and test validation results for deployi
 | **pnpm typecheck** | `DEGRADED` | Typecheck compiles cleanly for 8 of 9 workspace projects. `apps/worker` has pre-existing type errors (e.g. unknown catches and Stripe version mismatches) that fail compilation. These are legacy issues present on the `main` branch. |
 | **pnpm test** | `DEGRADED` | Tests in `@hopwhistle/shared` (13 tests) and `@callfabric/transcriber` (2 tests) pass successfully. `packages/routing-dsl` has pre-existing failures (8 tests fail) due to a flow executor bug present on `main`. `packages/sdk` has no tests. |
 | **pnpm build** | `SUCCESS` | The API and Next.js web application both compile and build into highly optimized production packages successfully. |
-| **Docker Config** | `Docker Config: NOT RUN LOCALLY — Docker was unavailable on the workstation. Must be validated on Hetzner or CI before production cutover.` | The compose files were reviewed/audited and verified to be structurally sound. The actual docker compose config/build commands still need to be run on the Hetzner host or CI. Do not overstate Docker as successful until those commands pass. |
+| **Docker Config** | `Docker Config: NOT RUN LOCALLY — Docker was unavailable on the workstation. Compose files were reviewed, but actual docker compose config/build/up validation must pass on Hetzner or CI before production cutover.` | The compose files were reviewed/audited and verified to be structurally sound. The actual docker compose config/build/up commands still need to be run on the Hetzner host or CI. Do not overstate Docker as successful until those commands pass. |
 
 ---
 
