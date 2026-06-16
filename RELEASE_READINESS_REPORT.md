@@ -37,7 +37,7 @@ This report summarizes the audit, build, and test validation results for deployi
 | **pnpm typecheck** | `DEGRADED` | Typecheck compiles cleanly for 8 of 9 workspace projects. `apps/worker` has pre-existing type errors (e.g. unknown catches and Stripe version mismatches) that fail compilation. These are legacy issues present on the `main` branch. |
 | **pnpm test** | `DEGRADED` | Tests in `@hopwhistle/shared` (13 tests) and `@callfabric/transcriber` (2 tests) pass successfully. `packages/routing-dsl` has pre-existing failures (8 tests fail) due to a flow executor bug present on `main`. `packages/sdk` has no tests. |
 | **pnpm build** | `SUCCESS` | The API and Next.js web application both compile and build into highly optimized production packages successfully. |
-| **Docker Config** | `Docker Config: NOT RUN LOCALLY — Docker was unavailable on the workstation. Compose files were reviewed, but actual docker compose config/build/up validation must pass on Hetzner or CI before production cutover.` | The compose files were reviewed/audited and verified to be structurally sound. The actual docker compose config/build/up commands still need to be run on the Hetzner host or CI. Do not overstate Docker as successful until those commands pass. |
+| **Docker Config** | NOT RUN LOCALLY — Docker was unavailable on the workstation. Compose files were reviewed, but actual docker compose config/build/up validation must pass on Hetzner or CI before production cutover. | The compose files were reviewed/audited and verified to be structurally sound. The actual docker compose config/build/up commands still need to be run on the Hetzner host or CI. Do not overstate Docker as successful until those commands pass. |
 
 ---
 
@@ -55,8 +55,12 @@ This report summarizes the audit, build, and test validation results for deployi
 ## E. Final Recommendation
 
 > [!TIP]
-> **RECOMMENDED STATE**: **READY TO DEPLOY (PENDING DOCKER VALIDATION ON HETZNER)**
+> **RECOMMENDED STATE**: **READY FOR HETZNER SERVER VALIDATION**
 >
-> The migration configuration changes are complete and all hardcoded production IPs have been successfully parameterized. The core web and API applications compile and build successfully. The pre-existing test and typecheck failures are documented on `main` and do not block deployment.
+> This branch should not be used for DNS/carrier cutover until Docker compose config/build/up, database restore, recordings sync, SIP, WSS, inbound calling, outbound calling, two-way audio, and recording playback are validated on the Hetzner host.
 >
-> Docker configuration has not been run locally due to lack of local Docker environment. The compose files were reviewed/audited, but the actual docker compose config/build commands must be run on Hetzner host or CI before production cutover. Do not mark Docker as passed/success until those commands pass.
+> The migration configuration changes are complete and all hardcoded production IPs have been parameterized. The core web and API applications compile and build successfully. Pre-existing test and typecheck failures are documented and are not considered migration blockers.
+>
+> However, Docker validation has not been run locally because Docker was unavailable on the workstation. Before production cutover, the Hetzner host or CI must successfully pass docker compose config, docker compose build, docker compose up -d, API health checks, web health checks, database connectivity, Redis, ClickHouse, S3/MinIO, FreeSWITCH, SIP profiles, WSS softphone registration, call tests, two-way audio, and recording upload/playback.
+>
+> Final status: ready for Hetzner server validation, not yet approved for DNS/carrier cutover.

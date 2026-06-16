@@ -39,4 +39,4 @@ We have successfully prepared the Hoppwhistle repository for immediate migration
 *   **Diff Checks**: Run on all modified files to ensure strict alignment with formatting rules.
 *   **Repo Status**: All modifications have been successfully verified using git.
 *   **Playbook Verification**: Executed `git grep` to verify that `hopwhistle-postgres-1` has been fully removed and `hopwhistle-postgres-dev` is used correctly.
-*   **Docker Config**: Docker Config: NOT RUN LOCALLY — Docker was unavailable on the workstation. Compose files were reviewed, but actual docker compose config/build/up validation must pass on Hetzner or CI before production cutover.
+*   **Docker Config**: NOT RUN LOCALLY — Docker was unavailable on the workstation. Compose files were reviewed, but actual docker compose config/build/up validation must pass on Hetzner or CI before production cutover.
