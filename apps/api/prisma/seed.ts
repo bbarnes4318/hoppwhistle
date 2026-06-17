@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, RoleName } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -38,7 +38,7 @@ async function main() {
   // Create roles
   const adminRole = await prisma.role.create({
     data: {
-      name: 'admin',
+      name: RoleName.ADMIN,
       description: 'Administrator with full access',
       permissions: [
         'users:read',
@@ -55,7 +55,7 @@ async function main() {
 
   const publisherRole = await prisma.role.create({
     data: {
-      name: 'publisher',
+      name: RoleName.PUBLISHER,
       description: 'Publisher role for managing campaigns',
       permissions: ['campaigns:read', 'campaigns:write', 'calls:read'],
     },
@@ -63,7 +63,7 @@ async function main() {
 
   const buyerRole = await prisma.role.create({
     data: {
-      name: 'buyer',
+      name: RoleName.BUYER,
       description: 'Buyer role for receiving calls',
       permissions: ['calls:read', 'endpoints:read', 'endpoints:write'],
     },
