@@ -35,7 +35,7 @@ During the initial server provisioning stage and the subsequent retry attempt, t
 
 ## Retry Attempt Result
 
-A provisioning retry was attempted after the initial blocker was documented. The retry failed with the same Hetzner Cloud API error:
+A provisioning retry was attempted again on June 17, 2026, after the account administrator indicated that Hetzner support had raised the limit. However, the creation of the `hopwhistle-prod-hetzner` instance (type `cx33` using `ubuntu-24.04` and firewall `11144466`) was still rejected by the Hetzner Cloud API with the same error:
 
 ```
 resource_limit_exceeded
@@ -43,7 +43,7 @@ server limit reached
 The project limit for server_limit has been exceeded.
 ```
 
-This confirms the project is still unable to create any server. The limit increase has not taken effect, was not applied to this project, or the account/project/token remains restricted.
+This confirms that the project limit for `server_limit` is still effectively set to 0. The limit increase has either not taken effect yet, was applied to the wrong project/account, or the API token project remains restricted.
 
 ---
 
