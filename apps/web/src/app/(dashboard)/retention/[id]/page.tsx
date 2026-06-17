@@ -1,11 +1,14 @@
-import { PolicyDetailView } from '@/components/retention/PolicyDetailView';
+'use client';
 
-interface PolicyDetailPageProps {
-  params: {
-    id: string;
-  };
-}
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
-export default function PolicyDetailPage({ params }: PolicyDetailPageProps): JSX.Element {
-  return <PolicyDetailView policyId={params.id} />;
+
+
+export default function PolicyDetailPage(): JSX.Element | null {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace('/insurance-leads');
+  }, [router]);
+  return null;
 }

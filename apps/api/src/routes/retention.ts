@@ -74,6 +74,25 @@ function validateBillingDate(ssBilling: boolean, billingDateStr?: string): boole
 }
 
 // ============================================================================
+// Tenant Context Helper
+// ============================================================================
+
+interface AuthenticatedUser {
+  tenantId?: string;
+  apiKeyId?: string;
+  userId?: string;
+  scopes?: string[];
+}
+
+type AuthRequest = FastifyRequest & { user?: AuthenticatedUser };
+
+function getTenantId(request: FastifyRequest): string | null {
+  const user = (request as AuthRequest).user;
+  const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+  return demoTenantId || user?.tenantId || null;
+}
+
+// ============================================================================
 // Route Registration
 // ============================================================================
 
@@ -82,6 +101,11 @@ export async function registerRetentionRoutes(fastify: FastifyInstance): Promise
   // GET /api/v1/retention - List all policies
   // ------------------------------------------------------------------------
   fastify.get('/api/v1/retention', async (request: FastifyRequest, reply) => {
+    const tenantId = getTenantId(request);
+    if (!tenantId) {
+      return reply.status(401).send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+    }
+
     try {
       const {
         status,
@@ -96,7 +120,7 @@ export async function registerRetentionRoutes(fastify: FastifyInstance): Promise
       };
 
       // Build where clause
-      const where: Record<string, unknown> = {};
+      const where: Record<string, unknown> = { tenantId };
 
       if (status) {
         where.status = status;
@@ -151,11 +175,13 @@ export async function registerRetentionRoutes(fastify: FastifyInstance): Promise
 
       return reply.send({
         success: true,
-        data: filteredPolicies,
-        pagination: {
-          total,
-          limit: Number(limit),
-          offset: Number(offset),
+        data: {
+          policies: filteredPolicies,
+          meta: {
+            total,
+            limit: Number(limit),
+            offset: Number(offset),
+          },
         },
       });
     } catch (error) {
@@ -168,11 +194,15 @@ export async function registerRetentionRoutes(fastify: FastifyInstance): Promise
   // GET /api/v1/retention/:id - Get single policy
   // ------------------------------------------------------------------------
   fastify.get('/api/v1/retention/:id', async (request: FastifyRequest, reply) => {
+    const tenantId = getTenantId(request);
+    if (!tenantId) {
+      return reply.status(401).send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+    }
+
     try {
       const { id } = request.params as { id: string };
-
-      const policy = await prisma.retentionPolicy.findUnique({
-        where: { id },
+      const policy = await prisma.retentionPolicy.findFirst({
+        where: { id, tenantId },
         include: {
           lead: true,
           notes: {
@@ -182,7 +212,7 @@ export async function registerRetentionRoutes(fastify: FastifyInstance): Promise
       });
 
       if (!policy) {
-        return reply.status(404).send({ success: false, error: 'Policy not found' });
+        return reply.status(404).send({ success: false, error: 'Policy not found under this tenant' });
       }
 
       return reply.send({ success: true, data: policy });
@@ -196,6 +226,11 @@ export async function registerRetentionRoutes(fastify: FastifyInstance): Promise
   // POST /api/v1/retention - Create new policy
   // ------------------------------------------------------------------------
   fastify.post('/api/v1/retention', async (request: FastifyRequest, reply) => {
+    const tenantId = getTenantId(request);
+    if (!tenantId) {
+      return reply.status(401).send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+    }
+
     try {
       const body = CreatePolicySchema.parse(request.body);
 
@@ -209,10 +244,7 @@ export async function registerRetentionRoutes(fastify: FastifyInstance): Promise
         });
       }
 
-      // Default tenant ID (TODO: get from auth)
-      const tenantId = 'default-tenant';
-
-      // Find or create Lead by phone number
+      // Find or create Lead by phone number (scoped by tenant)
       let lead = await prisma.lead.findFirst({
         where: {
           tenantId,
@@ -228,32 +260,14 @@ export async function registerRetentionRoutes(fastify: FastifyInstance): Promise
             phoneNumber: body.phoneNumber,
             firstName: body.firstName,
             lastName: body.lastName,
-            fullName:
-              body.firstName && body.lastName ? `${body.firstName} ${body.lastName}` : undefined,
+            fullName: (body.firstName && body.lastName) ? `${body.firstName} ${body.lastName}` : undefined,
             email: body.email,
             address: body.address,
             city: body.city,
             state: body.state,
             zipCode: body.zipCode,
             leadSource: 'Retention Intake',
-          },
-        });
-      } else {
-        // Update existing Lead with new info
-        lead = await prisma.lead.update({
-          where: { id: lead.id },
-          data: {
-            firstName: body.firstName || lead.firstName,
-            lastName: body.lastName || lead.lastName,
-            fullName:
-              body.firstName && body.lastName
-                ? `${body.firstName} ${body.lastName}`
-                : lead.fullName,
-            email: body.email || lead.email,
-            address: body.address || lead.address,
-            city: body.city || lead.city,
-            state: body.state || lead.state,
-            zipCode: body.zipCode || lead.zipCode,
+            status: 'ACTIVE',
           },
         });
       }
@@ -263,16 +277,16 @@ export async function registerRetentionRoutes(fastify: FastifyInstance): Promise
         data: {
           tenantId,
           leadId: lead.id,
-          primaryBeneficiary: body.primaryBeneficiary,
-          primaryRelationship: body.primaryRelationship,
-          contingentBeneficiary: body.contingentBeneficiary,
-          contingentRelationship: body.contingentRelationship,
-          carrier: body.carrier,
-          coverage: body.coverage,
-          monthlyPremium: body.monthlyPremium,
-          policyType: body.policyType,
+          primaryBeneficiary: body.primaryBeneficiary || null,
+          primaryRelationship: body.primaryRelationship || null,
+          contingentBeneficiary: body.contingentBeneficiary || null,
+          contingentRelationship: body.contingentRelationship || null,
+          carrier: body.carrier || null,
+          coverage: body.coverage || null,
+          monthlyPremium: body.monthlyPremium || null,
+          policyType: body.policyType || null,
           ssBilling: body.ssBilling,
-          billingDateStr: body.billingDateStr,
+          billingDateStr: body.billingDateStr || null,
           status: body.status,
         },
         include: {
@@ -280,22 +294,23 @@ export async function registerRetentionRoutes(fastify: FastifyInstance): Promise
         },
       });
 
-      // Create initial note if provided
+      // Write initial note if provided
       if (body.notes) {
         await prisma.retentionNote.create({
           data: {
             policyId: policy.id,
             note: body.notes,
+            userId: (request as AuthRequest).user?.userId || null,
           },
         });
       }
 
       return reply.status(201).send({ success: true, data: policy });
     } catch (error) {
+      request.log.error(error, 'Failed to create retention policy');
       if (error instanceof z.ZodError) {
         return reply.status(400).send({ success: false, error: error.errors });
       }
-      request.log.error(error, 'Failed to create retention policy');
       return reply.status(500).send({ success: false, error: 'Failed to create policy' });
     }
   });
@@ -304,53 +319,70 @@ export async function registerRetentionRoutes(fastify: FastifyInstance): Promise
   // PUT /api/v1/retention/:id - Update policy
   // ------------------------------------------------------------------------
   fastify.put('/api/v1/retention/:id', async (request: FastifyRequest, reply) => {
+    const tenantId = getTenantId(request);
+    if (!tenantId) {
+      return reply.status(401).send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+    }
+
     try {
       const { id } = request.params as { id: string };
       const body = UpdatePolicySchema.parse(request.body);
 
-      // Validate billing date if being updated
-      if (body.ssBilling !== undefined || body.billingDateStr !== undefined) {
-        const existingPolicy = await prisma.retentionPolicy.findUnique({ where: { id } });
-        const ssBilling = body.ssBilling ?? existingPolicy?.ssBilling ?? false;
-        if (!validateBillingDate(ssBilling, body.billingDateStr)) {
-          return reply.status(400).send({
-            success: false,
-            error: ssBilling
-              ? `Invalid SS billing date. Must be one of: ${SS_BILLING_OPTIONS.join(', ')}`
-              : 'Invalid billing date. Must be between 1-28',
-          });
-        }
+      const existingPolicy = await prisma.retentionPolicy.findFirst({ where: { id, tenantId } });
+      if (!existingPolicy) {
+        return reply.status(404).send({ success: false, error: 'Policy not found under this tenant' });
+      }
+
+      // Validate billing date if changed
+      const isSsBilling = body.ssBilling !== undefined ? body.ssBilling : existingPolicy.ssBilling;
+      const billingDateStr = body.billingDateStr !== undefined ? body.billingDateStr : (existingPolicy.billingDateStr || undefined);
+
+      if (!validateBillingDate(isSsBilling, billingDateStr)) {
+        return reply.status(400).send({
+          success: false,
+          error: isSsBilling
+            ? `Invalid SS billing date. Must be one of: ${SS_BILLING_OPTIONS.join(', ')}`
+            : 'Invalid billing date. Must be between 1-28',
+        });
       }
 
       const policy = await prisma.retentionPolicy.update({
         where: { id },
         data: {
-          primaryBeneficiary: body.primaryBeneficiary,
-          primaryRelationship: body.primaryRelationship,
-          contingentBeneficiary: body.contingentBeneficiary,
-          contingentRelationship: body.contingentRelationship,
-          carrier: body.carrier,
-          coverage: body.coverage,
-          monthlyPremium: body.monthlyPremium,
-          policyType: body.policyType,
-          ssBilling: body.ssBilling,
-          billingDateStr: body.billingDateStr,
-          status: body.status,
+          primaryBeneficiary: body.primaryBeneficiary !== undefined ? body.primaryBeneficiary : undefined,
+          primaryRelationship: body.primaryRelationship !== undefined ? body.primaryRelationship : undefined,
+          contingentBeneficiary: body.contingentBeneficiary !== undefined ? body.contingentBeneficiary : undefined,
+          contingentRelationship: body.contingentRelationship !== undefined ? body.contingentRelationship : undefined,
+          carrier: body.carrier !== undefined ? body.carrier : undefined,
+          coverage: body.coverage !== undefined ? body.coverage : undefined,
+          monthlyPremium: body.monthlyPremium !== undefined ? body.monthlyPremium : undefined,
+          policyType: body.policyType !== undefined ? body.policyType : undefined,
+          ssBilling: body.ssBilling !== undefined ? body.ssBilling : undefined,
+          billingDateStr: body.billingDateStr !== undefined ? body.billingDateStr : undefined,
+          status: body.status !== undefined ? body.status : undefined,
         },
         include: {
           lead: true,
-          notes: {
-            orderBy: { createdAt: 'desc' },
-          },
         },
       });
 
+      // Write note about updates if provided
+      if (body.notes) {
+        await prisma.retentionNote.create({
+          data: {
+            policyId: policy.id,
+            note: body.notes,
+            userId: (request as AuthRequest).user?.userId || null,
+          },
+        });
+      }
+
       return reply.send({ success: true, data: policy });
     } catch (error) {
+      request.log.error(error, 'Failed to update retention policy');
       if (error instanceof z.ZodError) {
         return reply.status(400).send({ success: false, error: error.errors });
       }
-      request.log.error(error, 'Failed to update retention policy');
       return reply.status(500).send({ success: false, error: 'Failed to update policy' });
     }
   });
@@ -359,149 +391,117 @@ export async function registerRetentionRoutes(fastify: FastifyInstance): Promise
   // POST /api/v1/retention/:id/log-call - Log a call attempt
   // ------------------------------------------------------------------------
   fastify.post('/api/v1/retention/:id/log-call', async (request: FastifyRequest, reply) => {
+    const tenantId = getTenantId(request);
+    if (!tenantId) {
+      return reply.status(401).send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+    }
+
     try {
       const { id } = request.params as { id: string };
-      const body = LogCallSchema.parse(request.body);
+      const { note } = LogCallSchema.parse(request.body);
 
-      // Get current policy
-      const policy = await prisma.retentionPolicy.findUnique({ where: { id } });
+      const policy = await prisma.retentionPolicy.findFirst({ where: { id, tenantId } });
       if (!policy) {
-        return reply.status(404).send({ success: false, error: 'Policy not found' });
+        return reply.status(404).send({ success: false, error: 'Policy not found under this tenant' });
       }
 
-      const newAttempts = policy.onboardingAttempts + 1;
+      // Add to onboarding attempts count & create note
+      const [updatedPolicy] = await Promise.all([
+        prisma.retentionPolicy.update({
+          where: { id },
+          data: {
+            onboardingAttempts: { increment: 1 },
+          },
+        }),
+        prisma.retentionNote.create({
+          data: {
+            policyId: id,
+            note: `[Call Logged] ${note}`,
+            userId: (request as AuthRequest).user?.userId || null,
+          },
+        }),
+      ]);
 
-      // Check if completed (9 attempts)
-      const shouldComplete = newAttempts >= 9;
-
-      // Update policy
-      const updatedPolicy = await prisma.retentionPolicy.update({
-        where: { id },
-        data: {
-          onboardingAttempts: newAttempts,
-          // Auto-mark as completed if 9 attempts reached (unless already PAID or DECLINED)
-          status:
-            shouldComplete &&
-            policy.status !== 'PAID' &&
-            policy.status !== 'DECLINED' &&
-            policy.status !== 'NOT_TAKEN'
-              ? 'LAPSED'
-              : undefined,
-        },
-        include: {
-          lead: true,
-        },
-      });
-
-      // Create note
-      const note = await prisma.retentionNote.create({
-        data: {
-          policyId: id,
-          note: body.note,
-        },
-      });
-
-      // Update Lead's lastContactedAt
-      await prisma.lead.update({
-        where: { id: policy.leadId },
-        data: { lastContactedAt: new Date() },
-      });
-
-      return reply.send({
-        success: true,
-        data: {
-          policy: updatedPolicy,
-          note,
-          completed: shouldComplete,
-        },
-      });
+      return reply.send({ success: true, data: updatedPolicy });
     } catch (error) {
+      request.log.error(error, 'Failed to log call');
       if (error instanceof z.ZodError) {
         return reply.status(400).send({ success: false, error: error.errors });
       }
-      request.log.error(error, 'Failed to log call');
       return reply.status(500).send({ success: false, error: 'Failed to log call' });
     }
   });
 
   // ------------------------------------------------------------------------
-  // PUT /api/v1/retention/:id/status - Update policy status
+  // POST /api/v1/retention/:id/status - Update policy status
   // ------------------------------------------------------------------------
-  fastify.put('/api/v1/retention/:id/status', async (request: FastifyRequest, reply) => {
-    try {
-      const { id } = request.params as { id: string };
-      const body = UpdateStatusSchema.parse(request.body);
-
-      const policy = await prisma.retentionPolicy.update({
-        where: { id },
-        data: { status: body.status },
-        include: {
-          lead: true,
-        },
-      });
-
-      // Auto-create note for status change
-      await prisma.retentionNote.create({
-        data: {
-          policyId: id,
-          note: `Status changed to ${body.status}`,
-        },
-      });
-
-      return reply.send({ success: true, data: policy });
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return reply.status(400).send({ success: false, error: error.errors });
-      }
-      request.log.error(error, 'Failed to update policy status');
-      return reply.status(500).send({ success: false, error: 'Failed to update status' });
+  fastify.post('/api/v1/retention/:id/status', async (request: FastifyRequest, reply) => {
+    const tenantId = getTenantId(request);
+    if (!tenantId) {
+      return reply.status(401).send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
     }
-  });
 
-  // ------------------------------------------------------------------------
-  // POST /api/v1/retention/:id/convert-gi - Convert declined policy to GI
-  // ------------------------------------------------------------------------
-  fastify.post('/api/v1/retention/:id/convert-gi', async (request: FastifyRequest, reply) => {
     try {
       const { id } = request.params as { id: string };
+      const { status } = UpdateStatusSchema.parse(request.body);
 
-      const policy = await prisma.retentionPolicy.findUnique({ where: { id } });
+      const policy = await prisma.retentionPolicy.findFirst({ where: { id, tenantId } });
       if (!policy) {
-        return reply.status(404).send({ success: false, error: 'Policy not found' });
+        return reply.status(404).send({ success: false, error: 'Policy not found under this tenant' });
       }
 
-      if (policy.status !== 'DECLINED') {
-        return reply.status(400).send({
-          success: false,
-          error: 'Only DECLINED policies can be converted to GI',
-        });
-      }
-
-      // Update policy type to GI and reset status
       const updatedPolicy = await prisma.retentionPolicy.update({
         where: { id },
-        data: {
-          policyType: 'GUARANTEED_ISSUE',
-          status: 'SUBMITTED',
-          onboardingAttempts: 0, // Reset attempts for new GI policy
-        },
-        include: {
-          lead: true,
-        },
+        data: { status },
       });
 
-      // Log the conversion
+      // Log status transition note
       await prisma.retentionNote.create({
         data: {
           policyId: id,
-          note: 'Policy converted to Guaranteed Issue after decline',
+          note: `[Status Change] Transitioned status from ${policy.status} to ${status}`,
+          userId: (request as AuthRequest).user?.userId || null,
         },
       });
 
       return reply.send({ success: true, data: updatedPolicy });
     } catch (error) {
-      request.log.error(error, 'Failed to convert to GI');
-      return reply.status(500).send({ success: false, error: 'Failed to convert to GI' });
+      request.log.error(error, 'Failed to update status');
+      if (error instanceof z.ZodError) {
+        return reply.status(400).send({ success: false, error: error.errors });
+      }
+      return reply.status(500).send({ success: false, error: 'Failed to update status' });
+    }
+  });
+
+  // ------------------------------------------------------------------------
+  // POST /api/v1/retention/:id/onboarding-attempt - Record onboarding attempt
+  // ------------------------------------------------------------------------
+  fastify.post('/api/v1/retention/:id/onboarding-attempt', async (request: FastifyRequest, reply) => {
+    const tenantId = getTenantId(request);
+    if (!tenantId) {
+      return reply.status(401).send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+    }
+
+    try {
+      const { id } = request.params as { id: string };
+
+      const policy = await prisma.retentionPolicy.findFirst({ where: { id, tenantId } });
+      if (!policy) {
+        return reply.status(404).send({ success: false, error: 'Policy not found under this tenant' });
+      }
+
+      const updatedPolicy = await prisma.retentionPolicy.update({
+        where: { id },
+        data: {
+          onboardingAttempts: { increment: 1 },
+        },
+      });
+
+      return reply.send({ success: true, data: updatedPolicy });
+    } catch (error) {
+      request.log.error(error, 'Failed to log onboarding attempt');
+      return reply.status(500).send({ success: false, error: 'Failed to log attempt' });
     }
   });
 
@@ -509,19 +509,26 @@ export async function registerRetentionRoutes(fastify: FastifyInstance): Promise
   // GET /api/v1/retention/stats - Get retention statistics
   // ------------------------------------------------------------------------
   fastify.get('/api/v1/retention/stats', async (request: FastifyRequest, reply) => {
+    const tenantId = getTenantId(request);
+    if (!tenantId) {
+      return reply.status(401).send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+    }
+
     try {
       const [totalPolicies, statusCounts, avgAttempts] = await Promise.all([
-        // Total count
-        prisma.retentionPolicy.count(),
+        // Total count (scoped to tenant)
+        prisma.retentionPolicy.count({ where: { tenantId } }),
 
-        // Count by status
+        // Count by status (scoped to tenant)
         prisma.retentionPolicy.groupBy({
           by: ['status'],
+          where: { tenantId },
           _count: { status: true },
         }),
 
-        // Average attempts
+        // Average attempts (scoped to tenant)
         prisma.retentionPolicy.aggregate({
+          where: { tenantId },
           _avg: { onboardingAttempts: true },
         }),
       ]);

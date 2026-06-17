@@ -1,6 +1,12 @@
-import { RetentionDashboard } from '@/components/retention';
+'use client';
 
-export default function RetentionPage(): JSX.Element {
- return <RetentionDashboard />;
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+
+export default function RetentionPage(): JSX.Element | null {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace('/insurance-leads');
+  }, [router]);
+  return null;
 }
-

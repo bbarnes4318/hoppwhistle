@@ -59,11 +59,36 @@ interface ProspectIntakePayload {
   notes?: string;
 }
 
+interface AuthenticatedUser {
+  tenantId?: string;
+  apiKeyId?: string;
+  userId?: string;
+  scopes?: string[];
+}
+
+type AuthRequest = FastifyRequest & { user?: AuthenticatedUser };
+
+function getTenantId(request: FastifyRequest): string | null {
+  const user = (request as AuthRequest).user;
+  const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+  return demoTenantId || user?.tenantId || null;
+}
+
 /**
  * Normalize phone number to digits only for consistent lookup
  */
 function normalizePhone(phone: string): string {
   return phone.replace(/\D/g, '');
+}
+
+/**
+ * Mask routing or account number to last 4 digits (e.g. ****1234)
+ */
+function maskBankingField(val?: string): string | null {
+  if (!val) return null;
+  const cleaned = val.trim();
+  if (cleaned.length <= 4) return cleaned;
+  return `****${cleaned.slice(-4)}`;
 }
 
 export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
@@ -75,6 +100,16 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
   fastify.post<{ Body: ProspectIntakePayload }>(
     '/api/v1/prospects/intake',
     async (request: FastifyRequest<{ Body: ProspectIntakePayload }>, reply: FastifyReply) => {
+      const tenantId = getTenantId(request);
+      if (!tenantId) {
+        return reply.code(401).send({
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Authentication required. Valid tenant context missing.',
+          },
+        });
+      }
+
       const body = request.body;
 
       // Validate required phone
@@ -87,8 +122,8 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const normalizedPhone = normalizePhone(body.phone);
-      if (normalizedPhone.length < 10) {
+      const rawPhone = normalizePhone(body.phone);
+      if (rawPhone.length < 10) {
         return reply.code(400).send({
           error: {
             code: 'VALIDATION_ERROR',
@@ -96,16 +131,21 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
           },
         });
       }
+      const normalizedPhone = rawPhone.slice(-10);
 
       try {
         // Get client IP address
         const clientIp = request.ip || request.headers['x-forwarded-for'] || 'unknown';
 
-        // Upsert - update if exists, create if not
+        // Securely mask banking fields before DB upsert
+        const maskedRouting = maskBankingField(body.routingNumber);
+        const maskedAccount = maskBankingField(body.accountNumber);
+
+        // Upsert - update if exists, create if not (scoped by tenantId)
         const prospect = await prisma.prospectIntake.upsert({
           where: {
             tenantId_phone: {
-              tenantId: 'default-tenant-id',
+              tenantId,
               phone: normalizedPhone,
             },
           },
@@ -124,14 +164,14 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
             policyType: body.policyType,
             coverageAmount: body.coverageAmount,
             monthlyPremium: body.monthlyPremium,
-            beneficiaries: body.beneficiaries,
+            beneficiaries: body.beneficiaries || undefined,
             ssPaidOnDate: body.ssPaidOnDate,
             payDay: body.payDay,
             bankDraftDate: body.bankDraftDate,
             bankName: body.bankName,
             accountType: body.accountType,
-            routingNumber: body.routingNumber,
-            accountNumber: body.accountNumber,
+            routingNumber: maskedRouting,
+            accountNumber: maskedAccount,
             trustedFormCertUrl: body.trustedFormCertUrl,
             ipAddress: typeof clientIp === 'string' ? clientIp : clientIp[0],
             source: body.source || 'intake_form',
@@ -139,7 +179,7 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
             updatedAt: new Date(),
           },
           create: {
-            tenantId: 'default-tenant-id',
+            tenantId,
             phone: normalizedPhone,
             firstName: body.firstName,
             lastName: body.lastName,
@@ -155,14 +195,14 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
             policyType: body.policyType,
             coverageAmount: body.coverageAmount,
             monthlyPremium: body.monthlyPremium,
-            beneficiaries: body.beneficiaries,
+            beneficiaries: body.beneficiaries || undefined,
             ssPaidOnDate: body.ssPaidOnDate,
             payDay: body.payDay,
             bankDraftDate: body.bankDraftDate,
             bankName: body.bankName,
             accountType: body.accountType,
-            routingNumber: body.routingNumber,
-            accountNumber: body.accountNumber,
+            routingNumber: maskedRouting,
+            accountNumber: maskedAccount,
             trustedFormCertUrl: body.trustedFormCertUrl,
             ipAddress: typeof clientIp === 'string' ? clientIp : clientIp[0],
             source: body.source || 'intake_form',
@@ -201,10 +241,20 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
   fastify.get<{ Params: { phoneNumber: string } }>(
     '/api/v1/prospects/by-phone/:phoneNumber',
     async (request, reply) => {
-      const { phoneNumber } = request.params;
-      const normalizedPhone = normalizePhone(phoneNumber);
+      const tenantId = getTenantId(request);
+      if (!tenantId) {
+        return reply.code(401).send({
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Authentication required. Valid tenant context missing.',
+          },
+        });
+      }
 
-      if (normalizedPhone.length < 10) {
+      const { phoneNumber } = request.params;
+      const rawPhone = normalizePhone(phoneNumber);
+
+      if (rawPhone.length < 10) {
         return reply.code(400).send({
           error: {
             code: 'VALIDATION_ERROR',
@@ -212,26 +262,17 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
           },
         });
       }
+      const normalizedPhone = rawPhone.slice(-10);
 
       try {
-        // Try exact match first
-        let prospect = await prisma.prospectIntake.findFirst({
+        // Scoped exactly to tenantId
+        const prospect = await prisma.prospectIntake.findFirst({
           where: {
+            tenantId,
             phone: normalizedPhone,
             status: 'ACTIVE',
           },
         });
-
-        // If no exact match, try last 10 digits match
-        if (!prospect && normalizedPhone.length > 10) {
-          const last10 = normalizedPhone.slice(-10);
-          prospect = await prisma.prospectIntake.findFirst({
-            where: {
-              phone: last10,
-              status: 'ACTIVE',
-            },
-          });
-        }
 
         if (!prospect) {
           return reply.code(404).send({
@@ -240,7 +281,7 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
           });
         }
 
-        // Return prospect data (mask sensitive banking info)
+        // Return prospect data (bank routing/account are already masked in DB)
         return reply.code(200).send({
           found: true,
           prospect: {
@@ -265,13 +306,8 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
             bankDraftDate: prospect.bankDraftDate,
             bankName: prospect.bankName,
             accountType: prospect.accountType,
-            // Mask sensitive banking info
-            routingNumber: prospect.routingNumber
-              ? `****${prospect.routingNumber.slice(-4)}`
-              : null,
-            accountNumber: prospect.accountNumber
-              ? `****${prospect.accountNumber.slice(-4)}`
-              : null,
+            routingNumber: prospect.routingNumber,
+            accountNumber: prospect.accountNumber,
             createdAt: prospect.createdAt,
             updatedAt: prospect.updatedAt,
           },
@@ -294,9 +330,20 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
    * List recent prospect intakes (for admin/debugging).
    */
   fastify.get('/api/v1/prospects/intake', async (request, reply) => {
+    const tenantId = getTenantId(request);
+    if (!tenantId) {
+      return reply.code(401).send({
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Authentication required. Valid tenant context missing.',
+        },
+      });
+    }
+
     try {
       const prospects = await prisma.prospectIntake.findMany({
         where: {
+          tenantId,
           status: 'ACTIVE',
         },
         orderBy: {
@@ -341,9 +388,32 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
   fastify.delete<{ Params: { id: string } }>(
     '/api/v1/prospects/intake/:id',
     async (request, reply) => {
+      const tenantId = getTenantId(request);
+      if (!tenantId) {
+        return reply.code(401).send({
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Authentication required. Valid tenant context missing.',
+          },
+        });
+      }
+
       const { id } = request.params;
 
       try {
+        const existing = await prisma.prospectIntake.findFirst({
+          where: { id, tenantId },
+        });
+
+        if (!existing) {
+          return reply.code(404).send({
+            error: {
+              code: 'NOT_FOUND',
+              message: 'Prospect intake not found under this tenant',
+            },
+          });
+        }
+
         await prisma.prospectIntake.update({
           where: { id },
           data: { status: 'ARCHIVED' },

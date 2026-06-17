@@ -15,6 +15,7 @@ function StatusBadge({ status }: { status: string }) {
  INVALID: { className: 'bg-red-500/15 text-red-400 border-red-500/30', label: 'Invalid' },
  // Post status
  PENDING: { className: 'bg-amber-500/15 text-amber-400 border-amber-500/30', label: 'Pending' },
+ HOLD: { className: 'bg-amber-500/15 text-amber-500 border-amber-500/30', label: 'Hold' },
  SKIPPED: { className: 'bg-slate-500/15 text-slate-400 border-slate-500/30', label: 'Skipped' },
  MATCHED: { className: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30', label: 'Matched' },
  UNMATCHED: { className: 'bg-orange-500/15 text-orange-400 border-orange-500/30', label: 'Unmatched' },

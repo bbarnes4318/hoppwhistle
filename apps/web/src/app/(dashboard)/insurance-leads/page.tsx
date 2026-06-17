@@ -251,6 +251,7 @@ export default function InsuranceLeadsPage() {
  { value: 'UNMATCHED', label: 'Unmatched' },
  { value: 'ERROR', label: 'Error' },
  { value: 'SKIPPED', label: 'Skipped' },
+ { value: 'HOLD', label: 'Hold' },
  ]}
  onChange={(v) => handleFilterChange('postStatus', v)}
  />

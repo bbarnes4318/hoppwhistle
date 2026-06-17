@@ -32,6 +32,33 @@ export interface InsuranceLeadSummary {
   } | null;
 }
 
+export interface InsuranceActivity {
+  id: string;
+  tenantId: string;
+  insuranceLeadId: string;
+  type: 'NOTE' | 'CALL' | 'STATUS_CHANGE' | 'SUBMISSION' | 'VALIDATION' | 'SYSTEM' | 'TASK' | 'COMPLIANCE';
+  title: string;
+  description: string | null;
+  metadata: Record<string, unknown> | null;
+  createdById: string | null;
+  createdAt: string;
+}
+
+export interface InsuranceTask {
+  id: string;
+  tenantId: string;
+  insuranceLeadId: string;
+  assignedToId: string | null;
+  title: string;
+  description: string | null;
+  status: 'OPEN' | 'COMPLETED' | 'CANCELLED';
+  priority: 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
+  dueAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface InsuranceLeadDetail {
   id: string;
   tenantId: string;
@@ -58,6 +85,34 @@ export interface InsuranceLeadDetail {
   createdAt: string;
   updatedAt: string;
   submissions: InsuranceLeadSubmission[];
+
+  // CRM fields
+  assignedToId: string | null;
+  assignedAt: string | null;
+  lastContactedAt: string | null;
+  nextFollowUpAt: string | null;
+  priority: string | null;
+  leadStage: string | null;
+  doNotCall: boolean;
+  duplicateOfId: string | null;
+
+  // Final Expense specific CRM fields
+  smoker: string | null;
+  faceAmount: string | null;
+  lifeType: string | null;
+  riskType: string | null;
+  carrier: string | null;
+  product: string | null;
+  monthlyPremium: string | null;
+  coverageAmount: string | null;
+  trustedFormUrl: string | null;
+  leadidToken: string | null;
+  consentLanguage: string | null;
+  recordingUrl: string | null;
+
+  // Timeline & Tasks
+  activities: InsuranceActivity[];
+  tasks: InsuranceTask[];
 }
 
 export interface InsuranceLeadSubmission {
@@ -166,4 +221,52 @@ export async function retryInsuranceSubmission(
 export async function fetchInsuranceLeadStats(): Promise<InsuranceLeadStats> {
   const res = await apiClient.get<InsuranceLeadStats>('/api/v1/insurance-leads/stats');
   return res.data as unknown as InsuranceLeadStats;
+}
+
+export async function fetchInsuranceLeadTasks(leadId: string): Promise<{ tasks: InsuranceTask[] }> {
+  const res = await apiClient.get<{ tasks: InsuranceTask[] }>(`/api/v1/insurance-leads/${leadId}/tasks`);
+  return res.data as unknown as { tasks: InsuranceTask[] };
+}
+
+export async function createInsuranceLeadTask(
+  leadId: string,
+  data: { title: string; description?: string; priority?: string; dueAt?: string }
+): Promise<{ success: boolean; task: InsuranceTask }> {
+  const res = await apiClient.post<{ success: boolean; task: InsuranceTask }>(
+    `/api/v1/insurance-leads/${leadId}/tasks`,
+    data
+  );
+  return res.data as unknown as { success: boolean; task: InsuranceTask };
+}
+
+export async function completeInsuranceLeadTask(
+  leadId: string,
+  taskId: string
+): Promise<{ success: boolean; task: InsuranceTask }> {
+  const res = await apiClient.post<{ success: boolean; task: InsuranceTask }>(
+    `/api/v1/insurance-leads/${leadId}/tasks/${taskId}/complete`
+  );
+  return res.data as unknown as { success: boolean; task: InsuranceTask };
+}
+
+export async function cancelInsuranceLeadTask(
+  leadId: string,
+  taskId: string
+): Promise<{ success: boolean; task: InsuranceTask }> {
+  const res = await apiClient.post<{ success: boolean; task: InsuranceTask }>(
+    `/api/v1/insurance-leads/${leadId}/tasks/${taskId}/cancel`
+  );
+  return res.data as unknown as { success: boolean; task: InsuranceTask };
+}
+
+export interface UserSummary {
+  id: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+}
+
+export async function fetchUsers(): Promise<{ data: UserSummary[] }> {
+  const res = await apiClient.get<{ data: UserSummary[] }>('/api/v1/users');
+  return res.data as unknown as { data: UserSummary[] };
 }

@@ -215,4 +215,197 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
 
     return result;
   });
+
+  // -----------------------------------------------------------------------
+  // Tasks Endpoints
+  // -----------------------------------------------------------------------
+
+  // GET /api/v1/insurance-leads/:id/tasks — List tasks for a lead
+  fastify.get<{
+    Params: { id: string };
+  }>('/api/v1/insurance-leads/:id/tasks', async (request, reply) => {
+    const tenantId = getTenantId(request);
+    if (!tenantId) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+    }
+
+    const { getPrismaClient } = await import('../lib/prisma.js');
+    const prisma = getPrismaClient();
+
+    // Verify lead belongs to tenant
+    const lead = await prisma.insuranceLead.findFirst({
+      where: { id: request.params.id, tenantId },
+    });
+    if (!lead) {
+      void reply.code(404);
+      return { error: { code: 'NOT_FOUND', message: 'Lead not found' } };
+    }
+
+    const tasks = await prisma.insuranceTask.findMany({
+      where: { insuranceLeadId: request.params.id, tenantId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return { tasks };
+  });
+
+  // POST /api/v1/insurance-leads/:id/tasks — Create a new task
+  fastify.post<{
+    Params: { id: string };
+    Body: { title: string; description?: string; priority?: 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT'; dueAt?: string };
+  }>('/api/v1/insurance-leads/:id/tasks', async (request, reply) => {
+    const tenantId = getTenantId(request);
+    if (!tenantId) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+    }
+
+    const { getPrismaClient } = await import('../lib/prisma.js');
+    const prisma = getPrismaClient();
+
+    // Verify lead belongs to tenant
+    const lead = await prisma.insuranceLead.findFirst({
+      where: { id: request.params.id, tenantId },
+    });
+    if (!lead) {
+      void reply.code(404);
+      return { error: { code: 'NOT_FOUND', message: 'Lead not found' } };
+    }
+
+    const { title, description, priority, dueAt } = request.body;
+    if (!title || typeof title !== 'string' || title.trim() === '') {
+      void reply.code(400);
+      return { error: { code: 'VALIDATION_ERROR', message: 'Task title is required' } };
+    }
+
+    const task = await prisma.insuranceTask.create({
+      data: {
+        tenantId,
+        insuranceLeadId: request.params.id,
+        title: title.trim(),
+        description: description || null,
+        priority: priority || 'NORMAL',
+        dueAt: dueAt ? new Date(dueAt) : null,
+        status: 'OPEN',
+      },
+    });
+
+    // Create activity timeline entry
+    try {
+      await prisma.insuranceActivity.create({
+        data: {
+          tenantId,
+          insuranceLeadId: request.params.id,
+          type: 'TASK',
+          title: 'Task Created',
+          description: `New task added: "${task.title}". Priority: ${task.priority}.`,
+          metadata: { taskId: task.id },
+        },
+      });
+    } catch (err) {
+      request.log.error(err, 'Failed to create task activity');
+    }
+
+    return { success: true, task };
+  });
+
+  // POST /api/v1/insurance-leads/:id/tasks/:taskId/complete — Complete a task
+  fastify.post<{
+    Params: { id: string; taskId: string };
+  }>('/api/v1/insurance-leads/:id/tasks/:taskId/complete', async (request, reply) => {
+    const tenantId = getTenantId(request);
+    if (!tenantId) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+    }
+
+    const { getPrismaClient } = await import('../lib/prisma.js');
+    const prisma = getPrismaClient();
+
+    // Verify task belongs to lead and tenant
+    const task = await prisma.insuranceTask.findFirst({
+      where: { id: request.params.taskId, insuranceLeadId: request.params.id, tenantId },
+    });
+
+    if (!task) {
+      void reply.code(404);
+      return { error: { code: 'NOT_FOUND', message: 'Task not found' } };
+    }
+
+    const updated = await prisma.insuranceTask.update({
+      where: { id: request.params.taskId },
+      data: {
+        status: 'COMPLETED',
+        completedAt: new Date(),
+      },
+    });
+
+    // Create activity timeline entry
+    try {
+      await prisma.insuranceActivity.create({
+        data: {
+          tenantId,
+          insuranceLeadId: request.params.id,
+          type: 'TASK',
+          title: 'Task Completed',
+          description: `Task completed: "${task.title}".`,
+          metadata: { taskId: task.id },
+        },
+      });
+    } catch (err) {
+      request.log.error(err, 'Failed to create task completion activity');
+    }
+
+    return { success: true, task: updated };
+  });
+
+  // POST /api/v1/insurance-leads/:id/tasks/:taskId/cancel — Cancel a task
+  fastify.post<{
+    Params: { id: string; taskId: string };
+  }>('/api/v1/insurance-leads/:id/tasks/:taskId/cancel', async (request, reply) => {
+    const tenantId = getTenantId(request);
+    if (!tenantId) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+    }
+
+    const { getPrismaClient } = await import('../lib/prisma.js');
+    const prisma = getPrismaClient();
+
+    // Verify task belongs to lead and tenant
+    const task = await prisma.insuranceTask.findFirst({
+      where: { id: request.params.taskId, insuranceLeadId: request.params.id, tenantId },
+    });
+
+    if (!task) {
+      void reply.code(404);
+      return { error: { code: 'NOT_FOUND', message: 'Task not found' } };
+    }
+
+    const updated = await prisma.insuranceTask.update({
+      where: { id: request.params.taskId },
+      data: {
+        status: 'CANCELLED',
+      },
+    });
+
+    // Create activity timeline entry
+    try {
+      await prisma.insuranceActivity.create({
+        data: {
+          tenantId,
+          insuranceLeadId: request.params.id,
+          type: 'TASK',
+          title: 'Task Cancelled',
+          description: `Task cancelled: "${task.title}".`,
+          metadata: { taskId: task.id },
+        },
+      });
+    } catch (err) {
+      request.log.error(err, 'Failed to create task cancellation activity');
+    }
+
+    return { success: true, task: updated };
+  });
 }
