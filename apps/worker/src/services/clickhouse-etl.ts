@@ -53,7 +53,7 @@ class ClickHouseService {
     if (this.enabled) {
       try {
         this.client = createClient({
-          url: clickhouseUrl!,
+          host: clickhouseUrl!,
           username: clickhouseUser,
           password: clickhousePassword,
           database: clickhouseDatabase,
