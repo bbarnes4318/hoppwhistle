@@ -190,12 +190,14 @@ async function main() {
       endpoints: {
         create: [
           {
+            name: 'Test SIP Endpoint',
             type: 'SIP',
             destination: 'sip:buyer@example.com:5060',
             priority: 0,
             status: 'ACTIVE',
           },
           {
+            name: 'Test PSTN Endpoint',
             type: 'PSTN',
             phoneNumberId: phoneNumber2.id,
             destination: '+15559876543',
