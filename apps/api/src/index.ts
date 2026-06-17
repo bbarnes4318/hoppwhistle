@@ -293,6 +293,10 @@ async function buildServer() {
   const { registerAgentPhoneRoutes } = await import('./routes/agent-phone.js');
   await server.register(registerAgentPhoneRoutes);
 
+  // Register Call Center routes
+  const { registerCallCenterRoutes } = await import('./routes/call-center.js');
+  await server.register(registerCallCenterRoutes);
+
   // Register AI Bot routes (outbound dialer control, TTS preview)
   const { registerBotRoutes } = await import('./routes/bot.js');
   await server.register(registerBotRoutes);

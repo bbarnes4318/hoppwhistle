@@ -270,3 +270,20 @@ export async function fetchUsers(): Promise<{ data: UserSummary[] }> {
   const res = await apiClient.get<{ data: UserSummary[] }>('/api/v1/users');
   return res.data as unknown as { data: UserSummary[] };
 }
+
+export interface CustomerLookupResponse {
+  customer: Record<string, any> | null;
+  recentCalls: any[];
+  activities: any[];
+  tasks: any[];
+  submissions: any[];
+  duplicates: any[];
+}
+
+export async function fetchCustomerLookup(phone: string): Promise<CustomerLookupResponse> {
+  const res = await apiClient.get<CustomerLookupResponse>(
+    `/api/v1/call-center/customer-lookup?phone=${encodeURIComponent(phone)}`
+  );
+  return res.data as unknown as CustomerLookupResponse;
+}
+

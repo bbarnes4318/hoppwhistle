@@ -34,6 +34,9 @@ import { usePhone } from '@/components/phone/phone-provider';
 import { useLeadInjection } from '@/hooks/useLeadInjection';
 import { useScriptAccess } from '@/hooks/useUserRoles';
 import { apiClient } from '@/lib/api';
+import { CustomerCrmPanel } from './CustomerCrmPanel';
+import type { CustomerLookupResponse } from '@/lib/api/leads';
+import { fetchCustomerLookup } from '@/lib/api/leads';
 
 // ============================================================================
 // MAIN COMPONENT
@@ -63,6 +66,29 @@ export function CallCenterPortal(): JSX.Element {
   const [isOnHold, setIsOnHold] = useState(false);
   const [thirdPartyConnected, setThirdPartyConnected] = useState(false);
   const [isAddingThirdParty, setIsAddingThirdParty] = useState(false);
+
+  // CRM Customer Panel State
+  const [crmData, setCrmData] = useState<CustomerLookupResponse | null>(null);
+  const [loadingCrm, setLoadingCrm] = useState(false);
+  const [crmPhone, setCrmPhone] = useState('');
+
+  const fetchCrmData = useCallback(async (phoneToLookup: string) => {
+    const cleanPhone = phoneToLookup.replace(/\D/g, '');
+    if (!cleanPhone) return;
+    setLoadingCrm(true);
+    setCrmPhone(cleanPhone);
+    try {
+      const data = await fetchCustomerLookup(cleanPhone);
+      setCrmData(data);
+      if (data.customer) {
+        setActiveCallView('data'); // auto switch to target profile tab
+      }
+    } catch (err) {
+      console.error('[CallCenter] CRM Lookup failed:', err);
+    } finally {
+      setLoadingCrm(false);
+    }
+  }, []);
 
   // Ringtone Audio
   const ringtoneRef = useRef<HTMLAudioElement | null>(null);
@@ -116,6 +142,13 @@ export function CallCenterPortal(): JSX.Element {
   // Fixed: Disposition modal now only triggers on genuine CALL_ENDED event
   // ─────────────────────────────────────────────────────────────────────────
   useEffect(() => {
+    if (currentCall) {
+      const cleanPhone = currentCall.phoneNumber ? currentCall.phoneNumber.replace(/\D/g, '') : '';
+      if (cleanPhone && crmPhone !== cleanPhone) {
+        void fetchCrmData(cleanPhone);
+      }
+    }
+
     // Case 1: No active call from the SIP hook
     if (!currentCall) {
       // Only trigger disposition if we HAD an active call and haven't already handled it
@@ -199,7 +232,7 @@ export function CallCenterPortal(): JSX.Element {
     // Sync mute/hold state from phone hook
     setIsMuted(currentCall.isMuted);
     setIsOnHold(currentCall.isOnHold);
-  }, [currentCall, isCallActive, activeCallData]);
+  }, [currentCall, isCallActive, activeCallData, fetchCrmData, crmPhone]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // LEAD INJECTION HANDLER - Pre-populate UI with webhook data
@@ -426,7 +459,7 @@ export function CallCenterPortal(): JSX.Element {
     setIsIncomingCall(false);
     setIsCallActive(true);
     setActiveCallData(incomingCallData);
-    setActiveCallView('script'); // Ensure script pops up immediately
+    setActiveCallView(crmData?.customer ? 'data' : 'script'); // Switch dynamically if CRM record found
     setAgentStatus('on_call');
     setCallTimer(0);
 
@@ -529,6 +562,8 @@ export function CallCenterPortal(): JSX.Element {
       dispositionHandledRef.current = false;
       setPreInjectedData(null);
       clearLead();
+      setCrmData(null);
+      setCrmPhone('');
     }, 2000);
   };
 
@@ -544,8 +579,10 @@ export function CallCenterPortal(): JSX.Element {
 
     const phoneNum = app.phone || app.caller_id;
     if (phoneNum) {
+      const cleanPhone = phoneNum.replace(/\D/g, '');
+      void fetchCrmData(cleanPhone);
       try {
-        await makeCall(phoneNum.replace(/\D/g, ''));
+        await makeCall(cleanPhone);
       } catch (error) {
         console.error('Failed to dial:', error);
       }
@@ -794,9 +831,9 @@ export function CallCenterPortal(): JSX.Element {
       )}
 
       {/* Main Content - 3 Column Layout */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
         {/* Left Column - Dialer */}
-        <div className="w-80 flex-shrink-0 border-r border-border flex flex-col bg-card">
+        <div className="w-full md:w-80 flex-shrink-0 md:border-r border-b md:border-b-0 border-border flex flex-col bg-card">
           {isIncomingCall && incomingCallData && (
             <IncomingCallPanel
               incomingCallData={incomingCallData}
@@ -855,6 +892,8 @@ export function CallCenterPortal(): JSX.Element {
                 dispositionHandledRef.current = false;
                 setPreInjectedData(null);
                 clearLead();
+                setCrmData(null);
+                setCrmPhone('');
               }}
             />
           )}
@@ -882,6 +921,7 @@ export function CallCenterPortal(): JSX.Element {
                     setCallTimer(0);
                     setTotalCallsCount(prev => prev + 1);
                     callTimerRef.current = setInterval(() => setCallTimer(prev => prev + 1), 1000);
+                    void fetchCrmData(dialNumber);
                     try {
                       await makeCall(dialNumber);
                     } catch (e) {
@@ -899,7 +939,7 @@ export function CallCenterPortal(): JSX.Element {
 
         {/* Center/Right Column - Script or Queue */}
         <div className="flex-1 p-4 overflow-hidden flex flex-col">
-          {isCallActive && activeCallData ? (
+          {(isCallActive && activeCallData) || crmData ? (
             <div className="flex-1 flex flex-col overflow-hidden gap-2">
               <WorkspaceTabs
                 activeCallView={activeCallView}
@@ -908,33 +948,71 @@ export function CallCenterPortal(): JSX.Element {
 
               {activeCallView === 'script' && (
                 <div className="flex-1 overflow-hidden">
-                  {selectedScript === 'retention' && canAccessRetentionScript ? (
-                    <RetentionScriptPanel
-                      prospectData={activeCallData}
-                      onDataUpdate={(data: Record<string, unknown>) =>
-                        setActiveCallData(prev =>
-                          prev ? ({ ...prev, ...data } as ProspectData) : null
-                        )
-                      }
-                    />
-                  ) : selectedScript === 'underwriting' ? (
-                    <UnderwritingScriptPanel
-                      prospectData={activeCallData}
-                      onDataUpdate={(data: Record<string, unknown>) =>
-                        setActiveCallData(prev =>
-                          prev ? ({ ...prev, ...data } as ProspectData) : null
-                        )
+                  {activeCallData ? (
+                    selectedScript === 'retention' && canAccessRetentionScript ? (
+                      <RetentionScriptPanel
+                        prospectData={activeCallData}
+                        onDataUpdate={(data: Record<string, unknown>) =>
+                          setActiveCallData(prev =>
+                            prev ? ({ ...prev, ...data } as ProspectData) : null
+                          )
+                        }
+                      />
+                    ) : selectedScript === 'underwriting' ? (
+                      <UnderwritingScriptPanel
+                        prospectData={activeCallData}
+                        onDataUpdate={(data: Record<string, unknown>) =>
+                          setActiveCallData(prev =>
+                            prev ? ({ ...prev, ...data } as ProspectData) : null
+                          )
+                        }
+                      />
+                    ) : (
+                      <IntegratedScriptPanel
+                        prospectData={activeCallData}
+                        onDataUpdate={(data: Partial<ProspectData>) =>
+                          setActiveCallData(prev =>
+                            prev ? ({ ...prev, ...data } as ProspectData) : null
+                          )
+                        }
+                      />
+                    )
+                  ) : (
+                    <div className="flex-1 flex items-center justify-center text-muted-foreground p-8 text-center bg-white/5 border border-white/10 rounded-xl">
+                      <p className="text-sm">Script is not available when no call is active.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {activeCallView === 'data' && (
+                <div className="flex-1 overflow-hidden flex flex-col">
+                  {crmData ? (
+                    <CustomerCrmPanel
+                      data={crmData}
+                      loading={loadingCrm}
+                      phone={crmPhone}
+                      onRefresh={() => fetchCrmData(crmPhone)}
+                      onSwitchCustomer={(phoneToSwitch) => fetchCrmData(phoneToSwitch)}
+                      activeCall={
+                        currentCall
+                          ? {
+                              state: currentCall.state,
+                              direction: currentCall.direction,
+                              campaignName: currentCall.prospectData?.campaignName || activeCallData?.campaignName,
+                              publisherName: currentCall.prospectData?.publisherName || activeCallData?.publisherName,
+                              buyerName: currentCall.prospectData?.buyerName || activeCallData?.buyerName,
+                            }
+                          : null
                       }
                     />
                   ) : (
-                    <IntegratedScriptPanel
-                      prospectData={activeCallData}
-                      onDataUpdate={(data: Partial<ProspectData>) =>
-                        setActiveCallData(prev =>
-                          prev ? ({ ...prev, ...data } as ProspectData) : null
-                        )
-                      }
-                    />
+                    <div className="flex-1 flex items-center justify-center text-muted-foreground p-8 text-center">
+                      <div>
+                        <User className="w-10 h-10 text-muted-foreground mx-auto mb-2 opacity-40" />
+                        <p className="text-sm">No profile data loaded. Dial a number or receive a call to fetch CRM records.</p>
+                      </div>
+                    </div>
                   )}
                 </div>
               )}
