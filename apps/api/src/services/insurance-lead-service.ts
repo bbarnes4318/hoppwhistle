@@ -7,7 +7,7 @@
  * Also provides CRM read/update/stats/retry functions for the frontend.
  */
 
-import type { Prisma } from '@prisma/client';
+import type { Prisma, InsuranceValidationStatus, InsurancePostStatus, InsuranceLeadMode } from '@prisma/client';
 
 import { createServiceLogger } from '../lib/logger.js';
 import { getPrismaClient } from '../lib/prisma.js';
@@ -331,9 +331,9 @@ export async function getLeads(tenantId: string, filters: LeadFilters) {
   // For submission-level filters, use a submissions relation filter
   if (filters.validationStatus || filters.postStatus || filters.postMode) {
     const subFilter: Prisma.InsuranceLeadSubmissionWhereInput = {};
-    if (filters.validationStatus) subFilter.validationStatus = filters.validationStatus as Prisma.InsuranceValidationStatus;
-    if (filters.postStatus) subFilter.postStatus = filters.postStatus as Prisma.InsurancePostStatus;
-    if (filters.postMode) subFilter.postMode = filters.postMode as Prisma.InsuranceLeadMode;
+    if (filters.validationStatus) subFilter.validationStatus = filters.validationStatus as InsuranceValidationStatus;
+    if (filters.postStatus) subFilter.postStatus = filters.postStatus as InsurancePostStatus;
+    if (filters.postMode) subFilter.postMode = filters.postMode as InsuranceLeadMode;
     where.submissions = { some: subFilter };
   }
 
