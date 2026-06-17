@@ -90,6 +90,7 @@ async function main() {
       keyHash: apiKeyHash,
       prefix: apiKeyPrefix.substring(0, 8),
       status: 'ACTIVE',
+      scopes: ['*'],
     },
   });
   console.log('✅ Created API key (prefix:', apiKeyPrefix.substring(0, 8) + ')');
