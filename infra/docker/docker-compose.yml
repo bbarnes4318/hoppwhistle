@@ -126,6 +126,8 @@ services:
       - RECORDINGS_FORMAT=${RECORDINGS_FORMAT:-wav}
       - ENABLE_TLS=${ENABLE_TLS:-false}
       - ENABLE_SRTP=${ENABLE_SRTP:-optional}
+      - PUBLIC_IP=${PUBLIC_IP}
+      - MEDIA_DOMAIN=${MEDIA_DOMAIN}
     volumes:
       - freeswitch_recordings:/recordings
       # NOTE: Do NOT mount freeswitch_conf here - config is baked into the image via Dockerfile
