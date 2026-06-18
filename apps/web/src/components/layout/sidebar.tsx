@@ -4,6 +4,7 @@ import {
   AudioLines,
   BarChart3,
   Bot,
+  ClipboardCheck,
   Clock,
   Disc3,
   DollarSign,
@@ -70,6 +71,13 @@ const navigation: NavItem[] = [
     href: '/contacts',
     icon: Users,
     title: 'Prospect lookup & call history',
+  },
+  {
+    name: 'Retention',
+    href: '/retention',
+    icon: ClipboardCheck,
+    title: 'Policy onboarding & retention queue',
+    hideFromBuyerOnly: true,
   },
   {
     name: 'Insurance Leads',
