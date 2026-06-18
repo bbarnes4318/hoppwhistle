@@ -40,12 +40,14 @@ export class BuyerBillingService {
    *
    * Logic:
    * 1. Check if buyer.billingType === 'UPFRONT'
-   * 2. Check if call.connectedDuration >= buyer.billableDuration
-   * 3. If YES:
-   *    - Decrement buyer.leadsRemaining by 1
-   *    - Create BuyerTransaction (DEBIT, -1)
-   *    - Set call.paidOut = true
-   *    - SAFETY: If leadsRemaining < 1, auto-pause the buyer
+   * 2. Check if call.buyerChargeStatus is already 'CHARGED' or if a DEBIT transaction exists.
+   * 3. Check if call.billable is true.
+   * 4. If YES:
+   *    - Deduct call.buyerBillableAmount from buyer.walletBalance
+   *    - Update buyer.leadsRemaining to Math.floor(newBalance) for legacy UI compatibility
+   *    - Create BuyerTransaction (DEBIT, -chargeAmount)
+   *    - Set call.buyerChargeStatus = 'CHARGED' and call.buyerChargedAt = now()
+   *    - SAFETY: If newBalance <= 0, auto-pause the buyer
    */
   async processCallBilling(callId: string): Promise<BillingResult> {
     const prisma = getPrismaClient();
@@ -78,6 +80,36 @@ export class BuyerBillingService {
             deducted: false,
             reason: 'Buyer is TERMS billing (post-pay)',
             buyerId: buyer.id,
+          };
+        }
+
+        // Check 1.2: Check if a DEBIT transaction already exists for this call and buyer to ensure database-level idempotency
+        const existingTx = await tx.buyerTransaction.findFirst({
+          where: {
+            buyerId: buyer.id,
+            callId: callId,
+            type: 'DEBIT',
+          },
+        });
+
+        if (existingTx) {
+          // If transaction exists but the call wasn't marked as CHARGED, update call state to keep it consistent
+          if (call.buyerChargeStatus !== 'CHARGED') {
+            await tx.call.update({
+              where: { id: callId },
+              data: {
+                buyerChargeStatus: 'CHARGED',
+                buyerChargedAt: existingTx.createdAt,
+              },
+            });
+          }
+          return {
+            success: true,
+            deducted: false,
+            reason: 'Call already charged (transaction exists)',
+            buyerId: buyer.id,
+            leadsRemaining: buyer.leadsRemaining,
+            walletBalance: Number(buyer.walletBalance),
           };
         }
 

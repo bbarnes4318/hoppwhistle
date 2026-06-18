@@ -667,6 +667,7 @@ model BuyerTransaction {
   call      Call? @relation(fields: [callId], references: [id])
   createdBy User? @relation("BuyerTransactionCreator", fields: [createdById], references: [id])
 
+  @@unique([buyerId, callId, type])
   @@index([buyerId])
   @@index([createdAt])
   @@index([type])
@@ -1381,6 +1382,7 @@ model AccrualLedger {
   closedAt         DateTime?
   invoiceId        String?
   metadata         Json?
+  idempotencyKey   String      @unique
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
 
@@ -1389,7 +1391,6 @@ model AccrualLedger {
   invoice        Invoice?       @relation(fields: [invoiceId], references: [id])
   call           Call?          @relation(fields: [callId], references: [id])
 
-  @@unique([tenantId, callId, type, buyerId, publisherId])
   @@index([tenantId])
   @@index([billingAccountId])
   @@index([periodDate])

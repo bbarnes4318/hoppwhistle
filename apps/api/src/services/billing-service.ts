@@ -32,10 +32,10 @@ export class BillingService {
 
   /**
    * Determine if a call is billable.
-   * Billable means durationUsed is strictly greater than the threshold.
+   * Billable means durationUsed is greater than or equal to the threshold.
    */
   isBillableCall(durationUsed: number, threshold: number): boolean {
-    return durationUsed > threshold;
+    return durationUsed >= threshold;
   }
 
   /**
@@ -134,7 +134,7 @@ export class BillingService {
         } else if (call.status !== 'COMPLETED' && call.status !== 'ANSWERED') {
           noPayoutReason = 'CALL_NOT_ANSWERED';
           noConversionReason = 'CALL_NOT_ANSWERED';
-        } else if (durationUsed <= threshold) {
+        } else if (durationUsed < threshold) {
           noPayoutReason = 'BELOW_DURATION_THRESHOLD';
           noConversionReason = 'BELOW_DURATION_THRESHOLD';
         } else {
@@ -413,14 +413,10 @@ export class BillingService {
           publisherId: string | null,
           description: string
         ) => {
-          const existing = await tx.accrualLedger.findFirst({
-            where: {
-              tenantId,
-              callId,
-              type,
-              buyerId,
-              publisherId,
-            },
+          const idempotencyKey = `${tenantId}:${callId}:${type}:${buyerId || 'none'}:${publisherId || 'none'}`;
+
+          const existing = await tx.accrualLedger.findUnique({
+            where: { idempotencyKey },
           });
 
           if (existing) {
@@ -448,6 +444,7 @@ export class BillingService {
                 periodDate,
                 buyerId,
                 publisherId,
+                idempotencyKey,
                 closed: false,
               },
             });
