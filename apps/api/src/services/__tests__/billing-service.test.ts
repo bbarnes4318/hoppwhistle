@@ -257,6 +257,7 @@ describe('BillingService Unit Tests', () => {
         basePrice: new Prisma.Decimal('10.00'),
       };
       mockPrisma.buyerEndpoint.findMany.mockResolvedValue([mockEndpoint]);
+      mockPrisma.buyerEndpoint.findUnique.mockResolvedValue(mockEndpoint);
 
       // 1. Endpoint fallback (no Campaign defaults/overrides/bids)
       mockPrisma.call.findUnique.mockResolvedValue({
