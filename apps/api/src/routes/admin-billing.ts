@@ -31,20 +31,20 @@ class InvoiceGeneratorService {
       
       // Get accruals
       let sql = `
-        SELECT id, type, amount, description, call_id
+        SELECT id, type, amount, description, "callId"
         FROM accrual_ledger
-        WHERE billing_account_id = $1 AND period_date = $2 AND closed = false
+        WHERE "billingAccountId" = $1 AND "periodDate" = $2 AND closed = false
       `;
       const params: any[] = [billingAccountId, periodDate];
       if (publisherId) {
-        sql += ' AND publisher_id = $' + (params.length + 1);
+        sql += ' AND "publisherId" = $' + (params.length + 1);
         params.push(publisherId);
       }
       if (buyerId) {
-        sql += ' AND buyer_id = $' + (params.length + 1);
+        sql += ' AND "buyerId" = $' + (params.length + 1);
         params.push(buyerId);
       }
-      sql += ' ORDER BY created_at ASC';
+      sql += ' ORDER BY "createdAt" ASC';
       
       const accrualsResult = await client.query(sql, params);
       if (accrualsResult.rows.length === 0) {
@@ -52,10 +52,10 @@ class InvoiceGeneratorService {
       }
 
       const accountResult = await client.query(
-        'SELECT tenant_id, currency FROM billing_accounts WHERE id = $1',
+        'SELECT "tenantId", currency FROM billing_accounts WHERE id = $1',
         [billingAccountId]
       );
-      const { tenant_id, currency } = accountResult.rows[0];
+      const { tenantId, currency } = accountResult.rows[0];
 
       const lines = accrualsResult.rows.map((accrual) => ({
         description: accrual.description,
@@ -77,8 +77,8 @@ class InvoiceGeneratorService {
 
       await client.query(
         `INSERT INTO invoices (
-          id, billing_account_id, invoice_number, status, period_start, period_end,
-          subtotal, tax, total, due_date, created_at
+          id, "billingAccountId", "invoiceNumber", status, "periodStart", "periodEnd",
+          subtotal, tax, total, "dueDate", "createdAt"
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())`,
         [
           invoiceId, billingAccountId, invoiceNumber, 'DRAFT',
@@ -90,7 +90,7 @@ class InvoiceGeneratorService {
       for (const line of lines) {
         await client.query(
           `INSERT INTO invoice_lines (
-            id, invoice_id, description, quantity, unit_price, total, created_at
+            id, "invoiceId", description, quantity, "unitPrice", total, "createdAt"
           ) VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
           [
             `line_${invoiceId}_${Math.random().toString(36).substr(2, 9)}`,
@@ -103,16 +103,16 @@ class InvoiceGeneratorService {
       // Close accruals
       let closeSql = `
         UPDATE accrual_ledger
-        SET closed = true, closed_at = NOW(), invoice_id = $1, updated_at = NOW()
-        WHERE billing_account_id = $2 AND period_date = $3 AND closed = false
+        SET closed = true, "closedAt" = NOW(), "invoiceId" = $1, "updatedAt" = NOW()
+        WHERE "billingAccountId" = $2 AND "periodDate" = $3 AND closed = false
       `;
       const closeParams: any[] = [invoiceId, billingAccountId, periodDate];
       if (publisherId) {
-        closeSql += ' AND publisher_id = $' + (closeParams.length + 1);
+        closeSql += ' AND "publisherId" = $' + (closeParams.length + 1);
         closeParams.push(publisherId);
       }
       if (buyerId) {
-        closeSql += ' AND buyer_id = $' + (closeParams.length + 1);
+        closeSql += ' AND "buyerId" = $' + (closeParams.length + 1);
         closeParams.push(buyerId);
       }
       await client.query(closeSql, closeParams);
@@ -131,17 +131,17 @@ class InvoiceGeneratorService {
     const client = await this.pool.connect();
     try {
       const invoiceResult = await client.query(
-        `SELECT i.*, ba.name as account_name, ba.currency, t.name as tenant_name
+        `SELECT i.id, i."invoiceNumber" as invoice_number, i.status, i."periodStart" as period_start, i."periodEnd" as period_end, i.subtotal, i.tax, i.total, i."dueDate" as due_date, ba.name as account_name, ba.currency, t.name as tenant_name
          FROM invoices i
-         JOIN billing_accounts ba ON ba.id = i.billing_account_id
-         JOIN tenants t ON t.id = ba.tenant_id
+         JOIN billing_accounts ba ON ba.id = i."billingAccountId"
+         JOIN tenants t ON t.id = ba."tenantId"
          WHERE i.id = $1`,
         [invoiceId]
       );
       if (invoiceResult.rows.length === 0) throw new Error('Invoice not found');
       const invoice = invoiceResult.rows[0];
       const linesResult = await client.query(
-        'SELECT * FROM invoice_lines WHERE invoice_id = $1 ORDER BY created_at',
+        'SELECT id, "invoiceId" as invoice_id, description, quantity, "unitPrice" as unit_price, total, "createdAt" as created_at FROM invoice_lines WHERE "invoiceId" = $1 ORDER BY "createdAt" ASC',
         [invoiceId]
       );
       const html = this.generateInvoiceHTML(invoice, linesResult.rows);
@@ -198,7 +198,7 @@ class InvoiceGeneratorService {
     const year = new Date().getFullYear();
     const month = String(new Date().getMonth() + 1).padStart(2, '0');
     const result = await this.pool.query(
-      `SELECT COUNT(*) as count FROM invoices WHERE billing_account_id = $1 AND EXTRACT(YEAR FROM created_at) = $2 AND EXTRACT(MONTH FROM created_at) = $3`,
+      `SELECT COUNT(*) as count FROM invoices WHERE "billingAccountId" = $1 AND EXTRACT(YEAR FROM "createdAt") = $2 AND EXTRACT(MONTH FROM "createdAt") = $3`,
       [billingAccountId, year, month]
     );
     const count = parseInt(result.rows[0].count, 10) + 1;
@@ -220,14 +220,14 @@ class AccrualLedgerService {
     publisherId?: string,
     buyerId?: string
   ): Promise<{ total: Decimal; byType: Record<string, Decimal>; count: number }> {
-    let sql = `SELECT type, SUM(amount::numeric) as total_amount, COUNT(*) as count FROM accrual_ledger WHERE billing_account_id = $1 AND period_date = $2 AND closed = false`;
+    let sql = `SELECT type, SUM(amount::numeric) as total_amount, COUNT(*) as count FROM accrual_ledger WHERE "billingAccountId" = $1 AND "periodDate" = $2 AND closed = false`;
     const params: any[] = [billingAccountId, periodDate];
     if (publisherId) {
-      sql += ' AND publisher_id = $' + (params.length + 1);
+      sql += ' AND "publisherId" = $' + (params.length + 1);
       params.push(publisherId);
     }
     if (buyerId) {
-      sql += ' AND buyer_id = $' + (params.length + 1);
+      sql += ' AND "buyerId" = $' + (params.length + 1);
       params.push(buyerId);
     }
     sql += ' GROUP BY type';
@@ -253,6 +253,36 @@ const pool = new Pool({
 });
 
 export async function registerAdminBillingRoutes(fastify: FastifyInstance) {
+  // Enforce ADMIN/OWNER only access to all administrative billing routes
+  fastify.addHook('preHandler', async (request, reply) => {
+    const user = (request as any).user;
+    if (!user || !user.userId) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+    }
+
+    const demoTenantId = request.headers['x-demo-tenant-id'] as string;
+    if (demoTenantId) {
+      return; // Allow demo request bypass
+    }
+
+    // Query roles from database using pg pool
+    const roleResult = await pool.query(
+      `SELECT r.name 
+       FROM user_roles ur 
+       JOIN roles r ON ur."roleId" = r.id 
+       WHERE ur."userId" = $1`,
+      [user.userId]
+    );
+    const roles = roleResult.rows.map(row => row.name);
+    const isAdminOrOwner = roles.some(role => role === 'ADMIN' || role === 'OWNER');
+
+    if (!isAdminOrOwner) {
+      void reply.code(403);
+      return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
+    }
+  });
+
   // Create/Update Rate Card
   fastify.post<{
     Body: {
@@ -273,7 +303,7 @@ export async function registerAdminBillingRoutes(fastify: FastifyInstance) {
 
       const result = await pool.query(
         `INSERT INTO rate_cards (
-          id, billing_account_id, name, rates, effective_from, effective_to, status, created_at
+          id, "billingAccountId", name, rates, "effectiveFrom", "effectiveTo", status, "createdAt"
         ) VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVE', NOW())
         RETURNING *`,
         [
@@ -305,17 +335,17 @@ export async function registerAdminBillingRoutes(fastify: FastifyInstance) {
   fastify.get('/api/v1/admin/billing/rate-cards', async (request, reply) => {
     const { billingAccountId } = request.query as { billingAccountId?: string };
 
-    let sql = 'SELECT * FROM rate_cards WHERE 1=1';
+    let sql = 'SELECT id, "billingAccountId", name, rates, "effectiveFrom", "effectiveTo", status, "createdAt", "updatedAt" FROM rate_cards WHERE 1=1';
     const params: any[] = [];
     let paramIndex = 1;
 
     if (billingAccountId) {
-      sql += ` AND billing_account_id = $${paramIndex}`;
+      sql += ` AND "billingAccountId" = $${paramIndex}`;
       params.push(billingAccountId);
       paramIndex++;
     }
 
-    sql += ' ORDER BY effective_from DESC';
+    sql += ' ORDER BY "effectiveFrom" DESC';
 
     const result = await pool.query(sql, params);
     return {
@@ -462,7 +492,7 @@ export async function registerAdminBillingRoutes(fastify: FastifyInstance) {
       const payoutId = `payout_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       await pool.query(
         `INSERT INTO payouts (
-          id, billing_account_id, amount, currency, status, method, reference, created_at
+          id, "billingAccountId", amount, currency, status, method, reference, "createdAt"
         ) VALUES ($1, $2, $3, $4, 'PROCESSING', 'stripe_connect', $5, NOW())`,
         [payoutId, billingAccountId, amount.toFixed(2), currency, transferId]
       );

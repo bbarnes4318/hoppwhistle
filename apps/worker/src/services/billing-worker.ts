@@ -316,6 +316,18 @@ export class BillingWorker {
 
       logger.info(`Created accruals for call ${event.data.callId}: $${rating.total.toFixed(4)}`);
 
+      // Update Call record's cost and profit (total cost of carrier connection, minute rates, and recordings)
+      await this.pool.query(
+        `UPDATE calls
+         SET cost = $1,
+             profit = COALESCE(revenue, 0) - COALESCE(payout, 0) - $1,
+             updated_at = NOW()
+         WHERE id = $2`,
+        [rating.total.toFixed(4), event.data.callId]
+      );
+
+      logger.info(`Updated call cost/profit in database for call ${event.data.callId}`);
+
       // Acknowledge message
       await this.redis.xack('events:stream', 'billing-group', messageId);
     } catch (error) {

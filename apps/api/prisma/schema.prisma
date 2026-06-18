@@ -606,6 +606,7 @@ model Buyer {
   status           BuyerStatus      @default(ACTIVE)
   billingType      BuyerBillingType @default(TERMS)
   leadsRemaining   Int              @default(0)
+  walletBalance    Decimal          @default(0.00) @db.Decimal(10, 2)
   billableDuration Int              @default(60) // Seconds threshold for billable call
 
   // Permission toggles
@@ -655,7 +656,7 @@ enum BuyerTransactionType {
 model BuyerTransaction {
   id          String               @id @default(uuid())
   buyerId     String
-  amount      Int // +N for credit, -1 for debit
+  amount      Decimal              @db.Decimal(10, 2) // +N for credit, -N for debit
   type        BuyerTransactionType
   description String // e.g., "Call ID #abc123" or "Admin added 100 leads"
   callId      String? // Reference if DEBIT
@@ -946,6 +947,14 @@ model Call {
   buyerBillableAmount        Decimal?  @db.Decimal(10, 4)
   billingCalculatedAt        DateTime?
   billingRuleSnapshot        Json?
+
+  // Semantic Status Tracking Fields
+  buyerChargeStatus          String?
+  buyerChargedAt             DateTime?
+  publisherPayoutStatus      String?
+  publisherPayableAt         DateTime?
+  publisherPaidAt            DateTime?
+  disputeStatus              String?
 
   // Boolean/Status Fields
   isDuplicate         Boolean @default(false) // If caller is duplicate
@@ -1380,6 +1389,7 @@ model AccrualLedger {
   invoice        Invoice?       @relation(fields: [invoiceId], references: [id])
   call           Call?          @relation(fields: [callId], references: [id])
 
+  @@unique([tenantId, callId, type, buyerId, publisherId])
   @@index([tenantId])
   @@index([billingAccountId])
   @@index([periodDate])
@@ -1398,6 +1408,12 @@ enum AccrualType {
   CPA_CONVERSION
   TAX
   ADJUSTMENT
+  BUYER_REVENUE
+  PUBLISHER_PAYOUT
+  CARRIER_COST
+  PLATFORM_PROFIT
+  DISPUTE_HOLD
+  DISPUTE_REVERSAL
 }
 
 // ============================================================================

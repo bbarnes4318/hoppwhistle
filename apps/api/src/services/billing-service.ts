@@ -96,21 +96,158 @@ export class BillingService {
         const tenantId = call.tenantId;
         const campaign = call.campaign;
 
-        // 2. Resolve threshold (default to campaign settings, then buyer billableDuration, then 60)
-        let threshold = 60;
-        if (campaign) {
-          threshold = campaign.billableDurationSeconds;
-        } else if (call.buyer) {
-          threshold = call.buyer.billableDuration;
+        // 1. Resolve duration used: prefer connectedDuration, fall back to duration
+        let durationUsed = 0;
+        let connectedDurationFallbackUsed = false;
+        if (call.connectedDuration !== null && call.connectedDuration !== undefined) {
+          durationUsed = call.connectedDuration;
+        } else if (call.duration !== null && call.duration !== undefined) {
+          durationUsed = call.duration;
+          connectedDurationFallbackUsed = true;
         }
 
-        const durationUsed = this.getBillableDuration(call);
-        const billable = this.isBillableCall(durationUsed, threshold);
+        // 2. Resolve threshold: Campaign -> Buyer -> 60s
+        let threshold = 60;
+        let thresholdSource = 'default_60s';
+        if (campaign && campaign.billableDurationSeconds !== null && campaign.billableDurationSeconds !== undefined) {
+          threshold = campaign.billableDurationSeconds;
+          thresholdSource = 'campaign';
+        } else if (call.buyer && call.buyer.billableDuration !== null && call.buyer.billableDuration !== undefined) {
+          threshold = call.buyer.billableDuration;
+          thresholdSource = 'buyer';
+        }
 
-        // 3. Resolve Publisher Payout Rate
+        // 3. Determine billability: >= threshold
+        let billable = false;
+        let noPayoutReason: string | null = null;
+        let noConversionReason: string | null = null;
+
+        if (call.blocked) {
+          noPayoutReason = 'BLOCKED';
+          noConversionReason = 'BLOCKED';
+        } else if (call.isDuplicate) {
+          noPayoutReason = 'DUPLICATE_CALLER';
+          noConversionReason = 'DUPLICATE_CALLER';
+        } else if (call.missedCall) {
+          noPayoutReason = 'MISSED_CALL';
+          noConversionReason = 'MISSED_CALL';
+        } else if (call.status !== 'COMPLETED' && call.status !== 'ANSWERED') {
+          noPayoutReason = 'CALL_NOT_ANSWERED';
+          noConversionReason = 'CALL_NOT_ANSWERED';
+        } else if (durationUsed <= threshold) {
+          noPayoutReason = 'BELOW_DURATION_THRESHOLD';
+          noConversionReason = 'BELOW_DURATION_THRESHOLD';
+        } else {
+          billable = true;
+        }
+
+        // 4. Resolve Buyer Endpoint ID
+        let buyerEndpointId: string | null = null;
+        if (call.buyerId && call.targetNumber) {
+          const normalizedTarget = this.normalizePhoneNumber(call.targetNumber);
+          const endpoints = await tx.buyerEndpoint.findMany({
+            where: {
+              buyerId: call.buyerId,
+              status: 'ACTIVE',
+            },
+          });
+          const matchingEp = endpoints.find(
+            (ep) => this.normalizePhoneNumber(ep.destination) === normalizedTarget
+          );
+          if (matchingEp) {
+            buyerEndpointId = matchingEp.id;
+          }
+        }
+
+        // 5. Resolve Buyer Revenue Rate
+        let buyerPriceRate = new Prisma.Decimal(0);
+        let pricingSource = 'default_0';
+
+        // A. Check RTB winning bid (if ping/post)
+        let rtbBidAmount: Prisma.Decimal | null = null;
+        if (call.buyerId && call.did) {
+          const pingRequests = await tx.pingRequest.findMany({
+            where: {
+              tenantId,
+              status: 'SOLD',
+              assignedPhoneNumber: {
+                number: call.did,
+              },
+            },
+            include: {
+              bids: {
+                where: {
+                  buyerId: call.buyerId,
+                },
+              },
+            },
+            orderBy: {
+              createdAt: 'desc',
+            },
+            take: 5,
+          });
+
+          const normalizedCaller = this.normalizePhoneNumber(call.callerId);
+          const match = pingRequests.find(pr => {
+            if (!pr.callerNumber) return false;
+            return this.normalizePhoneNumber(pr.callerNumber) === normalizedCaller;
+          });
+
+          if (match && match.bids.length > 0) {
+            const winningBid = match.bids.find(b => b.buyerEndpointId === buyerEndpointId) || match.bids[0];
+            rtbBidAmount = winningBid.amount;
+          }
+        }
+
+        if (rtbBidAmount !== null) {
+          buyerPriceRate = rtbBidAmount;
+          pricingSource = 'rtb_winning_bid';
+        } else if (campaign && call.buyerId && call.targetNumber) {
+          // B. CampaignBuyer override
+          const normalizedTarget = this.normalizePhoneNumber(call.targetNumber);
+          const assignments = await tx.campaignBuyer.findMany({
+            where: {
+              tenantId,
+              campaignId: campaign.id,
+              buyerId: call.buyerId,
+              status: 'ACTIVE',
+            },
+          });
+
+          const match = assignments.find(
+            (a) => this.normalizePhoneNumber(a.destinationNumber) === normalizedTarget
+          );
+
+          if (match && match.pricePerBillableCall !== null && match.pricePerBillableCall !== undefined) {
+            buyerPriceRate = match.pricePerBillableCall;
+            pricingSource = 'campaign_buyer_override';
+            if (match.buyerEndpointId) {
+              buyerEndpointId = match.buyerEndpointId;
+            }
+          } else {
+            // C. Campaign default buyer price
+            buyerPriceRate = campaign.buyerPricePerBillableCall;
+            pricingSource = 'campaign_default';
+          }
+        }
+
+        // D. BuyerEndpoint basePrice fallback
+        if (buyerPriceRate.isZero() && buyerEndpointId) {
+          const ep = await tx.buyerEndpoint.findUnique({
+            where: { id: buyerEndpointId },
+          });
+          if (ep && !ep.basePrice.isZero()) {
+            buyerPriceRate = ep.basePrice;
+            pricingSource = 'buyer_endpoint_fallback';
+          }
+        }
+
+        // 6. Resolve Publisher Payout Rate
         let publisherPayoutRate = new Prisma.Decimal(0);
+        let payoutSource = 'default_0';
+
         if (campaign && call.publisherId) {
-          // Check for CampaignPublisher override
+          // A. CampaignPublisher override
           const assignment = await tx.campaignPublisher.findUnique({
             where: {
               tenantId_campaignId_publisherId: {
@@ -123,92 +260,66 @@ export class BillingService {
 
           if (assignment?.payoutPerBillableCall !== null && assignment?.payoutPerBillableCall !== undefined) {
             publisherPayoutRate = assignment.payoutPerBillableCall;
+            payoutSource = 'campaign_publisher_override';
           } else {
+            // B. Campaign default
             publisherPayoutRate = campaign.publisherPayoutPerBillableCall;
+            payoutSource = 'campaign_default';
           }
         }
 
-        // 4. Resolve Buyer Price Rate
-        let buyerPriceRate = new Prisma.Decimal(0);
-        let buyerEndpointId: string | null = null;
-
-        if (campaign && call.buyerId && call.targetNumber) {
-          // Normalize target number for matching
-          const normalizedTarget = this.normalizePhoneNumber(call.targetNumber);
-
-          // Find campaign assignment
-          const assignments = await tx.campaignBuyer.findMany({
-            where: {
-              tenantId,
-              campaignId: campaign.id,
-              buyerId: call.buyerId,
-              status: 'ACTIVE',
-            },
+        // C. Publisher specific payout rule fallback
+        if (publisherPayoutRate.isZero() && call.publisherId) {
+          const publisher = await tx.publisher.findUnique({
+            where: { id: call.publisherId },
           });
-
-          // Match by normalized destination number
-          const match = assignments.find(
-            (a) => this.normalizePhoneNumber(a.destinationNumber) === normalizedTarget
-          );
-
-          if (match) {
-            buyerEndpointId = match.buyerEndpointId;
-            if (match.pricePerBillableCall !== null && match.pricePerBillableCall !== undefined) {
-              buyerPriceRate = match.pricePerBillableCall;
-            } else {
-              buyerPriceRate = campaign.buyerPricePerBillableCall;
-            }
-          } else {
-            // No campaign assignment match, try fallback to Campaign level default buyer price
-            buyerPriceRate = campaign.buyerPricePerBillableCall;
-
-            // Try to find the BuyerEndpoint matching destination to resolve buyerEndpointId and basePrice fallback
-            const endpoints = await tx.buyerEndpoint.findMany({
-              where: {
-                buyerId: call.buyerId,
-                status: 'ACTIVE',
-              },
-            });
-
-            const matchingEp = endpoints.find(
-              (ep) => this.normalizePhoneNumber(ep.destination) === normalizedTarget
-            );
-
-            if (matchingEp) {
-              buyerEndpointId = matchingEp.id;
-              // Fall back to basePrice only if campaign default price is 0
-              if (buyerPriceRate.isZero() && !matchingEp.basePrice.isZero()) {
-                buyerPriceRate = matchingEp.basePrice;
-              }
-            }
-          }
-        } else if (call.buyerId && call.targetNumber) {
-          // No campaign, fallback directly to buyer endpoints matching destination
-          const normalizedTarget = this.normalizePhoneNumber(call.targetNumber);
-          const endpoints = await tx.buyerEndpoint.findMany({
-            where: {
-              buyerId: call.buyerId,
-              status: 'ACTIVE',
-            },
-          });
-
-          const matchingEp = endpoints.find(
-            (ep) => this.normalizePhoneNumber(ep.destination) === normalizedTarget
-          );
-
-          if (matchingEp) {
-            buyerEndpointId = matchingEp.id;
-            buyerPriceRate = matchingEp.basePrice;
+          const pubMeta = (publisher?.metadata as any) || {};
+          if (pubMeta.defaultPayoutRate !== undefined) {
+            publisherPayoutRate = new Prisma.Decimal(pubMeta.defaultPayoutRate);
+            payoutSource = 'publisher_metadata';
           }
         }
 
-        // 5. Calculate revenue, payout, and profit
+        // 7. Resolve Carrier / Live-Transfer Cost
+        let cost = new Prisma.Decimal(0);
+        let costSource = 'estimated_rate_card';
+
+        const callMetadata = (call.metadata as any) || {};
+
+        if (call.cost !== null && call.cost !== undefined) {
+          cost = new Prisma.Decimal(call.cost);
+          costSource = callMetadata.costSource || 'freeswitch_cdr';
+        } else {
+          // No cost on call, try to estimate from route metadata or phone number metadata
+          const route = await tx.didRoute.findFirst({
+            where: { tenantId, did: call.did || '' },
+            include: { phoneNumber: true }
+          });
+
+          let rate = 0.015; // default rate card rate if nothing is found (e.g. $0.015/min)
+          if (route) {
+            const routeMeta = (route.metadata as any) || {};
+            const phoneMeta = (route.phoneNumber?.metadata as any) || {};
+
+            if (routeMeta.carrierCostPerMinute !== undefined) {
+              rate = Number(routeMeta.carrierCostPerMinute);
+            } else if (phoneMeta.carrierCostPerMinute !== undefined) {
+              rate = Number(phoneMeta.carrierCostPerMinute);
+            }
+          }
+
+          // Calculate estimated cost: duration in minutes * rate
+          const durationSeconds = call.duration || 0;
+          cost = new Prisma.Decimal((durationSeconds / 60) * rate);
+          costSource = 'estimated_rate_card';
+        }
+
+        // 8. Calculate final amounts
         const revenue = billable ? buyerPriceRate : new Prisma.Decimal(0);
         const payout = billable ? publisherPayoutRate : new Prisma.Decimal(0);
-        const callCost = call.cost ? new Prisma.Decimal(call.cost) : new Prisma.Decimal(0);
-        const profit = revenue.minus(payout).minus(callCost);
+        const profit = revenue.minus(payout).minus(cost);
 
-        // 6. Build billing rule snapshot
+        // 9. Build billing rule snapshot
         const billingRuleSnapshot = {
           campaignId: campaign?.id || null,
           campaignName: campaign?.name || null,
@@ -218,15 +329,36 @@ export class BillingService {
           buyerName: call.buyerName || null,
           buyerEndpointId,
           durationUsed,
+          connectedDuration: call.connectedDuration ?? null,
+          duration: call.duration ?? null,
+          connectedDurationFallbackUsed,
           thresholdUsed: threshold,
+          thresholdSource,
           publisherPayoutRate: publisherPayoutRate.toString(),
+          payoutSource,
           buyerPriceRate: buyerPriceRate.toString(),
+          pricingSource,
+          costSource,
           destinationNumber: call.targetNumber || null,
           trackingDID: call.did || null,
           calculatedAt: new Date().toISOString(),
         };
 
-        // 7. Update Call record
+        // 10. Update Call record with semantic status tracking fields
+        const isUpfront = call.buyer?.billingType === 'UPFRONT';
+        
+        let buyerChargeStatus = call.buyerChargeStatus;
+        if (!billable) {
+          buyerChargeStatus = 'NOT_BILLABLE';
+        } else if (!isUpfront) {
+          buyerChargeStatus = 'CHARGED'; // TERMS is immediately accrued/charged
+        } else if (buyerChargeStatus !== 'CHARGED') {
+          buyerChargeStatus = 'PENDING'; // UPFRONT starts as PENDING until balance is deducted
+        }
+
+        const publisherPayoutStatus = billable && payout.gt(0) ? 'PAYABLE' : 'NOT_PAYABLE';
+        const publisherPayableAt = billable && payout.gt(0) ? new Date() : null;
+
         await tx.call.update({
           where: { id: callId },
           data: {
@@ -236,18 +368,147 @@ export class BillingService {
             buyerBillableAmount: revenue,
             revenue,
             payout,
+            cost, // store resolved/estimated cost
             profit,
+            noPayoutReason: billable ? null : noPayoutReason,
+            noConversionReason: billable ? null : noConversionReason,
             billingCalculatedAt: new Date(),
             billingRuleSnapshot: billingRuleSnapshot as any,
+            buyerChargeStatus,
+            publisherPayoutStatus,
+            publisherPayableAt,
+            // Only set buyerChargedAt if TERMS and we just marked it as CHARGED
+            ...(buyerChargeStatus === 'CHARGED' && !call.buyerChargedAt ? { buyerChargedAt: new Date() } : {}),
           },
         });
 
-        // 8. If the buyer has UPFRONT billing, make sure the ledger debit matches the new logic safely
-        // Wait, the requirements state: "If billing ledger/accrual records already exist, make the operation idempotent. Do not create duplicate accruals for the same call."
-        // Let's check if we should hook into the Upfront billing ledger or AccrualLedger.
-        // Let's see: `AccrualLedger` does NOT seem to have a strict unique key in prisma schema, but we can query it.
-        // Let's see: does the app currently generate accruals? We don't see them generated in `buyer-billing-service.ts`.
-        // Let's write the calculation result.
+        // 11. Generate Accrual Ledger Entries (unified ledger rows)
+        // Find or create active BillingAccount for this tenant
+        let billingAccount = await tx.billingAccount.findFirst({
+          where: { tenantId, status: 'ACTIVE' },
+          select: { id: true },
+        });
+
+        let billingAccountId = billingAccount?.id;
+        if (!billingAccountId) {
+          const newAccount = await tx.billingAccount.create({
+            data: {
+              tenantId,
+              name: 'Default Billing Account',
+              status: 'ACTIVE',
+              currency: 'USD',
+            },
+            select: { id: true },
+          });
+          billingAccountId = newAccount.id;
+        }
+
+        const periodDate = new Date();
+        periodDate.setHours(0, 0, 0, 0);
+
+        const upsertLedgerEntry = async (
+          type: 'BUYER_REVENUE' | 'PUBLISHER_PAYOUT' | 'CARRIER_COST' | 'PLATFORM_PROFIT',
+          amount: Prisma.Decimal,
+          buyerId: string | null,
+          publisherId: string | null,
+          description: string
+        ) => {
+          const existing = await tx.accrualLedger.findFirst({
+            where: {
+              tenantId,
+              callId,
+              type,
+              buyerId,
+              publisherId,
+            },
+          });
+
+          if (existing) {
+            if (!existing.closed) {
+              await tx.accrualLedger.update({
+                where: { id: existing.id },
+                data: {
+                  amount,
+                  description,
+                  updatedAt: new Date(),
+                },
+              });
+            }
+            return existing;
+          } else {
+            return await tx.accrualLedger.create({
+              data: {
+                tenantId,
+                billingAccountId,
+                callId,
+                type,
+                amount,
+                currency: 'USD',
+                description,
+                periodDate,
+                buyerId,
+                publisherId,
+                closed: false,
+              },
+            });
+          }
+        };
+
+        if (billable) {
+          // A. Buyer Revenue Accrual
+          if (call.buyerId && revenue.gt(0)) {
+            await upsertLedgerEntry(
+              'BUYER_REVENUE',
+              revenue,
+              call.buyerId,
+              null,
+              `Lead Charge - Campaign: ${campaign?.name || 'Unknown'}`
+            );
+          }
+
+          // B. Publisher Payout Accrual
+          if (call.publisherId && payout.gt(0)) {
+            await upsertLedgerEntry(
+              'PUBLISHER_PAYOUT',
+              payout.negated(),
+              null,
+              call.publisherId,
+              `Lead Payout - Campaign: ${campaign?.name || 'Unknown'}`
+            );
+          }
+        } else {
+          // If call is not billable, clean up any unclosed buyer revenue and publisher payout accruals
+          await tx.accrualLedger.deleteMany({
+            where: {
+              callId,
+              type: { in: ['BUYER_REVENUE', 'PUBLISHER_PAYOUT'] },
+              closed: false,
+            },
+          });
+        }
+
+        // C. Carrier Cost Accrual (billable or non-billable, if cost is incurred)
+        if (cost.gt(0)) {
+          await upsertLedgerEntry(
+            'CARRIER_COST',
+            cost.negated(),
+            null,
+            null,
+            `Carrier Cost - Call SID: ${call.callSid}`
+          );
+        }
+
+        // D. Platform Profit Accrual (billable or non-billable, if there is profit/loss)
+        if (!profit.isZero()) {
+          await upsertLedgerEntry(
+            'PLATFORM_PROFIT',
+            profit,
+            null,
+            null,
+            `Platform Profit - Call SID: ${call.callSid}`
+          );
+        }
+
         return {
           success: true,
           billable,

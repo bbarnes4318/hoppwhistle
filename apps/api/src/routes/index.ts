@@ -1615,7 +1615,7 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
 
     const billableStats = await prisma.call.groupBy({
       by: ['publisherId'],
-      where: { tenantId, publisherId: { not: null }, paidOut: true },
+      where: { tenantId, publisherId: { not: null }, billable: true },
       _count: { id: true },
     });
 
@@ -1893,6 +1893,52 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
 export async function registerCallRoutes(fastify: FastifyInstance) {
   await Promise.resolve();
 
+  // Helper to get authenticated user profile (role, buyerId, publisherId, accessToRecordings)
+  async function getUserProfile(request: any, prisma: any) {
+    const user = request.user;
+    let userRoles: string[] = [];
+    let buyerId: string | null = null;
+    let publisherId: string | null = null;
+    let publisherAccessToRecordings = false;
+
+    if (user?.userId) {
+      const userRecord = await prisma.user.findUnique({
+        where: { id: user.userId },
+        include: { roles: { include: { role: true } } },
+      });
+      if (userRecord) {
+        userRoles = userRecord.roles.map((ur: any) => ur.role.name) || [];
+        buyerId = userRecord.buyerId || null;
+        publisherId = (userRecord.metadata as any)?.publisherId || null;
+      }
+    }
+
+    if (user?.roles && Array.isArray(user.roles)) {
+      for (const r of user.roles) {
+        if (!userRoles.includes(r)) userRoles.push(r);
+      }
+    }
+
+    if (publisherId) {
+      const pub = await prisma.publisher.findUnique({
+        where: { id: publisherId },
+        select: { accessToRecordings: true },
+      });
+      publisherAccessToRecordings = pub?.accessToRecordings ?? false;
+    }
+
+    const isAdminOrOwner = userRoles.some(role => role === 'ADMIN' || role === 'OWNER') || 
+                           (user?.roles?.some((role: string) => role === 'ADMIN' || role === 'OWNER') ?? false);
+
+    return {
+      isAdminOrOwner,
+      userRoles,
+      buyerId,
+      publisherId,
+      publisherAccessToRecordings,
+    };
+  }
+
   function formatDuration(seconds?: number | null): string {
     if (seconds === undefined || seconds === null || isNaN(seconds)) return '0:00';
     const hours = Math.floor(seconds / 3600);
@@ -1965,32 +2011,40 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
     phone?: string;
     startDate?: string;
     endDate?: string;
+    buyerId?: string | null;
+    publisherId?: string | null;
   }) {
-    const { tenantId, isAdminOrOwner, userId, userNumbers, search, phone, startDate, endDate } = params;
+    const { tenantId, isAdminOrOwner, userId, userNumbers, search, phone, startDate, endDate, buyerId, publisherId } = params;
     const where: Record<string, any> = { tenantId };
 
-    if (!isAdminOrOwner && userId) {
-      const numberFormats: string[] = [];
-      for (const num of userNumbers) {
-        numberFormats.push(num);
-        if (num.startsWith('+1')) {
-          numberFormats.push(num.substring(2)); // 10 digit
-          numberFormats.push(num.substring(1)); // 11 digit (1xxxxxxxxxx)
-        } else if (num.startsWith('1') && num.length === 11) {
-          numberFormats.push('+' + num);
-          numberFormats.push(num.substring(1));
-        } else if (num.length === 10) {
-          numberFormats.push('+1' + num);
-          numberFormats.push('1' + num);
+    if (!isAdminOrOwner) {
+      if (buyerId) {
+        where.buyerId = buyerId;
+      } else if (publisherId) {
+        where.publisherId = publisherId;
+      } else if (userId) {
+        const numberFormats: string[] = [];
+        for (const num of userNumbers) {
+          numberFormats.push(num);
+          if (num.startsWith('+1')) {
+            numberFormats.push(num.substring(2)); // 10 digit
+            numberFormats.push(num.substring(1)); // 11 digit (1xxxxxxxxxx)
+          } else if (num.startsWith('1') && num.length === 11) {
+            numberFormats.push('+' + num);
+            numberFormats.push(num.substring(1));
+          } else if (num.length === 10) {
+            numberFormats.push('+1' + num);
+            numberFormats.push('1' + num);
+          }
         }
+        where.OR = [
+          { createdById: userId },
+          { fromNumber: { userId: userId } },
+          { callerId: { in: numberFormats } },
+          { toNumber: { in: numberFormats } },
+          { did: { in: numberFormats } },
+        ];
       }
-      where.OR = [
-        { createdById: userId },
-        { fromNumber: { userId: userId } },
-        { callerId: { in: numberFormats } },
-        { toNumber: { in: numberFormats } },
-        { did: { in: numberFormats } },
-      ];
     }
 
     const andClauses: any[] = [];
@@ -2052,7 +2106,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
     return where;
   }
 
-  function mapCallRecord(call: any, apiBaseUrl: string, prisma: any, request: any, skipDbUpdate = false) {
+  function mapCallRecord(call: any, apiBaseUrl: string, prisma: any, request: any, skipDbUpdate = false, profile?: any) {
     const latestRecording = call.recordings?.[0] ?? null;
 
     const effectivePrimaryRecordingId =
@@ -2089,6 +2143,42 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
 
     const playbackUrls = buildRecordingPlaybackUrls(call, apiBaseUrl);
 
+    // Apply financial masking based on role
+    let revenue = call.revenue;
+    let payout = call.payout;
+    let profit = call.profit;
+    let cost = call.cost;
+    let recUrl = effectiveRecordingUrl;
+    let absRecUrl = playbackUrls.primaryUrl;
+    let allRecUrls = playbackUrls.allUrls;
+
+    if (profile) {
+      if (!profile.isAdminOrOwner) {
+        if (profile.userRoles.includes('PUBLISHER')) {
+          revenue = null;
+          cost = null;
+          profit = null;
+          if (!profile.publisherAccessToRecordings) {
+            recUrl = null;
+            absRecUrl = null;
+            allRecUrls = [];
+          }
+        } else if (profile.userRoles.includes('BUYER')) {
+          payout = null;
+          cost = null;
+          profit = null;
+        } else {
+          revenue = null;
+          payout = null;
+          cost = null;
+          profit = null;
+          recUrl = null;
+          absRecUrl = null;
+          allRecUrls = [];
+        }
+      }
+    }
+
     return {
       id: call.id,
       tenantId: call.tenantId,
@@ -2100,18 +2190,26 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       status: call.status,
       duration: call.duration,
       connectedDuration: call.connectedDuration,
-      cost: call.cost,
-      revenue: call.revenue,
+      cost,
+      revenue,
+      payout,
+      profit,
       callerId: call.callerId,
       did: call.did,
       targetNumber: call.targetNumber,
       converted: call.converted,
-      paidOut: call.paidOut,
+      paidOut: call.buyerChargeStatus === 'CHARGED',
+      buyerChargeStatus: call.buyerChargeStatus,
+      buyerChargedAt: call.buyerChargedAt?.toISOString() ?? null,
+      publisherPayoutStatus: call.publisherPayoutStatus,
+      publisherPayableAt: call.publisherPayableAt?.toISOString() ?? null,
+      publisherPaidAt: call.publisherPaidAt?.toISOString() ?? null,
+      disputeStatus: call.disputeStatus,
       missedCall: call.missedCall,
       blocked: call.blocked,
-      recordingUrl: effectiveRecordingUrl,
-      absoluteRecordingUrl: playbackUrls.primaryUrl,
-      allRecordingUrls: playbackUrls.allUrls,
+      recordingUrl: recUrl,
+      absoluteRecordingUrl: absRecUrl,
+      allRecordingUrls: allRecUrls,
       recordingStatus: effectiveRecordingStatus,
       recordingError: effectiveRecordingStatus === 'READY' ? null : call.recordingError,
       primaryRecordingId: effectivePrimaryRecordingId,
@@ -2206,39 +2304,33 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       const limit = parseInt(request.query.limit || '20');
       const skip = (page - 1) * limit;
 
-      let userRoles: string[] = [];
-      let userNumbers: string[] = [];
-      if (user?.userId) {
-        const userRecord = await prisma.user.findUnique({
-          where: { id: user.userId },
-          include: { roles: { include: { role: true } } },
-        });
-        userRoles = userRecord?.roles.map(ur => ur.role.name) || [];
+      const profile = await getUserProfile(request, prisma);
 
-        if (!userRoles.some(role => role === 'ADMIN' || role === 'OWNER')) {
-          const fetchedNumbers = await prisma.phoneNumber.findMany({
-            where: {
-              tenantId,
-              userId: user.userId,
-            },
-            select: {
-              number: true,
-            },
-          });
-          userNumbers = fetchedNumbers.map(n => n.number);
-        }
+      let userNumbers: string[] = [];
+      if (!profile.isAdminOrOwner && !profile.buyerId && !profile.publisherId && user?.userId) {
+        const fetchedNumbers = await prisma.phoneNumber.findMany({
+          where: {
+            tenantId,
+            userId: user.userId,
+          },
+          select: {
+            number: true,
+          },
+        });
+        userNumbers = fetchedNumbers.map(n => n.number);
       }
-      const isAdminOrOwner = userRoles.some(role => role === 'ADMIN' || role === 'OWNER');
 
       const where = buildCallWhere({
         tenantId,
-        isAdminOrOwner,
+        isAdminOrOwner: profile.isAdminOrOwner,
         userId: user?.userId,
         userNumbers,
         search: request.query.search,
         phone: request.query.phone,
         startDate: request.query.startDate,
         endDate: request.query.endDate,
+        buyerId: profile.buyerId,
+        publisherId: profile.publisherId,
       });
 
       const [calls, total] = await Promise.all([
@@ -2265,7 +2357,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       ]);
 
       const apiBaseUrl = getPublicApiBaseUrl(request);
-      const mappedCalls = calls.map(call => mapCallRecord(call, apiBaseUrl, prisma, request, false));
+      const mappedCalls = calls.map(call => mapCallRecord(call, apiBaseUrl, prisma, request, false, profile));
 
       return {
         data: mappedCalls,
@@ -2327,39 +2419,33 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
 
       const prisma = (await import('../lib/prisma.js')).getPrismaClient();
 
-      let userRoles: string[] = [];
-      let userNumbers: string[] = [];
-      if (user?.userId) {
-        const userRecord = await prisma.user.findUnique({
-          where: { id: user.userId },
-          include: { roles: { include: { role: true } } },
-        });
-        userRoles = userRecord?.roles.map(ur => ur.role.name) || [];
+      const profile = await getUserProfile(request, prisma);
 
-        if (!userRoles.some(role => role === 'ADMIN' || role === 'OWNER')) {
-          const fetchedNumbers = await prisma.phoneNumber.findMany({
-            where: {
-              tenantId,
-              userId: user.userId,
-            },
-            select: {
-              number: true,
-            },
-          });
-          userNumbers = fetchedNumbers.map(n => n.number);
-        }
+      let userNumbers: string[] = [];
+      if (!profile.isAdminOrOwner && !profile.buyerId && !profile.publisherId && user?.userId) {
+        const fetchedNumbers = await prisma.phoneNumber.findMany({
+          where: {
+            tenantId,
+            userId: user.userId,
+          },
+          select: {
+            number: true,
+          },
+        });
+        userNumbers = fetchedNumbers.map(n => n.number);
       }
-      const isAdminOrOwner = userRoles.some(role => role === 'ADMIN' || role === 'OWNER');
 
       const where = buildCallWhere({
         tenantId,
-        isAdminOrOwner,
+        isAdminOrOwner: profile.isAdminOrOwner,
         userId: user?.userId,
         userNumbers,
         search: request.query.search,
         phone: request.query.phone,
         startDate,
         endDate,
+        buyerId: profile.buyerId,
+        publisherId: profile.publisherId,
       });
 
       const apiBaseUrl = getPublicApiBaseUrl(request);
@@ -2398,6 +2484,14 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
         'Recording Status',
         'Notes',
       ];
+
+      if (profile.isAdminOrOwner) {
+        headers.push('Revenue', 'Payout', 'Cost', 'Profit');
+      } else if (profile.userRoles.includes('BUYER')) {
+        headers.push('Revenue');
+      } else if (profile.userRoles.includes('PUBLISHER')) {
+        headers.push('Payout');
+      }
 
       const batchSize = 1000;
       let offset = 0;
@@ -2444,12 +2538,18 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
           const status = call.status;
           const disposition = call.disposition || '';
           const source = call.callSource || '';
-          const recUrl = playbackUrls.primaryUrl;
-          const allRecUrls = playbackUrls.allUrls;
+
+          let recUrl = playbackUrls.primaryUrl;
+          let allRecUrls = playbackUrls.allUrls;
+          if (profile.userRoles.includes('PUBLISHER') && !profile.isAdminOrOwner && !profile.publisherAccessToRecordings) {
+            recUrl = '';
+            allRecUrls = '';
+          }
+
           const recStatus = call.recordingStatus || '';
           const notes = call.dispositionNotes || '';
 
-          return [
+          const row = [
             time,
             callId,
             callSid,
@@ -2464,6 +2564,25 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
             recStatus,
             notes,
           ];
+
+          if (profile.isAdminOrOwner) {
+            row.push(
+              call.revenue ? Number(call.revenue).toFixed(4) : '0.0000',
+              call.payout ? Number(call.payout).toFixed(4) : '0.0000',
+              call.cost ? Number(call.cost).toFixed(4) : '0.0000',
+              call.profit ? Number(call.profit).toFixed(4) : '0.0000'
+            );
+          } else if (profile.userRoles.includes('BUYER')) {
+            row.push(
+              call.revenue ? Number(call.revenue).toFixed(4) : '0.0000'
+            );
+          } else if (profile.userRoles.includes('PUBLISHER')) {
+            row.push(
+              call.payout ? Number(call.payout).toFixed(4) : '0.0000'
+            );
+          }
+
+          return row;
         });
 
         allRows.push(...mappedBatch);
@@ -2601,6 +2720,87 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       return { error: { code: 'NOT_FOUND', message: 'Call not found' } };
     }
 
+    const profile = await getUserProfile(request, prisma);
+
+    // Enforce access control
+    if (!profile.isAdminOrOwner) {
+      if (profile.userRoles.includes('PUBLISHER')) {
+        if (call.publisherId !== profile.publisherId) {
+          void reply.code(403);
+          return { error: { code: 'FORBIDDEN', message: 'Access denied to this call' } };
+        }
+      } else if (profile.userRoles.includes('BUYER')) {
+        if (call.buyerId !== profile.buyerId) {
+          void reply.code(403);
+          return { error: { code: 'FORBIDDEN', message: 'Access denied to this call' } };
+        }
+      } else if (profile.userRoles.includes('AGENT')) {
+        // Fetch agent's phone numbers
+        const fetchedNumbers = await prisma.phoneNumber.findMany({
+          where: { tenantId, userId: user?.userId },
+          select: { number: true },
+        });
+        const userNumbers = fetchedNumbers.map(n => n.number);
+        const numberFormats: string[] = [];
+        for (const num of userNumbers) {
+          numberFormats.push(num);
+          if (num.startsWith('+1')) {
+            numberFormats.push(num.substring(2));
+            numberFormats.push(num.substring(1));
+          } else if (num.startsWith('1') && num.length === 11) {
+            numberFormats.push('+' + num);
+            numberFormats.push(num.substring(1));
+          } else if (num.length === 10) {
+            numberFormats.push('+1' + num);
+            numberFormats.push('1' + num);
+          }
+        }
+        const callCaller = call.callerId || '';
+        const callTo = call.toNumber || '';
+        const callDid = call.did || '';
+        const hasNumberMatch = numberFormats.includes(callCaller) || numberFormats.includes(callTo) || numberFormats.includes(callDid);
+        
+        if (call.createdById !== user?.userId && !hasNumberMatch) {
+          void reply.code(403);
+          return { error: { code: 'FORBIDDEN', message: 'Access denied to this call' } };
+        }
+      } else {
+        void reply.code(403);
+        return { error: { code: 'FORBIDDEN', message: 'Access denied to this call' } };
+      }
+    }
+
+    // Apply masking based on roles
+    let revenue = call.revenue;
+    let payout = call.payout;
+    let profit = call.profit;
+    let cost = call.cost;
+    let recUrl = call.recordingUrl;
+    let recordings = call.recordings;
+
+    if (!profile.isAdminOrOwner) {
+      if (profile.userRoles.includes('PUBLISHER')) {
+        revenue = null;
+        cost = null;
+        profit = null;
+        if (!profile.publisherAccessToRecordings) {
+          recUrl = null;
+          recordings = [];
+        }
+      } else if (profile.userRoles.includes('BUYER')) {
+        payout = null;
+        cost = null;
+        profit = null;
+      } else {
+        revenue = null;
+        payout = null;
+        cost = null;
+        profit = null;
+        recUrl = null;
+        recordings = [];
+      }
+    }
+
     return {
       // Core fields
       id: call.id,
@@ -2647,7 +2847,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       durationFormatted: call.durationFormatted,
       connectedDuration: call.connectedDuration,
       connectedDurationFormatted: call.connectedDurationFormatted,
-      recordingUrl: call.recordingUrl,
+      recordingUrl: recUrl,
       recordingStatus: call.recordingStatus,
       primaryRecordingId: call.primaryRecordingId,
       recordingStartedAt: call.recordingStartedAt,
@@ -2655,17 +2855,22 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       recordingError: call.recordingError,
 
       // Financials
-      revenue: call.revenue,
-      payout: call.payout,
-      profit: call.profit,
-      cost: call.cost,
+      revenue,
+      payout,
+      profit,
+      cost,
 
-      // Boolean/Status
       isDuplicate: call.isDuplicate,
       converted: call.converted,
       missedCall: call.missedCall,
       blocked: call.blocked,
-      paidOut: call.paidOut,
+      paidOut: call.buyerChargeStatus === 'CHARGED',
+      buyerChargeStatus: call.buyerChargeStatus,
+      buyerChargedAt: call.buyerChargedAt?.toISOString() ?? null,
+      publisherPayoutStatus: call.publisherPayoutStatus,
+      publisherPayableAt: call.publisherPayableAt?.toISOString() ?? null,
+      publisherPaidAt: call.publisherPaidAt?.toISOString() ?? null,
+      disputeStatus: call.disputeStatus,
       previouslyConnected: call.previouslyConnected,
 
       // Reason Codes
@@ -2686,7 +2891,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       publisher: call.publisher,
       buyer: call.buyer,
       fromNumber: call.fromNumber,
-      recordings: call.recordings,
+      recordings,
       transcriptions: call.transcriptions,
     };
   });
@@ -4050,7 +4255,7 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
       buyerId?: string;
       granularity?: 'hour' | 'day';
     };
-  }>('/api/v1/reporting/metrics', async (request, _reply) => {
+  }>('/api/v1/reporting/metrics', async (request, reply) => {
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
     const tenantId = demoTenantId || user?.tenantId || 'default';
@@ -4059,7 +4264,10 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
       : new Date(Date.now() - 24 * 60 * 60 * 1000); // Default: last 24 hours
     const endDate = request.query.endDate ? new Date(request.query.endDate) : new Date();
 
-    const filters = {
+    const prisma = getPrismaClient();
+    const profile = await getUserProfile(request, prisma);
+
+    const filters: any = {
       tenantId,
       demoTenantId,
       startDate,
@@ -4070,47 +4278,130 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
       granularity: request.query.granularity || 'hour',
     };
 
+    if (!profile.isAdminOrOwner) {
+      if (profile.userRoles.includes('PUBLISHER')) {
+        filters.publisherId = profile.publisherId || undefined;
+      } else if (profile.userRoles.includes('BUYER')) {
+        filters.buyerId = profile.buyerId || undefined;
+        filters.publisherId = undefined; // Force hide publishers
+      } else {
+        filters.publisherId = 'none';
+        filters.buyerId = 'none';
+      }
+    }
+
     const result = await analyticsService.getMetrics(filters);
+
+    if (!profile.isAdminOrOwner) {
+      result.metrics.totalCost = 0;
+      if (result.breakdown) {
+        for (const row of result.breakdown) {
+          row.cost = 0;
+        }
+      }
+    }
     return result;
   });
 
-  fastify.get('/api/v1/reporting/calls', async (request, _reply) => {
-    const tenantId = (request as AuthRequest).user?.tenantId || 'default';
+  fastify.get('/api/v1/reporting/calls', async (request, reply) => {
+    const user = (request as AuthRequest).user;
+    const tenantId = user?.tenantId || 'default';
     const startDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const endDate = new Date();
 
-    const filters = {
+    const prisma = getPrismaClient();
+    const profile = await getUserProfile(request, prisma);
+
+    const filters: any = {
       tenantId,
       startDate,
       endDate,
       granularity: 'hour' as const,
     };
 
+    if (!profile.isAdminOrOwner) {
+      if (profile.userRoles.includes('PUBLISHER')) {
+        filters.publisherId = profile.publisherId || undefined;
+      } else if (profile.userRoles.includes('BUYER')) {
+        filters.buyerId = profile.buyerId || undefined;
+      } else {
+        filters.publisherId = 'none';
+        filters.buyerId = 'none';
+      }
+    }
+
     const result = await analyticsService.getMetrics(filters);
+
+    if (!profile.isAdminOrOwner) {
+      result.metrics.totalCost = 0;
+      if (result.breakdown) {
+        for (const row of result.breakdown) {
+          row.cost = 0;
+        }
+      }
+    }
     return result;
   });
 
   fastify.get<{
     Params: { campaignId: string };
     Querystring: { startDate?: string; endDate?: string };
-  }>('/api/v1/reporting/campaigns/:campaignId', async (request, _reply) => {
-    const tenantId = (request as AuthRequest).user?.tenantId || 'default';
+  }>('/api/v1/reporting/campaigns/:campaignId', async (request, reply) => {
+    const user = (request as AuthRequest).user;
+    const tenantId = user?.tenantId || 'default';
     const startDate = request.query.startDate
       ? new Date(request.query.startDate)
       : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // Default: last 7 days
     const endDate = request.query.endDate ? new Date(request.query.endDate) : new Date();
 
+    const prisma = getPrismaClient();
+    const profile = await getUserProfile(request, prisma);
+    const campaignId = request.params.campaignId;
+
+    if (!profile.isAdminOrOwner) {
+      if (profile.userRoles.includes('PUBLISHER')) {
+        const cmp = await prisma.campaign.findFirst({
+          where: { id: campaignId, publisherId: profile.publisherId },
+        });
+        if (!cmp) {
+          void reply.code(403);
+          return { error: { code: 'FORBIDDEN', message: 'Access denied to this campaign report' } };
+        }
+      } else if (profile.userRoles.includes('BUYER')) {
+        const mapping = await prisma.campaignBuyer.findFirst({
+          where: { campaignId, buyerId: profile.buyerId },
+        });
+        if (!mapping) {
+          void reply.code(403);
+          return { error: { code: 'FORBIDDEN', message: 'Access denied to this campaign report' } };
+        }
+      } else {
+        void reply.code(403);
+        return { error: { code: 'FORBIDDEN', message: 'Access denied to this campaign report' } };
+      }
+    }
+
     const filters = {
       tenantId,
       startDate,
       endDate,
-      campaignId: request.params.campaignId,
+      campaignId,
       granularity: 'day' as const,
     };
 
     const result = await analyticsService.getMetrics(filters);
+
+    if (!profile.isAdminOrOwner) {
+      result.metrics.totalCost = 0;
+      if (result.breakdown) {
+        for (const row of result.breakdown) {
+          row.cost = 0;
+        }
+      }
+    }
+
     return {
-      campaignId: request.params.campaignId,
+      campaignId,
       ...result,
     };
   });
@@ -4119,8 +4410,10 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
   fastify.get<{
     Querystring: { startDate?: string; endDate?: string };
   }>('/api/v1/dashboard/stats', async (request, _reply) => {
-    const tenantId = (request as AuthRequest).user?.tenantId || 'default';
+    const user = (request as AuthRequest).user;
+    const tenantId = user?.tenantId || 'default';
     const prisma = getPrismaClient();
+    const profile = await getUserProfile(request, prisma);
 
     // Parse date range — default to current month
     const now = new Date();
@@ -4129,14 +4422,63 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
       : new Date(now.getFullYear(), now.getMonth(), 1);
     const endDate = request.query.endDate ? new Date(request.query.endDate) : now;
 
-    const dateFilter = {
-      createdAt: { gte: startDate, lte: endDate },
-    };
+    let userNumbers: string[] = [];
+    if (!profile.isAdminOrOwner && !profile.buyerId && !profile.publisherId && user?.userId) {
+      const fetchedNumbers = await prisma.phoneNumber.findMany({
+        where: { tenantId, userId: user.userId },
+        select: { number: true },
+      });
+      userNumbers = fetchedNumbers.map(n => n.number);
+    }
 
-    const whereClause = { tenantId, ...dateFilter };
+    const whereClause = buildCallWhere({
+      tenantId,
+      isAdminOrOwner: profile.isAdminOrOwner,
+      userId: user?.userId,
+      userNumbers,
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString(),
+      buyerId: profile.buyerId,
+      publisherId: profile.publisherId,
+    });
+
+    const followUpWhereClause = buildCallWhere({
+      tenantId,
+      isAdminOrOwner: profile.isAdminOrOwner,
+      userId: user?.userId,
+      userNumbers,
+      buyerId: profile.buyerId,
+      publisherId: profile.publisherId,
+    });
+    followUpWhereClause.followUpStatus = 'PENDING';
+    followUpWhereClause.followUpAt = { not: null };
 
     // Non-connected dispositions (excluded from connected count)
     const nonConnectedDispositions = ['NO_ANSWER', 'WRONG_NUMBER', 'DISCONNECTED'];
+
+    const connectedWhere = {
+      ...whereClause,
+    };
+    if (connectedWhere.AND) {
+      connectedWhere.AND = [
+        ...connectedWhere.AND,
+        {
+          OR: [
+            { disposition: { notIn: nonConnectedDispositions } },
+            { disposition: null },
+          ],
+        },
+      ];
+    } else {
+      connectedWhere.AND = [
+        {
+          OR: [
+            { disposition: { notIn: nonConnectedDispositions } },
+            { disposition: null },
+          ],
+        },
+      ];
+    }
 
     // Run all aggregations in parallel
     const [
@@ -4162,22 +4504,12 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
 
       // Follow-ups due (pending, followUpAt in the future or overdue)
       prisma.call.count({
-        where: {
-          tenantId,
-          followUpStatus: 'PENDING',
-          followUpAt: { not: null },
-        },
+        where: followUpWhereClause,
       }),
 
       // Connected calls = total minus non-connected dispositions
       prisma.call.count({
-        where: {
-          ...whereClause,
-          OR: [
-            { disposition: { notIn: nonConnectedDispositions } },
-            { disposition: null }, // Calls without disposition are counted as connected
-          ],
-        },
+        where: connectedWhere,
       }),
 
       // Disposition breakdown

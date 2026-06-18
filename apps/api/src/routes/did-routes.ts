@@ -515,8 +515,55 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
       try {
         const { billingService } = await import('../services/billing-service.js');
         await billingService.calculateCallBilling(call.id);
+
+        // Fetch updated call details with buyer info
+        const updatedCall = await prisma.call.findUnique({
+          where: { id: call.id },
+          include: { buyer: true },
+        });
+
+        if (updatedCall) {
+          // If billable and buyer is upfront, process deduction immediately
+          if (updatedCall.billable && updatedCall.buyer?.billingType === 'UPFRONT') {
+            const { buyerBillingService } = await import('../services/buyer-billing-service.js');
+            await buyerBillingService.processCallBilling(updatedCall.id);
+          }
+
+          // Publish events to event bus
+          const { eventBus } = await import('../services/event-bus.js');
+          
+          // Publish call.completed (for billing-worker rating)
+          await eventBus.publish('call.*', {
+            event: 'call.completed',
+            tenantId: body.tenantId,
+            data: {
+              callId: updatedCall.id,
+              direction: updatedCall.direction,
+              duration: updatedCall.duration || 0,
+              answered: callStatus === 'COMPLETED' || callStatus === 'ANSWERED',
+              publisherId: updatedCall.publisherId || undefined,
+              buyerId: updatedCall.buyerId || undefined,
+              campaignId: updatedCall.campaignId || undefined,
+              hasRecording: !!body.recordingPath,
+              recordingDuration: body.recordingDuration || body.duration || 0,
+            },
+          });
+
+          // Publish call.ended (for real-time dashboards)
+          await eventBus.publish('call.*', {
+            event: 'call.ended',
+            tenantId: body.tenantId,
+            data: {
+              callId: updatedCall.id,
+              direction: updatedCall.direction,
+              duration: updatedCall.duration || 0,
+              status: updatedCall.status,
+              endedAt: updatedCall.endedAt?.toISOString() || new Date().toISOString(),
+            },
+          });
+        }
       } catch (billingErr) {
-        console.error('[FS-CDR] Failed to calculate billing for call:', call.id, billingErr);
+        console.error('[FS-CDR] Failed to calculate billing and publish events for call:', call.id, billingErr);
       }
 
       // If there's a recording, trigger background upload.
