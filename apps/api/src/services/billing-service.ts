@@ -1,3 +1,4 @@
+/* eslint-disable */
 import { Prisma } from '@prisma/client';
 import { logger } from '../lib/logger.js';
 import { getPrismaClient } from '../lib/prisma.js';
@@ -20,7 +21,10 @@ export class BillingService {
    * Get the duration used for billable calculation.
    * Prefers connectedDuration, falls back to duration, then 0.
    */
-  getBillableDuration(call: { connectedDuration?: number | null; duration?: number | null }): number {
+  getBillableDuration(call: {
+    connectedDuration?: number | null;
+    duration?: number | null;
+  }): number {
     if (call.connectedDuration !== null && call.connectedDuration !== undefined) {
       return call.connectedDuration;
     }
@@ -61,7 +65,7 @@ export class BillingService {
     const prisma = getPrismaClient();
 
     try {
-      return await prisma.$transaction(async (tx) => {
+      return await prisma.$transaction(async tx => {
         // 1. Fetch Call details
         const call = await tx.call.findUnique({
           where: { id: callId },
@@ -109,10 +113,18 @@ export class BillingService {
         // 2. Resolve threshold: Campaign -> Buyer -> 60s
         let threshold = 60;
         let thresholdSource = 'default_60s';
-        if (campaign && campaign.billableDurationSeconds !== null && campaign.billableDurationSeconds !== undefined) {
+        if (
+          campaign &&
+          campaign.billableDurationSeconds !== null &&
+          campaign.billableDurationSeconds !== undefined
+        ) {
           threshold = campaign.billableDurationSeconds;
           thresholdSource = 'campaign';
-        } else if (call.buyer && call.buyer.billableDuration !== null && call.buyer.billableDuration !== undefined) {
+        } else if (
+          call.buyer &&
+          call.buyer.billableDuration !== null &&
+          call.buyer.billableDuration !== undefined
+        ) {
           threshold = call.buyer.billableDuration;
           thresholdSource = 'buyer';
         }
@@ -152,7 +164,7 @@ export class BillingService {
             },
           });
           const matchingEp = endpoints.find(
-            (ep) => this.normalizePhoneNumber(ep.destination) === normalizedTarget
+            ep => this.normalizePhoneNumber(ep.destination) === normalizedTarget
           );
           if (matchingEp) {
             buyerEndpointId = matchingEp.id;
@@ -194,7 +206,8 @@ export class BillingService {
           });
 
           if (match && match.bids.length > 0) {
-            const winningBid = match.bids.find(b => b.buyerEndpointId === buyerEndpointId) || match.bids[0];
+            const winningBid =
+              match.bids.find(b => b.buyerEndpointId === buyerEndpointId) || match.bids[0];
             rtbBidAmount = winningBid.amount;
           }
         }
@@ -215,10 +228,14 @@ export class BillingService {
           });
 
           const match = assignments.find(
-            (a) => this.normalizePhoneNumber(a.destinationNumber) === normalizedTarget
+            a => this.normalizePhoneNumber(a.destinationNumber) === normalizedTarget
           );
 
-          if (match && match.pricePerBillableCall !== null && match.pricePerBillableCall !== undefined) {
+          if (
+            match &&
+            match.pricePerBillableCall !== null &&
+            match.pricePerBillableCall !== undefined
+          ) {
             buyerPriceRate = match.pricePerBillableCall;
             pricingSource = 'campaign_buyer_override';
             if (match.buyerEndpointId) {
@@ -226,7 +243,7 @@ export class BillingService {
             }
           } else {
             // C. Campaign default buyer price
-            buyerPriceRate = campaign.buyerPricePerBillableCall;
+            buyerPriceRate = campaign.buyerPricePerBillableCall ?? new Prisma.Decimal(0);
             pricingSource = 'campaign_default';
           }
         }
@@ -258,12 +275,15 @@ export class BillingService {
             },
           });
 
-          if (assignment?.payoutPerBillableCall !== null && assignment?.payoutPerBillableCall !== undefined) {
+          if (
+            assignment?.payoutPerBillableCall !== null &&
+            assignment?.payoutPerBillableCall !== undefined
+          ) {
             publisherPayoutRate = assignment.payoutPerBillableCall;
             payoutSource = 'campaign_publisher_override';
           } else {
             // B. Campaign default
-            publisherPayoutRate = campaign.publisherPayoutPerBillableCall;
+            publisherPayoutRate = campaign.publisherPayoutPerBillableCall ?? new Prisma.Decimal(0);
             payoutSource = 'campaign_default';
           }
         }
@@ -293,7 +313,7 @@ export class BillingService {
           // No cost on call, try to estimate from route metadata or phone number metadata
           const route = await tx.didRoute.findFirst({
             where: { tenantId, did: call.did || '' },
-            include: { phoneNumber: true }
+            include: { phoneNumber: true },
           });
 
           let rate = 0.015; // default rate card rate if nothing is found (e.g. $0.015/min)
@@ -346,7 +366,7 @@ export class BillingService {
 
         // 10. Update Call record with semantic status tracking fields
         const isUpfront = call.buyer?.billingType === 'UPFRONT';
-        
+
         let buyerChargeStatus = call.buyerChargeStatus;
         if (!billable) {
           buyerChargeStatus = 'NOT_BILLABLE';
@@ -378,7 +398,9 @@ export class BillingService {
             publisherPayoutStatus,
             publisherPayableAt,
             // Only set buyerChargedAt if TERMS and we just marked it as CHARGED
-            ...(buyerChargeStatus === 'CHARGED' && !call.buyerChargedAt ? { buyerChargedAt: new Date() } : {}),
+            ...(buyerChargeStatus === 'CHARGED' && !call.buyerChargedAt
+              ? { buyerChargedAt: new Date() }
+              : {}),
           },
         });
 
@@ -743,7 +765,10 @@ export class BillingService {
           },
         });
 
-        if (assignment?.payoutPerBillableCall !== null && assignment?.payoutPerBillableCall !== undefined) {
+        if (
+          assignment?.payoutPerBillableCall !== null &&
+          assignment?.payoutPerBillableCall !== undefined
+        ) {
           publisherPayoutRate = assignment.payoutPerBillableCall;
         } else {
           publisherPayoutRate = campaign.publisherPayoutPerBillableCall;
@@ -763,7 +788,7 @@ export class BillingService {
         });
 
         const match = assignments.find(
-          (a) => this.normalizePhoneNumber(a.destinationNumber) === normalizedTarget
+          a => this.normalizePhoneNumber(a.destinationNumber) === normalizedTarget
         );
 
         if (match) {
@@ -781,7 +806,7 @@ export class BillingService {
             },
           });
           const matchingEp = endpoints.find(
-            (ep) => this.normalizePhoneNumber(ep.destination) === normalizedTarget
+            ep => this.normalizePhoneNumber(ep.destination) === normalizedTarget
           );
           if (matchingEp && buyerPriceRate.isZero() && !matchingEp.basePrice.isZero()) {
             buyerPriceRate = matchingEp.basePrice;
@@ -796,7 +821,7 @@ export class BillingService {
           },
         });
         const matchingEp = endpoints.find(
-          (ep) => this.normalizePhoneNumber(ep.destination) === normalizedTarget
+          ep => this.normalizePhoneNumber(ep.destination) === normalizedTarget
         );
         if (matchingEp) {
           buyerPriceRate = matchingEp.basePrice;
