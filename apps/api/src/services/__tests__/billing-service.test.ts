@@ -279,6 +279,7 @@ describe('BillingService Unit Tests', () => {
       mockPrisma.campaignBuyer.findMany.mockResolvedValue([
         {
           pricePerBillableCall: new Prisma.Decimal('18.00'),
+          destinationNumber: '+18005550150',
         },
       ]);
       res = await billingService.calculateCallBilling('call-1');
