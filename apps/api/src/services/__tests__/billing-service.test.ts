@@ -1,15 +1,17 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-return */
 import { Prisma } from '@prisma/client';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 // Define the mock client
 const mockPrisma = {
-  $transaction: vi.fn((cb) => cb(mockPrisma)),
+  $transaction: vi.fn(cb => cb(mockPrisma)),
   call: {
     findUnique: vi.fn(),
     update: vi.fn(),
   },
   buyerEndpoint: {
     findMany: vi.fn(),
+    findUnique: vi.fn(),
   },
   pingRequest: {
     findMany: vi.fn(),
@@ -31,12 +33,20 @@ const mockPrisma = {
     findUnique: vi.fn(),
     update: vi.fn(),
     create: vi.fn(),
+    deleteMany: vi.fn(),
   },
   buyer: {
     findUnique: vi.fn(),
     update: vi.fn(),
   },
   buyerTransaction: {
+    findFirst: vi.fn(),
+    create: vi.fn(),
+  },
+  publisher: {
+    findUnique: vi.fn(),
+  },
+  billingAccount: {
     findFirst: vi.fn(),
     create: vi.fn(),
   },
@@ -146,15 +156,20 @@ describe('BillingService Unit Tests', () => {
       // Setup default mock values
       mockPrisma.call.findUnique.mockResolvedValue(defaultCall);
       mockPrisma.buyerEndpoint.findMany.mockResolvedValue([]);
+      mockPrisma.buyerEndpoint.findUnique.mockResolvedValue(null);
       mockPrisma.pingRequest.findMany.mockResolvedValue([]);
       mockPrisma.campaignPublisher.findUnique.mockResolvedValue(null);
       mockPrisma.campaignBuyer.findMany.mockResolvedValue([]);
       mockPrisma.didRoute.findFirst.mockResolvedValue(null);
       mockPrisma.phoneNumber.findFirst.mockResolvedValue(null);
       mockPrisma.accrualLedger.findUnique.mockResolvedValue(null);
-      mockPrisma.accrualLedger.create.mockImplementation((args) => Promise.resolve(args.data));
-      mockPrisma.accrualLedger.update.mockImplementation((args) => Promise.resolve(args.data));
+      mockPrisma.accrualLedger.create.mockImplementation(args => Promise.resolve(args.data));
+      mockPrisma.accrualLedger.update.mockImplementation(args => Promise.resolve(args.data));
+      mockPrisma.accrualLedger.deleteMany.mockResolvedValue({ count: 0 });
       mockPrisma.call.update.mockResolvedValue({});
+      mockPrisma.publisher.findUnique.mockResolvedValue(null);
+      mockPrisma.billingAccount.findFirst.mockResolvedValue({ id: 'acc-1' });
+      mockPrisma.billingAccount.create.mockResolvedValue({ id: 'acc-1' });
     });
 
     it('should return error if call status is INITIATED or RINGING', async () => {
@@ -306,7 +321,7 @@ describe('BillingService Unit Tests', () => {
         ...defaultCall,
         cost: null, // trigger estimation
       });
-      
+
       // Default rate $0.015/min * 100 seconds (duration fallback) = 0.025
       const res = await billingService.calculateCallBilling('call-1');
       expect(res.profit).toBeDefined();
@@ -321,14 +336,14 @@ describe('BillingService Unit Tests', () => {
     });
 
     it('should insert accrual ledger entries idempotently using unique idempotencyKey', async () => {
-      let createdKeys: string[] = [];
-      mockPrisma.accrualLedger.create.mockImplementation((args) => {
+      const createdKeys: string[] = [];
+      mockPrisma.accrualLedger.create.mockImplementation(args => {
         createdKeys.push(args.data.idempotencyKey);
         return Promise.resolve(args.data);
       });
 
       await billingService.calculateCallBilling('call-1');
-      
+
       expect(createdKeys.length).toBeGreaterThan(0);
       expect(createdKeys[0]).toContain('BUYER_REVENUE');
 
@@ -385,7 +400,7 @@ describe('BuyerBillingService Unit Tests', () => {
 
       expect(res.success).toBe(true);
       expect(res.deducted).toBe(true);
-      expect(res.walletBalance).toBe(84.50); // 100.00 - 15.50
+      expect(res.walletBalance).toBe(84.5); // 100.00 - 15.50
       expect(res.leadsRemaining).toBe(84); // Math.floor(84.50)
 
       expect(mockPrisma.buyer.update).toHaveBeenCalledWith(
@@ -457,10 +472,10 @@ describe('BuyerBillingService Unit Tests', () => {
     });
 
     it('should add amount to walletBalance, sync leadsRemaining, and reactivate if PAUSED', async () => {
-      const res = await buyerBillingService.addCredits('buyer-1', 50.50, 'admin-1', 'Deposit');
+      const res = await buyerBillingService.addCredits('buyer-1', 50.5, 'admin-1', 'Deposit');
 
       expect(res.success).toBe(true);
-      expect(res.newBalance).toBe(60.50); // 10.00 + 50.50
+      expect(res.newBalance).toBe(60.5); // 10.00 + 50.50
 
       expect(mockPrisma.buyer.update).toHaveBeenCalledWith(
         expect.objectContaining({
