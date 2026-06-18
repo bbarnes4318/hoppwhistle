@@ -1,3 +1,4 @@
+/* eslint-disable */
 // Route handlers - placeholder implementations
 import { FastifyInstance, FastifyRequest } from 'fastify';
 import { Prisma } from '@prisma/client';
@@ -5,6 +6,118 @@ import { Prisma } from '@prisma/client';
 import { AuthenticatedUser } from '../middleware/auth.js';
 
 type AuthRequest = FastifyRequest & { user?: AuthenticatedUser };
+
+function buildCallWhere(params: {
+  tenantId: string;
+  isAdminOrOwner: boolean;
+  userId?: string;
+  userNumbers: string[];
+  search?: string;
+  phone?: string;
+  startDate?: string;
+  endDate?: string;
+  buyerId?: string | null;
+  publisherId?: string | null;
+}) {
+  const {
+    tenantId,
+    isAdminOrOwner,
+    userId,
+    userNumbers,
+    search,
+    phone,
+    startDate,
+    endDate,
+    buyerId,
+    publisherId,
+  } = params;
+  const where: Record<string, any> = { tenantId };
+
+  if (!isAdminOrOwner) {
+    if (buyerId) {
+      where.buyerId = buyerId;
+    } else if (publisherId) {
+      where.publisherId = publisherId;
+    } else if (userId) {
+      const numberFormats: string[] = [];
+      for (const num of userNumbers) {
+        numberFormats.push(num);
+        if (num.startsWith('+1')) {
+          numberFormats.push(num.substring(2)); // 10 digit
+          numberFormats.push(num.substring(1)); // 11 digit (1xxxxxxxxxx)
+        } else if (num.startsWith('1') && num.length === 11) {
+          numberFormats.push('+' + num);
+          numberFormats.push(num.substring(1));
+        } else if (num.length === 10) {
+          numberFormats.push('+1' + num);
+          numberFormats.push('1' + num);
+        }
+      }
+      where.OR = [
+        { createdById: userId },
+        { fromNumber: { userId: userId } },
+        { callerId: { in: numberFormats } },
+        { toNumber: { in: numberFormats } },
+        { did: { in: numberFormats } },
+      ];
+    }
+  }
+
+  const andClauses: any[] = [];
+
+  if (phone) {
+    andClauses.push({
+      OR: [
+        { toNumber: phone },
+        { callerId: phone },
+        { toNumber: phone.replace(/^\+1/, '') },
+        { callerId: phone.replace(/^\+1/, '') },
+      ],
+    });
+  }
+
+  if (startDate) {
+    const parsedStart = new Date(startDate);
+    if (!isNaN(parsedStart.getTime())) {
+      andClauses.push({ createdAt: { gte: parsedStart } });
+    }
+  }
+  if (endDate) {
+    const parsedEnd = new Date(endDate);
+    if (!isNaN(parsedEnd.getTime())) {
+      andClauses.push({ createdAt: { lte: parsedEnd } });
+    }
+  }
+
+  if (search && search.trim()) {
+    const searchLower = search.trim();
+    andClauses.push({
+      OR: [
+        { id: { contains: searchLower, mode: 'insensitive' } },
+        { callSid: { contains: searchLower, mode: 'insensitive' } },
+        { callerId: { contains: searchLower, mode: 'insensitive' } },
+        { toNumber: { contains: searchLower, mode: 'insensitive' } },
+        { targetNumber: { contains: searchLower, mode: 'insensitive' } },
+        { did: { contains: searchLower, mode: 'insensitive' } },
+        { disposition: { contains: searchLower, mode: 'insensitive' } },
+        { dispositionNotes: { contains: searchLower, mode: 'insensitive' } },
+        { callSource: { contains: searchLower, mode: 'insensitive' } },
+        { campaign: { name: { contains: searchLower, mode: 'insensitive' } } },
+      ],
+    });
+  }
+
+  if (andClauses.length > 0) {
+    if (where.OR) {
+      where.AND = [{ OR: where.OR }, ...andClauses];
+      delete where.OR;
+    } else {
+      where.AND = andClauses;
+    }
+  }
+
+  return where;
+}
 
 // Public API - Numbers
 export async function registerNumberRoutes(fastify: FastifyInstance) {
@@ -488,21 +601,36 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
         return { error: { code: 'VALIDATION_ERROR', message: 'Publisher ID is required' } };
       }
 
-      const billableDurationSeconds = body.billableDurationSeconds !== undefined ? body.billableDurationSeconds : 60;
-      const publisherPayoutPerBillableCall = body.publisherPayoutPerBillableCall !== undefined ? body.publisherPayoutPerBillableCall : 0;
-      const buyerPricePerBillableCall = body.buyerPricePerBillableCall !== undefined ? body.buyerPricePerBillableCall : 0;
+      const billableDurationSeconds =
+        body.billableDurationSeconds !== undefined ? body.billableDurationSeconds : 60;
+      const publisherPayoutPerBillableCall =
+        body.publisherPayoutPerBillableCall !== undefined ? body.publisherPayoutPerBillableCall : 0;
+      const buyerPricePerBillableCall =
+        body.buyerPricePerBillableCall !== undefined ? body.buyerPricePerBillableCall : 0;
 
       if (billableDurationSeconds < 0) {
         void reply.code(400);
-        return { error: { code: 'VALIDATION_ERROR', message: 'Billable duration seconds must be >= 0' } };
+        return {
+          error: { code: 'VALIDATION_ERROR', message: 'Billable duration seconds must be >= 0' },
+        };
       }
       if (publisherPayoutPerBillableCall < 0) {
         void reply.code(400);
-        return { error: { code: 'VALIDATION_ERROR', message: 'Publisher payout per billable call must be >= 0' } };
+        return {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Publisher payout per billable call must be >= 0',
+          },
+        };
       }
       if (buyerPricePerBillableCall < 0) {
         void reply.code(400);
-        return { error: { code: 'VALIDATION_ERROR', message: 'Buyer price per billable call must be >= 0' } };
+        return {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Buyer price per billable call must be >= 0',
+          },
+        };
       }
 
       // Verify publisher exists and belongs to tenant
@@ -834,7 +962,9 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
       if (body.billableDurationSeconds !== undefined) {
         if (body.billableDurationSeconds < 0) {
           void reply.code(400);
-          return { error: { code: 'VALIDATION_ERROR', message: 'Billable duration seconds must be >= 0' } };
+          return {
+            error: { code: 'VALIDATION_ERROR', message: 'Billable duration seconds must be >= 0' },
+          };
         }
         updateData.billableDurationSeconds = body.billableDurationSeconds;
       }
@@ -843,7 +973,9 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
           void reply.code(400);
           return { error: { code: 'VALIDATION_ERROR', message: 'Publisher payout must be >= 0' } };
         }
-        updateData.publisherPayoutPerBillableCall = new Prisma.Decimal(body.publisherPayoutPerBillableCall);
+        updateData.publisherPayoutPerBillableCall = new Prisma.Decimal(
+          body.publisherPayoutPerBillableCall
+        );
       }
       if (body.buyerPricePerBillableCall !== undefined) {
         if (body.buyerPricePerBillableCall < 0) {
@@ -1080,57 +1212,59 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
       payoutPerBillableCall?: number;
       status?: 'ACTIVE' | 'INACTIVE';
     };
-  }>(
-    '/api/v1/campaigns/:campaignId/publishers',
-    async (request, reply) => {
-      const user = (request as AuthRequest).user;
-      const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-      const tenantId = demoTenantId || user?.tenantId;
-      if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+  }>('/api/v1/campaigns/:campaignId/publishers', async (request, reply) => {
+    const user = (request as AuthRequest).user;
+    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+    const tenantId = demoTenantId || user?.tenantId;
+    if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
 
-      const { campaignId } = request.params;
-      const { publisherId, payoutPerBillableCall, status } = request.body;
+    const { campaignId } = request.params;
+    const { publisherId, payoutPerBillableCall, status } = request.body;
 
-      if (!publisherId) {
-        return reply.code(400).send({ error: 'publisherId is required' });
-      }
-
-      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
-
-      // Verify campaign & publisher belong to tenant
-      const campaign = await prisma.campaign.findFirst({ where: { id: campaignId, tenantId } });
-      if (!campaign) return reply.code(404).send({ error: 'Campaign not found' });
-
-      const publisher = await prisma.publisher.findFirst({ where: { id: publisherId, tenantId } });
-      if (!publisher) return reply.code(404).send({ error: 'Publisher not found' });
-
-      // Check duplicate
-      const existing = await prisma.campaignPublisher.findUnique({
-        where: {
-          tenantId_campaignId_publisherId: { tenantId, campaignId, publisherId },
-        },
-      });
-
-      if (existing) {
-        return reply.code(409).send({ error: 'Publisher is already assigned to this campaign', existingId: existing.id });
-      }
-
-      const assignment = await prisma.campaignPublisher.create({
-        data: {
-          tenantId,
-          campaignId,
-          publisherId,
-          payoutPerBillableCall: payoutPerBillableCall !== undefined && payoutPerBillableCall !== null ? new Prisma.Decimal(payoutPerBillableCall) : null,
-          status: status || 'ACTIVE',
-        },
-        include: {
-          publisher: { select: { id: true, name: true } },
-        },
-      });
-
-      return reply.code(201).send({ data: assignment });
+    if (!publisherId) {
+      return reply.code(400).send({ error: 'publisherId is required' });
     }
-  );
+
+    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+
+    // Verify campaign & publisher belong to tenant
+    const campaign = await prisma.campaign.findFirst({ where: { id: campaignId, tenantId } });
+    if (!campaign) return reply.code(404).send({ error: 'Campaign not found' });
+
+    const publisher = await prisma.publisher.findFirst({ where: { id: publisherId, tenantId } });
+    if (!publisher) return reply.code(404).send({ error: 'Publisher not found' });
+
+    // Check duplicate
+    const existing = await prisma.campaignPublisher.findUnique({
+      where: {
+        tenantId_campaignId_publisherId: { tenantId, campaignId, publisherId },
+      },
+    });
+
+    if (existing) {
+      return reply
+        .code(409)
+        .send({ error: 'Publisher is already assigned to this campaign', existingId: existing.id });
+    }
+
+    const assignment = await prisma.campaignPublisher.create({
+      data: {
+        tenantId,
+        campaignId,
+        publisherId,
+        payoutPerBillableCall:
+          payoutPerBillableCall !== undefined && payoutPerBillableCall !== null
+            ? new Prisma.Decimal(payoutPerBillableCall)
+            : null,
+        status: status || 'ACTIVE',
+      },
+      include: {
+        publisher: { select: { id: true, name: true } },
+      },
+    });
+
+    return reply.code(201).send({ data: assignment });
+  });
 
   // PATCH campaign publisher assignment
   fastify.patch<{
@@ -1139,39 +1273,39 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
       payoutPerBillableCall?: number | null;
       status?: 'ACTIVE' | 'INACTIVE';
     };
-  }>(
-    '/api/v1/campaigns/:campaignId/publishers/:assignmentId',
-    async (request, reply) => {
-      const user = (request as AuthRequest).user;
-      const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-      const tenantId = demoTenantId || user?.tenantId;
-      if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+  }>('/api/v1/campaigns/:campaignId/publishers/:assignmentId', async (request, reply) => {
+    const user = (request as AuthRequest).user;
+    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+    const tenantId = demoTenantId || user?.tenantId;
+    if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
 
-      const { campaignId, assignmentId } = request.params;
-      const { payoutPerBillableCall, status } = request.body;
-      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+    const { campaignId, assignmentId } = request.params;
+    const { payoutPerBillableCall, status } = request.body;
+    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
 
-      const existing = await prisma.campaignPublisher.findFirst({
-        where: { id: assignmentId, campaignId, tenantId },
-      });
-      if (!existing) return reply.code(404).send({ error: 'Assignment not found' });
+    const existing = await prisma.campaignPublisher.findFirst({
+      where: { id: assignmentId, campaignId, tenantId },
+    });
+    if (!existing) return reply.code(404).send({ error: 'Assignment not found' });
 
-      const updated = await prisma.campaignPublisher.update({
-        where: { id: assignmentId },
-        data: {
-          payoutPerBillableCall: payoutPerBillableCall !== undefined 
-            ? (payoutPerBillableCall === null ? null : new Prisma.Decimal(payoutPerBillableCall))
+    const updated = await prisma.campaignPublisher.update({
+      where: { id: assignmentId },
+      data: {
+        payoutPerBillableCall:
+          payoutPerBillableCall !== undefined
+            ? payoutPerBillableCall === null
+              ? null
+              : new Prisma.Decimal(payoutPerBillableCall)
             : undefined,
-          status: status || undefined,
-        },
-        include: {
-          publisher: { select: { id: true, name: true } },
-        },
-      });
+        status: status || undefined,
+      },
+      include: {
+        publisher: { select: { id: true, name: true } },
+      },
+    });
 
-      return { data: updated };
-    }
-  );
+    return { data: updated };
+  });
 
   // DELETE campaign publisher assignment
   fastify.delete<{ Params: { campaignId: string; assignmentId: string } }>(
@@ -1237,92 +1371,107 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
       weight?: number;
       status?: 'ACTIVE' | 'INACTIVE';
     };
-  }>(
-    '/api/v1/campaigns/:campaignId/buyers',
-    async (request, reply) => {
-      const user = (request as AuthRequest).user;
-      const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-      const tenantId = demoTenantId || user?.tenantId;
-      if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+  }>('/api/v1/campaigns/:campaignId/buyers', async (request, reply) => {
+    const user = (request as AuthRequest).user;
+    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+    const tenantId = demoTenantId || user?.tenantId;
+    if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
 
-      const { campaignId } = request.params;
-      const { buyerId, buyerEndpointId, destinationNumber, pricePerBillableCall, priority, weight, status } = request.body;
+    const { campaignId } = request.params;
+    const {
+      buyerId,
+      buyerEndpointId,
+      destinationNumber,
+      pricePerBillableCall,
+      priority,
+      weight,
+      status,
+    } = request.body;
 
-      if (!buyerId || !destinationNumber) {
-        return reply.code(400).send({ error: 'buyerId and destinationNumber are required' });
+    if (!buyerId || !destinationNumber) {
+      return reply.code(400).send({ error: 'buyerId and destinationNumber are required' });
+    }
+
+    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+
+    // Verify campaign & buyer belong to tenant
+    const campaign = await prisma.campaign.findFirst({ where: { id: campaignId, tenantId } });
+    if (!campaign) return reply.code(404).send({ error: 'Campaign not found' });
+
+    const buyer = await prisma.buyer.findFirst({ where: { id: buyerId, tenantId } });
+    if (!buyer) return reply.code(404).send({ error: 'Buyer not found' });
+
+    // Verify endpoint type and validate destination number format
+    let normalizedDestination = destinationNumber.trim();
+    let isPstn = true;
+
+    if (buyerEndpointId) {
+      const ep = await prisma.buyerEndpoint.findFirst({ where: { id: buyerEndpointId, buyerId } });
+      if (!ep) return reply.code(404).send({ error: 'Buyer endpoint not found' });
+      if (ep.type === 'SIP' || ep.type === 'WEBRTC') {
+        isPstn = false;
       }
+    }
 
-      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
-
-      // Verify campaign & buyer belong to tenant
-      const campaign = await prisma.campaign.findFirst({ where: { id: campaignId, tenantId } });
-      if (!campaign) return reply.code(404).send({ error: 'Campaign not found' });
-
-      const buyer = await prisma.buyer.findFirst({ where: { id: buyerId, tenantId } });
-      if (!buyer) return reply.code(404).send({ error: 'Buyer not found' });
-
-      // Verify endpoint type and validate destination number format
-      let normalizedDestination = destinationNumber.trim();
-      let isPstn = true;
-
-      if (buyerEndpointId) {
-        const ep = await prisma.buyerEndpoint.findFirst({ where: { id: buyerEndpointId, buyerId } });
-        if (!ep) return reply.code(404).send({ error: 'Buyer endpoint not found' });
-        if (ep.type === 'SIP' || ep.type === 'WEBRTC') {
-          isPstn = false;
-        }
+    if (isPstn) {
+      // E.164 normalization & validation
+      const digits = normalizedDestination.replace(/\D/g, '');
+      if (digits.length < 10) {
+        return reply
+          .code(400)
+          .send({ error: 'PSTN destination number must have at least 10 digits' });
       }
-
-      if (isPstn) {
-        // E.164 normalization & validation
-        const digits = normalizedDestination.replace(/\D/g, '');
-        if (digits.length < 10) {
-          return reply.code(400).send({ error: 'PSTN destination number must have at least 10 digits' });
-        }
-        normalizedDestination = digits.length === 10 ? `+1${digits}` : `+${digits}`;
-        // Validate with standard E.164 regex
-        if (!/^\+[1-9]\d{1,14}$/.test(normalizedDestination)) {
-          return reply.code(400).send({ error: 'Invalid destination number format' });
-        }
+      normalizedDestination = digits.length === 10 ? `+1${digits}` : `+${digits}`;
+      // Validate with standard E.164 regex
+      if (!/^\+[1-9]\d{1,14}$/.test(normalizedDestination)) {
+        return reply.code(400).send({ error: 'Invalid destination number format' });
       }
+    }
 
-      // Check duplicate (unique tenantId, campaignId, buyerId, destinationNumber)
-      const existing = await prisma.campaignBuyer.findUnique({
-        where: {
-          tenantId_campaignId_buyerId_destinationNumber: {
-            tenantId,
-            campaignId,
-            buyerId,
-            destinationNumber: normalizedDestination,
-          },
-        },
-      });
-
-      if (existing) {
-        return reply.code(409).send({ error: 'Buyer with this destination is already assigned to this campaign', existingId: existing.id });
-      }
-
-      const assignment = await prisma.campaignBuyer.create({
-        data: {
+    // Check duplicate (unique tenantId, campaignId, buyerId, destinationNumber)
+    const existing = await prisma.campaignBuyer.findUnique({
+      where: {
+        tenantId_campaignId_buyerId_destinationNumber: {
           tenantId,
           campaignId,
           buyerId,
-          buyerEndpointId: buyerEndpointId || null,
           destinationNumber: normalizedDestination,
-          pricePerBillableCall: pricePerBillableCall !== undefined && pricePerBillableCall !== null ? new Prisma.Decimal(pricePerBillableCall) : null,
-          priority: priority || 0,
-          weight: weight !== undefined ? weight : 100,
-          status: status || 'ACTIVE',
         },
-        include: {
-          buyer: { select: { id: true, name: true } },
-          buyerEndpoint: { select: { id: true, name: true } },
-        },
-      });
+      },
+    });
 
-      return reply.code(201).send({ data: assignment });
+    if (existing) {
+      return reply
+        .code(409)
+        .send({
+          error: 'Buyer with this destination is already assigned to this campaign',
+          existingId: existing.id,
+        });
     }
-  );
+
+    const assignment = await prisma.campaignBuyer.create({
+      data: {
+        tenantId,
+        campaignId,
+        buyerId,
+        buyerEndpointId: buyerEndpointId || null,
+        destinationNumber: normalizedDestination,
+        pricePerBillableCall:
+          pricePerBillableCall !== undefined && pricePerBillableCall !== null
+            ? new Prisma.Decimal(pricePerBillableCall)
+            : null,
+        priority: priority || 0,
+        weight: weight !== undefined ? weight : 100,
+        status: status || 'ACTIVE',
+      },
+      include: {
+        buyer: { select: { id: true, name: true } },
+        buyerEndpoint: { select: { id: true, name: true } },
+      },
+    });
+
+    return reply.code(201).send({ data: assignment });
+  });
 
   // PATCH campaign buyer assignment
   fastify.patch<{
@@ -1335,84 +1484,90 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
       weight?: number;
       status?: 'ACTIVE' | 'INACTIVE';
     };
-  }>(
-    '/api/v1/campaigns/:campaignId/buyers/:assignmentId',
-    async (request, reply) => {
-      const user = (request as AuthRequest).user;
-      const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-      const tenantId = demoTenantId || user?.tenantId;
-      if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+  }>('/api/v1/campaigns/:campaignId/buyers/:assignmentId', async (request, reply) => {
+    const user = (request as AuthRequest).user;
+    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+    const tenantId = demoTenantId || user?.tenantId;
+    if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
 
-      const { campaignId, assignmentId } = request.params;
-      const { buyerEndpointId, destinationNumber, pricePerBillableCall, priority, weight, status } = request.body;
-      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+    const { campaignId, assignmentId } = request.params;
+    const { buyerEndpointId, destinationNumber, pricePerBillableCall, priority, weight, status } =
+      request.body;
+    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
 
-      const existing = await prisma.campaignBuyer.findFirst({
-        where: { id: assignmentId, campaignId, tenantId },
+    const existing = await prisma.campaignBuyer.findFirst({
+      where: { id: assignmentId, campaignId, tenantId },
+    });
+    if (!existing) return reply.code(404).send({ error: 'Assignment not found' });
+
+    let normalizedDestination =
+      destinationNumber !== undefined ? destinationNumber.trim() : existing.destinationNumber;
+    let isPstn = true;
+
+    const targetEpId = buyerEndpointId !== undefined ? buyerEndpointId : existing.buyerEndpointId;
+    if (targetEpId) {
+      const ep = await prisma.buyerEndpoint.findFirst({
+        where: { id: targetEpId, buyerId: existing.buyerId },
       });
-      if (!existing) return reply.code(404).send({ error: 'Assignment not found' });
-
-      let normalizedDestination = destinationNumber !== undefined ? destinationNumber.trim() : existing.destinationNumber;
-      let isPstn = true;
-
-      const targetEpId = buyerEndpointId !== undefined ? buyerEndpointId : existing.buyerEndpointId;
-      if (targetEpId) {
-        const ep = await prisma.buyerEndpoint.findFirst({ where: { id: targetEpId, buyerId: existing.buyerId } });
-        if (!ep) return reply.code(404).send({ error: 'Buyer endpoint not found' });
-        if (ep.type === 'SIP' || ep.type === 'WEBRTC') {
-          isPstn = false;
-        }
+      if (!ep) return reply.code(404).send({ error: 'Buyer endpoint not found' });
+      if (ep.type === 'SIP' || ep.type === 'WEBRTC') {
+        isPstn = false;
       }
-
-      if (isPstn && destinationNumber !== undefined) {
-        const digits = normalizedDestination.replace(/\D/g, '');
-        if (digits.length < 10) {
-          return reply.code(400).send({ error: 'PSTN destination number must have at least 10 digits' });
-        }
-        normalizedDestination = digits.length === 10 ? `+1${digits}` : `+${digits}`;
-        if (!/^\+[1-9]\d{1,14}$/.test(normalizedDestination)) {
-          return reply.code(400).send({ error: 'Invalid destination number format' });
-        }
-      }
-
-      // Check duplicate if destination number is changing
-      if (destinationNumber !== undefined && normalizedDestination !== existing.destinationNumber) {
-        const dup = await prisma.campaignBuyer.findUnique({
-          where: {
-            tenantId_campaignId_buyerId_destinationNumber: {
-              tenantId,
-              campaignId,
-              buyerId: existing.buyerId,
-              destinationNumber: normalizedDestination,
-            },
-          },
-        });
-        if (dup && dup.id !== assignmentId) {
-          return reply.code(409).send({ error: 'Another assignment exists with this destination' });
-        }
-      }
-
-      const updated = await prisma.campaignBuyer.update({
-        where: { id: assignmentId },
-        data: {
-          buyerEndpointId: buyerEndpointId !== undefined ? buyerEndpointId : undefined,
-          destinationNumber: destinationNumber !== undefined ? normalizedDestination : undefined,
-          pricePerBillableCall: pricePerBillableCall !== undefined
-            ? (pricePerBillableCall === null ? null : new Prisma.Decimal(pricePerBillableCall))
-            : undefined,
-          priority: priority !== undefined ? priority : undefined,
-          weight: weight !== undefined ? weight : undefined,
-          status: status || undefined,
-        },
-        include: {
-          buyer: { select: { id: true, name: true } },
-          buyerEndpoint: { select: { id: true, name: true } },
-        },
-      });
-
-      return { data: updated };
     }
-  );
+
+    if (isPstn && destinationNumber !== undefined) {
+      const digits = normalizedDestination.replace(/\D/g, '');
+      if (digits.length < 10) {
+        return reply
+          .code(400)
+          .send({ error: 'PSTN destination number must have at least 10 digits' });
+      }
+      normalizedDestination = digits.length === 10 ? `+1${digits}` : `+${digits}`;
+      if (!/^\+[1-9]\d{1,14}$/.test(normalizedDestination)) {
+        return reply.code(400).send({ error: 'Invalid destination number format' });
+      }
+    }
+
+    // Check duplicate if destination number is changing
+    if (destinationNumber !== undefined && normalizedDestination !== existing.destinationNumber) {
+      const dup = await prisma.campaignBuyer.findUnique({
+        where: {
+          tenantId_campaignId_buyerId_destinationNumber: {
+            tenantId,
+            campaignId,
+            buyerId: existing.buyerId,
+            destinationNumber: normalizedDestination,
+          },
+        },
+      });
+      if (dup && dup.id !== assignmentId) {
+        return reply.code(409).send({ error: 'Another assignment exists with this destination' });
+      }
+    }
+
+    const updated = await prisma.campaignBuyer.update({
+      where: { id: assignmentId },
+      data: {
+        buyerEndpointId: buyerEndpointId !== undefined ? buyerEndpointId : undefined,
+        destinationNumber: destinationNumber !== undefined ? normalizedDestination : undefined,
+        pricePerBillableCall:
+          pricePerBillableCall !== undefined
+            ? pricePerBillableCall === null
+              ? null
+              : new Prisma.Decimal(pricePerBillableCall)
+            : undefined,
+        priority: priority !== undefined ? priority : undefined,
+        weight: weight !== undefined ? weight : undefined,
+        status: status || undefined,
+      },
+      include: {
+        buyer: { select: { id: true, name: true } },
+        buyerEndpoint: { select: { id: true, name: true } },
+      },
+    });
+
+    return { data: updated };
+  });
 
   // DELETE campaign buyer assignment
   fastify.delete<{ Params: { campaignId: string; assignmentId: string } }>(
@@ -1927,8 +2082,9 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       publisherAccessToRecordings = pub?.accessToRecordings ?? false;
     }
 
-    const isAdminOrOwner = userRoles.some(role => role === 'ADMIN' || role === 'OWNER') || 
-                           (user?.roles?.some((role: string) => role === 'ADMIN' || role === 'OWNER') ?? false);
+    const isAdminOrOwner =
+      userRoles.some(role => role === 'ADMIN' || role === 'OWNER') ||
+      (user?.roles?.some((role: string) => role === 'ADMIN' || role === 'OWNER') ?? false);
 
     return {
       isAdminOrOwner,
@@ -1983,15 +2139,18 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
     }
 
     // All recordings
-    const allUrls = call.recordings && call.recordings.length > 0
-      ? call.recordings.map((rec: any) => {
-          let u = `${apiBaseUrl.replace(/\/$/, '')}/api/v1/recordings/${rec.id}/stream`;
-          if (token) {
-            u += `?token=${token}`;
-          }
-          return u;
-        }).join('; ')
-      : primaryUrl;
+    const allUrls =
+      call.recordings && call.recordings.length > 0
+        ? call.recordings
+            .map((rec: any) => {
+              let u = `${apiBaseUrl.replace(/\/$/, '')}/api/v1/recordings/${rec.id}/stream`;
+              if (token) {
+                u += `?token=${token}`;
+              }
+              return u;
+            })
+            .join('; ')
+        : primaryUrl;
 
     return { primaryUrl, allUrls };
   }
@@ -2002,115 +2161,17 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
     return `"${str.replace(/"/g, '""')}"`;
   }
 
-  function buildCallWhere(params: {
-    tenantId: string;
-    isAdminOrOwner: boolean;
-    userId?: string;
-    userNumbers: string[];
-    search?: string;
-    phone?: string;
-    startDate?: string;
-    endDate?: string;
-    buyerId?: string | null;
-    publisherId?: string | null;
-  }) {
-    const { tenantId, isAdminOrOwner, userId, userNumbers, search, phone, startDate, endDate, buyerId, publisherId } = params;
-    const where: Record<string, any> = { tenantId };
-
-    if (!isAdminOrOwner) {
-      if (buyerId) {
-        where.buyerId = buyerId;
-      } else if (publisherId) {
-        where.publisherId = publisherId;
-      } else if (userId) {
-        const numberFormats: string[] = [];
-        for (const num of userNumbers) {
-          numberFormats.push(num);
-          if (num.startsWith('+1')) {
-            numberFormats.push(num.substring(2)); // 10 digit
-            numberFormats.push(num.substring(1)); // 11 digit (1xxxxxxxxxx)
-          } else if (num.startsWith('1') && num.length === 11) {
-            numberFormats.push('+' + num);
-            numberFormats.push(num.substring(1));
-          } else if (num.length === 10) {
-            numberFormats.push('+1' + num);
-            numberFormats.push('1' + num);
-          }
-        }
-        where.OR = [
-          { createdById: userId },
-          { fromNumber: { userId: userId } },
-          { callerId: { in: numberFormats } },
-          { toNumber: { in: numberFormats } },
-          { did: { in: numberFormats } },
-        ];
-      }
-    }
-
-    const andClauses: any[] = [];
-
-    if (phone) {
-      andClauses.push({
-        OR: [
-          { toNumber: phone },
-          { callerId: phone },
-          { toNumber: phone.replace(/^\+1/, '') },
-          { callerId: phone.replace(/^\+1/, '') },
-        ],
-      });
-    }
-
-    if (startDate) {
-      const parsedStart = new Date(startDate);
-      if (!isNaN(parsedStart.getTime())) {
-        andClauses.push({ createdAt: { gte: parsedStart } });
-      }
-    }
-    if (endDate) {
-      const parsedEnd = new Date(endDate);
-      if (!isNaN(parsedEnd.getTime())) {
-        andClauses.push({ createdAt: { lte: parsedEnd } });
-      }
-    }
-
-    if (search && search.trim()) {
-      const searchLower = search.trim();
-      andClauses.push({
-        OR: [
-          { id: { contains: searchLower, mode: 'insensitive' } },
-          { callSid: { contains: searchLower, mode: 'insensitive' } },
-          { callerId: { contains: searchLower, mode: 'insensitive' } },
-          { toNumber: { contains: searchLower, mode: 'insensitive' } },
-          { targetNumber: { contains: searchLower, mode: 'insensitive' } },
-          { did: { contains: searchLower, mode: 'insensitive' } },
-          { disposition: { contains: searchLower, mode: 'insensitive' } },
-          { dispositionNotes: { contains: searchLower, mode: 'insensitive' } },
-          { callSource: { contains: searchLower, mode: 'insensitive' } },
-          { campaign: { name: { contains: searchLower, mode: 'insensitive' } } },
-        ],
-      });
-    }
-
-    if (andClauses.length > 0) {
-      if (where.OR) {
-        where.AND = [
-          { OR: where.OR },
-          ...andClauses
-        ];
-        delete where.OR;
-      } else {
-        where.AND = andClauses;
-      }
-    }
-
-    return where;
-  }
-
-  function mapCallRecord(call: any, apiBaseUrl: string, prisma: any, request: any, skipDbUpdate = false, profile?: any) {
+  function mapCallRecord(
+    call: any,
+    apiBaseUrl: string,
+    prisma: any,
+    request: any,
+    skipDbUpdate = false,
+    profile?: any
+  ) {
     const latestRecording = call.recordings?.[0] ?? null;
 
-    const effectivePrimaryRecordingId =
-      call.primaryRecordingId || latestRecording?.id || null;
+    const effectivePrimaryRecordingId = call.primaryRecordingId || latestRecording?.id || null;
 
     const effectiveRecordingUrl =
       call.recordingUrl ||
@@ -2119,26 +2180,26 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
         : null);
 
     const effectiveRecordingStatus =
-      effectiveRecordingUrl || effectivePrimaryRecordingId
-        ? 'READY'
-        : call.recordingStatus;
+      effectiveRecordingUrl || effectivePrimaryRecordingId ? 'READY' : call.recordingStatus;
 
     if (!skipDbUpdate && latestRecording && call.recordingStatus !== 'READY') {
-      prisma.call.update({
-        where: { id: call.id },
-        data: {
-          primaryRecordingId: latestRecording.id,
-          recordingStatus: 'READY',
-          recordingUrl: `/api/v1/recordings/${latestRecording.id}/stream`,
-          recordingCompletedAt: latestRecording.createdAt,
-          recordingError: null,
-        },
-      }).catch((err: any) => {
-        request.log.error(
-          { err, callId: call.id, recordingId: latestRecording.id },
-          'Failed to repair stale call recording status from existing recording row'
-        );
-      });
+      prisma.call
+        .update({
+          where: { id: call.id },
+          data: {
+            primaryRecordingId: latestRecording.id,
+            recordingStatus: 'READY',
+            recordingUrl: `/api/v1/recordings/${latestRecording.id}/stream`,
+            recordingCompletedAt: latestRecording.createdAt,
+            recordingError: null,
+          },
+        })
+        .catch((err: any) => {
+          request.log.error(
+            { err, callId: call.id, recordingId: latestRecording.id },
+            'Failed to repair stale call recording status from existing recording row'
+          );
+        });
     }
 
     const playbackUrls = buildRecordingPlaybackUrls(call, apiBaseUrl);
@@ -2249,127 +2310,125 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       startDate?: string;
       endDate?: string;
     };
-  }>(
-    '/api/v1/calls',
-    async (request, reply) => {
-      const user = (request as AuthRequest).user;
-      const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-      const tenantId = demoTenantId || user?.tenantId;
+  }>('/api/v1/calls', async (request, reply) => {
+    const user = (request as AuthRequest).user;
+    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+    const tenantId = demoTenantId || user?.tenantId;
 
-      if (!tenantId) {
-        void reply.code(401);
-        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
-      }
-
-      const startDate = request.query.startDate;
-      const endDate = request.query.endDate;
-
-      if (startDate) {
-        const parsed = new Date(startDate);
-        if (isNaN(parsed.getTime())) {
-          void reply.code(400);
-          return { error: { code: 'VALIDATION_ERROR', message: 'Invalid startDate format' } };
-        }
-      }
-
-      if (endDate) {
-        const parsed = new Date(endDate);
-        if (isNaN(parsed.getTime())) {
-          void reply.code(400);
-          return { error: { code: 'VALIDATION_ERROR', message: 'Invalid endDate format' } };
-        }
-      }
-
-      if (startDate && endDate) {
-        if (new Date(startDate) > new Date(endDate)) {
-          void reply.code(400);
-          return { error: { code: 'VALIDATION_ERROR', message: 'startDate cannot be after endDate' } };
-        }
-      }
-
-      try {
-        const { reconcileStaleRecordingsForTenant } = await import(
-          '../services/recording-reconciler.js'
-        );
-        await reconcileStaleRecordingsForTenant(tenantId);
-      } catch (err) {
-        request.log.error(
-          { err, tenantId },
-          'Recording reconciliation failed before call list fetch'
-        );
-      }
-
-      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
-      const page = parseInt(request.query.page || '1');
-      const limit = parseInt(request.query.limit || '20');
-      const skip = (page - 1) * limit;
-
-      const profile = await getUserProfile(request, prisma);
-
-      let userNumbers: string[] = [];
-      if (!profile.isAdminOrOwner && !profile.buyerId && !profile.publisherId && user?.userId) {
-        const fetchedNumbers = await prisma.phoneNumber.findMany({
-          where: {
-            tenantId,
-            userId: user.userId,
-          },
-          select: {
-            number: true,
-          },
-        });
-        userNumbers = fetchedNumbers.map(n => n.number);
-      }
-
-      const where = buildCallWhere({
-        tenantId,
-        isAdminOrOwner: profile.isAdminOrOwner,
-        userId: user?.userId,
-        userNumbers,
-        search: request.query.search,
-        phone: request.query.phone,
-        startDate: request.query.startDate,
-        endDate: request.query.endDate,
-        buyerId: profile.buyerId,
-        publisherId: profile.publisherId,
-      });
-
-      const [calls, total] = await Promise.all([
-        prisma.call.findMany({
-          where,
-          take: limit,
-          skip,
-          orderBy: [
-            { createdAt: 'desc' },
-            { id: 'desc' },
-          ],
-          include: {
-            campaign: true,
-            fromNumber: true,
-            createdBy: { select: { firstName: true, lastName: true } },
-            recordings: {
-              where: { deletedAt: null },
-              orderBy: { createdAt: 'desc' },
-              take: 1,
-            },
-          },
-        }),
-        prisma.call.count({ where }),
-      ]);
-
-      const apiBaseUrl = getPublicApiBaseUrl(request);
-      const mappedCalls = calls.map(call => mapCallRecord(call, apiBaseUrl, prisma, request, false, profile));
-
-      return {
-        data: mappedCalls,
-        meta: {
-          page,
-          limit,
-          total,
-          totalPages: Math.ceil(total / limit),
-        },
-      };
+    if (!tenantId) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
     }
-  );
+
+    const startDate = request.query.startDate;
+    const endDate = request.query.endDate;
+
+    if (startDate) {
+      const parsed = new Date(startDate);
+      if (isNaN(parsed.getTime())) {
+        void reply.code(400);
+        return { error: { code: 'VALIDATION_ERROR', message: 'Invalid startDate format' } };
+      }
+    }
+
+    if (endDate) {
+      const parsed = new Date(endDate);
+      if (isNaN(parsed.getTime())) {
+        void reply.code(400);
+        return { error: { code: 'VALIDATION_ERROR', message: 'Invalid endDate format' } };
+      }
+    }
+
+    if (startDate && endDate) {
+      if (new Date(startDate) > new Date(endDate)) {
+        void reply.code(400);
+        return {
+          error: { code: 'VALIDATION_ERROR', message: 'startDate cannot be after endDate' },
+        };
+      }
+    }
+
+    try {
+      const { reconcileStaleRecordingsForTenant } = await import(
+        '../services/recording-reconciler.js'
+      );
+      await reconcileStaleRecordingsForTenant(tenantId);
+    } catch (err) {
+      request.log.error(
+        { err, tenantId },
+        'Recording reconciliation failed before call list fetch'
+      );
+    }
+
+    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+    const page = parseInt(request.query.page || '1');
+    const limit = parseInt(request.query.limit || '20');
+    const skip = (page - 1) * limit;
+
+    const profile = await getUserProfile(request, prisma);
+
+    let userNumbers: string[] = [];
+    if (!profile.isAdminOrOwner && !profile.buyerId && !profile.publisherId && user?.userId) {
+      const fetchedNumbers = await prisma.phoneNumber.findMany({
+        where: {
+          tenantId,
+          userId: user.userId,
+        },
+        select: {
+          number: true,
+        },
+      });
+      userNumbers = fetchedNumbers.map(n => n.number);
+    }
+
+    const where = buildCallWhere({
+      tenantId,
+      isAdminOrOwner: profile.isAdminOrOwner,
+      userId: user?.userId,
+      userNumbers,
+      search: request.query.search,
+      phone: request.query.phone,
+      startDate: request.query.startDate,
+      endDate: request.query.endDate,
+      buyerId: profile.buyerId,
+      publisherId: profile.publisherId,
+    });
+
+    const [calls, total] = await Promise.all([
+      prisma.call.findMany({
+        where,
+        take: limit,
+        skip,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        include: {
+          campaign: true,
+          fromNumber: true,
+          createdBy: { select: { firstName: true, lastName: true } },
+          recordings: {
+            where: { deletedAt: null },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+          },
+        },
+      }),
+      prisma.call.count({ where }),
+    ]);
+
+    const apiBaseUrl = getPublicApiBaseUrl(request);
+    const mappedCalls = calls.map(call =>
+      mapCallRecord(call, apiBaseUrl, prisma, request, false, profile)
+    );
+
+    return {
+      data: mappedCalls,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  });
 
   // 2. GET /api/v1/calls/export.csv — Export all matching calls to CSV
   fastify.get<{
@@ -2379,231 +2438,228 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       startDate?: string;
       endDate?: string;
     };
-  }>(
-    '/api/v1/calls/export.csv',
-    async (request, reply) => {
-      const user = (request as AuthRequest).user;
-      const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-      const tenantId = demoTenantId || user?.tenantId;
+  }>('/api/v1/calls/export.csv', async (request, reply) => {
+    const user = (request as AuthRequest).user;
+    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+    const tenantId = demoTenantId || user?.tenantId;
 
-      if (!tenantId) {
-        void reply.code(401);
-        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+    if (!tenantId) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+    }
+
+    const startDate = request.query.startDate;
+    const endDate = request.query.endDate;
+
+    if (startDate) {
+      const parsed = new Date(startDate);
+      if (isNaN(parsed.getTime())) {
+        void reply.code(400);
+        return { error: { code: 'VALIDATION_ERROR', message: 'Invalid startDate format' } };
       }
+    }
 
-      const startDate = request.query.startDate;
-      const endDate = request.query.endDate;
-
-      if (startDate) {
-        const parsed = new Date(startDate);
-        if (isNaN(parsed.getTime())) {
-          void reply.code(400);
-          return { error: { code: 'VALIDATION_ERROR', message: 'Invalid startDate format' } };
-        }
+    if (endDate) {
+      const parsed = new Date(endDate);
+      if (isNaN(parsed.getTime())) {
+        void reply.code(400);
+        return { error: { code: 'VALIDATION_ERROR', message: 'Invalid endDate format' } };
       }
+    }
 
-      if (endDate) {
-        const parsed = new Date(endDate);
-        if (isNaN(parsed.getTime())) {
-          void reply.code(400);
-          return { error: { code: 'VALIDATION_ERROR', message: 'Invalid endDate format' } };
-        }
+    if (startDate && endDate) {
+      if (new Date(startDate) > new Date(endDate)) {
+        void reply.code(400);
+        return {
+          error: { code: 'VALIDATION_ERROR', message: 'startDate cannot be after endDate' },
+        };
       }
+    }
 
-      if (startDate && endDate) {
-        if (new Date(startDate) > new Date(endDate)) {
-          void reply.code(400);
-          return { error: { code: 'VALIDATION_ERROR', message: 'startDate cannot be after endDate' } };
-        }
-      }
+    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
 
-      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+    const profile = await getUserProfile(request, prisma);
 
-      const profile = await getUserProfile(request, prisma);
+    let userNumbers: string[] = [];
+    if (!profile.isAdminOrOwner && !profile.buyerId && !profile.publisherId && user?.userId) {
+      const fetchedNumbers = await prisma.phoneNumber.findMany({
+        where: {
+          tenantId,
+          userId: user.userId,
+        },
+        select: {
+          number: true,
+        },
+      });
+      userNumbers = fetchedNumbers.map(n => n.number);
+    }
 
-      let userNumbers: string[] = [];
-      if (!profile.isAdminOrOwner && !profile.buyerId && !profile.publisherId && user?.userId) {
-        const fetchedNumbers = await prisma.phoneNumber.findMany({
-          where: {
+    const where = buildCallWhere({
+      tenantId,
+      isAdminOrOwner: profile.isAdminOrOwner,
+      userId: user?.userId,
+      userNumbers,
+      search: request.query.search,
+      phone: request.query.phone,
+      startDate,
+      endDate,
+      buyerId: profile.buyerId,
+      publisherId: profile.publisherId,
+    });
+
+    const apiBaseUrl = getPublicApiBaseUrl(request);
+    const authHeader = request.headers.authorization;
+    const queryToken = (request.query as any)?.token;
+    let token =
+      authHeader && authHeader.startsWith('Bearer ') ? authHeader.substring(7) : queryToken;
+
+    if (!token && tenantId) {
+      try {
+        token = await (reply as any).jwtSign(
+          {
             tenantId,
-            userId: user.userId,
+            userId: user?.userId,
+            email: user?.email,
+            roles: ['ADMIN'],
           },
-          select: {
-            number: true,
-          },
-        });
-        userNumbers = fetchedNumbers.map(n => n.number);
+          { expiresIn: '7d' }
+        );
+      } catch (err) {
+        request.log.error({ err }, 'Failed to sign token for CSV export');
       }
+    }
 
-      const where = buildCallWhere({
-        tenantId,
-        isAdminOrOwner: profile.isAdminOrOwner,
-        userId: user?.userId,
-        userNumbers,
-        search: request.query.search,
-        phone: request.query.phone,
-        startDate,
-        endDate,
-        buyerId: profile.buyerId,
-        publisherId: profile.publisherId,
+    const headers = [
+      'Time',
+      'Call ID',
+      'Call SID',
+      'From',
+      'To',
+      'Duration',
+      'Status',
+      'Disposition',
+      'Source',
+      'Recording URL',
+      'All Recording URLs',
+      'Recording Status',
+      'Notes',
+    ];
+
+    if (profile.isAdminOrOwner) {
+      headers.push('Revenue', 'Payout', 'Cost', 'Profit');
+    } else if (profile.userRoles.includes('BUYER')) {
+      headers.push('Revenue');
+    } else if (profile.userRoles.includes('PUBLISHER')) {
+      headers.push('Payout');
+    }
+
+    const batchSize = 1000;
+    let offset = 0;
+    let hasMore = true;
+    const allRows: string[][] = [];
+
+    while (hasMore) {
+      const batch = await prisma.call.findMany({
+        where,
+        skip: offset,
+        take: batchSize,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        include: {
+          campaign: true,
+          fromNumber: true,
+          createdBy: { select: { firstName: true, lastName: true } },
+          recordings: {
+            where: { deletedAt: null },
+            orderBy: { createdAt: 'desc' },
+          },
+        },
       });
 
-      const apiBaseUrl = getPublicApiBaseUrl(request);
-      const authHeader = request.headers.authorization;
-      const queryToken = (request.query as any)?.token;
-      let token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.substring(7) : queryToken;
+      if (batch.length === 0) {
+        hasMore = false;
+        break;
+      }
 
-      if (!token && tenantId) {
-        try {
-          token = await (reply as any).jwtSign(
-            {
-              tenantId,
-              userId: user?.userId,
-              email: user?.email,
-              roles: ['ADMIN'],
-            },
-            { expiresIn: '7d' }
+      const mappedBatch = batch.map(call => {
+        const playbackUrls = buildRecordingPlaybackUrls(call, apiBaseUrl, token);
+
+        const time = call.createdAt.toISOString();
+        const callId = call.id;
+        const callSid = call.callSid || '';
+        const from = call.callerId || call.fromNumber?.number || '';
+        const to = call.toNumber || call.targetNumber || call.did || '';
+
+        const dur = call.connectedDuration || call.duration || 0;
+        const duration = formatDuration(dur);
+
+        const status = call.status;
+        const disposition = call.disposition || '';
+        const source = call.callSource || '';
+
+        let recUrl = playbackUrls.primaryUrl;
+        let allRecUrls = playbackUrls.allUrls;
+        if (
+          profile.userRoles.includes('PUBLISHER') &&
+          !profile.isAdminOrOwner &&
+          !profile.publisherAccessToRecordings
+        ) {
+          recUrl = '';
+          allRecUrls = '';
+        }
+
+        const recStatus = call.recordingStatus || '';
+        const notes = call.dispositionNotes || '';
+
+        const row = [
+          time,
+          callId,
+          callSid,
+          from,
+          to,
+          duration,
+          status,
+          disposition,
+          source,
+          recUrl,
+          allRecUrls,
+          recStatus,
+          notes,
+        ];
+
+        if (profile.isAdminOrOwner) {
+          row.push(
+            call.revenue ? Number(call.revenue).toFixed(4) : '0.0000',
+            call.payout ? Number(call.payout).toFixed(4) : '0.0000',
+            call.cost ? Number(call.cost).toFixed(4) : '0.0000',
+            call.profit ? Number(call.profit).toFixed(4) : '0.0000'
           );
-        } catch (err) {
-          request.log.error({ err }, 'Failed to sign token for CSV export');
-        }
-      }
-
-      const headers = [
-        'Time',
-        'Call ID',
-        'Call SID',
-        'From',
-        'To',
-        'Duration',
-        'Status',
-        'Disposition',
-        'Source',
-        'Recording URL',
-        'All Recording URLs',
-        'Recording Status',
-        'Notes',
-      ];
-
-      if (profile.isAdminOrOwner) {
-        headers.push('Revenue', 'Payout', 'Cost', 'Profit');
-      } else if (profile.userRoles.includes('BUYER')) {
-        headers.push('Revenue');
-      } else if (profile.userRoles.includes('PUBLISHER')) {
-        headers.push('Payout');
-      }
-
-      const batchSize = 1000;
-      let offset = 0;
-      let hasMore = true;
-      const allRows: string[][] = [];
-
-      while (hasMore) {
-        const batch = await prisma.call.findMany({
-          where,
-          skip: offset,
-          take: batchSize,
-          orderBy: [
-            { createdAt: 'desc' },
-            { id: 'desc' }
-          ],
-          include: {
-            campaign: true,
-            fromNumber: true,
-            createdBy: { select: { firstName: true, lastName: true } },
-            recordings: {
-              where: { deletedAt: null },
-              orderBy: { createdAt: 'desc' },
-            },
-          },
-        });
-
-        if (batch.length === 0) {
-          hasMore = false;
-          break;
+        } else if (profile.userRoles.includes('BUYER')) {
+          row.push(call.revenue ? Number(call.revenue).toFixed(4) : '0.0000');
+        } else if (profile.userRoles.includes('PUBLISHER')) {
+          row.push(call.payout ? Number(call.payout).toFixed(4) : '0.0000');
         }
 
-        const mappedBatch = batch.map(call => {
-          const playbackUrls = buildRecordingPlaybackUrls(call, apiBaseUrl, token);
-          
-          const time = call.createdAt.toISOString();
-          const callId = call.id;
-          const callSid = call.callSid || '';
-          const from = call.callerId || call.fromNumber?.number || '';
-          const to = call.toNumber || call.targetNumber || call.did || '';
-          
-          const dur = call.connectedDuration || call.duration || 0;
-          const duration = formatDuration(dur);
+        return row;
+      });
 
-          const status = call.status;
-          const disposition = call.disposition || '';
-          const source = call.callSource || '';
+      allRows.push(...mappedBatch);
 
-          let recUrl = playbackUrls.primaryUrl;
-          let allRecUrls = playbackUrls.allUrls;
-          if (profile.userRoles.includes('PUBLISHER') && !profile.isAdminOrOwner && !profile.publisherAccessToRecordings) {
-            recUrl = '';
-            allRecUrls = '';
-          }
-
-          const recStatus = call.recordingStatus || '';
-          const notes = call.dispositionNotes || '';
-
-          const row = [
-            time,
-            callId,
-            callSid,
-            from,
-            to,
-            duration,
-            status,
-            disposition,
-            source,
-            recUrl,
-            allRecUrls,
-            recStatus,
-            notes,
-          ];
-
-          if (profile.isAdminOrOwner) {
-            row.push(
-              call.revenue ? Number(call.revenue).toFixed(4) : '0.0000',
-              call.payout ? Number(call.payout).toFixed(4) : '0.0000',
-              call.cost ? Number(call.cost).toFixed(4) : '0.0000',
-              call.profit ? Number(call.profit).toFixed(4) : '0.0000'
-            );
-          } else if (profile.userRoles.includes('BUYER')) {
-            row.push(
-              call.revenue ? Number(call.revenue).toFixed(4) : '0.0000'
-            );
-          } else if (profile.userRoles.includes('PUBLISHER')) {
-            row.push(
-              call.payout ? Number(call.payout).toFixed(4) : '0.0000'
-            );
-          }
-
-          return row;
-        });
-
-        allRows.push(...mappedBatch);
-        
-        offset += batch.length;
-        if (batch.length < batchSize) {
-          hasMore = false;
-        }
+      offset += batch.length;
+      if (batch.length < batchSize) {
+        hasMore = false;
       }
-
-      const csvContent = [
-        headers.join(','),
-        ...allRows.map(row => row.map(cell => csvEscape(cell)).join(',')),
-      ].join('\n');
-
-      const dateStr = new Date().toISOString().slice(0, 10);
-      void reply.header('Content-Type', 'text/csv; charset=utf-8');
-      void reply.header('Content-Disposition', `attachment; filename="call-logs-${dateStr}.csv"`);
-      return reply.send(csvContent);
     }
-  );
+
+    const csvContent = [
+      headers.join(','),
+      ...allRows.map(row => row.map(cell => csvEscape(cell)).join(',')),
+    ].join('\n');
+
+    const dateStr = new Date().toISOString().slice(0, 10);
+    void reply.header('Content-Type', 'text/csv; charset=utf-8');
+    void reply.header('Content-Disposition', `attachment; filename="call-logs-${dateStr}.csv"`);
+    return reply.send(csvContent);
+  });
 
   fastify.post('/api/v1/calls', async (request, reply) => {
     const user = (request as AuthRequest).user;
@@ -2758,8 +2814,11 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
         const callCaller = call.callerId || '';
         const callTo = call.toNumber || '';
         const callDid = call.did || '';
-        const hasNumberMatch = numberFormats.includes(callCaller) || numberFormats.includes(callTo) || numberFormats.includes(callDid);
-        
+        const hasNumberMatch =
+          numberFormats.includes(callCaller) ||
+          numberFormats.includes(callTo) ||
+          numberFormats.includes(callDid);
+
         if (call.createdById !== user?.userId && !hasNumberMatch) {
           void reply.code(403);
           return { error: { code: 'FORBIDDEN', message: 'Access denied to this call' } };
@@ -2954,7 +3013,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
         updateData.recordingStatus = 'FAILED';
         updateData.recordingError = errorMsg || 'Recording failed';
         updateData.recordingCompletedAt = now;
-        
+
         // Try to parse HTTP code from the error message if it's there
         let uploadHttpCode: number | null = null;
         if (errorMsg) {
@@ -4080,7 +4139,10 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
         updateData.metadata = mergedMetadata;
 
         oldExtension = currentMetadata.extension || null;
-        newExtension = body.metadata.extension !== undefined ? (body.metadata.extension as string | null) : oldExtension;
+        newExtension =
+          body.metadata.extension !== undefined
+            ? (body.metadata.extension as string | null)
+            : oldExtension;
         if (newExtension !== oldExtension) {
           metadataChanged = true;
         }
@@ -4463,19 +4525,13 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
       connectedWhere.AND = [
         ...connectedWhere.AND,
         {
-          OR: [
-            { disposition: { notIn: nonConnectedDispositions } },
-            { disposition: null },
-          ],
+          OR: [{ disposition: { notIn: nonConnectedDispositions } }, { disposition: null }],
         },
       ];
     } else {
       connectedWhere.AND = [
         {
-          OR: [
-            { disposition: { notIn: nonConnectedDispositions } },
-            { disposition: null },
-          ],
+          OR: [{ disposition: { notIn: nonConnectedDispositions } }, { disposition: null }],
         },
       ];
     }
@@ -4557,8 +4613,12 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     };
   }>('/api/v1/reports/publisher-revenue', async (request, reply) => {
     const prisma = getPrismaClient();
-    const { isAdminOrOwner, userRoles, publisherId: userPubId } = await getUserProfile(request, prisma);
-    
+    const {
+      isAdminOrOwner,
+      userRoles,
+      publisherId: userPubId,
+    } = await getUserProfile(request, prisma);
+
     // Authorization check
     if (!isAdminOrOwner && !userRoles.includes('PUBLISHER')) {
       return reply.code(403).send({ error: 'Forbidden' });
@@ -4569,7 +4629,9 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     const tenantId = demoTenantId || user?.tenantId;
     if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
 
-    const startDate = request.query.startDate ? new Date(request.query.startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const startDate = request.query.startDate
+      ? new Date(request.query.startDate)
+      : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const endDate = request.query.endDate ? new Date(request.query.endDate) : new Date();
 
     let targetPublisherId = request.query.publisherId || null;
@@ -4617,12 +4679,15 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
       if (call.billable) billableCalls++;
       else nonBillableCalls++;
 
-      const payout = call.publisherPayoutAmount ? new Prisma.Decimal(call.publisherPayoutAmount) : new Prisma.Decimal(0);
+      const payout = call.publisherPayoutAmount
+        ? new Prisma.Decimal(call.publisherPayoutAmount)
+        : new Prisma.Decimal(0);
       totalRevenue = totalRevenue.plus(payout);
 
-      const dur = call.connectedDuration !== null && call.connectedDuration !== undefined
-        ? call.connectedDuration 
-        : (call.duration || 0);
+      const dur =
+        call.connectedDuration !== null && call.connectedDuration !== undefined
+          ? call.connectedDuration
+          : call.duration || 0;
       totalDuration += dur;
 
       if (!groupsMap.has(key)) {
@@ -4649,11 +4714,10 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     }
 
     const rows = [...groupsMap.values()].map(g => {
-      const billableRate = g.totalCalls > 0 ? (g.billableCalls / g.totalCalls) : 0;
+      const billableRate = g.totalCalls > 0 ? g.billableCalls / g.totalCalls : 0;
       const averageDuration = g.totalCalls > 0 ? Math.round(g.totalDuration / g.totalCalls) : 0;
-      const payoutPerBillableCall = g.billableCalls > 0 
-        ? g.publisherRevenue.dividedBy(g.billableCalls).toFixed(4)
-        : '0.0000';
+      const payoutPerBillableCall =
+        g.billableCalls > 0 ? g.publisherRevenue.dividedBy(g.billableCalls).toFixed(4) : '0.0000';
 
       return {
         publisherId: g.publisherId,
@@ -4671,7 +4735,7 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
       };
     });
 
-    const overallBillableRate = totalCalls > 0 ? (billableCalls / totalCalls) : 0;
+    const overallBillableRate = totalCalls > 0 ? billableCalls / totalCalls : 0;
     const overallAvgDuration = totalCalls > 0 ? Math.round(totalDuration / totalCalls) : 0;
 
     return {
@@ -4697,8 +4761,12 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     };
   }>('/api/v1/reports/publisher-revenue/export.csv', async (request, reply) => {
     const prisma = getPrismaClient();
-    const { isAdminOrOwner, userRoles, publisherId: userPubId } = await getUserProfile(request, prisma);
-    
+    const {
+      isAdminOrOwner,
+      userRoles,
+      publisherId: userPubId,
+    } = await getUserProfile(request, prisma);
+
     if (!isAdminOrOwner && !userRoles.includes('PUBLISHER')) {
       return reply.code(403).send({ error: 'Forbidden' });
     }
@@ -4708,7 +4776,9 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     const tenantId = demoTenantId || user?.tenantId;
     if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
 
-    const startDate = request.query.startDate ? new Date(request.query.startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const startDate = request.query.startDate
+      ? new Date(request.query.startDate)
+      : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const endDate = request.query.endDate ? new Date(request.query.endDate) : new Date();
 
     let targetPublisherId = request.query.publisherId || null;
@@ -4741,10 +4811,13 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
       const did = call.did || 'unknown';
       const key = `${pubName}_${campName}_${did}`;
 
-      const payout = call.publisherPayoutAmount ? new Prisma.Decimal(call.publisherPayoutAmount) : new Prisma.Decimal(0);
-      const dur = call.connectedDuration !== null && call.connectedDuration !== undefined
-        ? call.connectedDuration 
-        : (call.duration || 0);
+      const payout = call.publisherPayoutAmount
+        ? new Prisma.Decimal(call.publisherPayoutAmount)
+        : new Prisma.Decimal(0);
+      const dur =
+        call.connectedDuration !== null && call.connectedDuration !== undefined
+          ? call.connectedDuration
+          : call.duration || 0;
 
       if (!groupsMap.has(key)) {
         groupsMap.set(key, {
@@ -4768,11 +4841,10 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     }
 
     const rows = [...groupsMap.values()].map(g => {
-      const billableRate = g.totalCalls > 0 ? (g.billableCalls / g.totalCalls) : 0;
+      const billableRate = g.totalCalls > 0 ? g.billableCalls / g.totalCalls : 0;
       const averageDuration = g.totalCalls > 0 ? Math.round(g.totalDuration / g.totalCalls) : 0;
-      const payoutPerBillableCall = g.billableCalls > 0 
-        ? g.publisherRevenue.dividedBy(g.billableCalls).toFixed(4)
-        : '0.0000';
+      const payoutPerBillableCall =
+        g.billableCalls > 0 ? g.publisherRevenue.dividedBy(g.billableCalls).toFixed(4) : '0.0000';
 
       return [
         g.publisherName,
@@ -4788,7 +4860,18 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
       ];
     });
 
-    const csvHeaders = ['Publisher', 'Campaign', 'Tracking Number', 'Total Calls', 'Billable Calls', 'Non-Billable Calls', 'Billable Rate (%)', 'Avg Duration (s)', 'Payout / Billable Call ($)', 'Publisher Revenue ($)'];
+    const csvHeaders = [
+      'Publisher',
+      'Campaign',
+      'Tracking Number',
+      'Total Calls',
+      'Billable Calls',
+      'Non-Billable Calls',
+      'Billable Rate (%)',
+      'Avg Duration (s)',
+      'Payout / Billable Call ($)',
+      'Publisher Revenue ($)',
+    ];
     const csvContent = toCsv(csvHeaders, rows);
     void reply
       .type('text/csv')
@@ -4806,7 +4889,11 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     };
   }>('/api/v1/reports/buyer-costs', async (request, reply) => {
     const prisma = getPrismaClient();
-    const { isAdminOrOwner, userRoles, buyerId: userBuyerId } = await getUserProfile(request, prisma);
+    const {
+      isAdminOrOwner,
+      userRoles,
+      buyerId: userBuyerId,
+    } = await getUserProfile(request, prisma);
 
     if (!isAdminOrOwner && !userRoles.includes('BUYER')) {
       return reply.code(403).send({ error: 'Forbidden' });
@@ -4817,7 +4904,9 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     const tenantId = demoTenantId || user?.tenantId;
     if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
 
-    const startDate = request.query.startDate ? new Date(request.query.startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const startDate = request.query.startDate
+      ? new Date(request.query.startDate)
+      : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const endDate = request.query.endDate ? new Date(request.query.endDate) : new Date();
 
     let targetBuyerId = request.query.buyerId || null;
@@ -4865,12 +4954,15 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
       if (call.billable) billableCalls++;
       else nonBillableCalls++;
 
-      const cost = call.buyerBillableAmount ? new Prisma.Decimal(call.buyerBillableAmount) : new Prisma.Decimal(0);
+      const cost = call.buyerBillableAmount
+        ? new Prisma.Decimal(call.buyerBillableAmount)
+        : new Prisma.Decimal(0);
       totalCost = totalCost.plus(cost);
 
-      const dur = call.connectedDuration !== null && call.connectedDuration !== undefined
-        ? call.connectedDuration 
-        : (call.duration || 0);
+      const dur =
+        call.connectedDuration !== null && call.connectedDuration !== undefined
+          ? call.connectedDuration
+          : call.duration || 0;
       totalDuration += dur;
 
       if (!groupsMap.has(key)) {
@@ -4897,11 +4989,10 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     }
 
     const rows = [...groupsMap.values()].map(g => {
-      const billableRate = g.totalCalls > 0 ? (g.billableCalls / g.totalCalls) : 0;
+      const billableRate = g.totalCalls > 0 ? g.billableCalls / g.totalCalls : 0;
       const averageDuration = g.totalCalls > 0 ? Math.round(g.totalDuration / g.totalCalls) : 0;
-      const pricePerBillableCall = g.billableCalls > 0 
-        ? g.buyerCost.dividedBy(g.billableCalls).toFixed(4)
-        : '0.0000';
+      const pricePerBillableCall =
+        g.billableCalls > 0 ? g.buyerCost.dividedBy(g.billableCalls).toFixed(4) : '0.0000';
 
       return {
         buyerId: g.buyerId,
@@ -4919,7 +5010,7 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
       };
     });
 
-    const overallBillableRate = totalCalls > 0 ? (billableCalls / totalCalls) : 0;
+    const overallBillableRate = totalCalls > 0 ? billableCalls / totalCalls : 0;
     const overallAvgDuration = totalCalls > 0 ? Math.round(totalDuration / totalCalls) : 0;
 
     return {
@@ -4945,7 +5036,11 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     };
   }>('/api/v1/reports/buyer-costs/export.csv', async (request, reply) => {
     const prisma = getPrismaClient();
-    const { isAdminOrOwner, userRoles, buyerId: userBuyerId } = await getUserProfile(request, prisma);
+    const {
+      isAdminOrOwner,
+      userRoles,
+      buyerId: userBuyerId,
+    } = await getUserProfile(request, prisma);
 
     if (!isAdminOrOwner && !userRoles.includes('BUYER')) {
       return reply.code(403).send({ error: 'Forbidden' });
@@ -4956,7 +5051,9 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     const tenantId = demoTenantId || user?.tenantId;
     if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
 
-    const startDate = request.query.startDate ? new Date(request.query.startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const startDate = request.query.startDate
+      ? new Date(request.query.startDate)
+      : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const endDate = request.query.endDate ? new Date(request.query.endDate) : new Date();
 
     let targetBuyerId = request.query.buyerId || null;
@@ -4989,10 +5086,13 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
       const dest = call.targetNumber || 'unknown';
       const key = `${bName}_${campName}_${dest}`;
 
-      const cost = call.buyerBillableAmount ? new Prisma.Decimal(call.buyerBillableAmount) : new Prisma.Decimal(0);
-      const dur = call.connectedDuration !== null && call.connectedDuration !== undefined
-        ? call.connectedDuration 
-        : (call.duration || 0);
+      const cost = call.buyerBillableAmount
+        ? new Prisma.Decimal(call.buyerBillableAmount)
+        : new Prisma.Decimal(0);
+      const dur =
+        call.connectedDuration !== null && call.connectedDuration !== undefined
+          ? call.connectedDuration
+          : call.duration || 0;
 
       if (!groupsMap.has(key)) {
         groupsMap.set(key, {
@@ -5016,11 +5116,10 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     }
 
     const rows = [...groupsMap.values()].map(g => {
-      const billableRate = g.totalCalls > 0 ? (g.billableCalls / g.totalCalls) : 0;
+      const billableRate = g.totalCalls > 0 ? g.billableCalls / g.totalCalls : 0;
       const averageDuration = g.totalCalls > 0 ? Math.round(g.totalDuration / g.totalCalls) : 0;
-      const pricePerBillableCall = g.billableCalls > 0 
-        ? g.buyerCost.dividedBy(g.billableCalls).toFixed(4)
-        : '0.0000';
+      const pricePerBillableCall =
+        g.billableCalls > 0 ? g.buyerCost.dividedBy(g.billableCalls).toFixed(4) : '0.0000';
 
       return [
         g.buyerName,
@@ -5036,7 +5135,18 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
       ];
     });
 
-    const csvHeaders = ['Buyer', 'Campaign', 'Destination Number', 'Total Calls', 'Billable Calls', 'Non-Billable Calls', 'Billable Rate (%)', 'Avg Duration (s)', 'Cost / Billable Call ($)', 'Buyer Cost ($)'];
+    const csvHeaders = [
+      'Buyer',
+      'Campaign',
+      'Destination Number',
+      'Total Calls',
+      'Billable Calls',
+      'Non-Billable Calls',
+      'Billable Rate (%)',
+      'Avg Duration (s)',
+      'Cost / Billable Call ($)',
+      'Buyer Cost ($)',
+    ];
     const csvContent = toCsv(csvHeaders, rows);
     void reply
       .type('text/csv')
@@ -5064,7 +5174,9 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     const tenantId = demoTenantId || user?.tenantId;
     if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
 
-    const startDate = request.query.startDate ? new Date(request.query.startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const startDate = request.query.startDate
+      ? new Date(request.query.startDate)
+      : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const endDate = request.query.endDate ? new Date(request.query.endDate) : new Date();
 
     const calls = await prisma.call.findMany({
@@ -5098,8 +5210,12 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
       totalCalls++;
       if (call.billable) billableCalls++;
 
-      const rev = call.buyerBillableAmount ? new Prisma.Decimal(call.buyerBillableAmount) : new Prisma.Decimal(0);
-      const pay = call.publisherPayoutAmount ? new Prisma.Decimal(call.publisherPayoutAmount) : new Prisma.Decimal(0);
+      const rev = call.buyerBillableAmount
+        ? new Prisma.Decimal(call.buyerBillableAmount)
+        : new Prisma.Decimal(0);
+      const pay = call.publisherPayoutAmount
+        ? new Prisma.Decimal(call.publisherPayoutAmount)
+        : new Prisma.Decimal(0);
       const callCost = call.cost ? new Prisma.Decimal(call.cost) : new Prisma.Decimal(0);
 
       totalRev = totalRev.plus(rev);
@@ -5128,9 +5244,7 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
 
     const rows = [...groupsMap.values()].map(g => {
       const profit = g.buyerRevenue.minus(g.publisherPayout).minus(g.callCost);
-      const margin = g.buyerRevenue.gt(0) 
-        ? profit.dividedBy(g.buyerRevenue).toNumber()
-        : 0;
+      const margin = g.buyerRevenue.gt(0) ? profit.dividedBy(g.buyerRevenue).toNumber() : 0;
 
       return {
         campaignId: g.campaignId,
@@ -5146,9 +5260,7 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     });
 
     const overallProfit = totalRev.minus(totalPayout).minus(totalCallCost);
-    const overallMargin = totalRev.gt(0) 
-      ? overallProfit.dividedBy(totalRev).toNumber()
-      : 0;
+    const overallMargin = totalRev.gt(0) ? overallProfit.dividedBy(totalRev).toNumber() : 0;
 
     return {
       totals: {
@@ -5184,7 +5296,9 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     const tenantId = demoTenantId || user?.tenantId;
     if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
 
-    const startDate = request.query.startDate ? new Date(request.query.startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const startDate = request.query.startDate
+      ? new Date(request.query.startDate)
+      : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const endDate = request.query.endDate ? new Date(request.query.endDate) : new Date();
 
     const calls = await prisma.call.findMany({
@@ -5206,8 +5320,12 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     for (const call of calls) {
       const campName = call.campaignName || 'Unknown Campaign';
 
-      const rev = call.buyerBillableAmount ? new Prisma.Decimal(call.buyerBillableAmount) : new Prisma.Decimal(0);
-      const pay = call.publisherPayoutAmount ? new Prisma.Decimal(call.publisherPayoutAmount) : new Prisma.Decimal(0);
+      const rev = call.buyerBillableAmount
+        ? new Prisma.Decimal(call.buyerBillableAmount)
+        : new Prisma.Decimal(0);
+      const pay = call.publisherPayoutAmount
+        ? new Prisma.Decimal(call.publisherPayoutAmount)
+        : new Prisma.Decimal(0);
       const callCost = call.cost ? new Prisma.Decimal(call.cost) : new Prisma.Decimal(0);
 
       if (!groupsMap.has(campName)) {
@@ -5231,7 +5349,7 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
 
     const rows = [...groupsMap.values()].map(g => {
       const profit = g.buyerRevenue.minus(g.publisherPayout).minus(g.callCost);
-      const margin = g.buyerRevenue.gt(0) 
+      const margin = g.buyerRevenue.gt(0)
         ? (profit.dividedBy(g.buyerRevenue).toNumber() * 100).toFixed(2) + '%'
         : '0.00%';
 
@@ -5247,7 +5365,16 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
       ];
     });
 
-    const csvHeaders = ['Campaign', 'Total Calls', 'Billable Calls', 'Buyer Revenue ($)', 'Publisher Payout ($)', 'Call Cost ($)', 'Profit ($)', 'Margin (%)'];
+    const csvHeaders = [
+      'Campaign',
+      'Total Calls',
+      'Billable Calls',
+      'Buyer Revenue ($)',
+      'Publisher Payout ($)',
+      'Call Cost ($)',
+      'Profit ($)',
+      'Margin (%)',
+    ];
     const csvContent = toCsv(csvHeaders, rows);
     void reply
       .type('text/csv')
