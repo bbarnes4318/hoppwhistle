@@ -13,9 +13,6 @@ import { verifyGoogleToken } from '../services/google-auth.js';
 // Password validation: min 8 chars, 1 uppercase, 1 number
 const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*\d).{8,}$/;
 
-// Default tenant ID for new users (must exist in database)
-const DEFAULT_TENANT_ID = 'default-tenant-id';
-
 interface UserRole {
   role: { name: string };
 }
@@ -26,6 +23,27 @@ interface UserRole {
  */
 export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void> {
   const prisma = getPrismaClient();
+  await Promise.resolve(); // satisfy eslint require-await
+
+  // Helper to get or create a default tenant ID dynamically
+  async function getDefaultTenantId(): Promise<string> {
+    let defaultTenant = await prisma.tenant.findFirst({
+      orderBy: { createdAt: 'asc' },
+    });
+    if (!defaultTenant) {
+      defaultTenant = await prisma.tenant.create({
+        data: {
+          name: 'Default Organization',
+          slug: 'default',
+          status: 'ACTIVE',
+          metadata: {
+            plan: 'enterprise',
+          },
+        },
+      });
+    }
+    return defaultTenant.id;
+  }
 
   // ============================================================================
   // Email/Password Login
@@ -241,7 +259,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     // Create user with default tenant
     const user = await prisma.user.create({
       data: {
-        tenantId: DEFAULT_TENANT_ID,
+        tenantId: await getDefaultTenantId(),
         email: normalizedEmail,
         passwordHash,
         authMethod: 'EMAIL',
@@ -402,7 +420,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         // Create new user with Google and default tenant
         user = await prisma.user.create({
           data: {
-            tenantId: DEFAULT_TENANT_ID,
+            tenantId: await getDefaultTenantId(),
             email: normalizedEmail,
             googleId: googleUser.googleId,
             authMethod: 'GOOGLE',
