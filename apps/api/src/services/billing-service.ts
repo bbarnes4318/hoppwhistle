@@ -177,7 +177,16 @@ export class BillingService {
 
         // A. Check RTB winning bid (if ping/post)
         let rtbBidAmount: Prisma.Decimal | null = null;
-        if (call.buyerId && call.did) {
+        const callMetadataObj = (call.metadata as any) || {};
+        if (
+          callMetadataObj.rtb &&
+          callMetadataObj.rtb.bidAmount !== undefined &&
+          callMetadataObj.rtb.bidAmount !== null
+        ) {
+          rtbBidAmount = new Prisma.Decimal(callMetadataObj.rtb.bidAmount);
+        }
+
+        if (rtbBidAmount === null && call.buyerId && call.did) {
           const pingRequests = await tx.pingRequest.findMany({
             where: {
               tenantId,
@@ -263,8 +272,51 @@ export class BillingService {
         let publisherPayoutRate = new Prisma.Decimal(0);
         let payoutSource = 'default_0';
 
-        if (campaign && call.publisherId) {
-          // A. CampaignPublisher override
+        // 1. Explicit RTB payout rule if present (only applies to RTB calls)
+        const isRtbCall = call.callSource === 'INBOUND_RTB' || !!callMetadataObj.rtb;
+        let rtbPayoutRuleRate: Prisma.Decimal | null = null;
+        if (isRtbCall) {
+          const campaignMeta = (campaign?.metadata as any) || {};
+          const publisher = call.publisherId
+            ? await tx.publisher.findUnique({ where: { id: call.publisherId } })
+            : null;
+          const publisherMeta = (publisher?.metadata as any) || {};
+
+          // A. Check flat rate
+          if (campaignMeta.rtbPayoutRate !== undefined && campaignMeta.rtbPayoutRate !== null) {
+            rtbPayoutRuleRate = new Prisma.Decimal(campaignMeta.rtbPayoutRate);
+            payoutSource = 'campaign_rtb_payout_rate';
+          } else if (
+            publisherMeta.rtbPayoutRate !== undefined &&
+            publisherMeta.rtbPayoutRate !== null
+          ) {
+            rtbPayoutRuleRate = new Prisma.Decimal(publisherMeta.rtbPayoutRate);
+            payoutSource = 'publisher_rtb_payout_rate';
+          }
+          // B. Check percentage
+          else if (rtbBidAmount !== null) {
+            if (
+              campaignMeta.rtbPayoutPercentage !== undefined &&
+              campaignMeta.rtbPayoutPercentage !== null
+            ) {
+              const pct = new Prisma.Decimal(campaignMeta.rtbPayoutPercentage);
+              rtbPayoutRuleRate = rtbBidAmount.mul(pct);
+              payoutSource = 'campaign_rtb_payout_percentage';
+            } else if (
+              publisherMeta.rtbPayoutPercentage !== undefined &&
+              publisherMeta.rtbPayoutPercentage !== null
+            ) {
+              const pct = new Prisma.Decimal(publisherMeta.rtbPayoutPercentage);
+              rtbPayoutRuleRate = rtbBidAmount.mul(pct);
+              payoutSource = 'publisher_rtb_payout_percentage';
+            }
+          }
+        }
+
+        if (rtbPayoutRuleRate !== null) {
+          publisherPayoutRate = rtbPayoutRuleRate;
+        } else if (campaign && call.publisherId) {
+          // 2. CampaignPublisher override
           const assignment = await tx.campaignPublisher.findUnique({
             where: {
               tenantId_campaignId_publisherId: {
@@ -282,13 +334,13 @@ export class BillingService {
             publisherPayoutRate = assignment.payoutPerBillableCall;
             payoutSource = 'campaign_publisher_override';
           } else {
-            // B. Campaign default
+            // 3. Campaign default
             publisherPayoutRate = campaign.publisherPayoutPerBillableCall ?? new Prisma.Decimal(0);
             payoutSource = 'campaign_default';
           }
         }
 
-        // C. Publisher specific payout rule fallback
+        // 4. Publisher specific payout rule fallback
         if (publisherPayoutRate.isZero() && call.publisherId) {
           const publisher = await tx.publisher.findUnique({
             where: { id: call.publisherId },
@@ -754,7 +806,47 @@ export class BillingService {
       const billable = this.isBillableCall(durationUsed, threshold);
 
       let publisherPayoutRate = new Prisma.Decimal(0);
-      if (campaign && call.publisherId) {
+
+      // 1. Explicit RTB payout rule if present (only applies to RTB calls)
+      const isRtbCall = call.callSource === 'INBOUND_RTB' || !!callMetadataObj.rtb;
+      let rtbPayoutRuleRate: Prisma.Decimal | null = null;
+      if (isRtbCall) {
+        const campaignMeta = (campaign?.metadata as any) || {};
+        const publisher = call.publisherId
+          ? await prisma.publisher.findUnique({ where: { id: call.publisherId } })
+          : null;
+        const publisherMeta = (publisher?.metadata as any) || {};
+
+        // A. Check flat rate
+        if (campaignMeta.rtbPayoutRate !== undefined && campaignMeta.rtbPayoutRate !== null) {
+          rtbPayoutRuleRate = new Prisma.Decimal(campaignMeta.rtbPayoutRate);
+        } else if (
+          publisherMeta.rtbPayoutRate !== undefined &&
+          publisherMeta.rtbPayoutRate !== null
+        ) {
+          rtbPayoutRuleRate = new Prisma.Decimal(publisherMeta.rtbPayoutRate);
+        }
+        // B. Check percentage
+        else if (rtbBidAmount !== null) {
+          if (
+            campaignMeta.rtbPayoutPercentage !== undefined &&
+            campaignMeta.rtbPayoutPercentage !== null
+          ) {
+            const pct = new Prisma.Decimal(campaignMeta.rtbPayoutPercentage);
+            rtbPayoutRuleRate = rtbBidAmount.mul(pct);
+          } else if (
+            publisherMeta.rtbPayoutPercentage !== undefined &&
+            publisherMeta.rtbPayoutPercentage !== null
+          ) {
+            const pct = new Prisma.Decimal(publisherMeta.rtbPayoutPercentage);
+            rtbPayoutRuleRate = rtbBidAmount.mul(pct);
+          }
+        }
+      }
+
+      if (rtbPayoutRuleRate !== null) {
+        publisherPayoutRate = rtbPayoutRuleRate;
+      } else if (campaign && call.publisherId) {
         const assignment = await prisma.campaignPublisher.findUnique({
           where: {
             tenantId_campaignId_publisherId: {
@@ -775,8 +867,20 @@ export class BillingService {
         }
       }
 
+      if (publisherPayoutRate.isZero() && call.publisherId) {
+        const publisher = await prisma.publisher.findUnique({
+          where: { id: call.publisherId },
+        });
+        const pubMeta = (publisher?.metadata as any) || {};
+        if (pubMeta.defaultPayoutRate !== undefined) {
+          publisherPayoutRate = new Prisma.Decimal(pubMeta.defaultPayoutRate);
+        }
+      }
+
       let buyerPriceRate = new Prisma.Decimal(0);
-      if (campaign && call.buyerId && call.targetNumber) {
+      if (rtbBidAmount !== null) {
+        buyerPriceRate = rtbBidAmount;
+      } else if (campaign && call.buyerId && call.targetNumber) {
         const normalizedTarget = this.normalizePhoneNumber(call.targetNumber);
         const assignments = await prisma.campaignBuyer.findMany({
           where: {

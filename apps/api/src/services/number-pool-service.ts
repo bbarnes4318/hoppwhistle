@@ -12,6 +12,7 @@
 
 import { logger } from '../lib/logger.js';
 import { getPrismaClient } from '../lib/prisma.js';
+
 import { getRedisClient } from './redis.js';
 
 // ============================================================================
@@ -30,6 +31,17 @@ export interface RouteInfo {
   buyer_id: string;
   buyer_endpoint_id: string;
   leased_at: string;
+  tenant_id?: string;
+  publisher_id?: string;
+  campaign_id?: string | null;
+  transfer_number?: string;
+  caller_number?: string | null;
+  rtb_bid_amount?: number;
+  buyer_bid_id?: string | null;
+  post_accepted_at?: string;
+  publisher_request_id?: string | null;
+  vertical?: string | null;
+  expires_at?: string | null;
 }
 
 // ============================================================================
@@ -50,7 +62,8 @@ export class NumberPoolService {
     pingId: string,
     buyerId: string,
     buyerEndpointId: string,
-    durationSeconds?: number
+    durationSeconds?: number,
+    additionalData?: Partial<RouteInfo>
   ): Promise<LeaseResult> {
     const prisma = getPrismaClient();
     const redis = getRedisClient();
@@ -124,6 +137,17 @@ export class NumberPoolService {
         buyer_id: buyerId,
         buyer_endpoint_id: buyerEndpointId,
         leased_at: new Date().toISOString(),
+        tenant_id: additionalData?.tenant_id,
+        publisher_id: additionalData?.publisher_id,
+        campaign_id: additionalData?.campaign_id,
+        transfer_number: leasedNumber.number,
+        caller_number: additionalData?.caller_number,
+        rtb_bid_amount: additionalData?.rtb_bid_amount,
+        buyer_bid_id: additionalData?.buyer_bid_id,
+        post_accepted_at: additionalData?.post_accepted_at,
+        publisher_request_id: additionalData?.publisher_request_id,
+        vertical: additionalData?.vertical,
+        expires_at: additionalData?.expires_at,
       };
 
       const routeKey = `route:did:${leasedNumber.number}`;

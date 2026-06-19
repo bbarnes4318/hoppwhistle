@@ -46,13 +46,13 @@ export interface PingResult {
   message?: string;
 }
 
-interface FilterResult {
+export interface FilterResult {
   pass: boolean;
   reason?: string;
 }
 
 // Structured pricing rule format (safe from code injection)
-interface PricingRule {
+export interface PricingRule {
   field: string;
   op: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in';
   val: string | number | (string | number)[];
@@ -60,12 +60,12 @@ interface PricingRule {
 }
 
 // Split-shift hours format
-interface TimeRange {
+export interface TimeRange {
   start: string; // "09:00"
   end: string; // "17:00"
 }
 
-type HoursOfOperation = {
+export type HoursOfOperation = {
   [day: string]: TimeRange[];
 };
 
@@ -341,7 +341,7 @@ export class AuctionService {
    * Check operating hours with split-shift support
    * Iterates through all time blocks for the current day
    */
-  private checkHours(
+  public checkHours(
     hoursOfOperation: HoursOfOperation | null,
     timezone: string | null
   ): FilterResult {
@@ -389,7 +389,7 @@ export class AuctionService {
    * Cap check with Redis thundering herd protection
    * Formula: (SQL_Actual_Count + Redis_Reserved_Count) < Max_Cap
    */
-  private async checkCap(
+  public async checkCap(
     endpointId: string,
     maxCap: number,
     capPeriod: string
@@ -599,7 +599,15 @@ export class AuctionService {
       }
 
       // Decode payload
-      const payload = JSON.parse(Buffer.from(encodedPayload, 'base64').toString());
+      interface BidTokenPayload {
+        exp?: number;
+        ping_id?: string;
+        bid_amount?: number;
+        buyer_id?: string;
+      }
+      const payload = JSON.parse(
+        Buffer.from(encodedPayload, 'base64').toString()
+      ) as BidTokenPayload;
 
       // Check expiration
       if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
@@ -674,7 +682,7 @@ export class AuctionService {
     try {
       const redis = getRedisClient();
       const cached = await redis.get(`ping:result:${requestId}`);
-      return cached ? JSON.parse(cached) : null;
+      return cached ? (JSON.parse(cached) as PingResult) : null;
     } catch (error) {
       logger.warn({ msg: 'Redis error getting cached result', requestId, error });
       return null;
