@@ -142,9 +142,18 @@ const adminNavigation: NavItem[] = [
   },
 ];
 
+// Publisher navigation items
+const publisherNavigation: NavItem[] = [
+  { name: 'Overview', href: '/publisher/dashboard', icon: LayoutDashboard },
+  { name: 'Calls', href: '/publisher/calls', icon: AudioLines },
+  { name: 'API Setup', href: '/publisher/api-setup', icon: Shield },
+  { name: 'Ping/Post Tester', href: '/publisher/tester', icon: Bot },
+  { name: 'Earnings & Payouts', href: '/publisher/earnings', icon: Receipt },
+];
+
 export function Sidebar() {
   const pathname = usePathname();
-  const { hasFullAccess, isBuyerOnly, isNewUser } = useAuth();
+  const { hasFullAccess, isBuyerOnly, isNewUser, isPublisherOnly } = useAuth();
 
   // Filter navigation items based on user access level
   const filterNavItems = (items: NavItem[]): NavItem[] => {
@@ -162,8 +171,8 @@ export function Sidebar() {
     return items;
   };
 
-  const visibleNavigation = filterNavItems(navigation);
-  const visibleToolsNav = filterNavItems(toolsNavigation);
+  const visibleNavigation = isPublisherOnly ? publisherNavigation : filterNavItems(navigation);
+  const visibleToolsNav = isPublisherOnly ? [] : filterNavItems(toolsNavigation);
   // Admin section: only show to users with full access (ADMIN/OWNER) — not new users
   const visibleAdminNav = hasFullAccess && !isNewUser ? adminNavigation : [];
 
@@ -184,6 +193,13 @@ export function Sidebar() {
         {isBuyerOnly && (
           <div className="mb-4 px-3 py-2 text-xs font-semibold uppercase tracking-widest text-primary bg-primary/10 rounded-md text-center border border-primary/20">
             Buyer Portal
+          </div>
+        )}
+
+        {/* Publisher Portal indicator - only for publisher-only users */}
+        {isPublisherOnly && (
+          <div className="mb-4 px-3 py-2 text-xs font-semibold uppercase tracking-widest text-emerald-400 bg-emerald-500/10 rounded-md text-center border border-emerald-500/20">
+            Publisher Portal
           </div>
         )}
 

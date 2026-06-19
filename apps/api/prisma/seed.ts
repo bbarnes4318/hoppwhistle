@@ -179,6 +179,26 @@ async function main() {
   });
   console.log('✅ Created publisher');
 
+  // Create publisher user
+  const publisherUser = await prisma.user.create({
+    data: {
+      tenantId: tenant.id,
+      email: 'publisher@test.callfabric.local',
+      passwordHash,
+      firstName: 'Publisher',
+      lastName: 'User',
+      status: 'ACTIVE',
+      publisherId: publisher.id,
+    },
+  });
+  await prisma.userRole.create({
+    data: {
+      userId: publisherUser.id,
+      roleId: publisherRole.id,
+    },
+  });
+  console.log('✅ Created publisher user:', publisherUser.email);
+
   // Create buyer
   const buyer = await prisma.buyer.create({
     data: {

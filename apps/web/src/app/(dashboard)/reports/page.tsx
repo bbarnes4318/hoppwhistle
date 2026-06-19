@@ -62,13 +62,22 @@ interface PublisherRevenueRow {
   nonBillableCalls: number;
   payoutRate: string;
   publisherRevenue: string;
+  earnings: string;
+  paid: string;
+  pending: string;
+  held: string;
 }
 
 interface PublisherRevenueReport {
   totals: {
     totalCalls: number;
     billableCalls: number;
+    nonBillableCalls: number;
+    earnings: string;
     publisherRevenue: string;
+    paid: string;
+    pending: string;
+    held: string;
   };
   rows: PublisherRevenueRow[];
 }
@@ -86,13 +95,24 @@ interface BuyerCostsRow {
   averageDuration: number;
   pricePerBillableCall: string;
   buyerCost: string;
+  walletDebits: string;
+  invoiced: string;
+  pendingInvoice: string;
+  disputes: string;
 }
 
 interface BuyerCostsReport {
   totals: {
     totalCalls: number;
     billableCalls: number;
+    nonBillableCalls: number;
+    averageDuration: number;
+    billableRate: number;
     buyerCost: string;
+    walletDebits: string;
+    invoiced: string;
+    pendingInvoice: string;
+    disputes: string;
   };
   rows: BuyerCostsRow[];
 }
@@ -101,23 +121,35 @@ interface CampaignProfitabilityRow {
   campaignId: string;
   campaignName: string;
   totalCalls: number;
+  connectedCalls: number;
   billableCalls: number;
   buyerRevenue: string;
   publisherPayout: string;
   callCost: string;
+  otherCosts: string;
   profit: string;
   margin: number;
+  disputes: string;
+  disputesCount: number;
+  adjustments: string;
+  netPayableReceivable: string;
 }
 
 interface CampaignProfitabilityReport {
   totals: {
     totalCalls: number;
+    connectedCalls: number;
     billableCalls: number;
     buyerRevenue: string;
     publisherPayout: string;
     callCost: string;
+    otherCosts: string;
     profit: string;
     margin: number;
+    disputes: string;
+    disputesCount: number;
+    adjustments: string;
+    netPayableReceivable: string;
   };
   rows: CampaignProfitabilityRow[];
 }
@@ -380,7 +412,7 @@ export default function ReportsPage() {
             {/* Campaign Select */}
             <div className="space-y-1.5 flex-1 max-w-[240px]">
               <Label className="text-xs text-muted-foreground">Campaign Filter</Label>
-              <Select value={campaignId} onValueChange={setCampaignId}>
+              <Select value={campaignId || 'all-campaigns'} onValueChange={(val) => setCampaignId(val === 'all-campaigns' ? '' : val)}>
                 <SelectTrigger>
                   <SelectValue placeholder="All Campaigns" />
                 </SelectTrigger>
@@ -508,24 +540,29 @@ export default function ReportsPage() {
                     <TableRow>
                       <TableHead>Campaign Name</TableHead>
                       <TableHead className="text-right">Total Calls</TableHead>
+                      <TableHead className="text-right">Connected Calls</TableHead>
                       <TableHead className="text-right">Billable Calls</TableHead>
                       <TableHead className="text-right">Revenue ($)</TableHead>
                       <TableHead className="text-right">Payout ($)</TableHead>
                       <TableHead className="text-right">Carrier Cost ($)</TableHead>
+                      <TableHead className="text-right">Other Costs ($)</TableHead>
                       <TableHead className="text-right">Profit ($)</TableHead>
                       <TableHead className="text-right">Margin (%)</TableHead>
+                      <TableHead className="text-right">Disputes ($)</TableHead>
+                      <TableHead className="text-right">Adjustments ($)</TableHead>
+                      <TableHead className="text-right">Net Payable/Receivable ($)</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {loading ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-8">
+                        <TableCell colSpan={13} className="text-center py-8">
                           <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                         </TableCell>
                       </TableRow>
                     ) : !profitReport || profitReport.rows.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-8 text-muted-foreground text-sm">
+                        <TableCell colSpan={13} className="text-center py-8 text-muted-foreground text-sm">
                           No report data found for the selected filters.
                         </TableCell>
                       </TableRow>
@@ -535,10 +572,12 @@ export default function ReportsPage() {
                           <TableRow key={row.campaignId}>
                             <TableCell className="font-semibold text-foreground">{row.campaignName}</TableCell>
                             <TableCell className="text-right tabular-nums">{row.totalCalls}</TableCell>
+                            <TableCell className="text-right tabular-nums">{row.connectedCalls}</TableCell>
                             <TableCell className="text-right tabular-nums text-primary font-medium">{row.billableCalls}</TableCell>
                             <TableCell className="text-right tabular-nums text-emerald-400">${Number(row.buyerRevenue).toFixed(2)}</TableCell>
                             <TableCell className="text-right tabular-nums text-amber-400">${Number(row.publisherPayout).toFixed(2)}</TableCell>
                             <TableCell className="text-right tabular-nums text-rose-400">${Number(row.callCost).toFixed(2)}</TableCell>
+                            <TableCell className="text-right tabular-nums text-muted-foreground">${Number(row.otherCosts).toFixed(2)}</TableCell>
                             <TableCell className={cn(
                               "text-right tabular-nums font-bold",
                               Number(row.profit) >= 0 ? "text-emerald-400" : "text-rose-500"
@@ -553,18 +592,35 @@ export default function ReportsPage() {
                                 {(row.margin * 100).toFixed(1)}%
                               </Badge>
                             </TableCell>
+                            <TableCell className="text-right tabular-nums text-amber-400" title={`${row.disputesCount} disputed calls`}>
+                              ${Number(row.disputes).toFixed(2)}
+                            </TableCell>
+                            <TableCell className={cn(
+                              "text-right tabular-nums",
+                              Number(row.adjustments) >= 0 ? "text-emerald-400" : "text-rose-400"
+                            )}>
+                              ${Number(row.adjustments).toFixed(2)}
+                            </TableCell>
+                            <TableCell className={cn(
+                              "text-right tabular-nums font-bold",
+                              Number(row.netPayableReceivable) >= 0 ? "text-emerald-400" : "text-rose-500"
+                            )}>
+                              ${Number(row.netPayableReceivable).toFixed(2)}
+                            </TableCell>
                           </TableRow>
                         ))}
                         {/* Totals Row */}
                         <TableRow className="bg-muted/40 font-bold border-t-2 border-border hover:bg-muted/50">
                           <TableCell>Report Totals</TableCell>
                           <TableCell className="text-right tabular-nums">{profitReport.totals.totalCalls}</TableCell>
+                          <TableCell className="text-right tabular-nums">{profitReport.totals.connectedCalls}</TableCell>
                           <TableCell className="text-right tabular-nums text-primary">{profitReport.totals.billableCalls}</TableCell>
                           <TableCell className="text-right tabular-nums text-emerald-400">${Number(profitReport.totals.buyerRevenue).toFixed(2)}</TableCell>
                           <TableCell className="text-right tabular-nums text-amber-400">${Number(profitReport.totals.publisherPayout).toFixed(2)}</TableCell>
                           <TableCell className="text-right tabular-nums text-rose-400">${Number(profitReport.totals.callCost).toFixed(2)}</TableCell>
+                          <TableCell className="text-right tabular-nums text-muted-foreground">${Number(profitReport.totals.otherCosts).toFixed(2)}</TableCell>
                           <TableCell className={cn(
-                            "text-right tabular-nums text-lg",
+                            "text-right tabular-nums",
                             Number(profitReport.totals.profit) >= 0 ? "text-emerald-400" : "text-rose-500"
                           )}>
                             ${Number(profitReport.totals.profit).toFixed(2)}
@@ -576,6 +632,21 @@ export default function ReportsPage() {
                             )}>
                               {(profitReport.totals.margin * 100).toFixed(1)}%
                             </Badge>
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums text-amber-400" title={`${profitReport.totals.disputesCount} disputed calls`}>
+                            ${Number(profitReport.totals.disputes).toFixed(2)}
+                          </TableCell>
+                          <TableCell className={cn(
+                            "text-right tabular-nums",
+                            Number(profitReport.totals.adjustments) >= 0 ? "text-emerald-400" : "text-rose-400"
+                          )}>
+                            ${Number(profitReport.totals.adjustments).toFixed(2)}
+                          </TableCell>
+                          <TableCell className={cn(
+                            "text-right tabular-nums text-lg",
+                            Number(profitReport.totals.netPayableReceivable) >= 0 ? "text-emerald-400" : "text-rose-500"
+                          )}>
+                            ${Number(profitReport.totals.netPayableReceivable).toFixed(2)}
                           </TableCell>
                         </TableRow>
                       </>
@@ -650,18 +721,21 @@ export default function ReportsPage() {
                       <TableHead className="text-right">Non-Billable</TableHead>
                       <TableHead className="text-right">Payout Rate ($)</TableHead>
                       <TableHead className="text-right">Earnings ($)</TableHead>
+                      <TableHead className="text-right">Paid ($)</TableHead>
+                      <TableHead className="text-right">Pending ($)</TableHead>
+                      <TableHead className="text-right">Held/Disputed ($)</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {loading ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center py-8">
+                        <TableCell colSpan={10} className="text-center py-8">
                           <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                         </TableCell>
                       </TableRow>
                     ) : !pubReport || pubReport.rows.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground text-sm">
+                        <TableCell colSpan={10} className="text-center py-8 text-muted-foreground text-sm">
                           No publisher revenue records found.
                         </TableCell>
                       </TableRow>
@@ -675,7 +749,10 @@ export default function ReportsPage() {
                             <TableCell className="text-right tabular-nums text-emerald-400 font-medium">{row.billableCalls}</TableCell>
                             <TableCell className="text-right tabular-nums text-muted-foreground">{row.nonBillableCalls}</TableCell>
                             <TableCell className="text-right tabular-nums font-mono text-xs text-muted-foreground">${Number(row.payoutRate).toFixed(2)}</TableCell>
-                            <TableCell className="text-right tabular-nums font-bold text-emerald-400">${Number(row.publisherRevenue).toFixed(2)}</TableCell>
+                            <TableCell className="text-right tabular-nums font-bold text-emerald-400">${Number(row.earnings).toFixed(2)}</TableCell>
+                            <TableCell className="text-right tabular-nums text-emerald-400">${Number(row.paid).toFixed(2)}</TableCell>
+                            <TableCell className="text-right tabular-nums text-amber-400">${Number(row.pending).toFixed(2)}</TableCell>
+                            <TableCell className="text-right tabular-nums text-rose-500">${Number(row.held).toFixed(2)}</TableCell>
                           </TableRow>
                         ))}
                         {/* Totals Row */}
@@ -684,10 +761,13 @@ export default function ReportsPage() {
                           <TableCell className="text-right tabular-nums">{pubReport.totals.totalCalls}</TableCell>
                           <TableCell className="text-right tabular-nums text-emerald-400">{pubReport.totals.billableCalls}</TableCell>
                           <TableCell className="text-right tabular-nums text-muted-foreground">
-                            {pubReport.totals.totalCalls - pubReport.totals.billableCalls}
+                            {pubReport.totals.nonBillableCalls}
                           </TableCell>
                           <TableCell className="text-right">—</TableCell>
-                          <TableCell className="text-right tabular-nums text-lg text-emerald-400">${Number(pubReport.totals.publisherRevenue).toFixed(2)}</TableCell>
+                          <TableCell className="text-right tabular-nums text-lg text-emerald-400">${Number(pubReport.totals.earnings).toFixed(2)}</TableCell>
+                          <TableCell className="text-right tabular-nums text-emerald-400">${Number(pubReport.totals.paid).toFixed(2)}</TableCell>
+                          <TableCell className="text-right tabular-nums text-amber-400">${Number(pubReport.totals.pending).toFixed(2)}</TableCell>
+                          <TableCell className="text-right tabular-nums text-rose-500">${Number(pubReport.totals.held).toFixed(2)}</TableCell>
                         </TableRow>
                       </>
                     )}
@@ -763,18 +843,22 @@ export default function ReportsPage() {
                       <TableHead className="text-right">Avg Duration</TableHead>
                       <TableHead className="text-right">Rate ($)</TableHead>
                       <TableHead className="text-right">Cost ($)</TableHead>
+                      <TableHead className="text-right">Wallet Debits ($)</TableHead>
+                      <TableHead className="text-right">Invoiced ($)</TableHead>
+                      <TableHead className="text-right">Pending Invoice ($)</TableHead>
+                      <TableHead className="text-right">Disputes ($)</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {loading ? (
                       <TableRow>
-                        <TableCell colSpan={9} className="text-center py-8">
+                        <TableCell colSpan={13} className="text-center py-8">
                           <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                         </TableCell>
                       </TableRow>
                     ) : !buyerReport || buyerReport.rows.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={9} className="text-center py-8 text-muted-foreground text-sm">
+                        <TableCell colSpan={13} className="text-center py-8 text-muted-foreground text-sm">
                           No buyer cost records found.
                         </TableCell>
                       </TableRow>
@@ -795,6 +879,10 @@ export default function ReportsPage() {
                             </TableCell>
                             <TableCell className="text-right tabular-nums font-mono text-xs text-muted-foreground">${Number(row.pricePerBillableCall).toFixed(2)}</TableCell>
                             <TableCell className="text-right tabular-nums font-bold text-rose-400">${Number(row.buyerCost).toFixed(2)}</TableCell>
+                            <TableCell className="text-right tabular-nums text-rose-400">${Number(row.walletDebits).toFixed(2)}</TableCell>
+                            <TableCell className="text-right tabular-nums text-emerald-400">${Number(row.invoiced).toFixed(2)}</TableCell>
+                            <TableCell className="text-right tabular-nums text-amber-400">${Number(row.pendingInvoice).toFixed(2)}</TableCell>
+                            <TableCell className="text-right tabular-nums text-rose-500">${Number(row.disputes).toFixed(2)}</TableCell>
                           </TableRow>
                         ))}
                         {/* Totals Row */}
@@ -808,6 +896,10 @@ export default function ReportsPage() {
                           <TableCell className="text-right">—</TableCell>
                           <TableCell className="text-right">—</TableCell>
                           <TableCell className="text-right tabular-nums text-lg text-rose-400">${Number(buyerReport.totals.buyerCost).toFixed(2)}</TableCell>
+                          <TableCell className="text-right tabular-nums text-rose-400">${Number(buyerReport.totals.walletDebits).toFixed(2)}</TableCell>
+                          <TableCell className="text-right tabular-nums text-emerald-400">${Number(buyerReport.totals.invoiced).toFixed(2)}</TableCell>
+                          <TableCell className="text-right tabular-nums text-amber-400">${Number(buyerReport.totals.pendingInvoice).toFixed(2)}</TableCell>
+                          <TableCell className="text-right tabular-nums text-rose-500">${Number(buyerReport.totals.disputes).toFixed(2)}</TableCell>
                         </TableRow>
                       </>
                     )}

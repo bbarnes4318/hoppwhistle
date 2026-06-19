@@ -595,6 +595,8 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         lastName: user.lastName,
         roles: user.roles.map((ur: UserRole) => ur.role.name),
         tenantId: user.tenantId,
+        buyerId: user.buyerId,
+        publisherId: user.publisherId || (user.metadata as any)?.publisherId || null,
       });
     }
   );

@@ -189,10 +189,10 @@ export class BillingService {
         if (rtbBidAmount === null && call.buyerId && call.did) {
           const pingRequests = await tx.pingRequest.findMany({
             where: {
-              tenantId,
               status: 'SOLD',
               assignedPhoneNumber: {
                 number: call.did,
+                tenantId,
               },
             },
             include: {
@@ -214,9 +214,9 @@ export class BillingService {
             return this.normalizePhoneNumber(pr.callerNumber) === normalizedCaller;
           });
 
-          if (match && match.bids.length > 0) {
+          if (match && (match as any).bids.length > 0) {
             const winningBid =
-              match.bids.find(b => b.buyerEndpointId === buyerEndpointId) || match.bids[0];
+              (match as any).bids.find((b: any) => b.buyerEndpointId === buyerEndpointId) || (match as any).bids[0];
             rtbBidAmount = winningBid.amount;
           }
         }
@@ -370,7 +370,7 @@ export class BillingService {
 
           let rate = 0.015; // default rate card rate if nothing is found (e.g. $0.015/min)
           if (route) {
-            const routeMeta = (route.metadata as any) || {};
+            const routeMeta = (route as any).metadata || {};
             const phoneMeta = (route.phoneNumber?.metadata as any) || {};
 
             if (routeMeta.carrierCostPerMinute !== undefined) {
@@ -701,8 +701,8 @@ export class BillingService {
 
           const isDiff =
             before.billable !== after.billable ||
-            new Prisma.Decimal(before.revenue).ne(new Prisma.Decimal(after.revenue)) ||
-            new Prisma.Decimal(before.payout).ne(new Prisma.Decimal(after.payout));
+            !new Prisma.Decimal(before.revenue).equals(new Prisma.Decimal(after.revenue)) ||
+            !new Prisma.Decimal(before.payout).equals(new Prisma.Decimal(after.payout));
 
           if (isDiff) {
             results.changes.push({
@@ -752,8 +752,8 @@ export class BillingService {
 
           const isDiff =
             before.billable !== after.billable ||
-            new Prisma.Decimal(before.revenue).ne(new Prisma.Decimal(after.revenue)) ||
-            new Prisma.Decimal(before.payout).ne(new Prisma.Decimal(after.payout));
+            !new Prisma.Decimal(before.revenue).equals(new Prisma.Decimal(after.revenue)) ||
+            !new Prisma.Decimal(before.payout).equals(new Prisma.Decimal(after.payout));
 
           if (isDiff) {
             results.changes.push({
@@ -804,6 +804,16 @@ export class BillingService {
 
       const durationUsed = this.getBillableDuration(call);
       const billable = this.isBillableCall(durationUsed, threshold);
+
+      const callMetadataObj = (call.metadata as any) || {};
+      let rtbBidAmount: Prisma.Decimal | null = null;
+      if (
+        callMetadataObj.rtb &&
+        callMetadataObj.rtb.bidAmount !== undefined &&
+        callMetadataObj.rtb.bidAmount !== null
+      ) {
+        rtbBidAmount = new Prisma.Decimal(callMetadataObj.rtb.bidAmount);
+      }
 
       let publisherPayoutRate = new Prisma.Decimal(0);
 

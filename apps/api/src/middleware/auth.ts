@@ -12,6 +12,8 @@ export interface AuthenticatedUser {
   apiKeyId?: string;
   roles?: string[];
   scopes?: string[];
+  buyerId?: string | null;
+  publisherId?: string | null;
 }
 
 /**
@@ -88,6 +90,7 @@ export async function authenticateJWT(request: FastifyRequest, reply: FastifyRep
 
       // Extract roles
       const roles = user.roles.map(ur => ur.role.name);
+      const publisherId = user.publisherId || (user.metadata as any)?.publisherId || null;
 
       // Construct authenticated user object explicitly
       request.user = {
@@ -95,6 +98,8 @@ export async function authenticateJWT(request: FastifyRequest, reply: FastifyRep
         userId: decoded.userId,
         email: decoded.email,
         roles,
+        buyerId: user.buyerId || null,
+        publisherId,
       };
     } else {
       // API-only token without userId
@@ -161,6 +166,7 @@ export async function authenticateAPIKey(
     where: { keyHash },
     include: {
       tenant: true,
+      publisher: true,
     },
   });
 
@@ -268,6 +274,8 @@ export async function authenticateAPIKey(
     tenantId: dbApiKey.tenantId,
     apiKeyId: dbApiKey.id,
     scopes,
+    publisherId: dbApiKey.publisherId || (dbApiKey.metadata as any)?.publisherId || null,
+    buyerId: (dbApiKey.metadata as any)?.buyerId || null,
   };
 }
 

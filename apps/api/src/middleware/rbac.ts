@@ -402,3 +402,39 @@ export function requireRole(...roles: RoleName[]) {
     }
   };
 }
+
+/**
+ * Check if the user has the PUBLISHER role
+ */
+export function isPublisherUser(user: any): boolean {
+  return !!(user && user.roles?.includes('PUBLISHER'));
+}
+
+/**
+ * Enforce that the user has access to a specific publisherId.
+ * Admin/Owner users always have access.
+ * Publisher users only have access if they belong to that publisherId.
+ */
+export function requirePublisherAccess(user: any, publisherId: string): boolean {
+  if (!user) return false;
+  const userRoles = user.roles || [];
+  if (userRoles.includes('ADMIN') || userRoles.includes('OWNER')) return true;
+  if (userRoles.includes('PUBLISHER')) {
+    return user.publisherId === publisherId;
+  }
+  return false;
+}
+
+/**
+ * Builds a Prisma scoping where clause based on user roles
+ */
+export function buildPublisherScopedWhere(user: any) {
+  if (!user) return { publisherId: 'none' };
+  const userRoles = user.roles || [];
+  if (userRoles.includes('ADMIN') || userRoles.includes('OWNER')) return {};
+  if (userRoles.includes('PUBLISHER')) {
+    return { publisherId: user.publisherId || 'none' };
+  }
+  return { publisherId: 'none' };
+}
+

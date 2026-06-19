@@ -180,9 +180,13 @@ model User {
   // Buyer Portal: Link user to a Buyer entity for BUYER role
   buyerId String?
 
+  // Publisher Portal: Link user to a Publisher entity for PUBLISHER role
+  publisherId String?
+
   // Relations
   tenant              Tenant?            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   buyer               Buyer?             @relation(fields: [buyerId], references: [id])
+  publisher           Publisher?         @relation(fields: [publisherId], references: [id])
   roles               UserRole[]
   auditLogs           AuditLog[]
   createdCalls        Call[]             @relation("CallCreator")
@@ -203,6 +207,7 @@ model User {
   @@index([tenantId, status])
   @@index([googleId])
   @@index([buyerId])
+  @@index([publisherId])
   @@map("users")
 }
 
@@ -276,10 +281,13 @@ model ApiKey {
   tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   rateLimitEntries RateLimitEntry[]
   auditLogs        AuditLog[]
+  publisherId      String?
+  publisher        Publisher?       @relation(fields: [publisherId], references: [id])
 
   @@index([tenantId])
   @@index([keyHash])
   @@index([status])
+  @@index([publisherId])
   @@map("api_keys")
 }
 
@@ -584,6 +592,8 @@ model Publisher {
   pingRequests       PingRequest[]
   campaignPublishers CampaignPublisher[]
   didRoutes          DidRoute[]
+  users              User[]
+  apiKeys            ApiKey[]
 
   @@unique([tenantId, code])
   @@index([tenantId])

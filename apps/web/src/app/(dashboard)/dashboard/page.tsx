@@ -23,10 +23,13 @@ import {
  YAxis,
 } from 'recharts';
 
+import { useRouter } from 'next/navigation';
+
 import { KPICard } from '@/components/dashboard/kpi-card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
 import { formatDuration, formatPhoneNumber } from '@/lib/utils';
 
@@ -168,6 +171,15 @@ function ChartTooltip({
 
 /* ─── Main Dashboard ───────────────────────────────────────────── */
 export default function DashboardPage() {
+ const router = useRouter();
+ const { isPublisherOnly, loading: authLoading } = useAuth();
+
+ useEffect(() => {
+   if (!authLoading && isPublisherOnly) {
+     router.replace('/publisher/dashboard');
+   }
+ }, [isPublisherOnly, authLoading, router]);
+
  const [stats, setStats] = useState<DashboardStats | null>(null);
  const [calls, setCalls] = useState<CallRecord[]>([]);
  const [loading, setLoading] = useState(true);

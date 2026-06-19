@@ -31,7 +31,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       if (userRecord) {
         userRoles = userRecord.roles.map((ur: any) => ur.role.name) || [];
         buyerId = userRecord.buyerId || null;
-        publisherId = (userRecord.metadata as any)?.publisherId || null;
+        publisherId = userRecord.publisherId || (userRecord.metadata as any)?.publisherId || null;
       }
     }
 

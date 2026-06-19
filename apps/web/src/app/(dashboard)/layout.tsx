@@ -1,13 +1,23 @@
 'use client';
 
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 
 import { Header } from '@/components/layout/header';
 import { Sidebar } from '@/components/layout/sidebar';
 import { AgentPhonePanel, GlobalDispositionModal, PhoneProvider } from '@/components/phone';
+import { useAuth } from '@/hooks/use-auth';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }): JSX.Element {
- const pathname = usePathname();
+  const pathname = usePathname();
+  const router = useRouter();
+  const { isPublisherOnly, loading: authLoading } = useAuth();
+
+  useEffect(() => {
+    if (!authLoading && isPublisherOnly && !pathname?.startsWith('/publisher')) {
+      router.replace('/publisher/dashboard');
+    }
+  }, [isPublisherOnly, authLoading, pathname, router]);
 
  // Check if we're on the call center page (fullscreen mode)
  const isCallCenterPage = pathname?.startsWith('/call-center');

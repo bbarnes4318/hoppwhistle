@@ -9,6 +9,7 @@ interface UserData {
   lastName?: string;
   roles: string[];
   buyerId?: string;
+  publisherId?: string;
   tenantId: string;
 }
 
@@ -19,6 +20,10 @@ interface UseAuthReturn {
   isBuyer: boolean;
   /** User is ONLY a buyer - no ADMIN/OWNER privileges */
   isBuyerOnly: boolean;
+  /** User has PUBLISHER role */
+  isPublisher: boolean;
+  /** User is ONLY a publisher - no ADMIN/OWNER privileges */
+  isPublisherOnly: boolean;
   isAdmin: boolean;
   isOwner: boolean;
   isAgent: boolean;
@@ -71,6 +76,7 @@ export function useAuth(): UseAuthReturn {
         lastName: data.lastName || data.data?.lastName,
         roles,
         buyerId: data.buyerId || data.data?.buyerId,
+        publisherId: data.publisherId || data.data?.publisherId,
         tenantId: data.tenantId || data.data?.tenantId,
       });
       setError(null);
@@ -92,6 +98,7 @@ export function useAuth(): UseAuthReturn {
   const isAdmin = userRoles.includes('ADMIN');
   const isOwner = userRoles.includes('OWNER');
   const isBuyer = userRoles.includes('BUYER');
+  const isPublisher = userRoles.includes('PUBLISHER');
   const isAgent = userRoles.includes('AGENT');
 
   // CRITICAL: hasFullAccess means ADMIN or OWNER - they see EVERYTHING
@@ -99,6 +106,9 @@ export function useAuth(): UseAuthReturn {
 
   // isBuyerOnly = has BUYER role but NOT admin/owner (restricted view)
   const isBuyerOnly = isBuyer && !hasFullAccess;
+
+  // isPublisherOnly = has PUBLISHER role but NOT admin/owner (restricted view)
+  const isPublisherOnly = isPublisher && !hasFullAccess;
 
   // New user = authenticated but has zero roles (new signup, not yet assigned any role)
   const isNewUser = !!user && userRoles.length === 0;
@@ -108,6 +118,8 @@ export function useAuth(): UseAuthReturn {
     userRoles,
     isBuyer,
     isBuyerOnly,
+    isPublisher,
+    isPublisherOnly,
     isAdmin,
     isOwner,
     isAgent,
