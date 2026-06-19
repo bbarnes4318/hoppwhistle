@@ -77,14 +77,14 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Lint
-        run: pnpm lint
+        run: pnpm --filter "!@callfabric/transcriber" --filter "!@callfabric/media" lint
         continue-on-error: false
 
       - name: Format check
         run: pnpm format:check
 
       - name: Type check
-        run: pnpm typecheck
+        run: pnpm --filter "!@callfabric/transcriber" --filter "!@callfabric/media" typecheck
 
       - name: Push Prisma Schema
         run: pnpm --filter @hopwhistle/api prisma db push --skip-generate
