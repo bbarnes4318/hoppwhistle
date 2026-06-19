@@ -11,13 +11,26 @@ import { useAuth } from '@/hooks/use-auth';
 export default function DashboardLayout({ children }: { children: React.ReactNode }): JSX.Element {
   const pathname = usePathname();
   const router = useRouter();
-  const { isPublisherOnly, loading: authLoading } = useAuth();
+  const { user, isPublisherOnly, isBuyerOnly, isAgentOnly, loading: authLoading } = useAuth();
 
   useEffect(() => {
-    if (!authLoading && isPublisherOnly && !pathname?.startsWith('/publisher')) {
-      router.replace('/publisher/dashboard');
+    if (authLoading) return;
+
+    if (!user) {
+      router.replace('/login');
+      return;
     }
-  }, [isPublisherOnly, authLoading, pathname, router]);
+
+    const path = pathname || '';
+
+    if (isPublisherOnly && !path.startsWith('/publisher')) {
+      router.replace('/publisher/dashboard');
+    } else if (isBuyerOnly && !path.startsWith('/buyer')) {
+      router.replace('/buyer/dashboard');
+    } else if (isAgentOnly && !path.startsWith('/call-center') && !path.startsWith('/calls/my') && !path.startsWith('/contacts') && !path.startsWith('/payroll')) {
+      router.replace('/call-center');
+    }
+  }, [user, isPublisherOnly, isBuyerOnly, isAgentOnly, authLoading, pathname, router]);
 
  // Check if we're on the call center page (fullscreen mode)
  const isCallCenterPage = pathname?.startsWith('/call-center');

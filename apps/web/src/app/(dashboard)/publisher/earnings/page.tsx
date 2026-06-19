@@ -20,6 +20,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
 import { formatDuration, formatPhoneNumber } from '@/lib/utils';
 import { toast } from '@/components/ui/use-toast';
+import { RoleGuard } from '@/components/auth/role-guard';
 
 interface CallEarningRecord {
   id: string;
@@ -40,7 +41,7 @@ interface PublisherStats {
   billableCalls: number;
 }
 
-export default function PublisherEarningsPage() {
+function PublisherEarningsPage() {
   const { user } = useAuth();
   const publisherId = user?.publisherId;
 
@@ -315,3 +316,12 @@ function CheckCircle(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
+export default function GuardedPublisherEarningsPage() {
+  return (
+    <RoleGuard allowedRoles={['PUBLISHER']}>
+      <PublisherEarningsPage />
+    </RoleGuard>
+  );
+}
+

@@ -184,7 +184,7 @@ interface BuyerLiveStatus {
 // MAIN COMPONENT
 // =============================================================================
 
-export default function BuyersPage() {
+function BuyersPage() {
  // -------------------------------------------------------------------------
  // STATE: Primary data (instant render)
  // -------------------------------------------------------------------------
@@ -1789,3 +1789,12 @@ export default function BuyersPage() {
  );
 }
 
+import { RoleGuard } from '@/components/auth/role-guard';
+
+export default function GuardedBuyersPage() {
+  return (
+    <RoleGuard allowedRoles={['ADMIN', 'OWNER']}>
+      <BuyersPage />
+    </RoleGuard>
+  );
+}

@@ -32,6 +32,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
 import { formatDuration, formatPhoneNumber } from '@/lib/utils';
 import { toast } from '@/components/ui/use-toast';
+import { RoleGuard } from '@/components/auth/role-guard';
 
 interface CallRecord {
   id: string;
@@ -57,7 +58,7 @@ interface CallRecord {
 
 type DatePreset = 'last-7' | 'last-30' | 'last-90' | 'custom';
 
-export default function PublisherCallsPage() {
+function PublisherCallsPage() {
   const { user } = useAuth();
   const publisherId = user?.publisherId;
 
@@ -527,3 +528,12 @@ export default function PublisherCallsPage() {
     </div>
   );
 }
+
+export default function GuardedPublisherCallsPage() {
+  return (
+    <RoleGuard allowedRoles={['PUBLISHER']}>
+      <PublisherCallsPage />
+    </RoleGuard>
+  );
+}
+

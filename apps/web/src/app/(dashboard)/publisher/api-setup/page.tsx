@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
 import { toast } from '@/components/ui/use-toast';
+import { RoleGuard } from '@/components/auth/role-guard';
 import {
   Dialog,
   DialogContent,
@@ -52,7 +53,7 @@ interface IntegrationDocs {
   };
 }
 
-export default function PublisherApiSetupPage() {
+function PublisherApiSetupPage() {
   const { user } = useAuth();
   const publisherId = user?.publisherId;
 
@@ -539,3 +540,12 @@ export default function PublisherApiSetupPage() {
     </div>
   );
 }
+
+export default function GuardedPublisherApiSetupPage() {
+  return (
+    <RoleGuard allowedRoles={['PUBLISHER']}>
+      <PublisherApiSetupPage />
+    </RoleGuard>
+  );
+}
+

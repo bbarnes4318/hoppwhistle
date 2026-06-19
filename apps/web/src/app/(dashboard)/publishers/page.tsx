@@ -70,7 +70,7 @@ interface StatsResponse {
  data: PublisherStats[];
 }
 
-export default function PublishersPage() {
+function PublishersPage() {
  const [publishers, setPublishers] = useState<Publisher[]>([]);
  const [stats, setStats] = useState<Map<string, PublisherStats>>(new Map());
  const [loading, setLoading] = useState(true);
@@ -637,3 +637,12 @@ export default function PublishersPage() {
  );
 }
 
+import { RoleGuard } from '@/components/auth/role-guard';
+
+export default function GuardedPublishersPage() {
+  return (
+    <RoleGuard allowedRoles={['ADMIN', 'OWNER']}>
+      <PublishersPage />
+    </RoleGuard>
+  );
+}

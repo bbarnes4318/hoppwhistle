@@ -102,7 +102,7 @@ function StatusBadge({ status }: { status: Campaign['status'] }) {
  );
 }
 
-export default function CampaignsPage() {
+function CampaignsPage() {
  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
  const [stats, setStats] = useState<Map<string, CampaignStats>>(new Map());
  const [loading, setLoading] = useState(true);
@@ -526,3 +526,12 @@ export default function CampaignsPage() {
  );
 }
 
+import { RoleGuard } from '@/components/auth/role-guard';
+
+export default function GuardedCampaignsPage() {
+  return (
+    <RoleGuard allowedRoles={['ADMIN', 'OWNER']}>
+      <CampaignsPage />
+    </RoleGuard>
+  );
+}

@@ -137,6 +137,7 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
     let buyerId: string | null = null;
     let publisherId: string | null = null;
     let publisherAccessToRecordings = false;
+    let buyerAccessToRecordings = false;
 
     if (user?.userId) {
       const userRecord = await prisma.user.findUnique({
@@ -164,6 +165,14 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
       publisherAccessToRecordings = pub?.accessToRecordings ?? false;
     }
 
+    if (buyerId) {
+      const buyer = await prisma.buyer.findUnique({
+        where: { id: buyerId },
+        select: { metadata: true },
+      });
+      buyerAccessToRecordings = !!(buyer?.metadata as any)?.accessToRecordings;
+    }
+
     const isAdminOrOwner = userRoles.some(role => role === 'ADMIN' || role === 'OWNER') || 
                            (user?.roles?.some((role: string) => role === 'ADMIN' || role === 'OWNER') ?? false);
 
@@ -173,6 +182,7 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
       buyerId,
       publisherId,
       publisherAccessToRecordings,
+      buyerAccessToRecordings,
     };
   }
 
@@ -185,7 +195,7 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
       return !!(profile.publisherAccessToRecordings && recording.call?.publisherId === profile.publisherId);
     }
     if (profile.userRoles.includes('BUYER')) {
-      return recording.call?.buyerId === profile.buyerId;
+      return !!(profile.buyerAccessToRecordings && recording.call?.buyerId === profile.buyerId);
     }
     if (profile.userRoles.includes('AGENT') && userId) {
       if (recording.call?.createdById === userId) {
@@ -269,6 +279,17 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
         }
         where.call.publisherId = profile.publisherId;
       } else if (profile.userRoles.includes('BUYER')) {
+        if (!profile.buyerAccessToRecordings) {
+          return {
+            data: [],
+            meta: {
+              page,
+              limit,
+              total: 0,
+              totalPages: 0,
+            },
+          };
+        }
         where.call.buyerId = profile.buyerId;
       } else if (profile.userRoles.includes('AGENT')) {
         // Fetch agent's phone numbers

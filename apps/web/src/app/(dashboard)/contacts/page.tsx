@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
+import { RoleGuard } from '@/components/auth/role-guard';
+
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -65,7 +67,7 @@ interface ProspectProfile {
 }
 
 /* ─── Component ────────────────────────────────────────────────── */
-export default function ContactsPage() {
+function ContactsPage() {
   const [search, setSearch] = useState('');
   const [profile, setProfile] = useState<ProspectProfile | null>(null);
   const [loading, setLoading] = useState(false);
@@ -364,3 +366,12 @@ export default function ContactsPage() {
     </div>
   );
 }
+
+export default function GuardedContactsPage() {
+  return (
+    <RoleGuard allowedRoles={['AGENT', 'ADMIN', 'OWNER']}>
+      <ContactsPage />
+    </RoleGuard>
+  );
+}
+

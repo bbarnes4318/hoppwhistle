@@ -3851,7 +3851,172 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
     };
   });
 
+  /**
+   * POST /api/v1/calls/:callId/dispute
+   * Dispute a call connection
+   */
+  fastify.post<{
+    Params: { callId: string };
+    Body: { reason: string };
+  }>('/api/v1/calls/:callId/dispute', async (request, reply) => {
+    const user = (request as AuthRequest).user;
+    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+    const tenantId = demoTenantId || user?.tenantId;
+
+    if (!tenantId) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+    }
+
+    const { callId } = request.params;
+    const { reason } = request.body;
+
+    if (!reason || reason.trim() === '') {
+      void reply.code(400);
+      return { error: { code: 'BAD_REQUEST', message: 'Dispute reason is required' } };
+    }
+
+    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+
+    // 1. Fetch user to verify they are buyer and retrieve their buyerId
+    const userRecord = await prisma.user.findUnique({
+      where: { id: user?.userId },
+      include: { roles: { include: { role: true } } },
+    });
+    
+    if (!userRecord) {
+      void reply.code(404);
+      return { error: { code: 'NOT_FOUND', message: 'User not found' } };
+    }
+
+    const roles = userRecord.roles.map((ur: any) => ur.role.name) || [];
+    const isAdminOrOwner = roles.some(role => role === 'ADMIN' || role === 'OWNER');
+    const isBuyer = roles.some(role => role === 'BUYER');
+
+    if (!isAdminOrOwner && !isBuyer) {
+      void reply.code(403);
+      return { error: { code: 'FORBIDDEN', message: 'Access denied: Must be buyer or admin to dispute' } };
+    }
+
+    // 2. Fetch Call and verify owner/buyer scopes
+    const call = await prisma.call.findFirst({
+      where: { id: callId, tenantId },
+    });
+
+    if (!call) {
+      void reply.code(404);
+      return { error: { code: 'NOT_FOUND', message: 'Call not found' } };
+    }
+
+    if (isBuyer && !isAdminOrOwner) {
+      if (!userRecord.buyerId || call.buyerId !== userRecord.buyerId) {
+        void reply.code(403);
+        return { error: { code: 'FORBIDDEN', message: 'You can only dispute your own calls' } };
+      }
+
+      // Check buyer permission canDisputeConversions
+      const buyer = await prisma.buyer.findUnique({
+        where: { id: userRecord.buyerId },
+      });
+
+      if (!buyer || !buyer.canDisputeConversions) {
+        void reply.code(403);
+        return { error: { code: 'FORBIDDEN', message: 'Your buyer account is not permitted to dispute calls' } };
+      }
+    }
+
+    // 3. Update Call with dispute status and save reason in metadata
+    const metadata = (call.metadata as Record<string, any>) || {};
+    const updatedMetadata = {
+      ...metadata,
+      disputeReason: reason,
+      disputedAt: new Date().toISOString(),
+      disputedBy: userRecord.email,
+    };
+
+    const updatedCall = await prisma.call.update({
+      where: { id: callId },
+      data: {
+        disputeStatus: 'DISPUTED',
+        metadata: updatedMetadata,
+      },
+    });
+
+    return {
+      success: true,
+      callId: updatedCall.id,
+      disputeStatus: updatedCall.disputeStatus,
+    };
+  });
+
+  /**
+   * GET /api/v1/publishers/:publisherId/payouts
+   * List payouts for a publisher
+   */
+  fastify.get<{
+    Params: { publisherId: string };
+  }>('/api/v1/publishers/:publisherId/payouts', async (request, reply) => {
+    const user = (request as AuthRequest).user;
+    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+    const tenantId = demoTenantId || user?.tenantId;
+
+    if (!tenantId) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+    }
+
+    const { publisherId } = request.params;
+    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+
+    // Verify user profile matches publisherId (or admin)
+    const userRecord = await prisma.user.findUnique({
+      where: { id: user?.userId },
+      include: { roles: { include: { role: true } } },
+    });
+    
+    if (!userRecord) {
+      void reply.code(404);
+      return { error: { code: 'NOT_FOUND', message: 'User not found' } };
+    }
+
+    const roles = userRecord.roles.map((ur: any) => ur.role.name) || [];
+    const isAdminOrOwner = roles.some(role => role === 'ADMIN' || role === 'OWNER');
+    
+    if (!isAdminOrOwner && userRecord.publisherId !== publisherId) {
+      void reply.code(403);
+      return { error: { code: 'FORBIDDEN', message: 'Access denied' } };
+    }
+
+    // Find billing account
+    const billingAccount = await prisma.billingAccount.findFirst({
+      where: { tenantId },
+    });
+
+    if (!billingAccount) {
+      return { data: [] };
+    }
+
+    const payouts = await prisma.payout.findMany({
+      where: { billingAccountId: billingAccount.id },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return {
+      data: payouts.map(p => ({
+        id: p.id,
+        amount: Number(p.amount),
+        currency: p.currency,
+        status: p.status,
+        method: p.method,
+        reference: p.reference,
+        processedAt: p.processedAt?.toISOString() || null,
+        createdAt: p.createdAt.toISOString(),
+      })),
+    };
+  });
+
   // ── Follow-Ups GET — List upcoming and overdue follow-ups ──
+
   fastify.get<{
     Querystring: { status?: string; limit?: string };
   }>('/api/v1/calls/follow-ups', async (request, reply) => {

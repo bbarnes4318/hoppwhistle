@@ -53,7 +53,7 @@ interface DidRoute {
   createdAt: string;
 }
 
-export default function NumbersPage() {
+function NumbersPage() {
   const [search, setSearch] = useState('');
   const [bulkvsPurchaseDialogOpen, setBulkvsPurchaseDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -454,5 +454,15 @@ export default function NumbersPage() {
         />
       )}
     </div>
+  );
+}
+
+import { RoleGuard } from '@/components/auth/role-guard';
+
+export default function GuardedNumbersPage() {
+  return (
+    <RoleGuard allowedRoles={['ADMIN', 'OWNER']}>
+      <NumbersPage />
+    </RoleGuard>
   );
 }

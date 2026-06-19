@@ -23,6 +23,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
 import { toast } from '@/components/ui/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { RoleGuard } from '@/components/auth/role-guard';
 
 interface ApiKeyRecord {
   id: string;
@@ -31,7 +32,7 @@ interface ApiKeyRecord {
   status: string;
 }
 
-export default function PublisherTesterPage() {
+function PublisherTesterPage() {
   const { user } = useAuth();
   const publisherId = user?.publisherId;
 
@@ -647,3 +648,12 @@ export default function PublisherTesterPage() {
     </div>
   );
 }
+
+export default function GuardedPublisherTesterPage() {
+  return (
+    <RoleGuard allowedRoles={['PUBLISHER']}>
+      <PublisherTesterPage />
+    </RoleGuard>
+  );
+}
+

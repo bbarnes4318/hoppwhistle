@@ -171,14 +171,21 @@ function ChartTooltip({
 
 /* ─── Main Dashboard ───────────────────────────────────────────── */
 export default function DashboardPage() {
- const router = useRouter();
- const { isPublisherOnly, loading: authLoading } = useAuth();
+  const router = useRouter();
+  const { user, isPublisherOnly, isBuyerOnly, isAgentOnly, loading: authLoading } = useAuth();
 
- useEffect(() => {
-   if (!authLoading && isPublisherOnly) {
-     router.replace('/publisher/dashboard');
-   }
- }, [isPublisherOnly, authLoading, router]);
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user) return;
+
+    if (isPublisherOnly) {
+      router.replace('/publisher/dashboard');
+    } else if (isBuyerOnly) {
+      router.replace('/buyer/dashboard');
+    } else if (isAgentOnly) {
+      router.replace('/call-center');
+    }
+  }, [user, isPublisherOnly, isBuyerOnly, isAgentOnly, authLoading, router]);
 
  const [stats, setStats] = useState<DashboardStats | null>(null);
  const [calls, setCalls] = useState<CallRecord[]>([]);

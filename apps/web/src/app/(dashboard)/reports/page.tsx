@@ -154,7 +154,7 @@ interface CampaignProfitabilityReport {
   rows: CampaignProfitabilityRow[];
 }
 
-export default function ReportsPage() {
+function ReportsPage() {
   const { toast } = useToast();
   const { hasFullAccess, userRoles, isBuyerOnly, isBuyer } = useAuth();
   const [activeTab, setActiveTab] = useState('campaign-profitability');
@@ -911,5 +911,15 @@ export default function ReportsPage() {
         )}
       </Tabs>
     </div>
+  );
+}
+
+import { RoleGuard } from '@/components/auth/role-guard';
+
+export default function GuardedReportsPage() {
+  return (
+    <RoleGuard allowedRoles={['ADMIN', 'OWNER', 'READONLY', 'ANALYST']} allowedPermissions={['reports:read']}>
+      <ReportsPage />
+    </RoleGuard>
   );
 }

@@ -35,6 +35,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
 import { formatDuration, formatPhoneNumber } from '@/lib/utils';
 import { toast } from '@/components/ui/use-toast';
+import { RoleGuard } from '@/components/auth/role-guard';
 
 interface Stats {
   totalCalls: number;
@@ -69,7 +70,7 @@ interface Stats {
 
 type DatePreset = 'last-7' | 'last-30' | 'last-90' | 'custom';
 
-export default function PublisherDashboard() {
+function PublisherDashboard() {
   const { user } = useAuth();
   const publisherId = user?.publisherId;
 
@@ -478,3 +479,12 @@ export default function PublisherDashboard() {
     </div>
   );
 }
+
+export default function GuardedPublisherDashboard() {
+  return (
+    <RoleGuard allowedRoles={['PUBLISHER']}>
+      <PublisherDashboard />
+    </RoleGuard>
+  );
+}
+

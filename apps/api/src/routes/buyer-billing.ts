@@ -496,6 +496,59 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
   });
 
   /**
+   * GET /api/v1/buyers/:buyerId
+   * Get a single buyer's details
+   */
+  fastify.get<{
+    Params: { buyerId: string };
+  }>('/api/v1/buyers/:buyerId', async (request, reply) => {
+    const { buyerId } = request.params;
+    const user = (request as AuthRequest).user;
+    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+    const tenantId = demoTenantId || user?.tenantId;
+    if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+
+    const userRecord = await prisma.user.findUnique({
+      where: { id: user?.userId },
+      include: { roles: { include: { role: true } } },
+    });
+    const roles = userRecord?.roles.map((ur: any) => ur.role.name) || [];
+    const isAdminOrOwner = roles.some(role => role === 'ADMIN' || role === 'OWNER');
+
+    if (!isAdminOrOwner && userRecord?.buyerId !== buyerId) {
+      return reply.code(403).send({ error: 'Forbidden' });
+    }
+
+    const buyer = await prisma.buyer.findUnique({
+      where: { id: buyerId },
+      include: {
+        publisher: { select: { id: true, name: true } },
+      },
+    });
+
+    if (!buyer || buyer.tenantId !== tenantId) {
+      return reply.code(404).send({ error: 'Buyer not found' });
+    }
+
+    return {
+      id: buyer.id,
+      name: buyer.name,
+      code: buyer.code,
+      status: buyer.status,
+      billingType: buyer.billingType,
+      leadsRemaining: buyer.leadsRemaining,
+      walletBalance: Number(buyer.walletBalance),
+      billableDuration: buyer.billableDuration,
+      canPauseTargets: buyer.canPauseTargets,
+      canSetCaps: buyer.canSetCaps,
+      canDisputeConversions: buyer.canDisputeConversions,
+      publisher: buyer.publisher,
+      createdAt: buyer.createdAt.toISOString(),
+      updatedAt: buyer.updatedAt.toISOString(),
+    };
+  });
+
+  /**
    * PATCH /api/v1/buyers/:buyerId
    * Update a buyer
    */

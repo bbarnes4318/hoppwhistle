@@ -87,7 +87,7 @@ interface BuyersResponse {
  data: BuyerOption[];
 }
 
-export default function BillingPage() {
+function BillingPage() {
  const [invoices, setInvoices] = useState<Invoice[]>([]);
  const [balance, setBalance] = useState<Balance | null>(null);
  const [loading, setLoading] = useState(true);
@@ -471,3 +471,12 @@ export default function BillingPage() {
  );
 }
 
+import { RoleGuard } from '@/components/auth/role-guard';
+
+export default function GuardedBillingPage() {
+  return (
+    <RoleGuard allowedRoles={['ADMIN', 'OWNER']}>
+      <BillingPage />
+    </RoleGuard>
+  );
+}

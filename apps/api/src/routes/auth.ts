@@ -588,6 +588,25 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         });
       }
 
+      let publisherAccessToRecordings = false;
+      let buyerAccessToRecordings = false;
+
+      if (user.publisherId) {
+        const pub = await prisma.publisher.findUnique({
+          where: { id: user.publisherId },
+          select: { accessToRecordings: true },
+        });
+        publisherAccessToRecordings = pub?.accessToRecordings ?? false;
+      }
+
+      if (user.buyerId) {
+        const buyer = await prisma.buyer.findUnique({
+          where: { id: user.buyerId },
+          select: { metadata: true },
+        });
+        buyerAccessToRecordings = !!(buyer?.metadata as any)?.accessToRecordings;
+      }
+
       return reply.send({
         id: user.id,
         email: user.email,
@@ -597,6 +616,8 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         tenantId: user.tenantId,
         buyerId: user.buyerId,
         publisherId: user.publisherId || (user.metadata as any)?.publisherId || null,
+        publisherAccessToRecordings,
+        buyerAccessToRecordings,
       });
     }
   );
