@@ -7,6 +7,7 @@ All changes are contained within the git repository workspace.
 ## Key Accomplishments
 
 ### 1. Hard-Disabled Ameriquote/Boberdoo Posting
+
 - **Backend Backstop**: Updated [insurance-lead-poster.ts](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/api/src/services/insurance-lead-poster.ts) to throw an error immediately if `postToAmeriquote` is called, ensuring zero external network egress.
 - **Retry Deactivation**: Short-circuited the manual retry endpoint in [insurance-lead-service.ts](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/api/src/services/insurance-lead-service.ts) to immediately update status to `HOLD`, log a blocked-submission activity, and return:
   ```json
@@ -17,37 +18,44 @@ All changes are contained within the git repository workspace.
     "message": "Ameriquote delivery is disabled by owner request."
   }
   ```
-- **UI Deactivation**: Removed the "Retry" action button from [lead-detail-sheet.tsx](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/web/src/components/leads/lead-detail-sheet.tsx) and displayed a prominent warning: *"Ameriquote delivery is disabled by owner request. Leads are stored for internal review only."*
+- **UI Deactivation**: Removed the "Retry" action button from [lead-detail-sheet.tsx](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/web/src/components/leads/lead-detail-sheet.tsx) and displayed a prominent warning: _"Ameriquote delivery is disabled by owner request. Leads are stored for internal review only."_
 
 ### 2. CRM & Final Expense Master Lead Fields
+
 - Extended `InsuranceLead` in the [schema.prisma](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/api/prisma/schema.prisma) database schema with columns for assignment, priority, stages, dates, and DNC, plus FE-specific columns (smoker, premium, face amount, carrier, trustedForm, recording url).
 - Added interactive fields in the CRM frontend sheet [lead-detail-sheet.tsx](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/web/src/components/leads/lead-detail-sheet.tsx) to assign leads, view/edit FE details, and update follow-up schedules.
 
 ### 3. Tasks & Follow-ups
+
 - Added new models (`InsuranceTask` and related status/priority enums) to the schema.
 - Added task REST endpoints (`GET/POST tasks`, `POST complete`, `POST cancel`) in [insurance-leads.ts (routes)](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/api/src/routes/insurance-leads.ts).
 - Implemented task manager in [lead-detail-sheet.tsx](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/web/src/components/leads/lead-detail-sheet.tsx) allowing users to add open items, set priorities, track due dates, and complete/cancel them.
 
 ### 4. Activity Timeline
+
 - Added the `InsuranceActivity` model to track notes, calls, task actions, validation failures, and updates.
 - Added timeline rendering in the detail sheet to show lead timeline logs in reverse chronological order.
 
 ### 5. Masking Payment Fields & Enforcing Tenants
+
 - Modified [prospect-intake.ts](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/api/src/routes/prospect-intake.ts) to immediately mask `routingNumber` and `accountNumber` to `****[last4]` values on write, preventing raw banking credentials leakage.
 - Replaced hardcoded default tenant IDs with authenticated `tenantId` checking across tasks, intake, and retention endpoints to maintain strict tenant boundaries.
 
 ### 6. Mock Retention UI Deactivation
+
 - Removed the Retention link from the navigation sidebar.
 - Redirected the `/retention` frontend routes to `/insurance-leads`.
 - Retained database models for safety as requested.
 
 ### 7. Call Center CRM Panel & Lookup API
+
 - **Lookup API**: Created [call-center.ts](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/api/src/routes/call-center.ts) with `GET /api/v1/call-center/customer-lookup` endpoint. It normalizes numbers to the last 10 digits, searches across CRM tables with strict tenant boundaries, masks sensitive data, and separates duplicates.
 - **Dynamic CRM Panel**: Created [CustomerCrmPanel.tsx](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/web/src/components/call-center/CustomerCrmPanel.tsx) to display clean grouped contact card layouts, final expense details, active call context (reloads on call state changes), tasks (with inline creation/completion), activity log (with notes logger), and a possible duplicates panel.
 - **Portal Integration**: Modified [CallCenterPortal.tsx](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/web/src/components/call-center/CallCenterPortal.tsx) to trigger lookup and automatically show the CRM Target Profile tab on inbound ring/answer, outbound dial, and call transfer/resumption. Designed it with a responsive layout where softphone controls and CRM panels stack on mobile/smaller screens.
-- **Disabled Ameriquote/Boberdoo Actions**: Ensured that the Call Center panel shows the lead delivery status as `"HOLD"` only, with a message stating *"External delivery disabled by owner request"*, and completely omitted any buttons or flows that can send/retry posts to Ameriquote.
+- **Disabled Ameriquote/Boberdoo Actions**: Ensured that the Call Center panel shows the lead delivery status as `"HOLD"` only, with a message stating _"External delivery disabled by owner request"_, and completely omitted any buttons or flows that can send/retry posts to Ameriquote.
 
 ## Verification & Quality
+
 - Added service-level unit tests in [insurance-lead-crm.test.ts](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/api/src/services/__tests__/insurance-lead-crm.test.ts) proving that `postToAmeriquote` throws errors, manual retries block external posts, and valid leads default to `HOLD`.
 - Added Fastify integration tests in [call-center.test.ts](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/api/src/__tests__/call-center.test.ts) proving:
   - Inbound and outbound calls show matching CRM customer data.
@@ -63,6 +71,7 @@ All changes are contained within the git repository workspace.
 I completed the provisioning retry, environment sanitization, and verification of the full Docker stack on the Hetzner server (`37.27.189.145`) for branch `edit-campaign-buyer-fix`.
 
 ### Key Verification Metrics
+
 - **Host Env Sanitization**: Scrubbed Upstash/AWS URLs from the host `.env` file, pointing database, redis, clickhouse, and S3 storage endpoints purely to their local Hetzner Docker container instances:
   - `DATABASE_URL` -> `postgresql://callfabric:callfabric_dev@postgres:5432/callfabric`
   - `REDIS_URL` -> `redis://redis:6379`
@@ -82,3 +91,33 @@ I completed the provisioning retry, environment sanitization, and verification o
 - **Recording Upload Flow**:
   - Generated a test recording payload (> 100 bytes) and executed the FreeSWITCH recording upload utility script.
   - Verified a successful upload (HTTP 200) resulting in the object written to local MinIO storage and mapped correctly to the call record in PostgreSQL.
+
+---
+
+## 9. RTB Call Flow Integration and E2E Test Suite (Prompt 3)
+
+We have successfully implemented and verified the entire RTB source-to-sale call routing, post-time validation, and billing path:
+
+### A. Dynamic RTB Route Lookup
+
+- Updated `/api/v1/freeswitch/lookup` in [did-routes.ts](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/api/src/routes/did-routes.ts) to query leased Redis routes via `numberPoolService.getRouteInfo(did)` before falling back to static database-configured `DidRoute` records.
+
+### B. Leased Metadata Expansion
+
+- Enhanced `numberPoolService.leaseNumber` in [number-pool-service.ts](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/api/src/services/number-pool-service.ts) to store full RTB attribution details in Redis (including `tenant_id`, `publisher_id`, `campaign_id`, `caller_number`, and `rtb_bid_amount`).
+
+### C. Post-Time Validations
+
+- Updated [post-service.ts](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/api/src/services/post-service.ts) to perform strict validations when a bid token is POSTed (checking active buyer/endpoint status, operational hours, concurrency bounds, max cap limits, upfront wallet balances, and the campaign-buyer relationship) before completing the lease.
+
+### D. RTB CDR Integration & Upfront Billing
+
+- Updated `/api/v1/freeswitch/cdr` in [did-routes.ts](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/api/src/routes/did-routes.ts) to resolve route IDs matching `rtb-${pingId}`, extract the caller-specific RTB data, construct the inbound call with proper buyer/publisher/campaign fields, and trigger the `billingService` and `buyerBillingService`.
+- Prioritized the RTB bid amount as the buyer price inside `billingService.ts` and automated upfront wallet debits and ledger postings.
+- Enforced automatic release of leased transfer numbers back to the pool in both Redis (with a short 120s TTL snapshot for late CDR retries) and the SQL database.
+
+### E. E2E Integration Testing & Linter Verification
+
+- Added a complete Vitest integration test at [rtb-call-flow.test.ts](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/api/src/services/__tests__/rtb-call-flow.test.ts) covering the full lifecycle (ping -> post -> lookup -> CDR -> ledger entries -> wallet debit -> idempotency).
+- Resolved all TypeScript ESLint warnings/errors (unsafe any types, misused promises, and require-await violations) in the modified files.
+- Verified that all related tests pass successfully and the git commit hooks execute without error.
