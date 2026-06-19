@@ -84,7 +84,7 @@
       <condition field="${hopwhistle_call_id}" expression="^$" break="never">
         <action application="log" data="ERR HOPWHISTLE OUTBOUND ERROR: Missing X-Hopwhistle-Call-Id header! Cannot record call."/>
         <!-- Notify API recording-status failed directly via bg_system / curl -->
-        <action application="bg_system" data="curl -s -X POST -H 'Content-Type: application/json' -H 'x-api-key: ${env(API_KEY)}' -d '{&quot;status&quot;: &quot;failed&quot;, &quot;error&quot;: &quot;Missing X-Hopwhistle-Call-Id header on FreeSWITCH channel&quot;}' http://api:3001/api/v1/calls/unknown/recording-status || true"/>
+        <action application="system" data="curl -s -X POST -H 'Content-Type: application/json' -H 'x-api-key: ${env(API_KEY)}' -d '{&quot;status&quot;: &quot;failed&quot;, &quot;error&quot;: &quot;Missing X-Hopwhistle-Call-Id header on FreeSWITCH channel&quot;}' http://api:3001/api/v1/calls/unknown/recording-status || true"/>
       </condition>
 
       <!-- If hopwhistle_call_id is NOT empty, apply details and start record_session before bridge -->
