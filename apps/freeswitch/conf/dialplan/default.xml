@@ -106,7 +106,7 @@
 
       <!-- Bridge outbound call -->
       <condition field="destination_number" expression="^\+?1?([2-9]\d{9})$">
-        <action application="bridge" data="sofia/gateway/bulkvs/1$1"/>
+        <action application="bridge" data="sofia/gateway/bulkvs/1$1|sofia/gateway/telnyx/1$1"/>
         <action application="hangup" data="NORMAL_CLEARING"/>
       </condition>
     </extension>
