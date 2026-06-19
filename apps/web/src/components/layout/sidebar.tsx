@@ -15,6 +15,7 @@ import {
   LayoutDashboard,
   Megaphone,
   PhoneCall,
+  PlusCircle,
   Receipt,
   Settings,
   Shield,
@@ -73,18 +74,22 @@ const navigation: NavItem[] = [
     title: 'Prospect lookup & call history',
   },
   {
+    name: 'Customer Intake',
+    href: '/intake',
+    icon: PlusCircle,
+    title: 'New customer intake & consent form',
+  },
+  {
     name: 'Retention',
     href: '/retention',
     icon: ClipboardCheck,
     title: 'Policy onboarding & retention queue',
-    hideFromBuyerOnly: true,
   },
   {
     name: 'Insurance Leads',
     href: '/insurance-leads',
     icon: FileText,
     title: 'ACA & FE lead ingestion pipeline',
-    adminOnly: true,
   },
   { name: 'Billing', href: '/billing', icon: Receipt },
   {

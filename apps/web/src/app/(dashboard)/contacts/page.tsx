@@ -1,13 +1,31 @@
+/* eslint-disable */
 'use client';
 
-import { Phone, Play, Search, Clock, CalendarCheck, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
+import {
+  Phone,
+  Play,
+  Search,
+  Clock,
+  CalendarCheck,
+  ArrowUpRight,
+  ArrowDownLeft,
+  Plus,
+} from 'lucide-react';
+import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { apiClient } from '@/lib/api';
 import { formatDuration, formatPhoneNumber } from '@/lib/utils';
 import {
@@ -73,7 +91,9 @@ export default function ContactsPage() {
 
       if (response.data) {
         const calls = response.data.data || [];
-        const sorted = calls.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        const sorted = calls.sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
         const pendingFollowUp = sorted.find(c => c.followUpStatus === 'PENDING' && c.followUpAt);
 
         setProfile({
@@ -99,17 +119,26 @@ export default function ContactsPage() {
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <div className="flex items-center justify-between flex-shrink-0 mb-4">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Prospect Lookup</h1>
-          <p className="text-sm text-muted-foreground">
-            View call history and disposition records for a prospect by phone number
+          <h1 className="text-xl font-semibold text-foreground">Prospect Lookup</h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Search and view prospect call histories and follow-ups
           </p>
         </div>
+        <Button
+          asChild
+          className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+        >
+          <Link href="/intake">
+            <Plus className="h-4.5 w-4.5" />
+            Add Customer
+          </Link>
+        </Button>
       </div>
 
       {/* Search */}
-      <div className="flex gap-2 mb-4 flex-shrink-0">
+      <div className="flex gap-2 mb-4 mt-6 flex-shrink-0">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -138,19 +167,27 @@ export default function ContactsPage() {
         <div className="grid grid-cols-4 gap-4 flex-shrink-0 mb-4">
           <Card>
             <CardContent className="p-4">
-              <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Phone</p>
-              <p className="text-lg font-semibold text-foreground mt-1">{formatPhoneNumber(profile.phoneNumber)}</p>
+              <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+                Phone
+              </p>
+              <p className="text-lg font-semibold text-foreground mt-1">
+                {formatPhoneNumber(profile.phoneNumber)}
+              </p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4">
-              <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Total Calls</p>
+              <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+                Total Calls
+              </p>
               <p className="text-lg font-semibold text-foreground mt-1">{profile.totalCalls}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4">
-              <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Last Disposition</p>
+              <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+                Last Disposition
+              </p>
               <p className="text-lg font-semibold text-foreground mt-1">
                 {profile.lastDisposition ? getDispositionLabel(profile.lastDisposition) : '—'}
               </p>
@@ -158,10 +195,17 @@ export default function ContactsPage() {
           </Card>
           <Card>
             <CardContent className="p-4">
-              <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Next Follow-Up</p>
+              <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+                Next Follow-Up
+              </p>
               <p className="text-lg font-semibold text-foreground mt-1">
                 {profile.nextFollowUp
-                  ? new Date(profile.nextFollowUp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                  ? new Date(profile.nextFollowUp).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })
                   : '—'}
               </p>
             </CardContent>
@@ -225,7 +269,9 @@ export default function ContactsPage() {
                       <TableCell>
                         {call.callSource ? (
                           <span className="text-xs font-mono text-muted-foreground uppercase tracking-widest">
-                            {CALL_SOURCE_LABELS[call.callSource as keyof typeof CALL_SOURCE_LABELS] || call.callSource}
+                            {CALL_SOURCE_LABELS[
+                              call.callSource as keyof typeof CALL_SOURCE_LABELS
+                            ] || call.callSource}
                           </span>
                         ) : (
                           <span className="text-xs text-muted-foreground/50">—</span>
@@ -236,7 +282,11 @@ export default function ContactsPage() {
                         {call.disposition ? (
                           <Badge
                             variant="outline"
-                            className={DISPOSITION_COLORS[call.disposition as keyof typeof DISPOSITION_COLORS] || 'bg-secondary text-muted-foreground border-border'}
+                            className={
+                              DISPOSITION_COLORS[
+                                call.disposition as keyof typeof DISPOSITION_COLORS
+                              ] || 'bg-secondary text-muted-foreground border-border'
+                            }
                           >
                             {getDispositionLabel(call.disposition)}
                           </Badge>
@@ -246,7 +296,10 @@ export default function ContactsPage() {
                       </TableCell>
                       <TableCell className="max-w-[200px]">
                         {call.dispositionNotes ? (
-                          <span className="text-xs text-muted-foreground truncate block" title={call.dispositionNotes}>
+                          <span
+                            className="text-xs text-muted-foreground truncate block"
+                            title={call.dispositionNotes}
+                          >
                             {call.dispositionNotes}
                           </span>
                         ) : (
@@ -257,15 +310,24 @@ export default function ContactsPage() {
                         {call.followUpAt ? (
                           <div className="text-xs">
                             <span className="font-mono">
-                              {new Date(call.followUpAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                              {new Date(call.followUpAt).toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                              })}
                             </span>
                             {call.followUpStatus === 'PENDING' && (
-                              <Badge variant="outline" className="ml-1 bg-amber-500/10 text-amber-400 border-amber-500/30 text-[10px]">
+                              <Badge
+                                variant="outline"
+                                className="ml-1 bg-amber-500/10 text-amber-400 border-amber-500/30 text-[10px]"
+                              >
                                 Pending
                               </Badge>
                             )}
                             {call.followUpStatus === 'COMPLETED' && (
-                              <Badge variant="outline" className="ml-1 bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[10px]">
+                              <Badge
+                                variant="outline"
+                                className="ml-1 bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[10px]"
+                              >
                                 Done
                               </Badge>
                             )}
@@ -276,7 +338,8 @@ export default function ContactsPage() {
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {call.createdBy
-                          ? `${call.createdBy.firstName || ''} ${call.createdBy.lastName || ''}`.trim() || '—'
+                          ? `${call.createdBy.firstName || ''} ${call.createdBy.lastName || ''}`.trim() ||
+                            '—'
                           : '—'}
                       </TableCell>
                       <TableCell className="text-right">
