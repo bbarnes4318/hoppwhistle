@@ -3,6 +3,8 @@ name: PR Quality Gates
 on:
   pull_request:
     branches: [main, develop]
+  push:
+    branches: [edit-campaign-buyer-fix]
   workflow_dispatch:
 
 env:
