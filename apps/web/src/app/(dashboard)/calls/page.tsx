@@ -1184,7 +1184,6 @@ export default function OperationsCallLogsPage() {
               </div>
             </div>
           )}
-        </div>
       </DenseCard>
 
       {/* Slide-out Call Detail Drawer Dialog */}
