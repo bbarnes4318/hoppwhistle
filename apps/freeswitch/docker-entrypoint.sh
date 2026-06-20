@@ -71,11 +71,11 @@ LATEST_PRIVKEY=$(ls -v "$LE_ARCHIVE"/privkey*.pem 2>/dev/null | tail -1)
 if [ -n "$LATEST_FULLCHAIN" ] && [ -n "$LATEST_PRIVKEY" ]; then
     echo "Generating combined wss.pem from Let's Encrypt archive certs..."
     echo "  Using: $(basename $LATEST_FULLCHAIN) + $(basename $LATEST_PRIVKEY)"
-    cat "$LATEST_FULLCHAIN" "$LATEST_PRIVKEY" > "$FS_LE_DIR/wss.pem"
+    cat "$LATEST_FULLCHAIN" "$LATEST_PRIVKEY" > "/tmp/wss.pem"
     # Overwrite FreeSWITCH default self-signed certs
     mkdir -p "$FS_TLS_DIR"
-    cp "$FS_LE_DIR/wss.pem" "$FS_TLS_DIR/wss.pem"
-    cp "$FS_LE_DIR/wss.pem" "$FS_TLS_DIR/dtls-srtp.pem"
+    cp "/tmp/wss.pem" "$FS_TLS_DIR/wss.pem"
+    cp "/tmp/wss.pem" "$FS_TLS_DIR/dtls-srtp.pem"
     echo "  Let's Encrypt wss.pem installed at $FS_TLS_DIR/wss.pem"
 else
     echo "WARNING: Let's Encrypt certs not found at $LE_ARCHIVE — WSS will use self-signed cert!"
