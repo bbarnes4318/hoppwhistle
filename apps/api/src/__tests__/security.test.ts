@@ -16,8 +16,20 @@ describe('Security: Privilege Escalation Prevention', () => {
   let ownerRoleId: string;
   let readonlyRoleId: string;
 
+  async function cleanDatabase() {
+    const tables = ['audit_logs', 'api_keys', 'user_roles', 'users', 'roles', 'tenants'];
+    for (const t of tables) {
+      try {
+        await prisma.$executeRawUnsafe(`TRUNCATE TABLE "${t}" CASCADE;`);
+      } catch (err) {
+        // Ignored
+      }
+    }
+  }
+
   beforeEach(async () => {
     prisma = getPrismaClient();
+    await cleanDatabase();
 
     // Create test tenant
     const tenant = await prisma.tenant.create({

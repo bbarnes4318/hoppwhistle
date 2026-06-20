@@ -209,6 +209,7 @@ describe('Pay-Per-Call Real Database/Redis Integration Tests', () => {
       data: {
         id: 'apikey-pub-a-int',
         keyHash: 'pub-a-int-key-hash', // matches test key
+        prefix: 'apikey-p',
         tenantId,
         publisherId: 'pub-a-int',
         status: 'ACTIVE',

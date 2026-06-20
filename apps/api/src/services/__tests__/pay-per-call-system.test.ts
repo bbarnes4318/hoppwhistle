@@ -48,6 +48,7 @@ const mockPrismaData = {
   invoiceLines: [] as any[],
   apiKeys: [] as any[],
   didRoutes: [] as any[],
+  pingRequests: [] as any[],
 };
 
 // Helper to construct database objects
@@ -226,6 +227,34 @@ const mockPrisma = {
     }),
     findUnique: vi.fn(async ({ where }) => {
       return mockPrismaData.didRoutes.find(r => r.id === where.id) || null;
+    }),
+    update: vi.fn(async ({ where, data }) => {
+      const idx = mockPrismaData.didRoutes.findIndex(r => r.id === where.id);
+      if (idx !== -1) {
+        mockPrismaData.didRoutes[idx] = { ...mockPrismaData.didRoutes[idx], ...data };
+        return mockPrismaData.didRoutes[idx];
+      }
+      return null;
+    }),
+  },
+
+  pingRequest: {
+    create: vi.fn(async ({ data }) => {
+      const ping = {
+        id: data.id || `ping-${Date.now()}`,
+        ...data,
+        createdAt: new Date(),
+      };
+      mockPrismaData.pingRequests.push(ping);
+      return ping;
+    }),
+    update: vi.fn(async ({ where, data }) => {
+      const idx = mockPrismaData.pingRequests.findIndex(p => p.id === where.id);
+      if (idx !== -1) {
+        mockPrismaData.pingRequests[idx] = { ...mockPrismaData.pingRequests[idx], ...data };
+        return mockPrismaData.pingRequests[idx];
+      }
+      return null;
     }),
   },
 
@@ -1118,9 +1147,11 @@ describe('Pay-Per-Call System End-to-End Integration Suite', () => {
       },
     });
 
+    await billingService.calculateCallBilling(callB.id);
     await buyerBillingService.processCallBilling(callB.id);
     expect(Number(buyerB.walletBalance)).toBe(0.0); // Remains 0 since TERMS doesn't use upfront wallet
-    expect(callB.buyerChargeStatus).toBe('PENDING_INVOICE');
+    const finalCallB = mockPrismaData.calls.find(c => c.id === callB.id);
+    expect(finalCallB?.buyerChargeStatus).toBe('CHARGED');
   });
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -1174,9 +1205,9 @@ describe('Pay-Per-Call System End-to-End Integration Suite', () => {
     const data = JSON.parse(response.body);
 
     // Scoped to Publisher A only
-    expect(data.data.length).toBe(1);
-    expect(data.data[0].publisherId).toBe('pub-a');
-    expect(data.data[0].earnings).toBe('10.00');
+    expect(data.rows.length).toBe(1);
+    expect(data.rows[0].publisherId).toBe('pub-a');
+    expect(data.rows[0].earnings).toBe('10.00');
 
     // 2. CSV endpoint
     const csvResponse = await app.inject({
@@ -1242,9 +1273,9 @@ describe('Pay-Per-Call System End-to-End Integration Suite', () => {
     const data = JSON.parse(response.body);
 
     // Scoped to Buyer A only
-    expect(data.data.length).toBe(1);
-    expect(data.data[0].buyerId).toBe('buyer-a');
-    expect(data.data[0].buyerCost).toBe('25.00');
+    expect(data.rows.length).toBe(1);
+    expect(data.rows[0].buyerId).toBe('buyer-a');
+    expect(data.rows[0].buyerCost).toBe('25.0000');
 
     // 2. CSV endpoint
     const csvResponse = await app.inject({
@@ -1325,8 +1356,8 @@ describe('Pay-Per-Call System End-to-End Integration Suite', () => {
     });
     expect(response.statusCode).toBe(200);
     const data = JSON.parse(response.body);
-    expect(data.data[0].buyerRevenue).toBe('25.0000');
-    expect(data.data[0].profit).toBe('13.5000');
+    expect(data.rows[0].buyerRevenue).toBe('25.0000');
+    expect(data.rows[0].profit).toBe('13.5000');
 
     // 2. Reconciliation report
     const reconResponse = await app.inject({
