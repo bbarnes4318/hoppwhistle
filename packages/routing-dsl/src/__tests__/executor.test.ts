@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 
 import { simpleDirectRouteFlow, ivrWithDTMFFlow } from '../examples.js';
-import { executeNode, type ExecutionPlan, type ExecutionContext } from '../executor.js';
+import { executeNode } from '../executor.js';
 import { parseAndPlan } from '../parser.js';
+import type { ExecutionPlan, ExecutionContext } from '../types.js';
 
 describe('Flow Executor', () => {
   describe('executeNode', () => {

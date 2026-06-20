@@ -17,7 +17,7 @@ async function simulateCalls() {
   const billingAccountId = billingAccountIdArg?.split('=')[1] || 'test-billing-account';
   const count = countArg ? parseInt(countArg.split('=')[1], 10) : 100;
 
-  console.log(`Simulating ${count} calls for tenant ${tenantId}...`);
+  console.log(`Simulating ${count} calls for tenant ${tenantId} (Billing Account: ${billingAccountId})...`);
 
   const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 

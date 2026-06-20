@@ -1,6 +1,6 @@
 import { Decimal } from 'decimal.js';
 import { Pool } from 'pg';
-import puppeteer from 'puppeteer';
+import { launch } from 'puppeteer';
 
 import { logger } from '../logger.js';
 
@@ -26,6 +26,27 @@ export interface InvoiceData {
   total: Decimal;
   currency: string;
   metadata?: Record<string, unknown>;
+}
+
+interface InvoiceRow {
+  tenant_name?: string;
+  account_name: string;
+  invoice_number: string;
+  status: string;
+  period_start: string | number | Date;
+  period_end: string | number | Date;
+  due_date: string | number | Date;
+  currency: string;
+  subtotal: string;
+  tax: string;
+  total: string;
+}
+
+interface InvoiceLineRow {
+  description: string;
+  quantity: string;
+  unit_price: string;
+  total: string;
 }
 
 export class InvoiceGeneratorService {
@@ -85,7 +106,7 @@ export class InvoiceGeneratorService {
         throw new Error('Billing account not found');
       }
 
-      const { tenant_id, currency } = accountResult.rows[0];
+      // const { tenant_id, currency } = accountResult.rows[0];
 
       // Calculate totals
       const lines = accruals.map((accrual) => {
@@ -209,7 +230,7 @@ export class InvoiceGeneratorService {
         throw new Error('Invoice not found');
       }
 
-      const invoice = invoiceResult.rows[0];
+      const invoice = invoiceResult.rows[0] as InvoiceRow;
 
       // Get invoice lines
       const linesResult = await client.query(
@@ -217,13 +238,13 @@ export class InvoiceGeneratorService {
         [invoiceId]
       );
 
-      const lines = linesResult.rows;
+      const lines = linesResult.rows as InvoiceLineRow[];
 
       // Generate HTML
       const html = this.generateInvoiceHTML(invoice, lines);
 
       // Generate PDF using Puppeteer
-      const browser = await puppeteer.launch({
+      const browser = await launch({
         headless: true,
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
       });
@@ -248,7 +269,7 @@ export class InvoiceGeneratorService {
   /**
    * Generate invoice HTML template
    */
-  private generateInvoiceHTML(invoice: any, lines: any[]): string {
+  private generateInvoiceHTML(invoice: InvoiceRow, lines: InvoiceLineRow[]): string {
     return `
 <!DOCTYPE html>
 <html>
@@ -419,7 +440,8 @@ export class InvoiceGeneratorService {
       [billingAccountId, year, month]
     );
 
-    const count = parseInt(result.rows[0].count, 10) + 1;
+    const countRow = result.rows[0] as { count: string };
+    const count = parseInt(countRow.count, 10) + 1;
     return `INV-${year}${month}-${String(count).padStart(4, '0')}`;
   }
 }
