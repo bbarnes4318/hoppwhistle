@@ -1715,7 +1715,7 @@ export default function OperationsCallLogsPage() {
         </DialogContent>
       </Dialog>
       {!isAudioPlayerInDrawer && audioPlayer}
-    </div>
+    </CompactPageShell>
   );
 }
 
