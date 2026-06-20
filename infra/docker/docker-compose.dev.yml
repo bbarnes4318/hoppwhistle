@@ -73,6 +73,7 @@ services:
     volumes:
       - clickhouse_data:/var/lib/clickhouse
       - clickhouse_logs:/var/log/clickhouse-server
+      - ./clickhouse-config/default-user.xml:/etc/clickhouse-server/users.d/default-user.xml
     environment:
       CLICKHOUSE_DB: ${CLICKHOUSE_DB:-hopwhistle}
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
@@ -129,7 +130,6 @@ services:
       - hopwhistle-network
     volumes:
       - freeswitch_recordings:/recordings:ro
-
 
   web:
     build:
