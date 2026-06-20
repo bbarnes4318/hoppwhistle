@@ -101,13 +101,18 @@
         <action application="system" data="curl -s -X POST -H 'Content-Type: application/json' -H 'x-api-key: ${env(API_KEY)}' -d '{&quot;status&quot;: &quot;failed&quot;, &quot;error&quot;: &quot;Missing X-Hopwhistle-Call-Id header on FreeSWITCH channel&quot;}' http://api:3001/api/v1/calls/unknown/recording-status || true"/>
       </condition>
 
-      <!-- If hopwhistle_call_id is NOT empty, apply details and start record_session before bridge -->
-      <condition field="${hopwhistle_call_id}" expression="^(.+)$" break="never">
+      <!-- Set caller ID variables for ALL outbound calls -->
+      <condition field="destination_number" expression="^\+?1?([2-9]\d{9})$" break="never">
         <action application="set" data="clean_caller_id=${req_caller_id}" inline="true"/>
-        <action application="set" data="effective_caller_id_number=+${clean_caller_id}" inline="true"/>
-        <action application="set" data="origination_caller_id_number=+${clean_caller_id}" inline="true"/>
+        <action application="set" data="effective_caller_id_number=${clean_caller_id}" inline="true"/>
+        <action application="set" data="origination_caller_id_number=${clean_caller_id}" inline="true"/>
+        <action application="set" data="sip_from_user=${clean_caller_id}" inline="true"/>
         <action application="set" data="effective_caller_id_name=Hopwhistle" inline="true"/>
         <action application="set" data="hangup_after_bridge=true"/>
+      </condition>
+
+      <!-- If hopwhistle_call_id is NOT empty, apply details and start record_session before bridge -->
+      <condition field="${hopwhistle_call_id}" expression="^(.+)$" break="never">
         <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
         <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
 
