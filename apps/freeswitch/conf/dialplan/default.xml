@@ -74,6 +74,16 @@
         <action application="set" data="req_caller_id=12816991120" inline="true"/>
       </condition>
 
+      <!-- If req_caller_id is a demo/fake 555 number, rewrite it to our verified outbound caller ID -->
+      <condition field="${req_caller_id}" expression="^1?555" break="never">
+        <action application="set" data="req_caller_id=$${outbound_caller_id}" inline="true"/>
+      </condition>
+
+      <!-- Clean req_caller_id to remove any leading + and ensure it starts with 1 -->
+      <condition field="${req_caller_id}" expression="^\+?1?([2-9]\d{9})$" break="never">
+        <action application="set" data="req_caller_id=1$1" inline="true"/>
+      </condition>
+
       <!-- If hopwhistle_call_id is empty, fallback to lowercase -->
       <condition field="${hopwhistle_call_id}" expression="^$" break="never">
         <action application="set" data="hopwhistle_call_id=${sip_h_x-hopwhistle-call-id}" inline="true"/>
