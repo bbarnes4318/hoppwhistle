@@ -253,6 +253,7 @@ services:
       FREESWITCH_NODES: ${FREESWITCH_NODES:-freeswitch:5080}
       RTPENGINE_SOCK: ${RTPENGINE_SOCK:-udp:rtpengine:22222}
       DB_URL: ${DB_URL:-}
+      PUBLIC_IP: ${PUBLIC_IP}
     volumes:
       - kamailio_data:/var/run/kamailio
     healthcheck:
@@ -280,6 +281,7 @@ services:
       - '10000-20000:10000-20000/udp'
     environment:
       RTPENGINE_INTERFACE: ${RTPENGINE_INTERFACE:-auto}
+      PUBLIC_IP: ${PUBLIC_IP}
     volumes:
       - rtpengine_recordings:/recordings
     cap_add:
