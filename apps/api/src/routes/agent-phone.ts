@@ -274,23 +274,18 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       let outboundCallerId = callerId || '12816991120';
 
       if (isAuthenticatedUser) {
+        // Fetch all active numbers that are either assigned directly to this user
+        // or are tenant-wide / unassigned (userId: null) so they can be selected.
         let userNumbers = await prisma.phoneNumber.findMany({
           where: {
             tenantId,
-            userId,
             status: 'ACTIVE',
+            OR: [
+              { userId },
+              { userId: null },
+            ],
           },
         });
-
-        // Fall back to all tenant numbers if user has none directly assigned
-        if (userNumbers.length === 0) {
-          userNumbers = await prisma.phoneNumber.findMany({
-            where: {
-              tenantId,
-              status: 'ACTIVE',
-            },
-          });
-        }
 
         const userRecord = await prisma.user.findUnique({
           where: { id: userId },
