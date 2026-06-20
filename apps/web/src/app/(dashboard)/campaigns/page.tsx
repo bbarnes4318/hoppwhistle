@@ -26,6 +26,7 @@ import {
 import { toast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { CompactPageShell, CompactPageHeader } from '@/components/layout/compact-layout';
 
 interface Campaign {
  id: string;
@@ -238,54 +239,52 @@ function CampaignsPage() {
  );
 
  return (
- <div className="h-full flex flex-col overflow-hidden">
- {/* Header */}
- <div className="flex items-center justify-between flex-shrink-0 mb-4">
- <div>
- <h1 className="text-2xl font-semibold">Manage Campaigns</h1>
- <p className="text-sm text-muted-foreground">Configure campaigns and track performance</p>
- </div>
- <Button onClick={() => setWizardOpen(true)} size="sm">
- <Plus className="mr-2 h-4 w-4" />
- Create Campaign
- </Button>
- </div>
+    <CompactPageShell>
+      <CompactPageHeader
+        title="Manage Campaigns"
+        subtitle="Configure campaigns and track performance"
+      >
+        <Button onClick={() => setWizardOpen(true)} size="sm">
+          <Plus className="mr-2 h-4 w-4" />
+          Create Campaign
+        </Button>
+      </CompactPageHeader>
 
- {/* Content */}
- <Card className="flex-1 flex flex-col overflow-hidden min-h-0">
- <CardHeader className="flex-shrink-0 py-3 px-4 border-b border-border">
- <div className="flex items-center justify-between">
- <div>
- <CardTitle className="text-base font-medium">Campaigns</CardTitle>
- <CardDescription className="text-xs">View and manage all campaigns</CardDescription>
- </div>
- <div className="flex items-center gap-2">
- <div className="relative">
- <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
- <Input
- placeholder="Search campaigns..."
- value={search}
- onChange={e => setSearch(e.target.value)}
- className="pl-9 w-64 h-8 text-sm"
- />
- </div>
- <Button
- variant="outline"
- size="icon"
- className="h-8 w-8"
- onClick={() => {
- void fetchCampaigns();
- void fetchStats();
- }}
- disabled={loading}
- >
- <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
- </Button>
- </div>
- </div>
- </CardHeader>
- <CardContent className="flex-1 overflow-y-auto min-h-0 p-0">
- <Table>
+      {/* Content */}
+      <Card className="flex-1 flex flex-col overflow-hidden min-h-0 bg-card border-border/40 shadow-sm">
+        <CardHeader className="flex-shrink-0 py-2 px-3 border-b border-border/10">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Campaigns</CardTitle>
+              <CardDescription className="text-[10px]">View and manage all campaigns</CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search campaigns..."
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="pl-8 w-48 h-7 text-xs bg-background border-border/50 text-foreground"
+                />
+              </div>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-7 w-7 border-border/50 text-muted-foreground"
+                onClick={() => {
+                  void fetchCampaigns();
+                  void fetchStats();
+                }}
+                disabled={loading}
+              >
+                <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="flex-1 overflow-y-auto min-h-0 p-0">
+          <Table className="table-dense">
  <TableHeader className="sticky top-0 bg-background z-10">
  <TableRow className="border-b border-border">
  <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3">
@@ -522,8 +521,8 @@ function CampaignsPage() {
  </DialogFooter>
  </DialogContent>
  </Dialog>
- </div>
- );
+    </CompactPageShell>
+  );
 }
 
 import { RoleGuard } from '@/components/auth/role-guard';

@@ -49,7 +49,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
-import { formatDuration, formatPhoneNumber } from '@/lib/utils';
+import { formatDuration, formatPhoneNumber, cn } from '@/lib/utils';
+import { CompactPageShell, CompactPageHeader, DenseCard } from '@/components/layout/compact-layout';
 
 interface CallRecord {
   id: string;
@@ -687,65 +688,59 @@ export default function OperationsCallLogsPage() {
   };
 
   return (
-    <div className="space-y-6 p-6 max-w-7xl mx-auto">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-white flex items-center gap-2">
-            <Activity className="h-8 w-8 text-cyan-400" />
-            Operations Console
-          </h1>
-          <p className="text-sm text-gray-400">
-            Real-time pay-per-call transaction ledger, carrier thresholds, and disputes center.
-          </p>
-        </div>
-        <div className="flex gap-3 self-start md:self-auto">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                className="bg-white/5 border-white/10 text-white hover:bg-white/10 hover:text-white font-medium gap-2"
-              >
-                <SlidersHorizontal className="h-4 w-4" />
-                Columns
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="bg-slate-900 border-white/10 text-white min-w-[200px]" align="end">
-              <DropdownMenuLabel className="text-gray-400 text-xs">Configure Ledger Columns</DropdownMenuLabel>
-              <DropdownMenuSeparator className="bg-white/10" />
-              {columns.map(col => {
-                if (!col.canSee) return null;
-                return (
-                  <DropdownMenuCheckboxItem
-                    key={col.id}
-                    checked={visibleColumns[col.id]}
-                    onCheckedChange={() => toggleColumn(col.id)}
-                    className="focus:bg-cyan-600 focus:text-white"
-                  >
-                    {col.label}
-                  </DropdownMenuCheckboxItem>
-                );
-              })}
-            </DropdownMenuContent>
-          </DropdownMenu>
+    <CompactPageShell>
+      <CompactPageHeader
+        title="Operations Console"
+        subtitle="Real-time pay-per-call transaction ledger, carrier thresholds, and disputes center."
+        icon={Activity}
+      >
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className="bg-white/5 border-white/10 text-white hover:bg-white/10 hover:text-white font-medium gap-2 h-8 text-xs"
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              Columns
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="bg-slate-900 border-white/10 text-white min-w-[200px]" align="end">
+            <DropdownMenuLabel className="text-gray-400 text-xs">Configure Ledger Columns</DropdownMenuLabel>
+            <DropdownMenuSeparator className="bg-white/10" />
+            {columns.map(col => {
+              if (!col.canSee) return null;
+              return (
+                <DropdownMenuCheckboxItem
+                  key={col.id}
+                  checked={visibleColumns[col.id]}
+                  onCheckedChange={() => toggleColumn(col.id)}
+                  className="focus:bg-cyan-600 focus:text-white text-xs"
+                >
+                  {col.label}
+                </DropdownMenuCheckboxItem>
+              );
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
 
-          <Button
-            onClick={handleExportCSV}
-            disabled={exporting || calls.length === 0}
-            className="bg-cyan-600 hover:bg-cyan-500 text-white font-medium gap-2 shadow-lg"
-          >
-            {exporting ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Download className="h-4 w-4" />
-            )}
-            Export CSV Ledger
-          </Button>
-        </div>
-      </div>
+        <Button
+          onClick={handleExportCSV}
+          disabled={exporting || calls.length === 0}
+          size="sm"
+          className="bg-cyan-600 hover:bg-cyan-500 text-white font-medium gap-2 shadow-lg h-8 text-xs"
+        >
+          {exporting ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Download className="h-4 w-4" />
+          )}
+          Export CSV Ledger
+        </Button>
+      </CompactPageHeader>
 
       {/* Filter Panel */}
-      <Card className="bg-white/5 border-white/10 backdrop-blur-xl">
-        <CardContent className="p-4 grid grid-cols-1 md:grid-cols-4 lg:grid-cols-6 gap-4">
+      <div className="bg-card border border-border/40 rounded-lg p-2.5 grid grid-cols-1 md:grid-cols-4 lg:grid-cols-6 gap-2.5 flex-shrink-0">
           {/* Search Box */}
           <div className="relative col-span-1 md:col-span-2">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -897,14 +892,12 @@ export default function OperationsCallLogsPage() {
               />
             </div>
           )}
-        </CardContent>
-      </Card>
+      </div>
 
       {/* Main Operations Data Table */}
-      <Card className="bg-white/5 border-white/10 backdrop-blur-xl">
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
+      <DenseCard className="flex-1 min-h-0">
+        <div className="flex-1 min-h-0 overflow-auto">
+          <Table className="table-dense">
               <TableHeader>
                 <TableRow className="border-white/10 hover:bg-transparent">
                   {visibleColumns.time && (
@@ -1191,8 +1184,8 @@ export default function OperationsCallLogsPage() {
               </div>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </DenseCard>
 
       {/* Slide-out Call Detail Drawer Dialog */}
       <Dialog
