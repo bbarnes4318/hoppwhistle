@@ -45,6 +45,29 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     return defaultTenant.id;
   }
 
+  // Helper to automatically assign the ADMIN role to newly registered users
+  async function assignDefaultRole(userId: string): Promise<void> {
+    let role = await prisma.role.findFirst({
+      where: { name: 'ADMIN' },
+    });
+    if (!role) {
+      role = await prisma.role.findFirst({
+        where: { name: 'OWNER' },
+      });
+    }
+    if (!role) {
+      role = await prisma.role.findFirst();
+    }
+    if (role) {
+      await prisma.userRole.create({
+        data: {
+          userId,
+          roleId: role.id,
+        },
+      });
+    }
+  }
+
   // ============================================================================
   // Email/Password Login
   // ============================================================================
@@ -269,6 +292,8 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       },
     });
 
+    await assignDefaultRole(user.id);
+
     // Audit registration
     await auditLog({
       tenantId: 'default',
@@ -429,6 +454,13 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
             status: 'ACTIVE',
             lastLoginAt: new Date(),
           },
+        });
+
+        await assignDefaultRole(user.id);
+
+        // Fetch user again with relation to return correctly
+        const userWithRoles = await prisma.user.findUnique({
+          where: { id: user.id },
           include: {
             tenant: true,
             roles: {
@@ -438,6 +470,9 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
             },
           },
         });
+        if (userWithRoles) {
+          user = userWithRoles;
+        }
 
         await auditLog({
           tenantId: 'default',
@@ -604,8 +639,11 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
           where: { id: user.buyerId },
           select: { metadata: true },
         });
-        buyerAccessToRecordings = !!(buyer?.metadata as any)?.accessToRecordings;
+        const buyerMetadata = buyer?.metadata as Record<string, unknown> | null;
+        buyerAccessToRecordings = !!buyerMetadata?.accessToRecordings;
       }
+
+      const userMetadata = user.metadata as Record<string, unknown> | null;
 
       return reply.send({
         id: user.id,
@@ -615,7 +653,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         roles: user.roles.map((ur: UserRole) => ur.role.name),
         tenantId: user.tenantId,
         buyerId: user.buyerId,
-        publisherId: user.publisherId || (user.metadata as any)?.publisherId || null,
+        publisherId: user.publisherId || (userMetadata?.publisherId as string | null) || null,
         publisherAccessToRecordings,
         buyerAccessToRecordings,
       });
