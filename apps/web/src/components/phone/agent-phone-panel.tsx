@@ -229,30 +229,27 @@ export function AgentPhonePanel(): JSX.Element {
       {/* Phone Panel */}
       <Card
         className={cn(
-          'fixed bottom-6 right-6 z-40',
-          'w-[380px] overflow-hidden',
-          'bg-muted',
-          ' border-white/10',
-          'shadow-sm shadow-black/50',
+          'fixed bottom-4 right-4 z-40',
+          'w-[340px] overflow-hidden flex flex-col',
+          'bg-slate-950 border border-slate-800',
+          'shadow-2xl shadow-black/85',
           'transition-all duration-300 ease-out',
-          isExpanded ? 'max-h-[calc(100vh-48px)] flex flex-col h-auto' : 'h-[72px]'
+          isExpanded ? 'h-[500px] max-h-[calc(100vh-32px)]' : 'h-[44px]'
         )}
       >
         {/* Header */}
-        <CardHeader className="p-4 pb-3 space-y-0 flex flex-row items-center justify-between border-b border-white/5">
-          <div className="flex items-center gap-3">
+        <CardHeader className="p-2 flex flex-row items-center justify-between border-b border-slate-800 space-y-0 flex-shrink-0 bg-slate-900/40">
+          <div className="flex items-center gap-2">
             <div
               className={cn(
-                'w-10 h-10 rounded-xl flex items-center justify-center',
-                'bg-primary',
-                'border border-cyan-500/30'
+                'w-7 h-7 rounded flex items-center justify-center bg-primary/10 border border-primary/20'
               )}
             >
-              <Phone className="w-5 h-5 text-cyan-400" />
+              <Phone className="w-3.5 h-3.5 text-primary flex-shrink-0" />
             </div>
             <div>
-              <h3 className="font-semibold text-white text-sm">Agent Phone</h3>
-              <div className="flex items-center gap-2">
+              <h3 className="font-bold text-white text-xs leading-none">Softphone</h3>
+              <div className="flex items-center gap-1.5 mt-0.5">
                 <AgentStatusSelector />
               </div>
             </div>
@@ -260,9 +257,9 @@ export function AgentPhonePanel(): JSX.Element {
 
           <div className="flex items-center gap-1">
             {currentCall?.state === 'active' && (
-              <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 rounded-full mr-2">
-                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                <span className="text-emerald-400 text-xs font-mono">
+              <div className="flex items-center gap-1 px-1.5 py-0.5 bg-emerald-500/10 rounded mr-1">
+                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                <span className="text-emerald-400 text-[10px] font-mono leading-none">
                   {formatDuration(currentCall.duration)}
                 </span>
               </div>
@@ -271,28 +268,28 @@ export function AgentPhonePanel(): JSX.Element {
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 text-gray-400 hover:text-white"
+              className="h-7 w-7 text-gray-400 hover:text-white"
               onClick={() => setShowSettings(true)}
             >
-              <Settings className="w-4 h-4" />
+              <Settings className="w-3.5 h-3.5" />
             </Button>
 
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 text-gray-400 hover:text-white"
+              className="h-7 w-7 text-gray-400 hover:text-white"
               onClick={() => setIsExpanded(!isExpanded)}
             >
-              {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+              {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
             </Button>
 
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 text-gray-400 hover:text-white"
+              className="h-7 w-7 text-gray-400 hover:text-white"
               onClick={closePhonePanel}
             >
-              <X className="w-4 h-4" />
+              <X className="w-3.5 h-3.5" />
             </Button>
           </div>
         </CardHeader>
@@ -445,7 +442,7 @@ export function AgentPhonePanel(): JSX.Element {
                   {activeTab === 'dialpad' && (
                     <>
                       <CallerIdSelector />
-                      <DialPad />
+                      <DialPad compact={true} />
                     </>
                   )}
                   {activeTab === 'history' && <CallHistory />}
@@ -733,23 +730,23 @@ function CallerIdSelector(): JSX.Element | null {
   if (userNumbers.length === 0) return null;
 
   return (
-    <div className="mb-2">
-      <label className="flex items-center gap-2 text-xs text-gray-400 mb-1.5">
-        <Phone className="w-3 h-3 text-cyan-400" />
+    <div className="mb-1.5">
+      <label className="flex items-center gap-1.5 text-[10px] text-gray-400 mb-1">
+        <Phone className="w-2.5 h-2.5 text-primary" />
         Calling from:
       </label>
       <select
         value={selectedCallerId || ''}
         onChange={e => setSelectedCallerId(e.target.value)}
         className={cn(
-          'w-full px-3 py-2 rounded-lg text-sm',
+          'w-full px-2 py-1 rounded text-xs',
           'bg-white/5 border border-white/10',
-          'text-white focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500',
+          'text-white focus:border-primary focus:ring-1 focus:ring-primary',
           'outline-none transition-all cursor-pointer'
         )}
       >
         {userNumbers.map(num => (
-          <option key={num.id} value={num.number} className="bg-slate-900 text-white">
+          <option key={num.id} value={num.number} className="bg-slate-950 text-white">
             {formatPhone(num.number)}
           </option>
         ))}

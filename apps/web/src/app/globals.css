@@ -79,3 +79,30 @@
     @apply h-full;
   }
 }
+
+@layer utilities {
+  /* High row density for data ledgers */
+  .table-dense th {
+    @apply py-1.5 px-2 text-xs font-semibold text-muted-foreground uppercase tracking-widest border-b border-border/10;
+  }
+  .table-dense td {
+    @apply py-1.5 px-2 text-xs text-foreground border-b border-border/10;
+  }
+  
+  /* Compact custom scrollbar styling */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 3px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground));
+  }
+}
+

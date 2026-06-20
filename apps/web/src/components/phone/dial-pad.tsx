@@ -44,7 +44,7 @@ const dtmfFrequencies: Record<string, [number, number]> = {
   '#': [941, 1477],
 };
 
-export function DialPad(): JSX.Element {
+export function DialPad({ compact = false }: { compact?: boolean }): JSX.Element {
   const { makeCall, sendDTMF, currentCall, isConnecting, dialerNumber, setDialerNumber } =
     usePhone();
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -165,11 +165,12 @@ export function DialPad(): JSX.Element {
   );
 
   return (
-    <div className="space-y-4" onKeyDown={handleKeyDown} tabIndex={0}>
+    <div className={compact ? 'space-y-2' : 'space-y-4'} onKeyDown={handleKeyDown} tabIndex={0}>
       {/* Display */}
       <div
         className={cn(
-          'h-16 px-4 rounded-xl flex items-center justify-between',
+          compact ? 'h-11 px-3 rounded-lg' : 'h-16 px-4 rounded-xl',
+          'flex items-center justify-between',
           'bg-white/5 border border-white/10'
         )}
       >
@@ -179,41 +180,42 @@ export function DialPad(): JSX.Element {
           onChange={e => updatePhoneNumber(e.target.value.replace(/[^0-9+*#()-\s]/g, ''))}
           placeholder="Enter number..."
           className={cn(
-            'flex-1 bg-transparent text-2xl font-mono text-white',
-            'placeholder:text-gray-600 outline-none'
+            'flex-1 bg-transparent font-mono text-white outline-none',
+            compact ? 'text-lg placeholder:text-gray-700' : 'text-2xl placeholder:text-gray-600'
           )}
         />
         {phoneNumber && (
           <button
             onClick={handleBackspace}
-            className="p-2 text-gray-400 hover:text-white transition-colors"
+            className="p-1.5 text-gray-400 hover:text-white transition-colors"
           >
-            <Delete className="w-5 h-5" />
+            <Delete className="w-4 h-4" />
           </button>
         )}
       </div>
 
       {/* Formatted Display */}
       {phoneNumber && (
-        <p className="text-center text-gray-400 text-sm">{formatPhoneNumber(phoneNumber)}</p>
+        <p className="text-center text-gray-400 text-xs">{formatPhoneNumber(phoneNumber)}</p>
       )}
 
       {/* Keypad */}
-      <div className="grid grid-cols-3 gap-2">
+      <div className={cn('grid grid-cols-3', compact ? 'gap-1.5' : 'gap-2')}>
         {keypadButtons.map(({ digit, letters }) => (
           <button
             key={digit}
             onClick={() => handleDigitPress(digit)}
             className={cn(
-              'h-16 rounded-xl flex flex-col items-center justify-center',
+              compact ? 'h-10 rounded-lg' : 'h-16 rounded-xl',
+              'flex flex-col items-center justify-center',
               'bg-white/5 hover:bg-white/10 active:bg-cyan-500/20',
               'border border-transparent hover:border-white/10',
               'transition-all duration-150 ease-out',
               'active:scale-95'
             )}
           >
-            <span className="text-2xl text-white font-medium">{digit}</span>
-            {letters && (
+            <span className={cn('text-white font-medium', compact ? 'text-lg' : 'text-2xl')}>{digit}</span>
+            {letters && !compact && (
               <span className="text-[10px] text-gray-500 tracking-widest -mt-0.5">{letters}</span>
             )}
           </button>
@@ -225,19 +227,18 @@ export function DialPad(): JSX.Element {
         onClick={handleCall}
         disabled={!phoneNumber || isConnecting}
         className={cn(
-          'w-full h-14 rounded-xl text-lg font-medium',
+          'w-full font-medium transition-all duration-200 flex items-center justify-center gap-2',
+          compact ? 'h-11 rounded-lg text-sm' : 'h-14 rounded-xl text-lg',
           'bg-primary',
-          'hover: hover:',
-          'disabled:opacity-50 disabled:cursor-not-allowed',
-          'shadow-lg hover:shadow-sm hover:',
-          'transition-all duration-200'
+          'disabled:opacity-50 disabled:cursor-not-allowed shadow-lg'
         )}
       >
-        <Phone className="w-5 h-5 mr-2" />
+        <Phone className={cn(compact ? 'w-4 h-4' : 'w-5 h-5')} />
         {isConnecting ? 'Connecting...' : 'Call'}
       </Button>
     </div>
   );
+}
 }
 
 export default DialPad;

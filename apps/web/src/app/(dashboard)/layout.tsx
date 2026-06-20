@@ -59,7 +59,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
  <Sidebar />
  <div className="flex flex-1 flex-col h-screen overflow-hidden">
  <Header />
- <main className={`flex-1 bg-background ${isCampaignMapPage ? 'p-0 overflow-hidden' : 'p-6 pb-20 overflow-y-auto'}`}>
+ <main className="flex-1 bg-background flex flex-col min-h-0 overflow-hidden">
  {children}
  </main>
  {/* Footer removed - legal links accessible via Settings page */}

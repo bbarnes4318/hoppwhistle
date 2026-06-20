@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/table';
 import { apiClient } from '@/lib/api';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
+import { CompactPageShell, CompactPageHeader } from '@/components/layout/compact-layout';
 
 interface Invoice {
  id: string;
@@ -185,12 +186,12 @@ function BillingPage() {
  );
  }
 
- return (
- <div className="space-y-6">
- <div>
- <h1 className="text-3xl font-bold">Billing</h1>
- <p className="text-muted-foreground">Manage invoices, balances, and payouts</p>
- </div>
+  return (
+    <CompactPageShell>
+      <CompactPageHeader
+        title="Billing"
+        subtitle="Manage invoices, balances, and payouts"
+      />
 
  {error && (
  <Card>
@@ -338,7 +339,7 @@ function BillingPage() {
  <div className="text-center py-8 text-muted-foreground">No transactions found</div>
  ) : (
  <>
- <Table>
+ <Table className="table-dense">
  <TableHeader>
  <TableRow>
  <TableHead>Date</TableHead>
@@ -430,7 +431,7 @@ function BillingPage() {
  {invoices.length === 0 ? (
  <div className="text-center py-8 text-muted-foreground">No invoices found</div>
  ) : (
- <Table>
+ <Table className="table-dense">
  <TableHeader>
  <TableRow>
  <TableHead>Invoice Number</TableHead>
@@ -467,8 +468,8 @@ function BillingPage() {
  )}
  </CardContent>
  </Card>
- </div>
- );
+    </CompactPageShell>
+  );
 }
 
 import { RoleGuard } from '@/components/auth/role-guard';

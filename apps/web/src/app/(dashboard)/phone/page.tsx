@@ -9,7 +9,7 @@ import { AgentStatusSelector } from '@/components/phone/agent-status-selector';
 import { DialPad } from '@/components/phone/dial-pad';
 import { ScreenPopSettings } from '@/components/phone/screen-pop-settings';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { CompactPageShell, CompactPageHeader, DenseCard } from '@/components/layout/compact-layout';
 import { cn } from '@/lib/utils';
 
 // ============================================================================
@@ -17,157 +17,160 @@ import { cn } from '@/lib/utils';
 // ============================================================================
 
 export default function PhonePage(): JSX.Element {
- const { callHistory } = usePhone();
- const [showSettings, setShowSettings] = useState(false);
+  const { callHistory } = usePhone();
+  const [showSettings, setShowSettings] = useState(false);
 
- // Calculate stats
- const todaysCalls = callHistory.filter((c: CallInfo) => {
- const today = new Date();
- return c.startTime && c.startTime.toDateString() === today.toDateString();
- });
+  // Calculate stats
+  const todaysCalls = callHistory.filter((c: CallInfo) => {
+    const today = new Date();
+    return c.startTime && c.startTime.toDateString() === today.toDateString();
+  });
 
- const inboundCalls = todaysCalls.filter((c: CallInfo) => c.direction === 'inbound').length;
- const outboundCalls = todaysCalls.filter((c: CallInfo) => c.direction === 'outbound').length;
- const totalDuration = todaysCalls.reduce((sum: number, c: CallInfo) => sum + c.duration, 0);
+  const inboundCalls = todaysCalls.filter((c: CallInfo) => c.direction === 'inbound').length;
+  const outboundCalls = todaysCalls.filter((c: CallInfo) => c.direction === 'outbound').length;
+  const totalDuration = todaysCalls.reduce((sum: number, c: CallInfo) => sum + c.duration, 0);
 
- const formatDuration = (seconds: number): string => {
- const hours = Math.floor(seconds / 3600);
- const mins = Math.floor((seconds % 3600) / 60);
- const secs = seconds % 60;
- if (hours > 0) {
- return `${hours}h ${mins}m`;
- }
- return `${mins}m ${secs}s`;
- };
+  const formatDuration = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    if (hours > 0) {
+      return `${hours}h ${mins}m`;
+    }
+    return `${mins}m ${secs}s`;
+  };
 
- const formatTime = (date?: Date): string => {
- if (!date) return '';
- return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
- };
+  const formatTime = (date?: Date): string => {
+    if (!date) return '';
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
 
- return (
- <div className="h-full flex flex-col overflow-hidden">
- {/* Settings Modal */}
- {showSettings && <ScreenPopSettings onClose={() => setShowSettings(false)} />}
+  return (
+    <CompactPageShell>
+      {/* Settings Modal */}
+      {showSettings && <ScreenPopSettings onClose={() => setShowSettings(false)} />}
 
- {/* Header */}
- <div className="flex items-center justify-between flex-shrink-0 mb-6 border-b border-border pb-4">
- <div className="flex items-center gap-4">
- <div className="w-10 h-10 rounded border border-border bg-card flex items-center justify-center">
- <Phone className="w-5 h-5 text-muted-foreground" />
- </div>
- <div>
- <h1 className="text-2xl font-bold tracking-tight uppercase">Agent Console</h1>
- <div className="flex items-center gap-3 mt-1">
- <span className="text-xs uppercase tracking-widest text-muted-foreground">Status:</span>
- <AgentStatusSelector />
- </div>
- </div>
- </div>
+      {/* Header */}
+      <CompactPageHeader
+        title="Agent Console"
+        subtitle="Manage softphone operations and check live calling activity"
+        icon={Phone}
+      >
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded px-2.5 py-1 text-xs">
+            <span className="text-[10px] uppercase font-bold text-muted-foreground/60">Status:</span>
+            <AgentStatusSelector />
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowSettings(true)}
+            className="gap-1.5 h-8 border border-border/40 text-xs hover:bg-slate-900 hover:text-white"
+          >
+            <Settings className="w-3.5 h-3.5" />
+            Screen Pop Settings
+          </Button>
+        </div>
+      </CompactPageHeader>
 
- <Button variant="secondary" onClick={() => setShowSettings(true)} className="gap-2 rounded-sm border">
- <Settings className="w-4 h-4" />
- Screen Pop Settings
- </Button>
- </div>
+      {/* Main Content Grid */}
+      <div className="flex-1 grid gap-4 lg:grid-cols-3 min-h-0 overflow-hidden">
+        {/* Left Column - Dial Pad */}
+        <div className="lg:col-span-1 flex flex-col min-h-0">
+          <DenseCard title="Command Line" icon={Phone} className="flex-1 min-h-0">
+            <DialPad compact={true} />
+          </DenseCard>
+        </div>
 
- {/* Main Content Grid */}
- <div className="flex-1 grid gap-6 lg:grid-cols-3 min-h-0 overflow-auto">
- {/* Left Column - Dial Pad */}
- <Card className="lg:row-span-2">
- <CardHeader className="pb-4">
- <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
- <Phone className="w-4 h-4" />
- Command Line
- </CardTitle>
- </CardHeader>
- <CardContent>
- <DialPad />
- </CardContent>
- </Card>
+        {/* Right Column - Stats & History */}
+        <div className="lg:col-span-2 flex flex-col gap-4 min-h-0 overflow-hidden">
+          {/* Stats Cards */}
+          <div className="grid gap-4 sm:grid-cols-2 flex-shrink-0">
+            <KPICard
+              title="Volume Today"
+              value={todaysCalls.length}
+              icon={Activity}
+              trendLabel={`${inboundCalls} IN / ${outboundCalls} OUT`}
+              className="p-3 pb-2.5 space-y-2 border-border/40"
+            />
+            <KPICard
+              title="Talk Time"
+              value={formatDuration(totalDuration)}
+              icon={Clock}
+              className="p-3 pb-2.5 space-y-2 border-border/40"
+            />
+          </div>
 
- {/* Stats Cards */}
- <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
- <KPICard
- title="Volume Today"
- value={todaysCalls.length}
- icon={Activity}
- trendLabel={`${inboundCalls} INBOARD / ${outboundCalls} OUTBOUND`}
- />
- <KPICard
- title="Talk Time"
- value={formatDuration(totalDuration)}
- icon={Clock}
- />
- </div>
-
- {/* Call History */}
- <Card className="lg:col-span-2 flex flex-col min-h-0">
- <CardHeader className="pb-4 border-b border-border">
- <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
- <FileText className="w-4 h-4" />
- Operation Log
- </CardTitle>
- </CardHeader>
- <CardContent className="p-0 overflow-auto flex-1">
- {callHistory.length === 0 ? (
- <div className="text-center py-12">
- <Activity className="w-12 h-12 mx-auto mb-4 text-muted-foreground/30" />
- <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">No operations recorded</p>
- <p className="text-sm text-muted-foreground/70 mt-1">
- Your call history will appear here
- </p>
- </div>
- ) : (
- <table className="w-full text-left">
- <tbody className="divide-y divide-border">
- {callHistory.slice(0, 20).map((call: CallInfo, index: number) => (
- <tr
- key={`${call.callId}-${index}`}
- className="transition-colors hover:bg-muted/50"
- >
- <td className="py-2 pl-4 pr-3">
- <div className="flex items-center gap-1.5">
- {call.direction === 'inbound' ? (
- <PhoneIncoming className="w-3.5 h-3.5 text-muted-foreground" />
- ) : (
- <PhoneOutgoing className="w-3.5 h-3.5 text-muted-foreground" />
- )}
- <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground w-6">
- {call.direction === 'inbound' ? 'IN' : 'OUT'}
- </span>
- </div>
- </td>
- <td className="py-2 px-3 font-mono text-xs text-foreground truncate max-w-[150px]">
- {call.callerName ?? call.phoneNumber}
- </td>
- <td className="py-2 px-3 font-mono text-xs text-muted-foreground">
- {call.duration > 0 ? formatDuration(call.duration) : '—'}
- </td>
- <td className="py-2 px-3 font-mono text-xs text-muted-foreground text-right">
- {formatTime(call.startTime)}
- </td>
- <td className="py-2 pl-3 pr-4 text-right">
- <span
- className={cn(
- 'font-mono text-xs',
- call.state === 'ended' && call.duration > 0
- ? 'text-primary'
- : 'text-muted-foreground/60'
- )}
- >
- {call.state === 'ended' && call.duration > 0 ? 'COMPLETED' : 'MISSED'}
- </span>
- </td>
- </tr>
- ))}
- </tbody>
- </table>
- )}
- </CardContent>
- </Card>
- </div>
- </div>
- );
+          {/* Call History */}
+          <DenseCard title="Operation Log" icon={FileText} className="flex-1 min-h-0">
+            {callHistory.length === 0 ? (
+              <div className="text-center py-8">
+                <Activity className="w-8 h-8 mx-auto mb-2 text-muted-foreground/30" />
+                <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">No operations recorded</p>
+                <p className="text-xs text-muted-foreground/60 mt-1">
+                  Your call history will appear here
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-auto max-h-full custom-scrollbar">
+                <table className="w-full text-left table-dense">
+                  <thead>
+                    <tr className="border-b border-border/10">
+                      <th className="py-1 px-2">Type</th>
+                      <th className="py-1 px-2">Phone Number</th>
+                      <th className="py-1 px-2">Duration</th>
+                      <th className="py-1 px-2 text-right">Time</th>
+                      <th className="py-1 px-2 text-right">State</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/5">
+                    {callHistory.slice(0, 20).map((call: CallInfo, index: number) => (
+                      <tr
+                        key={`${call.callId}-${index}`}
+                        className="transition-colors hover:bg-white/[0.02]"
+                      >
+                        <td className="py-1 px-2">
+                          <div className="flex items-center gap-1">
+                            {call.direction === 'inbound' ? (
+                              <PhoneIncoming className="w-3 h-3 text-cyan-400" />
+                            ) : (
+                              <PhoneOutgoing className="w-3 h-3 text-blue-400" />
+                            )}
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                              {call.direction === 'inbound' ? 'IN' : 'OUT'}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-1 px-2 font-mono text-xs text-foreground truncate max-w-[150px]">
+                          {call.callerName ?? call.phoneNumber}
+                        </td>
+                        <td className="py-1 px-2 font-mono text-xs text-muted-foreground">
+                          {call.duration > 0 ? formatDuration(call.duration) : '—'}
+                        </td>
+                        <td className="py-1 px-2 font-mono text-xs text-muted-foreground text-right">
+                          {formatTime(call.startTime)}
+                        </td>
+                        <td className="py-1 px-2 text-right">
+                          <span
+                            className={cn(
+                              'font-mono text-[10px] font-bold px-1.5 py-0.5 rounded',
+                              call.state === 'ended' && call.duration > 0
+                                ? 'bg-primary/10 text-primary'
+                                : 'bg-rose-500/10 text-rose-400'
+                            )}
+                          >
+                            {call.state === 'ended' && call.duration > 0 ? 'COMPLETED' : 'MISSED'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </DenseCard>
+        </div>
+      </div>
+    </CompactPageShell>
+  );
 }
-

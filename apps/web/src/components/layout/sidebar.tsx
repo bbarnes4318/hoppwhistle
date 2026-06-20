@@ -159,35 +159,35 @@ export function Sidebar() {
     : [];
 
   return (
-    <div className="flex h-full w-64 flex-col border-r border-border bg-card">
-      <div className="flex h-16 items-center border-b border-border px-6">
+    <div className="flex h-full w-52 flex-col border-r border-border bg-card flex-shrink-0">
+      <div className="flex h-11 items-center border-b border-border px-4 flex-shrink-0">
         <Image
           src="/hopwhistle.png"
           alt="Hopwhistle"
-          width={120}
-          height={40}
-          className="h-8 w-auto"
+          width={100}
+          height={32}
+          className="h-6 w-auto"
           priority
         />
       </div>
-      <nav className="flex-1 space-y-0.5 overflow-y-auto p-4">
+      <nav className="flex-1 space-y-0.5 overflow-y-auto p-2.5 custom-scrollbar">
         {/* Buyer Portal indicator */}
         {isBuyerOnly && (
-          <div className="mb-4 px-3 py-2 text-xs font-semibold uppercase tracking-widest text-primary bg-primary/10 rounded-md text-center border border-primary/20">
+          <div className="mb-2.5 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-primary bg-primary/10 rounded border border-primary/20 text-center">
             Buyer Portal
           </div>
         )}
 
         {/* Publisher Portal indicator */}
         {isPublisherOnly && (
-          <div className="mb-4 px-3 py-2 text-xs font-semibold uppercase tracking-widest text-emerald-400 bg-emerald-500/10 rounded-md text-center border border-emerald-500/20">
+          <div className="mb-2.5 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-emerald-400 bg-emerald-500/10 rounded border border-emerald-500/20 text-center">
             Publisher Portal
           </div>
         )}
 
         {/* Agent Portal indicator */}
         {isAgentOnly && (
-          <div className="mb-4 px-3 py-2 text-xs font-semibold uppercase tracking-widest text-blue-400 bg-blue-500/10 rounded-md text-center border border-blue-500/20">
+          <div className="mb-2.5 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-blue-400 bg-blue-500/10 rounded border border-blue-500/20 text-center">
             Agent Portal
           </div>
         )}
@@ -200,21 +200,21 @@ export function Sidebar() {
               href={item.href}
               title={item.title}
               className={cn(
-                'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-all duration-150',
+                'flex items-center gap-2 rounded px-2 py-1.5 text-xs font-semibold transition-all duration-150',
                 isActive
                   ? 'bg-muted text-primary border-l-2 border-primary'
                   : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
               )}
             >
-              <item.icon className="h-5 w-5" />
+              <item.icon className="h-4 w-4 flex-shrink-0" />
               {item.name}
             </Link>
           );
         })}
 
         {toolsNav.length > 0 && (
-          <div className="pt-4">
-            <div className="px-3 py-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+          <div className="pt-3">
+            <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
               Tools
             </div>
             {toolsNav.map(item => {
@@ -224,13 +224,13 @@ export function Sidebar() {
                   key={item.name}
                   href={item.href}
                   className={cn(
-                    'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-all duration-150',
+                    'flex items-center gap-2 rounded px-2 py-1.5 text-xs font-semibold transition-all duration-150',
                     isActive
                       ? 'bg-muted text-primary border-l-2 border-primary'
                       : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                   )}
                 >
-                  <item.icon className="h-5 w-5" />
+                  <item.icon className="h-4 w-4 flex-shrink-0" />
                   {item.name}
                 </Link>
               );
@@ -239,8 +239,8 @@ export function Sidebar() {
         )}
 
         {adminNav.length > 0 && (
-          <div className="pt-4">
-            <div className="px-3 py-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+          <div className="pt-3">
+            <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
               Admin
             </div>
             {adminNav.map(item => {
@@ -251,13 +251,13 @@ export function Sidebar() {
                   href={item.href}
                   title={item.title}
                   className={cn(
-                    'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-all duration-150',
+                    'flex items-center gap-2 rounded px-2 py-1.5 text-xs font-semibold transition-all duration-150',
                     isActive
                       ? 'bg-muted text-primary border-l-2 border-primary'
                       : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                   )}
                 >
-                  <item.icon className="h-5 w-5" />
+                  <item.icon className="h-4 w-4 flex-shrink-0" />
                   {item.name}
                 </Link>
               );

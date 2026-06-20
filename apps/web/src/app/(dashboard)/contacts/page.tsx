@@ -5,16 +5,11 @@ import {
   Phone,
   Play,
   Search,
-  Clock,
-  CalendarCheck,
-  ArrowUpRight,
-  ArrowDownLeft,
   Plus,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { RoleGuard } from '@/components/auth/role-guard';
-
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -29,13 +24,13 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { apiClient } from '@/lib/api';
-import { formatDuration, formatPhoneNumber } from '@/lib/utils';
+import { formatDuration, formatPhoneNumber, cn } from '@/lib/utils';
 import {
   DISPOSITION_LABELS,
   DISPOSITION_COLORS,
-  CALL_SOURCE_LABELS,
   getDispositionLabel,
 } from '@hopwhistle/shared';
+import { CompactPageShell, CompactPageHeader } from '@/components/layout/compact-layout';
 
 /* ─── Types ────────────────────────────────────────────────────── */
 interface ProspectCallRecord {
@@ -78,7 +73,6 @@ function ContactsPage() {
     setLoading(true);
     setError(null);
     try {
-      // Normalize phone: strip non-digits, add +1 if needed
       let normalized = phone.replace(/[^\d+]/g, '');
       if (!normalized.startsWith('+') && normalized.length === 10) {
         normalized = '+1' + normalized;
@@ -120,29 +114,27 @@ function ContactsPage() {
   }, [search, lookupProspect]);
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">Prospect Lookup</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            Search and view prospect call histories and follow-ups
-          </p>
-        </div>
+    <CompactPageShell>
+      <CompactPageHeader
+        title="Prospect Lookup"
+        subtitle="Search and view prospect call histories and follow-ups"
+      >
         <Button
           asChild
-          className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+          size="sm"
+          className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-xs"
         >
           <Link href="/intake">
-            <Plus className="h-4.5 w-4.5" />
+            <Plus className="h-4 w-4" />
             Add Customer
           </Link>
         </Button>
-      </div>
+      </CompactPageHeader>
 
       {/* Search */}
-      <div className="flex gap-2 mb-4 mt-6 flex-shrink-0">
+      <div className="flex gap-2 mt-2 flex-shrink-0">
         <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             id="prospect-search"
             name="prospect-search"
@@ -150,57 +142,57 @@ function ContactsPage() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleSearch()}
-            className="pl-10"
+            className="pl-9 h-8 text-xs bg-background border-border/50 text-foreground"
           />
         </div>
-        <Button onClick={handleSearch} disabled={loading || search.length < 7}>
+        <Button onClick={handleSearch} disabled={loading || search.length < 7} size="sm" className="h-8 text-xs">
           {loading ? 'Searching...' : 'Lookup'}
         </Button>
       </div>
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded p-3 text-xs text-red-400 mb-4">
+        <div className="bg-red-500/10 border border-red-500/30 rounded p-2.5 text-xs text-red-400 flex-shrink-0">
           {error}
         </div>
       )}
 
       {/* Profile Summary */}
       {profile && (
-        <div className="grid grid-cols-4 gap-4 flex-shrink-0 mb-4">
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 flex-shrink-0">
+          <Card className="bg-card border-border/40 shadow-sm">
+            <CardContent className="p-3">
+              <p className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground">
                 Phone
               </p>
-              <p className="text-lg font-semibold text-foreground mt-1">
+              <p className="text-sm font-semibold text-white mt-1">
                 {formatPhoneNumber(profile.phoneNumber)}
               </p>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+          <Card className="bg-card border-border/40 shadow-sm">
+            <CardContent className="p-3">
+              <p className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground">
                 Total Calls
               </p>
-              <p className="text-lg font-semibold text-foreground mt-1">{profile.totalCalls}</p>
+              <p className="text-sm font-semibold text-white mt-1">{profile.totalCalls}</p>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+          <Card className="bg-card border-border/40 shadow-sm">
+            <CardContent className="p-3">
+              <p className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground">
                 Last Disposition
               </p>
-              <p className="text-lg font-semibold text-foreground mt-1">
+              <p className="text-sm font-semibold text-white mt-1">
                 {profile.lastDisposition ? getDispositionLabel(profile.lastDisposition) : '—'}
               </p>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+          <Card className="bg-card border-border/40 shadow-sm">
+            <CardContent className="p-3">
+              <p className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground">
                 Next Follow-Up
               </p>
-              <p className="text-lg font-semibold text-foreground mt-1">
+              <p className="text-sm font-semibold text-white mt-1">
                 {profile.nextFollowUp
                   ? new Date(profile.nextFollowUp).toLocaleDateString('en-US', {
                       month: 'short',
@@ -217,142 +209,93 @@ function ContactsPage() {
 
       {/* Call History Table */}
       {profile && (
-        <Card className="flex-1 flex flex-col overflow-hidden min-h-0">
-          <CardHeader className="flex-shrink-0">
-            <CardTitle>Call History</CardTitle>
-            <CardDescription>
-              All calls linked to {formatPhoneNumber(profile.phoneNumber)}
-            </CardDescription>
+        <Card className="flex-1 flex flex-col overflow-hidden min-h-0 bg-card border-border/40 shadow-sm">
+          <CardHeader className="flex-shrink-0 py-2.5 px-3 border-b border-border/10">
+            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Call Ledger</CardTitle>
+            <CardDescription className="text-[10px]">Recent communications log with this contact</CardDescription>
           </CardHeader>
-          <CardContent className="flex-1 overflow-y-auto min-h-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date/Time</TableHead>
-                  <TableHead>Direction</TableHead>
-                  <TableHead>Source</TableHead>
-                  <TableHead>Duration</TableHead>
-                  <TableHead>Disposition</TableHead>
-                  <TableHead>Notes</TableHead>
-                  <TableHead>Follow-Up</TableHead>
-                  <TableHead>Agent</TableHead>
-                  <TableHead className="text-right">Recording</TableHead>
+          <CardContent className="flex-grow min-h-0 overflow-auto p-0">
+            <Table className="table-dense">
+              <TableHeader className="sticky top-0 bg-background z-10">
+                <TableRow className="border-b border-border/10">
+                  <TableHead className="py-2 px-3">Date</TableHead>
+                  <TableHead className="py-2 px-3">Direction</TableHead>
+                  <TableHead className="py-2 px-3">Agent</TableHead>
+                  <TableHead className="py-2 px-3 text-right">Duration</TableHead>
+                  <TableHead className="py-2 px-3">Disposition</TableHead>
+                  <TableHead className="py-2 px-3">Notes</TableHead>
+                  <TableHead className="py-2 px-3 text-right">Recording</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {profile.calls.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
-                      No calls found for this number
+                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground text-xs">
+                      No calls found for this profile
                     </TableCell>
                   </TableRow>
                 ) : (
                   profile.calls.map(call => (
-                    <TableRow key={call.id}>
-                      <TableCell className="font-mono text-xs">
+                    <TableRow key={call.id} className="hover:bg-muted/30 border-b border-border/10 text-white">
+                      <TableCell className="py-2 px-3 font-mono text-[10px] text-muted-foreground">
                         {new Date(call.createdAt).toLocaleString('en-US', {
                           month: 'short',
                           day: 'numeric',
                           hour: '2-digit',
                           minute: '2-digit',
+                          hour12: false,
                         })}
                       </TableCell>
-                      <TableCell>
-                        {call.direction === 'INBOUND' ? (
-                          <span className="inline-flex items-center gap-1 text-xs text-blue-400">
-                            <ArrowDownLeft className="h-3 w-3" /> IN
+                      <TableCell className="py-2 px-3">
+                        {call.direction === 'OUTBOUND' ? (
+                          <span className="flex items-center gap-1 text-[10px] text-amber-400">
+                            Outbound
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 text-xs text-emerald-400">
-                            <ArrowUpRight className="h-3 w-3" /> OUT
+                          <span className="flex items-center gap-1 text-[10px] text-emerald-400">
+                            Inbound
                           </span>
                         )}
                       </TableCell>
-                      <TableCell>
-                        {call.callSource ? (
-                          <span className="text-xs font-mono text-muted-foreground uppercase tracking-widest">
-                            {CALL_SOURCE_LABELS[
-                              call.callSource as keyof typeof CALL_SOURCE_LABELS
-                            ] || call.callSource}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground/50">—</span>
-                        )}
+                      <TableCell className="py-2 px-3 text-xs">
+                        {call.createdBy
+                          ? `${call.createdBy.firstName || ''} ${call.createdBy.lastName || ''}`.trim()
+                          : 'System'}
                       </TableCell>
-                      <TableCell>{call.duration ? formatDuration(call.duration) : '—'}</TableCell>
-                      <TableCell>
+                      <TableCell className="py-2 px-3 text-right font-mono text-[10px]">
+                        {call.duration ? formatDuration(call.duration) : '—'}
+                      </TableCell>
+                      <TableCell className="py-2 px-3">
                         {call.disposition ? (
                           <Badge
                             variant="outline"
-                            className={
-                              DISPOSITION_COLORS[
-                                call.disposition as keyof typeof DISPOSITION_COLORS
-                              ] || 'bg-secondary text-muted-foreground border-border'
-                            }
+                            className={cn(
+                              'text-[8px] px-1 py-0 border-none',
+                              DISPOSITION_COLORS[call.disposition] || 'bg-slate-500/10 text-slate-400'
+                            )}
                           >
-                            {getDispositionLabel(call.disposition)}
+                            {DISPOSITION_LABELS[call.disposition] || call.disposition}
                           </Badge>
                         ) : (
-                          <span className="text-xs text-muted-foreground/50">—</span>
+                          <span className="text-[10px] text-muted-foreground">—</span>
                         )}
                       </TableCell>
-                      <TableCell className="max-w-[200px]">
-                        {call.dispositionNotes ? (
-                          <span
-                            className="text-xs text-muted-foreground truncate block"
-                            title={call.dispositionNotes}
+                      <TableCell className="py-2 px-3 max-w-[200px] truncate text-[10px] text-muted-foreground" title={call.dispositionNotes || ''}>
+                        {call.dispositionNotes || '—'}
+                      </TableCell>
+                      <TableCell className="py-2 px-3 text-right">
+                        {call.recordingUrl ? (
+                          <a
+                            href={call.recordingUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
                           >
-                            {call.dispositionNotes}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground/50">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {call.followUpAt ? (
-                          <div className="text-xs">
-                            <span className="font-mono">
-                              {new Date(call.followUpAt).toLocaleDateString('en-US', {
-                                month: 'short',
-                                day: 'numeric',
-                              })}
-                            </span>
-                            {call.followUpStatus === 'PENDING' && (
-                              <Badge
-                                variant="outline"
-                                className="ml-1 bg-amber-500/10 text-amber-400 border-amber-500/30 text-[10px]"
-                              >
-                                Pending
-                              </Badge>
-                            )}
-                            {call.followUpStatus === 'COMPLETED' && (
-                              <Badge
-                                variant="outline"
-                                className="ml-1 bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[10px]"
-                              >
-                                Done
-                              </Badge>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground/50">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {call.createdBy
-                          ? `${call.createdBy.firstName || ''} ${call.createdBy.lastName || ''}`.trim() ||
-                            '—'
-                          : '—'}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {call.recordingStatus === 'READY' && call.recordingUrl ? (
-                          <a href={call.recordingUrl} target="_blank" rel="noopener noreferrer">
-                            <Button variant="ghost" size="sm">
-                              <Play className="h-4 w-4" />
+                            <Button size="icon" variant="ghost" className="h-6 w-6">
+                              <Play className="h-3.5 w-3.5" />
                             </Button>
                           </a>
                         ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
+                          <span className="text-[10px] text-muted-foreground">—</span>
                         )}
                       </TableCell>
                     </TableRow>
@@ -363,7 +306,7 @@ function ContactsPage() {
           </CardContent>
         </Card>
       )}
-    </div>
+    </CompactPageShell>
   );
 }
 
@@ -374,4 +317,3 @@ export default function GuardedContactsPage() {
     </RoleGuard>
   );
 }
-
