@@ -211,17 +211,27 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       const { userId, tenantId } = getUser(request);
 
       if (userId === 'demo-agent') {
-        return { numbers: [{ id: 'demo-1', number: '12816991120', provider: 'local' }] };
+        return {
+          numbers: [
+            { id: 'demo-1', number: '12816991120', provider: 'local' },
+            { id: 'demo-2', number: '12816991121', provider: 'local' },
+            { id: 'demo-3', number: '12816991122', provider: 'local' },
+          ],
+        };
       }
 
       const prisma = getPrismaClient();
 
-      // First try numbers assigned directly to this user
-      let numbers = await prisma.phoneNumber.findMany({
+      // Fetch all active numbers that are either assigned directly to this user
+      // or are tenant-wide / unassigned (userId: null) so they can be selected.
+      const numbers = await prisma.phoneNumber.findMany({
         where: {
           tenantId,
-          userId,
           status: 'ACTIVE',
+          OR: [
+            { userId },
+            { userId: null },
+          ],
         },
         select: {
           id: true,
@@ -231,24 +241,6 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
         },
         orderBy: { purchasedAt: 'asc' },
       });
-
-      // If user has no directly assigned numbers, show all tenant numbers
-      // so every agent in the call center can use the company's DIDs
-      if (numbers.length === 0) {
-        numbers = await prisma.phoneNumber.findMany({
-          where: {
-            tenantId,
-            status: 'ACTIVE',
-          },
-          select: {
-            id: true,
-            number: true,
-            provider: true,
-            purchasedAt: true,
-          },
-          orderBy: { purchasedAt: 'asc' },
-        });
-      }
 
       return { numbers };
     }

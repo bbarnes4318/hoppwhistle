@@ -732,16 +732,6 @@ function CallerIdSelector(): JSX.Element | null {
 
   if (userNumbers.length === 0) return null;
 
-  if (userNumbers.length === 1) {
-    return (
-      <div className="flex items-center gap-2 px-3 py-2 mb-2 rounded-lg bg-white/5 border border-white/10">
-        <Phone className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
-        <span className="text-xs text-gray-400">Calling from:</span>
-        <span className="text-xs text-white font-medium">{formatPhone(userNumbers[0].number)}</span>
-      </div>
-    );
-  }
-
   return (
     <div className="mb-2">
       <label className="flex items-center gap-2 text-xs text-gray-400 mb-1.5">
@@ -759,7 +749,7 @@ function CallerIdSelector(): JSX.Element | null {
         )}
       >
         {userNumbers.map(num => (
-          <option key={num.id} value={num.number}>
+          <option key={num.id} value={num.number} className="bg-slate-900 text-white">
             {formatPhone(num.number)}
           </option>
         ))}
