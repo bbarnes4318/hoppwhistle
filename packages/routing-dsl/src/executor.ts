@@ -440,13 +440,14 @@ function executeHangupNode(node: HangupNode, context: ExecutionContext): Executi
  */
 function evaluateCondition(condition: string, context: ExecutionContext): boolean {
   // Simple variable substitution: ${variable.name}
-  const evaluated = condition.replace(/\$\{([^}]+)\}/g, (_, varPath) => {
+  const evaluated = condition.replace(/\$\{([^}]+)\}/g, (_: string, varPath: string) => {
     const parts = varPath.split('.');
     let value: unknown = context.variables;
 
     for (const part of parts) {
       if (value && typeof value === 'object' && part in value) {
-        value = (value as Record<string, unknown>)[part];
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        value = (value as Record<string, any>)[part];
       } else {
         return '';
       }
@@ -479,7 +480,7 @@ function selectBuyer(
       // Simple round-robin (in production, track state)
       return buyers[0];
 
-    case 'weighted':
+    case 'weighted': {
       // Weighted random selection
       const totalWeight = buyers.reduce((sum, b) => sum + b.weight, 0);
       let random = Math.random() * totalWeight;
@@ -490,6 +491,7 @@ function selectBuyer(
         }
       }
       return buyers[0];
+    }
 
     case 'least-calls':
       // Select buyer with least calls (in production, track call counts)

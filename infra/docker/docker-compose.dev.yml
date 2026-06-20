@@ -278,7 +278,7 @@ services:
     ports:
       - '22222:22222/udp'
       - '22222:22222/tcp'
-      - '10000-20000:10000-20000/udp'
+      - '10000-10100:10000-10100/udp'
     environment:
       RTPENGINE_INTERFACE: ${RTPENGINE_INTERFACE:-auto}
       PUBLIC_IP: ${PUBLIC_IP}
