@@ -51,7 +51,7 @@ export interface AdaptedNode {
 // Helper to adapt script nodes to IntegratedScriptPanel format
 export const adaptNodeForComponent = (
   node: ScriptNode,
-  formData: Record<string, unknown>
+  _formData: Record<string, unknown>
 ): AdaptedNode | null => {
   if (!node) return null;
 

@@ -1,5 +1,6 @@
 'use client';
 
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   aggregateByAreaCode,
   aggregateByState,
@@ -22,12 +23,11 @@ import {
   Plus,
   Minus
 } from 'lucide-react';
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+
+import { cn } from '@/lib/utils';
 
 import { generateMusicCampaignGeoMetrics, musicCampaigns } from '../data/music-campaign-geo-metrics';
 import { formatCompactNumber, formatCurrency } from '../lib/utils';
-
-import { cn } from '@/lib/utils';
 
 // Client-only lazy loaders for map dependencies to ensure Next.js SSR builds don't crash
 let DeckGL: any = null;

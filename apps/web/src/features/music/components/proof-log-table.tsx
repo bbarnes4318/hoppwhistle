@@ -3,13 +3,13 @@
 import { CheckCircle2, Clock, FileText, Mic } from 'lucide-react';
 import { useState } from 'react';
 
+import { cn } from '@/lib/utils';
+
 import {
   formatDurationMmSs,
   outcomeLabel,
 } from '../lib/utils';
 import type { ProofRecord } from '../types';
-
-import { cn } from '@/lib/utils';
 
 interface ProofLogTableProps {
   records: ProofRecord[];

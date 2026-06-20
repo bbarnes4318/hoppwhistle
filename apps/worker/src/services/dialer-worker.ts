@@ -21,7 +21,7 @@ const FREESWITCH_ESL_PASSWORD = process.env.FREESWITCH_ESL_PASSWORD || 'ClueCon'
 const MAX_CONCURRENT_CALLS = parseInt(process.env.MAX_CONCURRENT_CALLS || '10', 10);
 const DIALER_POLL_INTERVAL_MS = parseInt(process.env.DIALER_POLL_INTERVAL_MS || '1000', 10);
 const DIALER_BATCH_SIZE = parseInt(process.env.DIALER_BATCH_SIZE || '50', 10);
-const OUTBOUND_CALLER_ID = process.env.OUTBOUND_CALLER_ID || '+18652809894';
+// const OUTBOUND_CALLER_ID = process.env.OUTBOUND_CALLER_ID || '+18652809894';
 const SOCKET_LISTENER_HOST = process.env.SOCKET_LISTENER_HOST || '127.0.0.1';
 const SOCKET_LISTENER_PORT = process.env.SOCKET_LISTENER_PORT || '8021';
 
@@ -66,12 +66,19 @@ interface LeadRow {
   campaign_name: string;
 }
 
+interface FreeSwitchESLConnection {
+  disconnect(): void;
+  on(event: string, callback: (...args: unknown[]) => void): this;
+  api(command: string, args: string, callback: (res: ApiResponse) => void): void;
+  bgapi(command: string, callback: (res: ApiResponse) => void): void;
+}
+
 export class DialerWorker {
   private prisma: PrismaClient;
   private redis: Redis | null = null;
   private isRunning = false;
   private intervalId: NodeJS.Timeout | null = null;
-  private eslConnection: any | null = null; // using any for ESLConnection instance to avoid type conflicts
+  private eslConnection: FreeSwitchESLConnection | null = null;
   private currentActiveCalls = 0;
   private redisEnabled = false;
 
@@ -176,10 +183,11 @@ export class DialerWorker {
           FREESWITCH_HOST,
           FREESWITCH_ESL_PORT,
           FREESWITCH_ESL_PASSWORD
-        );
+        ) as unknown as FreeSwitchESLConnection;
 
-        this.eslConnection.on('error', (err: Error) => {
-          logger.error({ msg: 'ESL connection error', error: err.message });
+        this.eslConnection.on('error', (...args: unknown[]) => {
+          const err = args[0] as Error;
+          logger.error({ msg: 'ESL connection error', error: err?.message || 'Unknown ESL error' });
           this.eslConnection = null;
         });
 

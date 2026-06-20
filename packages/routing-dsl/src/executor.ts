@@ -446,8 +446,7 @@ function evaluateCondition(condition: string, context: ExecutionContext): boolea
 
     for (const part of parts) {
       if (value && typeof value === 'object' && part in value) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-        value = (value as Record<string, any>)[part];
+        value = (value as Record<string, unknown>)[part];
       } else {
         return '';
       }

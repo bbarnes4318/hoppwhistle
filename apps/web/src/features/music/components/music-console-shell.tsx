@@ -3,10 +3,10 @@
 import { usePathname } from 'next/navigation';
 import React from 'react';
 
+import { cn } from '@/lib/utils';
+
 import { MusicAuthGuard } from './music-auth-guard';
 import { MusicSidebar } from './music-sidebar';
-
-import { cn } from '@/lib/utils';
 
 export function MusicConsoleShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
