@@ -127,7 +127,7 @@
       <condition field="destination_number" expression="^\+?1?([2-9]\d{9})$">
         <action application="set" data="continue_on_fail=true"/>
         <action application="set" data="fail_on_single_reject=false"/>
-        <action application="bridge" data="sofia/gateway/bulkvs/1$1|sofia/gateway/signalwire/1$1|sofia/gateway/telnyx/1$1"/>
+        <action application="bridge" data="sofia/gateway/signalwire/1$1|sofia/gateway/telnyx/1$1|sofia/gateway/bulkvs/1$1"/>
         <action application="hangup" data="NORMAL_CLEARING"/>
       </condition>
     </extension>
