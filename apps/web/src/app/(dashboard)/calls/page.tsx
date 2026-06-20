@@ -1,10 +1,6 @@
 'use client';
 
 import {
-  CALL_SOURCE_LABELS,
-} from '@hopwhistle/shared';
-import {
-  Calendar,
   Download,
   Loader2,
   Play,
@@ -13,14 +9,8 @@ import {
   Volume2,
   AlertCircle,
   Clock,
-  Coins,
-  TrendingUp,
-  FileText,
-  User,
   Activity,
   History,
-  Scale,
-  ShieldAlert,
   ArrowRightLeft,
   X,
 } from 'lucide-react';
@@ -28,7 +18,8 @@ import { useCallback, useEffect, useState, useRef } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -37,13 +28,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { toast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
 import { formatDuration, formatPhoneNumber } from '@/lib/utils';
-import { toast } from '@/components/ui/use-toast';
-import { Dialog, DialogContent, DialogHeader } from '@/components/ui/dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface CallRecord {
   id: string;
@@ -151,12 +148,12 @@ interface CallDetail extends CallRecord {
 
 export default function OperationsCallLogsPage() {
   const { user, isAdmin, isOwner } = useAuth();
-  
+
   const isAgent = user?.roles.includes('AGENT');
   const isFinance = user?.roles.includes('FINANCE');
   const isBuyer = user?.roles.includes('BUYER');
   const isPublisher = user?.roles.includes('PUBLISHER');
-  
+
   const isAdminOrOwner = isAdmin || isOwner;
   const canSeeFinance = isAdminOrOwner || isFinance;
 
@@ -167,12 +164,12 @@ export default function OperationsCallLogsPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  
+
   // Filter parameters
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [publishers, setPublishers] = useState<any[]>([]);
   const [buyers, setBuyers] = useState<any[]>([]);
-  
+
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>('all');
   const [selectedPublisherId, setSelectedPublisherId] = useState<string>('all');
   const [selectedBuyerId, setSelectedBuyerId] = useState<string>('all');
@@ -260,18 +257,25 @@ export default function OperationsCallLogsPage() {
   useEffect(() => {
     const loadFilters = async () => {
       try {
-        const campRes = await apiClient.get<any[]>('/api/v1/campaigns');
-        if (campRes.data) setCampaigns(campRes.data);
+        const campRes = await apiClient.get<any>('/api/v1/campaigns');
+        if (campRes.data) {
+          const list = Array.isArray(campRes.data) ? campRes.data : campRes.data.data || [];
+          setCampaigns(list);
+        }
 
         if (isAdminOrOwner) {
           const pubRes = await apiClient.get<any>('/api/v1/publishers');
           if (pubRes.data) {
-            const list = Array.isArray(pubRes.data) ? pubRes.data : (pubRes.data.publishers || pubRes.data.data || []);
+            const list = Array.isArray(pubRes.data)
+              ? pubRes.data
+              : pubRes.data.publishers || pubRes.data.data || [];
             setPublishers(list);
           }
           const buyRes = await apiClient.get<any>('/api/v1/buyers');
           if (buyRes.data) {
-            const list = Array.isArray(buyRes.data) ? buyRes.data : (buyRes.data.buyers || buyRes.data.data || []);
+            const list = Array.isArray(buyRes.data)
+              ? buyRes.data
+              : buyRes.data.buyers || buyRes.data.data || [];
             setBuyers(list);
           }
         }
@@ -336,7 +340,17 @@ export default function OperationsCallLogsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, datePreset, fromDate, toDate, selectedCampaignId, selectedPublisherId, selectedBuyerId, selectedDisputeStatus]);
+  }, [
+    page,
+    search,
+    datePreset,
+    fromDate,
+    toDate,
+    selectedCampaignId,
+    selectedPublisherId,
+    selectedBuyerId,
+    selectedDisputeStatus,
+  ]);
 
   useEffect(() => {
     void fetchCalls();
@@ -349,7 +363,7 @@ export default function OperationsCallLogsPage() {
       if (search.trim()) {
         queryParams.append('search', search.trim());
       }
-      
+
       let startIso = '';
       let endIso = '';
       if (datePreset !== 'All Time' && datePreset !== 'Custom') {
@@ -367,7 +381,8 @@ export default function OperationsCallLogsPage() {
       if (selectedCampaignId !== 'all') queryParams.append('campaignId', selectedCampaignId);
       if (selectedPublisherId !== 'all') queryParams.append('publisherId', selectedPublisherId);
       if (selectedBuyerId !== 'all') queryParams.append('buyerId', selectedBuyerId);
-      if (selectedDisputeStatus !== 'all') queryParams.append('disputeStatus', selectedDisputeStatus);
+      if (selectedDisputeStatus !== 'all')
+        queryParams.append('disputeStatus', selectedDisputeStatus);
 
       const headers: HeadersInit = {};
       const storedToken = localStorage.getItem('token');
@@ -375,7 +390,10 @@ export default function OperationsCallLogsPage() {
         headers['Authorization'] = `Bearer ${storedToken}`;
       }
 
-      const apiBaseUrl = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001');
+      const apiBaseUrl =
+        typeof window !== 'undefined'
+          ? window.location.origin
+          : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
       const url = `${apiBaseUrl.replace(/\/$/, '')}/api/v1/calls/export.csv?${queryParams.toString()}`;
 
       const res = await fetch(url, { method: 'GET', headers });
@@ -385,7 +403,10 @@ export default function OperationsCallLogsPage() {
       const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = downloadUrl;
-      link.setAttribute('download', `call-operations-export-${new Date().toISOString().slice(0,10)}.csv`);
+      link.setAttribute(
+        'download',
+        `call-operations-export-${new Date().toISOString().slice(0, 10)}.csv`
+      );
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -419,11 +440,16 @@ export default function OperationsCallLogsPage() {
   const handlePlayRecording = async (recordingId: string) => {
     setAudioLoading(true);
     try {
-      const response = await apiClient.get<{ url: string }>(`/api/v1/recordings/${recordingId}/url`);
+      const response = await apiClient.get<{ url: string }>(
+        `/api/v1/recordings/${recordingId}/url`
+      );
       if (response.data?.url) {
         let playableUrl = response.data.url;
         if (playableUrl.startsWith('/')) {
-          const apiBaseUrl = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001');
+          const apiBaseUrl =
+            typeof window !== 'undefined'
+              ? window.location.origin
+              : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
           playableUrl = `${apiBaseUrl.replace(/\/$/, '')}${playableUrl}`;
         }
         setAudioUrl(playableUrl);
@@ -431,7 +457,7 @@ export default function OperationsCallLogsPage() {
         setTimeout(() => {
           if (audioRef.current) {
             audioRef.current.load();
-            audioRef.current.play();
+            void audioRef.current.play();
           }
         }, 50);
       }
@@ -447,12 +473,27 @@ export default function OperationsCallLogsPage() {
     const s = status || 'PENDING';
     switch (s.toUpperCase()) {
       case 'CHARGED':
-        return <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30">Charged</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+          >
+            Charged
+          </Badge>
+        );
       case 'NOT_BILLABLE':
-        return <Badge variant="outline" className="bg-slate-500/15 text-gray-500 border-slate-500/30">Not Billable</Badge>;
+        return (
+          <Badge variant="outline" className="bg-slate-500/15 text-gray-500 border-slate-500/30">
+            Not Billable
+          </Badge>
+        );
       case 'PENDING':
       default:
-        return <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border-amber-500/30">Pending</Badge>;
+        return (
+          <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border-amber-500/30">
+            Pending
+          </Badge>
+        );
     }
   };
 
@@ -460,14 +501,33 @@ export default function OperationsCallLogsPage() {
     const s = status || 'PENDING';
     switch (s.toUpperCase()) {
       case 'PAID':
-        return <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30">Paid</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+          >
+            Paid
+          </Badge>
+        );
       case 'PAYABLE':
-        return <Badge variant="outline" className="bg-cyan-500/10 text-cyan-400 border-cyan-500/30">Payable</Badge>;
+        return (
+          <Badge variant="outline" className="bg-cyan-500/10 text-cyan-400 border-cyan-500/30">
+            Payable
+          </Badge>
+        );
       case 'NOT_PAYABLE':
-        return <Badge variant="outline" className="bg-slate-500/15 text-gray-500 border-slate-500/30">Not Payable</Badge>;
+        return (
+          <Badge variant="outline" className="bg-slate-500/15 text-gray-500 border-slate-500/30">
+            Not Payable
+          </Badge>
+        );
       case 'PENDING':
       default:
-        return <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border-amber-500/30">Pending</Badge>;
+        return (
+          <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border-amber-500/30">
+            Pending
+          </Badge>
+        );
     }
   };
 
@@ -475,12 +535,30 @@ export default function OperationsCallLogsPage() {
     if (!status) return null;
     switch (status.toUpperCase()) {
       case 'RESOLVED':
-        return <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30">Disputed - Resolved</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+          >
+            Disputed - Resolved
+          </Badge>
+        );
       case 'PENDING':
       case 'UNDER_REVIEW':
-        return <Badge variant="outline" className="bg-rose-500/10 text-rose-400 border-rose-500/30 animate-pulse">Disputed - Review</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-rose-500/10 text-rose-400 border-rose-500/30 animate-pulse"
+          >
+            Disputed - Review
+          </Badge>
+        );
       default:
-        return <Badge variant="outline" className="bg-rose-500/10 text-rose-400 border-rose-500/30">{status}</Badge>;
+        return (
+          <Badge variant="outline" className="bg-rose-500/10 text-rose-400 border-rose-500/30">
+            {status}
+          </Badge>
+        );
     }
   };
 
@@ -529,7 +607,13 @@ export default function OperationsCallLogsPage() {
 
           {/* Dispute filter */}
           <div>
-            <Select value={selectedDisputeStatus} onValueChange={val => { setSelectedDisputeStatus(val); setPage(1); }}>
+            <Select
+              value={selectedDisputeStatus}
+              onValueChange={val => {
+                setSelectedDisputeStatus(val);
+                setPage(1);
+              }}
+            >
               <SelectTrigger className="bg-white/5 border-white/10 text-white">
                 <SelectValue placeholder="Dispute Status" />
               </SelectTrigger>
@@ -545,14 +629,22 @@ export default function OperationsCallLogsPage() {
 
           {/* Campaign Filter */}
           <div>
-            <Select value={selectedCampaignId} onValueChange={val => { setSelectedCampaignId(val); setPage(1); }}>
+            <Select
+              value={selectedCampaignId}
+              onValueChange={val => {
+                setSelectedCampaignId(val);
+                setPage(1);
+              }}
+            >
               <SelectTrigger className="bg-white/5 border-white/10 text-white">
                 <SelectValue placeholder="All Campaigns" />
               </SelectTrigger>
               <SelectContent className="bg-slate-900 border-white/10 text-white">
                 <SelectItem value="all">All Campaigns</SelectItem>
                 {campaigns.map(c => (
-                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -561,14 +653,22 @@ export default function OperationsCallLogsPage() {
           {/* Publisher Filter (Admin only) */}
           {isAdminOrOwner && (
             <div>
-              <Select value={selectedPublisherId} onValueChange={val => { setSelectedPublisherId(val); setPage(1); }}>
+              <Select
+                value={selectedPublisherId}
+                onValueChange={val => {
+                  setSelectedPublisherId(val);
+                  setPage(1);
+                }}
+              >
                 <SelectTrigger className="bg-white/5 border-white/10 text-white">
                   <SelectValue placeholder="All Publishers" />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-900 border-white/10 text-white">
                   <SelectItem value="all">All Publishers</SelectItem>
                   {publishers.map(p => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -578,14 +678,22 @@ export default function OperationsCallLogsPage() {
           {/* Buyer Filter (Admin only) */}
           {isAdminOrOwner && (
             <div>
-              <Select value={selectedBuyerId} onValueChange={val => { setSelectedBuyerId(val); setPage(1); }}>
+              <Select
+                value={selectedBuyerId}
+                onValueChange={val => {
+                  setSelectedBuyerId(val);
+                  setPage(1);
+                }}
+              >
                 <SelectTrigger className="bg-white/5 border-white/10 text-white">
                   <SelectValue placeholder="All Buyers" />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-900 border-white/10 text-white">
                   <SelectItem value="all">All Buyers</SelectItem>
                   {buyers.map(b => (
-                    <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                    <SelectItem key={b.id} value={b.id}>
+                      {b.name}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -616,14 +724,20 @@ export default function OperationsCallLogsPage() {
               <Input
                 type="date"
                 value={fromDate}
-                onChange={e => { setFromDate(e.target.value); setPage(1); }}
+                onChange={e => {
+                  setFromDate(e.target.value);
+                  setPage(1);
+                }}
                 className="bg-white/5 border-white/10 text-white"
               />
               <span className="text-gray-500 text-xs">to</span>
               <Input
                 type="date"
                 value={toDate}
-                onChange={e => { setToDate(e.target.value); setPage(1); }}
+                onChange={e => {
+                  setToDate(e.target.value);
+                  setPage(1);
+                }}
                 className="bg-white/5 border-white/10 text-white"
               />
             </div>
@@ -639,23 +753,43 @@ export default function OperationsCallLogsPage() {
               <TableHeader>
                 <TableRow className="border-white/10 hover:bg-transparent">
                   <TableHead className="text-gray-400 font-medium pl-6">Time</TableHead>
-                  {isAdminOrOwner && <TableHead className="text-gray-400 font-medium">Publisher</TableHead>}
-                  {isAdminOrOwner && <TableHead className="text-gray-400 font-medium">Buyer</TableHead>}
+                  {isAdminOrOwner && (
+                    <TableHead className="text-gray-400 font-medium">Publisher</TableHead>
+                  )}
+                  {isAdminOrOwner && (
+                    <TableHead className="text-gray-400 font-medium">Buyer</TableHead>
+                  )}
                   <TableHead className="text-gray-400 font-medium">Campaign</TableHead>
                   <TableHead className="text-gray-400 font-medium">Caller ID</TableHead>
-                  {!isBuyer && <TableHead className="text-gray-400 font-medium">DID (DNIS)</TableHead>}
-                  {!isPublisher && <TableHead className="text-gray-400 font-medium">Destination</TableHead>}
+                  {!isBuyer && (
+                    <TableHead className="text-gray-400 font-medium">DID (DNIS)</TableHead>
+                  )}
+                  {!isPublisher && (
+                    <TableHead className="text-gray-400 font-medium">Destination</TableHead>
+                  )}
                   <TableHead className="text-gray-400 font-medium">Duration</TableHead>
                   <TableHead className="text-gray-400 font-medium">Connected</TableHead>
                   <TableHead className="text-gray-400 font-medium">Billable</TableHead>
                   {/* Financial Fields */}
-                  {(!isPublisher && !isAgent) && <TableHead className="text-gray-400 font-medium text-right">Charge</TableHead>}
-                  {(!isBuyer && !isAgent) && <TableHead className="text-gray-400 font-medium text-right">Payout</TableHead>}
-                  {isAdminOrOwner && <TableHead className="text-gray-400 font-medium text-right">Cost</TableHead>}
-                  {isAdminOrOwner && <TableHead className="text-gray-400 font-medium text-right">Profit</TableHead>}
-                  {isAdminOrOwner && <TableHead className="text-gray-400 font-medium text-right">Margin</TableHead>}
+                  {!isPublisher && !isAgent && (
+                    <TableHead className="text-gray-400 font-medium text-right">Charge</TableHead>
+                  )}
+                  {!isBuyer && !isAgent && (
+                    <TableHead className="text-gray-400 font-medium text-right">Payout</TableHead>
+                  )}
+                  {isAdminOrOwner && (
+                    <TableHead className="text-gray-400 font-medium text-right">Cost</TableHead>
+                  )}
+                  {isAdminOrOwner && (
+                    <TableHead className="text-gray-400 font-medium text-right">Profit</TableHead>
+                  )}
+                  {isAdminOrOwner && (
+                    <TableHead className="text-gray-400 font-medium text-right">Margin</TableHead>
+                  )}
                   <TableHead className="text-gray-400 font-medium text-center">Status</TableHead>
-                  <TableHead className="text-gray-400 font-medium text-right pr-6">Action</TableHead>
+                  <TableHead className="text-gray-400 font-medium text-right pr-6">
+                    Action
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -679,7 +813,6 @@ export default function OperationsCallLogsPage() {
                   </TableRow>
                 ) : (
                   calls.map(call => {
-                    const showBuyerDetails = call.buyerName && call.buyerName !== 'Masked';
                     const showToDetails = call.toNumber && call.toNumber !== 'Masked';
 
                     return (
@@ -719,7 +852,11 @@ export default function OperationsCallLogsPage() {
                         )}
                         {!isPublisher && (
                           <TableCell className="font-mono text-xs text-gray-400">
-                            {showToDetails ? formatPhoneNumber(call.toNumber || call.targetNumber || '') : <span className="text-gray-600 italic">Masked</span>}
+                            {showToDetails ? (
+                              formatPhoneNumber(call.toNumber || call.targetNumber || '')
+                            ) : (
+                              <span className="text-gray-600 italic">Masked</span>
+                            )}
                           </TableCell>
                         )}
                         <TableCell className="font-mono text-xs text-gray-300">
@@ -741,14 +878,20 @@ export default function OperationsCallLogsPage() {
                           </Badge>
                         </TableCell>
                         {/* Financial Ledger Columns */}
-                        {(!isPublisher && !isAgent) && (
+                        {!isPublisher && !isAgent && (
                           <TableCell className="text-right font-mono text-xs font-semibold text-white">
-                            {call.buyerBillableAmount !== null && call.buyerBillableAmount !== undefined ? `$${Number(call.buyerBillableAmount).toFixed(2)}` : '—'}
+                            {call.buyerBillableAmount !== null &&
+                            call.buyerBillableAmount !== undefined
+                              ? `$${Number(call.buyerBillableAmount).toFixed(2)}`
+                              : '—'}
                           </TableCell>
                         )}
-                        {(!isBuyer && !isAgent) && (
+                        {!isBuyer && !isAgent && (
                           <TableCell className="text-right font-mono text-xs font-semibold text-emerald-400">
-                            {call.publisherPayoutAmount !== null && call.publisherPayoutAmount !== undefined ? `$${Number(call.publisherPayoutAmount).toFixed(2)}` : '—'}
+                            {call.publisherPayoutAmount !== null &&
+                            call.publisherPayoutAmount !== undefined
+                              ? `$${Number(call.publisherPayoutAmount).toFixed(2)}`
+                              : '—'}
                           </TableCell>
                         )}
                         {isAdminOrOwner && (
@@ -801,7 +944,10 @@ export default function OperationsCallLogsPage() {
                   variant="outline"
                   size="sm"
                   disabled={page === 1}
-                  onClick={(e) => { e.stopPropagation(); setPage(p => Math.max(1, p - 1)); }}
+                  onClick={e => {
+                    e.stopPropagation();
+                    setPage(p => Math.max(1, p - 1));
+                  }}
                   className="bg-white/5 border-white/10 text-white"
                 >
                   Previous
@@ -810,7 +956,10 @@ export default function OperationsCallLogsPage() {
                   variant="outline"
                   size="sm"
                   disabled={page === totalPages}
-                  onClick={(e) => { e.stopPropagation(); setPage(p => Math.min(totalPages, p + 1)); }}
+                  onClick={e => {
+                    e.stopPropagation();
+                    setPage(p => Math.min(totalPages, p + 1));
+                  }}
                   className="bg-white/5 border-white/10 text-white"
                 >
                   Next
@@ -822,7 +971,12 @@ export default function OperationsCallLogsPage() {
       </Card>
 
       {/* Slide-out Call Detail Drawer Dialog */}
-      <Dialog open={!!detailCallId} onOpenChange={(open) => { if (!open) setDetailCallId(null); }}>
+      <Dialog
+        open={!!detailCallId}
+        onOpenChange={open => {
+          if (!open) setDetailCallId(null);
+        }}
+      >
         <DialogContent className="fixed inset-y-0 right-0 z-50 h-full w-full max-w-2xl border-l border-white/10 bg-slate-950 p-0 shadow-2xl transition-all duration-300 ease-in-out text-white">
           <div className="h-full flex flex-col overflow-hidden">
             {/* Header */}
@@ -834,7 +988,9 @@ export default function OperationsCallLogsPage() {
                 </span>
                 <DialogHeader>
                   <h2 className="text-xl font-bold text-white mt-1">
-                    {detailCall ? `Call Detail: ${detailCall.id.slice(0, 8)}...` : 'Loading Call Details...'}
+                    {detailCall
+                      ? `Call Detail: ${detailCall.id.slice(0, 8)}...`
+                      : 'Loading Call Details...'}
                   </h2>
                 </DialogHeader>
               </div>
@@ -862,11 +1018,36 @@ export default function OperationsCallLogsPage() {
               ) : (
                 <Tabs defaultValue="overview" className="w-full h-full flex flex-col">
                   <TabsList className="bg-white/5 border border-white/10 w-full grid grid-cols-5 p-1 mb-6 flex-shrink-0">
-                    <TabsTrigger value="overview" className="text-xs data-[state=active]:bg-cyan-600 data-[state=active]:text-white">Overview</TabsTrigger>
-                    <TabsTrigger value="timeline" className="text-xs data-[state=active]:bg-cyan-600 data-[state=active]:text-white">Timeline</TabsTrigger>
-                    <TabsTrigger value="billing" className="text-xs data-[state=active]:bg-cyan-600 data-[state=active]:text-white">Billing</TabsTrigger>
-                    <TabsTrigger value="rtb" className="text-xs data-[state=active]:bg-cyan-600 data-[state=active]:text-white">Ping/Post</TabsTrigger>
-                    <TabsTrigger value="admin" className="text-xs data-[state=active]:bg-cyan-600 data-[state=active]:text-white">Ledger</TabsTrigger>
+                    <TabsTrigger
+                      value="overview"
+                      className="text-xs data-[state=active]:bg-cyan-600 data-[state=active]:text-white"
+                    >
+                      Overview
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="timeline"
+                      className="text-xs data-[state=active]:bg-cyan-600 data-[state=active]:text-white"
+                    >
+                      Timeline
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="billing"
+                      className="text-xs data-[state=active]:bg-cyan-600 data-[state=active]:text-white"
+                    >
+                      Billing
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="rtb"
+                      className="text-xs data-[state=active]:bg-cyan-600 data-[state=active]:text-white"
+                    >
+                      Ping/Post
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="admin"
+                      className="text-xs data-[state=active]:bg-cyan-600 data-[state=active]:text-white"
+                    >
+                      Ledger
+                    </TabsTrigger>
                   </TabsList>
 
                   {/* TAB 1: OVERVIEW */}
@@ -884,7 +1065,9 @@ export default function OperationsCallLogsPage() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => void handlePlayRecording(detailCall.primaryRecordingId || '')}
+                            onClick={() =>
+                              void handlePlayRecording(detailCall.primaryRecordingId || '')
+                            }
                             disabled={audioLoading}
                             className="bg-cyan-600 hover:bg-cyan-500 text-white font-medium border-none flex-shrink-0 h-9 w-9 p-0 rounded-full"
                           >
@@ -914,53 +1097,81 @@ export default function OperationsCallLogsPage() {
                     {/* Metadata grids */}
                     <div className="grid grid-cols-2 gap-4">
                       <div className="bg-white/5 border border-white/10 rounded-lg p-3 space-y-1">
-                        <span className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">Caller Number</span>
-                        <p className="font-mono text-sm font-semibold">{detailCall.callerId ? formatPhoneNumber(detailCall.callerId) : '—'}</p>
+                        <span className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">
+                          Caller Number
+                        </span>
+                        <p className="font-mono text-sm font-semibold">
+                          {detailCall.callerId ? formatPhoneNumber(detailCall.callerId) : '—'}
+                        </p>
                       </div>
                       <div className="bg-white/5 border border-white/10 rounded-lg p-3 space-y-1">
-                        <span className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">Destination Number</span>
+                        <span className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">
+                          Destination Number
+                        </span>
                         <p className="font-mono text-sm font-semibold">
-                          {detailCall.toNumber && detailCall.toNumber !== 'Masked' ? formatPhoneNumber(detailCall.toNumber) : 'Masked'}
+                          {detailCall.toNumber && detailCall.toNumber !== 'Masked'
+                            ? formatPhoneNumber(detailCall.toNumber)
+                            : 'Masked'}
                         </p>
                       </div>
                     </div>
 
                     <div className="grid grid-cols-3 gap-4">
                       <div className="bg-white/5 border border-white/10 rounded-lg p-3 space-y-0.5">
-                        <span className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">Campaign</span>
-                        <p className="text-xs font-semibold text-white truncate">{detailCall.campaignName || '—'}</p>
+                        <span className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">
+                          Campaign
+                        </span>
+                        <p className="text-xs font-semibold text-white truncate">
+                          {detailCall.campaignName || '—'}
+                        </p>
                       </div>
                       <div className="bg-white/5 border border-white/10 rounded-lg p-3 space-y-0.5">
-                        <span className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">Publisher</span>
-                        <p className="text-xs font-semibold text-white truncate">{detailCall.publisherName || '—'}</p>
+                        <span className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">
+                          Publisher
+                        </span>
+                        <p className="text-xs font-semibold text-white truncate">
+                          {detailCall.publisherName || '—'}
+                        </p>
                       </div>
                       <div className="bg-white/5 border border-white/10 rounded-lg p-3 space-y-0.5">
-                        <span className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">Buyer</span>
-                        <p className="text-xs font-semibold text-white truncate">{detailCall.buyerName || '—'}</p>
+                        <span className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">
+                          Buyer
+                        </span>
+                        <p className="text-xs font-semibold text-white truncate">
+                          {detailCall.buyerName || '—'}
+                        </p>
                       </div>
                     </div>
 
                     {/* Financial Performance snapshot */}
                     {canSeeFinance && (
                       <div className="space-y-3">
-                        <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest">Financial Summary</h3>
+                        <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest">
+                          Financial Summary
+                        </h3>
                         <div className="grid grid-cols-3 gap-4">
                           <div className="bg-white/5 border border-white/10 rounded-lg p-3">
                             <span className="text-[10px] text-gray-400">Buyer Charge</span>
                             <p className="text-lg font-bold font-mono text-white mt-1">
-                              {detailCall.buyerBillableAmount !== null ? `$${Number(detailCall.buyerBillableAmount).toFixed(2)}` : '$0.00'}
+                              {detailCall.buyerBillableAmount !== null
+                                ? `$${Number(detailCall.buyerBillableAmount).toFixed(2)}`
+                                : '$0.00'}
                             </p>
                           </div>
                           <div className="bg-white/5 border border-white/10 rounded-lg p-3">
                             <span className="text-[10px] text-gray-400">Publisher Payout</span>
                             <p className="text-lg font-bold font-mono text-emerald-400 mt-1">
-                              {detailCall.publisherPayoutAmount !== null ? `$${Number(detailCall.publisherPayoutAmount).toFixed(2)}` : '$0.00'}
+                              {detailCall.publisherPayoutAmount !== null
+                                ? `$${Number(detailCall.publisherPayoutAmount).toFixed(2)}`
+                                : '$0.00'}
                             </p>
                           </div>
                           <div className="bg-white/5 border border-white/10 rounded-lg p-3">
                             <span className="text-[10px] text-gray-400">Platform Margin</span>
                             <p className="text-lg font-bold font-mono text-cyan-400 mt-1">
-                              {detailCall.margin !== null ? `${Number(detailCall.margin).toFixed(1)}%` : '0.0%'}
+                              {detailCall.margin !== null
+                                ? `${Number(detailCall.margin).toFixed(1)}%`
+                                : '0.0%'}
                             </p>
                           </div>
                         </div>
@@ -969,7 +1180,9 @@ export default function OperationsCallLogsPage() {
 
                     {/* Outcome notes */}
                     <div className="bg-white/5 border border-white/10 rounded-lg p-4 space-y-2">
-                      <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Agent Notes / Outcome</h4>
+                      <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+                        Agent Notes / Outcome
+                      </h4>
                       <p className="text-xs text-gray-300 leading-relaxed font-sans">
                         {detailCall.dispositionNotes || 'No notes were recorded for this call.'}
                       </p>
@@ -978,7 +1191,9 @@ export default function OperationsCallLogsPage() {
 
                   {/* TAB 2: TIMELINE */}
                   <TabsContent value="timeline" className="space-y-4">
-                    <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest mb-4">Call Event Timeline</h3>
+                    <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest mb-4">
+                      Call Event Timeline
+                    </h3>
                     {detailCall.legs && detailCall.legs.length > 0 ? (
                       <div className="relative border-l border-white/10 pl-6 ml-2 space-y-6">
                         {detailCall.legs.map((leg, idx) => (
@@ -989,15 +1204,26 @@ export default function OperationsCallLogsPage() {
                             </span>
                             <div className="space-y-1">
                               <div className="flex items-center gap-2">
-                                <span className="font-semibold text-xs text-white">Leg {idx + 1}: {leg.direction}</span>
-                                <Badge variant="outline" className="bg-cyan-500/10 text-cyan-400 border-cyan-500/30 text-[10px] py-0">
+                                <span className="font-semibold text-xs text-white">
+                                  Leg {idx + 1}: {leg.direction}
+                                </span>
+                                <Badge
+                                  variant="outline"
+                                  className="bg-cyan-500/10 text-cyan-400 border-cyan-500/30 text-[10px] py-0"
+                                >
                                   {leg.status}
                                 </Badge>
                               </div>
                               <div className="text-[10px] text-gray-400 font-mono space-y-0.5">
-                                {leg.startedAt && <p>Initiated: {new Date(leg.startedAt).toLocaleString()}</p>}
-                                {leg.answeredAt && <p>Answered: {new Date(leg.answeredAt).toLocaleString()}</p>}
-                                {leg.endedAt && <p>Ended: {new Date(leg.endedAt).toLocaleString()}</p>}
+                                {leg.startedAt && (
+                                  <p>Initiated: {new Date(leg.startedAt).toLocaleString()}</p>
+                                )}
+                                {leg.answeredAt && (
+                                  <p>Answered: {new Date(leg.answeredAt).toLocaleString()}</p>
+                                )}
+                                {leg.endedAt && (
+                                  <p>Ended: {new Date(leg.endedAt).toLocaleString()}</p>
+                                )}
                                 {leg.duration && <p>Duration: {leg.duration}s</p>}
                               </div>
                             </div>
@@ -1015,29 +1241,43 @@ export default function OperationsCallLogsPage() {
                   {/* TAB 3: BILLING */}
                   <TabsContent value="billing" className="space-y-6">
                     <div className="space-y-4">
-                      <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest">Billing Snapshot Rules</h3>
+                      <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest">
+                        Billing Snapshot Rules
+                      </h3>
                       <div className="bg-white/5 border border-white/10 rounded-lg p-4 space-y-3 text-xs">
                         <div className="grid grid-cols-2 gap-4">
                           <div>
                             <span className="text-gray-400 font-medium">Billable Threshold</span>
-                            <p className="font-bold text-white mt-0.5">{detailCall.billableDurationThreshold ? `${detailCall.billableDurationThreshold} seconds` : '60 seconds (Default)'}</p>
+                            <p className="font-bold text-white mt-0.5">
+                              {detailCall.billableDurationThreshold
+                                ? `${detailCall.billableDurationThreshold} seconds`
+                                : '60 seconds (Default)'}
+                            </p>
                           </div>
                           <div>
                             <span className="text-gray-400 font-medium">Billable Result</span>
-                            <p className="font-bold text-white mt-0.5">{detailCall.billable ? 'Billable' : 'Non-Billable'}</p>
+                            <p className="font-bold text-white mt-0.5">
+                              {detailCall.billable ? 'Billable' : 'Non-Billable'}
+                            </p>
                           </div>
                         </div>
                         <Separator className="bg-white/5" />
                         <div>
                           <span className="text-gray-400 font-medium">Billing Reason</span>
-                          <p className="font-medium text-cyan-400 mt-1 font-sans leading-relaxed">{detailCall.billableReason || '—'}</p>
+                          <p className="font-medium text-cyan-400 mt-1 font-sans leading-relaxed">
+                            {detailCall.billableReason || '—'}
+                          </p>
                         </div>
                         {detailCall.noPayoutReason && (
                           <>
                             <Separator className="bg-white/5" />
                             <div>
-                              <span className="text-rose-400 font-medium">Payout Denied Reason</span>
-                              <p className="font-medium text-rose-300 mt-0.5 font-mono">{detailCall.noPayoutReason}</p>
+                              <span className="text-rose-400 font-medium">
+                                Payout Denied Reason
+                              </span>
+                              <p className="font-medium text-rose-300 mt-0.5 font-mono">
+                                {detailCall.noPayoutReason}
+                              </p>
                             </div>
                           </>
                         )}
@@ -1047,23 +1287,37 @@ export default function OperationsCallLogsPage() {
                     {/* Accruals ledger lists (Admin only) */}
                     {isAdminOrOwner && (
                       <div className="space-y-3">
-                        <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest">Accruals Ledger Entries</h3>
+                        <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest">
+                          Accruals Ledger Entries
+                        </h3>
                         {detailCall.accruals && detailCall.accruals.length > 0 ? (
                           <div className="border border-white/10 rounded-lg overflow-hidden">
                             <Table>
                               <TableHeader className="bg-white/5">
                                 <TableRow>
-                                  <TableHead className="text-gray-400 text-[10px] font-bold">Type</TableHead>
-                                  <TableHead className="text-gray-400 text-[10px] font-bold">Description</TableHead>
-                                  <TableHead className="text-gray-400 text-[10px] font-bold text-right">Amount</TableHead>
+                                  <TableHead className="text-gray-400 text-[10px] font-bold">
+                                    Type
+                                  </TableHead>
+                                  <TableHead className="text-gray-400 text-[10px] font-bold">
+                                    Description
+                                  </TableHead>
+                                  <TableHead className="text-gray-400 text-[10px] font-bold text-right">
+                                    Amount
+                                  </TableHead>
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
                                 {detailCall.accruals.map(acc => (
                                   <TableRow key={acc.id} className="border-white/5">
-                                    <TableCell className="font-mono text-[10px] text-white uppercase">{acc.type.replace('_', ' ')}</TableCell>
-                                    <TableCell className="text-[10px] text-gray-300">{acc.description}</TableCell>
-                                    <TableCell className={`text-right font-mono text-[10px] font-bold ${acc.type.includes('PAYOUT') ? 'text-emerald-400' : 'text-white'}`}>
+                                    <TableCell className="font-mono text-[10px] text-white uppercase">
+                                      {acc.type.replace('_', ' ')}
+                                    </TableCell>
+                                    <TableCell className="text-[10px] text-gray-300">
+                                      {acc.description}
+                                    </TableCell>
+                                    <TableCell
+                                      className={`text-right font-mono text-[10px] font-bold ${acc.type.includes('PAYOUT') ? 'text-emerald-400' : 'text-white'}`}
+                                    >
                                       ${Number(acc.amount).toFixed(2)}
                                     </TableCell>
                                   </TableRow>
@@ -1080,18 +1334,24 @@ export default function OperationsCallLogsPage() {
 
                   {/* TAB 4: PING/POST BIDS */}
                   <TabsContent value="rtb" className="space-y-6">
-                    <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest">Lead Auction Details</h3>
+                    <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest">
+                      Lead Auction Details
+                    </h3>
                     {detailCall.pingRequest ? (
                       <div className="space-y-4">
                         <div className="bg-white/5 border border-white/10 rounded-lg p-4 space-y-3 text-xs">
                           <div className="grid grid-cols-2 gap-4">
                             <div>
                               <span className="text-gray-400 font-medium">Vertical</span>
-                              <p className="font-bold text-white mt-0.5 uppercase">{detailCall.pingRequest.vertical || '—'}</p>
+                              <p className="font-bold text-white mt-0.5 uppercase">
+                                {detailCall.pingRequest.vertical || '—'}
+                              </p>
                             </div>
                             <div>
                               <span className="text-gray-400 font-medium">Auction Status</span>
-                              <p className="font-bold text-white mt-0.5 uppercase">{detailCall.pingRequest.status || '—'}</p>
+                              <p className="font-bold text-white mt-0.5 uppercase">
+                                {detailCall.pingRequest.status || '—'}
+                              </p>
                             </div>
                           </div>
                           <div>
@@ -1104,21 +1364,31 @@ export default function OperationsCallLogsPage() {
 
                         {/* Bids list */}
                         <div className="space-y-2">
-                          <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Auction Bids</h4>
+                          <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+                            Auction Bids
+                          </h4>
                           {detailCall.pingRequest.bids && detailCall.pingRequest.bids.length > 0 ? (
                             <div className="border border-white/10 rounded-lg overflow-hidden">
                               <Table>
                                 <TableHeader className="bg-white/5">
                                   <TableRow>
-                                    <TableHead className="text-gray-400 text-[10px] font-bold">Buyer</TableHead>
-                                    <TableHead className="text-gray-400 text-[10px] font-bold">Status</TableHead>
-                                    <TableHead className="text-gray-400 text-[10px] font-bold text-right">Bid Amount</TableHead>
+                                    <TableHead className="text-gray-400 text-[10px] font-bold">
+                                      Buyer
+                                    </TableHead>
+                                    <TableHead className="text-gray-400 text-[10px] font-bold">
+                                      Status
+                                    </TableHead>
+                                    <TableHead className="text-gray-400 text-[10px] font-bold text-right">
+                                      Bid Amount
+                                    </TableHead>
                                   </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                   {detailCall.pingRequest.bids.map(bid => (
                                     <TableRow key={bid.id} className="border-white/5">
-                                      <TableCell className="text-[10px] font-semibold text-white">{bid.buyer?.name || 'Unknown'}</TableCell>
+                                      <TableCell className="text-[10px] font-semibold text-white">
+                                        {bid.buyer?.name || 'Unknown'}
+                                      </TableCell>
                                       <TableCell>
                                         <Badge
                                           variant="outline"
@@ -1140,14 +1410,18 @@ export default function OperationsCallLogsPage() {
                               </Table>
                             </div>
                           ) : (
-                            <p className="text-xs text-gray-500 italic">No bids recorded in this auction.</p>
+                            <p className="text-xs text-gray-500 italic">
+                              No bids recorded in this auction.
+                            </p>
                           )}
                         </div>
                       </div>
                     ) : (
                       <div className="flex flex-col items-center justify-center py-12 text-center text-gray-600 gap-1">
                         <ArrowRightLeft className="w-8 h-8" />
-                        <span className="text-xs">Call did not originate from a Ping/Post RTB auction.</span>
+                        <span className="text-xs">
+                          Call did not originate from a Ping/Post RTB auction.
+                        </span>
                       </div>
                     )}
                   </TabsContent>
@@ -1156,7 +1430,9 @@ export default function OperationsCallLogsPage() {
                   <TabsContent value="admin" className="space-y-6">
                     {/* Disputes note */}
                     <div className="space-y-3">
-                      <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest">Dispute Review</h3>
+                      <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest">
+                        Dispute Review
+                      </h3>
                       <div className="bg-white/5 border border-white/10 rounded-lg p-4 space-y-2 text-xs">
                         <div className="flex items-center justify-between">
                           <span className="text-gray-400 font-medium">Dispute Status</span>
@@ -1171,16 +1447,26 @@ export default function OperationsCallLogsPage() {
 
                     {/* Manual Adjustments log */}
                     <div className="space-y-3">
-                      <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest">Manual adjustments history</h3>
+                      <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest">
+                        Manual adjustments history
+                      </h3>
                       {detailCall.buyerTransactions && detailCall.buyerTransactions.length > 0 ? (
                         <div className="border border-white/10 rounded-lg overflow-hidden">
                           <Table>
                             <TableHeader className="bg-white/5">
                               <TableRow>
-                                <TableHead className="text-gray-400 text-[10px] font-bold">Date</TableHead>
-                                <TableHead className="text-gray-400 text-[10px] font-bold">Type</TableHead>
-                                <TableHead className="text-gray-400 text-[10px] font-bold">Description</TableHead>
-                                <TableHead className="text-gray-400 text-[10px] font-bold text-right">Amount</TableHead>
+                                <TableHead className="text-gray-400 text-[10px] font-bold">
+                                  Date
+                                </TableHead>
+                                <TableHead className="text-gray-400 text-[10px] font-bold">
+                                  Type
+                                </TableHead>
+                                <TableHead className="text-gray-400 text-[10px] font-bold">
+                                  Description
+                                </TableHead>
+                                <TableHead className="text-gray-400 text-[10px] font-bold text-right">
+                                  Amount
+                                </TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -1189,8 +1475,12 @@ export default function OperationsCallLogsPage() {
                                   <TableCell className="font-mono text-[9px] text-gray-400">
                                     {new Date(tx.createdAt).toLocaleDateString()}
                                   </TableCell>
-                                  <TableCell className="text-[10px] font-semibold uppercase text-white">{tx.type}</TableCell>
-                                  <TableCell className="text-[10px] text-gray-300">{tx.description}</TableCell>
+                                  <TableCell className="text-[10px] font-semibold uppercase text-white">
+                                    {tx.type}
+                                  </TableCell>
+                                  <TableCell className="text-[10px] text-gray-300">
+                                    {tx.description}
+                                  </TableCell>
                                   <TableCell className="text-right font-mono text-[10px] font-bold text-rose-400">
                                     -${Number(tx.amount).toFixed(2)}
                                   </TableCell>

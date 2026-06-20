@@ -54,7 +54,18 @@ export function Sidebar() {
     // Admin/Owner full navigation
     navItems = [
       { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-      { name: 'AI Voice', href: '/voice-agents', icon: Bot, title: 'AI voice agents & outbound campaigns' },
+      {
+        name: 'Music Console',
+        href: '/music-console',
+        icon: Disc3,
+        title: 'AI-Powered Direct-to-Fan Voice Console',
+      },
+      {
+        name: 'AI Voice',
+        href: '/voice-agents',
+        icon: Bot,
+        title: 'AI voice agents & outbound campaigns',
+      },
       { name: 'Call Center', href: '/call-center', icon: Headphones },
       { name: 'Numbers', href: '/numbers', icon: PhoneCall },
       { name: 'Campaigns', href: '/campaigns', icon: Megaphone },
@@ -75,7 +86,11 @@ export function Sidebar() {
       { name: 'Earnings', href: '/publisher/earnings', icon: Receipt },
     ];
     if (canViewRecordings) {
-      navItems.push({ name: 'Recordings', href: '/publisher/calls?hasRecording=true', icon: Disc3 });
+      navItems.push({
+        name: 'Recordings',
+        href: '/publisher/calls?hasRecording=true',
+        icon: Disc3,
+      });
     }
     navItems.push(
       { name: 'Payouts', href: '/publisher/payouts', icon: DollarSign },
@@ -104,22 +119,16 @@ export function Sidebar() {
     ];
   } else if (isReadonlyOnly) {
     // Readonly navigation
-    navItems = [
-      { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    ];
+    navItems = [{ name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard }];
     if (canViewReports) {
       navItems.push({ name: 'Reports', href: '/reports', icon: BarChart3 });
     }
   } else if (isNewUser) {
     // New user with no assigned role
-    navItems = [
-      { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    ];
+    navItems = [{ name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard }];
   } else {
     // Fallback default
-    navItems = [
-      { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    ];
+    navItems = [{ name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard }];
   }
 
   // Tools Navigation - Admin/Owner Only
@@ -183,7 +192,7 @@ export function Sidebar() {
           </div>
         )}
 
-        {navItems.map((item) => {
+        {navItems.map(item => {
           const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
           return (
             <Link
@@ -208,7 +217,7 @@ export function Sidebar() {
             <div className="px-3 py-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               Tools
             </div>
-            {toolsNav.map((item) => {
+            {toolsNav.map(item => {
               const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
               return (
                 <Link
@@ -234,7 +243,7 @@ export function Sidebar() {
             <div className="px-3 py-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               Admin
             </div>
-            {adminNav.map((item) => {
+            {adminNav.map(item => {
               const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
               return (
                 <Link
