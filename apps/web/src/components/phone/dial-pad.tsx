@@ -239,6 +239,5 @@ export function DialPad({ compact = false }: { compact?: boolean }): JSX.Element
     </div>
   );
 }
-}
 
 export default DialPad;
