@@ -3,6 +3,20 @@ import Stripe from 'stripe';
 
 import { logger } from '../logger.js';
 
+interface StripeInvoiceRow {
+  stripe_customer_id: string | null;
+  billing_account_id: string;
+  currency: string;
+  due_date: string | number | Date;
+  invoice_number: string;
+}
+
+interface StripeInvoiceLineRow {
+  id: string;
+  total: string;
+  description: string;
+}
+
 export class StripeService {
   private stripe: Stripe | null = null;
   private pool: Pool;
@@ -14,7 +28,7 @@ export class StripeService {
 
     if (this.enabled && stripeKey) {
       this.stripe = new Stripe(stripeKey, {
-        apiVersion: '2024-11-20.acacia',
+        apiVersion: '2023-10-16',
       });
     }
 
@@ -54,7 +68,7 @@ export class StripeService {
         throw new Error('Invoice not found');
       }
 
-      const invoice = invoiceResult.rows[0];
+      const invoice = invoiceResult.rows[0] as StripeInvoiceRow;
 
       if (!invoice.stripe_customer_id) {
         logger.warn(`No Stripe customer ID for billing account ${invoice.billing_account_id}`);
@@ -68,10 +82,10 @@ export class StripeService {
       );
 
       // Create Stripe invoice items
-      const invoiceItems = await Promise.all(
-        linesResult.rows.map(async (line) => {
+      await Promise.all(
+        (linesResult.rows as StripeInvoiceLineRow[]).map(async (line) => {
           return await this.stripe!.invoiceItems.create({
-            customer: invoice.stripe_customer_id,
+            customer: invoice.stripe_customer_id!,
             amount: Math.round(parseFloat(line.total) * 100), // Convert to cents
             currency: invoice.currency.toLowerCase(),
             description: line.description,
@@ -145,12 +159,17 @@ export class StripeService {
         [billingAccountId]
       );
 
-      if (accountResult.rows.length === 0 || !accountResult.rows[0].stripe_connect_account_id) {
+      interface ConnectAccountRow {
+        stripe_connect_account_id: string | null;
+      }
+
+      const accountRow = accountResult.rows[0] as ConnectAccountRow;
+      if (accountResult.rows.length === 0 || !accountRow?.stripe_connect_account_id) {
         logger.warn(`No Stripe Connect account for billing account ${billingAccountId}`);
         return null;
       }
 
-      const connectAccountId = accountResult.rows[0].stripe_connect_account_id;
+      const connectAccountId = accountRow.stripe_connect_account_id;
 
       // Create transfer to Connect account
       const transfer = await this.stripe.transfers.create({

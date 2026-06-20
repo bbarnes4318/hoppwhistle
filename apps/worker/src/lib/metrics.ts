@@ -1,9 +1,8 @@
-import { Registry, Counter, Histogram, Gauge } from 'prom-client';
+import { Registry, Counter, Histogram, Gauge, collectDefaultMetrics } from 'prom-client';
 
 export const register = new Registry();
 
 // Default metrics
-import { collectDefaultMetrics } from 'prom-client';
 collectDefaultMetrics({ register });
 
 // Worker Metrics

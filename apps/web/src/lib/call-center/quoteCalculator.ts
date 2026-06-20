@@ -837,7 +837,6 @@ function calculateTransAmericaPremium(
  */
 function calculateCorebridgePremium(params: QuoteParams): number | null {
   const { age, gender, faceAmount } = params;
-  const config = CARRIER_CONFIG['Corebridge'];
 
   const ageKeys = Object.keys(COREBRIDGE_GI)
     .map(Number)

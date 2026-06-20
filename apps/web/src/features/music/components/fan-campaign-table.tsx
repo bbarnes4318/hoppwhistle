@@ -1,5 +1,7 @@
 'use client';
 
+import { cn } from '@/lib/utils';
+
 import {
   campaignStatusStyle,
   campaignTypeLabel,
@@ -8,8 +10,6 @@ import {
   formatPercentage,
 } from '../lib/utils';
 import type { FanCampaign } from '../types';
-
-import { cn } from '@/lib/utils';
 
 interface FanCampaignTableProps {
   campaigns: FanCampaign[];

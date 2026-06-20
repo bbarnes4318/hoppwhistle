@@ -68,8 +68,10 @@ const playRingtone = () => {
     
     return () => {
       try {
-        ctx.close();
-      } catch (e) {}
+        void ctx.close();
+      } catch (e) {
+        // ignore
+      }
     };
   } catch (e) {
     console.warn('Ringtone failed:', e);
@@ -692,14 +694,14 @@ export function CustomerSideDemo() {
                     <div className="bg-slate-900/90 border border-slate-800/80 p-2 rounded-lg text-[9px] space-y-1 animate-fadeIn max-w-[92%]" style={{ borderColor: 'rgba(255, 255, 255, 0.05)' }}>
                       <div className="text-[7px] font-black uppercase text-cyan-400 tracking-wider" style={{ color: '#22D3EE' }}>RPS Voice Agent</div>
                       <p className="text-zinc-200 leading-normal" style={{ color: '#E4E4E7' }}>
-                        {"\"Hey, this is the Arrested Development station line. We\'re testing out \'Mr. Wendell\' for their new release. Can I play you a short preview and you tell us if you like it?\""}
+                        {"\"Hey, this is the Arrested Development station line. We're testing out 'Mr. Wendell' for their new release. Can I play you a short preview and you tell us if you like it?\""}
                       </p>
                     </div>
 
                     <div className="bg-slate-800/70 border border-slate-700/50 p-2 rounded-lg text-[9px] space-y-1 animate-fadeIn max-w-[92%] self-end" style={{ borderColor: 'rgba(255, 255, 255, 0.05)' }}>
                       <div className="text-[7px] font-black uppercase text-zinc-400 tracking-wider" style={{ color: '#A1A1AA' }}>Fan</div>
                       <p className="text-zinc-200 leading-normal" style={{ color: '#E4E4E7' }}>
-                        {"\"Sure, I\'ll listen.\""}
+                        {"\"Sure, I'll listen.\""}
                       </p>
                     </div>
                   </div>

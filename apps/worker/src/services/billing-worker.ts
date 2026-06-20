@@ -234,7 +234,7 @@ export class BillingWorker {
 
       if (accountResult.rows.length === 0) {
         logger.warn(`No billing account found for tenant ${event.tenantId}`);
-        await this.redis.xack('events:stream', 'billing-group', messageId);
+        await this.redis!.xack('events:stream', 'billing-group', messageId);
         return;
       }
 
@@ -254,7 +254,7 @@ export class BillingWorker {
 
       if (rateCardResult.rows.length === 0) {
         logger.warn(`No active rate card found for billing account ${billingAccountId}`);
-        await this.redis.xack('events:stream', 'billing-group', messageId);
+        await this.redis!.xack('events:stream', 'billing-group', messageId);
         return;
       }
 
@@ -348,7 +348,7 @@ export class BillingWorker {
       logger.info(`Updated call cost/profit in database for call ${event.data.callId}`);
 
       // Acknowledge message
-      await this.redis.xack('events:stream', 'billing-group', messageId);
+      await this.redis!.xack('events:stream', 'billing-group', messageId);
     } catch (error) {
       logger.error(`Error processing call completed for ${event.data.callId}:`, error);
       // Don't acknowledge on error - will retry
@@ -370,7 +370,7 @@ export class BillingWorker {
 
       if (accountResult.rows.length === 0) {
         logger.warn(`No billing account found for tenant ${event.tenantId}`);
-        await this.redis.xack('events:stream', 'billing-group', messageId);
+        await this.redis!.xack('events:stream', 'billing-group', messageId);
         return;
       }
 
@@ -390,7 +390,7 @@ export class BillingWorker {
 
       if (rateCardResult.rows.length === 0) {
         logger.warn(`No active rate card found`);
-        await this.redis.xack('events:stream', 'billing-group', messageId);
+        await this.redis!.xack('events:stream', 'billing-group', messageId);
         return;
       }
 
@@ -422,7 +422,7 @@ export class BillingWorker {
         logger.info(`Created CPA accrual for call ${event.data.callId}: $${cpaAmount.toFixed(4)}`);
       }
 
-      await this.redis.xack('events:stream', 'billing-group', messageId);
+      await this.redis!.xack('events:stream', 'billing-group', messageId);
     } catch (error) {
       logger.error(`Error processing conversion confirmed for ${event.data.callId}:`, error);
     }

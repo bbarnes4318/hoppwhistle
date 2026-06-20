@@ -1,22 +1,22 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
+
 import {
- type ProspectData,
- type JobRole,
- type ScriptType,
- type ScriptNode,
- INITIAL_PROSPECT_DATA,
- JOB_ROLES,
- SCRIPT_TYPES,
- getScriptAccessForRole,
-} from '@/lib/call-center/types';
-import { SCRIPT_NODES, getNode as getUnderwriterNode } from '@/lib/call-center/scriptData';
-import {
- PLACEMENT_SCRIPT_NODES,
- getPlacementNode,
- getPlacementStartNode,
+  getPlacementNode,
+  getPlacementStartNode,
 } from '@/lib/call-center/placementScriptData';
+import { getNode as getUnderwriterNode } from '@/lib/call-center/scriptData';
+import {
+  INITIAL_PROSPECT_DATA,
+  JOB_ROLES,
+  SCRIPT_TYPES,
+  getScriptAccessForRole,
+  type JobRole,
+  type ProspectData,
+  type ScriptNode,
+  type ScriptType,
+} from '@/lib/call-center/types';
 
 // ============================================================================
 // CONTEXT TYPES

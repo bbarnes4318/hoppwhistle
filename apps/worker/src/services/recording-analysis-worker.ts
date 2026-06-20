@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import { z } from 'zod';
 
 import { logger } from '../lib/logger.js';
@@ -13,9 +13,9 @@ type TranscriptionReadyEvent = {
   data: {
     callId: string; // MUST be RecordingAnalysis.id
     transcriptId?: string;
-    stats?: any;
+    stats?: Record<string, unknown>;
     fullText?: string;
-    segments?: any[];
+    segments?: unknown[];
     language?: string;
     durationSec?: number;
     engine?: string;
@@ -25,7 +25,7 @@ type TranscriptionReadyEvent = {
 type Vertical = 'ACA' | 'FINAL_EXPENSE' | 'MEDICARE';
 
 type ExtractedPayload = {
-  values: Record<string, any>;
+  values: Record<string, Prisma.InputJsonValue>;
   confidence: Record<string, number>; // 0..1 per field
   overallConfidence: number; // 0..1
   billable?: 'Y' | 'N';
@@ -33,7 +33,7 @@ type ExtractedPayload = {
 };
 
 /** ------------------- DeepSeek call (strict JSON) ------------------- */
-async function callDeepSeekStrictJson(prompt: string): Promise<any> {
+async function callDeepSeekStrictJson(prompt: string): Promise<unknown> {
   const endpoint = process.env.DEEPSEEK_ENDPOINT || 'https://api.deepseek.com/chat/completions';
   const apiKey = process.env.DEEPSEEK_API_KEY;
   const model = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
@@ -67,7 +67,13 @@ async function callDeepSeekStrictJson(prompt: string): Promise<any> {
     throw new Error(`DeepSeek HTTP ${r.status}: ${t}`);
   }
 
-  const j: any = await r.json();
+  const j = (await r.json()) as {
+    choices?: Array<{
+      message?: {
+        content?: string;
+      };
+    }>;
+  };
   const content = j?.choices?.[0]?.message?.content;
   if (!content || typeof content !== 'string') throw new Error('DeepSeek empty content');
 
@@ -79,10 +85,10 @@ async function callDeepSeekStrictJson(prompt: string): Promise<any> {
       .replace(/^```/i, '')
       .replace(/```$/, '')
       .trim();
-    return JSON.parse(cleaned);
+    return JSON.parse(cleaned) as unknown;
   }
 
-  return JSON.parse(trimmed);
+  return JSON.parse(trimmed) as unknown;
 }
 
 /** ------------------- Field schemas (dynamic) ------------------- */
@@ -183,7 +189,10 @@ function buildPrompt(vertical: Vertical, selectedFields: string[], transcript: s
 }
 
 /** ------------------- Billable hard-logic (deterministic) ------------------- */
-function enforceBillableHardLogic(vertical: Vertical, values: Record<string, any>) {
+function enforceBillableHardLogic(
+  vertical: Vertical,
+  values: Record<string, unknown>
+): { billable: 'Y' | 'N'; nonbillable_reason: string | null } {
   const getNum = (k: string) => {
     const v = values?.[k];
     if (typeof v === 'number' && Number.isFinite(v)) return v;
@@ -240,16 +249,17 @@ export async function startRecordingAnalysisWorker() {
   try {
     await redis.xgroup('CREATE', 'events:stream', 'recording-analysis-group', '0', 'MKSTREAM');
     logger.info({ msg: 'Created recording-analysis-group consumer group' });
-  } catch (err: any) {
+  } catch (err: unknown) {
     // Group already exists
-    if (!err.message?.includes('BUSYGROUP')) {
+    if (err instanceof Error && !err.message?.includes('BUSYGROUP')) {
       logger.warn({ msg: 'Failed to create consumer group', err });
     }
   }
 
   logger.info({ msg: 'Recording Analysis Worker started' });
 
-  while (true) {
+  const isRunning = true;
+  while (isRunning) {
     const messages = await redis.xreadgroup(
       'GROUP',
       'recording-analysis-group',
@@ -265,7 +275,7 @@ export async function startRecordingAnalysisWorker() {
 
     if (!messages?.length) continue;
 
-    const [, streamMessages] = messages[0] as any;
+    const [, streamMessages] = messages[0] as [string, [string, string[]][]];
 
     for (const [messageId, fields] of streamMessages) {
       let callId: string | null = null;
@@ -309,7 +319,7 @@ export async function startRecordingAnalysisWorker() {
         });
 
         const selectedFields = Array.isArray(row.selectedFields)
-          ? (row.selectedFields as any as string[])
+          ? (row.selectedFields as unknown as string[])
           : [];
 
         const transcriptText = (payload.data.fullText || '').trim();
@@ -354,8 +364,9 @@ export async function startRecordingAnalysisWorker() {
         logger.info({ msg: 'Recording analysis completed', callId });
 
         await redis.xack('events:stream', 'recording-analysis-group', messageId);
-      } catch (e: any) {
-        logger.error({ msg: 'Recording analysis failed', callId, error: e?.message });
+      } catch (e: unknown) {
+        const errorMsg = e instanceof Error ? e.message : 'Unknown error';
+        logger.error({ msg: 'Recording analysis failed', callId, error: errorMsg });
         await redis.xack('events:stream', 'recording-analysis-group', messageId);
 
         // Best-effort failure update
@@ -365,10 +376,12 @@ export async function startRecordingAnalysisWorker() {
               where: { id: callId },
               data: {
                 status: 'failed',
-                error: e?.message || 'Unknown error',
+                error: errorMsg,
               },
             });
-          } catch {}
+          } catch {
+            // ignore
+          }
         }
       }
     }

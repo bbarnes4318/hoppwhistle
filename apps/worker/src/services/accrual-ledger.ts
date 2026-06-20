@@ -61,7 +61,7 @@ export class AccrualLedgerService {
         ]
       );
 
-      logger.info(`Created accrual entry ${entryId} for ${entry.type}: ${entry.amount}`);
+      logger.info(`Created accrual entry ${entryId} for ${entry.type}: ${entry.amount.toString()}`);
       return entryId;
     } catch (error) {
       logger.error('Error creating accrual entry:', error);
@@ -94,7 +94,7 @@ export class AccrualLedgerService {
         AND closed = false
     `;
 
-    const params: any[] = [billingAccountId, periodDate];
+    const params: unknown[] = [billingAccountId, periodDate];
     let paramIndex = 3;
 
     if (publisherId) {
@@ -112,7 +112,20 @@ export class AccrualLedgerService {
     sql += ` ORDER BY created_at ASC`;
 
     const result = await this.pool.query(sql, params);
-    return result.rows;
+    interface AccrualRow {
+      id: string;
+      type: string;
+      amount: string;
+      description: string;
+      call_id: string | null;
+    }
+    return (result.rows as AccrualRow[]).map(row => ({
+      id: row.id,
+      type: row.type,
+      amount: row.amount,
+      description: row.description,
+      callId: row.call_id || undefined,
+    }));
   }
 
   /**
@@ -133,7 +146,7 @@ export class AccrualLedgerService {
         AND closed = false
     `;
 
-    const params: any[] = [invoiceId, billingAccountId, periodDate];
+    const params: unknown[] = [invoiceId, billingAccountId, periodDate];
     let paramIndex = 4;
 
     if (publisherId) {
@@ -174,7 +187,7 @@ export class AccrualLedgerService {
         AND closed = false
     `;
 
-    const params: any[] = [billingAccountId, periodDate];
+    const params: unknown[] = [billingAccountId, periodDate];
     let paramIndex = 3;
 
     if (publisherId) {
@@ -197,7 +210,13 @@ export class AccrualLedgerService {
     let total = new Decimal(0);
     let count = 0;
 
-    for (const row of result.rows) {
+    interface SummaryRow {
+      type: string;
+      total_amount: string;
+      count: string;
+    }
+
+    for (const row of result.rows as SummaryRow[]) {
       const amount = new Decimal(row.total_amount);
       byType[row.type] = amount;
       total = total.plus(amount);
