@@ -13,6 +13,7 @@ import {
   History,
   ArrowRightLeft,
   X,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { useCallback, useEffect, useState, useRef } from 'react';
 
@@ -20,6 +21,14 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -189,6 +198,67 @@ export default function OperationsCallLogsPage() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [audioLoading, setAudioLoading] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Column Selection and Visibility
+  const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('hopwhistle_calls_columns');
+      if (stored) {
+        try {
+          return JSON.parse(stored);
+        } catch (e) {}
+      }
+    }
+    return {
+      time: true,
+      campaignName: true,
+      callerId: true,
+      duration: true,
+      status: true,
+      recording: true,
+      publisherName: false,
+      buyerName: false,
+      did: false,
+      toNumber: false,
+      connectedDuration: false,
+      billable: false,
+      buyerBillableAmount: false,
+      publisherPayoutAmount: false,
+      cost: false,
+      profit: false,
+      margin: false,
+    };
+  });
+
+  const toggleColumn = (columnId: string) => {
+    setVisibleColumns(prev => {
+      const updated = { ...prev, [columnId]: !prev[columnId] };
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('hopwhistle_calls_columns', JSON.stringify(updated));
+      }
+      return updated;
+    });
+  };
+
+  const columns = [
+    { id: 'time', label: 'Time', canSee: true },
+    { id: 'publisherName', label: 'Publisher', canSee: !!isAdminOrOwner },
+    { id: 'buyerName', label: 'Buyer', canSee: !!isAdminOrOwner },
+    { id: 'campaignName', label: 'Campaign', canSee: true },
+    { id: 'callerId', label: 'Caller ID', canSee: true },
+    { id: 'did', label: 'DID (DNIS)', canSee: !isBuyer },
+    { id: 'toNumber', label: 'Destination', canSee: !isPublisher },
+    { id: 'duration', label: 'Duration', canSee: true },
+    { id: 'connectedDuration', label: 'Connected', canSee: true },
+    { id: 'billable', label: 'Billable', canSee: true },
+    { id: 'buyerBillableAmount', label: 'Charge', canSee: !isPublisher && !isAgent },
+    { id: 'publisherPayoutAmount', label: 'Payout', canSee: !isBuyer && !isAgent },
+    { id: 'cost', label: 'Cost', canSee: !!isAdminOrOwner },
+    { id: 'profit', label: 'Profit', canSee: !!isAdminOrOwner },
+    { id: 'margin', label: 'Margin', canSee: !!isAdminOrOwner },
+    { id: 'status', label: 'Status', canSee: true },
+    { id: 'recording', label: 'Recording', canSee: true },
+  ];
 
   // Date Calculator Preset helper
   const calculatePresetDates = (preset: string): { from: Date | null; to: Date | null } => {
@@ -438,6 +508,18 @@ export default function OperationsCallLogsPage() {
   };
 
   const handlePlayRecording = async (recordingId: string) => {
+    if (playingId === recordingId) {
+      if (audioRef.current) {
+        if (!audioRef.current.paused) {
+          audioRef.current.pause();
+          setPlayingId(null);
+          return;
+        } else {
+          void audioRef.current.play();
+          return;
+        }
+      }
+    }
     setAudioLoading(true);
     try {
       const response = await apiClient.get<{ url: string }>(
@@ -468,6 +550,48 @@ export default function OperationsCallLogsPage() {
       setAudioLoading(false);
     }
   };
+
+  const handleDownloadRecording = async (recordingId: string, filename?: string) => {
+    try {
+      const response = await apiClient.get<{ url: string }>(
+        `/api/v1/recordings/${recordingId}/url`
+      );
+      if (response.data?.url) {
+        let downloadUrl = response.data.url;
+        if (downloadUrl.startsWith('/')) {
+          const apiBaseUrl =
+            typeof window !== 'undefined'
+              ? window.location.origin
+              : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+          downloadUrl = `${apiBaseUrl.replace(/\/$/, '')}${downloadUrl}`;
+        }
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.setAttribute('download', filename || `recording-${recordingId}.wav`);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        toast.success('Download started');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Download failed');
+    }
+  };
+
+  const activeColumnsCount = columns.filter(col => col.canSee && visibleColumns[col.id]).length + 1;
+
+  const isAudioPlayerInDrawer = !!detailCallId && playingId === detailCall?.primaryRecordingId && !!audioUrl;
+
+  const audioPlayer = (
+    <audio
+      ref={audioRef}
+      src={audioUrl || undefined}
+      className={isAudioPlayerInDrawer ? "h-8 flex-1 accent-cyan-400" : "hidden"}
+      controls={isAudioPlayerInDrawer}
+      onEnded={() => setPlayingId(null)}
+    />
+  );
 
   const getChargeStatusBadge = (status?: string | null) => {
     const s = status || 'PENDING';
@@ -574,18 +698,49 @@ export default function OperationsCallLogsPage() {
             Real-time pay-per-call transaction ledger, carrier thresholds, and disputes center.
           </p>
         </div>
-        <Button
-          onClick={handleExportCSV}
-          disabled={exporting || calls.length === 0}
-          className="bg-cyan-600 hover:bg-cyan-500 text-white font-medium gap-2 self-start md:self-auto shadow-lg"
-        >
-          {exporting ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Download className="h-4 w-4" />
-          )}
-          Export CSV Ledger
-        </Button>
+        <div className="flex gap-3 self-start md:self-auto">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                className="bg-white/5 border-white/10 text-white hover:bg-white/10 hover:text-white font-medium gap-2"
+              >
+                <SlidersHorizontal className="h-4 w-4" />
+                Columns
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="bg-slate-900 border-white/10 text-white min-w-[200px]" align="end">
+              <DropdownMenuLabel className="text-gray-400 text-xs">Configure Ledger Columns</DropdownMenuLabel>
+              <DropdownMenuSeparator className="bg-white/10" />
+              {columns.map(col => {
+                if (!col.canSee) return null;
+                return (
+                  <DropdownMenuCheckboxItem
+                    key={col.id}
+                    checked={visibleColumns[col.id]}
+                    onCheckedChange={() => toggleColumn(col.id)}
+                    className="focus:bg-cyan-600 focus:text-white"
+                  >
+                    {col.label}
+                  </DropdownMenuCheckboxItem>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <Button
+            onClick={handleExportCSV}
+            disabled={exporting || calls.length === 0}
+            className="bg-cyan-600 hover:bg-cyan-500 text-white font-medium gap-2 shadow-lg"
+          >
+            {exporting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            Export CSV Ledger
+          </Button>
+        </div>
       </div>
 
       {/* Filter Panel */}
@@ -752,41 +907,58 @@ export default function OperationsCallLogsPage() {
             <Table>
               <TableHeader>
                 <TableRow className="border-white/10 hover:bg-transparent">
-                  <TableHead className="text-gray-400 font-medium pl-6">Time</TableHead>
-                  {isAdminOrOwner && (
+                  {visibleColumns.time && (
+                    <TableHead className="text-gray-400 font-medium pl-6">Time</TableHead>
+                  )}
+                  {visibleColumns.publisherName && isAdminOrOwner && (
                     <TableHead className="text-gray-400 font-medium">Publisher</TableHead>
                   )}
-                  {isAdminOrOwner && (
+                  {visibleColumns.buyerName && isAdminOrOwner && (
                     <TableHead className="text-gray-400 font-medium">Buyer</TableHead>
                   )}
-                  <TableHead className="text-gray-400 font-medium">Campaign</TableHead>
-                  <TableHead className="text-gray-400 font-medium">Caller ID</TableHead>
-                  {!isBuyer && (
+                  {visibleColumns.campaignName && (
+                    <TableHead className="text-gray-400 font-medium">Campaign</TableHead>
+                  )}
+                  {visibleColumns.callerId && (
+                    <TableHead className="text-gray-400 font-medium">Caller ID</TableHead>
+                  )}
+                  {visibleColumns.did && !isBuyer && (
                     <TableHead className="text-gray-400 font-medium">DID (DNIS)</TableHead>
                   )}
-                  {!isPublisher && (
+                  {visibleColumns.toNumber && !isPublisher && (
                     <TableHead className="text-gray-400 font-medium">Destination</TableHead>
                   )}
-                  <TableHead className="text-gray-400 font-medium">Duration</TableHead>
-                  <TableHead className="text-gray-400 font-medium">Connected</TableHead>
-                  <TableHead className="text-gray-400 font-medium">Billable</TableHead>
+                  {visibleColumns.duration && (
+                    <TableHead className="text-gray-400 font-medium">Duration</TableHead>
+                  )}
+                  {visibleColumns.connectedDuration && (
+                    <TableHead className="text-gray-400 font-medium">Connected</TableHead>
+                  )}
+                  {visibleColumns.billable && (
+                    <TableHead className="text-gray-400 font-medium">Billable</TableHead>
+                  )}
                   {/* Financial Fields */}
-                  {!isPublisher && !isAgent && (
+                  {visibleColumns.buyerBillableAmount && !isPublisher && !isAgent && (
                     <TableHead className="text-gray-400 font-medium text-right">Charge</TableHead>
                   )}
-                  {!isBuyer && !isAgent && (
+                  {visibleColumns.publisherPayoutAmount && !isBuyer && !isAgent && (
                     <TableHead className="text-gray-400 font-medium text-right">Payout</TableHead>
                   )}
-                  {isAdminOrOwner && (
+                  {visibleColumns.cost && isAdminOrOwner && (
                     <TableHead className="text-gray-400 font-medium text-right">Cost</TableHead>
                   )}
-                  {isAdminOrOwner && (
+                  {visibleColumns.profit && isAdminOrOwner && (
                     <TableHead className="text-gray-400 font-medium text-right">Profit</TableHead>
                   )}
-                  {isAdminOrOwner && (
+                  {visibleColumns.margin && isAdminOrOwner && (
                     <TableHead className="text-gray-400 font-medium text-right">Margin</TableHead>
                   )}
-                  <TableHead className="text-gray-400 font-medium text-center">Status</TableHead>
+                  {visibleColumns.status && (
+                    <TableHead className="text-gray-400 font-medium text-center">Status</TableHead>
+                  )}
+                  {visibleColumns.recording && (
+                    <TableHead className="text-gray-400 font-medium text-center">Recording</TableHead>
+                  )}
                   <TableHead className="text-gray-400 font-medium text-right pr-6">
                     Action
                   </TableHead>
@@ -795,7 +967,7 @@ export default function OperationsCallLogsPage() {
               <TableBody>
                 {loading ? (
                   <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={17} className="h-64 text-center text-gray-500">
+                    <TableCell colSpan={activeColumnsCount} className="h-64 text-center text-gray-500">
                       <div className="flex flex-col items-center justify-center gap-2">
                         <Loader2 className="h-8 w-8 animate-spin text-cyan-400" />
                         <span>Loading pay-per-call ledger...</span>
@@ -804,7 +976,7 @@ export default function OperationsCallLogsPage() {
                   </TableRow>
                 ) : calls.length === 0 ? (
                   <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={17} className="h-64 text-center text-gray-500">
+                    <TableCell colSpan={activeColumnsCount} className="h-64 text-center text-gray-500">
                       <div className="flex flex-col items-center justify-center gap-2">
                         <AlertCircle className="h-8 w-8 text-gray-600" />
                         <span>No call events found</span>
@@ -821,36 +993,42 @@ export default function OperationsCallLogsPage() {
                         onClick={() => void handleOpenDetailDrawer(call.id)}
                         className="border-white/5 hover:bg-white/5 transition-colors cursor-pointer"
                       >
-                        <TableCell className="pl-6 font-mono text-xs text-white">
-                          {new Date(call.createdAt).toLocaleString('en-US', {
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </TableCell>
-                        {isAdminOrOwner && (
+                        {visibleColumns.time && (
+                          <TableCell className="pl-6 font-mono text-xs text-white">
+                            {new Date(call.createdAt).toLocaleString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </TableCell>
+                        )}
+                        {visibleColumns.publisherName && isAdminOrOwner && (
                           <TableCell className="text-gray-300 font-medium text-xs">
                             {call.publisherName || '—'}
                           </TableCell>
                         )}
-                        {isAdminOrOwner && (
+                        {visibleColumns.buyerName && isAdminOrOwner && (
                           <TableCell className="text-gray-300 font-medium text-xs">
                             {call.buyerName || '—'}
                           </TableCell>
                         )}
-                        <TableCell className="text-gray-300 font-semibold text-xs">
-                          {call.campaignName || '—'}
-                        </TableCell>
-                        <TableCell className="font-mono text-xs text-white font-semibold">
-                          {call.callerId ? formatPhoneNumber(call.callerId) : '—'}
-                        </TableCell>
-                        {!isBuyer && (
+                        {visibleColumns.campaignName && (
+                          <TableCell className="text-gray-300 font-semibold text-xs">
+                            {call.campaignName || '—'}
+                          </TableCell>
+                        )}
+                        {visibleColumns.callerId && (
+                          <TableCell className="font-mono text-xs text-white font-semibold">
+                            {call.callerId ? formatPhoneNumber(call.callerId) : '—'}
+                          </TableCell>
+                        )}
+                        {visibleColumns.did && !isBuyer && (
                           <TableCell className="font-mono text-xs text-gray-400">
                             {call.did ? formatPhoneNumber(call.did) : '—'}
                           </TableCell>
                         )}
-                        {!isPublisher && (
+                        {visibleColumns.toNumber && !isPublisher && (
                           <TableCell className="font-mono text-xs text-gray-400">
                             {showToDetails ? (
                               formatPhoneNumber(call.toNumber || call.targetNumber || '')
@@ -859,26 +1037,32 @@ export default function OperationsCallLogsPage() {
                             )}
                           </TableCell>
                         )}
-                        <TableCell className="font-mono text-xs text-gray-300">
-                          {call.duration ? formatDuration(call.duration) : '—'}
-                        </TableCell>
-                        <TableCell className="font-mono text-xs text-gray-300">
-                          {call.connectedDuration ? formatDuration(call.connectedDuration) : '—'}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="outline"
-                            className={
-                              call.billable
-                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                                : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                            }
-                          >
-                            {call.billable ? 'Billable' : 'No'}
-                          </Badge>
-                        </TableCell>
+                        {visibleColumns.duration && (
+                          <TableCell className="font-mono text-xs text-gray-300">
+                            {call.duration ? formatDuration(call.duration) : '—'}
+                          </TableCell>
+                        )}
+                        {visibleColumns.connectedDuration && (
+                          <TableCell className="font-mono text-xs text-gray-300">
+                            {call.connectedDuration ? formatDuration(call.connectedDuration) : '—'}
+                          </TableCell>
+                        )}
+                        {visibleColumns.billable && (
+                          <TableCell>
+                            <Badge
+                              variant="outline"
+                              className={
+                                call.billable
+                                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                                  : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                              }
+                            >
+                              {call.billable ? 'Billable' : 'No'}
+                            </Badge>
+                          </TableCell>
+                        )}
                         {/* Financial Ledger Columns */}
-                        {!isPublisher && !isAgent && (
+                        {visibleColumns.buyerBillableAmount && !isPublisher && !isAgent && (
                           <TableCell className="text-right font-mono text-xs font-semibold text-white">
                             {call.buyerBillableAmount !== null &&
                             call.buyerBillableAmount !== undefined
@@ -886,7 +1070,7 @@ export default function OperationsCallLogsPage() {
                               : '—'}
                           </TableCell>
                         )}
-                        {!isBuyer && !isAgent && (
+                        {visibleColumns.publisherPayoutAmount && !isBuyer && !isAgent && (
                           <TableCell className="text-right font-mono text-xs font-semibold text-emerald-400">
                             {call.publisherPayoutAmount !== null &&
                             call.publisherPayoutAmount !== undefined
@@ -894,34 +1078,74 @@ export default function OperationsCallLogsPage() {
                               : '—'}
                           </TableCell>
                         )}
-                        {isAdminOrOwner && (
+                        {visibleColumns.cost && isAdminOrOwner && (
                           <TableCell className="text-right font-mono text-xs text-gray-400">
                             {call.cost !== null ? `$${Number(call.cost).toFixed(2)}` : '—'}
                           </TableCell>
                         )}
-                        {isAdminOrOwner && (
+                        {visibleColumns.profit && isAdminOrOwner && (
                           <TableCell className="text-right font-mono text-xs font-bold text-cyan-400">
                             {call.profit !== null ? `$${Number(call.profit).toFixed(2)}` : '—'}
                           </TableCell>
                         )}
-                        {isAdminOrOwner && (
+                        {visibleColumns.margin && isAdminOrOwner && (
                           <TableCell className="text-right font-mono text-xs text-gray-400">
                             {call.margin !== null ? `${Number(call.margin).toFixed(1)}%` : '—'}
                           </TableCell>
                         )}
                         {/* Billing and dispute statuses */}
-                        <TableCell className="text-center">
-                          <div className="flex flex-col gap-1 items-center justify-center">
-                            {call.disputeStatus ? (
-                              getDisputeBadge(call.disputeStatus)
-                            ) : (
-                              <div className="flex items-center gap-1">
-                                {!isPublisher && getChargeStatusBadge(call.buyerChargeStatus)}
-                                {!isBuyer && getPayoutStatusBadge(call.publisherPayoutStatus)}
+                        {visibleColumns.status && (
+                          <TableCell className="text-center">
+                            <div className="flex flex-col gap-1 items-center justify-center">
+                              {call.disputeStatus ? (
+                                getDisputeBadge(call.disputeStatus)
+                              ) : (
+                                <div className="flex items-center gap-1">
+                                  {!isPublisher && getChargeStatusBadge(call.buyerChargeStatus)}
+                                  {!isBuyer && getPayoutStatusBadge(call.publisherPayoutStatus)}
+                                </div>
+                              )}
+                            </div>
+                          </TableCell>
+                        )}
+                        {/* Recording inline player and download */}
+                        {visibleColumns.recording && (
+                          <TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
+                            {call.recordingUrl || call.primaryRecordingId ? (
+                              <div className="flex items-center justify-center gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() =>
+                                    void handlePlayRecording(call.primaryRecordingId || call.id)
+                                  }
+                                  disabled={audioLoading && playingId === (call.primaryRecordingId || call.id)}
+                                  className="h-8 w-8 p-0 rounded-full hover:bg-white/10 text-cyan-400 hover:text-cyan-300"
+                                >
+                                  {audioLoading && playingId === (call.primaryRecordingId || call.id) ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : playingId === (call.primaryRecordingId || call.id) ? (
+                                    <Pause className="h-4 w-4" />
+                                  ) : (
+                                    <Play className="h-4 w-4" />
+                                  )}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() =>
+                                    void handleDownloadRecording(call.primaryRecordingId || call.id, `call-${call.id}-recording.wav`)
+                                  }
+                                  className="h-8 w-8 p-0 rounded-full hover:bg-white/10 text-gray-400 hover:text-white"
+                                >
+                                  <Download className="h-4 w-4" />
+                                </Button>
                               </div>
+                            ) : (
+                              <span className="text-gray-600 text-xs italic">—</span>
                             )}
-                          </div>
-                        </TableCell>
+                          </TableCell>
+                        )}
                         <TableCell className="text-right pr-6 font-medium text-cyan-400 hover:text-cyan-300 text-xs">
                           Inspect →
                         </TableCell>
@@ -1079,14 +1303,8 @@ export default function OperationsCallLogsPage() {
                               <Play className="h-4.5 w-4.5 pl-0.5" />
                             )}
                           </Button>
-                          {playingId === detailCall.primaryRecordingId && audioUrl ? (
-                            <audio
-                              ref={audioRef}
-                              src={audioUrl}
-                              controls
-                              className="h-8 flex-1 accent-cyan-400"
-                              onEnded={() => setPlayingId(null)}
-                            />
+                           {isAudioPlayerInDrawer ? (
+                            audioPlayer
                           ) : (
                             <div className="h-2 bg-white/10 rounded-full flex-1" />
                           )}
@@ -1503,6 +1721,7 @@ export default function OperationsCallLogsPage() {
           </div>
         </DialogContent>
       </Dialog>
+      {!isAudioPlayerInDrawer && audioPlayer}
     </div>
   );
 }
