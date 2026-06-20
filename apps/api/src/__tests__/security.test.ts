@@ -1,11 +1,10 @@
 import { createHash } from 'crypto';
 
-import type { RoleName } from '@prisma/client';
+import { RoleName } from '@prisma/client';
 import { hash } from 'bcryptjs';
 import { describe, it, expect, beforeEach } from 'vitest';
 
 import { getPrismaClient } from '../lib/prisma.js';
-
 
 /**
  * Test privilege escalation prevention
@@ -13,7 +12,6 @@ import { getPrismaClient } from '../lib/prisma.js';
 describe('Security: Privilege Escalation Prevention', () => {
   let prisma: ReturnType<typeof getPrismaClient>;
   let testTenantId: string;
-  let ownerUserId: string;
   let readonlyUserId: string;
   let ownerRoleId: string;
   let readonlyRoleId: string;
@@ -51,7 +49,7 @@ describe('Security: Privilege Escalation Prevention', () => {
     readonlyRoleId = readonlyRole.id;
 
     // Create owner user
-    const ownerUser = await prisma.user.create({
+    await prisma.user.create({
       data: {
         tenantId: testTenantId,
         email: 'owner@test.com',
@@ -64,7 +62,6 @@ describe('Security: Privilege Escalation Prevention', () => {
         },
       },
     });
-    ownerUserId = ownerUser.id;
 
     // Create readonly user
     const readonlyUser = await prisma.user.create({
@@ -209,4 +206,3 @@ describe('Security: Privilege Escalation Prevention', () => {
     expect(createdKey.rateLimit).toBe(10);
   });
 });
-

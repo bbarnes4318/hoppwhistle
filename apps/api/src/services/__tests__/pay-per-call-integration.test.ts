@@ -173,7 +173,12 @@ describe('Pay-Per-Call Real Database/Redis Integration Tests', () => {
 
     // Create billing account for tenant
     await prisma.billingAccount.create({
-      data: { id: 'ba-tenant-int', tenantId, currency: 'USD' },
+      data: {
+        id: 'ba-tenant-int',
+        tenantId,
+        name: 'Integration Test Billing Account',
+        currency: 'USD',
+      },
     });
 
     for (const u of usersToCreate) {
