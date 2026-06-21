@@ -540,7 +540,7 @@ export default function VoiceAgentsPage() {
   };
 
   return (
-    <CompactPageShell>
+    <CompactPageShell fullHeight={false}>
       <CompactPageHeader
         title="Voice Agents"
         subtitle="Manage AI voice agents for outbound calling campaigns"
@@ -722,11 +722,11 @@ export default function VoiceAgentsPage() {
       </MetricStrip>
 
       {/* ───────── Main content: Agent Selection + Controls ───────── */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-3 min-h-0 overflow-hidden">
+      <div className="w-full grid grid-cols-1 lg:grid-cols-4 gap-3">
         {/* Left Column: Agent Selection & Recent Calls */}
-        <div className="lg:col-span-3 flex flex-col gap-3 min-h-0 overflow-hidden">
+        <div className="lg:col-span-3 flex flex-col gap-3">
           {/* Select Voice Agent */}
-          <Card className="flex flex-col min-h-0 overflow-hidden border-border/40 max-h-[300px]">
+          <Card className="w-full border-border/40 shadow-sm">
             <CardHeader className="flex-shrink-0 p-3 pb-2 border-b border-border/10 flex flex-row items-center justify-between space-y-0">
               <div>
                 <CardTitle className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Select Voice Agent</CardTitle>
@@ -745,8 +745,8 @@ export default function VoiceAgentsPage() {
                 <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
               </Button>
             </CardHeader>
-            <CardContent className="p-3 flex-1 min-h-0 flex flex-col overflow-hidden">
-              <Tabs value={activeCategory} onValueChange={setActiveCategory} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+            <CardContent className="p-3">
+              <Tabs value={activeCategory} onValueChange={setActiveCategory} className="w-full flex flex-col gap-2">
                 <TabsList className="w-full justify-start border-b border-border/40 bg-transparent h-9 p-0 mb-3 gap-4 overflow-x-auto flex-nowrap scrollbar-none">
                   {CATEGORIES.map(cat => {
                     const count = assistants.filter(
@@ -771,7 +771,7 @@ export default function VoiceAgentsPage() {
                 </TabsList>
 
                 {CATEGORIES.map(cat => (
-                  <TabsContent key={cat.key} value={cat.key} className="flex-1 overflow-auto min-h-0 mt-0 data-[state=active]:flex flex-col">
+                  <TabsContent key={cat.key} value={cat.key} className="w-full mt-0 data-[state=active]:flex flex-col">
                     {loading ? (
                       <div className="grid gap-2 grid-cols-1 md:grid-cols-2">
                         {[1, 2].map(i => (
@@ -801,7 +801,7 @@ export default function VoiceAgentsPage() {
                         </Button>
                       </div>
                     ) : (
-                      <div className="grid gap-2 grid-cols-1 md:grid-cols-2 overflow-y-auto pr-1 pb-1">
+                      <div className="grid gap-2 grid-cols-1 md:grid-cols-2 max-h-[220px] overflow-y-auto pr-1 pb-1">
                         {agentsByCategory.map(agent => (
                           <Card
                             key={agent.id}
@@ -867,7 +867,7 @@ export default function VoiceAgentsPage() {
           </Card>
 
           {/* Recent Calls */}
-          <Card className="flex-1 flex flex-col min-h-0 overflow-hidden border-border/40">
+          <Card className="w-full border-border/40 shadow-sm">
             <CardHeader className="flex-shrink-0 p-3 pb-2 border-b border-border/10 flex flex-row items-center justify-between space-y-0">
               <div>
                 <CardTitle className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Recent Calls</CardTitle>
@@ -888,7 +888,7 @@ export default function VoiceAgentsPage() {
                 Refresh
               </Button>
             </CardHeader>
-            <CardContent className="flex-1 overflow-auto p-0 min-h-0">
+            <CardContent className="p-0 overflow-x-auto">
               {recentCalls.length === 0 ? (
                 <div className="flex items-center justify-center h-full text-muted-foreground text-xs py-8">
                   No calls yet
@@ -952,16 +952,16 @@ export default function VoiceAgentsPage() {
         </div>
 
         {/* Right Column: Campaign Controls & Agent Details */}
-        <div className="lg:col-span-1 flex flex-col gap-3 min-h-0 overflow-auto pr-1">
+        <div className="lg:col-span-1 flex flex-col gap-3">
           {/* Campaign Controls */}
-          <Card className={cn("border-border/40 flex flex-col min-h-0 flex-shrink-0", selectedAgent && "border-primary/30")}>
+          <Card className={cn("border-border/40 w-full shadow-sm", selectedAgent && "border-primary/30")}>
             <CardHeader className="p-3 pb-2 border-b border-border/10">
               <CardTitle className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Campaign Controls</CardTitle>
               <CardDescription className="text-[10px] text-muted-foreground mt-0.5">
                 {selectedAgent ? selectedAgent.name : 'Select an agent to start'}
               </CardDescription>
             </CardHeader>
-            <CardContent className="p-3 space-y-3 flex-1 min-h-0">
+            <CardContent className="p-3 space-y-3">
               {/* Contact Upload */}
               <div className="space-y-1.5">
                 <Label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
@@ -1117,7 +1117,7 @@ export default function VoiceAgentsPage() {
 
           {/* Selected Agent Details */}
           {selectedAgent && (
-            <Card className="border-border/40 flex-shrink-0">
+            <Card className="border-border/40 w-full shadow-sm">
               <CardHeader className="p-3 pb-2 border-b border-border/10">
                 <CardTitle className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Agent Details</CardTitle>
               </CardHeader>

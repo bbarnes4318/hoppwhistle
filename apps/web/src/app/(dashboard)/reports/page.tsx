@@ -340,7 +340,7 @@ function ReportsPage() {
   }
 
   return (
-    <CompactPageShell>
+    <CompactPageShell fullHeight={false}>
       <CompactPageHeader
         title="Financial Reports"
         subtitle="Analyze publisher revenue, buyer costs, and campaign profit margins."
@@ -448,7 +448,7 @@ function ReportsPage() {
       </div>
 
       {/* Tabs Layout */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 min-h-0 flex flex-col gap-3">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex flex-col gap-3">
         <TabsList className="bg-muted/40 p-0.5 border border-border/40 self-start">
           {showProfitability && (
             <TabsTrigger value="campaign-profitability" className="text-xs h-7">Campaign Profitability</TabsTrigger>
@@ -463,7 +463,7 @@ function ReportsPage() {
 
         {/* Tab 1: Campaign Profitability */}
         {showProfitability && (
-          <TabsContent value="campaign-profitability" className="m-0 flex-1 min-h-0 flex flex-col gap-2.5 overflow-hidden">
+          <TabsContent value="campaign-profitability" className="m-0 w-full flex flex-col gap-2.5">
             {/* Quick Metrics */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 flex-shrink-0">
               <div className="rounded border border-border/40 bg-card p-2">
@@ -514,11 +514,11 @@ function ReportsPage() {
             </div>
 
             {/* Detailed Table Card */}
-            <Card className="flex-1 min-h-0 flex flex-col overflow-hidden bg-card border-border/40 shadow-sm">
+            <Card className="w-full bg-card border-border/40 shadow-sm">
               <CardHeader className="flex-shrink-0 py-2 px-3 border-b border-border/10">
                 <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Profit & Margin Ledger</CardTitle>
               </CardHeader>
-              <CardContent className="flex-grow min-h-0 overflow-auto p-0">
+              <CardContent className="p-0 overflow-x-auto">
                 <Table className="table-dense">
                   <TableHeader className="sticky top-0 bg-background z-10">
                     <TableRow className="border-b border-border/10">
@@ -644,7 +644,7 @@ function ReportsPage() {
 
         {/* Tab 2: Publisher Revenue */}
         {showPublisherRevenue && (
-          <TabsContent value="publisher-revenue" className="m-0 flex-1 min-h-0 flex flex-col gap-2.5 overflow-hidden">
+          <TabsContent value="publisher-revenue" className="m-0 w-full flex flex-col gap-2.5">
             {/* Quick Metrics */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 flex-shrink-0">
               <div className="rounded border border-border/40 bg-card p-2">
@@ -675,11 +675,11 @@ function ReportsPage() {
             </div>
 
             {/* Detailed Table Card */}
-            <Card className="flex-1 min-h-0 flex flex-col overflow-hidden bg-card border-border/40 shadow-sm">
+            <Card className="w-full bg-card border-border/40 shadow-sm">
               <CardHeader className="flex-shrink-0 py-2 px-3 border-b border-border/10">
                 <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Publisher Revenue Ledger</CardTitle>
               </CardHeader>
-              <CardContent className="flex-grow min-h-0 overflow-auto p-0">
+              <CardContent className="p-0 overflow-x-auto">
                 <Table className="table-dense">
                   <TableHeader className="sticky top-0 bg-background z-10">
                     <TableRow className="border-b border-border/10">
@@ -749,7 +749,7 @@ function ReportsPage() {
 
         {/* Tab 3: Buyer Costs */}
         {showBuyerCosts && (
-          <TabsContent value="buyer-costs" className="m-0 flex-1 min-h-0 flex flex-col gap-2.5 overflow-hidden">
+          <TabsContent value="buyer-costs" className="m-0 w-full flex flex-col gap-2.5">
             {/* Quick Metrics */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 flex-shrink-0">
               <div className="rounded border border-border/40 bg-card p-2">
@@ -780,11 +780,11 @@ function ReportsPage() {
             </div>
 
             {/* Detailed Table Card */}
-            <Card className="flex-1 min-h-0 flex flex-col overflow-hidden bg-card border-border/40 shadow-sm">
+            <Card className="w-full bg-card border-border/40 shadow-sm">
               <CardHeader className="flex-shrink-0 py-2 px-3 border-b border-border/10">
                 <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Buyer Costs Ledger</CardTitle>
               </CardHeader>
-              <CardContent className="flex-grow min-h-0 overflow-auto p-0">
+              <CardContent className="p-0 overflow-x-auto">
                 <Table className="table-dense">
                   <TableHeader className="sticky top-0 bg-background z-10">
                     <TableRow className="border-b border-border/10">

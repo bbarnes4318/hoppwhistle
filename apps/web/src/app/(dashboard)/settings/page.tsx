@@ -70,7 +70,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <CompactPageShell>
+    <CompactPageShell fullHeight={false}>
       <CompactPageHeader
         title="Settings"
         subtitle="Manage your account settings and integrations"
@@ -81,7 +81,7 @@ export default function SettingsPage() {
         </div>
       </CompactPageHeader>
 
-      <Tabs defaultValue="webhooks" className="flex-1 flex flex-col overflow-hidden min-h-0">
+      <Tabs defaultValue="webhooks" className="w-full flex flex-col">
         <TabsList className="w-full justify-start border-b border-border/40 bg-transparent h-9 p-0 mb-3 gap-6">
           <TabsTrigger
             value="webhooks"
@@ -109,8 +109,8 @@ export default function SettingsPage() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="webhooks" className="flex-1 flex flex-col overflow-hidden min-h-0 mt-0 data-[state=active]:flex">
-          <Card className="flex-1 flex flex-col overflow-hidden min-h-0 border-border/40">
+        <TabsContent value="webhooks" className="w-full mt-0 data-[state=active]:flex flex-col">
+          <Card className="w-full border-border/40 shadow-sm">
             <CardHeader className="flex-shrink-0 p-3 pb-2 border-b border-border/10 flex flex-row items-center justify-between space-y-0">
               <div>
                 <CardTitle className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Webhooks</CardTitle>
@@ -121,7 +121,7 @@ export default function SettingsPage() {
                 Add Webhook
               </Button>
             </CardHeader>
-            <CardContent className="flex-1 overflow-auto p-0 min-h-0">
+            <CardContent className="p-0 overflow-x-auto">
               {loading ? (
                 <div className="flex items-center justify-center h-full">
                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -188,8 +188,8 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="api-keys" className="flex-1 flex flex-col overflow-hidden min-h-0 mt-0 data-[state=active]:flex">
-          <Card className="flex-1 flex flex-col overflow-hidden min-h-0 border-border/40">
+        <TabsContent value="api-keys" className="w-full mt-0 data-[state=active]:flex flex-col">
+          <Card className="w-full border-border/40 shadow-sm">
             <CardHeader className="flex-shrink-0 p-3 pb-2 border-b border-border/10 flex flex-row items-center justify-between space-y-0">
               <div>
                 <CardTitle className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">API Keys</CardTitle>
@@ -200,7 +200,7 @@ export default function SettingsPage() {
                 Generate Key
               </Button>
             </CardHeader>
-            <CardContent className="flex-1 overflow-auto p-0 min-h-0">
+            <CardContent className="p-0 overflow-x-auto">
               <Table className="table-dense">
                 <TableHeader>
                   <TableRow>
@@ -227,8 +227,8 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="dnc" className="flex-1 flex flex-col overflow-hidden min-h-0 mt-0 data-[state=active]:flex">
-          <Card className="flex-1 flex flex-col overflow-hidden min-h-0 border-border/40">
+        <TabsContent value="dnc" className="w-full mt-0 data-[state=active]:flex flex-col">
+          <Card className="w-full border-border/40 shadow-sm">
             <CardHeader className="flex-shrink-0 p-3 pb-2 border-b border-border/10 flex flex-row items-center justify-between space-y-0">
               <div>
                 <CardTitle className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">DNC Lists</CardTitle>
@@ -239,7 +239,7 @@ export default function SettingsPage() {
                 Upload List
               </Button>
             </CardHeader>
-            <CardContent className="flex-1 overflow-auto p-0 min-h-0">
+            <CardContent className="p-0 overflow-x-auto">
               <Table className="table-dense">
                 <TableHeader>
                   <TableRow>
@@ -272,8 +272,8 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="legal" className="flex-1 flex flex-col overflow-hidden min-h-0 mt-0 data-[state=active]:flex">
-          <Card className="flex-1 flex flex-col overflow-hidden min-h-0 border-border/40">
+        <TabsContent value="legal" className="w-full mt-0 data-[state=active]:flex flex-col">
+          <Card className="w-full border-border/40 shadow-sm">
             <CardHeader className="flex-shrink-0 p-3 pb-2 border-b border-border/10">
               <div>
                 <CardTitle className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Legal Documents</CardTitle>
@@ -282,7 +282,7 @@ export default function SettingsPage() {
                 </CardDescription>
               </div>
             </CardHeader>
-            <CardContent className="flex-1 overflow-auto p-3 min-h-0">
+            <CardContent className="p-3">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                 <a
                   href="/legal/privacy"

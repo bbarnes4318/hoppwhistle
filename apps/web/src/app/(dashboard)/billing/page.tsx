@@ -187,7 +187,7 @@ function BillingPage() {
  }
 
   return (
-    <CompactPageShell>
+    <CompactPageShell fullHeight={false}>
       <CompactPageHeader
         title="Billing"
         subtitle="Manage invoices, balances, and payouts"
