@@ -889,6 +889,24 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                 </div>
               </Section>
 
+              {/* Captured Script Data */}
+              {lead.customFields && Object.keys(lead.customFields).length > 0 && (
+                <Section title="Captured Script Data">
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-xs max-h-[400px] overflow-y-auto pr-1">
+                    {Object.entries(lead.customFields).map(([key, val]) => (
+                      <div key={key} className="space-y-0.5 border-b border-white/5 pb-1">
+                        <span className="text-[9px] font-mono uppercase tracking-wider text-slate-500 block">
+                          {key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
+                        </span>
+                        <span className="font-mono text-slate-300 block truncate" title={String(val)}>
+                          {typeof val === 'boolean' ? (val ? 'Yes' : 'No') : String(val ?? '—')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </Section>
+              )}
+
               {/* Metadata */}
               <Section title="Metadata">
                 <div className="space-y-2 text-xs text-slate-500">
