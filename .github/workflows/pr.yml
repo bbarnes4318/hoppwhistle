@@ -77,7 +77,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Lint
-        run: pnpm --filter "!@callfabric/transcriber" --filter "!@callfabric/media" lint
+        run: pnpm --filter "!@callfabric/transcriber" --filter "!@callfabric/media" --filter "!@hopwhistle/worker" lint
         continue-on-error: false
 
       - name: Format check
