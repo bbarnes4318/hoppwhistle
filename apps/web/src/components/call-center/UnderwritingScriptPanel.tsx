@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { Phone, HelpCircle, CheckCircle2, ChevronRight, ChevronLeft, ShieldCheck, RefreshCw } from 'lucide-react';
+import { useState, useCallback, useMemo } from 'react';
+import { HelpCircle, CheckCircle2, ChevronRight, ChevronLeft, ShieldCheck } from 'lucide-react';
+import { useScriptAccess } from '@/hooks/useUserRoles';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -136,13 +137,30 @@ End the call when ready. Your call notes will be automatically appended to the c
 };
 
 export function UnderwritingScriptPanel({
-  prospectData,
-  onDataUpdate,
+  prospectData: _prospectData,
+  onDataUpdate: _onDataUpdate,
 }: UnderwritingScriptPanelProps): JSX.Element {
+  const { customScripts } = useScriptAccess();
   const [activeStepId, setActiveStepId] = useState<StepId>('step1');
   const [history, setHistory] = useState<StepId[]>([]);
 
-  const currentStep = STEPS[activeStepId] || STEPS.step1;
+  // Dynamically map STEPS with custom overrides if present
+  const steps = useMemo(() => {
+    if (!customScripts) return STEPS;
+    const overridden = { ...STEPS };
+    Object.keys(customScripts).forEach(key => {
+      const stepId = key as StepId;
+      if (overridden[stepId]) {
+        overridden[stepId] = {
+          ...overridden[stepId],
+          script: customScripts[key],
+        };
+      }
+    });
+    return overridden;
+  }, [customScripts]);
+
+  const currentStep = steps[activeStepId] || steps.step1;
 
   // Progress percentage (based on phases 1 to 5)
   const progress = Math.round((currentStep.phase / 5) * 100);

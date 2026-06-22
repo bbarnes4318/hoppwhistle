@@ -7,6 +7,7 @@
 
 import { FileText, AlertCircle, Phone, User } from 'lucide-react';
 import React from 'react';
+import { useScriptAccess } from '@/hooks/useUserRoles';
 
 // ============================================================================
 // TYPES
@@ -38,12 +39,21 @@ interface RetentionScriptPanelProps {
 // MAIN COMPONENT
 // ============================================================================
 const RetentionScriptPanel = ({ prospectData, onDataUpdate }: RetentionScriptPanelProps) => {
- // Extract customer name for personalization
- const customerName = prospectData?.first_name || prospectData?.firstName || 'Customer';
- const customerPhone = prospectData?.phone || prospectData?.caller_id || '';
+  const { customScripts } = useScriptAccess();
+  // Extract customer name for personalization
+  const customerName = prospectData?.first_name || prospectData?.firstName || 'Customer';
+  const customerPhone = prospectData?.phone || prospectData?.caller_id || '';
 
- // Suppress unused var warning
- void onDataUpdate;
+  // Suppress unused var warning
+  void onDataUpdate;
+
+  const replaceVars = (text: string) => {
+    if (!text) return '';
+    return text
+      .replace(/{customerName}/g, `<span class="text-cyan-400 font-medium">${customerName}</span>`)
+      .replace(/{first_name}/g, `<span class="text-cyan-400 font-medium">${customerName}</span>`)
+      .replace(/{firstName}/g, `<span class="text-cyan-400 font-medium">${customerName}</span>`);
+  };
 
  return (
  <div className="h-full flex flex-col overflow-auto bg-background">
@@ -108,11 +118,15 @@ const RetentionScriptPanel = ({ prospectData, onDataUpdate }: RetentionScriptPan
  </div>
  <div className="flex-1">
  <p className="text-sm font-medium text-white mb-1">Greet the Customer</p>
- <p className="text-sm text-gray-400">
- &quot;Hello <span className="text-cyan-400">{customerName}</span>, this is [Your
- Name] from the retention team. I understand you&apos;re considering some changes
- to your policy...&quot;
- </p>
+ <p
+    className="text-sm text-gray-400 whitespace-pre-wrap"
+    dangerouslySetInnerHTML={{
+      __html: replaceVars(
+        customScripts?.['retention_step1'] ||
+          "Hello {customerName}, this is [Your Name] from the retention team. I understand you're considering some changes to your policy..."
+      ),
+    }}
+  />
  </div>
  </div>
 
@@ -123,10 +137,10 @@ const RetentionScriptPanel = ({ prospectData, onDataUpdate }: RetentionScriptPan
  </div>
  <div className="flex-1">
  <p className="text-sm font-medium text-white mb-1">Acknowledge Concerns</p>
- <p className="text-sm text-gray-400">
- Listen actively to the customer&apos;s concerns. Validate their feelings and
- show empathy.
- </p>
+ <p className="text-sm text-gray-400 whitespace-pre-wrap">
+    {customScripts?.['retention_step2'] ||
+      "Listen actively to the customer's concerns. Validate their feelings and show empathy."}
+  </p>
  </div>
  </div>
 
@@ -137,10 +151,10 @@ const RetentionScriptPanel = ({ prospectData, onDataUpdate }: RetentionScriptPan
  </div>
  <div className="flex-1">
  <p className="text-sm font-medium text-white mb-1">Present Retention Offers</p>
- <p className="text-sm text-gray-400">
- Based on their concerns, present available retention offers, discounts, or plan
- adjustments.
- </p>
+ <p className="text-sm text-gray-400 whitespace-pre-wrap">
+    {customScripts?.['retention_step3'] ||
+      "Based on their concerns, present available retention offers, discounts, or plan adjustments."}
+  </p>
  </div>
  </div>
 
@@ -151,9 +165,10 @@ const RetentionScriptPanel = ({ prospectData, onDataUpdate }: RetentionScriptPan
  </div>
  <div className="flex-1">
  <p className="text-sm font-medium text-white mb-1">Document Outcome</p>
- <p className="text-sm text-gray-400">
- Record the call outcome, any offers made, and next steps in the CRM.
- </p>
+ <p className="text-sm text-gray-400 whitespace-pre-wrap">
+    {customScripts?.['retention_step4'] ||
+      "Record the call outcome, any offers made, and next steps in the CRM."}
+  </p>
  </div>
  </div>
  </div>

@@ -215,11 +215,12 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
   // Email Registration
   // ============================================================================
   fastify.post('/api/auth/register', async (request, reply) => {
-    const { email, password, firstName, lastName } = request.body as {
+    const { email, password, firstName, lastName, position } = request.body as {
       email: string;
       password: string;
       firstName?: string;
       lastName?: string;
+      position?: string;
     };
 
     if (!email || !password) {
@@ -279,6 +280,9 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     // Hash password (12 salt rounds for security)
     const passwordHash = await hash(password, 12);
 
+    const userPosition = position || 'Licensed Agent';
+    const defaultScript = userPosition === 'Retention' ? 'retention' : 'sales';
+
     // Create user with default tenant
     const user = await prisma.user.create({
       data: {
@@ -289,6 +293,10 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         firstName: firstName?.trim() || null,
         lastName: lastName?.trim() || null,
         status: 'ACTIVE',
+        metadata: {
+          position: userPosition,
+          defaultScript: defaultScript,
+        },
       },
     });
 
@@ -656,6 +664,64 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         publisherId: user.publisherId || (userMetadata?.publisherId as string | null) || null,
         publisherAccessToRecordings,
         buyerAccessToRecordings,
+        position: userMetadata?.position || null,
+        defaultScript: userMetadata?.defaultScript || null,
+        customScripts: userMetadata?.customScripts || null,
+      });
+    }
+  );
+
+  // ============================================================================
+  // Update User Settings (me)
+  // ============================================================================
+  fastify.patch(
+    '/api/auth/me/settings',
+    {
+      preHandler: [authenticate],
+    },
+    async (request, reply) => {
+      const { userId } = request.user as { userId: string };
+      const { position, defaultScript, customScripts } = request.body as {
+        position?: string;
+        defaultScript?: string;
+        customScripts?: Record<string, string>;
+      };
+
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+      });
+
+      if (!user) {
+        return reply.code(404).send({
+          error: {
+            code: 'NOT_FOUND',
+            message: 'User not found',
+          },
+        });
+      }
+
+      const currentMetadata = (user.metadata as Record<string, any>) || {};
+      const newMetadata = {
+        ...currentMetadata,
+      };
+
+      if (position !== undefined) newMetadata.position = position;
+      if (defaultScript !== undefined) newMetadata.defaultScript = defaultScript;
+      if (customScripts !== undefined) {
+        newMetadata.customScripts = {
+          ...(currentMetadata.customScripts as Record<string, string> || {}),
+          ...customScripts,
+        };
+      }
+
+      const updated = await prisma.user.update({
+        where: { id: userId },
+        data: { metadata: newMetadata },
+      });
+
+      return reply.send({
+        success: true,
+        metadata: updated.metadata,
       });
     }
   );

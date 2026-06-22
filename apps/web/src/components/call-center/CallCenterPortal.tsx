@@ -37,6 +37,69 @@ import { apiClient } from '@/lib/api';
 import { CustomerCrmPanel } from './CustomerCrmPanel';
 import type { CustomerLookupResponse } from '@/lib/api/leads';
 import { fetchCustomerLookup } from '@/lib/api/leads';
+import { SCRIPT_NODES } from '../../lib/call-center/scriptData';
+
+// ============================================================================
+// DEFAULT SCRIPT CONTENT FOR EDITOR
+// ============================================================================
+const DEFAULT_RETENTION_SCRIPT = {
+  retention_step1: `Hello {customerName}, this is [Your Name] from the retention team. I understand you're considering some changes to your policy...`,
+  retention_step2: `Listen actively to the customer's concerns. Validate their feelings and show empathy.`,
+  retention_step3: `Based on their concerns, present available retention offers, discounts, or plan adjustments.`,
+  retention_step4: `Record the call outcome, any offers made, and next steps in the CRM.`
+};
+
+const DEFAULT_UNDERWRITING_SCRIPT = {
+  step1: `Please place a call to TransAmerica Underwriting & Policy Servicing.
+
+• Phone Number: 1-877-234-4848
+• Select Option 1 (Underwriting / Policy Servicing)
+
+Once a representative answers, introduce yourself:
+"Hello, I am the underwriting assistant for Yazzyl Vasquez and American Beneficiary LLC. I need to check the status of a policy."
+
+If requested, verify Yazzyl's Agent Credentials:
+• Agent Number: MLSR181715`,
+  step2: `Confirm status of application/policy and update CRM notes.`,
+  wrapup: `Wrap up call with TransAmerica representative, thank them for their time, and update status.`
+};
+
+const EDITABLE_NODES = {
+  sales: [
+    { id: 'greeting_start', label: '👋 Trust Anchor / Greeting' },
+    { id: 'verify_state', label: '📍 State Verification' },
+    { id: 'verify_age', label: '🔞 Age Verification' },
+    { id: 'emotional_anchor', label: '⚓ Emotional Excavation' },
+    { id: 'health_q_intro', label: '📋 Eligibility Pivot / Health Questions' },
+    { id: 'pricing_options', label: '💰 Option Selection' },
+    { id: 'application_opener', label: '✍️ Commitment Seal / Application Opener' },
+    { id: 'ssn_collection', label: '🔒 Identity Lock / SSN Collection' },
+    { id: 'payment_disarm', label: '💳 Financial Disarm / Banking' },
+    { id: 'victory_lap', label: '🏆 Victory Lap / Welcome' },
+  ],
+  retention: [
+    { id: 'retention_step1', label: '👋 Greet the Customer' },
+    { id: 'retention_step2', label: '🤝 Acknowledge Concerns' },
+    { id: 'retention_step3', label: '🎁 Present Retention Offers' },
+    { id: 'retention_step4', label: '📝 Document Outcome' },
+  ],
+  underwriting: [
+    { id: 'step1', label: '📞 Call Underwriting / Agent Credentials' },
+    { id: 'step2', label: '🔎 Retrieve Policy Status' },
+    { id: 'wrapup', label: '🏁 Wrap-up & Status Update' },
+  ],
+};
+
+const getDefaultScriptText = (scriptType: 'sales' | 'retention' | 'underwriting', nodeId: string): string => {
+  if (scriptType === 'sales') {
+    return SCRIPT_NODES[nodeId]?.script || '';
+  } else if (scriptType === 'retention') {
+    return DEFAULT_RETENTION_SCRIPT[nodeId as keyof typeof DEFAULT_RETENTION_SCRIPT] || '';
+  } else if (scriptType === 'underwriting') {
+    return DEFAULT_UNDERWRITING_SCRIPT[nodeId as keyof typeof DEFAULT_UNDERWRITING_SCRIPT] || '';
+  }
+  return '';
+};
 
 // ============================================================================
 // MAIN COMPONENT
@@ -127,11 +190,45 @@ export function CallCenterPortal(): JSX.Element {
 
   // Database-driven role and script access
   const {
+    user,
     canAccessRetentionScript,
     derivedJobTitle,
     loading: rolesLoading,
     isAdminOrOwner,
+    defaultScript,
+    position,
+    customScripts,
+    refetch: refetchUser,
   } = useScriptAccess();
+
+  // Settings Tab and Editor State
+  const [settingsTab, setSettingsTab] = useState<'general' | 'scripts'>('general');
+  const [editingScriptType, setEditingScriptType] = useState<'sales' | 'retention' | 'underwriting'>('sales');
+  const [editingNodeId, setEditingNodeId] = useState('greeting_start');
+  const [editedText, setEditedText] = useState('');
+  const [savingScript, setSavingScript] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Initialize selectedScript when defaults are loaded
+  useEffect(() => {
+    if (!rolesLoading && defaultScript) {
+      setSelectedScript(defaultScript as SelectedScript);
+    }
+  }, [rolesLoading, defaultScript]);
+
+  // Load script node text when user edits
+  useEffect(() => {
+    if (customScripts && customScripts[editingNodeId] !== undefined) {
+      setEditedText(customScripts[editingNodeId]);
+    } else {
+      setEditedText(getDefaultScriptText(editingScriptType, editingNodeId));
+    }
+  }, [editingNodeId, editingScriptType, customScripts]);
+
+  const handleScriptTypeChange = (type: 'sales' | 'retention' | 'underwriting') => {
+    setEditingScriptType(type);
+    setEditingNodeId(EDITABLE_NODES[type][0].id);
+  };
 
   // Calculate appointment rate: (Appointments / Total Calls) * 100
   const appointmentRate =
@@ -455,6 +552,10 @@ export function CallCenterPortal(): JSX.Element {
     } catch (e) {
       console.error('Failed to answer call:', e);
     }
+    // Set first script based on defaultScript preference
+    const initialScript = defaultScript || (position === 'Retention' ? 'retention' : 'sales');
+    setSelectedScript(initialScript as SelectedScript);
+
     // State updates happen via useEffect watching currentCall
     setIsIncomingCall(false);
     setIsCallActive(true);
@@ -751,9 +852,22 @@ export function CallCenterPortal(): JSX.Element {
       {/* Settings Modal */}
       {showSettings && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-card rounded-xl border border-border w-full max-w-md shadow-sm">
+          <div className={`bg-card rounded-xl border border-border w-full ${settingsTab === 'scripts' ? 'max-w-2xl' : 'max-w-md'} shadow-sm transition-all duration-200`}>
             <div className="p-4 border-b border-border flex items-center justify-between">
-              <h2 className="text-lg font-bold text-white">User Settings</h2>
+              <div className="flex gap-4">
+                <button
+                  onClick={() => setSettingsTab('general')}
+                  className={`text-sm font-bold pb-2 border-b-2 ${settingsTab === 'general' ? 'border-primary text-white' : 'border-transparent text-muted-foreground'}`}
+                >
+                  General Settings
+                </button>
+                <button
+                  onClick={() => setSettingsTab('scripts')}
+                  className={`text-sm font-bold pb-2 border-b-2 ${settingsTab === 'scripts' ? 'border-primary text-white' : 'border-transparent text-muted-foreground'}`}
+                >
+                  Script Customizer
+                </button>
+              </div>
               <button
                 onClick={() => setShowSettings(false)}
                 className="p-1 hover:bg-muted rounded-lg transition-colors"
@@ -761,69 +875,159 @@ export function CallCenterPortal(): JSX.Element {
                 <X className="w-5 h-5 text-muted-foreground" />
               </button>
             </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm text-muted-foreground mb-2">Your Role</label>
-                <div className="w-full bg-muted text-white text-sm p-3 rounded-lg border border-border">
-                  {rolesLoading ? (
-                    <span className="text-muted-foreground">Loading...</span>
-                  ) : (
-                    <span className={isAdminOrOwner ? 'text-purple-400' : 'text-slate-300'}>
-                      {derivedJobTitle}
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Your role is assigned by your organization administrator.
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm text-muted-foreground mb-2">Script Access</label>
-                <div className="p-3 bg-muted rounded-lg border border-border">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-white">📋 Contractor Sales Script</span>
-                    <span
-                      className={`text-xs ${selectedScript === 'sales' ? 'text-green-400' : 'text-muted-foreground'}`}
-                    >
-                      {selectedScript === 'sales' ? '✓ Selected' : 'Available'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-white">🎯 Retention Script</span>
-                    <span
-                      className={`text-xs ${
-                        !canAccessRetentionScript
-                          ? 'text-muted-foreground'
-                          : selectedScript === 'retention'
-                            ? 'text-green-400'
-                            : 'text-muted-foreground'
-                      }`}
-                    >
-                      {!canAccessRetentionScript
-                        ? '✗ Restricted'
-                        : selectedScript === 'retention'
-                          ? '✓ Selected'
-                          : 'Available'}
-                    </span>
+            
+            {settingsTab === 'general' ? (
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm text-muted-foreground mb-2">Your Position / Role</label>
+                  <div className="w-full bg-muted text-white text-sm p-3 rounded-lg border border-border">
+                    {rolesLoading ? (
+                      <span className="text-muted-foreground">Loading...</span>
+                    ) : (
+                      <span className="text-slate-300 font-medium">
+                        {derivedJobTitle}
+                      </span>
+                    )}
                   </div>
                 </div>
-                {canAccessRetentionScript ? (
+
+                <div>
+                  <label className="block text-sm text-muted-foreground mb-2">Default Script Preference</label>
+                  <select
+                    value={defaultScript || (position === 'Retention' ? 'retention' : 'sales')}
+                    onChange={async (e) => {
+                      try {
+                        await apiClient.patch('/api/auth/me/settings', {
+                          defaultScript: e.target.value,
+                        });
+                        await refetchUser();
+                      } catch (err) {
+                        console.error('Failed to save default script:', err);
+                      }
+                    }}
+                    className="flex h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  >
+                    <option value="sales">Contractor Script</option>
+                    <option value="retention">Retention Script</option>
+                    <option value="underwriting">Underwriting Script</option>
+                  </select>
                   <p className="text-xs text-muted-foreground mt-2">
-                    Use the dropdown in the header to switch scripts during calls.
+                    This script will automatically display first when you answer incoming calls.
                   </p>
-                ) : (
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Retention Script requires ADMIN or OWNER role.
-                  </p>
-                )}
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="p-6 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1.5 uppercase font-semibold">Select Script</label>
+                    <select
+                      value={editingScriptType}
+                      onChange={(e) => handleScriptTypeChange(e.target.value as any)}
+                      className="flex h-9 w-full rounded-md border border-input bg-muted px-3 py-1.5 text-xs text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    >
+                      <option value="sales">Contractor Script</option>
+                      <option value="retention">Retention Script</option>
+                      <option value="underwriting">Underwriting Script</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1.5 uppercase font-semibold">Select Step / Node</label>
+                    <select
+                      value={editingNodeId}
+                      onChange={(e) => setEditingNodeId(e.target.value)}
+                      className="flex h-9 w-full rounded-md border border-input bg-muted px-3 py-1.5 text-xs text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    >
+                      {EDITABLE_NODES[editingScriptType].map(nodeOpt => (
+                        <option key={nodeOpt.id} value={nodeOpt.id}>
+                          {nodeOpt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label className="block text-xs text-muted-foreground uppercase font-semibold">Script Text Template</label>
+                    {customScripts && customScripts[editingNodeId] !== undefined && (
+                      <span className="text-[10px] bg-cyan-500/10 text-cyan-400 px-2 py-0.5 rounded font-mono font-medium">Customized</span>
+                    )}
+                  </div>
+                  <textarea
+                    value={editedText}
+                    onChange={(e) => {
+                      setEditedText(e.target.value);
+                      setSaveSuccess(false);
+                    }}
+                    rows={8}
+                    className="flex w-full rounded-md border border-input bg-muted px-3 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 font-sans leading-relaxed"
+                    placeholder="Enter script text template..."
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1.5 leading-normal">
+                    You can use variables like <code className="bg-zinc-800 px-1 py-0.5 rounded text-cyan-300 font-mono">{'{first_name}'}</code>, <code className="bg-zinc-800 px-1 py-0.5 rounded text-cyan-300 font-mono">{'{last_name}'}</code>, <code className="bg-zinc-800 px-1 py-0.5 rounded text-cyan-300 font-mono">{'{state}'}</code>, and <code className="bg-zinc-800 px-1 py-0.5 rounded text-cyan-300 font-mono">{'{agent_name}'}</code> in the template.
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-between pt-2">
+                  <button
+                    onClick={async () => {
+                      try {
+                        const defaultTxt = getDefaultScriptText(editingScriptType, editingNodeId);
+                        setEditedText(defaultTxt);
+                        setSavingScript(true);
+                        await apiClient.patch('/api/auth/me/settings', {
+                          customScripts: { [editingNodeId]: defaultTxt },
+                        });
+                        await refetchUser();
+                        setSaveSuccess(true);
+                      } catch (err) {
+                        console.error('Failed to reset script:', err);
+                      } finally {
+                        setSavingScript(false);
+                      }
+                    }}
+                    disabled={savingScript}
+                    className="text-xs text-amber-500 hover:text-amber-400 font-medium transition-colors disabled:opacity-50"
+                  >
+                    Reset to Default
+                  </button>
+                  <div className="flex items-center gap-3">
+                    {saveSuccess && (
+                      <span className="text-xs text-green-400 font-medium">✓ Saved successfully</span>
+                    )}
+                    <button
+                      onClick={async () => {
+                        setSavingScript(true);
+                        setSaveSuccess(false);
+                        try {
+                          await apiClient.patch('/api/auth/me/settings', {
+                            customScripts: { [editingNodeId]: editedText },
+                          });
+                          await refetchUser();
+                          setSaveSuccess(true);
+                        } catch (err) {
+                          console.error('Failed to save script step:', err);
+                        } finally {
+                          setSavingScript(false);
+                        }
+                      }}
+                      disabled={savingScript}
+                      className="px-4 py-2 bg-primary text-white font-medium text-xs rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
+                    >
+                      {savingScript ? 'Saving...' : 'Save Script Step'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="p-4 border-t border-border">
               <button
                 onClick={() => setShowSettings(false)}
-                className="w-full py-2 bg-primary text-white font-medium rounded-lg hover:opacity-90 transition-opacity"
+                className="w-full py-2 bg-muted text-white font-medium rounded-lg hover:bg-muted/80 transition-colors"
               >
-                Save Settings
+                Close Settings
               </button>
             </div>
           </div>

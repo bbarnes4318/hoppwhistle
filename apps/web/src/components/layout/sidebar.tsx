@@ -67,6 +67,8 @@ export function Sidebar() {
         title: 'AI voice agents & outbound campaigns',
       },
       { name: 'Call Center', href: '/call-center', icon: Headphones },
+      { name: 'Contacts / CRM', href: '/contacts', icon: Users },
+      { name: 'Insurance Leads', href: '/insurance-leads', icon: FileText },
       { name: 'Numbers', href: '/numbers', icon: PhoneCall },
       { name: 'Campaigns', href: '/campaigns', icon: Megaphone },
       { name: 'Publishers', href: '/publishers', icon: Users },

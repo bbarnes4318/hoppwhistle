@@ -60,6 +60,7 @@ export default function AuthPage() {
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [position, setPosition] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   // UI state
@@ -207,7 +208,7 @@ export default function AuthPage() {
       const res = await fetch(`${API_BASE}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, firstName, lastName }),
+        body: JSON.stringify({ email, password, firstName, lastName, position }),
         credentials: 'include',
       });
 
@@ -504,6 +505,26 @@ export default function AuthPage() {
                         autoComplete="email"
                         className="h-10 font-mono text-sm shadow-none"
                       />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label
+                        htmlFor="signup-position"
+                        className="text-[10px] font-mono font-semibold tracking-widest text-muted-foreground uppercase"
+                      >
+                        Position / Role
+                      </label>
+                      <select
+                        id="signup-position"
+                        value={position}
+                        onChange={(e) => setPosition(e.target.value)}
+                        required
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <option value="">Select Position...</option>
+                        <option value="Licensed Agent">Licensed Agent</option>
+                        <option value="Sales Support">Sales Support</option>
+                        <option value="Retention">Retention</option>
+                      </select>
                     </div>
                     <div className="space-y-1.5">
                       <label

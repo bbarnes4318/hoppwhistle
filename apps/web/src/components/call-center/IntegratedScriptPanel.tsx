@@ -78,6 +78,7 @@ const calculateEligibility = (_healthAnswers: Record<string, unknown>): string =
 // SETTINGS PANEL FOR CARRIER SELECTION
 // ═══════════════════════════════════════════════════════════════════════════
 import SettingsPanel from './SettingsPanel';
+import { useScriptAccess } from '@/hooks/useUserRoles';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // HELPER: Calculate age from DOB
@@ -146,6 +147,7 @@ interface IntegratedScriptPanelProps {
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════
 const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedScriptPanelProps) => {
+  const { customScripts } = useScriptAccess();
  // ─────────────────────────────────────────────────────────────────────────
  // DETERMINE DATA SOURCE FOR LOCATION
  // Priority 1: Webhook Data (city + state)
@@ -852,7 +854,22 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
  // ─────────────────────────────────────────────────────────────────────────
  // DYNAMIC SCRIPT NODES
  // ─────────────────────────────────────────────────────────────────────────
- const NODES = useMemo(() => getAdaptedNodes(formData), [formData]);
+ const NODES = useMemo(() => {
+    const baseNodes = getAdaptedNodes(formData);
+    if (!customScripts) return baseNodes;
+
+    // Apply custom script overrides
+    const overriddenNodes = { ...baseNodes };
+    Object.keys(customScripts).forEach(key => {
+      if (overriddenNodes[key]) {
+        overriddenNodes[key] = {
+          ...overriddenNodes[key],
+          script: customScripts[key],
+        };
+      }
+    });
+    return overriddenNodes;
+  }, [formData, customScripts]);
 
  // Get current node
  const node = NODES[nodeId];

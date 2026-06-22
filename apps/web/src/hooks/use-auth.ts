@@ -13,6 +13,9 @@ interface UserData {
   tenantId: string;
   publisherAccessToRecordings?: boolean;
   buyerAccessToRecordings?: boolean;
+  position?: string | null;
+  defaultScript?: string | null;
+  customScripts?: Record<string, string> | null;
 }
 
 interface UseAuthReturn {
@@ -94,6 +97,9 @@ export function useAuth(): UseAuthReturn {
         tenantId: rawUser.tenantId,
         publisherAccessToRecordings: rawUser.publisherAccessToRecordings,
         buyerAccessToRecordings: rawUser.buyerAccessToRecordings,
+        position: rawUser.position,
+        defaultScript: rawUser.defaultScript,
+        customScripts: rawUser.customScripts,
       });
       setError(null);
     } catch (err) {
