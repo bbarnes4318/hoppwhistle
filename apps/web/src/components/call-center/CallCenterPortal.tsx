@@ -12,6 +12,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ActiveCallControls } from './ActiveCallControls';
 import { ApplicationQueue } from './ApplicationQueue';
 import { CallCenterHeader } from './CallCenterHeader';
+import { CapturedScriptDataPanel } from './CapturedScriptDataPanel';
 import { DialerPanel } from './DialerPanel';
 import { DispositionPanel } from './DispositionPanel';
 import { IncomingCallPanel } from './IncomingCallPanel';
@@ -181,9 +182,34 @@ export function CallCenterPortal(): JSX.Element {
 
   // User Settings & Stats
   const [showSettings, setShowSettings] = useState(false);
-  const [appointmentsCount, setAppointmentsCount] = useState(0);
-  const [totalCallsCount, setTotalCallsCount] = useState(0);
-  const [followUpCount, setFollowUpCount] = useState(0);
+  const [appointmentsCount, setAppointmentsCount] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const v = localStorage.getItem('cc_appointments_count');
+      return v ? parseInt(v, 10) : 0;
+    }
+    return 0;
+  });
+  const [totalCallsCount, setTotalCallsCount] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const v = localStorage.getItem('cc_total_calls_count');
+      return v ? parseInt(v, 10) : 0;
+    }
+    return 0;
+  });
+  const [followUpCount, setFollowUpCount] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const v = localStorage.getItem('cc_follow_up_count');
+      return v ? parseInt(v, 10) : 0;
+    }
+    return 0;
+  });
+  const [salesCount, setSalesCount] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const v = localStorage.getItem('cc_sales_count');
+      return v ? parseInt(v, 10) : 0;
+    }
+    return 0;
+  });
 
   // Script Selection - Default to Contractor Sales Script
   const [selectedScript, setSelectedScript] = useState<SelectedScript>('sales');
@@ -230,9 +256,22 @@ export function CallCenterPortal(): JSX.Element {
     setEditingNodeId(EDITABLE_NODES[type][0].id);
   };
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('cc_appointments_count', String(appointmentsCount));
+      localStorage.setItem('cc_total_calls_count', String(totalCallsCount));
+      localStorage.setItem('cc_follow_up_count', String(followUpCount));
+      localStorage.setItem('cc_sales_count', String(salesCount));
+    }
+  }, [appointmentsCount, totalCallsCount, followUpCount, salesCount]);
+
   // Calculate appointment rate: (Appointments / Total Calls) * 100
   const appointmentRate =
     totalCallsCount > 0 ? ((appointmentsCount / totalCallsCount) * 100).toFixed(1) : '0.0';
+
+  // Calculate conversion rate: (Sales / Total Calls) * 100
+  const conversionRate =
+    totalCallsCount > 0 ? ((salesCount / totalCallsCount) * 100).toFixed(1) : '0.0';
 
   // ─────────────────────────────────────────────────────────────────────────
   // SYNC WITH PHONE HOOK - React to incoming/active calls from sip.js
@@ -626,12 +665,95 @@ export function CallCenterPortal(): JSX.Element {
       followUpAt,
     };
     setCallRecords(prev => [...prev, callRecord]);
-    if (selectedDisposition === 'SET_APPOINTMENT') {
-      setAppointmentsCount(prev => prev + 1);
-    }
-    if (selectedDisposition === 'SET_CALLBACK' || selectedDisposition === 'FOLLOW_UP') {
+    if (selectedDisposition === 'APPLICATION_SUBMITTED') {
+      setSalesCount(prev => prev + 1);
+    } else {
       setFollowUpCount(prev => prev + 1);
+      if (selectedDisposition === 'SET_APPOINTMENT') {
+        setAppointmentsCount(prev => prev + 1);
+      }
     }
+
+    // Start/update customer profile in CRM
+    if (activeCallData) {
+      const rawPhone = (activeCallData.phone || activeCallData.caller_id || crmPhone || '').replace(/\D/g, '') || '0000000000';
+      const finalPhone = rawPhone.length > 10 ? rawPhone.slice(-10) : rawPhone.padStart(10, '0');
+
+      const crmPayload = {
+        firstName: activeCallData.firstName || activeCallData.first_name || 'Prospect',
+        lastName: activeCallData.lastName || activeCallData.last_name || 'Record',
+        phone: finalPhone,
+        email: activeCallData.email || `${(activeCallData.firstName || 'prospect').toLowerCase()}@placeholder.com`,
+        address: activeCallData.address || '123 Main St',
+        city: activeCallData.city || 'Anytown',
+        state: activeCallData.state || 'TX',
+        zipCode: activeCallData.zip || activeCallData.zipCode || '12345',
+        birthDate: activeCallData.dob || '01/01/1980',
+        gender: activeCallData.gender || 'Female',
+        age: activeCallData.age ? Number(activeCallData.age) : undefined,
+        smoker: activeCallData.tobacco ? 'Yes' : 'No',
+        carrier: activeCallData.selectedCarrier || undefined,
+        monthlyPremium: activeCallData.selectedPremium ? String(activeCallData.selectedPremium) : undefined,
+        coverageAmount: activeCallData.selectedCoverage ? String(activeCallData.selectedCoverage) : undefined,
+        source: 'CALL_CENTER',
+        customFields: {
+          middleName: activeCallData.middleName || '',
+          ssn: activeCallData.ssn || '',
+          birthState: activeCallData.birthState || '',
+          citizenship: activeCallData.citizenship || '',
+          beneficiaryName: activeCallData.beneficiaryName || '',
+          beneficiaryRelation: activeCallData.beneficiaryRelation || '',
+          ssPaymentDay: activeCallData.ssPaymentDay || '',
+          accountHolder: activeCallData.accountHolder || '',
+          bankName: activeCallData.bankName || '',
+          bankCityState: activeCallData.bankCityState || '',
+          ssPaymentSchedule: activeCallData.ssPaymentSchedule || null,
+          draftDay: activeCallData.draftDay || '',
+          routingNumber: activeCallData.routingNumber || '',
+          accountNumber: activeCallData.accountNumber || '',
+          accountType: activeCallData.accountType || '',
+          doctorName: activeCallData.doctorName || '',
+          doctorAddress: activeCallData.doctorAddress || '',
+          doctorPhone: activeCallData.doctorPhone || '',
+          hospitalizationReason: activeCallData.hospitalizationReason || '',
+          callbackDate: activeCallData.callbackDate || '',
+          callbackTime: activeCallData.callbackTime || '',
+          ownerIsInsured: activeCallData.ownerIsInsured ?? true,
+          payorIsInsured: activeCallData.payorIsInsured ?? true,
+          hasExistingInsurance: activeCallData.hasExistingInsurance ?? null,
+          existingCompanyName: activeCallData.existingCompanyName || '',
+          existingPolicyNumber: activeCallData.existingPolicyNumber || '',
+          existingCoverageAmount: activeCallData.existingCoverageAmount || '',
+          // Health questions
+          healthQ1: activeCallData.healthQ1,
+          healthQ2: activeCallData.healthQ2,
+          healthQ3: activeCallData.healthQ3,
+          healthQ4: activeCallData.healthQ4,
+          healthQ5: activeCallData.healthQ5,
+          healthQ6: activeCallData.healthQ6,
+          healthQ7a: activeCallData.healthQ7a,
+          healthQ7b: activeCallData.healthQ7b,
+          healthQ7c: activeCallData.healthQ7c,
+          healthQ7d: activeCallData.healthQ7d,
+          healthQ8a: activeCallData.healthQ8a,
+          healthQ8b: activeCallData.healthQ8b,
+          healthQ8c: activeCallData.healthQ8c,
+          healthCovid: activeCallData.healthCovid,
+        }
+      };
+
+      try {
+        const res = await apiClient.post<{ insuranceLeadId?: string }>('/api/v1/insurance-leads/inbound/FE', crmPayload);
+        if (res.data?.insuranceLeadId) {
+          const leadId = res.data.insuranceLeadId;
+          const status = selectedDisposition === 'APPLICATION_SUBMITTED' ? 'CONVERTED' : 'CONTACTED';
+          await apiClient.patch(`/api/v1/insurance-leads/${leadId}`, { status });
+        }
+      } catch (err) {
+        console.error('[CallCenter] CRM ingestion failed:', err);
+      }
+    }
+
     try {
       const response = await apiClient.post('/api/v1/calls/disposition', {
         callId: callSessionIdRef.current,
@@ -1189,6 +1311,15 @@ export function CallCenterPortal(): JSX.Element {
                 </div>
               )}
 
+              {activeCallView === 'captured_data' && (
+                <div className="flex-1 overflow-hidden flex flex-col bg-card border border-border rounded-xl p-4">
+                  <CapturedScriptDataPanel
+                    activeCallData={activeCallData}
+                    crmPhone={crmPhone}
+                  />
+                </div>
+              )}
+
               {activeCallView === 'data' && (
                 <div className="flex-1 overflow-hidden flex flex-col">
                   {crmData ? (
@@ -1228,6 +1359,8 @@ export function CallCenterPortal(): JSX.Element {
                 appointmentsCount={appointmentsCount}
                 appointmentRate={appointmentRate}
                 followUpCount={followUpCount}
+                salesCount={salesCount}
+                conversionRate={conversionRate}
               />
               <ApplicationQueue
                 applications={applications}

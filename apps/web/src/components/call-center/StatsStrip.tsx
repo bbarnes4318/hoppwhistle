@@ -6,6 +6,8 @@ interface StatsStripProps {
   appointmentsCount: number;
   appointmentRate: string;
   followUpCount: number;
+  salesCount: number;
+  conversionRate: string;
 }
 
 export function StatsStrip({
@@ -13,24 +15,30 @@ export function StatsStrip({
   appointmentsCount,
   appointmentRate,
   followUpCount,
+  salesCount,
+  conversionRate,
 }: StatsStripProps) {
   return (
-    <div className="grid grid-cols-4 gap-4 flex-shrink-0">
+    <div className="grid grid-cols-5 gap-4 flex-shrink-0">
       <KPICard
         title="Total Calls"
         value={totalCallsCount}
+      />
+      <KPICard
+        title="Sales / Apps"
+        value={salesCount}
       />
       <KPICard
         title="Appointments"
         value={appointmentsCount}
       />
       <KPICard
-        title="Appt. Rate"
-        value={`${appointmentRate}%`}
-      />
-      <KPICard
         title="Follow-Ups"
         value={followUpCount}
+      />
+      <KPICard
+        title="Conv. Rate"
+        value={`${conversionRate}%`}
       />
     </div>
   );

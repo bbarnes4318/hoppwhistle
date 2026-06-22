@@ -16,6 +16,7 @@ export const DISPOSITIONS = [
   'NO_ANSWER',
   'WRONG_NUMBER',
   'DISCONNECTED',
+  'APPLICATION_SUBMITTED',
 ] as const;
 
 export type DispositionValue = (typeof DISPOSITIONS)[number];
@@ -30,6 +31,7 @@ export const DISPOSITION_LABELS: Record<DispositionValue, string> = {
   NO_ANSWER: 'No Answer',
   WRONG_NUMBER: 'Wrong Number',
   DISCONNECTED: 'Disconnected',
+  APPLICATION_SUBMITTED: 'Application Submitted',
 };
 
 /** Dispositions that require or strongly prompt for a follow-up date/time */
@@ -46,6 +48,7 @@ export const CONNECTED_DISPOSITIONS: DispositionValue[] = [
   'FOLLOW_UP',
   'NOT_INTERESTED',
   'NOT_QUALIFIED',
+  'APPLICATION_SUBMITTED',
 ];
 
 /** Dispositions that count as non-conversation (excluded from connected count) */
@@ -65,6 +68,7 @@ export const DISPOSITION_COLORS: Record<DispositionValue, string> = {
   NO_ANSWER: 'bg-slate-500/10 text-slate-400 border-slate-500/30',
   WRONG_NUMBER: 'bg-red-500/10 text-red-400 border-red-500/30',
   DISCONNECTED: 'bg-red-500/10 text-red-300 border-red-500/20',
+  APPLICATION_SUBMITTED: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
 };
 
 // ─── Call Sources ─────────────────────────────────────────────────────────────

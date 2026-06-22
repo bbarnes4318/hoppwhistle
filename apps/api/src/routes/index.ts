@@ -3622,6 +3622,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
     'NO_ANSWER',
     'WRONG_NUMBER',
     'DISCONNECTED',
+    'APPLICATION_SUBMITTED',
   ];
   const VALID_CALL_SOURCES = ['CALL_CENTER', 'SOFTPHONE', 'AI_VOICE'];
   const VALID_FOLLOW_UP_STATUSES = ['PENDING', 'COMPLETED', 'CANCELLED'];

@@ -129,6 +129,26 @@ export async function ingestLead(
         age: typeof contactData.age === 'number' ? contactData.age : existing.age,
         gender: contactData.gender ? String(contactData.gender) : existing.gender,
         source: contactData.source ? String(contactData.source) : existing.source,
+        // Update FE specific fields
+        smoker: contactData.smoker ? String(contactData.smoker) : existing.smoker,
+        faceAmount: contactData.faceAmount ? String(contactData.faceAmount) : existing.faceAmount,
+        lifeType: contactData.lifeType ? String(contactData.lifeType) : existing.lifeType,
+        riskType: contactData.riskType ? String(contactData.riskType) : existing.riskType,
+        carrier: contactData.carrier ? String(contactData.carrier) : existing.carrier,
+        product: contactData.product ? String(contactData.product) : existing.product,
+        monthlyPremium: contactData.monthlyPremium ? String(contactData.monthlyPremium) : existing.monthlyPremium,
+        coverageAmount: contactData.coverageAmount ? String(contactData.coverageAmount) : existing.coverageAmount,
+        trustedFormUrl: contactData.trustedFormUrl || contactData.trustedFormCertUrl ? String(contactData.trustedFormUrl || contactData.trustedFormCertUrl) : existing.trustedFormUrl,
+        leadidToken: contactData.leadidToken ? String(contactData.leadidToken) : existing.leadidToken,
+        consentLanguage: contactData.consentLanguage ? String(contactData.consentLanguage) : existing.consentLanguage,
+        recordingUrl: contactData.recordingUrl ? String(contactData.recordingUrl) : existing.recordingUrl,
+        // Shallow merge custom fields if they exist
+        customFields: contactData.customFields
+          ? {
+              ...(existing.customFields as Record<string, unknown> || {}),
+              ...(contactData.customFields as Record<string, unknown>),
+            }
+          : existing.customFields,
       },
     });
 
@@ -172,6 +192,7 @@ export async function ingestLead(
         leadidToken: contactData.leadidToken ? String(contactData.leadidToken) : null,
         consentLanguage: contactData.consentLanguage ? String(contactData.consentLanguage) : null,
         recordingUrl: contactData.recordingUrl ? String(contactData.recordingUrl) : null,
+        customFields: contactData.customFields ? (contactData.customFields as Prisma.InputJsonValue) : null,
       },
     });
 
@@ -506,6 +527,7 @@ export async function updateLead(
     'smoker', 'faceAmount', 'lifeType', 'riskType', 'carrier', 'product',
     'monthlyPremium', 'coverageAmount', 'trustedFormUrl', 'leadidToken',
     'consentLanguage', 'recordingUrl',
+    'customFields',
   ];
 
   const data: InsuranceLeadCRMUpdates = {};

@@ -153,6 +153,9 @@ const baseInboundSchema = z.object({
   subId: z.string().optional(),
   pubId: z.string().optional(),
   recordingUrl: z.string().optional(),
+
+  // Custom / arbitrary fields from Call Center or other integrations
+  customFields: z.record(z.any()).optional(),
 });
 
 // ---------------------------------------------------------------------------
