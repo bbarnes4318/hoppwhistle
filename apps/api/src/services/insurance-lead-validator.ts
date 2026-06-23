@@ -180,7 +180,7 @@ export const acaInboundSchema = baseInboundSchema.extend({
   subsidy: z.string().optional(),
   coverageType: z.string().optional(),
   insuranceType: z.string().optional(),
-  coverageAmount: z.string().optional(),
+  coverageAmount: z.union([z.number().transform(v => String(v)), z.string()]).optional(),
   coverageYears: z.string().optional(),
   insuredTimeframe: z.string().optional(),
 });
@@ -206,11 +206,11 @@ export const feInboundSchema = baseInboundSchema.extend({
   faceAmount: z.union([z.number(), z.string()]).optional(),
   riskType: z.string().optional(),
   insuranceType: z.string().optional(),
-  coverageAmount: z.string().optional(),
+  coverageAmount: z.union([z.number().transform(v => String(v)), z.string()]).optional(),
   coverageYears: z.string().optional(),
   insuredTimeframe: z.string().optional(),
   term: z.string().optional(),
-  monthlyPremium: z.string().optional(),
+  monthlyPremium: z.union([z.number().transform(v => String(v)), z.string()]).optional(),
   carrier: z.string().optional(),
   product: z.string().optional(),
 });
