@@ -486,4 +486,35 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
 
     return { success: true, task: updated };
   });
+
+  // -----------------------------------------------------------------------
+  // DELETE /api/v1/insurance-leads — Bulk delete leads
+  // -----------------------------------------------------------------------
+  fastify.delete<{
+    Body: { ids: string[] };
+  }>('/api/v1/insurance-leads', async (request, reply) => {
+    const tenantId = getTenantId(request);
+    if (!tenantId) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+    }
+
+    const { ids } = request.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      void reply.code(400);
+      return { error: { code: 'INVALID_BODY', message: 'Must provide an array of ids' } };
+    }
+
+    const { getPrismaClient } = await import('../lib/prisma.js');
+    const prisma = getPrismaClient();
+
+    const result = await prisma.insuranceLead.deleteMany({
+      where: {
+        tenantId,
+        id: { in: ids },
+      },
+    });
+
+    return { success: true, count: result.count };
+  });
 }

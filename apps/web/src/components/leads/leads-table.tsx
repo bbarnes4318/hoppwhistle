@@ -97,6 +97,8 @@ interface LeadsTableProps {
   leads: InsuranceLeadSummary[];
   loading: boolean;
   onSelectLead: (id: string) => void;
+  selectedLeadIds?: string[];
+  onSelectLeadsChange?: (ids: string[]) => void;
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -169,8 +171,40 @@ function formatTime(iso: string): string {
   return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
-export function LeadsTable({ leads, loading, onSelectLead }: LeadsTableProps) {
+export function LeadsTable({
+  leads,
+  loading,
+  onSelectLead,
+  selectedLeadIds = [],
+  onSelectLeadsChange,
+}: LeadsTableProps) {
   const { makeCall } = usePhone();
+
+  const allSelected = leads.length > 0 && leads.every(lead => selectedLeadIds.includes(lead.id));
+  const someSelected = leads.length > 0 && leads.some(lead => selectedLeadIds.includes(lead.id)) && !allSelected;
+
+  const handleSelectAll = (checked: boolean) => {
+    if (!onSelectLeadsChange) return;
+    if (checked) {
+      const currentIds = leads.map(l => l.id);
+      const newSelection = Array.from(new Set([...selectedLeadIds, ...currentIds]));
+      onSelectLeadsChange(newSelection);
+    } else {
+      const currentIds = leads.map(l => l.id);
+      const newSelection = selectedLeadIds.filter(id => !currentIds.includes(id));
+      onSelectLeadsChange(newSelection);
+    }
+  };
+
+  const handleSelectOne = (id: string, checked: boolean) => {
+    if (!onSelectLeadsChange) return;
+    if (checked) {
+      onSelectLeadsChange([...selectedLeadIds, id]);
+    } else {
+      onSelectLeadsChange(selectedLeadIds.filter(x => x !== id));
+    }
+  };
+
   if (loading) {
     return (
       <div className="rounded-lg border border-white/5 bg-slate-900/50 overflow-hidden">
@@ -201,6 +235,20 @@ export function LeadsTable({ leads, loading, onSelectLead }: LeadsTableProps) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-white/5 bg-slate-900/80">
+              {onSelectLeadsChange && (
+                <th className="w-10 px-4 py-3 text-left">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    ref={el => {
+                      if (el) el.indeterminate = someSelected;
+                    }}
+                    onChange={e => handleSelectAll(e.target.checked)}
+                    className="rounded border-slate-700 bg-slate-900 text-emerald-600 focus:ring-emerald-500 focus:ring-offset-slate-900 h-4 w-4 cursor-pointer"
+                    aria-label="Select all leads"
+                  />
+                </th>
+              )}
               <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
                 Received
               </th>
@@ -245,12 +293,29 @@ export function LeadsTable({ leads, loading, onSelectLead }: LeadsTableProps) {
           <tbody className="divide-y divide-white/5">
             {leads.map(lead => {
               const sub = lead.latestSubmission;
+              const isSelected = selectedLeadIds.includes(lead.id);
               return (
                 <tr
                   key={lead.id}
                   onClick={() => onSelectLead(lead.id)}
-                  className="cursor-pointer transition-colors hover:bg-white/[0.02]"
+                  className={`cursor-pointer transition-colors hover:bg-white/[0.02] ${
+                    isSelected ? 'bg-white/[0.01]' : ''
+                  }`}
                 >
+                  {onSelectLeadsChange && (
+                    <td
+                      className="px-4 py-3 whitespace-nowrap"
+                      onClick={e => e.stopPropagation()}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={e => handleSelectOne(lead.id, e.target.checked)}
+                        className="rounded border-slate-700 bg-slate-900 text-emerald-600 focus:ring-emerald-500 focus:ring-offset-slate-900 h-4 w-4 cursor-pointer"
+                        aria-label={`Select lead ${lead.fullName || ''}`}
+                      />
+                    </td>
+                  )}
                   <td className="px-4 py-3 whitespace-nowrap">
                     <div className="text-xs text-slate-300">
                       {sub ? formatDate(sub.receivedAt) : formatDate(lead.createdAt)}

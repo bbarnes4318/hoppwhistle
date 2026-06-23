@@ -1,7 +1,7 @@
 /* eslint-disable */
 'use client';
 
-import { Search, X, Plus, Upload } from 'lucide-react';
+import { Search, X, Plus, Upload, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -11,7 +11,7 @@ import { LeadDetailSheet } from '@/components/leads/lead-detail-sheet';
 import { LeadStatsCards } from '@/components/leads/lead-stats-cards';
 import { LeadsTable } from '@/components/leads/leads-table';
 import { CsvImportDialog } from '@/components/leads/csv-import-dialog';
-import { fetchInsuranceLeads, fetchInsuranceLead, fetchInsuranceLeadStats } from '@/lib/api/leads';
+import { fetchInsuranceLeads, fetchInsuranceLead, fetchInsuranceLeadStats, deleteInsuranceLeads } from '@/lib/api/leads';
 import type {
   InsuranceLeadSummary,
   InsuranceLeadStats,
@@ -88,6 +88,7 @@ export default function InsuranceLeadsPage() {
   const [statsLoading, setStatsLoading] = useState(true);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [isImportOpen, setIsImportOpen] = useState(false);
+  const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
 
   // Detail sheet
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
@@ -189,6 +190,22 @@ export default function InsuranceLeadsPage() {
     if (selectedLeadId) void loadLeadDetail(selectedLeadId);
   };
 
+  const handleDeleteSelected = async () => {
+    if (selectedLeadIds.length === 0) return;
+    const confirmMsg = `Are you sure you want to delete ${selectedLeadIds.length} selected lead${
+      selectedLeadIds.length > 1 ? 's' : ''
+    }? This action cannot be undone.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      await deleteInsuranceLeads(selectedLeadIds);
+      setSelectedLeadIds([]);
+      handleRefresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete leads');
+    }
+  };
+
   return (
     <div className="space-y-5">
       {/* Page Header */}
@@ -200,6 +217,15 @@ export default function InsuranceLeadsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {selectedLeadIds.length > 0 && (
+            <Button
+              onClick={handleDeleteSelected}
+              className="flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white animate-fade-in"
+            >
+              <Trash2 className="h-4.5 w-4.5" />
+              Delete Selected ({selectedLeadIds.length})
+            </Button>
+          )}
           <Button
             onClick={() => setIsImportOpen(true)}
             className="flex items-center gap-1.5 border border-white/10 bg-slate-900 hover:bg-slate-800 text-slate-200"
@@ -332,7 +358,13 @@ export default function InsuranceLeadsPage() {
       </div>
 
       {/* Table */}
-      <LeadsTable leads={leads} loading={loading} onSelectLead={handleSelectLead} />
+      <LeadsTable
+        leads={leads}
+        loading={loading}
+        onSelectLead={handleSelectLead}
+        selectedLeadIds={selectedLeadIds}
+        onSelectLeadsChange={setSelectedLeadIds}
+      />
 
       {/* Pagination */}
       {totalPages > 1 && (

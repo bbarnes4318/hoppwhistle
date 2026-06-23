@@ -304,3 +304,9 @@ export async function fetchCustomerLookup(phone: string): Promise<CustomerLookup
   );
   return res.data as unknown as CustomerLookupResponse;
 }
+
+export async function deleteInsuranceLeads(ids: string[]): Promise<{ success: boolean; count: number }> {
+  const res = await apiClient.delete<{ success: boolean; count: number }>('/api/v1/insurance-leads', { ids });
+  if (res.error) throw new Error(res.error.message);
+  return res.data as unknown as { success: boolean; count: number };
+}
