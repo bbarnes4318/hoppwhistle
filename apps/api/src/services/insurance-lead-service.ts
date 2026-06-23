@@ -121,6 +121,21 @@ export async function ingestLead(
 
   // 2. Build CRM contact fields from whatever we have
   const contactData = validation.normalized || rawPayload;
+  const FIRST_CLASS_FIELDS = new Set([
+    'id', 'tenantId', 'vertical', 'firstName', 'lastName', 'fullName', 'email', 'phone', 
+    'address', 'address2', 'city', 'county', 'state', 'zipCode', 'birthDate', 'age', 'gender', 
+    'source', 'status', 'notes', 'tags', 'assignedToId', 'assignedAt', 'lastContactedAt', 
+    'nextFollowUpAt', 'priority', 'leadStage', 'doNotCall', 'duplicateOfId', 'smoker', 
+    'faceAmount', 'lifeType', 'riskType', 'carrier', 'product', 'monthlyPremium', 
+    'coverageAmount', 'trustedFormUrl', 'leadidToken', 'consentLanguage', 'recordingUrl', 
+    'createdAt', 'updatedAt', 'customFields'
+  ]);
+  const extraFields: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(contactData)) {
+    if (!FIRST_CLASS_FIELDS.has(key) && value !== undefined && value !== null) {
+      extraFields[key] = value;
+    }
+  }
   const rawPhone = String(contactData.phone || contactData.primaryPhone || '').replace(/\D/g, '');
   const phone = rawPhone.length > 10 ? rawPhone.slice(-10) : rawPhone;
   const firstName = String(contactData.firstName || '').trim();
@@ -179,12 +194,11 @@ export async function ingestLead(
           ? String(contactData.recordingUrl)
           : existing.recordingUrl,
         // Shallow merge custom fields if they exist
-        customFields: contactData.customFields
-          ? {
-              ...((existing.customFields as Record<string, unknown>) || {}),
-              ...(contactData.customFields as Record<string, unknown>),
-            }
-          : existing.customFields,
+        customFields: {
+          ...((existing.customFields as Record<string, unknown>) || {}),
+          ...((contactData.customFields as Record<string, unknown>) || {}),
+          ...extraFields,
+        },
         // CRM fields
         notes: contactData.notes ? String(contactData.notes) : existing.notes,
         priority: contactData.priority ? String(contactData.priority) : existing.priority,
@@ -239,9 +253,10 @@ export async function ingestLead(
         leadidToken: contactData.leadidToken ? String(contactData.leadidToken) : null,
         consentLanguage: contactData.consentLanguage ? String(contactData.consentLanguage) : null,
         recordingUrl: contactData.recordingUrl ? String(contactData.recordingUrl) : null,
-        customFields: contactData.customFields
-          ? (contactData.customFields as Prisma.InputJsonValue)
-          : null,
+        customFields: {
+          ...((contactData.customFields as Record<string, unknown>) || {}),
+          ...extraFields,
+        },
         // CRM fields
         notes: contactData.notes ? String(contactData.notes) : null,
         priority: contactData.priority ? String(contactData.priority) : null,

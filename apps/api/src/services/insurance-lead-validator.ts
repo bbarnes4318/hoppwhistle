@@ -154,6 +154,24 @@ const baseInboundSchema = z.object({
   pubId: z.string().optional(),
   recordingUrl: z.string().optional(),
 
+  // New optional fields
+  requestedEffectiveDate: z.string().optional(),
+  ssn: z.string().optional(),
+  primaryBeneficiaryName: z.string().optional(),
+  primaryBeneficiaryRelationship: z.string().optional(),
+  primaryBeneficiaryShare: z.string().optional(),
+  secondPrimaryBeneficiaryName: z.string().optional(),
+  secondPrimaryBeneficiaryRelationship: z.string().optional(),
+  currentPolicyInForce: z.string().optional(),
+  replacementReductionModification: z.string().optional(),
+  replacementCompanyName: z.string().optional(),
+  replacementFaceAmount: z.string().optional(),
+  bankName: z.string().optional(),
+  accountType: z.string().optional(),
+  routingNumber: z.string().optional(),
+  accountNumber: z.string().optional(),
+  agentName: z.string().optional(),
+
   // Custom / arbitrary fields from Call Center or other integrations
   customFields: z.record(z.any()).optional(),
 });
