@@ -199,6 +199,8 @@ services:
       - '8083:8083/tcp'
       - '5066:5066/tcp'
       - '7443:7443/tcp'
+      # RTP media ports (audio) - MUST be exposed for call audio to work
+      - '16384-16484:16384-16484/udp'
     environment:
       FREESWITCH_ESL_PASSWORD: ${FREESWITCH_ESL_PASSWORD:-ClueCon}
       API_URL: http://api:3001
@@ -261,7 +263,7 @@ services:
     volumes:
       - kamailio_data:/var/run/kamailio
     healthcheck:
-      test: ['CMD', 'kamctl', 'ping']
+      test: ['CMD', 'kamcmd', 'core.ps']
       interval: 30s
       timeout: 10s
       retries: 3
@@ -295,7 +297,7 @@ services:
     stop_grace_period: 5s
     stop_signal: SIGKILL
     healthcheck:
-      test: ['CMD', 'rtpengine-ctl', '-t', '127.0.0.1:9900', 'ping']
+      test: ['CMD', 'rtpengine-ctl', '-ip', '127.0.0.1:9900', 'list', 'numsessions']
       interval: 30s
       timeout: 10s
       retries: 3

@@ -46,6 +46,7 @@ exec rtpengine \
     --table=0 \
     --interface="$INTERFACE_FLAG" \
     --listen-ng=22222 \
+    --listen-cli=127.0.0.1:9900 \
     --pidfile=/run/rtpengine.pid \
     --port-min=10000 \
     --port-max=10100 \
