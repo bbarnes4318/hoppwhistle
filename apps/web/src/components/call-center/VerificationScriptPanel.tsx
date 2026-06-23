@@ -1,12 +1,51 @@
 'use client';
 
 import { useState, useCallback, useMemo } from 'react';
-import { HelpCircle, CheckCircle2, ChevronRight, ChevronLeft, ShieldCheck, AlertOctagon, User, Phone, DollarSign } from 'lucide-react';
+import { HelpCircle, ChevronLeft, ShieldCheck, AlertOctagon, User, Phone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
+export interface ProspectVerificationData {
+  agentName?: string;
+  agent_name?: string;
+  companyName?: string;
+  firstName?: string;
+  first_name?: string;
+  lastName?: string;
+  last_name?: string;
+  phone?: string;
+  caller_id?: string;
+  dob?: string;
+  selectedCarrier?: string;
+  carrier?: string;
+  carrierName?: string;
+  selectedCoverage?: string | number;
+  coverageAmount?: string | number;
+  replacementFaceAmount?: string | number;
+  faceAmount?: string | number;
+  coverage_amount?: string | number;
+  selectedPremium?: string | number;
+  monthlyPremium?: string | number;
+  premium?: string | number;
+  monthly_premium?: string | number;
+  requestedEffectiveDate?: string;
+  effectiveDate?: string;
+  effective_date?: string;
+  draftDay?: string;
+  draftDate?: string;
+  draft_day?: string;
+  beneficiaryName?: string;
+  primaryBeneficiaryName?: string;
+  primaryBenName?: string;
+  beneficiary?: string;
+  beneficiaryRelation?: string;
+  primaryBeneficiaryRelationship?: string;
+  primaryBenRel?: string;
+  beneficiary_relationship?: string;
+}
+
 interface VerificationScriptPanelProps {
-  prospectData?: any;
+  prospectData?: ProspectVerificationData;
   onDataUpdate?: (data: Record<string, unknown>) => void;
   setSelectedDisposition?: (d: string) => void;
   setCallNotes?: (n: string) => void;
@@ -30,6 +69,13 @@ type StepId =
   | 'final_confirmation'
   | 'abort_wrapup';
 
+interface StepOption {
+  label: string;
+  nextStep: StepId;
+  color?: 'emerald' | 'red' | 'blue' | 'amber';
+  action?: () => void;
+}
+
 interface StepContent {
   id: StepId;
   phase: number;
@@ -37,12 +83,7 @@ interface StepContent {
   subtitle?: string;
   script: string;
   stageDirection?: string;
-  options?: Array<{
-    label: string;
-    nextStep: StepId;
-    color?: 'emerald' | 'red' | 'blue' | 'amber';
-    action?: () => void;
-  }>;
+  options?: StepOption[];
   nextStep?: StepId;
   isEndNode?: boolean;
   suggestedDisposition?: string;
@@ -410,7 +451,7 @@ Perfect. Thank you. We’re marking your application as verified. If the insuran
   const progress = Math.round((currentStep.phase / 8) * 100);
 
   const handleOptionSelect = useCallback(
-    (option: any) => {
+    (option: StepOption) => {
       if (option.action) {
         option.action();
       }

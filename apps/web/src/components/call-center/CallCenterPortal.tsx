@@ -5,7 +5,7 @@
 // Exact 1:1 port with zero UI/functionality differences
 // ============================================================================
 
-import { Phone, FileText, Headphones, LogIn, X } from 'lucide-react';
+import { Phone, FileText, Headphones, LogIn, X, User } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 
@@ -13,7 +13,6 @@ import { ActiveCallControls } from './ActiveCallControls';
 import { ApplicationQueue } from './ApplicationQueue';
 import { CallCenterHeader } from './CallCenterHeader';
 import { CapturedScriptDataPanel } from './CapturedScriptDataPanel';
-import { DialerPanel } from './DialerPanel';
 import { DispositionPanel } from './DispositionPanel';
 import { IncomingCallPanel } from './IncomingCallPanel';
 import IntegratedScriptPanel from './IntegratedScriptPanel';
