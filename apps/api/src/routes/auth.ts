@@ -2,7 +2,7 @@
 import bcrypt from 'bcryptjs';
 // eslint-disable-next-line import/no-named-as-default-member
 const { compare, hash } = bcrypt;
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyRequest } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
 import { authenticate } from '../middleware/auth.js';
@@ -25,11 +25,90 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
   const prisma = getPrismaClient();
   await Promise.resolve(); // satisfy eslint require-await
 
-  // Helper to get or create a default tenant ID dynamically
-  async function getDefaultTenantId(): Promise<string> {
-    let defaultTenant = await prisma.tenant.findFirst({
-      orderBy: { createdAt: 'asc' },
+  // Helper to get or create a default tenant ID dynamically, optionally resolving from request host/domain/slug
+  async function getDefaultTenantId(request?: FastifyRequest): Promise<string> {
+    if (request) {
+      let host = request.hostname || '';
+      if (!host && request.headers.host) {
+        host = request.headers.host.split(':')[0];
+      }
+      
+      const referer = request.headers.referer;
+      if (referer) {
+        try {
+          const refUrl = new URL(referer);
+          if (refUrl.hostname) {
+            host = refUrl.hostname;
+          }
+        } catch {}
+      }
+      
+      const origin = request.headers.origin;
+      if (origin) {
+        try {
+          const originUrl = new URL(origin);
+          if (originUrl.hostname) {
+            host = originUrl.hostname;
+          }
+        } catch {}
+      }
+
+      if (host) {
+        // Normalize host (lowercase and strip port if present)
+        host = host.split(':')[0].toLowerCase();
+
+        // 1. Try matching the exact domain
+        let tenant = await prisma.tenant.findFirst({
+          where: { domain: host },
+        });
+        if (tenant) {
+          return tenant.id;
+        }
+
+        // 2. Try matching the first subdomain to the tenant slug
+        const parts = host.split('.');
+        if (parts.length > 1) {
+          const subdomain = parts[0];
+          tenant = await prisma.tenant.findUnique({
+            where: { slug: subdomain },
+          });
+          if (tenant) {
+            return tenant.id;
+          }
+        }
+      }
+    }
+
+    // 3. Try to find the primary seeded tenant ('test-org')
+    let defaultTenant = await prisma.tenant.findUnique({
+      where: { slug: 'test-org' },
     });
+
+    // 4. Try to find 'default' slug
+    if (!defaultTenant) {
+      defaultTenant = await prisma.tenant.findUnique({
+        where: { slug: 'default' },
+      });
+    }
+
+    // 5. Fallback to any active tenant that is not a test-generated one
+    if (!defaultTenant) {
+      const activeTenants = await prisma.tenant.findMany({
+        where: { status: 'ACTIVE' },
+        orderBy: { createdAt: 'asc' },
+      });
+      // Filter out test tenants like test-123456789
+      defaultTenant = activeTenants.find(t => !/^test-\d+$/.test(t.slug)) || activeTenants[0];
+    }
+
+    // 6. Fallback to the absolute first tenant
+    if (!defaultTenant) {
+      defaultTenant = await prisma.tenant.findFirst({
+        orderBy: { createdAt: 'asc' },
+      });
+    }
+
+    // 7. Create default organization if none exists
     if (!defaultTenant) {
       defaultTenant = await prisma.tenant.create({
         data: {
@@ -286,7 +365,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     // Create user with default tenant
     const user = await prisma.user.create({
       data: {
-        tenantId: await getDefaultTenantId(),
+        tenantId: await getDefaultTenantId(request),
         email: normalizedEmail,
         passwordHash,
         authMethod: 'EMAIL',
@@ -453,7 +532,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         // Create new user with Google and default tenant
         user = await prisma.user.create({
           data: {
-            tenantId: await getDefaultTenantId(),
+            tenantId: await getDefaultTenantId(request),
             email: normalizedEmail,
             googleId: googleUser.googleId,
             authMethod: 'GOOGLE',

@@ -17,6 +17,13 @@ export const DISPOSITIONS = [
   'WRONG_NUMBER',
   'DISCONNECTED',
   'APPLICATION_SUBMITTED',
+  'VERIFIED',
+  'NO_MEMORY_CONFUSED',
+  'DENIES_APPLICATION',
+  'PAYMENT_ISSUE',
+  'POLICY_DETAILS_WRONG',
+  'POSSIBLE_PRESSURE_COACHING',
+  'NO_CONTACT',
 ] as const;
 
 export type DispositionValue = (typeof DISPOSITIONS)[number];
@@ -32,6 +39,13 @@ export const DISPOSITION_LABELS: Record<DispositionValue, string> = {
   WRONG_NUMBER: 'Wrong Number',
   DISCONNECTED: 'Disconnected',
   APPLICATION_SUBMITTED: 'Application Submitted',
+  VERIFIED: 'Verified',
+  NO_MEMORY_CONFUSED: 'No Memory / Confused',
+  DENIES_APPLICATION: 'Denies Application',
+  PAYMENT_ISSUE: 'Payment Issue',
+  POLICY_DETAILS_WRONG: 'Policy Details Wrong',
+  POSSIBLE_PRESSURE_COACHING: 'Possible Pressure / Coaching',
+  NO_CONTACT: 'No Contact',
 };
 
 /** Dispositions that require or strongly prompt for a follow-up date/time */
@@ -49,6 +63,12 @@ export const CONNECTED_DISPOSITIONS: DispositionValue[] = [
   'NOT_INTERESTED',
   'NOT_QUALIFIED',
   'APPLICATION_SUBMITTED',
+  'VERIFIED',
+  'NO_MEMORY_CONFUSED',
+  'DENIES_APPLICATION',
+  'PAYMENT_ISSUE',
+  'POLICY_DETAILS_WRONG',
+  'POSSIBLE_PRESSURE_COACHING',
 ];
 
 /** Dispositions that count as non-conversation (excluded from connected count) */
@@ -56,6 +76,7 @@ export const NON_CONNECTED_DISPOSITIONS: DispositionValue[] = [
   'NO_ANSWER',
   'WRONG_NUMBER',
   'DISCONNECTED',
+  'NO_CONTACT',
 ];
 
 /** Badge color classes for each disposition */
@@ -69,6 +90,13 @@ export const DISPOSITION_COLORS: Record<DispositionValue, string> = {
   WRONG_NUMBER: 'bg-red-500/10 text-red-400 border-red-500/30',
   DISCONNECTED: 'bg-red-500/10 text-red-300 border-red-500/20',
   APPLICATION_SUBMITTED: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+  VERIFIED: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+  NO_MEMORY_CONFUSED: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+  DENIES_APPLICATION: 'bg-red-500/10 text-red-400 border-red-500/30',
+  PAYMENT_ISSUE: 'bg-orange-500/10 text-orange-400 border-orange-500/30',
+  POLICY_DETAILS_WRONG: 'bg-orange-500/10 text-orange-400 border-orange-500/30',
+  POSSIBLE_PRESSURE_COACHING: 'bg-red-500/10 text-red-400 border-red-500/30',
+  NO_CONTACT: 'bg-slate-500/10 text-slate-400 border-slate-500/30',
 };
 
 // ─── Call Sources ─────────────────────────────────────────────────────────────

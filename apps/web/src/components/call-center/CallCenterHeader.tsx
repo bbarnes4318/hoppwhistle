@@ -70,6 +70,7 @@ export function CallCenterHeader({
             <option value="sales">Contractor</option>
             {canAccessRetentionScript && <option value="retention">Retention</option>}
             <option value="underwriting">Underwriting</option>
+            <option value="verification">Verification</option>
           </select>
         </div>
 

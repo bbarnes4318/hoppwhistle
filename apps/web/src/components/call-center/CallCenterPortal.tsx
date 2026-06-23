@@ -29,6 +29,7 @@ import type {
   SelectedScript,
 } from './types';
 import UnderwritingScriptPanel from './UnderwritingScriptPanel';
+import { VerificationScriptPanel } from './VerificationScriptPanel';
 import { WorkspaceTabs } from './WorkspaceTabs';
 
 import { usePhone, DialPad, AddCallDialog } from '@/components/phone';
@@ -1276,6 +1277,18 @@ export function CallCenterPortal(): JSX.Element {
                             prev ? ({ ...prev, ...data } as ProspectData) : null
                           )
                         }
+                      />
+                    ) : selectedScript === 'verification' ? (
+                      <VerificationScriptPanel
+                        prospectData={activeCallData}
+                        onDataUpdate={(data: Record<string, unknown>) =>
+                          setActiveCallData(prev =>
+                            prev ? ({ ...prev, ...data } as ProspectData) : null
+                          )
+                        }
+                        setSelectedDisposition={setSelectedDisposition}
+                        setCallNotes={setCallNotes}
+                        setShowDisposition={setShowDisposition}
                       />
                     ) : (
                       <IntegratedScriptPanel
