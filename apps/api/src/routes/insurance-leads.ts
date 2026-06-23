@@ -84,6 +84,80 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
   });
 
   // -----------------------------------------------------------------------
+  // POST /api/v1/insurance-leads/import — Bulk import
+  // -----------------------------------------------------------------------
+  fastify.post<{
+    Body: {
+      vertical: string;
+      leads: Array<Record<string, unknown>>;
+    };
+  }>('/api/v1/insurance-leads/import', async (request, reply) => {
+    const tenantId = getTenantId(request);
+    if (!tenantId) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Valid API key required' } };
+    }
+
+    const { vertical: rawVertical, leads } = request.body;
+    if (!rawVertical || !Array.isArray(leads)) {
+      void reply.code(400);
+      return { error: { code: 'INVALID_BODY', message: 'Must provide vertical and leads array' } };
+    }
+
+    const vertical = rawVertical.toUpperCase();
+    if (vertical !== 'ACA' && vertical !== 'FE') {
+      void reply.code(400);
+      return {
+        error: {
+          code: 'INVALID_VERTICAL',
+          message: `Invalid vertical "${rawVertical}". Must be "aca" or "fe".`,
+        },
+      };
+    }
+
+    try {
+      const { ingestLead } = await import('../services/insurance-lead-service.js');
+      const results = [];
+
+      for (const lead of leads) {
+        try {
+          const result = await ingestLead(tenantId, vertical as 'ACA' | 'FE', lead);
+          results.push({
+            success: result.validationStatus === 'VALID',
+            phone: String(lead.phone || ''),
+            name: `${String(lead.firstName || '')} ${String(lead.lastName || '')}`.trim(),
+            errors: result.errors || null,
+          });
+        } catch (err: unknown) {
+          results.push({
+            success: false,
+            phone: String(lead.phone || ''),
+            name: `${String(lead.firstName || '')} ${String(lead.lastName || '')}`.trim(),
+            errors: [
+              { path: 'system', message: (err as Error).message || 'System ingestion failure' },
+            ],
+          });
+        }
+      }
+
+      return {
+        total: leads.length,
+        successCount: results.filter(r => r.success).length,
+        failCount: results.filter(r => !r.success).length,
+        details: results,
+      };
+    } catch (error: unknown) {
+      void reply.code(500);
+      return {
+        error: {
+          code: 'IMPORT_FAILED',
+          message: (error as Error).message || 'Failed to complete import process',
+        },
+      };
+    }
+  });
+
+  // -----------------------------------------------------------------------
   // GET /api/v1/insurance-leads — List leads with filtering
   // -----------------------------------------------------------------------
   fastify.get<{
@@ -97,6 +171,9 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
       search?: string;
       startDate?: string;
       endDate?: string;
+      status?: string;
+      leadStage?: string;
+      followUp?: string;
     };
   }>('/api/v1/insurance-leads', async (request, reply) => {
     const tenantId = getTenantId(request);
@@ -118,6 +195,9 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
       search: q.search,
       startDate: q.startDate,
       endDate: q.endDate,
+      status: q.status,
+      leadStage: q.leadStage,
+      followUp: q.followUp,
     });
 
     return result;
@@ -140,27 +220,24 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
   // -----------------------------------------------------------------------
   // GET /api/v1/insurance-leads/:id — Single lead detail
   // -----------------------------------------------------------------------
-  fastify.get<{ Params: { id: string } }>(
-    '/api/v1/insurance-leads/:id',
-    async (request, reply) => {
-      const tenantId = getTenantId(request);
-      if (!tenantId) {
-        void reply.code(401);
-        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
-      }
-
-      const { getLeadById } = await import('../services/insurance-lead-service.js');
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      const lead = await getLeadById(tenantId, request.params.id);
-
-      if (!lead) {
-        void reply.code(404);
-        return { error: { code: 'NOT_FOUND', message: 'Lead not found' } };
-      }
-
-      return lead;
+  fastify.get<{ Params: { id: string } }>('/api/v1/insurance-leads/:id', async (request, reply) => {
+    const tenantId = getTenantId(request);
+    if (!tenantId) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
     }
-  );
+
+    const { getLeadById } = await import('../services/insurance-lead-service.js');
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const lead = await getLeadById(tenantId, request.params.id);
+
+    if (!lead) {
+      void reply.code(404);
+      return { error: { code: 'NOT_FOUND', message: 'Lead not found' } };
+    }
+
+    return lead;
+  });
 
   // -----------------------------------------------------------------------
   // PATCH /api/v1/insurance-leads/:id — Edit CRM lead fields
@@ -202,11 +279,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
 
     const { retrySubmission } = await import('../services/insurance-lead-service.js');
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const result = await retrySubmission(
-      tenantId,
-      request.params.id,
-      request.params.submissionId,
-    );
+    const result = await retrySubmission(tenantId, request.params.id, request.params.submissionId);
 
     if ('error' in result) {
       void reply.code(400);
@@ -253,7 +326,12 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
   // POST /api/v1/insurance-leads/:id/tasks — Create a new task
   fastify.post<{
     Params: { id: string };
-    Body: { title: string; description?: string; priority?: 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT'; dueAt?: string };
+    Body: {
+      title: string;
+      description?: string;
+      priority?: 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
+      dueAt?: string;
+    };
   }>('/api/v1/insurance-leads/:id/tasks', async (request, reply) => {
     const tenantId = getTenantId(request);
     if (!tenantId) {

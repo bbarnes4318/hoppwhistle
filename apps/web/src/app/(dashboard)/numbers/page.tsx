@@ -3,6 +3,8 @@
 import { ArrowRightLeft, Download, Edit2, Loader2, Plus, Search } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
+import { RoleGuard } from '@/components/auth/role-guard';
+import { CompactPageShell, CompactPageHeader } from '@/components/layout/compact-layout';
 import { BulkvsPurchaseDialog } from '@/components/numbers/bulkvs-purchase-dialog';
 import { CreateRouteDialog } from '@/components/numbers/create-route-dialog';
 import { EditNumberDialog } from '@/components/numbers/edit-number-dialog';
@@ -22,8 +24,7 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api';
-import { formatPhoneNumber, cn } from '@/lib/utils';
-import { CompactPageShell, CompactPageHeader } from '@/components/layout/compact-layout';
+import { formatPhoneNumber } from '@/lib/utils';
 
 interface PhoneNumber {
   id: string;
@@ -101,7 +102,9 @@ function NumbersPage() {
   };
 
   const filteredNumbers = numbers.filter(
-    n => n.number.includes(search) || n.campaign?.name.toLowerCase().includes(search.toLowerCase())
+    n =>
+      n.number.includes(search) ||
+      (n.campaign?.name || '').toLowerCase().includes(search.toLowerCase())
   );
 
   const handleImport = () => {
@@ -146,7 +149,7 @@ function NumbersPage() {
     r =>
       r.did.includes(search) ||
       r.destination.includes(search) ||
-      r.label?.toLowerCase().includes(search.toLowerCase())
+      (r.label || '').toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -155,7 +158,12 @@ function NumbersPage() {
         title="Numbers & Routing"
         subtitle="Manage your phone numbers and inbound call routes"
       >
-        <Button variant="outline" size="sm" onClick={handleImport} className="h-8 text-xs border-border/50 text-muted-foreground">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleImport}
+          className="h-8 text-xs border-border/50 text-muted-foreground"
+        >
           <Download className="mr-2 h-3.5 w-3.5" />
           Import
         </Button>
@@ -169,7 +177,10 @@ function NumbersPage() {
           <DropdownMenuContent align="end" className="bg-slate-900 border-white/10 text-white">
             <DropdownMenuLabel className="text-xs text-gray-400">Select Provider</DropdownMenuLabel>
             <DropdownMenuSeparator className="bg-white/10" />
-            <DropdownMenuItem onClick={handleBuyBulkvsNumber} className="focus:bg-cyan-600 focus:text-white text-xs">
+            <DropdownMenuItem
+              onClick={handleBuyBulkvsNumber}
+              className="focus:bg-cyan-600 focus:text-white text-xs"
+            >
               Buy from Hopwhistle
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -178,8 +189,12 @@ function NumbersPage() {
 
       <Tabs defaultValue="numbers" className="w-full flex-1 min-h-0 flex flex-col gap-3">
         <TabsList className="mb-0 self-start">
-          <TabsTrigger value="numbers" className="text-xs h-8">Phone Numbers</TabsTrigger>
-          <TabsTrigger value="routing" className="text-xs h-8">Inbound Routes</TabsTrigger>
+          <TabsTrigger value="numbers" className="text-xs h-8">
+            Phone Numbers
+          </TabsTrigger>
+          <TabsTrigger value="routing" className="text-xs h-8">
+            Inbound Routes
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="numbers" className="m-0 flex-1 min-h-0 overflow-hidden">
@@ -187,8 +202,12 @@ function NumbersPage() {
             <CardHeader className="flex-shrink-0 py-2 px-3 border-b border-border/10">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Phone Numbers</CardTitle>
-                  <CardDescription className="text-[10px]">Search and manage your numbers</CardDescription>
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Phone Numbers
+                  </CardTitle>
+                  <CardDescription className="text-[10px]">
+                    Search and manage your numbers
+                  </CardDescription>
                 </div>
                 <div className="relative w-48">
                   <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -279,7 +298,10 @@ function NumbersPage() {
                           <div className="text-muted-foreground text-[9px] uppercase tracking-wider">
                             Assigned Agent
                           </div>
-                          <div className="font-medium truncate text-white" title={number.user?.name || 'Unassigned'}>
+                          <div
+                            className="font-medium truncate text-white"
+                            title={number.user?.name || 'Unassigned'}
+                          >
                             {number.user?.name || 'Unassigned'}
                           </div>
                         </div>
@@ -297,7 +319,9 @@ function NumbersPage() {
             <CardHeader className="flex-shrink-0 py-2 px-3 border-b border-border/10">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Inbound Routes</CardTitle>
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Inbound Routes
+                  </CardTitle>
                   <CardDescription className="text-[10px]">
                     Map your DIDs to buyer destinations for inbound calls
                   </CardDescription>
@@ -314,7 +338,11 @@ function NumbersPage() {
                       className="pl-8 h-7 text-xs bg-background border-border/50 text-foreground"
                     />
                   </div>
-                  <Button onClick={() => setCreateRouteOpen(true)} size="sm" className="h-7 text-xs">
+                  <Button
+                    onClick={() => setCreateRouteOpen(true)}
+                    size="sm"
+                    className="h-7 text-xs"
+                  >
                     <ArrowRightLeft className="mr-2 h-3.5 w-3.5" />
                     Create Route
                   </Button>
@@ -452,8 +480,6 @@ function NumbersPage() {
     </CompactPageShell>
   );
 }
-
-import { RoleGuard } from '@/components/auth/role-guard';
 
 export default function GuardedNumbersPage() {
   return (

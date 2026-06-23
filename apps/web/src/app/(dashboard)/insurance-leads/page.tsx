@@ -1,7 +1,7 @@
 /* eslint-disable */
 'use client';
 
-import { Search, X, Plus } from 'lucide-react';
+import { Search, X, Plus, Upload } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { LeadDetailSheet } from '@/components/leads/lead-detail-sheet';
 import { LeadStatsCards } from '@/components/leads/lead-stats-cards';
 import { LeadsTable } from '@/components/leads/leads-table';
+import { CsvImportDialog } from '@/components/leads/csv-import-dialog';
 import { fetchInsuranceLeads, fetchInsuranceLead, fetchInsuranceLeadStats } from '@/lib/api/leads';
 import type {
   InsuranceLeadSummary,
@@ -27,6 +28,8 @@ interface Filters {
   postStatus: string;
   postMode: string;
   search: string;
+  status: string;
+  followUp: string;
 }
 
 const EMPTY_FILTERS: Filters = {
@@ -35,6 +38,8 @@ const EMPTY_FILTERS: Filters = {
   postStatus: '',
   postMode: '',
   search: '',
+  status: '',
+  followUp: '',
 };
 
 function FilterPill({
@@ -82,6 +87,7 @@ export default function InsuranceLeadsPage() {
   const [loading, setLoading] = useState(true);
   const [statsLoading, setStatsLoading] = useState(true);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  const [isImportOpen, setIsImportOpen] = useState(false);
 
   // Detail sheet
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
@@ -104,6 +110,8 @@ export default function InsuranceLeadsPage() {
         postStatus: filters.postStatus || undefined,
         postMode: filters.postMode || undefined,
         search: filters.search || undefined,
+        status: filters.status || undefined,
+        followUp: filters.followUp || undefined,
       });
       setLeads(result.data);
       setTotalLeads(result.meta.total);
@@ -191,15 +199,24 @@ export default function InsuranceLeadsPage() {
             Manage inbound ACA and Final Expense leads · Ameriquote / Boberdoo integration
           </p>
         </div>
-        <Button
-          asChild
-          className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
-        >
-          <Link href="/intake">
-            <Plus className="h-4.5 w-4.5" />
-            Add Customer
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={() => setIsImportOpen(true)}
+            className="flex items-center gap-1.5 border border-white/10 bg-slate-900 hover:bg-slate-800 text-slate-200"
+          >
+            <Upload className="h-4.5 w-4.5" />
+            Import CSV
+          </Button>
+          <Button
+            asChild
+            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+          >
+            <Link href="/intake">
+              <Plus className="h-4.5 w-4.5" />
+              Add Customer
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -252,6 +269,30 @@ export default function InsuranceLeadsPage() {
               { value: 'INVALID', label: 'Invalid' },
             ]}
             onChange={v => handleFilterChange('validationStatus', v)}
+          />
+          <FilterPill
+            label="Stage"
+            value={filters.status}
+            options={[
+              { value: 'NEW', label: 'New' },
+              { value: 'CONTACTED', label: 'Contacted' },
+              { value: 'QUALIFIED', label: 'Qualified' },
+              { value: 'CONVERTED', label: 'Converted' },
+              { value: 'LOST', label: 'Lost' },
+            ]}
+            onChange={v => handleFilterChange('status', v)}
+          />
+          <FilterPill
+            label="Follow Up"
+            value={filters.followUp}
+            options={[
+              { value: 'OVERDUE', label: 'Overdue' },
+              { value: 'TODAY', label: 'Today' },
+              { value: 'TOMORROW', label: 'Tomorrow' },
+              { value: 'UPCOMING', label: 'Upcoming' },
+              { value: 'NONE', label: 'No Follow-up' },
+            ]}
+            onChange={v => handleFilterChange('followUp', v)}
           />
           <FilterPill
             label="Post Status"
@@ -328,6 +369,11 @@ export default function InsuranceLeadsPage() {
           onClose={handleCloseDetail}
           onRefresh={handleRefresh}
         />
+      )}
+
+      {/* Import CSV Dialog */}
+      {isImportOpen && (
+        <CsvImportDialog onClose={() => setIsImportOpen(false)} onSuccess={handleRefresh} />
       )}
     </div>
   );
