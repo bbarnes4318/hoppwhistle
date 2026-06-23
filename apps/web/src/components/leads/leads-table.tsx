@@ -1,6 +1,8 @@
 'use client';
 
 import type { InsuranceLeadSummary } from '@/lib/api/leads';
+import { PhoneCall } from 'lucide-react';
+import { usePhone } from '@/components/phone';
 
 function LeadStageBadge({ stage }: { stage: string | null }) {
   if (!stage) return <span className="text-slate-600">—</span>;
@@ -168,6 +170,7 @@ function formatTime(iso: string): string {
 }
 
 export function LeadsTable({ leads, loading, onSelectLead }: LeadsTableProps) {
+  const { makeCall } = usePhone();
   if (loading) {
     return (
       <div className="rounded-lg border border-white/5 bg-slate-900/50 overflow-hidden">
@@ -273,7 +276,22 @@ export function LeadsTable({ leads, loading, onSelectLead }: LeadsTableProps) {
                     <FollowUpBadge dateStr={lead.nextFollowUpAt} stage={lead.leadStage} />
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-300 font-mono">
-                    {formatPhone(lead.phone)}
+                    <div className="flex items-center gap-2">
+                      <span>{formatPhone(lead.phone)}</span>
+                      {lead.phone && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void makeCall(lead.phone);
+                          }}
+                          className="rounded bg-emerald-500/10 border border-emerald-500/20 p-1 text-emerald-400 hover:bg-emerald-500/20 transition-all"
+                          title="Click to dial"
+                          aria-label={`Dial ${lead.phone}`}
+                        >
+                          <PhoneCall className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-400">
                     {lead.state || '—'}

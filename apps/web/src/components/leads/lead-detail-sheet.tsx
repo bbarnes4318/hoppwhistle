@@ -20,6 +20,7 @@ import {
 import { useState, useEffect } from 'react';
 
 import { StatusBadge, VerticalBadge } from './leads-table';
+import { usePhone } from '@/components/phone';
 
 import type {
   InsuranceLeadDetail,
@@ -371,6 +372,7 @@ function SubmissionItem({
 // Main Component
 // ---------------------------------------------------------------------------
 export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetailSheetProps) {
+  const { makeCall } = usePhone();
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
@@ -526,7 +528,31 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                 <div className="grid grid-cols-2 gap-3">
                   <EditField label="First Name" value={lead.firstName} fieldKey="firstName" edits={edits} onEdit={handleEdit} />
                   <EditField label="Last Name" value={lead.lastName} fieldKey="lastName" edits={edits} onEdit={handleEdit} />
-                  <EditField label="Phone" value={lead.phone} fieldKey="phone" edits={edits} onEdit={handleEdit} />
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-medium uppercase tracking-wider text-slate-500">
+                      Phone
+                    </label>
+                    <div className="flex gap-2">
+                      <div className="flex-grow">
+                        <input
+                          type="text"
+                          value={edits.phone !== undefined ? edits.phone : (lead.phone ?? '')}
+                          onChange={(e) => handleEdit('phone', e.target.value)}
+                          className="w-full rounded-md border px-2.5 py-1.5 text-sm transition-colors bg-slate-900/50 text-slate-200 placeholder-slate-600 border-white/10 outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20"
+                        />
+                      </div>
+                      {lead.phone && (
+                        <button
+                          onClick={() => void makeCall(lead.phone!)}
+                          className="flex items-center justify-center gap-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 px-3 text-xs font-semibold text-white shadow-lg transition-colors border border-emerald-500/30"
+                          title="Click to dial"
+                        >
+                          <PhoneCall className="h-4 w-4" />
+                          <span>Call</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
                   <EditField label="Email" value={lead.email} fieldKey="email" edits={edits} onEdit={handleEdit} />
                 </div>
               </Section>
