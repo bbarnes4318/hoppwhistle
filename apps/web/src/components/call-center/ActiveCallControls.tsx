@@ -1,4 +1,4 @@
-import { Circle, Mic, MicOff, Pause, PhoneForwarded, PhoneOff, Play, UserPlus } from 'lucide-react';
+import { Circle, Merge, Mic, MicOff, Pause, PhoneForwarded, PhoneOff, Play, UserPlus } from 'lucide-react';
 import React, { useState } from 'react';
 import type { ProspectData } from './types';
 
@@ -15,6 +15,8 @@ interface ActiveCallControlsProps {
   makeCall: (num: string) => Promise<void>;
   callNotes: string;
   setCallNotes: (notes: string) => void;
+  hasHeldCalls: boolean;
+  mergeCalls: () => Promise<void>;
 }
 
 export function ActiveCallControls({
@@ -30,6 +32,8 @@ export function ActiveCallControls({
   makeCall,
   callNotes,
   setCallNotes,
+  hasHeldCalls,
+  mergeCalls,
 }: ActiveCallControlsProps) {
   const [showTransferPanel, setShowTransferPanel] = useState(false);
   const [transferNumber, setTransferNumber] = useState('');
@@ -95,8 +99,21 @@ export function ActiveCallControls({
           </div>
         </div>
 
+        {/* Merge Button (Only appears when there is a held call) */}
+        {hasHeldCalls && (
+          <div className="mb-4">
+            <button
+              onClick={() => void mergeCalls()}
+              className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white font-mono uppercase tracking-widest text-sm rounded flex items-center justify-center space-x-2 transition-colors shadow-lg shadow-purple-600/20"
+            >
+              <Merge className="w-4.5 h-4.5" />
+              <span>Merge Calls</span>
+            </button>
+          </div>
+        )}
+
         {/* 3-Way / Transfer Buttons */}
-        {!isAddingThirdParty && !thirdPartyConnected && (
+        {!isAddingThirdParty && !thirdPartyConnected && !hasHeldCalls && (
           <div className="grid grid-cols-2 gap-2 mb-4">
             <button
               onClick={() => setIsAddingThirdParty(true)}

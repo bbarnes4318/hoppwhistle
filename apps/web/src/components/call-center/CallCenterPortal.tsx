@@ -107,7 +107,7 @@ const getDefaultScriptText = (scriptType: 'sales' | 'retention' | 'underwriting'
 // ============================================================================
 export function CallCenterPortal(): JSX.Element {
   const router = useRouter();
-  const { currentCall, makeCall, hangupCall, answerCall, toggleMute, toggleHold } = usePhone();
+  const { currentCall, makeCall, hangupCall, answerCall, toggleMute, toggleHold, hasHeldCalls, mergeCalls } = usePhone();
 
   // Lead Injection - Pre-call data from webhooks
   const { leadData, lookupLead, clearLead } = useLeadInjection();
@@ -1190,6 +1190,8 @@ export function CallCenterPortal(): JSX.Element {
               makeCall={makeCall}
               callNotes={callNotes}
               setCallNotes={setCallNotes}
+              hasHeldCalls={hasHeldCalls}
+              mergeCalls={mergeCalls}
             />
           )}
 
