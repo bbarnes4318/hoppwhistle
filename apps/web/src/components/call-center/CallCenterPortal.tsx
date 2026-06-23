@@ -31,7 +31,7 @@ import type {
 import UnderwritingScriptPanel from './UnderwritingScriptPanel';
 import { WorkspaceTabs } from './WorkspaceTabs';
 
-import { usePhone } from '@/components/phone/phone-provider';
+import { usePhone, DialPad, AddCallDialog } from '@/components/phone';
 import { useLeadInjection } from '@/hooks/useLeadInjection';
 import { useScriptAccess } from '@/hooks/useUserRoles';
 import { apiClient } from '@/lib/api';
@@ -335,6 +335,7 @@ export function CallCenterPortal(): JSX.Element {
       if (!callSessionIdRef.current || callSessionIdRef.current !== currentCall.callId) {
         callSessionIdRef.current = currentCall.callId || `call-${Date.now()}`;
         dispositionHandledRef.current = false;
+        setTotalCallsCount(prev => prev + 1);
         console.log('[CallCenter] New call session started:', callSessionIdRef.current);
       }
 
@@ -1225,41 +1226,22 @@ export function CallCenterPortal(): JSX.Element {
           )}
 
           {!isIncomingCall && !isCallActive && !showDisposition && (
-            <DialerPanel
-              phoneNumber={phoneNumber}
-              setPhoneNumber={setPhoneNumber}
-              formatPhoneNumber={formatPhoneNumber}
-              handleKeypadPress={handleKeypadPress}
-              disabled={false}
-              onDial={() => {
-                void (async () => {
-                  const dialNumber = phoneNumber.replace(/\D/g, '');
-                  if (dialNumber.length === 10) {
-                    const callData = {
-                      caller_id: dialNumber,
-                      first_name: 'Outbound',
-                      last_name: 'Call',
-                      phone: dialNumber,
-                    };
-                    setActiveCallData(callData);
-                    setIsCallActive(true);
-                    setAgentStatus('on_call');
-                    setCallTimer(0);
-                    setTotalCallsCount(prev => prev + 1);
-                    callTimerRef.current = setInterval(() => setCallTimer(prev => prev + 1), 1000);
-                    void fetchCrmData(dialNumber);
-                    try {
-                      await makeCall(dialNumber);
-                    } catch (e) {
-                      console.error(e);
-                      setIsCallActive(false);
-                      setAgentStatus('available');
-                      if (callTimerRef.current) clearInterval(callTimerRef.current);
-                    }
-                  }
-                })();
-              }}
-            />
+            <div className="flex-grow flex flex-col p-4 bg-background justify-between">
+              <div className="space-y-4 flex-grow flex flex-col">
+                <div className="flex items-center justify-between pb-2 border-b border-border">
+                  <h3 className="text-xs font-mono uppercase tracking-widest font-bold text-foreground">
+                    Agent Dialer
+                  </h3>
+                </div>
+                <div className="flex-grow flex flex-col justify-center">
+                  <DialPad compact={true} />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {isAddingThirdParty && (
+            <AddCallDialog onClose={() => setIsAddingThirdParty(false)} />
           )}
         </div>
 
