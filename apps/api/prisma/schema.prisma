@@ -60,6 +60,7 @@ model Tenant {
   insuranceLeadSubmissions InsuranceLeadSubmission[]
   insuranceActivities      InsuranceActivity[]
   insuranceTasks           InsuranceTask[]
+  leadLists                LeadList[]
   didRoutes                DidRoute[]
   campaignPublishers       CampaignPublisher[]
   campaignBuyers           CampaignBuyer[]
@@ -2443,6 +2444,10 @@ model InsuranceLead {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Lead List Relation
+  listId String?
+  list   LeadList? @relation(fields: [listId], references: [id], onDelete: SetNull)
+
   // Relations
   tenant      Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   submissions InsuranceLeadSubmission[]
@@ -2456,6 +2461,22 @@ model InsuranceLead {
   @@index([tenantId, status])
   @@index([createdAt])
   @@map("insurance_leads")
+}
+
+model LeadList {
+  id        String            @id @default(uuid())
+  tenantId  String
+  name      String
+  vertical  InsuranceVertical
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  tenant    Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  leads     InsuranceLead[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("lead_lists")
 }
 
 /// Audit record for each inbound lead submission + delivery attempt.

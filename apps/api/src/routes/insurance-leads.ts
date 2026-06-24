@@ -90,6 +90,8 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     Body: {
       vertical: string;
       leads: Array<Record<string, unknown>>;
+      listName?: string;
+      listId?: string;
     };
   }>('/api/v1/insurance-leads/import', async (request, reply) => {
     const tenantId = getTenantId(request);
@@ -98,7 +100,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
       return { error: { code: 'UNAUTHORIZED', message: 'Valid API key required' } };
     }
 
-    const { vertical: rawVertical, leads } = request.body;
+    const { vertical: rawVertical, leads, listName, listId: reqListId } = request.body;
     if (!rawVertical || !Array.isArray(leads)) {
       void reply.code(400);
       return { error: { code: 'INVALID_BODY', message: 'Must provide vertical and leads array' } };
@@ -116,12 +118,37 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     }
 
     try {
-      const { ingestLead } = await import('../services/insurance-lead-service.js');
+      const { getPrismaClient, ingestLead } = await import('../services/insurance-lead-service.js');
+      const prisma = getPrismaClient();
+
+      let targetListId = reqListId || null;
+
+      if (!targetListId && listName && listName.trim()) {
+        const trimmedName = listName.trim();
+        let listRecord = await prisma.leadList.findFirst({
+          where: { tenantId, name: { equals: trimmedName, mode: 'insensitive' } }
+        });
+        if (!listRecord) {
+          listRecord = await prisma.leadList.create({
+            data: {
+              tenantId,
+              name: trimmedName,
+              vertical: vertical as 'ACA' | 'FE'
+            }
+          });
+        }
+        targetListId = listRecord.id;
+      }
+
       const results = [];
 
       for (const lead of leads) {
         try {
-          const result = await ingestLead(tenantId, vertical as 'ACA' | 'FE', lead);
+          const payload = {
+            ...lead,
+            ...(targetListId ? { listId: targetListId } : {})
+          };
+          const result = await ingestLead(tenantId, vertical as 'ACA' | 'FE', payload);
           results.push({
             success: result.validationStatus === 'VALID',
             phone: String(lead.phone || ''),
@@ -174,6 +201,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
       status?: string;
       leadStage?: string;
       followUp?: string;
+      listId?: string;
     };
   }>('/api/v1/insurance-leads', async (request, reply) => {
     const tenantId = getTenantId(request);
@@ -198,9 +226,36 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
       status: q.status,
       leadStage: q.leadStage,
       followUp: q.followUp,
+      listId: q.listId,
     });
 
     return result;
+  });
+
+  // -----------------------------------------------------------------------
+  // GET /api/v1/lead-lists — List all lead lists for tenant
+  // -----------------------------------------------------------------------
+  fastify.get('/api/v1/lead-lists', async (request, reply) => {
+    const tenantId = getTenantId(request);
+    if (!tenantId) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+    }
+
+    const { getPrismaClient } = await import('../services/insurance-lead-service.js');
+    const prisma = getPrismaClient();
+
+    const lists = await prisma.leadList.findMany({
+      where: { tenantId },
+      include: {
+        _count: {
+          select: { leads: true },
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    return lists;
   });
 
   // -----------------------------------------------------------------------

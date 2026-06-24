@@ -53,6 +53,7 @@ export interface LeadFilters {
   status?: string;
   leadStage?: string;
   followUp?: string;
+  listId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -128,7 +129,7 @@ export async function ingestLead(
     'nextFollowUpAt', 'priority', 'leadStage', 'doNotCall', 'duplicateOfId', 'smoker', 
     'faceAmount', 'lifeType', 'riskType', 'carrier', 'product', 'monthlyPremium', 
     'coverageAmount', 'trustedFormUrl', 'leadidToken', 'consentLanguage', 'recordingUrl', 
-    'createdAt', 'updatedAt', 'customFields'
+    'createdAt', 'updatedAt', 'customFields', 'listId'
   ]);
   const extraFields: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(contactData)) {
@@ -207,6 +208,7 @@ export async function ingestLead(
           : existing.nextFollowUpAt,
         status: contactData.status ? (contactData.status as InsuranceLeadStatus) : existing.status,
         leadStage: contactData.leadStage ? String(contactData.leadStage) : existing.leadStage,
+        listId: contactData.listId ? String(contactData.listId) : existing.listId,
       },
     });
 
@@ -265,6 +267,7 @@ export async function ingestLead(
           : null,
         status: contactData.status ? (contactData.status as InsuranceLeadStatus) : 'NEW',
         leadStage: contactData.leadStage ? String(contactData.leadStage) : null,
+        listId: contactData.listId ? String(contactData.listId) : null,
       },
     });
 
@@ -442,6 +445,9 @@ export async function getLeads(tenantId: string, filters: LeadFilters) {
   }
   if (filters.leadStage) {
     where.leadStage = filters.leadStage;
+  }
+  if (filters.listId) {
+    where.listId = filters.listId;
   }
 
   // CRM follow-up filter

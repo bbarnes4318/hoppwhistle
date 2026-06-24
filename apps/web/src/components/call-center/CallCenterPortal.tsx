@@ -5,7 +5,7 @@
 // Exact 1:1 port with zero UI/functionality differences
 // ============================================================================
 
-import { Phone, FileText, Headphones, LogIn, X, Play, Pause, Upload, RotateCcw, User } from 'lucide-react';
+import { Phone, FileText, Headphones, LogIn, X, Play, Pause, Upload, RotateCcw, User, Database } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 
@@ -220,8 +220,9 @@ export function CallCenterPortal(): JSX.Element {
     return 0;
   });
 
-  // Script Selection - Default to Contractor Sales Script
   const [selectedScript, setSelectedScript] = useState<SelectedScript>('sales');
+  const [leadLists, setLeadLists] = useState<any[]>([]);
+  const [selectedListId, setSelectedListId] = useState<string>('');
 
   // Database-driven role and script access
   const {
@@ -887,11 +888,22 @@ export function CallCenterPortal(): JSX.Element {
     }
   };
 
-  // Fetch Applications
+  // Fetch Applications & Lists
   const fetchApplications = useCallback(async () => {
     setLoadingApplications(true);
     try {
-      const res = await apiClient.get<any>('/api/v1/insurance-leads?limit=100');
+      // 1. Fetch Lead Lists in parallel to keep dropdown updated
+      const listsRes = await apiClient.get<any[]>('/api/v1/lead-lists');
+      if (!listsRes.error && listsRes.data) {
+        setLeadLists(listsRes.data);
+      }
+
+      // 2. Fetch leads in queue (filtered by list if selected)
+      const url = selectedListId 
+        ? `/api/v1/insurance-leads?limit=100&listId=${selectedListId}`
+        : '/api/v1/insurance-leads?limit=100';
+
+      const res = await apiClient.get<any>(url);
       if (!res.error && res.data) {
         const result = res.data;
         const apps = (result.data || []).map((lead: any) => ({
@@ -908,7 +920,7 @@ export function CallCenterPortal(): JSX.Element {
     } finally {
       setLoadingApplications(false);
     }
-  }, []);
+  }, [selectedListId]);
 
   useEffect(() => {
     if (currentView === 'agentDashboard') {
@@ -1545,6 +1557,29 @@ export function CallCenterPortal(): JSX.Element {
                 </div>
                 
                 <div className="flex flex-wrap items-center gap-2">
+                  {/* Target List Dropdown */}
+                  <div className="flex items-center gap-2 bg-slate-800 border border-slate-700 hover:border-slate-600 rounded-lg px-3 py-2 text-white text-xs font-mono font-medium uppercase tracking-widest transition-all">
+                    <Database className="w-3.5 h-3.5 text-cyan-400" />
+                    <select
+                      value={selectedListId}
+                      onChange={(e) => {
+                        setSelectedListId(e.target.value);
+                        // Reset dialer state when list changes
+                        setIsAutoDialing(false);
+                        setAutoDialIndex(0);
+                        setAutoDialStatus('idle');
+                      }}
+                      className="bg-transparent text-white text-xs font-mono focus:outline-none cursor-pointer pr-4 font-bold uppercase"
+                    >
+                      <option value="" className="bg-slate-900 text-slate-400">All Lists</option>
+                      {leadLists.map((list) => (
+                        <option key={list.id} value={list.id} className="bg-slate-900 text-white">
+                          {list.name} ({list._count?.leads ?? 0})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   <button
                     onClick={() => setShowUploadModal(true)}
                     className="px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 text-white text-xs font-mono font-medium uppercase tracking-widest rounded-lg transition-all flex items-center gap-2"

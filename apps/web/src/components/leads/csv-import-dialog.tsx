@@ -11,7 +11,7 @@ import {
   Sparkles,
   X,
 } from 'lucide-react';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 import { apiClient } from '@/lib/api';
 
@@ -214,6 +214,29 @@ function parseCSV(text: string): string[][] {
 
 export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [leadLists, setLeadLists] = useState<any[]>([]);
+  const [selectedListId, setSelectedListId] = useState<string>('');
+  const [newListName, setNewListName] = useState<string>('');
+  const [isCreateNewList, setIsCreateNewList] = useState<boolean>(true);
+
+  useEffect(() => {
+    const loadLists = async () => {
+      try {
+        const response = await apiClient.get<any[]>('/api/v1/lead-lists');
+        if (!response.error && response.data) {
+          setLeadLists(response.data);
+          if (response.data.length > 0) {
+            setSelectedListId(response.data[0].id);
+            setIsCreateNewList(false);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load lead lists:', err);
+      }
+    };
+    void loadLists();
+  }, []);
+
   const [vertical, setVertical] = useState<'ACA' | 'FE'>('ACA');
   const [fileName, setFileName] = useState<string>('');
   const [parsedRows, setParsedRows] = useState<string[][]>([]);
@@ -359,6 +382,10 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    if (isCreateNewList && (!newListName || !newListName.trim())) {
+      alert('Please enter a name for the new lead list first.');
+      return;
+    }
     const file = e.dataTransfer.files?.[0];
     if (file && file.name.endsWith('.csv')) {
       processFile(file);
@@ -432,10 +459,17 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
       return lead;
     });
 
+    if (isCreateNewList && (!newListName || !newListName.trim())) {
+      alert('Please enter a name for the new lead list.');
+      return;
+    }
+
     try {
       const response = await apiClient.post('/api/v1/insurance-leads/import', {
         vertical,
         leads: payloadLeads,
+        listId: isCreateNewList ? undefined : selectedListId,
+        listName: isCreateNewList ? newListName : undefined,
       });
 
       const data = response.data as any;
@@ -578,6 +612,57 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
                 </button>
               </div>
 
+              {/* Lead List Selection */}
+              <div className="space-y-3 rounded-lg border border-white/5 bg-slate-950/20 p-4">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Target Lead List
+                </label>
+                <div className="flex gap-4">
+                  <button
+                    type="button"
+                    onClick={() => setIsCreateNewList(true)}
+                    className={`flex-1 py-1.5 px-3 rounded border text-xs font-mono transition-colors ${isCreateNewList ? 'bg-emerald-500/10 border-emerald-500 text-slate-100' : 'bg-slate-900 border-white/5 text-slate-400'}`}
+                  >
+                    + CREATE NEW LIST
+                  </button>
+                  {leadLists.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setIsCreateNewList(false)}
+                      className={`flex-1 py-1.5 px-3 rounded border text-xs font-mono transition-colors ${!isCreateNewList ? 'bg-emerald-500/10 border-emerald-500 text-slate-100' : 'bg-slate-900 border-white/5 text-slate-400'}`}
+                    >
+                      SELECT EXISTING LIST
+                    </button>
+                  )}
+                </div>
+
+                {isCreateNewList ? (
+                  <div className="space-y-1.5 mt-2">
+                    <input
+                      type="text"
+                      placeholder="e.g. June 2026 Outbound Leads"
+                      value={newListName}
+                      onChange={(e) => setNewListName(e.target.value)}
+                      className="w-full bg-slate-950 border border-white/10 rounded px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-primary"
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-1.5 mt-2">
+                    <select
+                      value={selectedListId}
+                      onChange={(e) => setSelectedListId(e.target.value)}
+                      className="w-full bg-slate-950 border border-white/10 rounded px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-primary cursor-pointer"
+                    >
+                      {leadLists.map((list: any) => (
+                        <option key={list.id} value={list.id}>
+                          {list.name} ({list.vertical})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
               {/* File Dropzone */}
               <div className="space-y-2">
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">
@@ -586,7 +671,13 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
                 <div
                   onDragOver={handleDragOver}
                   onDrop={handleDrop}
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => {
+                    if (isCreateNewList && (!newListName || !newListName.trim())) {
+                      alert('Please enter a name for the new lead list first.');
+                      return;
+                    }
+                    fileInputRef.current?.click();
+                  }}
                   className="flex flex-col items-center justify-center border-2 border-dashed border-white/10 bg-slate-950/20 rounded-xl py-12 px-6 cursor-pointer hover:border-emerald-500/30 hover:bg-slate-950/40 transition-all"
                 >
                   <div className="rounded-full bg-slate-900 p-3 border border-white/5 mb-3">
