@@ -609,6 +609,10 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
         listName: isCreateNewList ? newListName : undefined,
       });
 
+      if (response.error) {
+        throw new Error(response.error.message || 'Import API request failed');
+      }
+
       const data = response.data as any;
       setImportResult({
         total: data.total ?? payloadLeads.length,

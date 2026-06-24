@@ -21,7 +21,7 @@ $remoteCommands = @(
     "echo '>>> Starting stack...'",
     "docker compose -f infra/docker/docker-compose.dev.yml up -d api web",
     "echo '>>> Aligning database schema...'",
-    "docker exec hopwhistle-api-dev npx prisma db push --accept-data-loss"
+    "docker exec -u root hopwhistle-api-dev npx prisma db push --accept-data-loss"
 ) -join " && "
 
 Write-Host "1. Connecting to root@$ip using key $keyPath..." -ForegroundColor Yellow
