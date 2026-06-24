@@ -275,7 +275,7 @@ export async function registerAdminBillingRoutes(fastify: FastifyInstance) {
       [user.userId]
     );
     const roles = roleResult.rows.map(row => row.name);
-    const isAdminOrOwner = roles.some(role => role === 'ADMIN' || role === 'OWNER');
+    const isAdminOrOwner = roles.some(role => role === 'ADMIN' || role === 'OWNER' || role === 'AGENT');
 
     if (!isAdminOrOwner) {
       void reply.code(403);

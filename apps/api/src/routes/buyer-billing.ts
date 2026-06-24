@@ -41,8 +41,8 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       }
     }
 
-    const isAdminOrOwner = userRoles.some(role => role === 'ADMIN' || role === 'OWNER') || 
-                           (user?.roles?.some((role: string) => role === 'ADMIN' || role === 'OWNER') ?? false);
+    const isAdminOrOwner = userRoles.some(role => role === 'ADMIN' || role === 'OWNER' || role === 'AGENT') || 
+                           (user?.roles?.some((role: string) => role === 'ADMIN' || role === 'OWNER' || role === 'AGENT') ?? false);
 
     return {
       isAdminOrOwner,
@@ -218,7 +218,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
     }
 
     // Require admin role for adding credits
-    const isAdmin = user?.roles?.some(r => r === 'ADMIN' || r === 'OWNER') ?? false;
+    const isAdmin = user?.roles?.some(r => r === 'ADMIN' || r === 'OWNER' || r === 'AGENT') ?? false;
     if (!demoTenantId && !isAdmin) {
       void reply.code(403);
       return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
@@ -513,7 +513,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       include: { roles: { include: { role: true } } },
     });
     const roles = userRecord?.roles.map((ur: any) => ur.role.name) || [];
-    const isAdminOrOwner = roles.some(role => role === 'ADMIN' || role === 'OWNER');
+    const isAdminOrOwner = roles.some(role => role === 'ADMIN' || role === 'OWNER' || role === 'AGENT');
 
     if (!isAdminOrOwner && userRecord?.buyerId !== buyerId) {
       return reply.code(403).send({ error: 'Forbidden' });

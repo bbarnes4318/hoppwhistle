@@ -27,8 +27,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       router.replace('/publisher/dashboard');
     } else if (isBuyerOnly && !path.startsWith('/buyer')) {
       router.replace('/buyer/dashboard');
-    } else if (isAgentOnly && !path.startsWith('/call-center') && !path.startsWith('/calls/my') && !path.startsWith('/contacts') && !path.startsWith('/payroll')) {
-      router.replace('/call-center');
+    } else if (isAgentOnly && (path.startsWith('/music-console') || path.startsWith('/voice-agents') || path.startsWith('/flows') || path.startsWith('/buyer') || path.startsWith('/publisher'))) {
+      router.replace('/dashboard');
     }
   }, [user, isPublisherOnly, isBuyerOnly, isAgentOnly, authLoading, pathname, router]);
 

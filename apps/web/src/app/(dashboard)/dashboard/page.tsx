@@ -178,8 +178,6 @@ export default function DashboardPage() {
       router.replace('/publisher/dashboard');
     } else if (isBuyerOnly) {
       router.replace('/buyer/dashboard');
-    } else if (isAgentOnly) {
-      router.replace('/call-center');
     }
   }, [user, isPublisherOnly, isBuyerOnly, isAgentOnly, authLoading, router]);
 

@@ -4923,8 +4923,8 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
       publisherId = user.publisherId;
     }
 
-    const isAdminOrOwner = userRoles.some(role => role === 'ADMIN' || role === 'OWNER') ||
-                           (user?.roles?.some((role: string) => role === 'ADMIN' || role === 'OWNER') ?? false);
+    const isAdminOrOwner = userRoles.some(role => role === 'ADMIN' || role === 'OWNER' || role === 'AGENT') ||
+                           (user?.roles?.some((role: string) => role === 'ADMIN' || role === 'OWNER' || role === 'AGENT') ?? false);
     return {
       isAdminOrOwner,
       userRoles,

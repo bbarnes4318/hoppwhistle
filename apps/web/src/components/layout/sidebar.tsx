@@ -114,10 +114,20 @@ export function Sidebar() {
   } else if (isAgentOnly) {
     // Agent Portal navigation
     navItems = [
+      { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
       { name: 'Call Center', href: '/call-center', icon: Headphones },
       { name: 'My Calls', href: '/calls/my', icon: AudioLines },
       { name: 'Contacts / CRM', href: '/contacts', icon: Users },
+      { name: 'Insurance Leads', href: '/insurance-leads', icon: FileText },
+      { name: 'Numbers', href: '/numbers', icon: PhoneCall },
+      { name: 'Campaigns', href: '/campaigns', icon: Megaphone },
+      { name: 'Publishers', href: '/publishers', icon: Users },
+      { name: 'Buyers', href: '/buyers', icon: Users },
+      { name: 'Call Logs', href: '/calls', icon: AudioLines },
+      { name: 'Reports', href: '/reports', icon: BarChart3 },
       { name: 'My Payroll', href: '/payroll', icon: Clock },
+      { name: 'Billing', href: '/billing', icon: Receipt },
+      { name: 'Settings', href: '/settings', icon: Settings },
     ];
   } else if (isReadonlyOnly) {
     // Readonly navigation

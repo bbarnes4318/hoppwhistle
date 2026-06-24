@@ -117,6 +117,28 @@ const ROLE_PERMISSIONS: Record<RoleName, Permission[]> = {
     'numbers:read',
     'reports:read',
   ],
+  AGENT: [
+    'users:read',
+    'users:write',
+    'roles:read',
+    'numbers:read',
+    'numbers:write',
+    'numbers:delete',
+    'campaigns:read',
+    'campaigns:write',
+    'campaigns:delete',
+    'calls:read',
+    'calls:write',
+    'calls:delete',
+    'recordings:read',
+    'recordings:write',
+    'recordings:delete',
+    'billing:read',
+    'billing:write',
+    'reports:read',
+    'payroll:read',
+    'payroll:write',
+  ],
 };
 
 /**
