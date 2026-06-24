@@ -1,6 +1,7 @@
 FROM node:20-alpine AS base
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_SKIP_DOWNLOAD=true
+RUN apk add --no-cache python3 py3-pandas py3-openpyxl
 
 FROM base AS deps
 RUN apk add --no-cache libc6-compat
@@ -89,6 +90,7 @@ COPY --from=builder /app/packages ./packages
 COPY --from=builder /app/apps/api/package.json ./package.json
 COPY --from=builder /app/docs ./docs
 COPY --from=builder /app/apps/api/prisma ./prisma
+COPY --from=builder /app/scripts ./scripts
 
 USER nextjs
 

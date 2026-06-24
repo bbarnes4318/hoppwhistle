@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument */
 /**
  * Insurance Lead Pipeline — API Routes
  *
@@ -5,6 +6,8 @@
  * Uses the existing Fastify API-key auth pattern (x-api-key header)
  * so tenantId resolves from the global auth hook.
  */
+
+import { spawn } from 'child_process';
 
 import { FastifyInstance, FastifyRequest } from 'fastify';
 
@@ -21,6 +24,66 @@ function getTenantId(request: FastifyRequest): string | null {
   const user = (request as AuthRequest).user;
   const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
   return demoTenantId || user?.tenantId || null;
+}
+
+function runPreClosedPython(leads: any[]): Promise<any[]> {
+  return new Promise((resolve, reject) => {
+    const scriptPath = 'scripts/process-preclosed.py';
+    const pyProcess = spawn('python3', [scriptPath]);
+
+    let stdoutData = '';
+    let stderrData = '';
+
+    pyProcess.stdout.on('data', data => {
+      stdoutData += data.toString();
+    });
+
+    pyProcess.stderr.on('data', data => {
+      stderrData += data.toString();
+    });
+
+    pyProcess.on('close', code => {
+      if (code !== 0) {
+        const fallbackProcess = spawn('python', [scriptPath]);
+        let fStdout = '';
+        let fStderr = '';
+
+        fallbackProcess.stdout.on('data', d => {
+          fStdout += d.toString();
+        });
+        fallbackProcess.stderr.on('data', d => {
+          fStderr += d.toString();
+        });
+        fallbackProcess.on('close', fCode => {
+          if (fCode !== 0) {
+            reject(
+              new Error(
+                `Python process exited with code ${fCode}. Stderr: ${fStderr || stderrData}`
+              )
+            );
+          } else {
+            try {
+              resolve(JSON.parse(fStdout));
+            } catch (err) {
+              reject(err);
+            }
+          }
+        });
+
+        fallbackProcess.stdin.write(JSON.stringify(leads));
+        fallbackProcess.stdin.end();
+      } else {
+        try {
+          resolve(JSON.parse(stdoutData));
+        } catch (err) {
+          reject(err);
+        }
+      }
+    });
+
+    pyProcess.stdin.write(JSON.stringify(leads));
+    pyProcess.stdin.end();
+  });
 }
 
 // eslint-disable-next-line @typescript-eslint/require-await
@@ -122,31 +185,66 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
       const prisma = getPrismaClient();
 
       let targetListId = reqListId || null;
+      let listRecord = null;
 
       if (!targetListId && listName && listName.trim()) {
         const trimmedName = listName.trim();
-        let listRecord = await prisma.leadList.findFirst({
-          where: { tenantId, name: { equals: trimmedName, mode: 'insensitive' } }
+        listRecord = await prisma.leadList.findFirst({
+          where: { tenantId, name: { equals: trimmedName, mode: 'insensitive' } },
         });
         if (!listRecord) {
           listRecord = await prisma.leadList.create({
             data: {
               tenantId,
               name: trimmedName,
-              vertical: vertical as 'ACA' | 'FE'
-            }
+              vertical: vertical as 'ACA' | 'FE',
+            },
           });
         }
         targetListId = listRecord.id;
+      } else if (targetListId) {
+        listRecord = await prisma.leadList.findUnique({ where: { id: targetListId } });
+      }
+
+      const isPreClosed = listRecord && listRecord.name.toLowerCase() === 'preclosed';
+      let processedLeads = leads;
+
+      if (isPreClosed) {
+        try {
+          processedLeads = await runPreClosedPython(leads);
+        } catch (pyErr) {
+          request.log.error(pyErr, 'Failed to process PreClosed leads in Python');
+        }
       }
 
       const results = [];
 
-      for (const lead of leads) {
+      for (const lead of processedLeads) {
         try {
+          let customFields =
+            lead.customFields && typeof lead.customFields === 'object'
+              ? { ...lead.customFields }
+              : {};
+          if (isPreClosed) {
+            customFields = {
+              ...customFields,
+              primaryBeneficiaryName: lead.primaryBeneficiaryName || '',
+              primaryBeneficiaryRelationship: lead.primaryBeneficiaryRelationship || '',
+              amamQuote: lead.amamQuote || null,
+              amamLessThanCurrent: lead.amamLessThanCurrent || null,
+              gtlQuote: lead.gtlQuote || null,
+              gtlLessThanCurrent: lead.gtlLessThanCurrent || null,
+              cheapestCarrierUnderCurrent: lead.cheapestCarrierUnderCurrent || '',
+              savingsVsCurrent: lead.savingsVsCurrent || null,
+              dob: lead.dob || null,
+              firstPremiumDate: lead.firstPremiumDate || null,
+            };
+          }
+
           const payload = {
             ...lead,
-            ...(targetListId ? { listId: targetListId } : {})
+            customFields,
+            ...(targetListId ? { listId: targetListId } : {}),
           };
           const result = await ingestLead(tenantId, vertical as 'ACA' | 'FE', payload);
           results.push({

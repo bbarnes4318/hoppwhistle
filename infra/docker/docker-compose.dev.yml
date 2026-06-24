@@ -133,6 +133,7 @@ services:
       - hopwhistle-network
     volumes:
       - freeswitch_recordings:/recordings:ro
+      - ../../rating (9) (1).xlsx:/app/rating (9) (1).xlsx
 
   web:
     build:

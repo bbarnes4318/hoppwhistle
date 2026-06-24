@@ -65,21 +65,86 @@ const TARGET_FIELDS: TargetField[] = [
     required: false,
     description: 'Date/time for next follow-up',
   },
-  { key: 'requestedEffectiveDate', label: 'Requested Effective Date', required: false, description: 'Requested effective date' },
+  {
+    key: 'requestedEffectiveDate',
+    label: 'Requested Effective Date',
+    required: false,
+    description: 'Requested effective date',
+  },
   { key: 'ssn', label: 'SSN', required: false, description: 'Social Security Number' },
-  { key: 'primaryBeneficiaryName', label: 'Primary Beneficiary Name', required: false, description: 'Primary beneficiary name' },
-  { key: 'primaryBeneficiaryRelationship', label: 'Primary Beneficiary Relationship', required: false, description: 'Primary beneficiary relationship' },
-  { key: 'primaryBeneficiaryShare', label: 'Primary Beneficiary Share %', required: false, description: 'Primary beneficiary share percentage' },
-  { key: 'secondPrimaryBeneficiaryName', label: 'Second Primary Beneficiary Name', required: false, description: 'Second primary beneficiary name' },
-  { key: 'secondPrimaryBeneficiaryRelationship', label: 'Second Primary Beneficiary Relationship', required: false, description: 'Second primary beneficiary relationship' },
-  { key: 'currentPolicyInForce', label: 'Current Policy In Force', required: false, description: 'Is current policy in force' },
-  { key: 'replacementReductionModification', label: 'Replacement/Reduction/Modification', required: false, description: 'Replacement/reduction/modification details' },
-  { key: 'replacementCompanyName', label: 'Replacement Company Name', required: false, description: 'Replacement insurance company name' },
-  { key: 'replacementFaceAmount', label: 'Replacement Face Amount', required: false, description: 'Replacement policy face amount' },
+  {
+    key: 'primaryBeneficiaryName',
+    label: 'Primary Beneficiary Name',
+    required: false,
+    description: 'Primary beneficiary name',
+  },
+  {
+    key: 'primaryBeneficiaryRelationship',
+    label: 'Primary Beneficiary Relationship',
+    required: false,
+    description: 'Primary beneficiary relationship',
+  },
+  {
+    key: 'primaryBeneficiaryShare',
+    label: 'Primary Beneficiary Share %',
+    required: false,
+    description: 'Primary beneficiary share percentage',
+  },
+  {
+    key: 'secondPrimaryBeneficiaryName',
+    label: 'Second Primary Beneficiary Name',
+    required: false,
+    description: 'Second primary beneficiary name',
+  },
+  {
+    key: 'secondPrimaryBeneficiaryRelationship',
+    label: 'Second Primary Beneficiary Relationship',
+    required: false,
+    description: 'Second primary beneficiary relationship',
+  },
+  {
+    key: 'currentPolicyInForce',
+    label: 'Current Policy In Force',
+    required: false,
+    description: 'Is current policy in force',
+  },
+  {
+    key: 'replacementReductionModification',
+    label: 'Replacement/Reduction/Modification',
+    required: false,
+    description: 'Replacement/reduction/modification details',
+  },
+  {
+    key: 'replacementCompanyName',
+    label: 'Replacement Company Name',
+    required: false,
+    description: 'Replacement insurance company name',
+  },
+  {
+    key: 'replacementFaceAmount',
+    label: 'Replacement Face Amount',
+    required: false,
+    description: 'Replacement policy face amount',
+  },
   { key: 'bankName', label: 'Bank Name', required: false, description: 'Bank name for payment' },
-  { key: 'accountType', label: 'Account Type', required: false, description: 'Checking or Savings' },
-  { key: 'routingNumber', label: 'Routing Number', required: false, description: '9-digit bank routing number' },
-  { key: 'accountNumber', label: 'Account Number', required: false, description: 'Bank account number' },
+  {
+    key: 'accountType',
+    label: 'Account Type',
+    required: false,
+    description: 'Checking or Savings',
+  },
+  {
+    key: 'routingNumber',
+    label: 'Routing Number',
+    required: false,
+    description: '9-digit bank routing number',
+  },
+  {
+    key: 'accountNumber',
+    label: 'Account Number',
+    required: false,
+    description: 'Bank account number',
+  },
   { key: 'agentName', label: 'Agent Name', required: false, description: 'Writing agent name' },
 
   // ACA Specific
@@ -168,6 +233,69 @@ const TARGET_FIELDS: TargetField[] = [
     required: false,
     vertical: 'FE',
     description: 'Quoted face/coverage amount',
+  },
+  {
+    key: 'height',
+    label: 'Height',
+    required: false,
+    vertical: 'FE',
+    description: 'Prospect height (e.g., 5-10)',
+  },
+  {
+    key: 'weight',
+    label: 'Weight',
+    required: false,
+    vertical: 'FE',
+    description: 'Prospect weight in lbs',
+  },
+  {
+    key: 'burialCremation',
+    label: 'Burial or Cremation',
+    required: false,
+    vertical: 'FE',
+    description: 'Burial/Cremation preference',
+  },
+  {
+    key: 'firstPremiumDate',
+    label: 'First Premium Date',
+    required: false,
+    vertical: 'FE',
+    description: 'First premium date (YYYY-MM-DD)',
+  },
+  {
+    key: 'monthlyRecurringDueDate',
+    label: 'Monthly Recurring Due Date',
+    required: false,
+    vertical: 'FE',
+    description: 'Recurring due date (e.g. 3rd)',
+  },
+  {
+    key: 'driversLicense',
+    label: 'Drivers License',
+    required: false,
+    vertical: 'FE',
+    description: 'Drivers license number',
+  },
+  {
+    key: 'health',
+    label: 'Health',
+    required: false,
+    vertical: 'FE',
+    description: 'Health conditions / notes',
+  },
+  {
+    key: 'medications',
+    label: 'Medications',
+    required: false,
+    vertical: 'FE',
+    description: 'List of medications',
+  },
+  {
+    key: 'doctorName',
+    label: 'Doctor Name',
+    required: false,
+    vertical: 'FE',
+    description: 'Primary doctor name',
   },
 ];
 
@@ -308,6 +436,15 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
       'product',
       'monthlyPremium',
       'coverageAmount',
+      'height',
+      'weight',
+      'burialCremation',
+      'firstPremiumDate',
+      'monthlyRecurringDueDate',
+      'driversLicense',
+      'health',
+      'medications',
+      'doctorName',
     ];
 
     const hdrs =
@@ -642,7 +779,7 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
                       type="text"
                       placeholder="e.g. June 2026 Outbound Leads"
                       value={newListName}
-                      onChange={(e) => setNewListName(e.target.value)}
+                      onChange={e => setNewListName(e.target.value)}
                       className="w-full bg-slate-950 border border-white/10 rounded px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-primary"
                     />
                   </div>
@@ -650,7 +787,7 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
                   <div className="space-y-1.5 mt-2">
                     <select
                       value={selectedListId}
-                      onChange={(e) => setSelectedListId(e.target.value)}
+                      onChange={e => setSelectedListId(e.target.value)}
                       className="w-full bg-slate-950 border border-white/10 rounded px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-primary cursor-pointer"
                     >
                       {leadLists.map((list: any) => (
