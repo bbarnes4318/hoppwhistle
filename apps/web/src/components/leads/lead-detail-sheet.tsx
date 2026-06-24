@@ -5,10 +5,8 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
-  Clock,
   Save,
   X,
-  XCircle,
   Plus,
   Calendar,
   Activity,
@@ -19,14 +17,10 @@ import {
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
-import { StatusBadge, VerticalBadge } from './leads-table';
-import { usePhone } from '@/components/phone';
+import { VerticalBadge } from './leads-table';
 
-import type {
-  InsuranceLeadDetail,
-  InsuranceLeadSubmission,
-  UserSummary,
-} from '@/lib/api/leads';
+import { usePhone } from '@/components/phone';
+import type { InsuranceLeadDetail, UserSummary } from '@/lib/api/leads';
 import {
   updateInsuranceLead,
   fetchUsers,
@@ -118,12 +112,13 @@ function EditField({
       <input
         type={type}
         value={String(currentValue)}
-        onChange={(e) => onEdit(fieldKey, e.target.value)}
+        onChange={e => onEdit(fieldKey, e.target.value)}
         className={`w-full rounded-md border px-2.5 py-1.5 text-sm transition-colors
         bg-slate-900/50 text-slate-200 placeholder-slate-600
-        ${isModified
-          ? 'border-amber-500/50 ring-1 ring-amber-500/20'
-          : 'border-white/10 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20'
+        ${
+          isModified
+            ? 'border-amber-500/50 ring-1 ring-amber-500/20'
+            : 'border-white/10 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20'
         }
         outline-none`}
       />
@@ -156,16 +151,17 @@ function SelectField({
       </label>
       <select
         value={currentValue}
-        onChange={(e) => onEdit(fieldKey, e.target.value)}
+        onChange={e => onEdit(fieldKey, e.target.value)}
         className={`w-full rounded-md border px-2.5 py-1.5 text-sm transition-colors
         bg-slate-900/50 text-slate-200 outline-none
-        ${isModified
-          ? 'border-amber-500/50 ring-1 ring-amber-500/20'
-          : 'border-white/10 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20'
+        ${
+          isModified
+            ? 'border-amber-500/50 ring-1 ring-amber-500/20'
+            : 'border-white/10 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20'
         }`}
       >
         <option value="">Select...</option>
-        {options.map((o) => (
+        {options.map(o => (
           <option key={o.value} value={o.value}>
             {o.label}
           </option>
@@ -196,181 +192,19 @@ function CheckboxField({
         type="checkbox"
         id={fieldKey}
         checked={currentValue}
-        onChange={(e) => onEdit(fieldKey, e.target.checked ? 'true' : 'false')}
+        onChange={e => onEdit(fieldKey, e.target.checked ? 'true' : 'false')}
         className="h-4 w-4 rounded border-white/10 bg-slate-900/50 text-emerald-500 focus:ring-emerald-500/20 focus:ring-opacity-50"
       />
-      <label htmlFor={fieldKey} className="text-xs font-semibold uppercase tracking-widest text-slate-500 cursor-pointer select-none">
+      <label
+        htmlFor={fieldKey}
+        className="text-xs font-semibold uppercase tracking-widest text-slate-500 cursor-pointer select-none"
+      >
         {label}
       </label>
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// JSON Viewer
-// ---------------------------------------------------------------------------
-
-function JsonViewer({ data, redactKeys }: { data: unknown; redactKeys?: string[] }) {
- if (!data) return <div className="text-xs text-slate-600 italic">No data</div>;
-
- let display = data;
- if (redactKeys && typeof data === 'object' && data !== null) {
- const copy = { ...(data as Record<string, unknown>) };
- for (const key of redactKeys) {
- if (copy[key]) copy[key] = '[REDACTED]';
- }
- display = copy;
- }
-
- return (
- <pre className="max-h-64 overflow-auto rounded-md bg-slate-950/80 border border-white/5 p-3 text-[11px] font-mono text-slate-400 leading-relaxed">
- {JSON.stringify(display, null, 2)}
- </pre>
- );
-}
-
-// ---------------------------------------------------------------------------
-// Submission Timeline Item
-// ---------------------------------------------------------------------------
-
-function SubmissionItem({
-  submission,
-}: {
-  submission: InsuranceLeadSubmission;
-}) {
-  const [expanded, setExpanded] = useState(false);
-
-  const statusIcon = () => {
-    switch (submission.postStatus) {
-      case 'MATCHED':
-        return <CheckCircle2 className="h-4 w-4 text-emerald-400" />;
-      case 'ERROR':
-        return <XCircle className="h-4 w-4 text-red-400" />;
-      case 'UNMATCHED':
-        return <AlertTriangle className="h-4 w-4 text-orange-400" />;
-      case 'SKIPPED':
-        return <XCircle className="h-4 w-4 text-slate-500" />;
-      default:
-        return <Clock className="h-4 w-4 text-amber-400" />;
-    }
-  };
-
-  return (
-    <div className="rounded-lg border border-white/5 bg-slate-950/50">
-      {/* Header */}
-      <div
-        onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-white/[0.02] transition-colors"
-      >
-        {statusIcon()}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 text-xs">
-            <span className="text-slate-300">{new Date(submission.receivedAt).toLocaleString()}</span>
-            <StatusBadge status={submission.validationStatus} />
-            <StatusBadge status={submission.postStatus} />
-            <StatusBadge status={submission.postMode} />
-          </div>
-          {submission.ameriquoteResponseStatus && (
-            <div className="text-[10px] text-slate-500 mt-0.5">
-              Ameriquote: {submission.ameriquoteResponseStatus}
-              {submission.ameriquoteLeadId && ` · Lead #${submission.ameriquoteLeadId}`}
-              {submission.ameriquotePrice && ` · $${submission.ameriquotePrice}`}
-            </div>
-          )}
-          {submission.ameriquoteErrorMessage && (
-            <div className="text-[10px] text-red-400/80 mt-0.5">
-              {submission.ameriquoteErrorMessage}
-            </div>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-medium text-slate-500 border border-white/10 px-2 py-1 rounded bg-white/5">
-            Posting Disabled
-          </span>
-          {expanded ? <ChevronDown className="h-3.5 w-3.5 text-slate-500" /> : <ChevronRight className="h-3.5 w-3.5 text-slate-500" />}
-        </div>
-      </div>
-
-      {/* Expanded Detail */}
-      {expanded && (
-        <div className="border-t border-white/5 px-4 py-3 space-y-3">
-          <div className="rounded border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-400/90 flex gap-2 items-center">
-            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500 animate-pulse" />
-            <span>Ameriquote delivery is disabled by owner request. Leads are stored for internal review only.</span>
-          </div>
-
-          {/* Validation Errors */}
-          {submission.validationErrors && Array.isArray(submission.validationErrors) && submission.validationErrors.length > 0 && (
-            <div>
-              <div className="text-[10px] font-semibold uppercase tracking-widest text-red-400 mb-1.5">
-                Validation Errors
-              </div>
-              <div className="space-y-1">
-                {(submission.validationErrors as Array<{ path: string; message: string }>).map((err, i) => (
-                  <div key={i} className="flex gap-2 text-xs">
-                    <span className="text-red-400/60 font-mono">{err.path || 'root'}</span>
-                    <span className="text-red-300">{err.message}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Raw Inbound */}
-          <div>
-            <div className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-1.5">
-              Raw Inbound Payload
-            </div>
-            <JsonViewer data={submission.rawPayload} />
-          </div>
-
-          {/* Normalized */}
-          {submission.normalizedPayload && (
-            <div>
-              <div className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-1.5">
-                Normalized Payload
-              </div>
-              <JsonViewer data={submission.normalizedPayload} />
-            </div>
-          )}
-
-          {/* Mapped Outbound */}
-          {submission.mappedOutboundPayload && (
-            <div>
-              <div className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-1.5">
-                Mapped Outbound Payload
-              </div>
-              <JsonViewer data={submission.mappedOutboundPayload} redactKeys={['Key']} />
-            </div>
-          )}
-
-          {/* Raw Ameriquote Response */}
-          {submission.ameriquoteResponseRaw && (
-            <div>
-              <div className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-1.5">
-                Ameriquote Raw Response
-              </div>
-              <pre className="max-h-32 overflow-auto rounded-md bg-slate-950/80 border border-white/5 p-3 text-[11px] font-mono text-slate-400">
-                {submission.ameriquoteResponseRaw}
-              </pre>
-            </div>
-          )}
-
-          {/* Attempt Info */}
-          <div className="flex gap-4 text-[10px] text-slate-500">
-            <span>Attempts: {submission.attemptCount}</span>
-            {submission.postedAt && <span>Posted: {new Date(submission.postedAt).toLocaleString()}</span>}
-            {submission.lastAttemptAt && <span>Last attempt: {new Date(submission.lastAttemptAt).toLocaleString()}</span>}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Main Component
-// ---------------------------------------------------------------------------
 export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetailSheetProps) {
   const { makeCall } = usePhone();
   const [edits, setEdits] = useState<Record<string, string>>({});
@@ -388,16 +222,16 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
   const hasEdits = Object.keys(edits).length > 0;
 
   const handleEdit = (key: string, value: string) => {
-    setEdits((prev) => ({ ...prev, [key]: value }));
+    setEdits(prev => ({ ...prev, [key]: value }));
   };
 
   useEffect(() => {
     if (lead) {
       fetchUsers()
-        .then((res) => {
+        .then(res => {
           setUsers(res.data || []);
         })
-        .catch((err) => console.error('Failed to load users:', err));
+        .catch(err => console.error('Failed to load users:', err));
     }
   }, [lead]);
 
@@ -473,10 +307,7 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
   return (
     <>
       {/* Backdrop */}
-      <div
-        className="fixed inset-0 z-40 bg-black/40 "
-        onClick={onClose}
-      />
+      <div className="fixed inset-0 z-40 bg-black/40 " onClick={onClose} />
 
       {/* Sheet */}
       <div className="fixed right-0 top-0 z-50 flex h-screen w-full max-w-2xl flex-col border-l border-white/10 bg-slate-900/95 shadow-sm animate-in slide-in-from-right duration-250">
@@ -485,7 +316,11 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
           <div className="flex items-center gap-3">
             {lead && <VerticalBadge vertical={lead.vertical} />}
             <h2 className="text-sm font-semibold text-slate-200">
-              {lead ? lead.fullName || `${lead.firstName || ''} ${lead.lastName || ''}`.trim() || 'Unnamed Lead' : '…'}
+              {lead
+                ? lead.fullName ||
+                  `${lead.firstName || ''} ${lead.lastName || ''}`.trim() ||
+                  'Unnamed Lead'
+                : '…'}
             </h2>
           </div>
           <div className="flex items-center gap-2">
@@ -502,7 +337,9 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
               </button>
             )}
             {saveMsg && (
-              <span className={`text-xs ${saveMsg === 'Saved' ? 'text-emerald-400' : 'text-red-400'}`}>
+              <span
+                className={`text-xs ${saveMsg === 'Saved' ? 'text-emerald-400' : 'text-red-400'}`}
+              >
                 {saveMsg}
               </span>
             )}
@@ -526,8 +363,20 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
               {/* Contact Information */}
               <Section title="Contact Information" defaultOpen={true}>
                 <div className="grid grid-cols-2 gap-3">
-                  <EditField label="First Name" value={lead.firstName} fieldKey="firstName" edits={edits} onEdit={handleEdit} />
-                  <EditField label="Last Name" value={lead.lastName} fieldKey="lastName" edits={edits} onEdit={handleEdit} />
+                  <EditField
+                    label="First Name"
+                    value={lead.firstName}
+                    fieldKey="firstName"
+                    edits={edits}
+                    onEdit={handleEdit}
+                  />
+                  <EditField
+                    label="Last Name"
+                    value={lead.lastName}
+                    fieldKey="lastName"
+                    edits={edits}
+                    onEdit={handleEdit}
+                  />
                   <div className="space-y-1">
                     <label className="block text-[10px] font-medium uppercase tracking-wider text-slate-500">
                       Phone
@@ -537,13 +386,13 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                         <input
                           type="text"
                           value={edits.phone !== undefined ? edits.phone : (lead.phone ?? '')}
-                          onChange={(e) => handleEdit('phone', e.target.value)}
+                          onChange={e => handleEdit('phone', e.target.value)}
                           className="w-full rounded-md border px-2.5 py-1.5 text-sm transition-colors bg-slate-900/50 text-slate-200 placeholder-slate-600 border-white/10 outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20"
                         />
                       </div>
                       {lead.phone && (
                         <button
-                          onClick={() => void makeCall(lead.phone!)}
+                          onClick={() => void makeCall(lead.phone)}
                           className="flex items-center justify-center gap-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 px-3 text-xs font-semibold text-white shadow-lg transition-colors border border-emerald-500/30"
                           title="Click to dial"
                         >
@@ -553,7 +402,13 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                       )}
                     </div>
                   </div>
-                  <EditField label="Email" value={lead.email} fieldKey="email" edits={edits} onEdit={handleEdit} />
+                  <EditField
+                    label="Email"
+                    value={lead.email}
+                    fieldKey="email"
+                    edits={edits}
+                    onEdit={handleEdit}
+                  />
                 </div>
               </Section>
 
@@ -564,7 +419,7 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                     label="Assigned To"
                     value={lead.assignedToId}
                     fieldKey="assignedToId"
-                    options={users.map((u) => ({
+                    options={users.map(u => ({
                       value: u.id,
                       label: `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email,
                     }))}
@@ -632,23 +487,77 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
               <Section title="Address" defaultOpen={true}>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="col-span-2">
-                    <EditField label="Address" value={lead.address} fieldKey="address" edits={edits} onEdit={handleEdit} />
+                    <EditField
+                      label="Address"
+                      value={lead.address}
+                      fieldKey="address"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
                   </div>
-                  <EditField label="Address 2" value={lead.address2} fieldKey="address2" edits={edits} onEdit={handleEdit} />
-                  <EditField label="City" value={lead.city} fieldKey="city" edits={edits} onEdit={handleEdit} />
-                  <EditField label="State" value={lead.state} fieldKey="state" edits={edits} onEdit={handleEdit} />
-                  <EditField label="ZIP Code" value={lead.zipCode} fieldKey="zipCode" edits={edits} onEdit={handleEdit} />
-                  <EditField label="County" value={lead.county} fieldKey="county" edits={edits} onEdit={handleEdit} />
+                  <EditField
+                    label="Address 2"
+                    value={lead.address2}
+                    fieldKey="address2"
+                    edits={edits}
+                    onEdit={handleEdit}
+                  />
+                  <EditField
+                    label="City"
+                    value={lead.city}
+                    fieldKey="city"
+                    edits={edits}
+                    onEdit={handleEdit}
+                  />
+                  <EditField
+                    label="State"
+                    value={lead.state}
+                    fieldKey="state"
+                    edits={edits}
+                    onEdit={handleEdit}
+                  />
+                  <EditField
+                    label="ZIP Code"
+                    value={lead.zipCode}
+                    fieldKey="zipCode"
+                    edits={edits}
+                    onEdit={handleEdit}
+                  />
+                  <EditField
+                    label="County"
+                    value={lead.county}
+                    fieldKey="county"
+                    edits={edits}
+                    onEdit={handleEdit}
+                  />
                 </div>
               </Section>
 
               {/* Demographics */}
               <Section title="Demographics" defaultOpen={true}>
                 <div className="grid grid-cols-2 gap-3">
-                  <EditField label="Date of Birth" value={lead.birthDate} fieldKey="birthDate" edits={edits} onEdit={handleEdit} />
-                  <EditField label="Age" value={lead.age} fieldKey="age" edits={edits} onEdit={handleEdit} type="number" />
-                  <EditField label="Gender" value={lead.gender} fieldKey="gender" edits={edits} onEdit={handleEdit} />
-                  <EditField label="Source" value={lead.source} fieldKey="source" edits={edits} onEdit={handleEdit} />
+                  <EditField
+                    label="Date of Birth"
+                    value={lead.birthDate}
+                    fieldKey="birthDate"
+                    edits={edits}
+                    onEdit={handleEdit}
+                  />
+                  <EditField
+                    label="Age"
+                    value={lead.age}
+                    fieldKey="age"
+                    edits={edits}
+                    onEdit={handleEdit}
+                    type="number"
+                  />
+                  <EditField
+                    label="Gender"
+                    value={lead.gender}
+                    fieldKey="gender"
+                    edits={edits}
+                    onEdit={handleEdit}
+                  />
                 </div>
               </Section>
 
@@ -667,24 +576,90 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                       edits={edits}
                       onEdit={handleEdit}
                     />
-                    <EditField label="Face Amount" value={lead.faceAmount} fieldKey="faceAmount" edits={edits} onEdit={handleEdit} />
-                    <EditField label="Monthly Premium" value={lead.monthlyPremium} fieldKey="monthlyPremium" edits={edits} onEdit={handleEdit} />
-                    <EditField label="Coverage Amount" value={lead.coverageAmount} fieldKey="coverageAmount" edits={edits} onEdit={handleEdit} />
-                    <EditField label="Carrier" value={lead.carrier} fieldKey="carrier" edits={edits} onEdit={handleEdit} />
-                    <EditField label="Product" value={lead.product} fieldKey="product" edits={edits} onEdit={handleEdit} />
-                    <EditField label="Life Type" value={lead.lifeType} fieldKey="lifeType" edits={edits} onEdit={handleEdit} />
-                    <EditField label="Risk Type" value={lead.riskType} fieldKey="riskType" edits={edits} onEdit={handleEdit} />
+                    <EditField
+                      label="Face Amount"
+                      value={lead.faceAmount}
+                      fieldKey="faceAmount"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <EditField
+                      label="Monthly Premium"
+                      value={lead.monthlyPremium}
+                      fieldKey="monthlyPremium"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <EditField
+                      label="Coverage Amount"
+                      value={lead.coverageAmount}
+                      fieldKey="coverageAmount"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <EditField
+                      label="Carrier"
+                      value={lead.carrier}
+                      fieldKey="carrier"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <EditField
+                      label="Product"
+                      value={lead.product}
+                      fieldKey="product"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <EditField
+                      label="Life Type"
+                      value={lead.lifeType}
+                      fieldKey="lifeType"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <EditField
+                      label="Risk Type"
+                      value={lead.riskType}
+                      fieldKey="riskType"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
                     <div className="col-span-2">
-                      <EditField label="TrustedForm URL" value={lead.trustedFormUrl} fieldKey="trustedFormUrl" edits={edits} onEdit={handleEdit} />
+                      <EditField
+                        label="TrustedForm URL"
+                        value={lead.trustedFormUrl}
+                        fieldKey="trustedFormUrl"
+                        edits={edits}
+                        onEdit={handleEdit}
+                      />
                     </div>
                     <div className="col-span-2">
-                      <EditField label="LeadId Token" value={lead.leadidToken} fieldKey="leadidToken" edits={edits} onEdit={handleEdit} />
+                      <EditField
+                        label="LeadId Token"
+                        value={lead.leadidToken}
+                        fieldKey="leadidToken"
+                        edits={edits}
+                        onEdit={handleEdit}
+                      />
                     </div>
                     <div className="col-span-2">
-                      <EditField label="Consent Language" value={lead.consentLanguage} fieldKey="consentLanguage" edits={edits} onEdit={handleEdit} />
+                      <EditField
+                        label="Consent Language"
+                        value={lead.consentLanguage}
+                        fieldKey="consentLanguage"
+                        edits={edits}
+                        onEdit={handleEdit}
+                      />
                     </div>
                     <div className="col-span-2">
-                      <EditField label="Recording URL" value={lead.recordingUrl} fieldKey="recordingUrl" edits={edits} onEdit={handleEdit} />
+                      <EditField
+                        label="Recording URL"
+                        value={lead.recordingUrl}
+                        fieldKey="recordingUrl"
+                        edits={edits}
+                        onEdit={handleEdit}
+                      />
                     </div>
                   </div>
                 </Section>
@@ -694,7 +669,12 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
               <Section title={`Tasks & Follow-ups (${lead.tasks?.length || 0})`}>
                 <div className="space-y-4">
                   {/* Task Creation Form */}
-                  <form onSubmit={(e) => { void handleAddTask(e); }} className="rounded-lg border border-white/5 bg-slate-950/20 p-3 space-y-3">
+                  <form
+                    onSubmit={e => {
+                      void handleAddTask(e);
+                    }}
+                    className="rounded-lg border border-white/5 bg-slate-950/20 p-3 space-y-3"
+                  >
                     <div className="text-xs font-semibold text-slate-300">Create New Task</div>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="col-span-2">
@@ -702,7 +682,7 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                           type="text"
                           placeholder="Task Title..."
                           value={taskTitle}
-                          onChange={(e) => setTaskTitle(e.target.value)}
+                          onChange={e => setTaskTitle(e.target.value)}
                           className="w-full rounded-md border border-white/10 bg-slate-900/50 px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-emerald-500/50"
                           required
                         />
@@ -712,14 +692,16 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                           type="text"
                           placeholder="Description (optional)..."
                           value={taskDesc}
-                          onChange={(e) => setTaskDesc(e.target.value)}
+                          onChange={e => setTaskDesc(e.target.value)}
                           className="w-full rounded-md border border-white/10 bg-slate-900/50 px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-emerald-500/50"
                         />
                       </div>
                       <div>
                         <select
                           value={taskPriority}
-                          onChange={(e) => setTaskPriority(e.target.value as 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT')}
+                          onChange={e =>
+                            setTaskPriority(e.target.value as 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT')
+                          }
                           className="w-full rounded-md border border-white/10 bg-slate-900/50 px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-emerald-500/50"
                         >
                           <option value="LOW">Low Priority</option>
@@ -732,7 +714,7 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                         <input
                           type="date"
                           value={taskDueAt}
-                          onChange={(e) => setTaskDueAt(e.target.value)}
+                          onChange={e => setTaskDueAt(e.target.value)}
                           className="w-full rounded-md border border-white/10 bg-slate-900/50 px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-emerald-500/50"
                         />
                       </div>
@@ -754,21 +736,32 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                     {!lead.tasks || lead.tasks.length === 0 ? (
                       <div className="text-xs text-slate-500 italic">No tasks created yet</div>
                     ) : (
-                      lead.tasks.map((task) => {
-                        const isOverdue = task.status === 'OPEN' && task.dueAt && new Date(task.dueAt) < new Date();
+                      lead.tasks.map(task => {
+                        const isOverdue =
+                          task.status === 'OPEN' && task.dueAt && new Date(task.dueAt) < new Date();
                         return (
-                          <div key={task.id} className="flex items-center justify-between p-3 rounded-lg border border-white/5 bg-slate-950/30">
+                          <div
+                            key={task.id}
+                            className="flex items-center justify-between p-3 rounded-lg border border-white/5 bg-slate-950/30"
+                          >
                             <div className="min-w-0 flex-1 pr-2">
                               <div className="flex items-center gap-2">
-                                <span className={`text-xs font-semibold ${task.status !== 'OPEN' ? 'line-through text-slate-500' : 'text-slate-200'}`}>
+                                <span
+                                  className={`text-xs font-semibold ${task.status !== 'OPEN' ? 'line-through text-slate-500' : 'text-slate-200'}`}
+                                >
                                   {task.title}
                                 </span>
-                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
-                                  task.priority === 'URGENT' ? 'bg-red-500/10 text-red-400 border border-red-500/20' :
-                                  task.priority === 'HIGH' ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' :
-                                  task.priority === 'LOW' ? 'bg-slate-500/10 text-slate-400 border border-slate-500/20' :
-                                  'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                                }`}>
+                                <span
+                                  className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                                    task.priority === 'URGENT'
+                                      ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                                      : task.priority === 'HIGH'
+                                        ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20'
+                                        : task.priority === 'LOW'
+                                          ? 'bg-slate-500/10 text-slate-400 border border-slate-500/20'
+                                          : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                  }`}
+                                >
                                   {task.priority}
                                 </span>
                                 {task.status !== 'OPEN' && (
@@ -778,14 +771,20 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                                 )}
                               </div>
                               {task.description && (
-                                <p className={`text-xs mt-0.5 ${task.status !== 'OPEN' ? 'line-through text-slate-600' : 'text-slate-400'}`}>
+                                <p
+                                  className={`text-xs mt-0.5 ${task.status !== 'OPEN' ? 'line-through text-slate-600' : 'text-slate-400'}`}
+                                >
                                   {task.description}
                                 </p>
                               )}
                               {task.dueAt && (
                                 <div className="flex items-center gap-1 mt-1 text-[10px]">
                                   <Calendar className="h-3 w-3 text-slate-500" />
-                                  <span className={isOverdue ? 'text-red-400 font-medium' : 'text-slate-500'}>
+                                  <span
+                                    className={
+                                      isOverdue ? 'text-red-400 font-medium' : 'text-slate-500'
+                                    }
+                                  >
                                     Due: {new Date(task.dueAt).toLocaleDateString()}
                                     {isOverdue && ' (Overdue)'}
                                   </span>
@@ -801,14 +800,18 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                             {task.status === 'OPEN' && (
                               <div className="flex items-center gap-1 shrink-0">
                                 <button
-                                  onClick={() => { void handleCompleteTask(task.id); }}
+                                  onClick={() => {
+                                    void handleCompleteTask(task.id);
+                                  }}
                                   className="p-1 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20"
                                   title="Complete Task"
                                 >
                                   <Check className="h-3.5 w-3.5" />
                                 </button>
                                 <button
-                                  onClick={() => { void handleCancelTask(task.id); }}
+                                  onClick={() => {
+                                    void handleCancelTask(task.id);
+                                  }}
                                   className="p-1 rounded bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20"
                                   title="Cancel Task"
                                 >
@@ -827,8 +830,8 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
               {/* Notes */}
               <Section title="Notes">
                 <textarea
-                  value={edits.notes !== undefined ? edits.notes : (lead.notes || '')}
-                  onChange={(e) => handleEdit('notes', e.target.value)}
+                  value={edits.notes !== undefined ? edits.notes : lead.notes || ''}
+                  onChange={e => handleEdit('notes', e.target.value)}
                   rows={3}
                   placeholder="Add notes…"
                   className="w-full rounded-md border border-white/10 bg-slate-900/50 text-sm text-slate-200
@@ -838,7 +841,10 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
               </Section>
 
               {/* Activity Timeline */}
-              <Section title={`Activity Timeline (${lead.activities?.length || 0})`} defaultOpen={true}>
+              <Section
+                title={`Activity Timeline (${lead.activities?.length || 0})`}
+                defaultOpen={true}
+              >
                 <div className="flow-root">
                   <ul className="-mb-8">
                     {!lead.activities || lead.activities.length === 0 ? (
@@ -846,30 +852,45 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                     ) : (
                       lead.activities.map((act, actIdx) => {
                         const iconColor =
-                          act.type === 'NOTE' ? 'bg-amber-500/15 text-amber-400' :
-                          act.type === 'CALL' ? 'bg-cyan-500/15 text-cyan-400' :
-                          act.type === 'STATUS_CHANGE' ? 'bg-indigo-500/15 text-indigo-400' :
-                          act.type === 'VALIDATION' ? 'bg-red-500/15 text-red-400' :
-                          act.type === 'SUBMISSION' ? 'bg-emerald-500/15 text-emerald-400' :
-                          'bg-slate-500/15 text-slate-400';
+                          act.type === 'NOTE'
+                            ? 'bg-amber-500/15 text-amber-400'
+                            : act.type === 'CALL'
+                              ? 'bg-cyan-500/15 text-cyan-400'
+                              : act.type === 'STATUS_CHANGE'
+                                ? 'bg-indigo-500/15 text-indigo-400'
+                                : act.type === 'VALIDATION'
+                                  ? 'bg-red-500/15 text-red-400'
+                                  : act.type === 'SUBMISSION'
+                                    ? 'bg-emerald-500/15 text-emerald-400'
+                                    : 'bg-slate-500/15 text-slate-400';
 
                         const Icon =
-                          act.type === 'NOTE' ? MessageSquare :
-                          act.type === 'CALL' ? PhoneCall :
-                          act.type === 'STATUS_CHANGE' ? Activity :
-                          act.type === 'VALIDATION' ? AlertTriangle :
-                          act.type === 'TASK' ? CheckCircle2 :
-                          Activity;
+                          act.type === 'NOTE'
+                            ? MessageSquare
+                            : act.type === 'CALL'
+                              ? PhoneCall
+                              : act.type === 'STATUS_CHANGE'
+                                ? Activity
+                                : act.type === 'VALIDATION'
+                                  ? AlertTriangle
+                                  : act.type === 'TASK'
+                                    ? CheckCircle2
+                                    : Activity;
 
                         return (
                           <li key={act.id}>
                             <div className="relative pb-8">
                               {actIdx !== lead.activities.length - 1 ? (
-                                <span className="absolute left-4 top-4 -ml-px h-full w-0.5 bg-white/5" aria-hidden="true" />
+                                <span
+                                  className="absolute left-4 top-4 -ml-px h-full w-0.5 bg-white/5"
+                                  aria-hidden="true"
+                                />
                               ) : null}
                               <div className="relative flex space-x-3">
                                 <div>
-                                  <span className={`flex h-8 w-8 items-center justify-center rounded-full border border-white/5 ${iconColor}`}>
+                                  <span
+                                    className={`flex h-8 w-8 items-center justify-center rounded-full border border-white/5 ${iconColor}`}
+                                  >
                                     <Icon className="h-4 w-4" aria-hidden="true" />
                                   </span>
                                 </div>
@@ -885,7 +906,9 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                                     )}
                                   </div>
                                   <div className="whitespace-nowrap text-right text-[10px] text-slate-500">
-                                    <time dateTime={act.createdAt}>{new Date(act.createdAt).toLocaleString()}</time>
+                                    <time dateTime={act.createdAt}>
+                                      {new Date(act.createdAt).toLocaleString()}
+                                    </time>
                                   </div>
                                 </div>
                               </div>
@@ -898,23 +921,6 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                 </div>
               </Section>
 
-              {/* Submission History */}
-              <Section title={`Submission History (${lead.submissions.length})`} defaultOpen={true}>
-                <div className="space-y-2">
-                  {lead.submissions.length === 0 ? (
-                    <div className="text-xs text-slate-500 italic">No submissions recorded</div>
-                  ) : (
-                    lead.submissions.map((sub) => (
-                      <SubmissionItem
-                        key={sub.id}
-                        submission={sub}
-                        leadId={lead.id}
-                      />
-                    ))
-                  )}
-                </div>
-              </Section>
-
               {/* Captured Script Data */}
               {lead.customFields && Object.keys(lead.customFields).length > 0 && (
                 <Section title="Captured Script Data">
@@ -924,7 +930,10 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                         <span className="text-[9px] font-mono uppercase tracking-wider text-slate-500 block">
                           {key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
                         </span>
-                        <span className="font-mono text-slate-300 block truncate" title={String(val)}>
+                        <span
+                          className="font-mono text-slate-300 block truncate"
+                          title={String(val)}
+                        >
                           {typeof val === 'boolean' ? (val ? 'Yes' : 'No') : String(val ?? '—')}
                         </span>
                       </div>

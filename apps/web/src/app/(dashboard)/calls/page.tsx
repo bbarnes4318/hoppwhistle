@@ -217,8 +217,9 @@ export default function OperationsCallLogsPage() {
       campaignName: true,
       callerId: true,
       duration: true,
-      status: true,
+      status: false,
       recording: true,
+      dispositionNotes: true,
       publisherName: false,
       buyerName: false,
       did: false,
@@ -248,7 +249,7 @@ export default function OperationsCallLogsPage() {
     { id: 'publisherName', label: 'Publisher', canSee: !!isAdminOrOwner },
     { id: 'buyerName', label: 'Buyer', canSee: !!isAdminOrOwner },
     { id: 'campaignName', label: 'Campaign', canSee: true },
-    { id: 'callerId', label: 'Caller ID', canSee: true },
+    { id: 'callerId', label: 'Customer Phone', canSee: true },
     { id: 'did', label: 'DID (DNIS)', canSee: !isBuyer },
     { id: 'toNumber', label: 'Destination', canSee: !isPublisher },
     { id: 'duration', label: 'Duration', canSee: true },
@@ -260,6 +261,7 @@ export default function OperationsCallLogsPage() {
     { id: 'profit', label: 'Profit', canSee: !!isAdminOrOwner },
     { id: 'margin', label: 'Margin', canSee: !!isAdminOrOwner },
     { id: 'status', label: 'Status', canSee: true },
+    { id: 'dispositionNotes', label: 'Call Notes', canSee: true },
     { id: 'recording', label: 'Recording', canSee: true },
   ];
 
@@ -921,7 +923,7 @@ export default function OperationsCallLogsPage() {
                   <TableHead className="text-gray-400 font-medium">Campaign</TableHead>
                 )}
                 {visibleColumns.callerId && (
-                  <TableHead className="text-gray-400 font-medium">Caller ID</TableHead>
+                  <TableHead className="text-gray-400 font-medium">Customer Phone</TableHead>
                 )}
                 {visibleColumns.did && !isBuyer && (
                   <TableHead className="text-gray-400 font-medium">DID (DNIS)</TableHead>
@@ -956,6 +958,9 @@ export default function OperationsCallLogsPage() {
                 )}
                 {visibleColumns.status && (
                   <TableHead className="text-gray-400 font-medium text-center">Status</TableHead>
+                )}{' '}
+                {visibleColumns.dispositionNotes && (
+                  <TableHead className="text-gray-400 font-medium">Call Notes</TableHead>
                 )}
                 {visibleColumns.recording && (
                   <TableHead className="text-gray-400 font-medium text-center">Recording</TableHead>
@@ -1025,7 +1030,13 @@ export default function OperationsCallLogsPage() {
                       )}
                       {visibleColumns.callerId && (
                         <TableCell className="font-mono text-xs text-white font-semibold">
-                          {call.callerId ? formatPhoneNumber(call.callerId) : '—'}
+                          {(() => {
+                            const phone =
+                              call.direction?.toLowerCase() === 'outbound'
+                                ? call.toNumber
+                                : call.callerId;
+                            return phone ? formatPhoneNumber(phone) : '—';
+                          })()}
                         </TableCell>
                       )}
                       {visibleColumns.did && !isBuyer && (
@@ -1111,6 +1122,14 @@ export default function OperationsCallLogsPage() {
                               </div>
                             )}
                           </div>
+                        </TableCell>
+                      )}
+                      {visibleColumns.dispositionNotes && (
+                        <TableCell
+                          className="text-gray-300 text-xs max-w-xs truncate"
+                          title={call.dispositionNotes || ''}
+                        >
+                          {call.dispositionNotes || '—'}
                         </TableCell>
                       )}
                       {/* Recording inline player and download */}

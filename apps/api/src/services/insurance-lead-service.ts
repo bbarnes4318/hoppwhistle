@@ -123,13 +123,51 @@ export async function ingestLead(
   // 2. Build CRM contact fields from whatever we have
   const contactData = validation.normalized || rawPayload;
   const FIRST_CLASS_FIELDS = new Set([
-    'id', 'tenantId', 'vertical', 'firstName', 'lastName', 'fullName', 'email', 'phone', 
-    'address', 'address2', 'city', 'county', 'state', 'zipCode', 'birthDate', 'age', 'gender', 
-    'source', 'status', 'notes', 'tags', 'assignedToId', 'assignedAt', 'lastContactedAt', 
-    'nextFollowUpAt', 'priority', 'leadStage', 'doNotCall', 'duplicateOfId', 'smoker', 
-    'faceAmount', 'lifeType', 'riskType', 'carrier', 'product', 'monthlyPremium', 
-    'coverageAmount', 'trustedFormUrl', 'leadidToken', 'consentLanguage', 'recordingUrl', 
-    'createdAt', 'updatedAt', 'customFields', 'listId'
+    'id',
+    'tenantId',
+    'vertical',
+    'firstName',
+    'lastName',
+    'fullName',
+    'email',
+    'phone',
+    'address',
+    'address2',
+    'city',
+    'county',
+    'state',
+    'zipCode',
+    'birthDate',
+    'age',
+    'gender',
+    'source',
+    'status',
+    'notes',
+    'tags',
+    'assignedToId',
+    'assignedAt',
+    'lastContactedAt',
+    'nextFollowUpAt',
+    'priority',
+    'leadStage',
+    'doNotCall',
+    'duplicateOfId',
+    'smoker',
+    'faceAmount',
+    'lifeType',
+    'riskType',
+    'carrier',
+    'product',
+    'monthlyPremium',
+    'coverageAmount',
+    'trustedFormUrl',
+    'leadidToken',
+    'consentLanguage',
+    'recordingUrl',
+    'createdAt',
+    'updatedAt',
+    'customFields',
+    'listId',
   ]);
   const extraFields: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(contactData)) {
@@ -559,6 +597,60 @@ export async function getLeadById(tenantId: string, id: string) {
 
   if (!lead) return null;
 
+  interface ActivityReturn {
+    id: string;
+    tenantId: string;
+    insuranceLeadId: string;
+    type: string;
+    title: string;
+    description: string | null;
+    createdAt: string;
+    metadata?: any;
+    createdById?: string | null;
+  }
+
+  const last10 = lead.phone.replace(/\D/g, '').slice(-10);
+  const callActivities: ActivityReturn[] = [];
+  if (last10.length >= 10) {
+    const calls = await prisma.call.findMany({
+      where: {
+        tenantId,
+        OR: [{ callerId: { endsWith: last10 } }, { toNumber: { endsWith: last10 } }],
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    const mappedCalls = calls.map(c => ({
+      id: `call-note-${c.id}`,
+      tenantId: c.tenantId,
+      insuranceLeadId: lead.id,
+      type: 'CALL',
+      title: `Call (${c.direction}) - ${c.campaignName || 'Call Center'}`,
+      description: c.dispositionNotes
+        ? `Disposition: ${c.disposition || 'None'}\nNotes: ${c.dispositionNotes}`
+        : `Disposition: ${c.disposition || 'None'}`,
+      createdAt: c.createdAt.toISOString(),
+      metadata: null,
+      createdById: null,
+    }));
+    callActivities.push(...mappedCalls);
+  }
+
+  const dbActivities: ActivityReturn[] = lead.activities.map(a => ({
+    id: a.id,
+    tenantId: a.tenantId,
+    insuranceLeadId: a.insuranceLeadId,
+    type: String(a.type),
+    title: a.title,
+    description: a.description || null,
+    createdAt: a.createdAt.toISOString(),
+    metadata: a.metadata,
+    createdById: a.createdById || null,
+  }));
+
+  const sortedActivities: ActivityReturn[] = [...dbActivities, ...callActivities].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+
   return {
     ...lead,
     createdAt: lead.createdAt.toISOString(),
@@ -571,10 +663,7 @@ export async function getLeadById(tenantId: string, id: string) {
       createdAt: s.createdAt.toISOString(),
       updatedAt: s.updatedAt.toISOString(),
     })),
-    activities: lead.activities.map(a => ({
-      ...a,
-      createdAt: a.createdAt.toISOString(),
-    })),
+    activities: sortedActivities,
     tasks: lead.tasks.map(t => ({
       ...t,
       dueAt: t.dueAt?.toISOString() || null,
@@ -842,28 +931,53 @@ export async function getStats(tenantId: string) {
 // Bulk Import
 // ---------------------------------------------------------------------------
 
-export async function bulkImportLeads(
-  tenantId: string,
-  leads: Array<Record<string, unknown>>,
-) {
+export async function bulkImportLeads(tenantId: string, leads: Array<Record<string, unknown>>) {
   const prisma = getPrismaClient();
   let importCount = 0;
 
   const standardFields = [
-    'firstName', 'lastName', 'fullName', 'email', 'phone',
-    'address', 'address2', 'city', 'county', 'state', 'zipCode',
-    'birthDate', 'age', 'gender', 'source', 'notes', 'status',
-    'assignedToId', 'assignedAt', 'lastContactedAt', 'nextFollowUpAt',
-    'priority', 'leadStage', 'doNotCall', 'smoker', 'faceAmount',
-    'monthlyPremium', 'carrier', 'coverageAmount', 'lifeType',
-    'riskType', 'product', 'trustedFormUrl', 'leadidToken',
-    'consentLanguage', 'recordingUrl',
+    'firstName',
+    'lastName',
+    'fullName',
+    'email',
+    'phone',
+    'address',
+    'address2',
+    'city',
+    'county',
+    'state',
+    'zipCode',
+    'birthDate',
+    'age',
+    'gender',
+    'source',
+    'notes',
+    'status',
+    'assignedToId',
+    'assignedAt',
+    'lastContactedAt',
+    'nextFollowUpAt',
+    'priority',
+    'leadStage',
+    'doNotCall',
+    'smoker',
+    'faceAmount',
+    'monthlyPremium',
+    'carrier',
+    'coverageAmount',
+    'lifeType',
+    'riskType',
+    'product',
+    'trustedFormUrl',
+    'leadidToken',
+    'consentLanguage',
+    'recordingUrl',
   ];
 
   for (const lead of leads) {
-    let rawPhone = String(lead.phone || lead.phoneNumber || '').trim();
+    const rawPhone = String(lead.phone || lead.phoneNumber || '').trim();
     if (!rawPhone) continue;
-    
+
     // Normalize phone to last 10 digits
     const cleanPhone = rawPhone.replace(/\D/g, '');
     const phone = cleanPhone.length > 10 ? cleanPhone.slice(-10) : cleanPhone;
@@ -871,22 +985,31 @@ export async function bulkImportLeads(
 
     const firstName = lead.firstName ? String(lead.firstName).trim() : null;
     const lastName = lead.lastName ? String(lead.lastName).trim() : null;
-    const fullName = lead.fullName ? String(lead.fullName).trim() : (firstName && lastName ? `${firstName} ${lastName}` : null);
+    const fullName = lead.fullName
+      ? String(lead.fullName).trim()
+      : firstName && lastName
+        ? `${firstName} ${lastName}`
+        : null;
 
     // Extract custom fields (any fields not in standardFields list)
     const customFields: Record<string, unknown> = {};
     for (const key of Object.keys(lead)) {
-      if (!standardFields.includes(key) && key !== 'id' && key !== 'tenantId' && lead[key] !== undefined) {
+      if (
+        !standardFields.includes(key) &&
+        key !== 'id' &&
+        key !== 'tenantId' &&
+        lead[key] !== undefined
+      ) {
         customFields[key] = lead[key];
       }
     }
-    
+
     // Merge with any customFields explicitly provided as an object
     if (lead.customFields && typeof lead.customFields === 'object') {
       Object.assign(customFields, lead.customFields);
     }
 
-    const vertical = (String(lead.vertical || 'FE').toUpperCase() === 'ACA') ? 'ACA' : 'FE';
+    const vertical = String(lead.vertical || 'FE').toUpperCase() === 'ACA' ? 'ACA' : 'FE';
 
     // Find existing by tenant + phone + vertical
     const existing = await prisma.insuranceLead.findFirst({
@@ -897,17 +1020,21 @@ export async function bulkImportLeads(
       firstName: firstName || (existing ? existing.firstName : null),
       lastName: lastName || (existing ? existing.lastName : null),
       fullName: fullName || (existing ? existing.fullName : null),
-      email: lead.email ? String(lead.email).trim() : (existing ? existing.email : null),
-      address: lead.address ? String(lead.address).trim() : (existing ? existing.address : null),
-      address2: lead.address2 ? String(lead.address2).trim() : (existing ? existing.address2 : null),
-      city: lead.city ? String(lead.city).trim() : (existing ? existing.city : null),
-      county: lead.county ? String(lead.county).trim() : (existing ? existing.county : null),
-      state: lead.state ? String(lead.state).trim() : (existing ? existing.state : null),
-      zipCode: lead.zipCode ? String(lead.zipCode).trim() : (existing ? existing.zipCode : null),
-      birthDate: lead.birthDate ? String(lead.birthDate).trim() : (existing ? existing.birthDate : null),
-      age: typeof lead.age === 'number' ? lead.age : (existing ? existing.age : null),
-      gender: lead.gender ? String(lead.gender).trim() : (existing ? existing.gender : null),
-      source: lead.source ? String(lead.source).trim() : (existing ? existing.source : 'bulk_upload'),
+      email: lead.email ? String(lead.email).trim() : existing ? existing.email : null,
+      address: lead.address ? String(lead.address).trim() : existing ? existing.address : null,
+      address2: lead.address2 ? String(lead.address2).trim() : existing ? existing.address2 : null,
+      city: lead.city ? String(lead.city).trim() : existing ? existing.city : null,
+      county: lead.county ? String(lead.county).trim() : existing ? existing.county : null,
+      state: lead.state ? String(lead.state).trim() : existing ? existing.state : null,
+      zipCode: lead.zipCode ? String(lead.zipCode).trim() : existing ? existing.zipCode : null,
+      birthDate: lead.birthDate
+        ? String(lead.birthDate).trim()
+        : existing
+          ? existing.birthDate
+          : null,
+      age: typeof lead.age === 'number' ? lead.age : existing ? existing.age : null,
+      gender: lead.gender ? String(lead.gender).trim() : existing ? existing.gender : null,
+      source: lead.source ? String(lead.source).trim() : existing ? existing.source : 'bulk_upload',
       status: (() => {
         if (lead.status) {
           const upper = String(lead.status).toUpperCase().trim();
@@ -917,15 +1044,32 @@ export async function bulkImportLeads(
         }
         return existing ? existing.status : 'NEW';
       })(),
-      
-      smoker: lead.smoker ? String(lead.smoker).trim() : (existing ? existing.smoker : null),
-      faceAmount: lead.faceAmount ? String(lead.faceAmount).trim() : (existing ? existing.faceAmount : null),
-      monthlyPremium: lead.monthlyPremium ? String(lead.monthlyPremium).trim() : (existing ? existing.monthlyPremium : null),
-      carrier: lead.carrier ? String(lead.carrier).trim() : (existing ? existing.carrier : null),
-      coverageAmount: lead.coverageAmount ? String(lead.coverageAmount).trim() : (existing ? existing.coverageAmount : null),
+
+      smoker: lead.smoker ? String(lead.smoker).trim() : existing ? existing.smoker : null,
+      faceAmount: lead.faceAmount
+        ? String(lead.faceAmount).trim()
+        : existing
+          ? existing.faceAmount
+          : null,
+      monthlyPremium: lead.monthlyPremium
+        ? String(lead.monthlyPremium).trim()
+        : existing
+          ? existing.monthlyPremium
+          : null,
+      carrier: lead.carrier ? String(lead.carrier).trim() : existing ? existing.carrier : null,
+      coverageAmount: lead.coverageAmount
+        ? String(lead.coverageAmount).trim()
+        : existing
+          ? existing.coverageAmount
+          : null,
 
       // Store customFields as a JSON object
-      customFields: Object.keys(customFields).length > 0 ? (customFields as Prisma.InputJsonValue) : (existing ? (existing.customFields as Prisma.InputJsonValue) : null),
+      customFields:
+        Object.keys(customFields).length > 0
+          ? (customFields as Prisma.InputJsonValue)
+          : existing
+            ? (existing.customFields as Prisma.InputJsonValue)
+            : null,
     };
 
     if (existing) {

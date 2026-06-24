@@ -1,8 +1,9 @@
 'use client';
 
-import type { InsuranceLeadSummary } from '@/lib/api/leads';
 import { PhoneCall } from 'lucide-react';
+
 import { usePhone } from '@/components/phone';
+import type { InsuranceLeadSummary } from '@/lib/api/leads';
 
 function LeadStageBadge({ stage }: { stage: string | null }) {
   if (!stage) return <span className="text-slate-600">—</span>;
@@ -181,7 +182,8 @@ export function LeadsTable({
   const { makeCall } = usePhone();
 
   const allSelected = leads.length > 0 && leads.every(lead => selectedLeadIds.includes(lead.id));
-  const someSelected = leads.length > 0 && leads.some(lead => selectedLeadIds.includes(lead.id)) && !allSelected;
+  const someSelected =
+    leads.length > 0 && leads.some(lead => selectedLeadIds.includes(lead.id)) && !allSelected;
 
   const handleSelectAll = (checked: boolean) => {
     if (!onSelectLeadsChange) return;
@@ -273,21 +275,6 @@ export function LeadsTable({
               <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
                 ZIP
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
-                Source
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
-                Validation
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
-                Post
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
-                Mode
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
-                Result
-              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
@@ -303,10 +290,7 @@ export function LeadsTable({
                   }`}
                 >
                   {onSelectLeadsChange && (
-                    <td
-                      className="px-4 py-3 whitespace-nowrap"
-                      onClick={e => e.stopPropagation()}
-                    >
+                    <td className="px-4 py-3 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         checked={isSelected}
@@ -345,7 +329,7 @@ export function LeadsTable({
                       <span>{formatPhone(lead.phone)}</span>
                       {lead.phone && (
                         <button
-                          onClick={(e) => {
+                          onClick={e => {
                             e.stopPropagation();
                             void makeCall(lead.phone);
                           }}
@@ -363,21 +347,6 @@ export function LeadsTable({
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-400 font-mono">
                     {lead.zipCode || '—'}
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-400">
-                    {sub?.source || lead.source || '—'}
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    {sub ? <StatusBadge status={sub.validationStatus} /> : '—'}
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    {sub ? <StatusBadge status={sub.postStatus} /> : '—'}
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    {sub ? <StatusBadge status={sub.postMode} /> : '—'}
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-400">
-                    {sub?.ameriquoteResponseStatus || '—'}
                   </td>
                 </tr>
               );
