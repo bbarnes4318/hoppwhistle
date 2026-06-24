@@ -207,7 +207,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
    */
   fastify.get(
     '/api/v1/agent/my-numbers',
-    async (request, reply: FastifyReply) => {
+    async (request, _reply: FastifyReply) => {
       const { userId, tenantId } = getUser(request);
 
       if (userId === 'demo-agent') {
@@ -228,6 +228,11 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
         where: {
           tenantId,
           status: 'ACTIVE',
+          NOT: {
+            number: {
+              contains: '555',
+            },
+          },
           OR: [
             { userId },
             { userId: null },
@@ -271,7 +276,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       const prisma = getPrismaClient();
 
       const isAuthenticatedUser = userId !== 'demo-agent';
-      let outboundCallerId = callerId || '12816991120';
+      let outboundCallerId = callerId || process.env.OUTBOUND_CALLER_ID || '12816991120';
 
       if (isAuthenticatedUser) {
         // Fetch all active numbers that are either assigned directly to this user
@@ -280,6 +285,11 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
           where: {
             tenantId,
             status: 'ACTIVE',
+            NOT: {
+              number: {
+                contains: '555',
+              },
+            },
             OR: [
               { userId },
               { userId: null },
@@ -322,6 +332,18 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       const digitsOnly = outboundCallerId.replace(/\D/g, '');
       const fsCallerId = digitsOnly.length === 10 ? '1' + digitsOnly : digitsOnly;
 
+      // Find the PhoneNumber record in the DB to associate with the call
+      const cleanFsCallerId = fsCallerId.replace(/\D/g, '');
+      const last10 = cleanFsCallerId.length >= 10 ? cleanFsCallerId.slice(-10) : cleanFsCallerId;
+      const dbNumber = await prisma.phoneNumber.findFirst({
+        where: {
+          tenantId,
+          number: {
+            endsWith: last10,
+          },
+        },
+      });
+
       // Determine recording intent from campaign settings
       const recordingEnabled = await shouldRecordCall(campaignId);
 
@@ -337,6 +359,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
           ...(isAuthenticatedUser ? { createdById: userId } : {}),
           campaignId: campaignId ?? null,
           callerId: fsCallerId,
+          fromNumberId: dbNumber?.id || null,
           // Recording lifecycle: mark intent at call creation
           recordingStatus: recordingEnabled ? 'PENDING' : null,
           metadata: {
@@ -921,7 +944,13 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
 
       const prisma = getPrismaClient();
       let user = await prisma.user.findUnique({ where: { id: userId } });
-      let extension = (user?.metadata as any)?.extension;
+      let extension: string | null = null;
+      if (user?.metadata && typeof user.metadata === 'object' && !Array.isArray(user.metadata)) {
+        const meta = user.metadata as Record<string, unknown>;
+        if (typeof meta.extension === 'string' || typeof meta.extension === 'number') {
+          extension = String(meta.extension);
+        }
+      }
 
       // If user has no extension, dynamically assign a free one from 1000-1019
       if (!extension && user) {
@@ -930,9 +959,11 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
         });
         const usedExtensions = new Set<string>();
         for (const u of allUsers) {
-          const ext = (u.metadata as any)?.extension;
-          if (ext) {
-            usedExtensions.add(ext.toString().trim());
+          if (u.metadata && typeof u.metadata === 'object' && !Array.isArray(u.metadata)) {
+            const meta = u.metadata as Record<string, unknown>;
+            if (typeof meta.extension === 'string' || typeof meta.extension === 'number') {
+              usedExtensions.add(String(meta.extension).trim());
+            }
           }
         }
 
@@ -946,7 +977,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
         }
 
         if (availableExtension) {
-          const currentMetadata = (user.metadata as Record<string, any>) || {};
+          const currentMetadata = (user.metadata as Record<string, unknown>) || {};
           const updatedMetadata = {
             ...currentMetadata,
             extension: availableExtension,
@@ -961,7 +992,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
           request.log.info({
             msg: 'webrtc/credentials: Automatically assigned free extension to user',
             userId,
-            extension,
+            extension: extension || '',
           });
 
           // Sync DidRoute for any active phone numbers assigned to the user
