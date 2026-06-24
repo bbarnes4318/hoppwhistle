@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useState, useRef } from 'react';
 
+import { CompactPageShell, CompactPageHeader, DenseCard } from '@/components/layout/compact-layout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -49,8 +50,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
-import { formatDuration, formatPhoneNumber, cn } from '@/lib/utils';
-import { CompactPageShell, CompactPageHeader, DenseCard } from '@/components/layout/compact-layout';
+import { formatDuration, formatPhoneNumber } from '@/lib/utils';
 
 interface CallRecord {
   id: string;
@@ -207,7 +207,9 @@ export default function OperationsCallLogsPage() {
       if (stored) {
         try {
           return JSON.parse(stored);
-        } catch (e) {}
+        } catch (e) {
+          // Ignore invalid JSON in local storage
+        }
       }
     }
     return {
@@ -582,13 +584,14 @@ export default function OperationsCallLogsPage() {
 
   const activeColumnsCount = columns.filter(col => col.canSee && visibleColumns[col.id]).length + 1;
 
-  const isAudioPlayerInDrawer = !!detailCallId && playingId === detailCall?.primaryRecordingId && !!audioUrl;
+  const isAudioPlayerInDrawer =
+    !!detailCallId && playingId === detailCall?.primaryRecordingId && !!audioUrl;
 
   const audioPlayer = (
     <audio
       ref={audioRef}
       src={audioUrl || undefined}
-      className={isAudioPlayerInDrawer ? "h-8 flex-1 accent-cyan-400" : "hidden"}
+      className={isAudioPlayerInDrawer ? 'h-8 flex-1 accent-cyan-400' : 'hidden'}
       controls={isAudioPlayerInDrawer}
       onEnded={() => setPlayingId(null)}
     />
@@ -705,8 +708,13 @@ export default function OperationsCallLogsPage() {
               Columns
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent className="bg-slate-900 border-white/10 text-white min-w-[200px]" align="end">
-            <DropdownMenuLabel className="text-gray-400 text-xs">Configure Ledger Columns</DropdownMenuLabel>
+          <DropdownMenuContent
+            className="bg-slate-900 border-white/10 text-white min-w-[200px]"
+            align="end"
+          >
+            <DropdownMenuLabel className="text-gray-400 text-xs">
+              Configure Ledger Columns
+            </DropdownMenuLabel>
             <DropdownMenuSeparator className="bg-white/10" />
             {columns.map(col => {
               if (!col.canSee) return null;
@@ -741,449 +749,459 @@ export default function OperationsCallLogsPage() {
 
       {/* Filter Panel */}
       <div className="bg-card border border-border/40 rounded-lg p-2.5 grid grid-cols-1 md:grid-cols-4 lg:grid-cols-6 gap-2.5 flex-shrink-0">
-          {/* Search Box */}
-          <div className="relative col-span-1 md:col-span-2">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input
-              placeholder="Search ID / Caller / Notes..."
-              value={search}
-              onChange={e => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              className="pl-9 bg-white/5 border-white/10 text-white placeholder-gray-500 focus:border-cyan-500"
-            />
-          </div>
+        {/* Search Box */}
+        <div className="relative col-span-1 md:col-span-2">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Input
+            placeholder="Search ID / Caller / Notes..."
+            value={search}
+            onChange={e => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            className="pl-9 bg-white/5 border-white/10 text-white placeholder-gray-500 focus:border-cyan-500"
+          />
+        </div>
 
-          {/* Dispute filter */}
+        {/* Dispute filter */}
+        <div>
+          <Select
+            value={selectedDisputeStatus}
+            onValueChange={val => {
+              setSelectedDisputeStatus(val);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="bg-white/5 border-white/10 text-white">
+              <SelectValue placeholder="Dispute Status" />
+            </SelectTrigger>
+            <SelectContent className="bg-slate-900 border-white/10 text-white">
+              <SelectItem value="all">All Disputes</SelectItem>
+              <SelectItem value="NONE">No Disputes</SelectItem>
+              <SelectItem value="DISPUTED">Disputed (All)</SelectItem>
+              <SelectItem value="UNDER_REVIEW">Disputed - Under Review</SelectItem>
+              <SelectItem value="RESOLVED">Disputed - Resolved</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Campaign Filter */}
+        <div>
+          <Select
+            value={selectedCampaignId}
+            onValueChange={val => {
+              setSelectedCampaignId(val);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="bg-white/5 border-white/10 text-white">
+              <SelectValue placeholder="All Campaigns" />
+            </SelectTrigger>
+            <SelectContent className="bg-slate-900 border-white/10 text-white">
+              <SelectItem value="all">All Campaigns</SelectItem>
+              {campaigns.map(c => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Publisher Filter (Admin only) */}
+        {isAdminOrOwner && (
           <div>
             <Select
-              value={selectedDisputeStatus}
+              value={selectedPublisherId}
               onValueChange={val => {
-                setSelectedDisputeStatus(val);
+                setSelectedPublisherId(val);
                 setPage(1);
               }}
             >
               <SelectTrigger className="bg-white/5 border-white/10 text-white">
-                <SelectValue placeholder="Dispute Status" />
+                <SelectValue placeholder="All Publishers" />
               </SelectTrigger>
               <SelectContent className="bg-slate-900 border-white/10 text-white">
-                <SelectItem value="all">All Disputes</SelectItem>
-                <SelectItem value="NONE">No Disputes</SelectItem>
-                <SelectItem value="DISPUTED">Disputed (All)</SelectItem>
-                <SelectItem value="UNDER_REVIEW">Disputed - Under Review</SelectItem>
-                <SelectItem value="RESOLVED">Disputed - Resolved</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Campaign Filter */}
-          <div>
-            <Select
-              value={selectedCampaignId}
-              onValueChange={val => {
-                setSelectedCampaignId(val);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger className="bg-white/5 border-white/10 text-white">
-                <SelectValue placeholder="All Campaigns" />
-              </SelectTrigger>
-              <SelectContent className="bg-slate-900 border-white/10 text-white">
-                <SelectItem value="all">All Campaigns</SelectItem>
-                {campaigns.map(c => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name}
+                <SelectItem value="all">All Publishers</SelectItem>
+                {publishers.map(p => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
+        )}
 
-          {/* Publisher Filter (Admin only) */}
-          {isAdminOrOwner && (
-            <div>
-              <Select
-                value={selectedPublisherId}
-                onValueChange={val => {
-                  setSelectedPublisherId(val);
-                  setPage(1);
-                }}
-              >
-                <SelectTrigger className="bg-white/5 border-white/10 text-white">
-                  <SelectValue placeholder="All Publishers" />
-                </SelectTrigger>
-                <SelectContent className="bg-slate-900 border-white/10 text-white">
-                  <SelectItem value="all">All Publishers</SelectItem>
-                  {publishers.map(p => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {/* Buyer Filter (Admin only) */}
-          {isAdminOrOwner && (
-            <div>
-              <Select
-                value={selectedBuyerId}
-                onValueChange={val => {
-                  setSelectedBuyerId(val);
-                  setPage(1);
-                }}
-              >
-                <SelectTrigger className="bg-white/5 border-white/10 text-white">
-                  <SelectValue placeholder="All Buyers" />
-                </SelectTrigger>
-                <SelectContent className="bg-slate-900 border-white/10 text-white">
-                  <SelectItem value="all">All Buyers</SelectItem>
-                  {buyers.map(b => (
-                    <SelectItem key={b.id} value={b.id}>
-                      {b.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {/* Date Picker preset */}
+        {/* Buyer Filter (Admin only) */}
+        {isAdminOrOwner && (
           <div>
-            <Select value={datePreset} onValueChange={handlePresetChange}>
+            <Select
+              value={selectedBuyerId}
+              onValueChange={val => {
+                setSelectedBuyerId(val);
+                setPage(1);
+              }}
+            >
               <SelectTrigger className="bg-white/5 border-white/10 text-white">
-                <SelectValue placeholder="All Time" />
+                <SelectValue placeholder="All Buyers" />
               </SelectTrigger>
               <SelectContent className="bg-slate-900 border-white/10 text-white">
-                <SelectItem value="All Time">All Time</SelectItem>
-                <SelectItem value="Today">Today</SelectItem>
-                <SelectItem value="Yesterday">Yesterday</SelectItem>
-                <SelectItem value="This Week">This Week</SelectItem>
-                <SelectItem value="This Month">This Month</SelectItem>
-                <SelectItem value="Last Month">Last Month</SelectItem>
-                <SelectItem value="Custom">Custom Range</SelectItem>
+                <SelectItem value="all">All Buyers</SelectItem>
+                {buyers.map(b => (
+                  <SelectItem key={b.id} value={b.id}>
+                    {b.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
+        )}
 
-          {/* Custom Date Inputs */}
-          {datePreset === 'Custom' && (
-            <div className="flex gap-2 items-center col-span-1 md:col-span-2">
-              <Input
-                type="date"
-                value={fromDate}
-                onChange={e => {
-                  setFromDate(e.target.value);
-                  setPage(1);
-                }}
-                className="bg-white/5 border-white/10 text-white"
-              />
-              <span className="text-gray-500 text-xs">to</span>
-              <Input
-                type="date"
-                value={toDate}
-                onChange={e => {
-                  setToDate(e.target.value);
-                  setPage(1);
-                }}
-                className="bg-white/5 border-white/10 text-white"
-              />
-            </div>
-          )}
+        {/* Date Picker preset */}
+        <div>
+          <Select value={datePreset} onValueChange={handlePresetChange}>
+            <SelectTrigger className="bg-white/5 border-white/10 text-white">
+              <SelectValue placeholder="All Time" />
+            </SelectTrigger>
+            <SelectContent className="bg-slate-900 border-white/10 text-white">
+              <SelectItem value="All Time">All Time</SelectItem>
+              <SelectItem value="Today">Today</SelectItem>
+              <SelectItem value="Yesterday">Yesterday</SelectItem>
+              <SelectItem value="This Week">This Week</SelectItem>
+              <SelectItem value="This Month">This Month</SelectItem>
+              <SelectItem value="Last Month">Last Month</SelectItem>
+              <SelectItem value="Custom">Custom Range</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Custom Date Inputs */}
+        {datePreset === 'Custom' && (
+          <div className="flex gap-2 items-center col-span-1 md:col-span-2">
+            <Input
+              type="date"
+              value={fromDate}
+              onChange={e => {
+                setFromDate(e.target.value);
+                setPage(1);
+              }}
+              className="bg-white/5 border-white/10 text-white"
+            />
+            <span className="text-gray-500 text-xs">to</span>
+            <Input
+              type="date"
+              value={toDate}
+              onChange={e => {
+                setToDate(e.target.value);
+                setPage(1);
+              }}
+              className="bg-white/5 border-white/10 text-white"
+            />
+          </div>
+        )}
       </div>
 
       {/* Main Operations Data Table */}
       <DenseCard className="flex-1 min-h-0">
         <div className="flex-1 min-h-0 overflow-auto">
           <Table className="table-dense">
-              <TableHeader>
-                <TableRow className="border-white/10 hover:bg-transparent">
-                  {visibleColumns.time && (
-                    <TableHead className="text-gray-400 font-medium pl-6">Time</TableHead>
-                  )}
-                  {visibleColumns.publisherName && isAdminOrOwner && (
-                    <TableHead className="text-gray-400 font-medium">Publisher</TableHead>
-                  )}
-                  {visibleColumns.buyerName && isAdminOrOwner && (
-                    <TableHead className="text-gray-400 font-medium">Buyer</TableHead>
-                  )}
-                  {visibleColumns.campaignName && (
-                    <TableHead className="text-gray-400 font-medium">Campaign</TableHead>
-                  )}
-                  {visibleColumns.callerId && (
-                    <TableHead className="text-gray-400 font-medium">Caller ID</TableHead>
-                  )}
-                  {visibleColumns.did && !isBuyer && (
-                    <TableHead className="text-gray-400 font-medium">DID (DNIS)</TableHead>
-                  )}
-                  {visibleColumns.toNumber && !isPublisher && (
-                    <TableHead className="text-gray-400 font-medium">Destination</TableHead>
-                  )}
-                  {visibleColumns.duration && (
-                    <TableHead className="text-gray-400 font-medium">Duration</TableHead>
-                  )}
-                  {visibleColumns.connectedDuration && (
-                    <TableHead className="text-gray-400 font-medium">Connected</TableHead>
-                  )}
-                  {visibleColumns.billable && (
-                    <TableHead className="text-gray-400 font-medium">Billable</TableHead>
-                  )}
-                  {/* Financial Fields */}
-                  {visibleColumns.buyerBillableAmount && !isPublisher && !isAgent && (
-                    <TableHead className="text-gray-400 font-medium text-right">Charge</TableHead>
-                  )}
-                  {visibleColumns.publisherPayoutAmount && !isBuyer && !isAgent && (
-                    <TableHead className="text-gray-400 font-medium text-right">Payout</TableHead>
-                  )}
-                  {visibleColumns.cost && isAdminOrOwner && (
-                    <TableHead className="text-gray-400 font-medium text-right">Cost</TableHead>
-                  )}
-                  {visibleColumns.profit && isAdminOrOwner && (
-                    <TableHead className="text-gray-400 font-medium text-right">Profit</TableHead>
-                  )}
-                  {visibleColumns.margin && isAdminOrOwner && (
-                    <TableHead className="text-gray-400 font-medium text-right">Margin</TableHead>
-                  )}
-                  {visibleColumns.status && (
-                    <TableHead className="text-gray-400 font-medium text-center">Status</TableHead>
-                  )}
-                  {visibleColumns.recording && (
-                    <TableHead className="text-gray-400 font-medium text-center">Recording</TableHead>
-                  )}
-                  <TableHead className="text-gray-400 font-medium text-right pr-6">
-                    Action
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={activeColumnsCount} className="h-64 text-center text-gray-500">
-                      <div className="flex flex-col items-center justify-center gap-2">
-                        <Loader2 className="h-8 w-8 animate-spin text-cyan-400" />
-                        <span>Loading pay-per-call ledger...</span>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : calls.length === 0 ? (
-                  <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={activeColumnsCount} className="h-64 text-center text-gray-500">
-                      <div className="flex flex-col items-center justify-center gap-2">
-                        <AlertCircle className="h-8 w-8 text-gray-600" />
-                        <span>No call events found</span>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  calls.map(call => {
-                    const showToDetails = call.toNumber && call.toNumber !== 'Masked';
-
-                    return (
-                      <TableRow
-                        key={call.id}
-                        onClick={() => void handleOpenDetailDrawer(call.id)}
-                        className="border-white/5 hover:bg-white/5 transition-colors cursor-pointer"
-                      >
-                        {visibleColumns.time && (
-                          <TableCell className="pl-6 font-mono text-xs text-white">
-                            {new Date(call.createdAt).toLocaleString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </TableCell>
-                        )}
-                        {visibleColumns.publisherName && isAdminOrOwner && (
-                          <TableCell className="text-gray-300 font-medium text-xs">
-                            {call.publisherName || '—'}
-                          </TableCell>
-                        )}
-                        {visibleColumns.buyerName && isAdminOrOwner && (
-                          <TableCell className="text-gray-300 font-medium text-xs">
-                            {call.buyerName || '—'}
-                          </TableCell>
-                        )}
-                        {visibleColumns.campaignName && (
-                          <TableCell className="text-gray-300 font-semibold text-xs">
-                            {call.campaignName || '—'}
-                          </TableCell>
-                        )}
-                        {visibleColumns.callerId && (
-                          <TableCell className="font-mono text-xs text-white font-semibold">
-                            {call.callerId ? formatPhoneNumber(call.callerId) : '—'}
-                          </TableCell>
-                        )}
-                        {visibleColumns.did && !isBuyer && (
-                          <TableCell className="font-mono text-xs text-gray-400">
-                            {call.did ? formatPhoneNumber(call.did) : '—'}
-                          </TableCell>
-                        )}
-                        {visibleColumns.toNumber && !isPublisher && (
-                          <TableCell className="font-mono text-xs text-gray-400">
-                            {showToDetails ? (
-                              formatPhoneNumber(call.toNumber || call.targetNumber || '')
-                            ) : (
-                              <span className="text-gray-600 italic">Masked</span>
-                            )}
-                          </TableCell>
-                        )}
-                        {visibleColumns.duration && (
-                          <TableCell className="font-mono text-xs text-gray-300">
-                            {call.duration ? formatDuration(call.duration) : '—'}
-                          </TableCell>
-                        )}
-                        {visibleColumns.connectedDuration && (
-                          <TableCell className="font-mono text-xs text-gray-300">
-                            {call.connectedDuration ? formatDuration(call.connectedDuration) : '—'}
-                          </TableCell>
-                        )}
-                        {visibleColumns.billable && (
-                          <TableCell>
-                            <Badge
-                              variant="outline"
-                              className={
-                                call.billable
-                                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                                  : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                              }
-                            >
-                              {call.billable ? 'Billable' : 'No'}
-                            </Badge>
-                          </TableCell>
-                        )}
-                        {/* Financial Ledger Columns */}
-                        {visibleColumns.buyerBillableAmount && !isPublisher && !isAgent && (
-                          <TableCell className="text-right font-mono text-xs font-semibold text-white">
-                            {call.buyerBillableAmount !== null &&
-                            call.buyerBillableAmount !== undefined
-                              ? `$${Number(call.buyerBillableAmount).toFixed(2)}`
-                              : '—'}
-                          </TableCell>
-                        )}
-                        {visibleColumns.publisherPayoutAmount && !isBuyer && !isAgent && (
-                          <TableCell className="text-right font-mono text-xs font-semibold text-emerald-400">
-                            {call.publisherPayoutAmount !== null &&
-                            call.publisherPayoutAmount !== undefined
-                              ? `$${Number(call.publisherPayoutAmount).toFixed(2)}`
-                              : '—'}
-                          </TableCell>
-                        )}
-                        {visibleColumns.cost && isAdminOrOwner && (
-                          <TableCell className="text-right font-mono text-xs text-gray-400">
-                            {call.cost !== null ? `$${Number(call.cost).toFixed(2)}` : '—'}
-                          </TableCell>
-                        )}
-                        {visibleColumns.profit && isAdminOrOwner && (
-                          <TableCell className="text-right font-mono text-xs font-bold text-cyan-400">
-                            {call.profit !== null ? `$${Number(call.profit).toFixed(2)}` : '—'}
-                          </TableCell>
-                        )}
-                        {visibleColumns.margin && isAdminOrOwner && (
-                          <TableCell className="text-right font-mono text-xs text-gray-400">
-                            {call.margin !== null ? `${Number(call.margin).toFixed(1)}%` : '—'}
-                          </TableCell>
-                        )}
-                        {/* Billing and dispute statuses */}
-                        {visibleColumns.status && (
-                          <TableCell className="text-center">
-                            <div className="flex flex-col gap-1 items-center justify-center">
-                              {call.disputeStatus ? (
-                                getDisputeBadge(call.disputeStatus)
-                              ) : (
-                                <div className="flex items-center gap-1">
-                                  {!isPublisher && getChargeStatusBadge(call.buyerChargeStatus)}
-                                  {!isBuyer && getPayoutStatusBadge(call.publisherPayoutStatus)}
-                                </div>
-                              )}
-                            </div>
-                          </TableCell>
-                        )}
-                        {/* Recording inline player and download */}
-                        {visibleColumns.recording && (
-                          <TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
-                            {call.recordingUrl || call.primaryRecordingId ? (
-                              <div className="flex items-center justify-center gap-2">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() =>
-                                    void handlePlayRecording(call.primaryRecordingId || call.id)
-                                  }
-                                  disabled={audioLoading && playingId === (call.primaryRecordingId || call.id)}
-                                  className="h-8 w-8 p-0 rounded-full hover:bg-white/10 text-cyan-400 hover:text-cyan-300"
-                                >
-                                  {audioLoading && playingId === (call.primaryRecordingId || call.id) ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                  ) : playingId === (call.primaryRecordingId || call.id) ? (
-                                    <Pause className="h-4 w-4" />
-                                  ) : (
-                                    <Play className="h-4 w-4" />
-                                  )}
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() =>
-                                    void handleDownloadRecording(call.primaryRecordingId || call.id, `call-${call.id}-recording.wav`)
-                                  }
-                                  className="h-8 w-8 p-0 rounded-full hover:bg-white/10 text-gray-400 hover:text-white"
-                                >
-                                  <Download className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            ) : (
-                              <span className="text-gray-600 text-xs italic">—</span>
-                            )}
-                          </TableCell>
-                        )}
-                        <TableCell className="text-right pr-6 font-medium text-cyan-400 hover:text-cyan-300 text-xs">
-                          Inspect →
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
+            <TableHeader>
+              <TableRow className="border-white/10 hover:bg-transparent">
+                {visibleColumns.time && (
+                  <TableHead className="text-gray-400 font-medium pl-6">Time</TableHead>
                 )}
-              </TableBody>
-            </Table>
-          </div>
+                {visibleColumns.publisherName && isAdminOrOwner && (
+                  <TableHead className="text-gray-400 font-medium">Publisher</TableHead>
+                )}
+                {visibleColumns.buyerName && isAdminOrOwner && (
+                  <TableHead className="text-gray-400 font-medium">Buyer</TableHead>
+                )}
+                {visibleColumns.campaignName && (
+                  <TableHead className="text-gray-400 font-medium">Campaign</TableHead>
+                )}
+                {visibleColumns.callerId && (
+                  <TableHead className="text-gray-400 font-medium">Caller ID</TableHead>
+                )}
+                {visibleColumns.did && !isBuyer && (
+                  <TableHead className="text-gray-400 font-medium">DID (DNIS)</TableHead>
+                )}
+                {visibleColumns.toNumber && !isPublisher && (
+                  <TableHead className="text-gray-400 font-medium">Destination</TableHead>
+                )}
+                {visibleColumns.duration && (
+                  <TableHead className="text-gray-400 font-medium">Duration</TableHead>
+                )}
+                {visibleColumns.connectedDuration && (
+                  <TableHead className="text-gray-400 font-medium">Connected</TableHead>
+                )}
+                {visibleColumns.billable && (
+                  <TableHead className="text-gray-400 font-medium">Billable</TableHead>
+                )}
+                {/* Financial Fields */}
+                {visibleColumns.buyerBillableAmount && !isPublisher && !isAgent && (
+                  <TableHead className="text-gray-400 font-medium text-right">Charge</TableHead>
+                )}
+                {visibleColumns.publisherPayoutAmount && !isBuyer && !isAgent && (
+                  <TableHead className="text-gray-400 font-medium text-right">Payout</TableHead>
+                )}
+                {visibleColumns.cost && isAdminOrOwner && (
+                  <TableHead className="text-gray-400 font-medium text-right">Cost</TableHead>
+                )}
+                {visibleColumns.profit && isAdminOrOwner && (
+                  <TableHead className="text-gray-400 font-medium text-right">Profit</TableHead>
+                )}
+                {visibleColumns.margin && isAdminOrOwner && (
+                  <TableHead className="text-gray-400 font-medium text-right">Margin</TableHead>
+                )}
+                {visibleColumns.status && (
+                  <TableHead className="text-gray-400 font-medium text-center">Status</TableHead>
+                )}
+                {visibleColumns.recording && (
+                  <TableHead className="text-gray-400 font-medium text-center">Recording</TableHead>
+                )}
+                <TableHead className="text-gray-400 font-medium text-right pr-6">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell
+                    colSpan={activeColumnsCount}
+                    className="h-64 text-center text-gray-500"
+                  >
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <Loader2 className="h-8 w-8 animate-spin text-cyan-400" />
+                      <span>Loading pay-per-call ledger...</span>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : calls.length === 0 ? (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell
+                    colSpan={activeColumnsCount}
+                    className="h-64 text-center text-gray-500"
+                  >
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <AlertCircle className="h-8 w-8 text-gray-600" />
+                      <span>No call events found</span>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                calls.map(call => {
+                  const showToDetails = call.toNumber && call.toNumber !== 'Masked';
 
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between p-4 border-t border-white/10">
-              <span className="text-xs text-gray-400">
-                Page {page} of {totalPages}
-              </span>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page === 1}
-                  onClick={e => {
-                    e.stopPropagation();
-                    setPage(p => Math.max(1, p - 1));
-                  }}
-                  className="bg-white/5 border-white/10 text-white"
-                >
-                  Previous
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page === totalPages}
-                  onClick={e => {
-                    e.stopPropagation();
-                    setPage(p => Math.min(totalPages, p + 1));
-                  }}
-                  className="bg-white/5 border-white/10 text-white"
-                >
-                  Next
-                </Button>
-              </div>
+                  return (
+                    <TableRow
+                      key={call.id}
+                      onClick={() => void handleOpenDetailDrawer(call.id)}
+                      className="border-white/5 hover:bg-white/5 transition-colors cursor-pointer"
+                    >
+                      {visibleColumns.time && (
+                        <TableCell className="pl-6 font-mono text-xs text-white">
+                          {new Date(call.createdAt).toLocaleString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </TableCell>
+                      )}
+                      {visibleColumns.publisherName && isAdminOrOwner && (
+                        <TableCell className="text-gray-300 font-medium text-xs">
+                          {call.publisherName || '—'}
+                        </TableCell>
+                      )}
+                      {visibleColumns.buyerName && isAdminOrOwner && (
+                        <TableCell className="text-gray-300 font-medium text-xs">
+                          {call.buyerName || '—'}
+                        </TableCell>
+                      )}
+                      {visibleColumns.campaignName && (
+                        <TableCell className="text-gray-300 font-semibold text-xs">
+                          {call.campaignName || '—'}
+                        </TableCell>
+                      )}
+                      {visibleColumns.callerId && (
+                        <TableCell className="font-mono text-xs text-white font-semibold">
+                          {call.callerId ? formatPhoneNumber(call.callerId) : '—'}
+                        </TableCell>
+                      )}
+                      {visibleColumns.did && !isBuyer && (
+                        <TableCell className="font-mono text-xs text-gray-400">
+                          {call.did ? formatPhoneNumber(call.did) : '—'}
+                        </TableCell>
+                      )}
+                      {visibleColumns.toNumber && !isPublisher && (
+                        <TableCell className="font-mono text-xs text-gray-400">
+                          {showToDetails ? (
+                            formatPhoneNumber(call.toNumber || call.targetNumber || '')
+                          ) : (
+                            <span className="text-gray-600 italic">Masked</span>
+                          )}
+                        </TableCell>
+                      )}
+                      {visibleColumns.duration && (
+                        <TableCell className="font-mono text-xs text-gray-300">
+                          {call.duration ? formatDuration(call.duration) : '—'}
+                        </TableCell>
+                      )}
+                      {visibleColumns.connectedDuration && (
+                        <TableCell className="font-mono text-xs text-gray-300">
+                          {call.connectedDuration ? formatDuration(call.connectedDuration) : '—'}
+                        </TableCell>
+                      )}
+                      {visibleColumns.billable && (
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={
+                              call.billable
+                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                                : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                            }
+                          >
+                            {call.billable ? 'Billable' : 'No'}
+                          </Badge>
+                        </TableCell>
+                      )}
+                      {/* Financial Ledger Columns */}
+                      {visibleColumns.buyerBillableAmount && !isPublisher && !isAgent && (
+                        <TableCell className="text-right font-mono text-xs font-semibold text-white">
+                          {call.buyerBillableAmount !== null &&
+                          call.buyerBillableAmount !== undefined
+                            ? `$${Number(call.buyerBillableAmount).toFixed(2)}`
+                            : '—'}
+                        </TableCell>
+                      )}
+                      {visibleColumns.publisherPayoutAmount && !isBuyer && !isAgent && (
+                        <TableCell className="text-right font-mono text-xs font-semibold text-emerald-400">
+                          {call.publisherPayoutAmount !== null &&
+                          call.publisherPayoutAmount !== undefined
+                            ? `$${Number(call.publisherPayoutAmount).toFixed(2)}`
+                            : '—'}
+                        </TableCell>
+                      )}
+                      {visibleColumns.cost && isAdminOrOwner && (
+                        <TableCell className="text-right font-mono text-xs text-gray-400">
+                          {call.cost !== null ? `$${Number(call.cost).toFixed(2)}` : '—'}
+                        </TableCell>
+                      )}
+                      {visibleColumns.profit && isAdminOrOwner && (
+                        <TableCell className="text-right font-mono text-xs font-bold text-cyan-400">
+                          {call.profit !== null ? `$${Number(call.profit).toFixed(2)}` : '—'}
+                        </TableCell>
+                      )}
+                      {visibleColumns.margin && isAdminOrOwner && (
+                        <TableCell className="text-right font-mono text-xs text-gray-400">
+                          {call.margin !== null ? `${Number(call.margin).toFixed(1)}%` : '—'}
+                        </TableCell>
+                      )}
+                      {/* Billing and dispute statuses */}
+                      {visibleColumns.status && (
+                        <TableCell className="text-center">
+                          <div className="flex flex-col gap-1 items-center justify-center">
+                            {call.disputeStatus ? (
+                              getDisputeBadge(call.disputeStatus)
+                            ) : (
+                              <div className="flex items-center gap-1">
+                                {!isPublisher && getChargeStatusBadge(call.buyerChargeStatus)}
+                                {!isBuyer && getPayoutStatusBadge(call.publisherPayoutStatus)}
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                      )}
+                      {/* Recording inline player and download */}
+                      {visibleColumns.recording && (
+                        <TableCell className="text-center" onClick={e => e.stopPropagation()}>
+                          {call.recordingUrl || call.primaryRecordingId ? (
+                            <div className="flex items-center justify-center gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  void handlePlayRecording(call.primaryRecordingId || call.id)
+                                }
+                                disabled={
+                                  audioLoading && playingId === (call.primaryRecordingId || call.id)
+                                }
+                                className="h-8 w-8 p-0 rounded-full hover:bg-white/10 text-cyan-400 hover:text-cyan-300"
+                              >
+                                {audioLoading &&
+                                playingId === (call.primaryRecordingId || call.id) ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : playingId === (call.primaryRecordingId || call.id) ? (
+                                  <Pause className="h-4 w-4" />
+                                ) : (
+                                  <Play className="h-4 w-4" />
+                                )}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  void handleDownloadRecording(
+                                    call.primaryRecordingId || call.id,
+                                    `call-${call.id}-recording.wav`
+                                  )
+                                }
+                                className="h-8 w-8 p-0 rounded-full hover:bg-white/10 text-gray-400 hover:text-white"
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <span className="text-gray-600 text-xs italic">—</span>
+                          )}
+                        </TableCell>
+                      )}
+                      <TableCell className="text-right pr-6 font-medium text-cyan-400 hover:text-cyan-300 text-xs">
+                        Inspect →
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between p-4 border-t border-white/10">
+            <span className="text-xs text-gray-400">
+              Page {page} of {totalPages}
+            </span>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page === 1}
+                onClick={e => {
+                  e.stopPropagation();
+                  setPage(p => Math.max(1, p - 1));
+                }}
+                className="bg-white/5 border-white/10 text-white"
+              >
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page === totalPages}
+                onClick={e => {
+                  e.stopPropagation();
+                  setPage(p => Math.min(totalPages, p + 1));
+                }}
+                className="bg-white/5 border-white/10 text-white"
+              >
+                Next
+              </Button>
             </div>
-          )}
+          </div>
+        )}
       </DenseCard>
 
       {/* Slide-out Call Detail Drawer Dialog */}
@@ -1193,7 +1211,7 @@ export default function OperationsCallLogsPage() {
           if (!open) setDetailCallId(null);
         }}
       >
-        <DialogContent className="fixed inset-y-0 right-0 z-50 h-full w-full max-w-2xl border-l border-white/10 bg-slate-950 p-0 shadow-2xl transition-all duration-300 ease-in-out text-white">
+        <DialogContent className="fixed inset-y-0 right-0 z-50 h-full w-full max-w-2xl border-l border-white/10 bg-slate-950 p-0 shadow-2xl transition-all duration-300 ease-in-out text-white translate-x-0 translate-y-0 left-auto top-0 bottom-0">
           <div className="h-full flex flex-col overflow-hidden">
             {/* Header */}
             <div className="p-6 border-b border-white/5 flex items-center justify-between bg-slate-900/50">
@@ -1295,7 +1313,7 @@ export default function OperationsCallLogsPage() {
                               <Play className="h-4.5 w-4.5 pl-0.5" />
                             )}
                           </Button>
-                           {isAudioPlayerInDrawer ? (
+                          {isAudioPlayerInDrawer ? (
                             audioPlayer
                           ) : (
                             <div className="h-2 bg-white/10 rounded-full flex-1" />
