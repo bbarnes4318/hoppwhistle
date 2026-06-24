@@ -831,3 +831,114 @@ export async function getStats(tenantId: string) {
     liveSubmissions,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Bulk Import
+// ---------------------------------------------------------------------------
+
+export async function bulkImportLeads(
+  tenantId: string,
+  leads: Array<Record<string, unknown>>,
+) {
+  const prisma = getPrismaClient();
+  let importCount = 0;
+
+  const standardFields = [
+    'firstName', 'lastName', 'fullName', 'email', 'phone',
+    'address', 'address2', 'city', 'county', 'state', 'zipCode',
+    'birthDate', 'age', 'gender', 'source', 'notes', 'status',
+    'assignedToId', 'assignedAt', 'lastContactedAt', 'nextFollowUpAt',
+    'priority', 'leadStage', 'doNotCall', 'smoker', 'faceAmount',
+    'monthlyPremium', 'carrier', 'coverageAmount', 'lifeType',
+    'riskType', 'product', 'trustedFormUrl', 'leadidToken',
+    'consentLanguage', 'recordingUrl',
+  ];
+
+  for (const lead of leads) {
+    let rawPhone = String(lead.phone || lead.phoneNumber || '').trim();
+    if (!rawPhone) continue;
+    
+    // Normalize phone to last 10 digits
+    const cleanPhone = rawPhone.replace(/\D/g, '');
+    const phone = cleanPhone.length > 10 ? cleanPhone.slice(-10) : cleanPhone;
+    if (phone.length < 10) continue; // Skip invalid phone numbers
+
+    const firstName = lead.firstName ? String(lead.firstName).trim() : null;
+    const lastName = lead.lastName ? String(lead.lastName).trim() : null;
+    const fullName = lead.fullName ? String(lead.fullName).trim() : (firstName && lastName ? `${firstName} ${lastName}` : null);
+
+    // Extract custom fields (any fields not in standardFields list)
+    const customFields: Record<string, unknown> = {};
+    for (const key of Object.keys(lead)) {
+      if (!standardFields.includes(key) && key !== 'id' && key !== 'tenantId' && lead[key] !== undefined) {
+        customFields[key] = lead[key];
+      }
+    }
+    
+    // Merge with any customFields explicitly provided as an object
+    if (lead.customFields && typeof lead.customFields === 'object') {
+      Object.assign(customFields, lead.customFields);
+    }
+
+    const vertical = (String(lead.vertical || 'FE').toUpperCase() === 'ACA') ? 'ACA' : 'FE';
+
+    // Find existing by tenant + phone + vertical
+    const existing = await prisma.insuranceLead.findFirst({
+      where: { tenantId, phone, vertical },
+    });
+
+    const data: Prisma.InsuranceLeadUpdateInput = {
+      firstName: firstName || (existing ? existing.firstName : null),
+      lastName: lastName || (existing ? existing.lastName : null),
+      fullName: fullName || (existing ? existing.fullName : null),
+      email: lead.email ? String(lead.email).trim() : (existing ? existing.email : null),
+      address: lead.address ? String(lead.address).trim() : (existing ? existing.address : null),
+      address2: lead.address2 ? String(lead.address2).trim() : (existing ? existing.address2 : null),
+      city: lead.city ? String(lead.city).trim() : (existing ? existing.city : null),
+      county: lead.county ? String(lead.county).trim() : (existing ? existing.county : null),
+      state: lead.state ? String(lead.state).trim() : (existing ? existing.state : null),
+      zipCode: lead.zipCode ? String(lead.zipCode).trim() : (existing ? existing.zipCode : null),
+      birthDate: lead.birthDate ? String(lead.birthDate).trim() : (existing ? existing.birthDate : null),
+      age: typeof lead.age === 'number' ? lead.age : (existing ? existing.age : null),
+      gender: lead.gender ? String(lead.gender).trim() : (existing ? existing.gender : null),
+      source: lead.source ? String(lead.source).trim() : (existing ? existing.source : 'bulk_upload'),
+      status: (() => {
+        if (lead.status) {
+          const upper = String(lead.status).toUpperCase().trim();
+          if (['NEW', 'CONTACTED', 'QUALIFIED', 'CONVERTED', 'LOST'].includes(upper)) {
+            return upper as InsuranceLeadStatus;
+          }
+        }
+        return existing ? existing.status : 'NEW';
+      })(),
+      
+      smoker: lead.smoker ? String(lead.smoker).trim() : (existing ? existing.smoker : null),
+      faceAmount: lead.faceAmount ? String(lead.faceAmount).trim() : (existing ? existing.faceAmount : null),
+      monthlyPremium: lead.monthlyPremium ? String(lead.monthlyPremium).trim() : (existing ? existing.monthlyPremium : null),
+      carrier: lead.carrier ? String(lead.carrier).trim() : (existing ? existing.carrier : null),
+      coverageAmount: lead.coverageAmount ? String(lead.coverageAmount).trim() : (existing ? existing.coverageAmount : null),
+
+      // Store customFields as a JSON object
+      customFields: Object.keys(customFields).length > 0 ? (customFields as Prisma.InputJsonValue) : (existing ? (existing.customFields as Prisma.InputJsonValue) : null),
+    };
+
+    if (existing) {
+      await prisma.insuranceLead.update({
+        where: { id: existing.id },
+        data,
+      });
+    } else {
+      await prisma.insuranceLead.create({
+        data: {
+          ...data,
+          phone,
+          vertical,
+          tenant: { connect: { id: tenantId } },
+        } as Prisma.InsuranceLeadCreateInput,
+      });
+    }
+    importCount++;
+  }
+
+  return { success: true, count: importCount };
+}

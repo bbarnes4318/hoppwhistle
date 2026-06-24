@@ -517,4 +517,37 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
 
     return { success: true, count: result.count };
   });
+
+  // -----------------------------------------------------------------------
+  // POST /api/v1/insurance-leads/bulk — Bulk import leads
+  // -----------------------------------------------------------------------
+  fastify.post<{
+    Body: { leads: Array<Record<string, unknown>> };
+  }>('/api/v1/insurance-leads/bulk', async (request, reply) => {
+    const tenantId = getTenantId(request);
+    if (!tenantId) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+    }
+
+    const { leads } = request.body;
+    if (!leads || !Array.isArray(leads)) {
+      void reply.code(400);
+      return { error: { code: 'INVALID_BODY', message: 'leads must be an array of objects' } };
+    }
+
+    try {
+      const { bulkImportLeads } = await import('../services/insurance-lead-service.js');
+      const result = await bulkImportLeads(tenantId, leads);
+      return result;
+    } catch (error: unknown) {
+      void reply.code(500);
+      return {
+        error: {
+          code: 'IMPORT_FAILED',
+          message: (error as Error).message || 'Failed to bulk import leads',
+        },
+      };
+    }
+  });
 }
