@@ -3,3 +3,4 @@ export { CallCenterPortal } from './CallCenterPortal';
 export { DialerControls } from './DialerControls';
 export { ScriptPanel } from './ScriptPanel';
 export { QuotePanel } from './QuotePanel';
+export { LeadUploadModal } from './LeadUploadModal';

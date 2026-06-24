@@ -287,3 +287,13 @@ export async function fetchCustomerLookup(phone: string): Promise<CustomerLookup
   return res.data as unknown as CustomerLookupResponse;
 }
 
+export async function bulkImportInsuranceLeads(
+  leads: Array<Record<string, unknown>>
+): Promise<{ success: boolean; count: number }> {
+  const res = await apiClient.post<{ success: boolean; count: number }>(
+    '/api/v1/insurance-leads/bulk',
+    { leads }
+  );
+  return res.data as unknown as { success: boolean; count: number };
+}
+

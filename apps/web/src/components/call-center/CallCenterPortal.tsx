@@ -5,7 +5,7 @@
 // Exact 1:1 port with zero UI/functionality differences
 // ============================================================================
 
-import { Phone, FileText, Headphones, LogIn, X } from 'lucide-react';
+import { Phone, FileText, Headphones, LogIn, X, Play, Pause, Upload, RotateCcw, User } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 
@@ -36,7 +36,8 @@ import { useScriptAccess } from '@/hooks/useUserRoles';
 import { apiClient } from '@/lib/api';
 import { CustomerCrmPanel } from './CustomerCrmPanel';
 import type { CustomerLookupResponse } from '@/lib/api/leads';
-import { fetchCustomerLookup } from '@/lib/api/leads';
+import { fetchCustomerLookup, updateInsuranceLead } from '@/lib/api/leads';
+import { LeadUploadModal } from './LeadUploadModal';
 
 // ============================================================================
 // MAIN COMPONENT
@@ -48,6 +49,14 @@ export function CallCenterPortal(): JSX.Element {
   // Lead Injection - Pre-call data from webhooks
   const { leadData, lookupLead, clearLead } = useLeadInjection();
   const [preInjectedData, setPreInjectedData] = useState<ProspectData | null>(null);
+
+  // Auto-Dialer & Lead Upload State
+  const [isAutoDialing, setIsAutoDialing] = useState(false);
+  const [autoDialIndex, setAutoDialIndex] = useState(0);
+  const [autoDialStatus, setAutoDialStatus] = useState<'idle' | 'calling' | 'disposition' | 'wrapup' | 'paused'>('idle');
+  const [wrapUpCountdown, setWrapUpCountdown] = useState(5);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const wrapUpTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // State - Default directly to agentDashboard (skip role selection menu)
   const [currentView, setCurrentView] = useState<CurrentView>('agentDashboard');
@@ -548,6 +557,59 @@ export function CallCenterPortal(): JSX.Element {
     } catch (err) {
       console.error('[CallCenter] Disposition save error:', err);
     }
+
+    // Save updated CRM data if lead exists
+    const resolvedLeadId = activeCallData?.id || crmData?.customer?.id;
+    if (resolvedLeadId && activeCallData) {
+      try {
+        // Collect custom fields (any fields not in standard CRM fields list)
+        const standardKeys = [
+          'id', 'tenantId', 'vertical', 'firstName', 'first_name', 'lastName', 'last_name',
+          'fullName', 'name', 'email', 'phone', 'caller_id', 'address', 'address2', 'city',
+          'county', 'state', 'zipCode', 'zip', 'birthDate', 'age', 'gender', 'source',
+          'status', 'customFields', 'notes', 'tags', 'assignedToId', 'assignedAt',
+          'lastContactedAt', 'nextFollowUpAt', 'priority', 'leadStage', 'doNotCall',
+          'duplicateOfId', 'smoker', 'faceAmount', 'lifeType', 'riskType', 'carrier',
+          'product', 'monthlyPremium', 'coverageAmount', 'trustedFormUrl', 'leadidToken',
+          'consentLanguage', 'recordingUrl', 'createdAt', 'updatedAt', 'submissions',
+          'activities', 'tasks'
+        ];
+        
+        const customFields: Record<string, unknown> = {};
+        if (activeCallData.customFields && typeof activeCallData.customFields === 'object') {
+          Object.assign(customFields, activeCallData.customFields);
+        }
+        
+        // Extract any keys directly on activeCallData that are not standard keys
+        Object.keys(activeCallData).forEach((key) => {
+          if (!standardKeys.includes(key) && activeCallData[key] !== undefined) {
+            customFields[key] = activeCallData[key];
+          }
+        });
+
+        await updateInsuranceLead(resolvedLeadId, {
+          firstName: activeCallData.firstName || activeCallData.first_name,
+          lastName: activeCallData.lastName || activeCallData.last_name,
+          email: activeCallData.email,
+          phone: activeCallData.phone || activeCallData.caller_id,
+          address: activeCallData.address,
+          city: activeCallData.city,
+          state: activeCallData.state,
+          zipCode: activeCallData.zipCode || activeCallData.zip,
+          age: activeCallData.age,
+          gender: activeCallData.gender,
+          smoker: activeCallData.smoker,
+          faceAmount: activeCallData.faceAmount,
+          monthlyPremium: activeCallData.monthlyPremium,
+          carrier: activeCallData.carrier,
+          customFields: customFields,
+        });
+        console.log('[CallCenter] CRM record updated successfully');
+      } catch (err) {
+        console.error('[CallCenter] Failed to save CRM updates:', err);
+      }
+    }
+
     setDispositionSaved(true);
     setTimeout(() => {
       setDispositionSaved(false);
@@ -564,10 +626,22 @@ export function CallCenterPortal(): JSX.Element {
       clearLead();
       setCrmData(null);
       setCrmPhone('');
+
+      if (isAutoDialing && autoDialIndex + 1 < applications.length) {
+        setAutoDialStatus('wrapup');
+        setWrapUpCountdown(5);
+      } else {
+        setIsAutoDialing(false);
+        setAutoDialStatus('idle');
+      }
     }, 2000);
   };
 
   const startCallWithApplication = async (app: ApplicationData) => {
+    const idx = applications.findIndex(a => a.id === app.id);
+    if (idx !== -1) {
+      setAutoDialIndex(idx);
+    }
     setActiveCallData(app);
     setIsCallActive(true);
     setAgentStatus('on_call');
@@ -593,9 +667,15 @@ export function CallCenterPortal(): JSX.Element {
   const fetchApplications = useCallback(async () => {
     setLoadingApplications(true);
     try {
-      const res = await fetch('/api/applications');
+      const res = await fetch('/api/v1/insurance-leads?limit=100');
       if (res.ok) {
-        const apps = await res.json();
+        const result = await res.json();
+        const apps = (result.data || []).map((lead: any) => ({
+          ...lead,
+          firstName: lead.firstName || '',
+          lastName: lead.lastName || '',
+          name: lead.fullName || `${lead.firstName || ''} ${lead.lastName || ''}`.trim() || 'Unnamed Lead',
+        }));
         setApplications(apps);
       }
     } catch (err) {
@@ -611,6 +691,40 @@ export function CallCenterPortal(): JSX.Element {
       void fetchApplications();
     }
   }, [currentView, fetchApplications]);
+
+  // Auto-Dialer Countdown Effect
+  useEffect(() => {
+    if (isAutoDialing && autoDialStatus === 'wrapup') {
+      if (wrapUpCountdown > 0) {
+        wrapUpTimerRef.current = setTimeout(() => {
+          setWrapUpCountdown(prev => prev - 1);
+        }, 1000);
+      } else {
+        // Countdown hit 0! Start next call
+        const nextIndex = autoDialIndex + 1;
+        if (nextIndex < applications.length) {
+          setAutoDialIndex(nextIndex);
+          setAutoDialStatus('calling');
+          const nextApp = applications[nextIndex];
+          if (nextApp) {
+            void startCallWithApplication(nextApp);
+          }
+        } else {
+          // End of queue
+          setIsAutoDialing(false);
+          setAutoDialStatus('idle');
+          setAutoDialIndex(0);
+          alert('Auto-dialer complete. All leads in the queue have been dialed.');
+        }
+      }
+    }
+    return () => {
+      if (wrapUpTimerRef.current) {
+        clearTimeout(wrapUpTimerRef.current);
+        wrapUpTimerRef.current = null;
+      }
+    };
+  }, [isAutoDialing, autoDialStatus, wrapUpCountdown, autoDialIndex, applications, startCallWithApplication]);
 
   // =========================================================================
   // ROLE SELECTION VIEW
@@ -894,46 +1008,90 @@ export function CallCenterPortal(): JSX.Element {
                 clearLead();
                 setCrmData(null);
                 setCrmPhone('');
+
+                if (isAutoDialing && autoDialIndex + 1 < applications.length) {
+                  setAutoDialStatus('wrapup');
+                  setWrapUpCountdown(5);
+                } else {
+                  setIsAutoDialing(false);
+                  setAutoDialStatus('idle');
+                }
               }}
             />
           )}
 
           {!isIncomingCall && !isCallActive && !showDisposition && (
-            <DialerPanel
-              phoneNumber={phoneNumber}
-              setPhoneNumber={setPhoneNumber}
-              formatPhoneNumber={formatPhoneNumber}
-              handleKeypadPress={handleKeypadPress}
-              disabled={false}
-              onDial={() => {
-                void (async () => {
-                  const dialNumber = phoneNumber.replace(/\D/g, '');
-                  if (dialNumber.length === 10) {
-                    const callData = {
-                      caller_id: dialNumber,
-                      first_name: 'Outbound',
-                      last_name: 'Call',
-                      phone: dialNumber,
-                    };
-                    setActiveCallData(callData);
-                    setIsCallActive(true);
-                    setAgentStatus('on_call');
-                    setCallTimer(0);
-                    setTotalCallsCount(prev => prev + 1);
-                    callTimerRef.current = setInterval(() => setCallTimer(prev => prev + 1), 1000);
-                    void fetchCrmData(dialNumber);
-                    try {
-                      await makeCall(dialNumber);
-                    } catch (e) {
-                      console.error(e);
-                      setIsCallActive(false);
-                      setAgentStatus('available');
-                      if (callTimerRef.current) clearInterval(callTimerRef.current);
+            isAutoDialing && autoDialStatus === 'wrapup' ? (
+              <div className="flex-1 p-6 bg-slate-900 border border-slate-800 rounded-xl flex flex-col justify-between">
+                <div>
+                  <h3 className="text-sm font-mono uppercase tracking-widest text-slate-400 mb-2">Auto-Dialer Queue</h3>
+                  <div className="text-xs text-slate-500 mb-4">Lead {autoDialIndex + 1} of {applications.length}</div>
+                  
+                  <div className="flex flex-col items-center justify-center py-8">
+                    <div className="relative flex items-center justify-center">
+                      <div className="w-24 h-24 rounded-full border-4 border-cyan-500/20 border-t-cyan-500 animate-spin absolute" />
+                      <div className="text-3xl font-bold text-white">{wrapUpCountdown}s</div>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-6 text-center font-medium">Wrap-up period active. Preparing to dial the next lead...</p>
+                  </div>
+                </div>
+                
+                <div className="space-y-2">
+                  <button
+                    onClick={() => setWrapUpCountdown(0)}
+                    className="w-full py-2.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-mono font-bold uppercase tracking-widest rounded-lg transition-colors flex items-center justify-center gap-2 text-xs"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    Dial Next Now
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsAutoDialing(false);
+                      setAutoDialStatus('paused');
+                    }}
+                    className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-red-400 font-mono font-bold uppercase tracking-widest rounded-lg border border-red-500/20 transition-colors text-xs"
+                  >
+                    Pause Dialer
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <DialerPanel
+                phoneNumber={phoneNumber}
+                setPhoneNumber={setPhoneNumber}
+                formatPhoneNumber={formatPhoneNumber}
+                handleKeypadPress={handleKeypadPress}
+                disabled={false}
+                onDial={() => {
+                  void (async () => {
+                    const dialNumber = phoneNumber.replace(/\D/g, '');
+                    if (dialNumber.length === 10) {
+                      const callData = {
+                        caller_id: dialNumber,
+                        first_name: 'Outbound',
+                        last_name: 'Call',
+                        phone: dialNumber,
+                      };
+                      setActiveCallData(callData);
+                      setIsCallActive(true);
+                      setAgentStatus('on_call');
+                      setCallTimer(0);
+                      setTotalCallsCount(prev => prev + 1);
+                      callTimerRef.current = setInterval(() => setCallTimer(prev => prev + 1), 1000);
+                      void fetchCrmData(dialNumber);
+                      try {
+                        await makeCall(dialNumber);
+                      } catch (e) {
+                        console.error(e);
+                        setIsCallActive(false);
+                        setAgentStatus('available');
+                        if (callTimerRef.current) clearInterval(callTimerRef.current);
+                      }
                     }
-                  }
-                })();
-              }}
-            />
+                  })();
+                }}
+              />
+            )
           )}
         </div>
 
@@ -1025,6 +1183,91 @@ export function CallCenterPortal(): JSX.Element {
                 appointmentRate={appointmentRate}
                 followUpCount={followUpCount}
               />
+              
+              {/* Auto-Dialer Control Panel */}
+              <div className="p-4 bg-slate-900 border border-slate-800 rounded-xl flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 shadow-lg">
+                <div className="flex items-center gap-3">
+                  <div className={`w-3 h-3 rounded-full ${
+                    isAutoDialing 
+                      ? autoDialStatus === 'paused' 
+                        ? 'bg-amber-500 animate-pulse' 
+                        : 'bg-emerald-500 animate-pulse' 
+                      : 'bg-slate-700'
+                  }`} />
+                  <div>
+                    <h3 className="text-sm font-bold text-white flex items-center gap-1.5 font-sans">
+                      Auto-Dialer Queue
+                      {isAutoDialing && (
+                        <span className="text-[10px] font-mono uppercase bg-cyan-400/20 text-cyan-400 px-1.5 py-0.5 rounded font-normal">
+                          {autoDialStatus}
+                        </span>
+                      )}
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5 font-sans">
+                      {applications.length > 0 
+                        ? `Loaded: ${applications.length} leads. Current index: ${autoDialIndex + 1}.` 
+                        : 'Queue is empty. Upload leads to start.'}
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => setShowUploadModal(true)}
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 text-white text-xs font-mono font-medium uppercase tracking-widest rounded-lg transition-all flex items-center gap-2"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    Upload Leads
+                  </button>
+                  
+                  {applications.length > 0 && (
+                    <>
+                      {isAutoDialing && autoDialStatus !== 'paused' ? (
+                        <button
+                          onClick={() => {
+                            setIsAutoDialing(false);
+                            setAutoDialStatus('paused');
+                          }}
+                          className="px-4 py-2 bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 text-amber-400 text-xs font-mono font-bold uppercase tracking-widest rounded-lg transition-all flex items-center gap-2"
+                        >
+                          <Pause className="w-3.5 h-3.5" />
+                          Pause Dialer
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setIsAutoDialing(true);
+                            setAutoDialStatus('calling');
+                            const lead = applications[autoDialIndex];
+                            if (lead) {
+                              void startCallWithApplication(lead);
+                            }
+                          }}
+                          className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-mono font-bold uppercase tracking-widest rounded-lg transition-all flex items-center gap-2 shadow-lg hover:shadow-cyan-500/10"
+                        >
+                          <Play className="w-3.5 h-3.5 fill-current" />
+                          Start Dialer
+                        </button>
+                      )}
+                      
+                      {autoDialIndex > 0 && (
+                        <button
+                          onClick={() => {
+                            setIsAutoDialing(false);
+                            setAutoDialStatus('idle');
+                            setAutoDialIndex(0);
+                          }}
+                          className="p-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-400 hover:text-white rounded-lg transition-all"
+                          title="Reset Dialer Queue"
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+
               <ApplicationQueue
                 applications={applications}
                 loadingApplications={loadingApplications}
@@ -1035,6 +1278,15 @@ export function CallCenterPortal(): JSX.Element {
           )}
         </div>
       </div>
+
+      {showUploadModal && (
+        <LeadUploadModal
+          onClose={() => setShowUploadModal(false)}
+          onImportComplete={() => {
+            void fetchApplications();
+          }}
+        />
+      )}
     </div>
   );
 }
