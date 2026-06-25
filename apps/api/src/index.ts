@@ -63,7 +63,12 @@ async function buildServer() {
   await registerAuth(server);
 
   // Register multipart for file uploads (must be before routes)
-  await server.register(multipart);
+  // Set default file size limit to 100MB to allow long call recordings
+  await server.register(multipart, {
+    limits: {
+      fileSize: 104857600, // 100MB
+    },
+  });
 
   // Global API key authentication for /api/v1/* routes
   const { createHash } = await import('crypto');
