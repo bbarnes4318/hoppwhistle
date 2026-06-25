@@ -3612,6 +3612,57 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
     }
   );
 
+  async function propagateLeadDisposition(
+    tenantId: string,
+    disposition: string,
+    phoneVal?: string | null,
+    notesVal?: string | null
+  ) {
+    if (!phoneVal) return;
+    const clean = phoneVal.replace(/\D/g, '');
+    const last10 = clean.length >= 10 ? clean.slice(-10) : clean;
+    if (last10.length < 10) return;
+
+    try {
+      const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+      const { updateLead } = await import('../services/insurance-lead-service.js');
+
+      // Find matching leads
+      const leads = await prisma.insuranceLead.findMany({
+        where: {
+          tenantId,
+          phone: { endsWith: last10 },
+        },
+      });
+
+      let leadStatus: 'NEW' | 'CONTACTED' | 'QUALIFIED' | 'CONVERTED' | 'LOST' = 'NEW';
+      if (disposition === 'APPLICATION_SUBMITTED') {
+        leadStatus = 'CONVERTED';
+      } else if (['SET_APPOINTMENT', 'SET_CALLBACK', 'FOLLOW_UP'].includes(disposition)) {
+        leadStatus = 'CONTACTED';
+      } else if (['NOT_INTERESTED', 'NOT_QUALIFIED', 'WRONG_NUMBER', 'DISCONNECTED'].includes(disposition)) {
+        leadStatus = 'LOST';
+      } else if (disposition === 'NO_ANSWER') {
+        leadStatus = 'NEW';
+      }
+
+      for (const lead of leads) {
+        const updates: Record<string, any> = {
+          status: leadStatus,
+          lastContactedAt: new Date(),
+        };
+        if (notesVal) {
+          updates.notes = lead.notes
+            ? `${lead.notes}\n[Call Note - ${new Date().toLocaleDateString()}]: ${notesVal}`
+            : notesVal;
+        }
+        await updateLead(tenantId, lead.id, updates);
+      }
+    } catch (err) {
+      console.error('[Disposition Propagation] Failed to update insurance lead:', err);
+    }
+  }
+
   // ── Disposition POST — Save/update disposition for a call ──
   const VALID_DISPOSITIONS = [
     'SET_APPOINTMENT',
@@ -3748,6 +3799,12 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
           ...recordingStatusUpdate,
         },
       });
+
+      const rawPhone = callerNumber || call.toNumber || call.callerId;
+      if (rawPhone) {
+        await propagateLeadDisposition(tenantId, disposition, rawPhone, notes);
+      }
+
       return {
         id: updated.id,
         callSid: updated.callSid,
@@ -3773,6 +3830,12 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
           ...updateData,
         },
       });
+
+      const rawPhone = callerNumber || newCall.toNumber || newCall.callerId;
+      if (rawPhone) {
+        await propagateLeadDisposition(tenantId, disposition, rawPhone, notes);
+      }
+
       void reply.code(201);
       return {
         id: newCall.id,
@@ -3841,6 +3904,16 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       where: { id: callId },
       data: updateData,
     });
+
+    const rawPhone = call.toNumber || call.callerId;
+    if (rawPhone && (disposition !== undefined || notes !== undefined)) {
+      await propagateLeadDisposition(
+        tenantId,
+        disposition !== undefined ? disposition : (call.disposition || 'NO_ANSWER'),
+        rawPhone,
+        notes
+      );
+    }
 
     return {
       id: updated.id,

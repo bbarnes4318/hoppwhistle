@@ -985,10 +985,10 @@ export function CallCenterPortal(): JSX.Element {
         setLeadLists(listsRes.data);
       }
 
-      // 2. Fetch leads in queue (filtered by list if selected)
+      // 2. Fetch leads in queue (filtered by list if selected, showing only NEW status leads)
       const url = selectedListId
-        ? `/api/v1/insurance-leads?limit=100&listId=${selectedListId}`
-        : '/api/v1/insurance-leads?limit=100';
+        ? `/api/v1/insurance-leads?limit=100&listId=${selectedListId}&status=NEW`
+        : '/api/v1/insurance-leads?limit=100&status=NEW';
 
       const res = await apiClient.get<any>(url);
       if (!res.error && res.data) {
