@@ -132,7 +132,14 @@ export function VerificationScriptPanel({
 
   // Set disposition helper
   const handleLogDisposition = useCallback((disposition: string, autoNote?: string) => {
-    if (setSelectedDisposition) setSelectedDisposition(disposition);
+    let mapped = disposition;
+    if (disposition === 'DENIES_APPLICATION') mapped = 'NOT_INTERESTED';
+    else if (disposition === 'PAYMENT_ISSUE') mapped = 'NOT_QUALIFIED';
+    else if (disposition === 'POLICY_DETAILS_WRONG') mapped = 'NOT_INTERESTED';
+    else if (disposition === 'POSSIBLE_PRESSURE_COACHING') mapped = 'NOT_QUALIFIED';
+    else if (disposition === 'NO_CONTACT') mapped = 'NO_ANSWER';
+
+    if (setSelectedDisposition) setSelectedDisposition(mapped);
     if (setCallNotes && autoNote) setCallNotes(autoNote);
     if (setShowDisposition) setShowDisposition(true);
   }, [setSelectedDisposition, setCallNotes, setShowDisposition]);

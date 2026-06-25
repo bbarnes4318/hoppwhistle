@@ -3665,16 +3665,18 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
 
   // ── Disposition POST — Save/update disposition for a call ──
   const VALID_DISPOSITIONS = [
-    'SET_APPOINTMENT',
-    'SET_CALLBACK',
-    'FOLLOW_UP',
+    'NO_ANSWER',
+    'DISCONNECTED',
     'NOT_INTERESTED',
     'NOT_QUALIFIED',
-    'NO_ANSWER',
+    'NO_MEMORY_CONFUSED',
     'WRONG_NUMBER',
-    'DISCONNECTED',
-    'APPLICATION_SUBMITTED',
+    'VERIFIED',
+    'FOLLOW_UP',
     'LIVE_TRANSFER',
+    'SET_APPOINTMENT',
+    'SET_CALLBACK',
+    'APPLICATION_SUBMITTED',
   ];
   const VALID_CALL_SOURCES = ['CALL_CENTER', 'SOFTPHONE', 'AI_VOICE'];
   const VALID_FOLLOW_UP_STATUSES = ['PENDING', 'COMPLETED', 'CANCELLED'];
