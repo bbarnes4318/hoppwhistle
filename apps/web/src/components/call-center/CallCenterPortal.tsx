@@ -1023,7 +1023,7 @@ export function CallCenterPortal(): JSX.Element {
       const cleanPhone = phoneNum.replace(/\D/g, '');
       void fetchCrmData(cleanPhone);
       try {
-        await makeCall(cleanPhone);
+        await makeCall(cleanPhone, 'ROTATE');
       } catch (error) {
         console.error('Failed to dial:', error);
       }

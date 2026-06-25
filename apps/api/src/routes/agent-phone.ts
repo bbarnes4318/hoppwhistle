@@ -321,9 +321,39 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
         }
 
         if (userNumbers.length > 0) {
-          const hasNumber = userNumbers.some(n => n.number === callerId || n.number.replace(/\D/g, '') === callerId?.replace(/\D/g, ''));
-          if (!hasNumber || !callerId) {
-            outboundCallerId = userNumbers[0].number;
+          if (callerId === 'ROTATE' || !callerId) {
+            // Filter pool for BulkVS numbers if available
+            const bulkVsNumbers = userNumbers.filter(
+              n => n.provider && n.provider.toLowerCase() === 'bulkvs'
+            );
+            const pool = bulkVsNumbers.length > 0 ? bulkVsNumbers : userNumbers;
+
+            // Sort pool by lastAssignedAt ascending (nulls first)
+            const sortedPool = [...pool].sort((a, b) => {
+              if (!a.lastAssignedAt && b.lastAssignedAt) return -1;
+              if (a.lastAssignedAt && !b.lastAssignedAt) return 1;
+              if (!a.lastAssignedAt && !b.lastAssignedAt) return 0;
+              const timeA = new Date(a.lastAssignedAt!).getTime();
+              const timeB = new Date(b.lastAssignedAt!).getTime();
+              return timeA - timeB;
+            });
+
+            const selectedRecord = sortedPool[0];
+            outboundCallerId = selectedRecord.number;
+
+            // Update lastAssignedAt to current time in DB
+            await prisma.phoneNumber.update({
+              where: { id: selectedRecord.id },
+              data: { lastAssignedAt: new Date() },
+            });
+            console.log(`[CallerID Rotation] Rotated to ${outboundCallerId} (provider: ${selectedRecord.provider || 'unknown'})`);
+          } else {
+            const hasNumber = userNumbers.some(n => n.number === callerId || n.number.replace(/\D/g, '') === callerId?.replace(/\D/g, ''));
+            if (!hasNumber) {
+              outboundCallerId = userNumbers[0].number;
+            } else {
+              outboundCallerId = callerId;
+            }
           }
         }
       }

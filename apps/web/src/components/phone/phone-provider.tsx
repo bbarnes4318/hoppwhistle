@@ -137,7 +137,7 @@ export interface PhoneContextType {
   closePhonePanel: () => void;
   togglePhonePanel: () => void;
   setDialerNumber: (number: string) => void; // Pre-fill dialer
-  makeCall: (phoneNumber: string) => Promise<void>;
+  makeCall: (phoneNumber: string, callerIdOverride?: string) => Promise<void>;
   answerCall: () => void;
   hangupCall: () => void;
   toggleMute: () => void;
@@ -772,7 +772,7 @@ export function PhoneProvider({
   const togglePhonePanel = useCallback(() => setIsPhonePanelOpen(prev => !prev), []);
 
   const makeCall = useCallback(
-    async (phoneNumber: string) => {
+    async (phoneNumber: string, callerIdOverride?: string) => {
       if (!userAgentRef.current || !isRegistered) {
         setError('Phone not connected');
         return;
@@ -800,7 +800,7 @@ export function PhoneProvider({
         const response = await fetch(url, {
           method: 'POST',
           headers: getApiHeaders(),
-          body: JSON.stringify({ phoneNumber, callerId: selectedCallerId || undefined }),
+          body: JSON.stringify({ phoneNumber, callerId: callerIdOverride || selectedCallerId || undefined }),
         });
 
         if (!response.ok) {
