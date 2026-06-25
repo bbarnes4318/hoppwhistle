@@ -181,7 +181,8 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     }
 
     try {
-      const { getPrismaClient, ingestLead } = await import('../services/insurance-lead-service.js');
+      const { ingestLead } = await import('../services/insurance-lead-service.js');
+      const { getPrismaClient } = await import('../lib/prisma.js');
       const prisma = getPrismaClient();
 
       let targetListId = reqListId || null;
@@ -340,7 +341,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
       return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
     }
 
-    const { getPrismaClient } = await import('../services/insurance-lead-service.js');
+    const { getPrismaClient } = await import('../lib/prisma.js');
     const prisma = getPrismaClient();
 
     const lists = await prisma.leadList.findMany({
