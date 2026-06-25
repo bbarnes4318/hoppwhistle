@@ -209,6 +209,23 @@ export function CallCenterPortal(): JSX.Element {
   const callSessionIdRef = useRef<string | null>(null);
   const callEndedTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Refs to avoid stale closures in setTimeout/useEffect
+  const callTimerValRef = useRef(0);
+  const activeCallDataRef = useRef<ProspectData | null>(null);
+  const handleSaveDispositionRef = useRef<any>(null);
+
+  useEffect(() => {
+    callTimerValRef.current = callTimer;
+  }, [callTimer]);
+
+  useEffect(() => {
+    activeCallDataRef.current = activeCallData;
+  }, [activeCallData]);
+
+  useEffect(() => {
+    handleSaveDispositionRef.current = handleSaveDisposition;
+  }, [handleSaveDisposition]);
+
   // Disposition
   const [selectedDisposition, setSelectedDisposition] = useState('');
   const [followUpDate, setFollowUpDate] = useState('');
@@ -336,12 +353,39 @@ export function CallCenterPortal(): JSX.Element {
           callEndedTimerRef.current = setTimeout(() => {
             // Re-check conditions after debounce
             if (!dispositionHandledRef.current && callSessionIdRef.current) {
-              console.log('[CallCenter] Call ended - triggering disposition modal');
+              console.log('[CallCenter] Call ended - checking for auto-disposition');
               if (callTimerRef.current) clearInterval(callTimerRef.current);
               dispositionHandledRef.current = true;
               setIsCallActive(false);
-              setShowDisposition(true);
-              setAgentStatus('available');
+
+              // Auto-disposition checks:
+              // 1. Never answered: duration is 0
+              // 2. Short call (< 20s) with no captured script details
+              const duration = callTimerValRef.current;
+              const activeLead = activeCallDataRef.current;
+              const hasCapturedData = activeLead && (
+                activeLead.ageRange ||
+                activeLead.responsiblePerson ||
+                activeLead.hasFinalExpenseCoverage ||
+                activeLead.hasBankAccount ||
+                activeLead.tobaccoStatus
+              );
+
+              if (duration === 0) {
+                console.log('[CallCenter] Auto-dispositioning: No Answer');
+                if (handleSaveDispositionRef.current) {
+                  void handleSaveDispositionRef.current('NO_ANSWER', 'Auto-dispositioned: No Answer / Ringing Timeout');
+                }
+              } else if (duration > 0 && duration < 20 && !hasCapturedData) {
+                console.log('[CallCenter] Auto-dispositioning: Voicemail / Short Call');
+                if (handleSaveDispositionRef.current) {
+                  void handleSaveDispositionRef.current('NO_ANSWER', `Auto-dispositioned: Voicemail / Short Call (${duration}s)`);
+                }
+              } else {
+                console.log('[CallCenter] Triggering manual disposition modal');
+                setShowDisposition(true);
+                setAgentStatus('available');
+              }
             }
             callEndedTimerRef.current = null;
           }, 2000);
@@ -688,32 +732,39 @@ export function CallCenterPortal(): JSX.Element {
     setIsAddingThirdParty(false);
   };
 
-  const handleSaveDisposition = async () => {
-    if (!selectedDisposition) return;
+  const handleSaveDisposition = async (autoDisp?: string, autoNotes?: string) => {
+    const disp = autoDisp || selectedDisposition;
+    if (!disp) return;
+
     let followUpAt: string | undefined;
-    if (followUpDate && followUpTime) {
-      followUpAt = new Date(`${followUpDate}T${followUpTime}`).toISOString();
-    } else if (followUpDate) {
-      followUpAt = new Date(`${followUpDate}T09:00:00`).toISOString();
+    if (!autoDisp) {
+      if (followUpDate && followUpTime) {
+        followUpAt = new Date(`${followUpDate}T${followUpTime}`).toISOString();
+      } else if (followUpDate) {
+        followUpAt = new Date(`${followUpDate}T09:00:00`).toISOString();
+      }
     }
+
+    const notes = autoNotes || callNotes;
+
     const callRecord: CallRecord = {
       id: 'record-' + Date.now(),
       notificationId: 'pop-' + Date.now(),
       prospect: activeCallData || {},
       timestamp: new Date().toISOString(),
-      disposition: selectedDisposition,
-      dispositionNotes: callNotes,
+      disposition: disp,
+      dispositionNotes: notes,
       callDuration: callTimer,
       callEndTime: new Date().toISOString(),
       callSource: 'CALL_CENTER',
       followUpAt,
     };
     setCallRecords(prev => [...prev, callRecord]);
-    if (selectedDisposition === 'APPLICATION_SUBMITTED') {
+    if (disp === 'APPLICATION_SUBMITTED') {
       setSalesCount(prev => prev + 1);
     } else {
       setFollowUpCount(prev => prev + 1);
-      if (selectedDisposition === 'SET_APPOINTMENT') {
+      if (disp === 'SET_APPOINTMENT') {
         setAppointmentsCount(prev => prev + 1);
       }
     }
@@ -814,9 +865,9 @@ export function CallCenterPortal(): JSX.Element {
         if (res.data?.insuranceLeadId) {
           const leadId = res.data.insuranceLeadId;
           const status =
-            (selectedDisposition === 'APPLICATION_SUBMITTED' || selectedDisposition === 'LIVE_TRANSFER')
+            (disp === 'APPLICATION_SUBMITTED' || disp === 'LIVE_TRANSFER')
               ? 'CONVERTED'
-              : 'CONTACTED';
+              : (disp === 'NO_ANSWER' ? 'NEW' : (['DISCONNECTED', 'NOT_INTERESTED', 'NOT_QUALIFIED'].includes(disp) ? 'LOST' : 'CONTACTED'));
           await apiClient.patch(`/api/v1/insurance-leads/${leadId}`, { status });
         }
       } catch (err) {
@@ -827,8 +878,8 @@ export function CallCenterPortal(): JSX.Element {
     try {
       const response = await apiClient.post('/api/v1/calls/disposition', {
         callId: callSessionIdRef.current,
-        disposition: selectedDisposition,
-        notes: callNotes,
+        disposition: disp,
+        notes,
         duration: callTimer,
         callerNumber: activeCallData?.caller_id || activeCallData?.phone,
         direction: 'OUTBOUND',
@@ -937,9 +988,7 @@ export function CallCenterPortal(): JSX.Element {
       }
     }
 
-    setDispositionSaved(true);
-    setTimeout(() => {
-      setDispositionSaved(false);
+    const resetStates = () => {
       setShowDisposition(false);
       setSelectedDisposition('');
       setFollowUpDate('');
@@ -961,7 +1010,17 @@ export function CallCenterPortal(): JSX.Element {
         setIsAutoDialing(false);
         setAutoDialStatus('idle');
       }
-    }, 2000);
+    };
+
+    if (autoDisp) {
+      resetStates();
+    } else {
+      setDispositionSaved(true);
+      setTimeout(() => {
+        setDispositionSaved(false);
+        resetStates();
+      }, 2000);
+    }
   };
 
   const startCallWithApplication = async (app: ApplicationData) => {
