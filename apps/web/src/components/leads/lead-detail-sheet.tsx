@@ -226,6 +226,7 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
   };
 
   useEffect(() => {
+    setEdits({});
     if (lead) {
       fetchUsers()
         .then(res => {
@@ -233,7 +234,7 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
         })
         .catch(err => console.error('Failed to load users:', err));
     }
-  }, [lead]);
+  }, [lead?.id]);
 
   const handleSave = () => {
     if (!lead || !hasEdits) return;
@@ -244,6 +245,51 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
     const transformedEdits = { ...edits };
     if (transformedEdits.doNotCall !== undefined) {
       transformedEdits.doNotCall = (transformedEdits.doNotCall === 'true') as unknown as boolean;
+    }
+
+    // Merge modified custom fields back into customFields object
+    const customFieldKeys = [
+      'aflacMonthlyQuote',
+      'aflacModifiedMonthlyQuote',
+      'sbliMonthlyQuote',
+      'sbliModifiedMonthlyQuote',
+      'cicaMonthlyQuote',
+      'cicaGiMonthlyQuote',
+      'gtlMonthlyQuote',
+      'transamericaMonthlyQuote',
+      'transamericaGradedMonthlyQuote',
+      'corebridgeMonthlyQuote',
+      'amamMonthlyQuote',
+      'amamGradedMonthlyQuote',
+      'amamReturnOrPremiumMonthlyQuote',
+      'ahlMonthlyQuote',
+      'ahlGradedMonthlyQuote',
+      'royalNeighborsMonthlyQuote',
+      'royalNeighborsGradedMonthlyQuote',
+      'gerberGiMonthlyQuote',
+      'mutualOfOmahaMonthlyQuote',
+      'mutualOfOmahaGradedMonthlyQuote',
+      'amamQuote',
+      'amamLessThanCurrent',
+      'gtlQuote',
+      'gtlLessThanCurrent',
+      'cheapestCarrierUnderCurrent',
+      'savingsVsCurrent',
+    ];
+
+    let customFieldsChanged = false;
+    const newCustomFields = { ...((lead.customFields as Record<string, unknown>) || {}) };
+
+    for (const key of customFieldKeys) {
+      if (transformedEdits[key] !== undefined) {
+        newCustomFields[key] = transformedEdits[key];
+        delete transformedEdits[key];
+        customFieldsChanged = true;
+      }
+    }
+
+    if (customFieldsChanged) {
+      transformedEdits.customFields = newCustomFields;
     }
 
     void updateInsuranceLead(lead.id, transformedEdits)
@@ -657,6 +703,219 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
                         label="Recording URL"
                         value={lead.recordingUrl}
                         fieldKey="recordingUrl"
+                        edits={edits}
+                        onEdit={handleEdit}
+                      />
+                    </div>
+                  </div>
+                </Section>
+              )}
+
+              {/* Carrier Quotes & Calculations (FE vertical only) */}
+              {lead.vertical === 'FE' && (
+                <Section title="Carrier Quotes & Calculations" defaultOpen={false}>
+                  <div className="grid grid-cols-2 gap-3">
+                    <EditField
+                      label="Aflac Monthly Quote"
+                      value={((lead.customFields as any)?.aflacMonthlyQuote ?? '') as string}
+                      fieldKey="aflacMonthlyQuote"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <EditField
+                      label="Aflac-Modified Monthly Quote"
+                      value={
+                        ((lead.customFields as any)?.aflacModifiedMonthlyQuote ?? '') as string
+                      }
+                      fieldKey="aflacModifiedMonthlyQuote"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <EditField
+                      label="SBLI Monthly Quote"
+                      value={((lead.customFields as any)?.sbliMonthlyQuote ?? '') as string}
+                      fieldKey="sbliMonthlyQuote"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <EditField
+                      label="SBLI-Modified Monthly Quote"
+                      value={((lead.customFields as any)?.sbliModifiedMonthlyQuote ?? '') as string}
+                      fieldKey="sbliModifiedMonthlyQuote"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <EditField
+                      label="CICA Monthly Quote"
+                      value={((lead.customFields as any)?.cicaMonthlyQuote ?? '') as string}
+                      fieldKey="cicaMonthlyQuote"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <EditField
+                      label="CICA-GI Monthly Quote"
+                      value={((lead.customFields as any)?.cicaGiMonthlyQuote ?? '') as string}
+                      fieldKey="cicaGiMonthlyQuote"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <EditField
+                      label="GTL Monthly Quote"
+                      value={((lead.customFields as any)?.gtlMonthlyQuote ?? '') as string}
+                      fieldKey="gtlMonthlyQuote"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <EditField
+                      label="TransAmerica Monthly Quote"
+                      value={((lead.customFields as any)?.transamericaMonthlyQuote ?? '') as string}
+                      fieldKey="transamericaMonthlyQuote"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <EditField
+                      label="TransAmerica Graded Monthly Quote"
+                      value={
+                        ((lead.customFields as any)?.transamericaGradedMonthlyQuote ?? '') as string
+                      }
+                      fieldKey="transamericaGradedMonthlyQuote"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <EditField
+                      label="Corebridge Monthly Quote"
+                      value={((lead.customFields as any)?.corebridgeMonthlyQuote ?? '') as string}
+                      fieldKey="corebridgeMonthlyQuote"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <EditField
+                      label="AmAm Monthly Quote"
+                      value={((lead.customFields as any)?.amamMonthlyQuote ?? '') as string}
+                      fieldKey="amamMonthlyQuote"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <EditField
+                      label="AmAm-Graded Monthly Quote"
+                      value={((lead.customFields as any)?.amamGradedMonthlyQuote ?? '') as string}
+                      fieldKey="amamGradedMonthlyQuote"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <EditField
+                      label="AmAm-Return or Premium Monthly Quote"
+                      value={
+                        ((lead.customFields as any)?.amamReturnOrPremiumMonthlyQuote ??
+                          '') as string
+                      }
+                      fieldKey="amamReturnOrPremiumMonthlyQuote"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <EditField
+                      label="AHL Monthly Quote"
+                      value={((lead.customFields as any)?.ahlMonthlyQuote ?? '') as string}
+                      fieldKey="ahlMonthlyQuote"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <EditField
+                      label="AHL-Graded Monthly Quote"
+                      value={((lead.customFields as any)?.ahlGradedMonthlyQuote ?? '') as string}
+                      fieldKey="ahlGradedMonthlyQuote"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <EditField
+                      label="Royal Neighbors Monthly Quote"
+                      value={
+                        ((lead.customFields as any)?.royalNeighborsMonthlyQuote ?? '') as string
+                      }
+                      fieldKey="royalNeighborsMonthlyQuote"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <EditField
+                      label="Royal Neighbors-Graded Monthly Quote"
+                      value={
+                        ((lead.customFields as any)?.royalNeighborsGradedMonthlyQuote ??
+                          '') as string
+                      }
+                      fieldKey="royalNeighborsGradedMonthlyQuote"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <EditField
+                      label="Gerber-GI Monthly Quote"
+                      value={((lead.customFields as any)?.gerberGiMonthlyQuote ?? '') as string}
+                      fieldKey="gerberGiMonthlyQuote"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <EditField
+                      label="Mutual of Omaha Monthly Quote"
+                      value={
+                        ((lead.customFields as any)?.mutualOfOmahaMonthlyQuote ?? '') as string
+                      }
+                      fieldKey="mutualOfOmahaMonthlyQuote"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <EditField
+                      label="Mutual of Omaha-Graded Monthly Quote"
+                      value={
+                        ((lead.customFields as any)?.mutualOfOmahaGradedMonthlyQuote ??
+                          '') as string
+                      }
+                      fieldKey="mutualOfOmahaGradedMonthlyQuote"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <EditField
+                      label="AmAm Quote"
+                      value={((lead.customFields as any)?.amamQuote ?? '') as string}
+                      fieldKey="amamQuote"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <EditField
+                      label="AmAm Less Than Current"
+                      value={((lead.customFields as any)?.amamLessThanCurrent ?? '') as string}
+                      fieldKey="amamLessThanCurrent"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <EditField
+                      label="GTL Quote"
+                      value={((lead.customFields as any)?.gtlQuote ?? '') as string}
+                      fieldKey="gtlQuote"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <EditField
+                      label="GTL Less Than Current"
+                      value={((lead.customFields as any)?.gtlLessThanCurrent ?? '') as string}
+                      fieldKey="gtlLessThanCurrent"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <div className="col-span-2">
+                      <EditField
+                        label="Cheapest Carrier Under Current"
+                        value={
+                          ((lead.customFields as any)?.cheapestCarrierUnderCurrent ?? '') as string
+                        }
+                        fieldKey="cheapestCarrierUnderCurrent"
+                        edits={edits}
+                        onEdit={handleEdit}
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <EditField
+                        label="Savings vs Current"
+                        value={((lead.customFields as any)?.savingsVsCurrent ?? '') as string}
+                        fieldKey="savingsVsCurrent"
                         edits={edits}
                         onEdit={handleEdit}
                       />
