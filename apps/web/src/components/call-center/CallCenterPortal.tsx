@@ -843,7 +843,10 @@ export function CallCenterPortal(): JSX.Element {
             (disp === 'APPLICATION_SUBMITTED' || disp === 'LIVE_TRANSFER')
               ? 'CONVERTED'
               : (disp === 'NO_ANSWER' ? 'NEW' : (['DISCONNECTED', 'NOT_INTERESTED', 'NOT_QUALIFIED'].includes(disp) ? 'LOST' : 'CONTACTED'));
-          await apiClient.patch(`/api/v1/insurance-leads/${leadId}`, { status });
+          await apiClient.patch(`/api/v1/insurance-leads/${leadId}`, {
+            status,
+            lastContactedAt: new Date().toISOString(),
+          });
         }
       } catch (err) {
         console.error('[CallCenter] CRM ingestion failed:', err);
@@ -956,6 +959,7 @@ export function CallCenterPortal(): JSX.Element {
           monthlyPremium: activeCallData.monthlyPremium,
           carrier: activeCallData.carrier,
           customFields: customFields,
+          lastContactedAt: new Date().toISOString(),
         });
         console.log('[CallCenter] CRM record updated successfully');
       } catch (err) {
