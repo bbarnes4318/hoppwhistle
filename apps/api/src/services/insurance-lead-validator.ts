@@ -173,6 +173,8 @@ const baseInboundSchema = z.object({
   agentName: z.string().optional(),
 
   // Custom / arbitrary fields from Call Center or other integrations
+  listId: z.string().optional(),
+  status: z.string().optional(),
   customFields: z.record(z.any()).optional(),
 });
 
