@@ -538,7 +538,10 @@ export async function getLeads(tenantId: string, filters: LeadFilters) {
           },
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [
+        { lastContactedAt: { sort: 'asc', nulls: 'first' } },
+        { createdAt: 'desc' },
+      ],
       take: limit,
       skip,
     }),

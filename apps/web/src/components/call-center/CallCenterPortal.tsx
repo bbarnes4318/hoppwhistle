@@ -344,49 +344,39 @@ export function CallCenterPortal(): JSX.Element {
     // Case 1: No active call from the SIP hook
     if (!currentCall) {
       // Only trigger disposition if we HAD an active call and haven't already handled it
-      // Use a debounce to avoid false triggers from SIP state flickers
       if (isCallActive && !dispositionHandledRef.current && callSessionIdRef.current) {
-        // Wait 2 seconds to confirm the call is truly ended (not a flicker)
-        if (!callEndedTimerRef.current) {
-          callEndedTimerRef.current = setTimeout(() => {
-            // Re-check conditions after debounce
-            if (!dispositionHandledRef.current && callSessionIdRef.current) {
-              console.log('[CallCenter] Call ended - checking for auto-disposition');
-              if (callTimerRef.current) clearInterval(callTimerRef.current);
-              dispositionHandledRef.current = true;
-              setIsCallActive(false);
+        console.log('[CallCenter] Call ended - checking for auto-disposition');
+        if (callTimerRef.current) clearInterval(callTimerRef.current);
+        dispositionHandledRef.current = true;
+        setIsCallActive(false);
 
-              // Auto-disposition checks:
-              // 1. Never answered: duration is 0
-              // 2. Short call (< 20s) with no captured script details
-              const duration = callTimerValRef.current;
-              const activeLead = activeCallDataRef.current;
-              const hasCapturedData = activeLead && (
-                activeLead.ageRange ||
-                activeLead.responsiblePerson ||
-                activeLead.hasFinalExpenseCoverage ||
-                activeLead.hasBankAccount ||
-                activeLead.tobaccoStatus
-              );
+        // Auto-disposition checks:
+        // 1. Never answered: duration is 0
+        // 2. Short call (< 20s) with no captured script details
+        const duration = callTimerValRef.current;
+        const activeLead = activeCallDataRef.current;
+        const hasCapturedData = activeLead && (
+          activeLead.ageRange ||
+          activeLead.responsiblePerson ||
+          activeLead.hasFinalExpenseCoverage ||
+          activeLead.hasBankAccount ||
+          activeLead.tobaccoStatus
+        );
 
-              if (duration === 0) {
-                console.log('[CallCenter] Auto-dispositioning: No Answer');
-                if (handleSaveDispositionRef.current) {
-                  void handleSaveDispositionRef.current('NO_ANSWER', 'Auto-dispositioned: No Answer / Ringing Timeout');
-                }
-              } else if (duration > 0 && duration < 20 && !hasCapturedData) {
-                console.log('[CallCenter] Auto-dispositioning: Voicemail / Short Call');
-                if (handleSaveDispositionRef.current) {
-                  void handleSaveDispositionRef.current('NO_ANSWER', `Auto-dispositioned: Voicemail / Short Call (${duration}s)`);
-                }
-              } else {
-                console.log('[CallCenter] Triggering manual disposition modal');
-                setShowDisposition(true);
-                setAgentStatus('available');
-              }
-            }
-            callEndedTimerRef.current = null;
-          }, 2000);
+        if (duration === 0) {
+          console.log('[CallCenter] Auto-dispositioning: No Answer');
+          if (handleSaveDispositionRef.current) {
+            void handleSaveDispositionRef.current('NO_ANSWER', 'Auto-dispositioned: No Answer / Ringing Timeout');
+          }
+        } else if (duration > 0 && duration < 20 && !hasCapturedData) {
+          console.log('[CallCenter] Auto-dispositioning: Voicemail / Short Call');
+          if (handleSaveDispositionRef.current) {
+            void handleSaveDispositionRef.current('NO_ANSWER', `Auto-dispositioned: Voicemail / Short Call (${duration}s)`);
+          }
+        } else {
+          console.log('[CallCenter] Triggering manual disposition modal');
+          setShowDisposition(true);
+          setAgentStatus('available');
         }
       }
       setIsIncomingCall(false);
@@ -715,19 +705,6 @@ export function CallCenterPortal(): JSX.Element {
     } catch (e) {
       console.error(e);
     }
-
-    // Only show disposition once per call session
-    if (!dispositionHandledRef.current && callSessionIdRef.current) {
-      dispositionHandledRef.current = true;
-      setShowDisposition(true);
-    }
-
-    setIsCallActive(false);
-    setAgentStatus('available');
-    setIsMuted(false);
-    setIsOnHold(false);
-    setThirdPartyConnected(false);
-    setIsAddingThirdParty(false);
   };
 
   const handleSaveDisposition = async (autoDisp?: string, autoNotes?: string) => {
@@ -1034,6 +1011,8 @@ export function CallCenterPortal(): JSX.Element {
     setIsCallActive(true);
     setAgentStatus('on_call');
     setCallTimer(0);
+    dispositionHandledRef.current = false;
+    callSessionIdRef.current = `call-${Date.now()}`;
     setTotalCallsCount(prev => prev + 1); // Count outbound application calls
     callTimerRef.current = setInterval(() => {
       setCallTimer(prev => prev + 1);
@@ -1555,7 +1534,17 @@ export function CallCenterPortal(): JSX.Element {
                 void handleSaveDisposition();
               }}
               onDispositionSelect={() => {}}
-              handleSkipDisposition={() => {
+              handleSkipDisposition={async () => {
+                const leadId = activeCallData?.id || crmData?.customer?.id;
+                if (leadId) {
+                  try {
+                    await apiClient.patch(`/api/v1/insurance-leads/${leadId}`, {
+                      lastContactedAt: new Date().toISOString(),
+                    });
+                  } catch (e) {
+                    console.error('Failed to update lastContactedAt on skip:', e);
+                  }
+                }
                 setShowDisposition(false);
                 setSelectedDisposition('');
                 setFollowUpDate('');
