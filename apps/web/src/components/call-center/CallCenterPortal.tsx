@@ -213,6 +213,7 @@ export function CallCenterPortal(): JSX.Element {
   const callTimerValRef = useRef(0);
   const activeCallDataRef = useRef<ProspectData | null>(null);
   const handleSaveDispositionRef = useRef<any>(null);
+  const wasAnsweredRef = useRef<boolean>(false);
 
   useEffect(() => {
     callTimerValRef.current = callTimer;
@@ -351,27 +352,11 @@ export function CallCenterPortal(): JSX.Element {
         setIsCallActive(false);
 
         // Auto-disposition checks:
-        // 1. Never answered: duration is 0
-        // 2. Short call (< 20s) with no captured script details
-        const duration = callTimerValRef.current;
-        const activeLead = activeCallDataRef.current;
-        const hasCapturedData = activeLead && (
-          activeLead.ageRange ||
-          activeLead.responsiblePerson ||
-          activeLead.hasFinalExpenseCoverage ||
-          activeLead.hasBankAccount ||
-          activeLead.tobaccoStatus
-        );
-
-        if (duration === 0) {
+        // Only auto-disposition if the call was NEVER answered/connected (e.g. no answer or disconnected number)
+        if (!wasAnsweredRef.current) {
           console.log('[CallCenter] Auto-dispositioning: No Answer');
           if (handleSaveDispositionRef.current) {
             void handleSaveDispositionRef.current('NO_ANSWER', 'Auto-dispositioned: No Answer / Ringing Timeout');
-          }
-        } else if (duration > 0 && duration < 20 && !hasCapturedData) {
-          console.log('[CallCenter] Auto-dispositioning: Voicemail / Short Call');
-          if (handleSaveDispositionRef.current) {
-            void handleSaveDispositionRef.current('NO_ANSWER', `Auto-dispositioned: Voicemail / Short Call (${duration}s)`);
           }
         } else {
           console.log('[CallCenter] Triggering manual disposition modal');
@@ -408,8 +393,13 @@ export function CallCenterPortal(): JSX.Element {
       if (!callSessionIdRef.current || callSessionIdRef.current !== currentCall.callId) {
         callSessionIdRef.current = currentCall.callId || `call-${Date.now()}`;
         dispositionHandledRef.current = false;
+        wasAnsweredRef.current = false;
         setTotalCallsCount(prev => prev + 1);
         console.log('[CallCenter] New call session started:', callSessionIdRef.current);
+      }
+
+      if (currentCall.state === 'active') {
+        wasAnsweredRef.current = true;
       }
 
       setIsIncomingCall(false);
@@ -943,6 +933,11 @@ export function CallCenterPortal(): JSX.Element {
           }
         });
 
+        const status =
+          (disp === 'APPLICATION_SUBMITTED' || disp === 'LIVE_TRANSFER')
+            ? 'CONVERTED'
+            : (disp === 'NO_ANSWER' ? 'NEW' : (['DISCONNECTED', 'NOT_INTERESTED', 'NOT_QUALIFIED'].includes(disp) ? 'LOST' : 'CONTACTED'));
+
         await updateInsuranceLead(resolvedLeadId, {
           firstName: activeCallData.firstName || activeCallData.first_name,
           lastName: activeCallData.lastName || activeCallData.last_name,
@@ -959,6 +954,7 @@ export function CallCenterPortal(): JSX.Element {
           monthlyPremium: activeCallData.monthlyPremium,
           carrier: activeCallData.carrier,
           customFields: customFields,
+          status,
           lastContactedAt: new Date().toISOString(),
         });
         console.log('[CallCenter] CRM record updated successfully');
