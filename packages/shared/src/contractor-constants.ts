@@ -24,6 +24,7 @@ export const DISPOSITIONS = [
   'POLICY_DETAILS_WRONG',
   'POSSIBLE_PRESSURE_COACHING',
   'NO_CONTACT',
+  'LIVE_TRANSFER',
 ] as const;
 
 export type DispositionValue = (typeof DISPOSITIONS)[number];
@@ -46,6 +47,7 @@ export const DISPOSITION_LABELS: Record<DispositionValue, string> = {
   POLICY_DETAILS_WRONG: 'Policy Details Wrong',
   POSSIBLE_PRESSURE_COACHING: 'Possible Pressure / Coaching',
   NO_CONTACT: 'No Contact',
+  LIVE_TRANSFER: 'Live Transfer',
 };
 
 /** Dispositions that require or strongly prompt for a follow-up date/time */
@@ -69,6 +71,7 @@ export const CONNECTED_DISPOSITIONS: DispositionValue[] = [
   'PAYMENT_ISSUE',
   'POLICY_DETAILS_WRONG',
   'POSSIBLE_PRESSURE_COACHING',
+  'LIVE_TRANSFER',
 ];
 
 /** Dispositions that count as non-conversation (excluded from connected count) */
@@ -97,6 +100,7 @@ export const DISPOSITION_COLORS: Record<DispositionValue, string> = {
   POLICY_DETAILS_WRONG: 'bg-orange-500/10 text-orange-400 border-orange-500/30',
   POSSIBLE_PRESSURE_COACHING: 'bg-red-500/10 text-red-400 border-red-500/30',
   NO_CONTACT: 'bg-slate-500/10 text-slate-400 border-slate-500/30',
+  LIVE_TRANSFER: 'bg-purple-500/10 text-purple-400 border-purple-500/30',
 };
 
 // ─── Call Sources ─────────────────────────────────────────────────────────────

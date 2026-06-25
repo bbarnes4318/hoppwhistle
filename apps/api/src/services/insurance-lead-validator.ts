@@ -167,47 +167,38 @@ const US_STATES = new Set([
 // Shared base schema — fields common to both ACA and FE inbound payloads
 // ---------------------------------------------------------------------------
 
+const optionalString = z.preprocess(
+  v => (v === '' || v === null ? undefined : v),
+  z.string().optional()
+);
+
 const baseInboundSchema = z.object({
-  // Contact — required
-  firstName: z.string().min(1, 'firstName is required').transform(trimName),
-  lastName: z.string().min(1, 'lastName is required').transform(trimName),
+  // Contact
+  firstName: optionalString.transform(v => (v ? trimName(v) : undefined)),
+  lastName: optionalString.transform(v => (v ? trimName(v) : undefined)),
   phone: z
     .string()
     .min(1, 'phone is required')
     .transform(normalizePhone)
     .refine(v => v.length === 10, 'phone must be exactly 10 digits'),
-  email: z
-    .string()
-    .min(1, 'email is required')
-    .transform(normalizeEmail)
-    .refine(v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), 'email must be valid'),
+  email: optionalString
+    .transform(v => (v ? normalizeEmail(v) : undefined))
+    .refine(v => !v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), 'email must be valid'),
 
-  // Location — required
-  address: z
-    .string()
-    .min(1, 'address is required')
-    .transform(v => v.trim()),
-  city: z
-    .string()
-    .min(1, 'city is required')
-    .transform(v => v.trim()),
-  state: z
-    .string()
-    .min(1, 'state is required')
-    .transform(normalizeState)
-    .refine(v => US_STATES.has(v), 'state must be a valid 2-letter US state'),
-  zipCode: z
-    .string()
-    .min(1, 'zipCode is required')
-    .transform(normalizeZip)
-    .refine(v => /^\d{5}$/.test(v), 'zipCode must be 5 digits'),
+  // Location
+  address: optionalString.transform(v => v?.trim()),
+  city: optionalString.transform(v => v?.trim()),
+  state: optionalString
+    .transform(v => (v ? normalizeState(v) : undefined))
+    .refine(v => !v || US_STATES.has(v), 'state must be a valid 2-letter US state'),
+  zipCode: optionalString
+    .transform(v => (v ? normalizeZip(v) : undefined))
+    .refine(v => !v || /^\d{5}$/.test(v), 'zipCode must be 5 digits'),
 
-  // Demographics — required
-  birthDate: z
-    .string()
-    .min(1, 'birthDate is required')
-    .transform(normalizeBirthDate)
-    .refine(v => /^\d{2}\/\d{2}\/\d{4}$/.test(v), 'birthDate must be MM/DD/YYYY'),
+  // Demographics
+  birthDate: optionalString
+    .transform(v => (v ? normalizeBirthDate(v) : undefined))
+    .refine(v => !v || /^\d{2}\/\d{2}\/\d{4}$/.test(v), 'birthDate must be MM/DD/YYYY'),
   age: z.union([z.number(), z.string().transform(v => parseInt(v, 10))]).optional(),
 
   // Optional common fields
@@ -281,6 +272,20 @@ const baseInboundSchema = z.object({
   cheapestCarrierUnderCurrent: z.string().optional(),
   savingsVsCurrent: z.string().optional(),
 
+  // Script transfer fields
+  ageRange: z.string().optional(),
+  hasFinalExpenseCoverage: z.string().optional(),
+  coverageType: z.string().optional(),
+  responsiblePerson: z.string().optional(),
+  financialBurden: z.string().optional(),
+  correctState: z.string().optional(),
+  tobaccoStatus: z.string().optional(),
+  tobaccoType: z.string().optional(),
+  majorHealthHistory: z.string().optional(),
+  majorHealthDetails: z.string().optional(),
+  hasBankAccount: z.string().optional(),
+  callbackTime: z.string().optional(),
+
   // Custom / arbitrary fields from Call Center or other integrations
   listId: z.string().optional(),
   status: z.string().optional(),
@@ -294,14 +299,18 @@ const baseInboundSchema = z.object({
 // ---------------------------------------------------------------------------
 
 export const acaInboundSchema = baseInboundSchema.extend({
-  // ACA-specific required fields
+  // ACA-specific fields (optional)
   heightFeet: z
-    .union([z.number(), z.string().transform(v => parseInt(v, 10))])
-    .refine(v => !isNaN(v) && v > 0, 'heightFeet is required and must be positive'),
+    .preprocess(v => (v === '' || v === null ? undefined : v), z.union([z.number(), z.string().transform(v => parseInt(v, 10))]))
+    .optional()
+    .refine(v => v === undefined || (!isNaN(v) && v > 0), 'heightFeet must be positive'),
   heightInches: z
-    .union([z.number(), z.string().transform(v => parseInt(v, 10))])
-    .refine(v => !isNaN(v) && v >= 0, 'heightInches is required and must be >= 0'),
-  weight: z.union([z.number().transform(v => String(v)), z.string().min(1, 'weight is required')]),
+    .preprocess(v => (v === '' || v === null ? undefined : v), z.union([z.number(), z.string().transform(v => parseInt(v, 10))]))
+    .optional()
+    .refine(v => v === undefined || (!isNaN(v) && v >= 0), 'heightInches must be >= 0'),
+  weight: z
+    .preprocess(v => (v === '' || v === null ? undefined : v), z.union([z.number().transform(v => String(v)), z.string()]))
+    .optional(),
 
   // Optional ACA fields
   gender: z
@@ -329,13 +338,11 @@ export const acaInboundSchema = baseInboundSchema.extend({
 // ---------------------------------------------------------------------------
 
 export const feInboundSchema = baseInboundSchema.extend({
-  // FE-specific required field
-  gender: z
-    .string()
-    .min(1, 'gender is required for FE leads')
-    .transform(normalizeGender)
+  // FE-specific fields (optional)
+  gender: optionalString
+    .transform(v => (v ? normalizeGender(v) : undefined))
     .refine(
-      v => ['Male', 'Female', 'Non-binary'].includes(v),
+      v => v === undefined || ['Male', 'Female', 'Non-binary'].includes(v),
       'gender must be Male, Female, or Non-binary'
     ),
 

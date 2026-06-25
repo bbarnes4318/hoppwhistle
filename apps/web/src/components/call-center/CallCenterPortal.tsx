@@ -45,6 +45,7 @@ import type {
 } from './types';
 import UnderwritingScriptPanel from './UnderwritingScriptPanel';
 import { VerificationScriptPanel } from './VerificationScriptPanel';
+import { ColdCallTransferScriptPanel } from './ColdCallTransferScriptPanel';
 import { WorkspaceTabs } from './WorkspaceTabs';
 
 import { CsvImportDialog } from '@/components/leads/csv-import-dialog';
@@ -790,6 +791,18 @@ export function CallCenterPortal(): JSX.Element {
           healthQ8b: activeCallData.healthQ8b,
           healthQ8c: activeCallData.healthQ8c,
           healthCovid: activeCallData.healthCovid,
+          // Script transfer fields
+          ageRange: activeCallData.ageRange || '',
+          hasFinalExpenseCoverage: activeCallData.hasFinalExpenseCoverage || '',
+          coverageType: activeCallData.coverageType || '',
+          responsiblePerson: activeCallData.responsiblePerson || '',
+          financialBurden: activeCallData.financialBurden || '',
+          correctState: activeCallData.correctState || '',
+          tobaccoStatus: activeCallData.tobaccoStatus || '',
+          tobaccoType: activeCallData.tobaccoType || '',
+          majorHealthHistory: activeCallData.majorHealthHistory || '',
+          majorHealthDetails: activeCallData.majorHealthDetails || '',
+          hasBankAccount: activeCallData.hasBankAccount || '',
         },
       };
 
@@ -801,7 +814,9 @@ export function CallCenterPortal(): JSX.Element {
         if (res.data?.insuranceLeadId) {
           const leadId = res.data.insuranceLeadId;
           const status =
-            selectedDisposition === 'APPLICATION_SUBMITTED' ? 'CONVERTED' : 'CONTACTED';
+            (selectedDisposition === 'APPLICATION_SUBMITTED' || selectedDisposition === 'LIVE_TRANSFER')
+              ? 'CONVERTED'
+              : 'CONTACTED';
           await apiClient.patch(`/api/v1/insurance-leads/${leadId}`, { status });
         }
       } catch (err) {
@@ -1599,6 +1614,19 @@ export function CallCenterPortal(): JSX.Element {
                       ) : selectedScript === 'verification' ? (
                         <VerificationScriptPanel
                           prospectData={activeCallData}
+                          onDataUpdate={(data: Record<string, unknown>) =>
+                            setActiveCallData(prev =>
+                              prev ? ({ ...prev, ...data } as ProspectData) : null
+                            )
+                          }
+                          setSelectedDisposition={setSelectedDisposition}
+                          setCallNotes={setCallNotes}
+                          setShowDisposition={setShowDisposition}
+                        />
+                      ) : selectedScript === 'cold_call_transfer' ? (
+                        <ColdCallTransferScriptPanel
+                          prospectData={activeCallData}
+                          leadId={activeCallData?.id}
                           onDataUpdate={(data: Record<string, unknown>) =>
                             setActiveCallData(prev =>
                               prev ? ({ ...prev, ...data } as ProspectData) : null

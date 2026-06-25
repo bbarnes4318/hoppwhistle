@@ -29,23 +29,23 @@ interface TargetField {
 }
 
 const TARGET_FIELDS: TargetField[] = [
-  { key: 'firstName', label: 'First Name', required: true, description: 'First name of prospect' },
-  { key: 'lastName', label: 'Last Name', required: true, description: 'Last name of prospect' },
+  { key: 'firstName', label: 'First Name', required: false, description: 'First name of prospect' },
+  { key: 'lastName', label: 'Last Name', required: false, description: 'Last name of prospect' },
   { key: 'phone', label: 'Phone Number', required: true, description: '10-digit phone number' },
   {
     key: 'email',
     label: 'Email Address',
-    required: true,
+    required: false,
     description: 'Email address of prospect',
   },
-  { key: 'address', label: 'Street Address', required: true, description: 'Home street address' },
-  { key: 'city', label: 'City', required: true, description: 'City name' },
-  { key: 'state', label: 'State', required: true, description: '2-letter state code' },
-  { key: 'zipCode', label: 'Zip Code', required: true, description: '5-digit zip code' },
+  { key: 'address', label: 'Street Address', required: false, description: 'Home street address' },
+  { key: 'city', label: 'City', required: false, description: 'City name' },
+  { key: 'state', label: 'State', required: false, description: '2-letter state code' },
+  { key: 'zipCode', label: 'Zip Code', required: false, description: '5-digit zip code' },
   {
     key: 'birthDate',
     label: 'Birth Date',
-    required: true,
+    required: false,
     description: 'Birthdate (MM/DD/YYYY or YYYY-MM-DD)',
   },
 
@@ -151,21 +151,21 @@ const TARGET_FIELDS: TargetField[] = [
   {
     key: 'heightFeet',
     label: 'Height (Feet)',
-    required: true,
+    required: false,
     vertical: 'ACA',
     description: 'Height in feet (e.g. 5)',
   },
   {
     key: 'heightInches',
     label: 'Height (Inches)',
-    required: true,
+    required: false,
     vertical: 'ACA',
     description: 'Height in inches (0-11)',
   },
   {
     key: 'weight',
     label: 'Weight (lbs)',
-    required: true,
+    required: false,
     vertical: 'ACA',
     description: 'Weight in pounds',
   },
@@ -195,7 +195,7 @@ const TARGET_FIELDS: TargetField[] = [
   {
     key: 'gender',
     label: 'Gender',
-    required: true,
+    required: false,
     vertical: 'FE',
     description: 'Male, Female, or Non-binary',
   },

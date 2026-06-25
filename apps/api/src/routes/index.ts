@@ -3636,7 +3636,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       });
 
       let leadStatus: 'NEW' | 'CONTACTED' | 'QUALIFIED' | 'CONVERTED' | 'LOST' = 'NEW';
-      if (disposition === 'APPLICATION_SUBMITTED') {
+      if (disposition === 'APPLICATION_SUBMITTED' || disposition === 'LIVE_TRANSFER') {
         leadStatus = 'CONVERTED';
       } else if (['SET_APPOINTMENT', 'SET_CALLBACK', 'FOLLOW_UP'].includes(disposition)) {
         leadStatus = 'CONTACTED';
@@ -3674,6 +3674,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
     'WRONG_NUMBER',
     'DISCONNECTED',
     'APPLICATION_SUBMITTED',
+    'LIVE_TRANSFER',
   ];
   const VALID_CALL_SOURCES = ['CALL_CENTER', 'SOFTPHONE', 'AI_VOICE'];
   const VALID_FOLLOW_UP_STATUSES = ['PENDING', 'COMPLETED', 'CANCELLED'];

@@ -71,6 +71,7 @@ export function CallCenterHeader({
             {canAccessRetentionScript && <option value="retention">Retention</option>}
             <option value="underwriting">Underwriting</option>
             <option value="verification">Verification</option>
+            <option value="cold_call_transfer">Cold Call Transfer</option>
           </select>
         </div>
 
