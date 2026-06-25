@@ -222,9 +222,7 @@ export function CallCenterPortal(): JSX.Element {
     activeCallDataRef.current = activeCallData;
   }, [activeCallData]);
 
-  useEffect(() => {
-    handleSaveDispositionRef.current = handleSaveDisposition;
-  }, [handleSaveDisposition]);
+
 
   // Disposition
   const [selectedDisposition, setSelectedDisposition] = useState('');
@@ -1022,6 +1020,10 @@ export function CallCenterPortal(): JSX.Element {
       }, 2000);
     }
   };
+
+  useEffect(() => {
+    handleSaveDispositionRef.current = handleSaveDisposition;
+  }, [handleSaveDisposition]);
 
   const startCallWithApplication = async (app: ApplicationData) => {
     const idx = applications.findIndex(a => a.id === app.id);
