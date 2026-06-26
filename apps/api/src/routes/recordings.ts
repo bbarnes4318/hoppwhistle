@@ -6,6 +6,16 @@ import { RecordingService } from '../services/recording-service.js';
 const recordingService = new RecordingService();
 const prisma = getPrismaClient();
 
+function getPublicApiBaseUrl(request: any): string {
+  const envUrl = process.env.PUBLIC_API_URL || process.env.API_PUBLIC_URL;
+  if (envUrl) {
+    return envUrl;
+  }
+  const protocol = (request.headers['x-forwarded-proto'] as string) || 'http';
+  const host = request.headers.host || 'localhost:3001';
+  return `${protocol}://${host}`;
+}
+
 /**
  * Recording management routes
  */
@@ -479,7 +489,8 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
         { expiresIn: '1h' }
       );
 
-      const playbackUrl = `/api/v1/recordings/${recordingId}/stream?token=${token}`;
+      const apiBaseUrl = getPublicApiBaseUrl(request);
+      const playbackUrl = `${apiBaseUrl.replace(/\/$/, '')}/api/v1/recordings/${recordingId}/stream?token=${token}`;
 
       return {
         url: playbackUrl,

@@ -342,8 +342,8 @@ function mapCallRecord(
   let payout = call.payout;
   let profit = call.profit;
   let cost = call.cost;
-  let recUrl: string | null = effectiveRecordingUrl;
   let absRecUrl: string | null = playbackUrls.primaryUrl;
+  let recUrl: string | null = absRecUrl;
   let allRecUrls: string | string[] = playbackUrls.allUrls;
   let callerId = call.callerId;
   let targetNumber = call.targetNumber;
