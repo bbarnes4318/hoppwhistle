@@ -9,9 +9,14 @@
 - [x] **Frontend Call Logs UI Upgrades**
   - [x] Upgrade columns in `apps/web/src/app/(dashboard)/calls/page.tsx` based on the user's role.
   - [x] Add filters for Publisher, Buyer, Campaign, and Dispute Status.
+  - [x] Fetch Lead Lists on Call Logs Page
+  - [x] Add Lead Lists Dropdown to Filter Panel
+  - [x] Pass listId query param in fetchCalls and handleExportCSV
   - [x] Build the interactive sliding `CallDetailDrawer` component.
   - [x] Implement drawer tabs: Timeline, Billing & Ledger, Ping/Post, Audio & Transcript, and Admin Actions.
   - [x] Integrate the detail drawer trigger on row click.
+- [x] **Deployment**
+  - [x] Commit, push, deploy, and verify changes on Hetzner server
 - [x] **Verification & Validation**
   - [x] Run type-checking on both backend and frontend to verify compilation of modified files.
   - [x] Confirm role-based views load correctly without leakage.

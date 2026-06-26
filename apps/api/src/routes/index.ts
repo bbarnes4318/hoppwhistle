@@ -20,6 +20,7 @@ function buildCallWhere(params: {
   publisherId?: string | null;
   campaignId?: string | null;
   disputeStatus?: string | null;
+  listPhoneNumbers?: string[];
 }) {
   const {
     tenantId,
@@ -34,6 +35,7 @@ function buildCallWhere(params: {
     publisherId,
     campaignId,
     disputeStatus,
+    listPhoneNumbers,
   } = params;
   const where: Record<string, any> = { tenantId };
 
@@ -90,6 +92,33 @@ function buildCallWhere(params: {
   }
 
   const andClauses: any[] = [];
+
+  if (listPhoneNumbers !== undefined) {
+    if (listPhoneNumbers.length === 0) {
+      andClauses.push({ id: 'none' });
+    } else {
+      const formatNumberList: string[] = [];
+      for (const rawPhone of listPhoneNumbers) {
+        const clean = rawPhone.replace(/\D/g, '');
+        const last10 = clean.length >= 10 ? clean.slice(-10) : clean;
+        if (last10.length === 10) {
+          formatNumberList.push(last10);
+          formatNumberList.push(`+1${last10}`);
+          formatNumberList.push(`1${last10}`);
+        }
+      }
+      if (formatNumberList.length > 0) {
+        andClauses.push({
+          OR: [
+            { toNumber: { in: formatNumberList } },
+            { callerId: { in: formatNumberList } },
+          ],
+        });
+      } else {
+        andClauses.push({ id: 'none' });
+      }
+    }
+  }
 
   if (phone) {
     andClauses.push({
@@ -2848,6 +2877,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       publisherId?: string;
       campaignId?: string;
       disputeStatus?: string;
+      listId?: string;
     };
   }>('/api/v1/calls', async (request, reply) => {
     const user = (request as AuthRequest).user;
@@ -2920,6 +2950,15 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       userNumbers = fetchedNumbers.map(n => n.number);
     }
 
+    let listPhoneNumbers: string[] | undefined = undefined;
+    if (request.query.listId && request.query.listId !== 'all') {
+      const leads = await prisma.insuranceLead.findMany({
+        where: { tenantId, listId: request.query.listId },
+        select: { phone: true },
+      });
+      listPhoneNumbers = leads.map(l => l.phone);
+    }
+
     const where = buildCallWhere({
       tenantId,
       isAdminOrOwner: profile.isAdminOrOwner,
@@ -2933,6 +2972,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       publisherId: profile.isAdminOrOwner ? request.query.publisherId : profile.publisherId,
       campaignId: request.query.campaignId,
       disputeStatus: request.query.disputeStatus,
+      listPhoneNumbers,
     });
 
     const [calls, total] = await Promise.all([
@@ -2980,6 +3020,11 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       search?: string;
       startDate?: string;
       endDate?: string;
+      buyerId?: string;
+      publisherId?: string;
+      campaignId?: string;
+      disputeStatus?: string;
+      listId?: string;
     };
   }>('/api/v1/calls/export.csv', async (request, reply) => {
     const user = (request as AuthRequest).user;
@@ -3037,6 +3082,15 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       userNumbers = fetchedNumbers.map(n => n.number);
     }
 
+    let listPhoneNumbers: string[] | undefined = undefined;
+    if (request.query.listId && request.query.listId !== 'all') {
+      const leads = await prisma.insuranceLead.findMany({
+        where: { tenantId, listId: request.query.listId },
+        select: { phone: true },
+      });
+      listPhoneNumbers = leads.map(l => l.phone);
+    }
+
     const where = buildCallWhere({
       tenantId,
       isAdminOrOwner: profile.isAdminOrOwner,
@@ -3046,8 +3100,11 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
       phone: request.query.phone,
       startDate,
       endDate,
-      buyerId: profile.buyerId,
-      publisherId: profile.publisherId,
+      buyerId: profile.isAdminOrOwner ? request.query.buyerId : profile.buyerId,
+      publisherId: profile.isAdminOrOwner ? request.query.publisherId : profile.publisherId,
+      campaignId: request.query.campaignId,
+      disputeStatus: request.query.disputeStatus,
+      listPhoneNumbers,
     });
 
     const apiBaseUrl = getPublicApiBaseUrl(request);

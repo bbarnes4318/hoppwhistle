@@ -179,11 +179,13 @@ export default function OperationsCallLogsPage() {
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [publishers, setPublishers] = useState<any[]>([]);
   const [buyers, setBuyers] = useState<any[]>([]);
+  const [leadLists, setLeadLists] = useState<any[]>([]);
 
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>('all');
   const [selectedPublisherId, setSelectedPublisherId] = useState<string>('all');
   const [selectedBuyerId, setSelectedBuyerId] = useState<string>('all');
   const [selectedDisputeStatus, setSelectedDisputeStatus] = useState<string>('all');
+  const [selectedListId, setSelectedListId] = useState<string>('all');
 
   const [datePreset, setDatePreset] = useState<string>('All Time');
   const [fromDate, setFromDate] = useState<string>('');
@@ -338,6 +340,12 @@ export default function OperationsCallLogsPage() {
           setCampaigns(list);
         }
 
+        const listsRes = await apiClient.get<any>('/api/v1/lead-lists');
+        if (listsRes.data) {
+          const list = Array.isArray(listsRes.data) ? listsRes.data : listsRes.data.data || [];
+          setLeadLists(list);
+        }
+
         if (isAdminOrOwner) {
           const pubRes = await apiClient.get<any>('/api/v1/publishers');
           if (pubRes.data) {
@@ -401,6 +409,9 @@ export default function OperationsCallLogsPage() {
       if (selectedDisputeStatus !== 'all') {
         queryParams.append('disputeStatus', selectedDisputeStatus);
       }
+      if (selectedListId !== 'all') {
+        queryParams.append('listId', selectedListId);
+      }
 
       const response = await apiClient.get<{ data: CallRecord[]; meta: { totalPages: number } }>(
         `/api/v1/calls?${queryParams.toString()}`
@@ -425,6 +436,7 @@ export default function OperationsCallLogsPage() {
     selectedPublisherId,
     selectedBuyerId,
     selectedDisputeStatus,
+    selectedListId,
   ]);
 
   useEffect(() => {
@@ -458,6 +470,7 @@ export default function OperationsCallLogsPage() {
       if (selectedBuyerId !== 'all') queryParams.append('buyerId', selectedBuyerId);
       if (selectedDisputeStatus !== 'all')
         queryParams.append('disputeStatus', selectedDisputeStatus);
+      if (selectedListId !== 'all') queryParams.append('listId', selectedListId);
 
       const headers: HeadersInit = {};
       const storedToken = localStorage.getItem('token');
@@ -750,7 +763,7 @@ export default function OperationsCallLogsPage() {
       </CompactPageHeader>
 
       {/* Filter Panel */}
-      <div className="bg-card border border-border/40 rounded-lg p-2.5 grid grid-cols-1 md:grid-cols-4 lg:grid-cols-6 gap-2.5 flex-shrink-0">
+      <div className="bg-card border border-border/40 rounded-lg p-2.5 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2.5 flex-shrink-0">
         {/* Search Box */}
         <div className="relative col-span-1 md:col-span-2">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -804,6 +817,29 @@ export default function OperationsCallLogsPage() {
               {campaigns.map(c => (
                 <SelectItem key={c.id} value={c.id}>
                   {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Lead List Filter */}
+        <div>
+          <Select
+            value={selectedListId}
+            onValueChange={val => {
+              setSelectedListId(val);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="bg-white/5 border-white/10 text-white">
+              <SelectValue placeholder="All Lead Lists" />
+            </SelectTrigger>
+            <SelectContent className="bg-slate-900 border-white/10 text-white">
+              <SelectItem value="all">All Lead Lists</SelectItem>
+              {leadLists.map(l => (
+                <SelectItem key={l.id} value={l.id}>
+                  {l.name}
                 </SelectItem>
               ))}
             </SelectContent>
