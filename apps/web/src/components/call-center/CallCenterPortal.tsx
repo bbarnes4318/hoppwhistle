@@ -214,6 +214,7 @@ export function CallCenterPortal(): JSX.Element {
   const activeCallDataRef = useRef<ProspectData | null>(null);
   const handleSaveDispositionRef = useRef<any>(null);
   const wasAnsweredRef = useRef<boolean>(false);
+  const hasHadActiveSessionRef = useRef<boolean>(false);
 
   useEffect(() => {
     callTimerValRef.current = callTimer;
@@ -344,19 +345,30 @@ export function CallCenterPortal(): JSX.Element {
 
     // Case 1: No active call from the SIP hook
     if (!currentCall) {
-      // Only trigger disposition if we HAD an active call and haven't already handled it
-      if (isCallActive && !dispositionHandledRef.current && callSessionIdRef.current) {
+      // Only trigger disposition if we HAD an active call, had a live session, and haven't already handled it
+      if (isCallActive && !dispositionHandledRef.current && callSessionIdRef.current && hasHadActiveSessionRef.current) {
         console.log('[CallCenter] Call ended - checking for auto-disposition');
         if (callTimerRef.current) clearInterval(callTimerRef.current);
         dispositionHandledRef.current = true;
         setIsCallActive(false);
+        hasHadActiveSessionRef.current = false;
 
         // Auto-disposition checks:
         // Only auto-disposition if the call was NEVER answered/connected (e.g. no answer or disconnected number)
         if (!wasAnsweredRef.current) {
-          console.log('[CallCenter] Auto-dispositioning: No Answer');
-          if (handleSaveDispositionRef.current) {
-            void handleSaveDispositionRef.current('NO_ANSWER', 'Auto-dispositioned: No Answer / Ringing Timeout');
+          const callStartTime = callSessionIdRef.current ? parseInt(callSessionIdRef.current.split('-')[1]) : 0;
+          const elapsedSeconds = callStartTime ? Math.floor((Date.now() - callStartTime) / 1000) : 0;
+
+          if (elapsedSeconds < 5) {
+            console.log('[CallCenter] Auto-dispositioning: Disconnected (elapsed < 5s)');
+            if (handleSaveDispositionRef.current) {
+              void handleSaveDispositionRef.current('DISCONNECTED', 'Auto-dispositioned: Number Disconnected / Immediately Terminated');
+            }
+          } else {
+            console.log('[CallCenter] Auto-dispositioning: No Answer');
+            if (handleSaveDispositionRef.current) {
+              void handleSaveDispositionRef.current('NO_ANSWER', 'Auto-dispositioned: No Answer / Ringing Timeout');
+            }
           }
         } else {
           console.log('[CallCenter] Triggering manual disposition modal');
@@ -385,6 +397,7 @@ export function CallCenterPortal(): JSX.Element {
         ...currentCall.prospectData,
       } as ProspectData);
       setAgentStatus('on_call');
+      hasHadActiveSessionRef.current = false; // Reset for incoming call
     }
 
     // Case 3: Call is active (connected)
@@ -394,9 +407,12 @@ export function CallCenterPortal(): JSX.Element {
         callSessionIdRef.current = currentCall.callId || `call-${Date.now()}`;
         dispositionHandledRef.current = false;
         wasAnsweredRef.current = false;
+        hasHadActiveSessionRef.current = false; // Reset for new session
         setTotalCallsCount(prev => prev + 1);
         console.log('[CallCenter] New call session started:', callSessionIdRef.current);
       }
+
+      hasHadActiveSessionRef.current = true; // Mark as having a live session
 
       if (currentCall.state === 'active') {
         wasAnsweredRef.current = true;
@@ -1012,6 +1028,8 @@ export function CallCenterPortal(): JSX.Element {
     setAgentStatus('on_call');
     setCallTimer(0);
     dispositionHandledRef.current = false;
+    wasAnsweredRef.current = false;
+    hasHadActiveSessionRef.current = false;
     callSessionIdRef.current = `call-${Date.now()}`;
     setTotalCallsCount(prev => prev + 1); // Count outbound application calls
     callTimerRef.current = setInterval(() => {
