@@ -358,6 +358,47 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
   });
 
   // -----------------------------------------------------------------------
+  // DELETE /api/v1/lead-lists/:id — Delete a lead list and its leads
+  // -----------------------------------------------------------------------
+  fastify.delete<{ Params: { id: string } }>('/api/v1/lead-lists/:id', async (request, reply) => {
+    const tenantId = getTenantId(request);
+    if (!tenantId) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+    }
+
+    const { id } = request.params;
+    const { getPrismaClient } = await import('../lib/prisma.js');
+    const prisma = getPrismaClient();
+
+    // Verify list exists and belongs to the tenant
+    const list = await prisma.leadList.findFirst({
+      where: { id, tenantId },
+    });
+
+    if (!list) {
+      void reply.code(404);
+      return { error: { code: 'NOT_FOUND', message: 'Lead list not found' } };
+    }
+
+    // Delete all leads in this list first
+    await prisma.insuranceLead.deleteMany({
+      where: {
+        tenantId,
+        listId: id,
+      },
+    });
+
+    // Delete the list itself
+    await prisma.leadList.delete({
+      where: { id },
+    });
+
+    return { success: true };
+  });
+
+
+  // -----------------------------------------------------------------------
   // GET /api/v1/insurance-leads/stats — Aggregate stats
   // -----------------------------------------------------------------------
   fastify.get('/api/v1/insurance-leads/stats', async (request, reply) => {

@@ -16,12 +16,14 @@ import {
   fetchInsuranceLead,
   fetchInsuranceLeadStats,
   deleteInsuranceLeads,
+  deleteLeadList,
 } from '@/lib/api/leads';
 import type {
   InsuranceLeadSummary,
   InsuranceLeadStats,
   InsuranceLeadDetail,
 } from '@/lib/api/leads';
+import { apiClient } from '@/lib/api';
 
 // ---------------------------------------------------------------------------
 // Filter Bar
@@ -35,6 +37,7 @@ interface Filters {
   search: string;
   status: string;
   followUp: string;
+  listId: string;
 }
 
 const EMPTY_FILTERS: Filters = {
@@ -45,6 +48,7 @@ const EMPTY_FILTERS: Filters = {
   search: '',
   status: '',
   followUp: '',
+  listId: '',
 };
 
 function FilterPill({
@@ -94,6 +98,7 @@ export default function InsuranceLeadsPage() {
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
+  const [leadLists, setLeadLists] = useState<any[]>([]);
 
   // Detail sheet
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
@@ -118,6 +123,7 @@ export default function InsuranceLeadsPage() {
         search: filters.search || undefined,
         status: filters.status || undefined,
         followUp: filters.followUp || undefined,
+        listId: filters.listId || undefined,
       });
       setLeads(result.data);
       setTotalLeads(result.meta.total);
@@ -142,6 +148,18 @@ export default function InsuranceLeadsPage() {
     }
   }, []);
 
+  // Fetch lead lists
+  const loadLists = useCallback(async () => {
+    try {
+      const response = await apiClient.get<any[]>('/api/v1/lead-lists');
+      if (!response.error && response.data) {
+        setLeadLists(response.data);
+      }
+    } catch {
+      // Silent fail
+    }
+  }, []);
+
   // Fetch lead detail
   const loadLeadDetail = useCallback(async (id: string) => {
     setDetailLoading(true);
@@ -159,7 +177,8 @@ export default function InsuranceLeadsPage() {
   useEffect(() => {
     void loadLeads();
     void loadStats();
-  }, [loadLeads, loadStats]);
+    void loadLists();
+  }, [loadLeads, loadStats, loadLists]);
 
   // Load detail when selected
   useEffect(() => {
@@ -169,6 +188,25 @@ export default function InsuranceLeadsPage() {
       setSelectedLead(null);
     }
   }, [selectedLeadId, loadLeadDetail]);
+
+  const handleDeleteList = async () => {
+    if (!filters.listId) return;
+    const selectedList = leadLists.find(l => l.id === filters.listId);
+    if (!selectedList) return;
+
+    const confirmMsg = `Are you sure you want to delete the lead list "${selectedList.name}" and all leads in it? This action cannot be undone.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      await deleteLeadList(filters.listId);
+      handleFilterChange('listId', '');
+      void loadLists();
+      void loadLeads();
+      void loadStats();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete lead list');
+    }
+  };
 
   // Handlers
   const handleFilterChange = (key: keyof Filters, value: string) => {
@@ -316,6 +354,33 @@ export default function InsuranceLeadsPage() {
             ]}
             onChange={v => handleFilterChange('followUp', v)}
           />
+
+          <div className="flex items-center gap-1.5">
+            <select
+              value={filters.listId}
+              onChange={e => handleFilterChange('listId', e.target.value)}
+              className="rounded-md border border-border bg-card px-2.5 py-1.5 text-xs text-foreground
+ outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors
+ appearance-none cursor-pointer"
+              aria-label="Lead List"
+            >
+              <option value="">All Lead Lists</option>
+              {leadLists.map(list => (
+                <option key={list.id} value={list.id}>
+                  {list.name} ({list._count?.leads ?? 0})
+                </option>
+              ))}
+            </select>
+            {filters.listId && (
+              <button
+                onClick={handleDeleteList}
+                className="p-1.5 text-red-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                title="Delete Selected Lead List"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            )}
+          </div>
 
           {/* Clear Filters */}
           {activeFilterCount > 0 && (

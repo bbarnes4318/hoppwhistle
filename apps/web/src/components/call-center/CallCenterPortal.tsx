@@ -17,6 +17,7 @@ import {
   RotateCcw,
   User,
   Database,
+  Trash2,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -54,7 +55,7 @@ import { useLeadInjection } from '@/hooks/useLeadInjection';
 import { useScriptAccess } from '@/hooks/useUserRoles';
 import { apiClient } from '@/lib/api';
 import type { CustomerLookupResponse } from '@/lib/api/leads';
-import { fetchCustomerLookup, updateInsuranceLead } from '@/lib/api/leads';
+import { fetchCustomerLookup, updateInsuranceLead, deleteLeadList, deleteInsuranceLeads } from '@/lib/api/leads';
 
 // ============================================================================
 // DEFAULT SCRIPT CONTENT FOR EDITOR
@@ -1085,6 +1086,41 @@ export function CallCenterPortal(): JSX.Element {
     }
   }, [selectedListId]);
 
+  const handleDeleteList = async () => {
+    if (!selectedListId) return;
+    const selectedList = leadLists.find(l => l.id === selectedListId);
+    if (!selectedList) return;
+
+    const confirmMsg = `Are you sure you want to delete the lead list "${selectedList.name}" and all leads in it? This action cannot be undone.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      await deleteLeadList(selectedListId);
+      setSelectedListId('');
+      setIsAutoDialing(false);
+      setAutoDialIndex(0);
+      setAutoDialStatus('idle');
+      void fetchApplications();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete lead list');
+    }
+  };
+
+  const handleDeleteLead = async (id: string) => {
+    const confirmMsg = `Are you sure you want to delete this lead? This action cannot be undone.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      await deleteInsuranceLeads([id]);
+      void fetchApplications();
+      if (autoDialIndex >= applications.length - 1) {
+        setAutoDialIndex(Math.max(0, applications.length - 2));
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete lead');
+    }
+  };
+
   useEffect(() => {
     if (currentView === 'agentDashboard') {
       void fetchApplications();
@@ -1846,6 +1882,17 @@ export function CallCenterPortal(): JSX.Element {
                     </select>
                   </div>
 
+                  {selectedListId && (
+                    <button
+                      onClick={handleDeleteList}
+                      className="px-4 py-2 bg-red-950/40 hover:bg-red-900/60 border border-red-900/50 hover:border-red-700 text-red-400 text-xs font-mono font-medium uppercase tracking-widest rounded-lg transition-all flex items-center gap-2"
+                      title="Delete Selected List"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Delete List
+                    </button>
+                  )}
+
                   <button
                     onClick={() => setShowUploadModal(true)}
                     className="px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 text-white text-xs font-mono font-medium uppercase tracking-widest rounded-lg transition-all flex items-center gap-2"
@@ -1905,6 +1952,7 @@ export function CallCenterPortal(): JSX.Element {
                 loadingApplications={loadingApplications}
                 fetchApplications={fetchApplications}
                 startCallWithApplication={startCallWithApplication}
+                onDeleteLead={handleDeleteLead}
               />
             </div>
           )}

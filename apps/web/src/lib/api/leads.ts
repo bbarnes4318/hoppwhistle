@@ -190,6 +190,7 @@ export async function fetchInsuranceLeads(params: {
   status?: string;
   leadStage?: string;
   followUp?: string;
+  listId?: string;
 }): Promise<LeadListResponse> {
   const queryParts: string[] = [];
   if (params.page) queryParts.push(`page=${params.page}`);
@@ -204,6 +205,7 @@ export async function fetchInsuranceLeads(params: {
   if (params.status) queryParts.push(`status=${params.status}`);
   if (params.leadStage) queryParts.push(`leadStage=${params.leadStage}`);
   if (params.followUp) queryParts.push(`followUp=${params.followUp}`);
+  if (params.listId) queryParts.push(`listId=${params.listId}`);
 
   const qs = queryParts.length ? `?${queryParts.join('&')}` : '';
   const res = await apiClient.get<LeadListResponse>(`/api/v1/insurance-leads${qs}`);
@@ -319,4 +321,10 @@ export async function bulkImportInsuranceLeads(
     { leads }
   );
   return res.data as unknown as { success: boolean; count: number };
+}
+
+export async function deleteLeadList(id: string): Promise<{ success: boolean }> {
+  const res = await apiClient.delete<{ success: boolean }>(`/api/v1/lead-lists/${id}`);
+  if (res.error) throw new Error(res.error.message);
+  return res.data as unknown as { success: boolean };
 }

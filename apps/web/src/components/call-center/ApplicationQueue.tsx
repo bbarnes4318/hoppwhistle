@@ -1,4 +1,4 @@
-import { Phone, RefreshCw } from 'lucide-react';
+import { Phone, RefreshCw, Trash2 } from 'lucide-react';
 import React from 'react';
 import type { ApplicationData } from './types';
 
@@ -7,6 +7,7 @@ interface ApplicationQueueProps {
   loadingApplications: boolean;
   fetchApplications: () => Promise<void>;
   startCallWithApplication: (app: ApplicationData) => Promise<void>;
+  onDeleteLead?: (id: string) => Promise<void>;
 }
 
 export function ApplicationQueue({
@@ -14,6 +15,7 @@ export function ApplicationQueue({
   loadingApplications,
   fetchApplications,
   startCallWithApplication,
+  onDeleteLead,
 }: ApplicationQueueProps) {
   return (
     <div className="flex-1 bg-card border border-border rounded overflow-hidden flex flex-col mt-4">
@@ -76,12 +78,23 @@ export function ApplicationQueue({
                     </span>
                   </td>
                   <td className="px-4 py-2 text-right">
-                    <button
-                      onClick={() => void startCallWithApplication(app)}
-                      className="px-3 py-1 bg-card border border-border hover:bg-muted text-foreground text-[10px] font-mono uppercase tracking-widest rounded transition-colors inline-block"
-                    >
-                      Call Out
-                    </button>
+                    <div className="flex items-center justify-end space-x-2">
+                      <button
+                        onClick={() => void startCallWithApplication(app)}
+                        className="px-3 py-1 bg-card border border-border hover:bg-muted text-foreground text-[10px] font-mono uppercase tracking-widest rounded transition-colors inline-block"
+                      >
+                        Call Out
+                      </button>
+                      {onDeleteLead && (
+                        <button
+                          onClick={() => void onDeleteLead(app.id)}
+                          className="p-1 hover:bg-red-500/10 text-slate-400 hover:text-red-400 rounded transition-colors"
+                          title="Delete Lead"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
