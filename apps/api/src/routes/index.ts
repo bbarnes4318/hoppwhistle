@@ -335,7 +335,24 @@ function mapCallRecord(
       });
   }
 
-  const playbackUrls = buildRecordingPlaybackUrls(call, apiBaseUrl);
+  let token: string | undefined = undefined;
+  if (request && request.server && (request.server as any).jwt && (request as any).user) {
+    try {
+      token = (request.server as any).jwt.sign(
+        {
+          tenantId: (request as any).user.tenantId,
+          userId: (request as any).user.userId,
+          email: (request as any).user.email,
+          roles: (request as any).user.roles || [],
+        },
+        { expiresIn: '7d' }
+      );
+    } catch (err) {
+      request.log?.error?.({ err }, 'Failed to synchronously sign JWT for recording URL');
+    }
+  }
+
+  const playbackUrls = buildRecordingPlaybackUrls(call, apiBaseUrl, token);
 
   // Apply financial masking based on role
   let revenue = call.revenue;
