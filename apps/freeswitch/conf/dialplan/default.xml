@@ -63,6 +63,7 @@
         <!-- Extract X-Caller-ID (mixed or lowercase) -->
         <action application="set" data="req_caller_id=${sip_h_X-Caller-ID}" inline="true"/>
         <action application="set" data="hopwhistle_call_id=${sip_h_X-Hopwhistle-Call-Id}" inline="true"/>
+        <action application="set" data="domain_name=$${domain}" inline="true"/>
       </condition>
 
       <!-- If req_caller_id is empty, fallback to lowercase -->
@@ -127,7 +128,7 @@
       <condition field="destination_number" expression="^\+?1?([2-9]\d{9})$">
         <action application="set" data="continue_on_fail=true"/>
         <action application="set" data="fail_on_single_reject=false"/>
-        <action application="bridge" data="sofia/gateway/signalwire/1$1|sofia/gateway/telnyx/1$1|sofia/gateway/bulkvs/1$1"/>
+        <action application="lua" data="outbound_route.lua"/>
         <action application="hangup" data="NORMAL_CLEARING"/>
       </condition>
     </extension>
