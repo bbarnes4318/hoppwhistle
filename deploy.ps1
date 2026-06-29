@@ -17,9 +17,9 @@ $remoteCommands = @(
     "git checkout edit-campaign-buyer-fix",
     "git pull origin edit-campaign-buyer-fix",
     "echo '>>> Rebuilding containers...'",
-    "docker compose -f infra/docker/docker-compose.dev.yml build api web freeswitch --no-cache",
+    "docker compose --env-file .env -f infra/docker/docker-compose.dev.yml build api web freeswitch --no-cache",
     "echo '>>> Starting stack...'",
-    "docker compose -f infra/docker/docker-compose.dev.yml up -d api web freeswitch",
+    "docker compose --env-file .env -f infra/docker/docker-compose.dev.yml up -d api web freeswitch",
     "echo '>>> Aligning database schema...'",
     "docker exec -u root hopwhistle-api-dev npx prisma db push --accept-data-loss"
 ) -join " && "
