@@ -126,10 +126,28 @@
 
       <!-- Bridge outbound call -->
       <condition field="destination_number" expression="^\+?1?([2-9]\d{9})$">
-        <action application="set" data="continue_on_fail=true"/>
-        <action application="set" data="fail_on_single_reject=false"/>
-        <action application="lua" data="outbound_route.lua"/>
+        <!-- Save the clean 10-digit number to clean_dest -->
+        <action application="set" data="clean_dest=$1" inline="true"/>
+        <!-- Lookup via HTTP GET API using mod_curl -->
+        <action application="set" data="lookup_response=${curl(http://api:3001/api/v1/freeswitch/lookup?did=%2b1$1)}" inline="true"/>
+        <!-- Extract the destination extension if it's a 4-digit number -->
+        <action application="set" data="local_ext=${regex(${lookup_response}|&quot;destination&quot;:&quot;(\d{4})&quot;|%1)}" inline="true"/>
+        <action application="log" data="INFO [OUTBOUND-LOOKUP] response=${lookup_response} local_ext=${local_ext}"/>
+      </condition>
+
+      <!-- Route call locally to extension if matched, otherwise failover to PSTN gateways -->
+      <condition field="${local_ext}" expression="^\d{4}$">
+        <!-- Local routing -->
+        <action application="log" data="INFO [OUTBOUND-LOCAL] Routing locally to extension ${local_ext}"/>
+        <action application="bridge" data="${sofia_contact(internal/${local_ext}@$${domain})}"/>
         <action application="hangup" data="NORMAL_CLEARING"/>
+        
+        <!-- PSTN Gateway routing (anti-action) -->
+        <anti-action application="log" data="INFO [OUTBOUND-PSTN] Routing to PSTN gateways for 1${clean_dest}"/>
+        <anti-action application="set" data="continue_on_fail=true"/>
+        <anti-action application="set" data="fail_on_single_reject=false"/>
+        <anti-action application="bridge" data="sofia/gateway/signalwire/1${clean_dest}|sofia/gateway/telnyx/1${clean_dest}|sofia/gateway/bulkvs/1${clean_dest}"/>
+        <anti-action application="hangup" data="NORMAL_CLEARING"/>
       </condition>
     </extension>
 
