@@ -219,6 +219,7 @@ services:
       OUTBOUND_SIP_PASS: ${OUTBOUND_SIP_PASS}
       OUTBOUND_CALLER_ID: ${OUTBOUND_CALLER_ID}
       PUBLIC_IP: ${PUBLIC_IP}
+      SIP_DOMAIN: ${SIP_DOMAIN:-freeswitch}
     volumes:
       - freeswitch_recordings:/recordings
       # Mount Let's Encrypt certs for WSS (on production servers only)
