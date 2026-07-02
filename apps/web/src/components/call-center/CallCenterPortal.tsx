@@ -26,8 +26,10 @@ import { SCRIPT_NODES } from '../../lib/call-center/scriptData';
 
 import { ActiveCallControls } from './ActiveCallControls';
 import { ApplicationQueue } from './ApplicationQueue';
+import { BetterPlanCallbackScriptPanel } from './BetterPlanCallbackScriptPanel';
 import { CallCenterHeader } from './CallCenterHeader';
 import { CapturedScriptDataPanel } from './CapturedScriptDataPanel';
+import { ColdCallTransferScriptPanel } from './ColdCallTransferScriptPanel';
 import { CustomerCrmPanel } from './CustomerCrmPanel';
 import { DispositionPanel } from './DispositionPanel';
 import { IncomingCallPanel } from './IncomingCallPanel';
@@ -46,7 +48,6 @@ import type {
 } from './types';
 import UnderwritingScriptPanel from './UnderwritingScriptPanel';
 import { VerificationScriptPanel } from './VerificationScriptPanel';
-import { ColdCallTransferScriptPanel } from './ColdCallTransferScriptPanel';
 import { WorkspaceTabs } from './WorkspaceTabs';
 
 import { CsvImportDialog } from '@/components/leads/csv-import-dialog';
@@ -55,7 +56,12 @@ import { useLeadInjection } from '@/hooks/useLeadInjection';
 import { useScriptAccess } from '@/hooks/useUserRoles';
 import { apiClient } from '@/lib/api';
 import type { CustomerLookupResponse } from '@/lib/api/leads';
-import { fetchCustomerLookup, updateInsuranceLead, deleteLeadList, deleteInsuranceLeads } from '@/lib/api/leads';
+import {
+  fetchCustomerLookup,
+  updateInsuranceLead,
+  deleteLeadList,
+  deleteInsuranceLeads,
+} from '@/lib/api/leads';
 
 // ============================================================================
 // DEFAULT SCRIPT CONTENT FOR EDITOR
@@ -167,7 +173,8 @@ export function CallCenterPortal(): JSX.Element {
 
   const [isMuted, setIsMuted] = useState(false);
   const [isOnHold, setIsOnHold] = useState(false);
-  const [thirdPartyConnected, setThirdPartyConnected] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [thirdPartyConnected, _setThirdPartyConnected] = useState(false);
   const [isAddingThirdParty, setIsAddingThirdParty] = useState(false);
 
   // CRM Customer Panel State
@@ -224,8 +231,6 @@ export function CallCenterPortal(): JSX.Element {
   useEffect(() => {
     activeCallDataRef.current = activeCallData;
   }, [activeCallData]);
-
-
 
   // Disposition
   const [selectedDisposition, setSelectedDisposition] = useState('');
@@ -347,7 +352,12 @@ export function CallCenterPortal(): JSX.Element {
     // Case 1: No active call from the SIP hook
     if (!currentCall) {
       // Only trigger disposition if we HAD an active call, had a live session, and haven't already handled it
-      if (isCallActive && !dispositionHandledRef.current && callSessionIdRef.current && hasHadActiveSessionRef.current) {
+      if (
+        isCallActive &&
+        !dispositionHandledRef.current &&
+        callSessionIdRef.current &&
+        hasHadActiveSessionRef.current
+      ) {
         console.log('[CallCenter] Call ended - checking for auto-disposition');
         if (callTimerRef.current) clearInterval(callTimerRef.current);
         dispositionHandledRef.current = true;
@@ -357,18 +367,28 @@ export function CallCenterPortal(): JSX.Element {
         // Auto-disposition checks:
         // Only auto-disposition if the call was NEVER answered/connected (e.g. no answer or disconnected number)
         if (!wasAnsweredRef.current) {
-          const callStartTime = callSessionIdRef.current ? parseInt(callSessionIdRef.current.split('-')[1]) : 0;
-          const elapsedSeconds = callStartTime ? Math.floor((Date.now() - callStartTime) / 1000) : 0;
+          const callStartTime = callSessionIdRef.current
+            ? parseInt(callSessionIdRef.current.split('-')[1])
+            : 0;
+          const elapsedSeconds = callStartTime
+            ? Math.floor((Date.now() - callStartTime) / 1000)
+            : 0;
 
           if (elapsedSeconds < 5) {
             console.log('[CallCenter] Auto-dispositioning: Disconnected (elapsed < 5s)');
             if (handleSaveDispositionRef.current) {
-              void handleSaveDispositionRef.current('DISCONNECTED', 'Auto-dispositioned: Number Disconnected / Immediately Terminated');
+              void handleSaveDispositionRef.current(
+                'DISCONNECTED',
+                'Auto-dispositioned: Number Disconnected / Immediately Terminated'
+              );
             }
           } else {
             console.log('[CallCenter] Auto-dispositioning: No Answer');
             if (handleSaveDispositionRef.current) {
-              void handleSaveDispositionRef.current('NO_ANSWER', 'Auto-dispositioned: No Answer / Ringing Timeout');
+              void handleSaveDispositionRef.current(
+                'NO_ANSWER',
+                'Auto-dispositioned: No Answer / Ringing Timeout'
+              );
             }
           }
         } else {
@@ -847,9 +867,13 @@ export function CallCenterPortal(): JSX.Element {
         if (res.data?.insuranceLeadId) {
           const leadId = res.data.insuranceLeadId;
           const status =
-            (disp === 'APPLICATION_SUBMITTED' || disp === 'LIVE_TRANSFER')
+            disp === 'APPLICATION_SUBMITTED' || disp === 'LIVE_TRANSFER'
               ? 'CONVERTED'
-              : (disp === 'NO_ANSWER' ? 'NEW' : (['DISCONNECTED', 'NOT_INTERESTED', 'NOT_QUALIFIED'].includes(disp) ? 'LOST' : 'CONTACTED'));
+              : disp === 'NO_ANSWER'
+                ? 'NEW'
+                : ['DISCONNECTED', 'NOT_INTERESTED', 'NOT_QUALIFIED'].includes(disp)
+                  ? 'LOST'
+                  : 'CONTACTED';
           await apiClient.patch(`/api/v1/insurance-leads/${leadId}`, {
             status,
             lastContactedAt: new Date().toISOString(),
@@ -951,9 +975,13 @@ export function CallCenterPortal(): JSX.Element {
         });
 
         const status =
-          (disp === 'APPLICATION_SUBMITTED' || disp === 'LIVE_TRANSFER')
+          disp === 'APPLICATION_SUBMITTED' || disp === 'LIVE_TRANSFER'
             ? 'CONVERTED'
-            : (disp === 'NO_ANSWER' ? 'NEW' : (['DISCONNECTED', 'NOT_INTERESTED', 'NOT_QUALIFIED'].includes(disp) ? 'LOST' : 'CONTACTED'));
+            : disp === 'NO_ANSWER'
+              ? 'NEW'
+              : ['DISCONNECTED', 'NOT_INTERESTED', 'NOT_QUALIFIED'].includes(disp)
+                ? 'LOST'
+                : 'CONTACTED';
 
         await updateInsuranceLead(resolvedLeadId, {
           firstName: activeCallData.firstName || activeCallData.first_name,
@@ -1588,16 +1616,16 @@ export function CallCenterPortal(): JSX.Element {
                 void handleSaveDisposition();
               }}
               onDispositionSelect={() => {}}
-              handleSkipDisposition={async () => {
+              handleSkipDisposition={() => {
                 const leadId = activeCallData?.id || crmData?.customer?.id;
                 if (leadId) {
-                  try {
-                    await apiClient.patch(`/api/v1/insurance-leads/${leadId}`, {
+                  apiClient
+                    .patch(`/api/v1/insurance-leads/${leadId}`, {
                       lastContactedAt: new Date().toISOString(),
+                    })
+                    .catch(e => {
+                      console.error('Failed to update lastContactedAt on skip:', e);
                     });
-                  } catch (e) {
-                    console.error('Failed to update lastContactedAt on skip:', e);
-                  }
                 }
                 setShowDisposition(false);
                 setSelectedDisposition('');
@@ -1729,6 +1757,19 @@ export function CallCenterPortal(): JSX.Element {
                         />
                       ) : selectedScript === 'cold_call_transfer' ? (
                         <ColdCallTransferScriptPanel
+                          prospectData={activeCallData}
+                          leadId={activeCallData?.id}
+                          onDataUpdate={(data: Record<string, unknown>) =>
+                            setActiveCallData(prev =>
+                              prev ? ({ ...prev, ...data } as ProspectData) : null
+                            )
+                          }
+                          setSelectedDisposition={setSelectedDisposition}
+                          setCallNotes={setCallNotes}
+                          setShowDisposition={setShowDisposition}
+                        />
+                      ) : selectedScript === 'better_plan_callback' ? (
+                        <BetterPlanCallbackScriptPanel
                           prospectData={activeCallData}
                           leadId={activeCallData?.id}
                           onDataUpdate={(data: Record<string, unknown>) =>
@@ -1884,7 +1925,9 @@ export function CallCenterPortal(): JSX.Element {
 
                   {selectedListId && (
                     <button
-                      onClick={handleDeleteList}
+                      onClick={() => {
+                        void handleDeleteList();
+                      }}
                       className="px-4 py-2 bg-red-950/40 hover:bg-red-900/60 border border-red-900/50 hover:border-red-700 text-red-400 text-xs font-mono font-medium uppercase tracking-widest rounded-lg transition-all flex items-center gap-2"
                       title="Delete Selected List"
                     >

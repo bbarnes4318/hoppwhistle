@@ -5,3 +5,4 @@ export { ScriptPanel } from './ScriptPanel';
 export { QuotePanel } from './QuotePanel';
 export { CapturedScriptDataPanel } from './CapturedScriptDataPanel';
 export { PreClosedStatsCard } from './PreClosedStatsCard';
+export { BetterPlanCallbackScriptPanel } from './BetterPlanCallbackScriptPanel';
