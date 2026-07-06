@@ -222,6 +222,12 @@ services:
       - BULKVS_USERNAME=jimmy@getlifeassurance.com
       - BULKVS_PASSWORD=50e77367256f3bd823f44d13dc1e8d17
       - BULKVS_TRUNK_GROUP=pvn
+      # American Amicable carrier-application RPA (values sourced from .env)
+      - AMERICAN_AMICABLE_AGENT_ID=${AMERICAN_AMICABLE_AGENT_ID}
+      - AMERICAN_AMICABLE_PASSWORD=${AMERICAN_AMICABLE_PASSWORD}
+      - AMERICAN_AMICABLE_SIGNATURE_NAME=${AMERICAN_AMICABLE_SIGNATURE_NAME}
+      - FIELD_ENCRYPTION_KEY=${FIELD_ENCRYPTION_KEY}
+      - PUPPETEER_EXECUTABLE_PATH=${PUPPETEER_EXECUTABLE_PATH:-/usr/bin/chromium-browser}
     depends_on:
       redis:
         condition: service_healthy
