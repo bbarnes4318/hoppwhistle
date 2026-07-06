@@ -35,7 +35,7 @@ const sidebarSections: SidebarSection[] = [
       { name: 'Dashboard', href: '/music-console', icon: LayoutDashboard },
       { name: 'Fan Campaigns', href: '/music-console/campaigns', icon: Megaphone },
       { name: 'Campaign Map', href: '/music-console/map', icon: Map },
-      { name: 'RPS Voice', href: '/music-console/voice', icon: Volume2 },
+      { name: 'Voice AI', href: '/music-console/voice', icon: Volume2 },
       { name: 'Customer Demo', href: '/music-console/customer-demo', icon: Smartphone },
     ],
   },

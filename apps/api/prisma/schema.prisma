@@ -63,6 +63,7 @@ model Tenant {
   didRoutes                DidRoute[]
   campaignPublishers       CampaignPublisher[]
   campaignBuyers           CampaignBuyer[]
+  voiceAgents              VoiceAgent[]
 
   @@index([slug])
   @@index([status])
@@ -198,6 +199,7 @@ model User {
   timeEntries    TimeEntry[]
   financials     UserFinancials?
   payrollPayouts PayrollPayout[]
+  voiceAgents    VoiceAgent[]
 
   @@index([tenantId, email])
   @@index([tenantId, status])
@@ -2615,4 +2617,25 @@ model InsuranceTask {
   @@index([assignedToId])
   @@index([dueAt])
   @@map("insurance_tasks")
+}
+
+model VoiceAgent {
+  id              String   @id @default(uuid())
+  tenantId        String
+  userId          String?
+  vapiAssistantId String   @unique
+  displayName     String
+  status          String   @default("active")
+  source          String   @default("music-console")
+  metadata        Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([tenantId, source])
+  @@index([userId])
+  @@map("voice_agents")
 }

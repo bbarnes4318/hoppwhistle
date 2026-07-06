@@ -16,6 +16,7 @@ export function MusicConsoleShell({ children }: { children: React.ReactNode }) {
     if (pathname === '/music-console') return 'Dashboard';
     if (pathname?.startsWith('/music-console/campaigns')) return 'Fan Campaigns';
     if (pathname?.startsWith('/music-console/map')) return 'Campaign Map';
+    if (pathname?.startsWith('/music-console/voice')) return 'Voice AI';
     if (pathname?.startsWith('/music-console/fans')) return 'Fan Database';
     if (pathname?.startsWith('/music-console/proof')) return 'Voice Proof';
     if (pathname?.startsWith('/music-console/reports')) return 'Campaign Reports';

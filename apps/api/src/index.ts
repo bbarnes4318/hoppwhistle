@@ -347,6 +347,11 @@ async function buildServer() {
   await server.register(registerAICampaignRoutes);
   await server.register(registerVapiWebhookRoutes);
 
+  // Register Music Console Voice routes
+  const { registerMusicVoiceRoutes } = await import('./routes/music-console-voice.js');
+  await server.register(registerMusicVoiceRoutes);
+
+
   // Register SignalWire webhook routes (voice, SMS, status callbacks, RELAY events)
   const { registerSignalWireWebhookRoutes } = await import('./routes/signalwire-webhooks.js');
   await server.register(registerSignalWireWebhookRoutes);
