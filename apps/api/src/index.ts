@@ -81,7 +81,7 @@ async function buildServer() {
     }
 
     const authHeader = request.headers.authorization;
-    const queryToken = (request.query as any)?.token;
+    const queryToken = (request.query as { token?: string } | undefined)?.token;
 
     // Try JWT first
     if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -106,7 +106,7 @@ async function buildServer() {
     // Fallback to Demo Tenant ID if present and JWT failed/absent
     const demoTenantId =
       (request.headers['x-demo-tenant-id'] as string | undefined) ||
-      (request.query as any)?.demoTenantId;
+      (request.query as { demoTenantId?: string } | undefined)?.demoTenantId;
 
     if (demoTenantId) {
       request.user = {
@@ -315,8 +315,8 @@ async function buildServer() {
   await server.register(registerBuyerBillingRoutes);
 
   // Register Automation routes (carrier application RPA)
-  const automationRoutes = await import('./routes/automation.js');
-  await server.register(automationRoutes.default, { prefix: '/api/automation' });
+  const { registerAutomationRoutes } = await import('./routes/automation.js');
+  await server.register(registerAutomationRoutes);
 
   // Register Lead Injection routes (pre-call data webhook)
   const { registerLeadInjectRoutes } = await import('./routes/lead-inject.js');

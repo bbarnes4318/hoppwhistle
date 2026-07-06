@@ -2687,3 +2687,132 @@ model VoiceAgent {
   @@index([userId])
   @@map("voice_agents")
 }
+
+// ============================================================================
+// Carrier Application RPA (American Amicable final expense submission)
+// ============================================================================
+
+enum CarrierAutomationStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+model InsuranceCarrierApplication {
+  id       String @id @default(uuid())
+  tenantId String
+
+  // Optional linkage to other records (plain ID columns, no FK relations,
+  // so no phone/lead models are modified by this feature)
+  insuranceLeadId  String?
+  prospectIntakeId String?
+  callId           String?
+
+  // Product
+  carrier        String   @default("American Amicable")
+  product        String   @default("Senior Choice")
+  planType       String? // Level | Graded | ROP
+  monthlyPremium Decimal? @db.Decimal(10, 2)
+  faceAmount     Int?
+  status         String   @default("PENDING")
+
+  // Applicant
+  firstName    String
+  middleName   String?
+  lastName     String
+  address      String?
+  city         String?
+  state        String? // Full state name as required by the carrier portal
+  zip          String?
+  phone        String? // digits only
+  email        String?
+  dob          String? // MM/DD/YYYY
+  age          Int?
+  gender       String?
+  tobacco      Boolean @default(false)
+  stateOfBirth String? // 2-letter code
+  heightFeet   Int?
+  heightInches Int?
+  weight       Int?
+
+  // Sensitive (AES-256-GCM encrypted at rest; only last-4 exposed via API)
+  ssnEncrypted           String?
+  ssnLast4               String?
+  routingNumberEncrypted String?
+  routingNumberLast4     String?
+  accountNumberEncrypted String?
+  accountNumberLast4     String?
+  accountHolder          String?
+  accountType            String? // Checking | Saving
+  bankName               String?
+  bankCityState          String?
+  draftSchedule          String? // ss_payment | day_of_month
+  draftDay               String?
+
+  // Beneficiaries
+  beneficiaryName              String?
+  beneficiaryRelation          String?
+  contingentBeneficiaryName    String?
+  contingentBeneficiaryRelation String?
+
+  // Owner / Payor
+  ownerIsInsured Boolean @default(true)
+  payorIsInsured Boolean @default(true)
+  ownerName      String?
+  ownerRelation  String?
+  ownerAddress   String?
+
+  // Existing insurance
+  hasExistingInsurance   Boolean @default(false)
+  willReplaceExisting    Boolean @default(false)
+  existingCompanyName    String?
+  existingPolicyNumber   String?
+  existingCoverageAmount String?
+
+  // Doctor
+  doctorName    String?
+  doctorAddress String?
+  doctorPhone   String?
+
+  // Health questions
+  healthQ1    Boolean @default(false)
+  healthQ2    Boolean @default(false)
+  healthQ3    Boolean @default(false)
+  healthQ4    Boolean @default(false)
+  healthQ5    Boolean @default(false)
+  healthQ6    Boolean @default(false)
+  healthQ7a   Boolean @default(false)
+  healthQ7b   Boolean @default(false)
+  healthQ7c   Boolean @default(false)
+  healthQ7d   Boolean @default(false)
+  healthQ8a   Boolean @default(false)
+  healthQ8b   Boolean @default(false)
+  healthQ8c   Boolean @default(false)
+  healthCovid Boolean @default(false)
+
+  // Illinois-specific
+  ilDesigneeChoice String?
+
+  // Automation tracking
+  carrierApplicationNumber String?
+  automationJobId          String?                 @unique
+  automationStatus         CarrierAutomationStatus @default(PENDING)
+  automationError          String?
+  automationStartedAt      DateTime?
+  automationCompletedAt    DateTime?
+  lastDebugSnapshotPath    String?
+
+  // Audit
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?
+
+  @@index([tenantId])
+  @@index([tenantId, phone])
+  @@index([tenantId, createdAt])
+  @@index([prospectIntakeId])
+  @@index([insuranceLeadId])
+  @@index([callId])
+  @@map("insurance_carrier_applications")
+}
