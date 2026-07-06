@@ -580,7 +580,7 @@ export default function MusicVoicePage() {
                 <Plus className="h-3 w-3" /> Create Voice AI Agent
               </button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[550px] bg-[var(--m-surface)] border border-[var(--m-border)] text-[var(--m-text)]">
+            <DialogContent className="music-console m-dark-mode sm:max-w-[550px] bg-[var(--m-surface)] border border-[var(--m-border)] text-[var(--m-text)] shadow-2xl z-[9999]">
               <DialogHeader>
                 <DialogTitle className="text-sm font-bold uppercase tracking-wider text-[var(--m-text)]">Create Voice AI Agent</DialogTitle>
                 <DialogDescription className="text-xs text-[var(--m-muted)]">
