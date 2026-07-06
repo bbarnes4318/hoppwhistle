@@ -19,6 +19,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api';
+import { RoleGuard } from '@/components/auth/role-guard';
+
 
 interface TimeEntry {
  id: string;
@@ -59,7 +61,7 @@ interface Payout {
  entriesCount: number;
 }
 
-export default function PayrollPage() {
+function PayrollPage() {
  const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
  const [summary, setSummary] = useState<EarningsSummary | null>(null);
  const [banking, setBanking] = useState<BankingInfo | null>(null);
@@ -510,3 +512,10 @@ export default function PayrollPage() {
  );
 }
 
+export default function GuardedPayrollPage() {
+  return (
+    <RoleGuard allowedRoles={['AGENT', 'ADMIN', 'OWNER']}>
+      <PayrollPage />
+    </RoleGuard>
+  );
+}

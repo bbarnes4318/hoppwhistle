@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, RoleName } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -38,7 +38,7 @@ async function main() {
   // Create roles
   const adminRole = await prisma.role.create({
     data: {
-      name: 'admin',
+      name: RoleName.ADMIN,
       description: 'Administrator with full access',
       permissions: [
         'users:read',
@@ -55,7 +55,7 @@ async function main() {
 
   const publisherRole = await prisma.role.create({
     data: {
-      name: 'publisher',
+      name: RoleName.PUBLISHER,
       description: 'Publisher role for managing campaigns',
       permissions: ['campaigns:read', 'campaigns:write', 'calls:read'],
     },
@@ -63,7 +63,7 @@ async function main() {
 
   const buyerRole = await prisma.role.create({
     data: {
-      name: 'buyer',
+      name: RoleName.BUYER,
       description: 'Buyer role for receiving calls',
       permissions: ['calls:read', 'endpoints:read', 'endpoints:write'],
     },
@@ -90,6 +90,7 @@ async function main() {
       keyHash: apiKeyHash,
       prefix: apiKeyPrefix.substring(0, 8),
       status: 'ACTIVE',
+      scopes: ['*'],
     },
   });
   console.log('✅ Created API key (prefix:', apiKeyPrefix.substring(0, 8) + ')');
@@ -143,6 +144,30 @@ async function main() {
       capabilities: ['voice'],
     },
   });
+
+  const bulkVsDids = [
+    '12816989460', '12816989461',
+    '14063165877', '14402992856',
+    '14402992860', '16102819660',
+    '16102819662', '17038313168',
+    '17042283589', '17042286088',
+    '18036135410', '18036135412',
+    '19124185540', '19124185542',
+    '19542083921', '19542083922'
+  ];
+
+  for (const did of bulkVsDids) {
+    await prisma.phoneNumber.create({
+      data: {
+        tenantId: tenant.id,
+        number: `+${did}`,
+        carrierId: carrier.id,
+        trunkId: trunk.id,
+        status: 'ACTIVE',
+        capabilities: ['voice'],
+      },
+    });
+  }
   console.log('✅ Created phone numbers');
 
   // Create caller ID pool
@@ -178,6 +203,26 @@ async function main() {
   });
   console.log('✅ Created publisher');
 
+  // Create publisher user
+  const publisherUser = await prisma.user.create({
+    data: {
+      tenantId: tenant.id,
+      email: 'publisher@test.callfabric.local',
+      passwordHash,
+      firstName: 'Publisher',
+      lastName: 'User',
+      status: 'ACTIVE',
+      publisherId: publisher.id,
+    },
+  });
+  await prisma.userRole.create({
+    data: {
+      userId: publisherUser.id,
+      roleId: publisherRole.id,
+    },
+  });
+  console.log('✅ Created publisher user:', publisherUser.email);
+
   // Create buyer
   const buyer = await prisma.buyer.create({
     data: {
@@ -189,12 +234,14 @@ async function main() {
       endpoints: {
         create: [
           {
+            name: 'Test SIP Endpoint',
             type: 'SIP',
             destination: 'sip:buyer@example.com:5060',
             priority: 0,
             status: 'ACTIVE',
           },
           {
+            name: 'Test PSTN Endpoint',
             type: 'PSTN',
             phoneNumberId: phoneNumber2.id,
             destination: '+15559876543',

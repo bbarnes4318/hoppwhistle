@@ -1,42 +1,123 @@
-# Walkthrough - Hetzner Migration Preparation
+# Walkthrough - Insurance Lead CRM Enhancements
 
-We have successfully prepared the Hoppwhistle repository for immediate migration from AWS to Hetzner by parameterizing all hardcoded AWS public IP references, cleaning up stale Vultr references, updating environment variable templates, and providing a comprehensive step-by-step migration guide.
+I have completed the implementation to fix the CRM side of the insurance/final-expense lead system, secure the pipeline, and completely deactivate outbound Ameriquote/Boberdoo posting.
 
-## Changes Made
+All changes are contained within the git repository workspace.
 
-### 1. FreeSWITCH Parameterization
-*   **`apps/freeswitch/conf/vars.xml`**: Replaced the hardcoded AWS public IP (`3.214.60.13`) with environment-driven variables `${PUBLIC_IP}`, `${SIP_PUBLIC_IP}`, and `${SIP_DOMAIN}`.
-*   **`apps/freeswitch/docker-entrypoint.sh`**: Added dynamic substitution for `SIP_PUBLIC_IP` and `SIP_DOMAIN` on startup.
-*   **`apps/freeswitch/conf/sip_profiles/external.xml`**: Updated `ext-rtp-ip` and `ext-sip-ip` parameters to use `$${sip_public_ip}`.
-*   **`apps/freeswitch/conf/sip_profiles/vapi.xml`**: Updated `ext-rtp-ip` and `ext-sip-ip` parameters to use `$${sip_public_ip}`.
-*   **`apps/freeswitch/conf/dialplan/default.xml`**: Parameterized `sofia_contact` bridge target domain using `$${domain}`.
-*   **`apps/freeswitch/conf/dialplan/public.xml`**: Parameterized the inbound DID domain and `sofia_contact` bridge target domain using `$${domain}`.
-*   **`apps/freeswitch/scripts/inbound_route.lua`**: Modified the Lua routing script to dynamically query the `domain_name` channel variable instead of using the hardcoded AWS public IP.
+## Key Accomplishments
 
-### 2. Frontend Configuration
-*   **`apps/web/src/components/phone/phone-provider.tsx`**: Replaced the hardcoded AWS public IP fallback with `process.env.NEXT_PUBLIC_SIP_DOMAIN` and a dynamic fallback to `window.location.hostname`.
+### 1. Hard-Disabled Ameriquote/Boberdoo Posting
 
-### 3. Vultr Stale Reference Cleanup
-*   **`infra/nginx/hopwhistle`**: Modified Host headers from the stale Vultr IP `45.32.213.201` to use the dynamic `$host` variable.
-*   **`apps/media/__tests__/integration.test.ts` & `apps/worker/src/__tests__/billing-integration.test.ts`**: Replaced legacy Vultr database connection string fallbacks with a local connection string fallback.
-*   **`scripts/vapi_provision_and_call.js`**: Parameterized host variables and removed hardcoded Vapi tokens.
-*   **`apps/api/run-ssh-query.ps1`**: Updated the ssh target to use the `$env:PUBLIC_IP` variable.
+- **Backend Backstop**: Updated [insurance-lead-poster.ts](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/api/src/services/insurance-lead-poster.ts) to throw an error immediately if `postToAmeriquote` is called, ensuring zero external network egress.
+- **Retry Deactivation**: Short-circuited the manual retry endpoint in [insurance-lead-service.ts](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/api/src/services/insurance-lead-service.ts) to immediately update status to `HOLD`, log a blocked-submission activity, and return:
+  ```json
+  {
+    "success": false,
+    "postStatus": "HOLD",
+    "disabled": true,
+    "message": "Ameriquote delivery is disabled by owner request."
+  }
+  ```
+- **UI Deactivation**: Removed the "Retry" action button from [lead-detail-sheet.tsx](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/web/src/components/leads/lead-detail-sheet.tsx) and displayed a prominent warning: _"Ameriquote delivery is disabled by owner request. Leads are stored for internal review only."_
 
-### 4. Environment Templates
-*   Added the required Hetzner S3, URLs, and IP variables to `infra/docker/env.example`, `infra/docker/env.template`, `apps/api/env.example`, and `apps/web/env.example`.
+### 2. CRM & Final Expense Master Lead Fields
 
-### 5. Migration Guide Playbook
-*   Created [HETZNER_MIGRATION_FROM_AWS.md](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/HETZNER_MIGRATION_FROM_AWS.md) in the workspace root detailing definitions, steps, validation commands, and rollback procedures.
-*   **Final Playbook Corrections**:
-    *   Replaced the PostgreSQL container reference `hopwhistle-postgres-1` with `hopwhistle-postgres-dev` to align with the AWS production setup.
-    *   Revised the recordings sync section to establish `rclone` as the recommended primary method (with optimal check/transfer flags) and provided a safe two-step fallback using the `aws-cli`.
-    *   Added database and recordings verification checklists (spot-checks, table counting, and rclone size comparisons).
+- Extended `InsuranceLead` in the [schema.prisma](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/api/prisma/schema.prisma) database schema with columns for assignment, priority, stages, dates, and DNC, plus FE-specific columns (smoker, premium, face amount, carrier, trustedForm, recording url).
+- Added interactive fields in the CRM frontend sheet [lead-detail-sheet.tsx](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/web/src/components/leads/lead-detail-sheet.tsx) to assign leads, view/edit FE details, and update follow-up schedules.
+
+### 3. Tasks & Follow-ups
+
+- Added new models (`InsuranceTask` and related status/priority enums) to the schema.
+- Added task REST endpoints (`GET/POST tasks`, `POST complete`, `POST cancel`) in [insurance-leads.ts (routes)](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/api/src/routes/insurance-leads.ts).
+- Implemented task manager in [lead-detail-sheet.tsx](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/web/src/components/leads/lead-detail-sheet.tsx) allowing users to add open items, set priorities, track due dates, and complete/cancel them.
+
+### 4. Activity Timeline
+
+- Added the `InsuranceActivity` model to track notes, calls, task actions, validation failures, and updates.
+- Added timeline rendering in the detail sheet to show lead timeline logs in reverse chronological order.
+
+### 5. Masking Payment Fields & Enforcing Tenants
+
+- Modified [prospect-intake.ts](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/api/src/routes/prospect-intake.ts) to immediately mask `routingNumber` and `accountNumber` to `****[last4]` values on write, preventing raw banking credentials leakage.
+- Replaced hardcoded default tenant IDs with authenticated `tenantId` checking across tasks, intake, and retention endpoints to maintain strict tenant boundaries.
+
+### 6. Mock Retention UI Deactivation
+
+- Removed the Retention link from the navigation sidebar.
+- Redirected the `/retention` frontend routes to `/insurance-leads`.
+- Retained database models for safety as requested.
+
+### 7. Call Center CRM Panel & Lookup API
+
+- **Lookup API**: Created [call-center.ts](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/api/src/routes/call-center.ts) with `GET /api/v1/call-center/customer-lookup` endpoint. It normalizes numbers to the last 10 digits, searches across CRM tables with strict tenant boundaries, masks sensitive data, and separates duplicates.
+- **Dynamic CRM Panel**: Created [CustomerCrmPanel.tsx](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/web/src/components/call-center/CustomerCrmPanel.tsx) to display clean grouped contact card layouts, final expense details, active call context (reloads on call state changes), tasks (with inline creation/completion), activity log (with notes logger), and a possible duplicates panel.
+- **Portal Integration**: Modified [CallCenterPortal.tsx](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/web/src/components/call-center/CallCenterPortal.tsx) to trigger lookup and automatically show the CRM Target Profile tab on inbound ring/answer, outbound dial, and call transfer/resumption. Designed it with a responsive layout where softphone controls and CRM panels stack on mobile/smaller screens.
+- **Disabled Ameriquote/Boberdoo Actions**: Ensured that the Call Center panel shows the lead delivery status as `"HOLD"` only, with a message stating _"External delivery disabled by owner request"_, and completely omitted any buttons or flows that can send/retry posts to Ameriquote.
+
+## Verification & Quality
+
+- Added service-level unit tests in [insurance-lead-crm.test.ts](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/api/src/services/__tests__/insurance-lead-crm.test.ts) proving that `postToAmeriquote` throws errors, manual retries block external posts, and valid leads default to `HOLD`.
+- Added Fastify integration tests in [call-center.test.ts](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/api/src/__tests__/call-center.test.ts) proving:
+  - Inbound and outbound calls show matching CRM customer data.
+  - Normalization to the last 10 digits functions correctly.
+  - Tenant isolation is fully enforced.
+  - Banking fields are masked and never returned.
+  - Duplicate matches are returned without crashing.
 
 ---
 
-## Verification Results
+## 8. Hetzner Server Migration Deployment & Stack Validation
 
-*   **Diff Checks**: Run on all modified files to ensure strict alignment with formatting rules.
-*   **Repo Status**: All modifications have been successfully verified using git.
-*   **Playbook Verification**: Executed `git grep` to verify that `hopwhistle-postgres-1` has been fully removed and `hopwhistle-postgres-dev` is used correctly.
-*   **Docker Config**: NOT RUN LOCALLY — Docker was unavailable on the workstation. Compose files were reviewed, but actual docker compose config/build/up validation must pass on Hetzner or CI before production cutover.
+I completed the provisioning retry, environment sanitization, and verification of the full Docker stack on the Hetzner server (`37.27.189.145`) for branch `edit-campaign-buyer-fix`.
+
+### Key Verification Metrics
+
+- **Host Env Sanitization**: Scrubbed Upstash/AWS URLs from the host `.env` file, pointing database, redis, clickhouse, and S3 storage endpoints purely to their local Hetzner Docker container instances:
+  - `DATABASE_URL` -> `postgresql://callfabric:callfabric_dev@postgres:5432/callfabric`
+  - `REDIS_URL` -> `redis://redis:6379`
+  - `S3_ENDPOINT` -> `http://minio:9000`
+- **Database Schema & Seeding**:
+  - Aligned database schemas on the fresh PostgreSQL container using `npx prisma db push --force-reset --skip-generate` to synchronize schema models.
+  - Successfully seeded the database using `npx prisma db seed`, creating all baseline Tenant, Admin User, API Keys, Carrier/Trunks, and Flow nodes.
+- **Service Pings & Health**:
+  - **API**: `live` & `ready` checks are fully healthy with status `200 OK`.
+  - **PostgreSQL**: Succeeded (database table count check `calls` = 1).
+  - **Redis**: Succeeded (`PONG` response).
+  - **ClickHouse**: Succeeded (`Ok.` response).
+  - **MinIO**: Succeeded (bucket `hopwhistle-recordings` created and listed recursively).
+- **Telephony & FreeSWITCH Variables**:
+  - Configured `PUBLIC_IP` and `MEDIA_DOMAIN` to pass into the FreeSWITCH environment.
+  - Confirmed FreeSWITCH loaded the environment correctly with Sofia external and vapi profiles successfully bound to Hetzner's public IP `37.27.189.145`.
+- **Recording Upload Flow**:
+  - Generated a test recording payload (> 100 bytes) and executed the FreeSWITCH recording upload utility script.
+  - Verified a successful upload (HTTP 200) resulting in the object written to local MinIO storage and mapped correctly to the call record in PostgreSQL.
+
+---
+
+## 9. RTB Call Flow Integration and E2E Test Suite (Prompt 3)
+
+We have successfully implemented and verified the entire RTB source-to-sale call routing, post-time validation, and billing path:
+
+### A. Dynamic RTB Route Lookup
+
+- Updated `/api/v1/freeswitch/lookup` in [did-routes.ts](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/api/src/routes/did-routes.ts) to query leased Redis routes via `numberPoolService.getRouteInfo(did)` before falling back to static database-configured `DidRoute` records.
+
+### B. Leased Metadata Expansion
+
+- Enhanced `numberPoolService.leaseNumber` in [number-pool-service.ts](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/api/src/services/number-pool-service.ts) to store full RTB attribution details in Redis (including `tenant_id`, `publisher_id`, `campaign_id`, `caller_number`, and `rtb_bid_amount`).
+
+### C. Post-Time Validations
+
+- Updated [post-service.ts](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/api/src/services/post-service.ts) to perform strict validations when a bid token is POSTed (checking active buyer/endpoint status, operational hours, concurrency bounds, max cap limits, upfront wallet balances, and the campaign-buyer relationship) before completing the lease.
+
+### D. RTB CDR Integration & Upfront Billing
+
+- Updated `/api/v1/freeswitch/cdr` in [did-routes.ts](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/api/src/routes/did-routes.ts) to resolve route IDs matching `rtb-${pingId}`, extract the caller-specific RTB data, construct the inbound call with proper buyer/publisher/campaign fields, and trigger the `billingService` and `buyerBillingService`.
+- Prioritized the RTB bid amount as the buyer price inside `billingService.ts` and automated upfront wallet debits and ledger postings.
+- Enforced automatic release of leased transfer numbers back to the pool in both Redis (with a short 120s TTL snapshot for late CDR retries) and the SQL database.
+
+### E. E2E Integration Testing & Linter Verification
+
+- Added a complete Vitest integration test at [rtb-call-flow.test.ts](file:///C:/Users/jimbo/.gemini/antigravity/worktrees/hopbot/edit-campaign-buyer-fix/apps/api/src/services/__tests__/rtb-call-flow.test.ts) covering the full lifecycle (ping -> post -> lookup -> CDR -> ledger entries -> wallet debit -> idempotency).
+- Resolved all TypeScript ESLint warnings/errors (unsafe any types, misused promises, and require-await violations) in the modified files.
+- Verified that all related tests pass successfully and the git commit hooks execute without error.

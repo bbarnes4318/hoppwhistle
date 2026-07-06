@@ -7,7 +7,13 @@
  * Also provides CRM read/update/stats/retry functions for the frontend.
  */
 
-import type { Prisma, InsuranceValidationStatus, InsurancePostStatus, InsuranceLeadMode } from '@prisma/client';
+import type {
+  Prisma,
+  InsuranceValidationStatus,
+  InsurancePostStatus,
+  InsuranceLeadMode,
+  InsuranceLeadStatus,
+} from '@prisma/client';
 
 import { createServiceLogger } from '../lib/logger.js';
 import { getPrismaClient } from '../lib/prisma.js';
@@ -44,6 +50,10 @@ export interface LeadFilters {
   endDate?: string;
   page?: number;
   limit?: number;
+  status?: string;
+  leadStage?: string;
+  followUp?: string;
+  listId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -54,7 +64,15 @@ async function createActivity(
   tenantId: string,
   insuranceLeadId: string,
   activity: {
-    type: 'NOTE' | 'CALL' | 'STATUS_CHANGE' | 'SUBMISSION' | 'VALIDATION' | 'SYSTEM' | 'TASK' | 'COMPLIANCE';
+    type:
+      | 'NOTE'
+      | 'CALL'
+      | 'STATUS_CHANGE'
+      | 'SUBMISSION'
+      | 'VALIDATION'
+      | 'SYSTEM'
+      | 'TASK'
+      | 'COMPLIANCE';
     title: string;
     description?: string;
     metadata?: any;
@@ -70,13 +88,19 @@ async function createActivity(
         type: activity.type,
         title: activity.title,
         description: activity.description || null,
-        metadata: activity.metadata || undefined,
+        metadata: (activity.metadata || undefined) as Prisma.InputJsonValue,
         createdById: activity.createdById || null,
       },
     });
   } catch (err) {
     log.error({ msg: 'Failed to create activity log', err, insuranceLeadId });
   }
+}
+
+function parseSafeDate(val: unknown): Date | null {
+  if (!val) return null;
+  const d = new Date(val as string | number | Date);
+  return isNaN(d.getTime()) ? null : d;
 }
 
 // ---------------------------------------------------------------------------
@@ -86,7 +110,7 @@ async function createActivity(
 export async function ingestLead(
   tenantId: string,
   vertical: Vertical,
-  rawPayload: Record<string, unknown>,
+  rawPayload: Record<string, unknown>
 ): Promise<IngestResult> {
   const prisma = getPrismaClient();
   const mode = getInsuranceLeadMode();
@@ -98,6 +122,59 @@ export async function ingestLead(
 
   // 2. Build CRM contact fields from whatever we have
   const contactData = validation.normalized || rawPayload;
+  const FIRST_CLASS_FIELDS = new Set([
+    'id',
+    'tenantId',
+    'vertical',
+    'firstName',
+    'lastName',
+    'fullName',
+    'email',
+    'phone',
+    'address',
+    'address2',
+    'city',
+    'county',
+    'state',
+    'zipCode',
+    'birthDate',
+    'age',
+    'gender',
+    'source',
+    'status',
+    'notes',
+    'tags',
+    'assignedToId',
+    'assignedAt',
+    'lastContactedAt',
+    'nextFollowUpAt',
+    'priority',
+    'leadStage',
+    'doNotCall',
+    'duplicateOfId',
+    'smoker',
+    'faceAmount',
+    'lifeType',
+    'riskType',
+    'carrier',
+    'product',
+    'monthlyPremium',
+    'coverageAmount',
+    'trustedFormUrl',
+    'leadidToken',
+    'consentLanguage',
+    'recordingUrl',
+    'createdAt',
+    'updatedAt',
+    'customFields',
+    'listId',
+  ]);
+  const extraFields: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(contactData)) {
+    if (!FIRST_CLASS_FIELDS.has(key) && value !== undefined && value !== null) {
+      extraFields[key] = value;
+    }
+  }
   const rawPhone = String(contactData.phone || contactData.primaryPhone || '').replace(/\D/g, '');
   const phone = rawPhone.length > 10 ? rawPhone.slice(-10) : rawPhone;
   const firstName = String(contactData.firstName || '').trim();
@@ -117,7 +194,7 @@ export async function ingestLead(
       data: {
         firstName: firstName || existing.firstName,
         lastName: lastName || existing.lastName,
-        fullName: (firstName && lastName) ? `${firstName} ${lastName}` : existing.fullName,
+        fullName: firstName && lastName ? `${firstName} ${lastName}` : existing.fullName,
         email: contactData.email ? String(contactData.email) : existing.email,
         address: contactData.address ? String(contactData.address) : existing.address,
         address2: contactData.address2 ? String(contactData.address2) : existing.address2,
@@ -129,6 +206,47 @@ export async function ingestLead(
         age: typeof contactData.age === 'number' ? contactData.age : existing.age,
         gender: contactData.gender ? String(contactData.gender) : existing.gender,
         source: contactData.source ? String(contactData.source) : existing.source,
+        // Update FE specific fields
+        smoker: contactData.smoker ? String(contactData.smoker) : existing.smoker,
+        faceAmount: contactData.faceAmount ? String(contactData.faceAmount) : existing.faceAmount,
+        lifeType: contactData.lifeType ? String(contactData.lifeType) : existing.lifeType,
+        riskType: contactData.riskType ? String(contactData.riskType) : existing.riskType,
+        carrier: contactData.carrier ? String(contactData.carrier) : existing.carrier,
+        product: contactData.product ? String(contactData.product) : existing.product,
+        monthlyPremium: contactData.monthlyPremium
+          ? String(contactData.monthlyPremium)
+          : existing.monthlyPremium,
+        coverageAmount: contactData.coverageAmount
+          ? String(contactData.coverageAmount)
+          : existing.coverageAmount,
+        trustedFormUrl:
+          contactData.trustedFormUrl || contactData.trustedFormCertUrl
+            ? String(contactData.trustedFormUrl || contactData.trustedFormCertUrl)
+            : existing.trustedFormUrl,
+        leadidToken: contactData.leadidToken
+          ? String(contactData.leadidToken)
+          : existing.leadidToken,
+        consentLanguage: contactData.consentLanguage
+          ? String(contactData.consentLanguage)
+          : existing.consentLanguage,
+        recordingUrl: contactData.recordingUrl
+          ? String(contactData.recordingUrl)
+          : existing.recordingUrl,
+        // Shallow merge custom fields if they exist
+        customFields: {
+          ...((existing.customFields as Record<string, unknown>) || {}),
+          ...((contactData.customFields as Record<string, unknown>) || {}),
+          ...extraFields,
+        },
+        // CRM fields
+        notes: contactData.notes ? String(contactData.notes) : existing.notes,
+        priority: contactData.priority ? String(contactData.priority) : existing.priority,
+        nextFollowUpAt: contactData.nextFollowUpAt
+          ? parseSafeDate(contactData.nextFollowUpAt) || existing.nextFollowUpAt
+          : existing.nextFollowUpAt,
+        status: contactData.status ? (contactData.status as InsuranceLeadStatus) : existing.status,
+        leadStage: contactData.leadStage ? String(contactData.leadStage) : existing.leadStage,
+        listId: contactData.listId ? String(contactData.listId) : existing.listId,
       },
     });
 
@@ -136,7 +254,7 @@ export async function ingestLead(
     await createActivity(tenantId, insuranceLead.id, {
       type: 'SYSTEM',
       title: 'Lead Updated (Re-ingestion)',
-      description: `Lead information updated via re-ingestion from source: ${contactData.source || 'unknown'}`
+      description: `Lead information updated via re-ingestion from source: ${String(contactData.source || 'unknown')}`,
     });
   } else {
     // FE specific fields parsed from contactData if valid/normalized
@@ -146,7 +264,7 @@ export async function ingestLead(
         vertical,
         firstName: firstName || null,
         lastName: lastName || null,
-        fullName: (firstName && lastName) ? `${firstName} ${lastName}` : null,
+        fullName: firstName && lastName ? `${firstName} ${lastName}` : null,
         phone: phone || `unknown-${Date.now()}`,
         email: contactData.email ? String(contactData.email) : null,
         address: contactData.address ? String(contactData.address) : null,
@@ -168,10 +286,26 @@ export async function ingestLead(
         product: contactData.product ? String(contactData.product) : null,
         monthlyPremium: contactData.monthlyPremium ? String(contactData.monthlyPremium) : null,
         coverageAmount: contactData.coverageAmount ? String(contactData.coverageAmount) : null,
-        trustedFormUrl: contactData.trustedFormUrl || contactData.trustedFormCertUrl ? String(contactData.trustedFormUrl || contactData.trustedFormCertUrl) : null,
+        trustedFormUrl:
+          contactData.trustedFormUrl || contactData.trustedFormCertUrl
+            ? String(contactData.trustedFormUrl || contactData.trustedFormCertUrl)
+            : null,
         leadidToken: contactData.leadidToken ? String(contactData.leadidToken) : null,
         consentLanguage: contactData.consentLanguage ? String(contactData.consentLanguage) : null,
         recordingUrl: contactData.recordingUrl ? String(contactData.recordingUrl) : null,
+        customFields: {
+          ...((contactData.customFields as Record<string, unknown>) || {}),
+          ...extraFields,
+        },
+        // CRM fields
+        notes: contactData.notes ? String(contactData.notes) : null,
+        priority: contactData.priority ? String(contactData.priority) : null,
+        nextFollowUpAt: contactData.nextFollowUpAt
+          ? parseSafeDate(contactData.nextFollowUpAt)
+          : null,
+        status: contactData.status ? (contactData.status as InsuranceLeadStatus) : 'NEW',
+        leadStage: contactData.leadStage ? String(contactData.leadStage) : null,
+        listId: contactData.listId ? String(contactData.listId) : null,
       },
     });
 
@@ -179,7 +313,7 @@ export async function ingestLead(
     await createActivity(tenantId, insuranceLead.id, {
       type: 'SYSTEM',
       title: 'Lead Ingested',
-      description: `New insurance lead ingested via source: ${contactData.source || 'unknown'}`
+      description: `New insurance lead ingested via source: ${String(contactData.source || 'unknown')}`,
     });
   }
 
@@ -206,7 +340,7 @@ export async function ingestLead(
     type: 'SUBMISSION',
     title: 'Submission Received',
     description: `Submission recorded for vertical ${vertical}.`,
-    metadata: { submissionId: submission.id }
+    metadata: { submissionId: submission.id },
   });
 
   // 5. If valid, map the outbound payload for review — but do NOT post.
@@ -221,7 +355,7 @@ export async function ingestLead(
         where: { id: submission.id },
         data: {
           mappedOutboundPayload: redactedPayload as unknown as Prisma.InputJsonValue,
-          postStatus: 'HOLD',   // Held until explicit send
+          postStatus: 'HOLD', // Held until explicit send
         },
       });
 
@@ -229,7 +363,7 @@ export async function ingestLead(
       await createActivity(tenantId, insuranceLead.id, {
         type: 'SYSTEM',
         title: 'Lead Held',
-        description: 'Ameriquote posting is disabled by owner request. Lead held on HOLD.'
+        description: 'Ameriquote posting is disabled by owner request. Lead held on HOLD.',
       });
 
       log.info({
@@ -273,7 +407,7 @@ export async function ingestLead(
     type: 'VALIDATION',
     title: 'Validation Failed',
     description: `Inbound lead validation failed with ${validation.errors?.length || 0} errors.`,
-    metadata: { errors: validation.errors }
+    metadata: { errors: validation.errors },
   });
 
   return {
@@ -304,7 +438,12 @@ export async function getLeads(tenantId: string, filters: LeadFilters) {
   if (filters.search) {
     const s = filters.search;
     const cleanSearch = s.replace(/\D/g, '');
-    const phoneSearch = cleanSearch.length > 0 ? (cleanSearch.length > 10 ? cleanSearch.slice(-10) : cleanSearch) : '';
+    const phoneSearch =
+      cleanSearch.length > 0
+        ? cleanSearch.length > 10
+          ? cleanSearch.slice(-10)
+          : cleanSearch
+        : '';
     const orConditions: Prisma.InsuranceLeadWhereInput[] = [
       { firstName: { contains: s, mode: 'insensitive' } },
       { lastName: { contains: s, mode: 'insensitive' } },
@@ -331,10 +470,54 @@ export async function getLeads(tenantId: string, filters: LeadFilters) {
   // For submission-level filters, use a submissions relation filter
   if (filters.validationStatus || filters.postStatus || filters.postMode) {
     const subFilter: Prisma.InsuranceLeadSubmissionWhereInput = {};
-    if (filters.validationStatus) subFilter.validationStatus = filters.validationStatus as InsuranceValidationStatus;
+    if (filters.validationStatus)
+      subFilter.validationStatus = filters.validationStatus as InsuranceValidationStatus;
     if (filters.postStatus) subFilter.postStatus = filters.postStatus as InsurancePostStatus;
     if (filters.postMode) subFilter.postMode = filters.postMode as InsuranceLeadMode;
     where.submissions = { some: subFilter };
+  }
+
+  // CRM status & stage filters
+  if (filters.status) {
+    where.status = filters.status as InsuranceLeadStatus;
+  }
+  if (filters.leadStage) {
+    where.leadStage = filters.leadStage;
+  }
+  if (filters.listId) {
+    where.listId = filters.listId;
+  }
+
+  // CRM follow-up filter
+  if (filters.followUp) {
+    const now = new Date();
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+
+    if (filters.followUp.toUpperCase() === 'OVERDUE') {
+      where.nextFollowUpAt = { lt: now };
+      where.status = { notIn: ['LOST', 'CONVERTED'] };
+    } else if (filters.followUp.toUpperCase() === 'TODAY') {
+      where.nextFollowUpAt = {
+        gte: startOfToday,
+        lte: endOfToday,
+      };
+    } else if (filters.followUp.toUpperCase() === 'TOMORROW') {
+      const startOfTomorrow = new Date(startOfToday);
+      startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
+      const endOfTomorrow = new Date(endOfToday);
+      endOfTomorrow.setDate(endOfTomorrow.getDate() + 1);
+      where.nextFollowUpAt = {
+        gte: startOfTomorrow,
+        lte: endOfTomorrow,
+      };
+    } else if (filters.followUp.toUpperCase() === 'UPCOMING') {
+      where.nextFollowUpAt = { gt: now };
+    } else if (filters.followUp.toUpperCase() === 'NONE') {
+      where.nextFollowUpAt = null;
+    }
   }
 
   const [leads, total] = await Promise.all([
@@ -355,7 +538,10 @@ export async function getLeads(tenantId: string, filters: LeadFilters) {
           },
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [
+        { lastContactedAt: { sort: 'asc', nulls: 'first' } },
+        { createdAt: 'desc' },
+      ],
       take: limit,
       skip,
     }),
@@ -363,7 +549,7 @@ export async function getLeads(tenantId: string, filters: LeadFilters) {
   ]);
 
   return {
-    data: leads.map((lead) => ({
+    data: leads.map(lead => ({
       id: lead.id,
       vertical: lead.vertical,
       firstName: lead.firstName,
@@ -375,6 +561,8 @@ export async function getLeads(tenantId: string, filters: LeadFilters) {
       zipCode: lead.zipCode,
       source: lead.source,
       status: lead.status,
+      leadStage: lead.leadStage,
+      nextFollowUpAt: lead.nextFollowUpAt ? lead.nextFollowUpAt.toISOString() : null,
       createdAt: lead.createdAt.toISOString(),
       latestSubmission: lead.submissions[0]
         ? {
@@ -412,11 +600,65 @@ export async function getLeadById(tenantId: string, id: string) {
 
   if (!lead) return null;
 
+  interface ActivityReturn {
+    id: string;
+    tenantId: string;
+    insuranceLeadId: string;
+    type: string;
+    title: string;
+    description: string | null;
+    createdAt: string;
+    metadata?: any;
+    createdById?: string | null;
+  }
+
+  const last10 = lead.phone.replace(/\D/g, '').slice(-10);
+  const callActivities: ActivityReturn[] = [];
+  if (last10.length >= 10) {
+    const calls = await prisma.call.findMany({
+      where: {
+        tenantId,
+        OR: [{ callerId: { endsWith: last10 } }, { toNumber: { endsWith: last10 } }],
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    const mappedCalls = calls.map(c => ({
+      id: `call-note-${c.id}`,
+      tenantId: c.tenantId,
+      insuranceLeadId: lead.id,
+      type: 'CALL',
+      title: `Call (${c.direction}) - ${c.campaignName || 'Call Center'}`,
+      description: c.dispositionNotes
+        ? `Disposition: ${c.disposition || 'None'}\nNotes: ${c.dispositionNotes}`
+        : `Disposition: ${c.disposition || 'None'}`,
+      createdAt: c.createdAt.toISOString(),
+      metadata: null,
+      createdById: null,
+    }));
+    callActivities.push(...mappedCalls);
+  }
+
+  const dbActivities: ActivityReturn[] = lead.activities.map(a => ({
+    id: a.id,
+    tenantId: a.tenantId,
+    insuranceLeadId: a.insuranceLeadId,
+    type: String(a.type),
+    title: a.title,
+    description: a.description || null,
+    createdAt: a.createdAt.toISOString(),
+    metadata: a.metadata,
+    createdById: a.createdById || null,
+  }));
+
+  const sortedActivities: ActivityReturn[] = [...dbActivities, ...callActivities].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+
   return {
     ...lead,
     createdAt: lead.createdAt.toISOString(),
     updatedAt: lead.updatedAt.toISOString(),
-    submissions: lead.submissions.map((s) => ({
+    submissions: lead.submissions.map(s => ({
       ...s,
       receivedAt: s.receivedAt.toISOString(),
       postedAt: s.postedAt?.toISOString() || null,
@@ -424,11 +666,8 @@ export async function getLeadById(tenantId: string, id: string) {
       createdAt: s.createdAt.toISOString(),
       updatedAt: s.updatedAt.toISOString(),
     })),
-    activities: lead.activities.map((a) => ({
-      ...a,
-      createdAt: a.createdAt.toISOString(),
-    })),
-    tasks: lead.tasks.map((t) => ({
+    activities: sortedActivities,
+    tasks: lead.tasks.map(t => ({
       ...t,
       dueAt: t.dueAt?.toISOString() || null,
       completedAt: t.completedAt?.toISOString() || null,
@@ -482,11 +721,7 @@ interface InsuranceLeadCRMUpdates {
   recordingUrl?: string | null;
 }
 
-export async function updateLead(
-  tenantId: string,
-  id: string,
-  updates: Record<string, unknown>,
-) {
+export async function updateLead(tenantId: string, id: string, updates: Record<string, unknown>) {
   const prisma = getPrismaClient();
 
   const existing = await prisma.insuranceLead.findFirst({
@@ -496,25 +731,57 @@ export async function updateLead(
   if (!existing) return null;
 
   const allowedFields = [
-    'firstName', 'lastName', 'fullName', 'email', 'phone',
-    'address', 'address2', 'city', 'county', 'state', 'zipCode',
-    'birthDate', 'age', 'gender', 'source', 'notes', 'status',
-    'customFields',
+    'firstName',
+    'lastName',
+    'fullName',
+    'email',
+    'phone',
+    'address',
+    'address2',
+    'city',
+    'county',
+    'state',
+    'zipCode',
+    'birthDate',
+    'age',
+    'gender',
+    'source',
+    'notes',
+    'status',
     // CRM fields
-    'assignedToId', 'assignedAt', 'lastContactedAt', 'nextFollowUpAt',
-    'priority', 'leadStage', 'doNotCall', 'duplicateOfId',
+    'assignedToId',
+    'assignedAt',
+    'lastContactedAt',
+    'nextFollowUpAt',
+    'priority',
+    'leadStage',
+    'doNotCall',
+    'duplicateOfId',
     // FE fields
-    'smoker', 'faceAmount', 'lifeType', 'riskType', 'carrier', 'product',
-    'monthlyPremium', 'coverageAmount', 'trustedFormUrl', 'leadidToken',
-    'consentLanguage', 'recordingUrl',
+    'smoker',
+    'faceAmount',
+    'lifeType',
+    'riskType',
+    'carrier',
+    'product',
+    'monthlyPremium',
+    'coverageAmount',
+    'trustedFormUrl',
+    'leadidToken',
+    'consentLanguage',
+    'recordingUrl',
+    'customFields',
   ];
 
   const data: InsuranceLeadCRMUpdates = {};
   const dataObj = data as Record<string, unknown>;
   for (const key of allowedFields) {
     if (updates[key] !== undefined) {
-      if (['assignedAt', 'lastContactedAt', 'nextFollowUpAt'].includes(key) && typeof updates[key] === 'string') {
-        dataObj[key] = new Date(updates[key] as string);
+      if (
+        ['assignedAt', 'lastContactedAt', 'nextFollowUpAt'].includes(key) &&
+        typeof updates[key] === 'string'
+      ) {
+        dataObj[key] = new Date(updates[key]);
       } else if (key === 'doNotCall') {
         dataObj[key] = updates[key] === true || updates[key] === 'true';
       } else {
@@ -525,8 +792,8 @@ export async function updateLead(
 
   // Auto-compute fullName
   if (data.firstName || data.lastName) {
-    const fn = (data.firstName || existing.firstName || '') as string;
-    const ln = (data.lastName || existing.lastName || '') as string;
+    const fn = data.firstName || existing.firstName || '';
+    const ln = data.lastName || existing.lastName || '';
     if (fn && ln) data.fullName = `${fn} ${ln}`;
   }
 
@@ -540,7 +807,7 @@ export async function updateLead(
     await createActivity(tenantId, id, {
       type: 'STATUS_CHANGE',
       title: 'Status Changed',
-      description: `Lead status changed from ${existing.status} to ${data.status}.`
+      description: `Lead status changed from ${existing.status} to ${data.status}.`,
     });
   }
 
@@ -549,19 +816,23 @@ export async function updateLead(
     await createActivity(tenantId, id, {
       type: 'NOTE',
       title: existing.notes ? 'Notes Updated' : 'Notes Added',
-      description: data.notes || undefined
+      description: data.notes || undefined,
     });
   }
 
   // Log general updates
   const updatedKeys = Object.keys(data).filter(
-    (k) => k !== 'status' && k !== 'notes' && String(data[k as keyof InsuranceLeadCRMUpdates]) !== String(existing[k as keyof typeof existing])
+    k =>
+      k !== 'status' &&
+      k !== 'notes' &&
+      String(data[k as keyof InsuranceLeadCRMUpdates]) !==
+        String(existing[k as keyof typeof existing])
   );
   if (updatedKeys.length > 0) {
     await createActivity(tenantId, id, {
       type: 'SYSTEM',
       title: 'Lead Information Updated',
-      description: `Updated fields: ${updatedKeys.join(', ')}.`
+      description: `Updated fields: ${updatedKeys.join(', ')}.`,
     });
   }
 
@@ -572,11 +843,7 @@ export async function updateLead(
 // Retry Submission
 // ---------------------------------------------------------------------------
 
-export async function retrySubmission(
-  tenantId: string,
-  leadId: string,
-  submissionId: string,
-) {
+export async function retrySubmission(tenantId: string, leadId: string, submissionId: string) {
   const prisma = getPrismaClient();
   const mode = getInsuranceLeadMode();
 
@@ -604,7 +871,7 @@ export async function retrySubmission(
     type: 'SUBMISSION',
     title: 'Ameriquote Post Blocked',
     description: 'Manual retry was blocked: Ameriquote delivery is disabled by owner request.',
-    metadata: { submissionId }
+    metadata: { submissionId },
   });
 
   return {
@@ -623,10 +890,17 @@ export async function getStats(tenantId: string) {
   const prisma = getPrismaClient();
 
   const [
-    totalLeads, acaLeads, feLeads,
-    totalSubmissions, validSubmissions, invalidSubmissions,
-    matchedSubmissions, unmatchedSubmissions, errorSubmissions,
-    testSubmissions, liveSubmissions,
+    totalLeads,
+    acaLeads,
+    feLeads,
+    totalSubmissions,
+    validSubmissions,
+    invalidSubmissions,
+    matchedSubmissions,
+    unmatchedSubmissions,
+    errorSubmissions,
+    testSubmissions,
+    liveSubmissions,
   ] = await Promise.all([
     prisma.insuranceLead.count({ where: { tenantId } }),
     prisma.insuranceLead.count({ where: { tenantId, vertical: 'ACA' } }),
@@ -642,10 +916,17 @@ export async function getStats(tenantId: string) {
   ]);
 
   return {
-    totalLeads, acaLeads, feLeads,
-    totalSubmissions, validSubmissions, invalidSubmissions,
-    matchedSubmissions, unmatchedSubmissions, errorSubmissions,
-    testSubmissions, liveSubmissions,
+    totalLeads,
+    acaLeads,
+    feLeads,
+    totalSubmissions,
+    validSubmissions,
+    invalidSubmissions,
+    matchedSubmissions,
+    unmatchedSubmissions,
+    errorSubmissions,
+    testSubmissions,
+    liveSubmissions,
   };
 }
 
@@ -653,28 +934,53 @@ export async function getStats(tenantId: string) {
 // Bulk Import
 // ---------------------------------------------------------------------------
 
-export async function bulkImportLeads(
-  tenantId: string,
-  leads: Array<Record<string, unknown>>,
-) {
+export async function bulkImportLeads(tenantId: string, leads: Array<Record<string, unknown>>) {
   const prisma = getPrismaClient();
   let importCount = 0;
 
   const standardFields = [
-    'firstName', 'lastName', 'fullName', 'email', 'phone',
-    'address', 'address2', 'city', 'county', 'state', 'zipCode',
-    'birthDate', 'age', 'gender', 'source', 'notes', 'status',
-    'assignedToId', 'assignedAt', 'lastContactedAt', 'nextFollowUpAt',
-    'priority', 'leadStage', 'doNotCall', 'smoker', 'faceAmount',
-    'monthlyPremium', 'carrier', 'coverageAmount', 'lifeType',
-    'riskType', 'product', 'trustedFormUrl', 'leadidToken',
-    'consentLanguage', 'recordingUrl',
+    'firstName',
+    'lastName',
+    'fullName',
+    'email',
+    'phone',
+    'address',
+    'address2',
+    'city',
+    'county',
+    'state',
+    'zipCode',
+    'birthDate',
+    'age',
+    'gender',
+    'source',
+    'notes',
+    'status',
+    'assignedToId',
+    'assignedAt',
+    'lastContactedAt',
+    'nextFollowUpAt',
+    'priority',
+    'leadStage',
+    'doNotCall',
+    'smoker',
+    'faceAmount',
+    'monthlyPremium',
+    'carrier',
+    'coverageAmount',
+    'lifeType',
+    'riskType',
+    'product',
+    'trustedFormUrl',
+    'leadidToken',
+    'consentLanguage',
+    'recordingUrl',
   ];
 
   for (const lead of leads) {
-    let rawPhone = String(lead.phone || lead.phoneNumber || '').trim();
+    const rawPhone = String(lead.phone || lead.phoneNumber || '').trim();
     if (!rawPhone) continue;
-    
+
     // Normalize phone to last 10 digits
     const cleanPhone = rawPhone.replace(/\D/g, '');
     const phone = cleanPhone.length > 10 ? cleanPhone.slice(-10) : cleanPhone;
@@ -682,22 +988,31 @@ export async function bulkImportLeads(
 
     const firstName = lead.firstName ? String(lead.firstName).trim() : null;
     const lastName = lead.lastName ? String(lead.lastName).trim() : null;
-    const fullName = lead.fullName ? String(lead.fullName).trim() : (firstName && lastName ? `${firstName} ${lastName}` : null);
+    const fullName = lead.fullName
+      ? String(lead.fullName).trim()
+      : firstName && lastName
+        ? `${firstName} ${lastName}`
+        : null;
 
     // Extract custom fields (any fields not in standardFields list)
     const customFields: Record<string, unknown> = {};
     for (const key of Object.keys(lead)) {
-      if (!standardFields.includes(key) && key !== 'id' && key !== 'tenantId' && lead[key] !== undefined) {
+      if (
+        !standardFields.includes(key) &&
+        key !== 'id' &&
+        key !== 'tenantId' &&
+        lead[key] !== undefined
+      ) {
         customFields[key] = lead[key];
       }
     }
-    
+
     // Merge with any customFields explicitly provided as an object
     if (lead.customFields && typeof lead.customFields === 'object') {
       Object.assign(customFields, lead.customFields);
     }
 
-    const vertical = (String(lead.vertical || 'FE').toUpperCase() === 'ACA') ? 'ACA' : 'FE';
+    const vertical = String(lead.vertical || 'FE').toUpperCase() === 'ACA' ? 'ACA' : 'FE';
 
     // Find existing by tenant + phone + vertical
     const existing = await prisma.insuranceLead.findFirst({
@@ -708,35 +1023,56 @@ export async function bulkImportLeads(
       firstName: firstName || (existing ? existing.firstName : null),
       lastName: lastName || (existing ? existing.lastName : null),
       fullName: fullName || (existing ? existing.fullName : null),
-      email: lead.email ? String(lead.email).trim() : (existing ? existing.email : null),
-      address: lead.address ? String(lead.address).trim() : (existing ? existing.address : null),
-      address2: lead.address2 ? String(lead.address2).trim() : (existing ? existing.address2 : null),
-      city: lead.city ? String(lead.city).trim() : (existing ? existing.city : null),
-      county: lead.county ? String(lead.county).trim() : (existing ? existing.county : null),
-      state: lead.state ? String(lead.state).trim() : (existing ? existing.state : null),
-      zipCode: lead.zipCode ? String(lead.zipCode).trim() : (existing ? existing.zipCode : null),
-      birthDate: lead.birthDate ? String(lead.birthDate).trim() : (existing ? existing.birthDate : null),
-      age: typeof lead.age === 'number' ? lead.age : (existing ? existing.age : null),
-      gender: lead.gender ? String(lead.gender).trim() : (existing ? existing.gender : null),
-      source: lead.source ? String(lead.source).trim() : (existing ? existing.source : 'bulk_upload'),
+      email: lead.email ? String(lead.email).trim() : existing ? existing.email : null,
+      address: lead.address ? String(lead.address).trim() : existing ? existing.address : null,
+      address2: lead.address2 ? String(lead.address2).trim() : existing ? existing.address2 : null,
+      city: lead.city ? String(lead.city).trim() : existing ? existing.city : null,
+      county: lead.county ? String(lead.county).trim() : existing ? existing.county : null,
+      state: lead.state ? String(lead.state).trim() : existing ? existing.state : null,
+      zipCode: lead.zipCode ? String(lead.zipCode).trim() : existing ? existing.zipCode : null,
+      birthDate: lead.birthDate
+        ? String(lead.birthDate).trim()
+        : existing
+          ? existing.birthDate
+          : null,
+      age: typeof lead.age === 'number' ? lead.age : existing ? existing.age : null,
+      gender: lead.gender ? String(lead.gender).trim() : existing ? existing.gender : null,
+      source: lead.source ? String(lead.source).trim() : existing ? existing.source : 'bulk_upload',
       status: (() => {
         if (lead.status) {
           const upper = String(lead.status).toUpperCase().trim();
           if (['NEW', 'CONTACTED', 'QUALIFIED', 'CONVERTED', 'LOST'].includes(upper)) {
-            return upper as any;
+            return upper as InsuranceLeadStatus;
           }
         }
         return existing ? existing.status : 'NEW';
       })(),
-      
-      smoker: lead.smoker ? String(lead.smoker).trim() : (existing ? existing.smoker : null),
-      faceAmount: lead.faceAmount ? String(lead.faceAmount).trim() : (existing ? existing.faceAmount : null),
-      monthlyPremium: lead.monthlyPremium ? String(lead.monthlyPremium).trim() : (existing ? existing.monthlyPremium : null),
-      carrier: lead.carrier ? String(lead.carrier).trim() : (existing ? existing.carrier : null),
-      coverageAmount: lead.coverageAmount ? String(lead.coverageAmount).trim() : (existing ? existing.coverageAmount : null),
+
+      smoker: lead.smoker ? String(lead.smoker).trim() : existing ? existing.smoker : null,
+      faceAmount: lead.faceAmount
+        ? String(lead.faceAmount).trim()
+        : existing
+          ? existing.faceAmount
+          : null,
+      monthlyPremium: lead.monthlyPremium
+        ? String(lead.monthlyPremium).trim()
+        : existing
+          ? existing.monthlyPremium
+          : null,
+      carrier: lead.carrier ? String(lead.carrier).trim() : existing ? existing.carrier : null,
+      coverageAmount: lead.coverageAmount
+        ? String(lead.coverageAmount).trim()
+        : existing
+          ? existing.coverageAmount
+          : null,
 
       // Store customFields as a JSON object
-      customFields: Object.keys(customFields).length > 0 ? (customFields as any) : (existing ? existing.customFields : null),
+      customFields:
+        Object.keys(customFields).length > 0
+          ? (customFields as Prisma.InputJsonValue)
+          : existing
+            ? (existing.customFields as Prisma.InputJsonValue)
+            : null,
     };
 
     if (existing) {
@@ -751,7 +1087,7 @@ export async function bulkImportLeads(
           phone,
           vertical,
           tenant: { connect: { id: tenantId } },
-        } as any,
+        } as Prisma.InsuranceLeadCreateInput,
       });
     }
     importCount++;

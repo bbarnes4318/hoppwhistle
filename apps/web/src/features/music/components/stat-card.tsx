@@ -1,8 +1,8 @@
 'use client';
 
-import { formatChange } from '../lib/utils';
-
 import { cn } from '@/lib/utils';
+
+import { formatChange } from '../lib/utils';
 
 interface StatCardProps {
   title: string;

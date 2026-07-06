@@ -20,6 +20,8 @@ export interface InsuranceLeadSummary {
   zipCode: string | null;
   source: string | null;
   status: string;
+  leadStage: string | null;
+  nextFollowUpAt: string | null;
   createdAt: string;
   latestSubmission: {
     id: string;
@@ -36,7 +38,15 @@ export interface InsuranceActivity {
   id: string;
   tenantId: string;
   insuranceLeadId: string;
-  type: 'NOTE' | 'CALL' | 'STATUS_CHANGE' | 'SUBMISSION' | 'VALIDATION' | 'SYSTEM' | 'TASK' | 'COMPLIANCE';
+  type:
+    | 'NOTE'
+    | 'CALL'
+    | 'STATUS_CHANGE'
+    | 'SUBMISSION'
+    | 'VALIDATION'
+    | 'SYSTEM'
+    | 'TASK'
+    | 'COMPLIANCE';
   title: string;
   description: string | null;
   metadata: Record<string, unknown> | null;
@@ -177,6 +187,10 @@ export async function fetchInsuranceLeads(params: {
   search?: string;
   startDate?: string;
   endDate?: string;
+  status?: string;
+  leadStage?: string;
+  followUp?: string;
+  listId?: string;
 }): Promise<LeadListResponse> {
   const queryParts: string[] = [];
   if (params.page) queryParts.push(`page=${params.page}`);
@@ -188,6 +202,10 @@ export async function fetchInsuranceLeads(params: {
   if (params.search) queryParts.push(`search=${encodeURIComponent(params.search)}`);
   if (params.startDate) queryParts.push(`startDate=${params.startDate}`);
   if (params.endDate) queryParts.push(`endDate=${params.endDate}`);
+  if (params.status) queryParts.push(`status=${params.status}`);
+  if (params.leadStage) queryParts.push(`leadStage=${params.leadStage}`);
+  if (params.followUp) queryParts.push(`followUp=${params.followUp}`);
+  if (params.listId) queryParts.push(`listId=${params.listId}`);
 
   const qs = queryParts.length ? `?${queryParts.join('&')}` : '';
   const res = await apiClient.get<LeadListResponse>(`/api/v1/insurance-leads${qs}`);
@@ -201,7 +219,7 @@ export async function fetchInsuranceLead(id: string): Promise<InsuranceLeadDetai
 
 export async function updateInsuranceLead(
   id: string,
-  data: Record<string, unknown>,
+  data: Record<string, unknown>
 ): Promise<{ success: boolean }> {
   const res = await apiClient.patch<{ success: boolean }>(`/api/v1/insurance-leads/${id}`, data);
   return res.data as unknown as { success: boolean };
@@ -209,10 +227,10 @@ export async function updateInsuranceLead(
 
 export async function retryInsuranceSubmission(
   leadId: string,
-  submissionId: string,
+  submissionId: string
 ): Promise<{ success?: boolean; error?: string }> {
   const res = await apiClient.post<{ success?: boolean; error?: { message: string } }>(
-    `/api/v1/insurance-leads/${leadId}/submissions/${submissionId}/retry`,
+    `/api/v1/insurance-leads/${leadId}/submissions/${submissionId}/retry`
   );
   if (res.error) return { error: res.error.message };
   return { success: true };
@@ -224,7 +242,9 @@ export async function fetchInsuranceLeadStats(): Promise<InsuranceLeadStats> {
 }
 
 export async function fetchInsuranceLeadTasks(leadId: string): Promise<{ tasks: InsuranceTask[] }> {
-  const res = await apiClient.get<{ tasks: InsuranceTask[] }>(`/api/v1/insurance-leads/${leadId}/tasks`);
+  const res = await apiClient.get<{ tasks: InsuranceTask[] }>(
+    `/api/v1/insurance-leads/${leadId}/tasks`
+  );
   return res.data as unknown as { tasks: InsuranceTask[] };
 }
 
@@ -287,6 +307,12 @@ export async function fetchCustomerLookup(phone: string): Promise<CustomerLookup
   return res.data as unknown as CustomerLookupResponse;
 }
 
+export async function deleteInsuranceLeads(ids: string[]): Promise<{ success: boolean; count: number }> {
+  const res = await apiClient.delete<{ success: boolean; count: number }>('/api/v1/insurance-leads', { ids });
+  if (res.error) throw new Error(res.error.message);
+  return res.data as unknown as { success: boolean; count: number };
+}
+
 export async function bulkImportInsuranceLeads(
   leads: Array<Record<string, unknown>>
 ): Promise<{ success: boolean; count: number }> {
@@ -297,3 +323,8 @@ export async function bulkImportInsuranceLeads(
   return res.data as unknown as { success: boolean; count: number };
 }
 
+export async function deleteLeadList(id: string): Promise<{ success: boolean }> {
+  const res = await apiClient.delete<{ success: boolean }>(`/api/v1/lead-lists/${id}`);
+  if (res.error) throw new Error(res.error.message);
+  return res.data as unknown as { success: boolean };
+}

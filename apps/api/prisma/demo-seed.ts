@@ -107,12 +107,23 @@ async function main() {
   // Create phone numbers
   console.log('📞 Creating phone numbers...');
   const phoneNumbers = [];
-  for (let i = 0; i < 10; i++) {
+  const bulkVsDids = [
+    '12816989460', '12816989461',
+    '14063165877', '14402992856',
+    '14402992860', '16102819660',
+    '16102819662', '17038313168',
+    '17042283589', '17042286088',
+    '18036135410', '18036135412',
+    '19124185540', '19124185542',
+    '19542083921', '19542083922'
+  ];
+
+  for (const did of bulkVsDids) {
     const number = await prisma.phoneNumber.create({
       data: {
         tenantId: tenant.id,
-        number: randomPhoneNumber(),
-        provider: 'local',
+        number: `+${did}`,
+        provider: 'bulkvs',
         status: 'ACTIVE',
         capabilities: { voice: true, sms: true },
         purchasedAt: new Date(),

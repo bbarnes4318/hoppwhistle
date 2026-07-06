@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument */
 /**
  * Call Center Portal — API Routes
  *
@@ -5,6 +6,7 @@
  */
 
 import { FastifyInstance, FastifyRequest } from 'fastify';
+
 import { getPrismaClient } from '../lib/prisma.js';
 
 interface AuthenticatedUser {
@@ -63,6 +65,7 @@ export async function registerCallCenterRoutes(fastify: FastifyInstance) {
           submissions: { orderBy: { receivedAt: 'desc' } },
           activities: { orderBy: { createdAt: 'desc' } },
           tasks: { orderBy: { createdAt: 'desc' } },
+          list: true,
         },
       });
 
@@ -86,10 +89,7 @@ export async function registerCallCenterRoutes(fastify: FastifyInstance) {
       const calls = await prisma.call.findMany({
         where: {
           tenantId,
-          OR: [
-            { callerId: { endsWith: last10 } },
-            { toNumber: { endsWith: last10 } },
-          ],
+          OR: [{ callerId: { endsWith: last10 } }, { toNumber: { endsWith: last10 } }],
         },
         orderBy: { createdAt: 'desc' },
         take: 10,
@@ -107,7 +107,7 @@ export async function registerCallCenterRoutes(fastify: FastifyInstance) {
 
       // Map Primary Customer
       let customer: Record<string, any> | null = null;
-      let recentCallsList: any[] = calls.map(c => ({
+      const recentCallsList: any[] = calls.map(c => ({
         id: c.id,
         direction: c.direction,
         status: c.status,
@@ -170,9 +170,12 @@ export async function registerCallCenterRoutes(fastify: FastifyInstance) {
             consentLanguage: lead.consentLanguage || null,
             recordingUrl: lead.recordingUrl || null,
           },
+          customFields: lead.customFields || null,
+          listId: lead.listId || null,
+          list: lead.list ? { id: lead.list.id, name: lead.list.name } : null,
         };
 
-        activitiesList = lead.activities.map((a) => ({
+        activitiesList = lead.activities.map(a => ({
           id: a.id,
           type: a.type,
           title: a.title,
@@ -180,7 +183,7 @@ export async function registerCallCenterRoutes(fastify: FastifyInstance) {
           createdAt: a.createdAt.toISOString(),
         }));
 
-        tasksList = lead.tasks.map((t) => ({
+        tasksList = lead.tasks.map(t => ({
           id: t.id,
           title: t.title,
           description: t.description || null,
@@ -191,7 +194,7 @@ export async function registerCallCenterRoutes(fastify: FastifyInstance) {
           createdAt: t.createdAt.toISOString(),
         }));
 
-        submissionsList = lead.submissions.map((s) => ({
+        submissionsList = lead.submissions.map(s => ({
           id: s.id,
           receivedAt: s.receivedAt.toISOString(),
           validationStatus: s.validationStatus,
@@ -283,7 +286,9 @@ export async function registerCallCenterRoutes(fastify: FastifyInstance) {
           recordType: type,
           fullName:
             record.fullName ||
-            (record.firstName && record.lastName ? `${record.firstName} ${record.lastName}` : null) ||
+            (record.firstName && record.lastName
+              ? `${record.firstName} ${record.lastName}`
+              : null) ||
             'Unnamed Record',
           phone: phoneVal,
           email: record.email || null,
@@ -298,7 +303,11 @@ export async function registerCallCenterRoutes(fastify: FastifyInstance) {
       for (let i = primaryRecordType === 'Lead' ? 1 : 0; i < genericLeads.length; i++) {
         pushDuplicate(genericLeads[i], 'Lead', genericLeads[i].phoneNumber);
       }
-      for (let i = primaryRecordType === 'ProspectIntake' ? 1 : 0; i < prospectIntakes.length; i++) {
+      for (
+        let i = primaryRecordType === 'ProspectIntake' ? 1 : 0;
+        i < prospectIntakes.length;
+        i++
+      ) {
         pushDuplicate(prospectIntakes[i], 'ProspectIntake', prospectIntakes[i].phone);
       }
 

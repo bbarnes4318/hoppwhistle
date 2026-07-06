@@ -73,6 +73,7 @@ services:
     volumes:
       - clickhouse_data:/var/lib/clickhouse
       - clickhouse_logs:/var/log/clickhouse-server
+      - ./clickhouse-config/default-user.xml:/etc/clickhouse-server/users.d/default-user.xml
     environment:
       CLICKHOUSE_DB: ${CLICKHOUSE_DB:-hopwhistle}
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
@@ -118,6 +119,9 @@ services:
       S3_FORCE_PATH_STYLE: 'true'
       CLICKHOUSE_URL: http://clickhouse:8123
       CLICKHOUSE_DATABASE: ${CLICKHOUSE_DB:-hopwhistle}
+      BULKVS_USERNAME: ${BULKVS_USERNAME:-jimmy@getlifeassurance.com}
+      BULKVS_PASSWORD: ${BULKVS_PASSWORD:-50e77367256f3bd823f44d13dc1e8d17}
+      BULKVS_TRUNK_GROUP: ${BULKVS_TRUNK_GROUP:-pvn}
     depends_on:
       postgres:
         condition: service_healthy
@@ -129,7 +133,7 @@ services:
       - hopwhistle-network
     volumes:
       - freeswitch_recordings:/recordings:ro
-
+      - ../../rating (9) (1).xlsx:/app/rating (9) (1).xlsx
 
   web:
     build:
@@ -196,6 +200,8 @@ services:
       - '8083:8083/tcp'
       - '5066:5066/tcp'
       - '7443:7443/tcp'
+      # RTP media ports (audio) - MUST be exposed for call audio to work
+      - '16384-16484:16384-16484/udp'
     environment:
       FREESWITCH_ESL_PASSWORD: ${FREESWITCH_ESL_PASSWORD:-ClueCon}
       API_URL: http://api:3001
@@ -213,9 +219,11 @@ services:
       OUTBOUND_SIP_PASS: ${OUTBOUND_SIP_PASS}
       OUTBOUND_CALLER_ID: ${OUTBOUND_CALLER_ID}
       PUBLIC_IP: ${PUBLIC_IP}
+      SIP_DOMAIN: ${SIP_DOMAIN:-freeswitch}
     volumes:
       - freeswitch_recordings:/recordings
       # Mount Let's Encrypt certs for WSS (on production servers only)
+      - /etc/letsencrypt:/etc/letsencrypt:ro
       - /etc/letsencrypt/live/hopwhistle.com:/etc/freeswitch/letsencrypt:ro
       # NOTE: Do NOT mount freeswitch_conf here - config is baked into the image via Dockerfile
     healthcheck:
@@ -253,10 +261,11 @@ services:
       FREESWITCH_NODES: ${FREESWITCH_NODES:-freeswitch:5080}
       RTPENGINE_SOCK: ${RTPENGINE_SOCK:-udp:rtpengine:22222}
       DB_URL: ${DB_URL:-}
+      PUBLIC_IP: ${PUBLIC_IP}
     volumes:
       - kamailio_data:/var/run/kamailio
     healthcheck:
-      test: ['CMD', 'kamctl', 'ping']
+      test: ['CMD', 'kamcmd', 'core.ps']
       interval: 30s
       timeout: 10s
       retries: 3
@@ -277,9 +286,10 @@ services:
     ports:
       - '22222:22222/udp'
       - '22222:22222/tcp'
-      - '10000-20000:10000-20000/udp'
+      - '10000-10100:10000-10100/udp'
     environment:
       RTPENGINE_INTERFACE: ${RTPENGINE_INTERFACE:-auto}
+      PUBLIC_IP: ${PUBLIC_IP}
     volumes:
       - rtpengine_recordings:/recordings
     cap_add:
@@ -289,7 +299,7 @@ services:
     stop_grace_period: 5s
     stop_signal: SIGKILL
     healthcheck:
-      test: ['CMD', 'rtpengine-ctl', '-t', '127.0.0.1:9900', 'ping']
+      test: ['CMD', 'rtpengine-ctl', '-ip', '127.0.0.1:9900', 'list', 'numsessions']
       interval: 30s
       timeout: 10s
       retries: 3

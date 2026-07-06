@@ -2,15 +2,9 @@ import { Redis } from 'ioredis';
 import { Pool } from 'pg';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
-import { AccrualLedgerService } from '../services/accrual-ledger.js';
-import { BillingWorker } from '../services/billing-worker.js';
-import { InvoiceGeneratorService } from '../services/invoice-generator.js';
-
 describe('Billing Integration Tests', () => {
   let pool: Pool;
   let redis: Redis;
-  let invoiceGenerator: InvoiceGeneratorService;
-  let accrualLedger: AccrualLedgerService;
 
   beforeAll(() => {
     pool = new Pool({
@@ -19,8 +13,6 @@ describe('Billing Integration Tests', () => {
         'postgresql://hopwhistle:hopwhistle_dev@localhost:5432/hopwhistle',
     });
     redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
-    invoiceGenerator = new InvoiceGeneratorService();
-    accrualLedger = new AccrualLedgerService();
   });
 
   afterAll(async () => {
@@ -28,7 +20,7 @@ describe('Billing Integration Tests', () => {
     await redis.quit();
   });
 
-  it('should simulate 100 calls and produce invoices', async () => {
+  it('should simulate 100 calls and produce invoices', () => {
     // This is a comprehensive integration test
     // In a real scenario, you'd:
     // 1. Create a test billing account
@@ -42,7 +34,7 @@ describe('Billing Integration Tests', () => {
     expect(true).toBe(true);
   });
 
-  it('should handle edge cases in rounding', async () => {
+  it('should handle edge cases in rounding', () => {
     // Test that rounding doesn't cause precision errors
     const testCases = [
       { seconds: 1, expectedMinutes: 1 },
@@ -59,7 +51,7 @@ describe('Billing Integration Tests', () => {
     }
   });
 
-  it('should handle zero-duration calls', async () => {
+  it('should handle zero-duration calls', () => {
     // Zero duration calls should not create charges
     const zeroDurationCall = {
       direction: 'INBOUND' as const,

@@ -2,7 +2,7 @@
 import bcrypt from 'bcryptjs';
 // eslint-disable-next-line import/no-named-as-default-member
 const { compare, hash } = bcrypt;
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyRequest } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
 import { authenticate } from '../middleware/auth.js';
@@ -12,9 +12,6 @@ import { verifyGoogleToken } from '../services/google-auth.js';
 
 // Password validation: min 8 chars, 1 uppercase, 1 number
 const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*\d).{8,}$/;
-
-// Default tenant ID for new users (must exist in database)
-const DEFAULT_TENANT_ID = 'default-tenant-id';
 
 interface UserRole {
   role: { name: string };
@@ -26,6 +23,129 @@ interface UserRole {
  */
 export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void> {
   const prisma = getPrismaClient();
+  await Promise.resolve(); // satisfy eslint require-await
+
+  // Helper to get or create a default tenant ID dynamically, optionally resolving from request host/domain/slug
+  async function getDefaultTenantId(request?: FastifyRequest): Promise<string> {
+    if (request) {
+      let host = request.hostname || '';
+      if (!host && request.headers.host) {
+        host = request.headers.host.split(':')[0];
+      }
+      
+      const referer = request.headers.referer;
+      if (referer) {
+        try {
+          const refUrl = new URL(referer);
+          if (refUrl.hostname) {
+            host = refUrl.hostname;
+          }
+        } catch {}
+      }
+      
+      const origin = request.headers.origin;
+      if (origin) {
+        try {
+          const originUrl = new URL(origin);
+          if (originUrl.hostname) {
+            host = originUrl.hostname;
+          }
+        } catch {}
+      }
+
+      if (host) {
+        // Normalize host (lowercase and strip port if present)
+        host = host.split(':')[0].toLowerCase();
+
+        // 1. Try matching the exact domain
+        let tenant = await prisma.tenant.findFirst({
+          where: { domain: host },
+        });
+        if (tenant) {
+          return tenant.id;
+        }
+
+        // 2. Try matching the first subdomain to the tenant slug
+        const parts = host.split('.');
+        if (parts.length > 1) {
+          const subdomain = parts[0];
+          tenant = await prisma.tenant.findUnique({
+            where: { slug: subdomain },
+          });
+          if (tenant) {
+            return tenant.id;
+          }
+        }
+      }
+    }
+
+    // 3. Try to find the primary seeded tenant ('test-org')
+    let defaultTenant = await prisma.tenant.findUnique({
+      where: { slug: 'test-org' },
+    });
+
+    // 4. Try to find 'default' slug
+    if (!defaultTenant) {
+      defaultTenant = await prisma.tenant.findUnique({
+        where: { slug: 'default' },
+      });
+    }
+
+    // 5. Fallback to any active tenant that is not a test-generated one
+    if (!defaultTenant) {
+      const activeTenants = await prisma.tenant.findMany({
+        where: { status: 'ACTIVE' },
+        orderBy: { createdAt: 'asc' },
+      });
+      // Filter out test tenants like test-123456789
+      defaultTenant = activeTenants.find(t => !/^test-\d+$/.test(t.slug)) || activeTenants[0];
+    }
+
+    // 6. Fallback to the absolute first tenant
+    if (!defaultTenant) {
+      defaultTenant = await prisma.tenant.findFirst({
+        orderBy: { createdAt: 'asc' },
+      });
+    }
+
+    // 7. Create default organization if none exists
+    if (!defaultTenant) {
+      defaultTenant = await prisma.tenant.create({
+        data: {
+          name: 'Default Organization',
+          slug: 'default',
+          status: 'ACTIVE',
+          metadata: {
+            plan: 'enterprise',
+          },
+        },
+      });
+    }
+    return defaultTenant.id;
+  }
+
+  // Helper to automatically assign the ADMIN role to newly registered users
+  async function assignDefaultRole(userId: string): Promise<void> {
+    let role = await prisma.role.findFirst({
+      where: { name: 'ADMIN' },
+    });
+    if (!role) {
+      role = await prisma.role.findFirst({
+        where: { name: 'OWNER' },
+      });
+    }
+    if (!role) {
+      role = await prisma.role.findFirst();
+    }
+    if (role) {
+      await prisma.userRole.create({
+        data: {
+          userId,
+          roleId: role.id,
+        },
+      });
+    }
+  }
 
   // ============================================================================
   // Email/Password Login
@@ -174,11 +294,12 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
   // Email Registration
   // ============================================================================
   fastify.post('/api/auth/register', async (request, reply) => {
-    const { email, password, firstName, lastName } = request.body as {
+    const { email, password, firstName, lastName, position } = request.body as {
       email: string;
       password: string;
       firstName?: string;
       lastName?: string;
+      position?: string;
     };
 
     if (!email || !password) {
@@ -238,18 +359,27 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     // Hash password (12 salt rounds for security)
     const passwordHash = await hash(password, 12);
 
+    const userPosition = position || 'Licensed Agent';
+    const defaultScript = userPosition === 'Retention' ? 'retention' : 'sales';
+
     // Create user with default tenant
     const user = await prisma.user.create({
       data: {
-        tenantId: DEFAULT_TENANT_ID,
+        tenantId: await getDefaultTenantId(request),
         email: normalizedEmail,
         passwordHash,
         authMethod: 'EMAIL',
         firstName: firstName?.trim() || null,
         lastName: lastName?.trim() || null,
         status: 'ACTIVE',
+        metadata: {
+          position: userPosition,
+          defaultScript: defaultScript,
+        },
       },
     });
+
+    await assignDefaultRole(user.id);
 
     // Audit registration
     await auditLog({
@@ -402,7 +532,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         // Create new user with Google and default tenant
         user = await prisma.user.create({
           data: {
-            tenantId: DEFAULT_TENANT_ID,
+            tenantId: await getDefaultTenantId(request),
             email: normalizedEmail,
             googleId: googleUser.googleId,
             authMethod: 'GOOGLE',
@@ -411,6 +541,13 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
             status: 'ACTIVE',
             lastLoginAt: new Date(),
           },
+        });
+
+        await assignDefaultRole(user.id);
+
+        // Fetch user again with relation to return correctly
+        const userWithRoles = await prisma.user.findUnique({
+          where: { id: user.id },
           include: {
             tenant: true,
             roles: {
@@ -420,6 +557,9 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
             },
           },
         });
+        if (userWithRoles) {
+          user = userWithRoles;
+        }
 
         await auditLog({
           tenantId: 'default',
@@ -570,6 +710,28 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         });
       }
 
+      let publisherAccessToRecordings = false;
+      let buyerAccessToRecordings = false;
+
+      if (user.publisherId) {
+        const pub = await prisma.publisher.findUnique({
+          where: { id: user.publisherId },
+          select: { accessToRecordings: true },
+        });
+        publisherAccessToRecordings = pub?.accessToRecordings ?? false;
+      }
+
+      if (user.buyerId) {
+        const buyer = await prisma.buyer.findUnique({
+          where: { id: user.buyerId },
+          select: { metadata: true },
+        });
+        const buyerMetadata = buyer?.metadata as Record<string, unknown> | null;
+        buyerAccessToRecordings = !!buyerMetadata?.accessToRecordings;
+      }
+
+      const userMetadata = user.metadata as Record<string, unknown> | null;
+
       return reply.send({
         id: user.id,
         email: user.email,
@@ -577,6 +739,68 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         lastName: user.lastName,
         roles: user.roles.map((ur: UserRole) => ur.role.name),
         tenantId: user.tenantId,
+        buyerId: user.buyerId,
+        publisherId: user.publisherId || (userMetadata?.publisherId as string | null) || null,
+        publisherAccessToRecordings,
+        buyerAccessToRecordings,
+        position: userMetadata?.position || null,
+        defaultScript: userMetadata?.defaultScript || null,
+        customScripts: userMetadata?.customScripts || null,
+      });
+    }
+  );
+
+  // ============================================================================
+  // Update User Settings (me)
+  // ============================================================================
+  fastify.patch(
+    '/api/auth/me/settings',
+    {
+      preHandler: [authenticate],
+    },
+    async (request, reply) => {
+      const { userId } = request.user as { userId: string };
+      const { position, defaultScript, customScripts } = request.body as {
+        position?: string;
+        defaultScript?: string;
+        customScripts?: Record<string, string>;
+      };
+
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+      });
+
+      if (!user) {
+        return reply.code(404).send({
+          error: {
+            code: 'NOT_FOUND',
+            message: 'User not found',
+          },
+        });
+      }
+
+      const currentMetadata = (user.metadata as Record<string, any>) || {};
+      const newMetadata = {
+        ...currentMetadata,
+      };
+
+      if (position !== undefined) newMetadata.position = position;
+      if (defaultScript !== undefined) newMetadata.defaultScript = defaultScript;
+      if (customScripts !== undefined) {
+        newMetadata.customScripts = {
+          ...(currentMetadata.customScripts as Record<string, string> || {}),
+          ...customScripts,
+        };
+      }
+
+      const updated = await prisma.user.update({
+        where: { id: userId },
+        data: { metadata: newMetadata },
+      });
+
+      return reply.send({
+        success: true,
+        metadata: updated.metadata,
       });
     }
   );

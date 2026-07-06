@@ -13,6 +13,9 @@ interface UserProfile {
   lastName: string | null;
   roles: RoleName[];
   tenantId: string | null;
+  position?: string | null;
+  defaultScript?: string | null;
+  customScripts?: Record<string, string> | null;
 }
 
 interface UseUserRolesReturn {
@@ -96,7 +99,7 @@ export function useUserRoles(): UseUserRolesReturn {
  * - Other roles: Access to Sales script only
  */
 export function useScriptAccess() {
-  const { roles, loading, error, isAdminOrOwner } = useUserRoles();
+  const { user, roles, loading, error, isAdminOrOwner, refetch } = useUserRoles();
 
   // Script access logic:
   // - Sales Script: Everyone has access
@@ -104,10 +107,11 @@ export function useScriptAccess() {
   const canAccessSalesScript = true;
   const canAccessRetentionScript = true;
 
-  // Derive job title from role for display purposes
-  const derivedJobTitle = isAdminOrOwner ? 'Admin' : 'Agent';
+  // Derive job title from role or position for display purposes
+  const derivedJobTitle = user?.position || (isAdminOrOwner ? 'Admin' : 'Agent');
 
   return {
+    user,
     roles,
     loading,
     error,
@@ -115,5 +119,9 @@ export function useScriptAccess() {
     canAccessRetentionScript,
     derivedJobTitle,
     isAdminOrOwner,
+    position: user?.position || null,
+    defaultScript: user?.defaultScript || null,
+    customScripts: user?.customScripts || null,
+    refetch,
   };
 }

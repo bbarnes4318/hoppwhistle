@@ -3,5 +3,6 @@
     <param name="proxy" value="sip.bulkvs.com"/>
     <param name="register" value="false"/>
     <param name="caller-id-in-from" value="true"/>
+    <param name="cid-type" value="none"/>
   </gateway>
 </include>
