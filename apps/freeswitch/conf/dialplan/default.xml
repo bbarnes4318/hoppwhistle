@@ -56,9 +56,8 @@
         <action application="set" data="proxy_media=false" inline="true"/>
         <action application="set" data="bypass_media_after_bridge=false" inline="true"/>
 
-        <!-- Disable identity headers (PAI/RPID) to prevent carrier rejection -->
-        <action application="export" data="nolocal:sip_cid_type=none" inline="true"/>
-        <action application="export" data="nolocal:sip_copy_custom_headers=false" inline="true"/>
+        <!-- Send caller ID via P-Asserted-Identity header to the carrier -->
+        <action application="export" data="nolocal:sip_cid_type=pid" inline="true"/>
 
         <!-- Extract X-Caller-ID (mixed or lowercase) -->
         <action application="set" data="req_caller_id=${sip_h_X-Caller-ID}" inline="true"/>
@@ -108,7 +107,9 @@
         <action application="set" data="effective_caller_id_number=${clean_caller_id}" inline="true"/>
         <action application="set" data="origination_caller_id_number=${clean_caller_id}" inline="true"/>
         <action application="set" data="sip_from_user=${clean_caller_id}" inline="true"/>
+        <action application="set" data="sip_invite_from_uri=sip:${clean_caller_id}@$${domain}" inline="true"/>
         <action application="set" data="effective_caller_id_name=Hopwhistle" inline="true"/>
+        <action application="set" data="origination_caller_id_name=Hopwhistle" inline="true"/>
         <action application="set" data="hangup_after_bridge=true"/>
         <!-- Default priority: Telnyx -> BulkVS -> SignalWire -->
         <action application="set" data="gw1=telnyx" inline="true"/>
@@ -166,11 +167,11 @@
         <action application="bridge" data="${sofia_contact(internal/${local_ext}@$${domain})}"/>
         <action application="hangup" data="NORMAL_CLEARING"/>
         
-        <!-- PSTN Gateway routing (anti-action) -->
-        <anti-action application="log" data="INFO [OUTBOUND-PSTN] Routing to PSTN gateways for 1${clean_dest}"/>
+        <!-- PSTN Gateway routing (anti-action) — BulkVS first (primary for agent calls) -->
+        <anti-action application="log" data="INFO [OUTBOUND-PSTN] Routing to PSTN gateways for 1${clean_dest} with CID ${clean_caller_id}"/>
         <anti-action application="set" data="continue_on_fail=true"/>
         <anti-action application="set" data="fail_on_single_reject=false"/>
-        <anti-action application="bridge" data="sofia/gateway/${gw1}/1${clean_dest}|sofia/gateway/${gw2}/1${clean_dest}|sofia/gateway/${gw3}/1${clean_dest}"/>
+        <anti-action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=Hopwhistle,origination_caller_id_number=${clean_caller_id},sip_from_user=${clean_caller_id}}sofia/gateway/${gw1}/1${clean_dest}|sofia/gateway/${gw2}/1${clean_dest}|sofia/gateway/${gw3}/1${clean_dest}"/>
         <anti-action application="hangup" data="NORMAL_CLEARING"/>
       </condition>
     </extension>
