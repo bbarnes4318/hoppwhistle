@@ -41,7 +41,6 @@
     "**/tests/**/*.js",
     "**/*.spec.js",
     "**/*.test.js",
-    "scripts/**/*.js",
-    "apps/api/src/services/american-amicable.js"
+    "scripts/**/*.js"
   ]
 }

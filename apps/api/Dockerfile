@@ -81,6 +81,12 @@ WORKDIR /app
 
 ENV NODE_ENV production
 
+# Chromium for the American Amicable carrier-application RPA (Puppeteer).
+# The image skips Puppeteer's bundled download, so provide the system browser
+# and point Puppeteer at it via PUPPETEER_EXECUTABLE_PATH.
+RUN apk add --no-cache chromium nss freetype harfbuzz ca-certificates ttf-freefont
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
