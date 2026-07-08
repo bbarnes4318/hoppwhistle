@@ -1370,6 +1370,12 @@ export function PhoneProvider({
             onConnect: () => {
               console.log('[Phone] SIP Transport Connected');
               setError(null);
+              if (registererRef.current) {
+                console.log('[Phone] Re-registering on transport connect');
+                registererRef.current.register().catch(err => {
+                  console.error('[Phone] Re-registration failed:', err);
+                });
+              }
             },
             onDisconnect: error => {
               console.log('[Phone] SIP Transport Disconnected', error);
