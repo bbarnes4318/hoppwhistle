@@ -1225,7 +1225,7 @@ export default function OperationsCallLogsPage() {
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between p-4 border-t border-white/10">
+          <div className="flex items-center justify-between p-4 border-t border-white/10 pr-24">
             <span className="text-xs text-gray-400">
               Page {page} of {totalPages}
             </span>

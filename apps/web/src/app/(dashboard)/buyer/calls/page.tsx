@@ -429,7 +429,7 @@ function BuyerCallsPage() {
 
           {/* Pagination */}
           {!loading && totalPages > 1 && (
-            <div className="flex items-center justify-between border-t p-4">
+            <div className="flex items-center justify-between border-t p-4 pr-24">
               <Button
                 variant="outline"
                 size="sm"

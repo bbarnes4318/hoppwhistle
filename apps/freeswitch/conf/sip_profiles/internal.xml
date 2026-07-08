@@ -20,7 +20,7 @@
 
       <!-- TLS Settings for WSS (Let's Encrypt certs) -->
       <param name="tls-cert-dir" value="/etc/freeswitch/letsencrypt"/>
-      <param name="tls-version" value="tlsv1.2"/>
+      <param name="tls-version" value="sslv23"/>
 
       <!-- SIP Settings -->
       <param name="dialplan" value="XML"/>
