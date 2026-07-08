@@ -245,7 +245,7 @@ function BuyerCallsPage() {
       </div>
 
       {/* Hidden audio element for stream playback */}
-      <audio ref={audioRef} className="hidden" />
+      <audio ref={audioRef} className="absolute w-0 h-0 opacity-0 pointer-events-none" />
 
       {/* Filters Card */}
       <Card className="bg-card border-border">

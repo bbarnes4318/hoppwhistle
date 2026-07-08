@@ -606,7 +606,7 @@ export default function OperationsCallLogsPage() {
     <audio
       ref={audioRef}
       src={audioUrl || undefined}
-      className={isAudioPlayerInDrawer ? 'h-8 flex-1 accent-cyan-400' : 'hidden'}
+      className={isAudioPlayerInDrawer ? 'h-8 flex-1 accent-cyan-400' : 'absolute w-0 h-0 opacity-0 pointer-events-none'}
       controls={isAudioPlayerInDrawer}
       onEnded={() => setPlayingId(null)}
     />
