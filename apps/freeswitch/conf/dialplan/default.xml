@@ -153,6 +153,12 @@
         <action application="log" data="INFO [OUTBOUND-LOOKUP] response=${lookup_response} local_ext=${local_ext}"/>
       </condition>
 
+      <!-- If local extension is matched but unregistered, clear local_ext to fall back to PSTN -->
+      <condition field="${local_ext}:${sofia_contact(internal/${local_ext}@$${domain})}" expression="^\d{4}:error" break="never">
+        <action application="log" data="WARNING [OUTBOUND-LOCAL] Extension ${local_ext} is offline. Routing call via PSTN carrier gateways."/>
+        <action application="set" data="local_ext=" inline="true"/>
+      </condition>
+
       <!-- Route call locally to extension if matched, otherwise failover to PSTN gateways -->
       <condition field="${local_ext}" expression="^\d{4}$">
         <!-- Local routing -->
