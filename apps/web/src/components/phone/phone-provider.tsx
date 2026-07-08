@@ -818,9 +818,14 @@ export function PhoneProvider({
 
   const makeCall = useCallback(
     async (phoneNumber: string, callerIdOverride?: string) => {
-      if (!userAgentRef.current || !isRegistered) {
+      if (!userAgentRef.current) {
         setError('Phone not connected');
-        return;
+        throw new Error('Phone not connected');
+      }
+
+      if (!isRegistered && !sessionRef.current && !heldSessionRef.current) {
+        setError('Phone not connected');
+        throw new Error('Phone not connected');
       }
 
       // Clean up any leftover session from a previous call to prevent
@@ -942,6 +947,7 @@ export function PhoneProvider({
         const message = err instanceof Error ? err.message : 'Failed to place call';
         setError(message);
         setIsConnecting(false);
+        throw err;
       }
     },
     [normalizedApiUrl, getApiHeaders, isRegistered, selectedCallerId]
