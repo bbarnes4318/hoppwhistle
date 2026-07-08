@@ -712,6 +712,9 @@ export function PhoneProvider({
                 sender.track.enabled = true; // unmute
               }
             }
+
+            // Re-bind the restored call's stream to the browser HTML audio element
+            wireRemoteAudio(pc);
           }
         } catch (e) {
           console.warn('[Phone] Failed to unmute track on restore:', e);
@@ -782,7 +785,7 @@ export function PhoneProvider({
     stopRingtone();
     stopCallDurationTimer();
     sessionRef.current = null;
-  }, [stopRingtone, stopCallDurationTimer, normalizedApiUrl, getApiHeaders]);
+  }, [stopRingtone, stopCallDurationTimer, normalizedApiUrl, getApiHeaders, wireRemoteAudio]);
 
   // Keep refs in sync so stateChange listeners always call latest versions
   useEffect(() => {
