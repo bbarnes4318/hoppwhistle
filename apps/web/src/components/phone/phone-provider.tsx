@@ -308,6 +308,7 @@ export function PhoneProvider({
   const callDurationIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const ringtoneRef = useRef<HTMLAudioElement | null>(null);
   const userAgentRef = useRef<UserAgent | null>(null);
+  const registererRef = useRef<Registerer | null>(null);
   const sessionRef = useRef<Session | null>(null);
   const heldSessionRef = useRef<Session | null>(null);
   const heldCallInfoRef = useRef<CallInfo | null>(null);
@@ -1388,6 +1389,7 @@ export function PhoneProvider({
         await ua.start();
         console.log('[Phone] SIP UA Started');
         const registerer = new Registerer(ua);
+        registererRef.current = registerer;
         await registerer.register();
         console.log('[Phone] SIP Registered');
         setIsRegistered(true);
@@ -1405,6 +1407,10 @@ export function PhoneProvider({
 
     return () => {
       active = false;
+      if (registererRef.current) {
+        void registererRef.current.unregister();
+        registererRef.current = null;
+      }
       if (ua) {
         void ua.stop();
       }
