@@ -2353,6 +2353,7 @@ enum AICallStatus {
 enum InsuranceVertical {
   ACA
   FE
+  B2B
 }
 
 enum InsuranceValidationStatus {
@@ -2442,6 +2443,13 @@ model InsuranceLead {
   leadidToken     String?
   consentLanguage String?
   recordingUrl    String?
+
+  // B2B specific CRM fields
+  company         String?
+  repName         String?
+  industry        String?
+  revenue         String?
+  yearEstablished String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

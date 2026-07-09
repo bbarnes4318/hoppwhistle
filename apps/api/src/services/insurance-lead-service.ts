@@ -28,7 +28,7 @@ const log = createServiceLogger('insurance-lead-service');
 // Types
 // ---------------------------------------------------------------------------
 
-type Vertical = 'ACA' | 'FE';
+type Vertical = 'ACA' | 'FE' | 'B2B';
 
 export interface IngestResult {
   insuranceLeadId: string;
@@ -168,6 +168,11 @@ export async function ingestLead(
     'updatedAt',
     'customFields',
     'listId',
+    'company',
+    'repName',
+    'industry',
+    'revenue',
+    'yearEstablished',
   ]);
   const extraFields: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(contactData)) {
@@ -232,6 +237,14 @@ export async function ingestLead(
         recordingUrl: contactData.recordingUrl
           ? String(contactData.recordingUrl)
           : existing.recordingUrl,
+        // Update B2B specific fields
+        company: contactData.company ? String(contactData.company) : existing.company,
+        repName: contactData.repName ? String(contactData.repName) : existing.repName,
+        industry: contactData.industry ? String(contactData.industry) : existing.industry,
+        revenue: contactData.revenue ? String(contactData.revenue) : existing.revenue,
+        yearEstablished: contactData.yearEstablished
+          ? String(contactData.yearEstablished)
+          : existing.yearEstablished,
         // Shallow merge custom fields if they exist
         customFields: {
           ...((existing.customFields as Record<string, unknown>) || {}),
@@ -293,6 +306,12 @@ export async function ingestLead(
         leadidToken: contactData.leadidToken ? String(contactData.leadidToken) : null,
         consentLanguage: contactData.consentLanguage ? String(contactData.consentLanguage) : null,
         recordingUrl: contactData.recordingUrl ? String(contactData.recordingUrl) : null,
+        // Optional B2B specific fields
+        company: contactData.company ? String(contactData.company) : null,
+        repName: contactData.repName ? String(contactData.repName) : null,
+        industry: contactData.industry ? String(contactData.industry) : null,
+        revenue: contactData.revenue ? String(contactData.revenue) : null,
+        yearEstablished: contactData.yearEstablished ? String(contactData.yearEstablished) : null,
         customFields: {
           ...((contactData.customFields as Record<string, unknown>) || {}),
           ...extraFields,
@@ -580,6 +599,18 @@ export async function getLeads(tenantId: string, filters: LeadFilters) {
   };
 }
 
+export interface ActivityReturn {
+  id: string;
+  tenantId: string;
+  insuranceLeadId: string;
+  type: string;
+  title: string;
+  description: string | null;
+  createdAt: string;
+  metadata?: any;
+  createdById?: string | null;
+}
+
 export async function getLeadById(tenantId: string, id: string) {
   const prisma = getPrismaClient();
 
@@ -599,18 +630,6 @@ export async function getLeadById(tenantId: string, id: string) {
   });
 
   if (!lead) return null;
-
-  interface ActivityReturn {
-    id: string;
-    tenantId: string;
-    insuranceLeadId: string;
-    type: string;
-    title: string;
-    description: string | null;
-    createdAt: string;
-    metadata?: any;
-    createdById?: string | null;
-  }
 
   const last10 = lead.phone.replace(/\D/g, '').slice(-10);
   const callActivities: ActivityReturn[] = [];

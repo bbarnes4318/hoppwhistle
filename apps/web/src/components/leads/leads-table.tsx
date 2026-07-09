@@ -142,15 +142,24 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function VerticalBadge({ vertical }: { vertical: 'ACA' | 'FE' }) {
-  const isACA = vertical === 'ACA';
+function VerticalBadge({ vertical }: { vertical: 'ACA' | 'FE' | 'B2B' }) {
+  if (vertical === 'ACA') {
+    return (
+      <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-widest bg-cyan-500/15 text-cyan-400">
+        ACA
+      </span>
+    );
+  }
+  if (vertical === 'FE') {
+    return (
+      <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-widest bg-violet-500/15 text-violet-400">
+        FE Customers
+      </span>
+    );
+  }
   return (
-    <span
-      className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-widest ${
-        isACA ? 'bg-cyan-500/15 text-cyan-400' : 'bg-violet-500/15 text-violet-400'
-      }`}
-    >
-      {vertical}
+    <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-widest bg-amber-500/15 text-amber-400">
+      B2B
     </span>
   );
 }

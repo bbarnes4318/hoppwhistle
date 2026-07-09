@@ -41,11 +41,14 @@ export function getAmeriquoteApiKey(): string {
   return key;
 }
 
-export function getAmeriquoteSrc(vertical: 'ACA' | 'FE'): string {
+export function getAmeriquoteSrc(vertical: 'ACA' | 'FE' | 'B2B'): string {
   if (vertical === 'ACA') {
     return process.env.AMERIQUOTE_ACA_SRC || 'PVNACA_aged';
   }
-  return process.env.AMERIQUOTE_FE_SRC || 'PVNFE_aged';
+  if (vertical === 'FE') {
+    return process.env.AMERIQUOTE_FE_SRC || 'PVNFE_aged';
+  }
+  return '';
 }
 
 export function getAmeriquoteGatewayUrl(): string {
@@ -53,8 +56,10 @@ export function getAmeriquoteGatewayUrl(): string {
 }
 
 /** TYPE code per vertical — from the Boberdoo spec */
-export function getAmeriquoteType(vertical: 'ACA' | 'FE'): string {
-  return vertical === 'ACA' ? '31' : '19';
+export function getAmeriquoteType(vertical: 'ACA' | 'FE' | 'B2B'): string {
+  if (vertical === 'ACA') return '31';
+  if (vertical === 'FE') return '19';
+  return '';
 }
 
 // ---------------------------------------------------------------------------
