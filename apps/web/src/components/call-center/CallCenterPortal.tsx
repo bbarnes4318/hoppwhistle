@@ -1090,8 +1090,8 @@ export function CallCenterPortal(): JSX.Element {
 
       // 2. Fetch leads in queue (filtered by list if selected, showing only NEW status leads)
       const url = selectedListId
-        ? `/api/v1/insurance-leads?limit=100&listId=${selectedListId}&status=NEW`
-        : '/api/v1/insurance-leads?limit=100&status=NEW';
+        ? `/api/v1/insurance-leads?limit=50000&listId=${selectedListId}&status=NEW`
+        : '/api/v1/insurance-leads?limit=50000&status=NEW';
 
       const res = await apiClient.get<any>(url);
       if (!res.error && res.data) {

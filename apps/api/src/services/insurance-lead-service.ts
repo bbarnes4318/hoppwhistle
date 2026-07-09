@@ -446,7 +446,7 @@ export async function ingestLead(
 export async function getLeads(tenantId: string, filters: LeadFilters) {
   const prisma = getPrismaClient();
   const page = filters.page || 1;
-  const limit = Math.min(filters.limit || 25, 100);
+  const limit = Math.min(filters.limit || 25, 50000);
   const skip = (page - 1) * limit;
 
   const where: Prisma.InsuranceLeadWhereInput = { tenantId };
