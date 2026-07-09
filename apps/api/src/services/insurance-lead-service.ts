@@ -790,6 +790,11 @@ export async function updateLead(tenantId: string, id: string, updates: Record<s
     'consentLanguage',
     'recordingUrl',
     'customFields',
+    'company',
+    'repName',
+    'industry',
+    'revenue',
+    'yearEstablished',
   ];
 
   const data: InsuranceLeadCRMUpdates = {};

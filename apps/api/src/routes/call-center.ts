@@ -173,6 +173,11 @@ export async function registerCallCenterRoutes(fastify: FastifyInstance) {
           customFields: lead.customFields || null,
           listId: lead.listId || null,
           list: lead.list ? { id: lead.list.id, name: lead.list.name } : null,
+          company: lead.company || null,
+          repName: lead.repName || null,
+          industry: lead.industry || null,
+          revenue: lead.revenue || null,
+          yearEstablished: lead.yearEstablished || null,
         };
 
         activitiesList = lead.activities.map(a => ({
