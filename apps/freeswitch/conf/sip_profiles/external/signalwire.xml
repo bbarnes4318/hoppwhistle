@@ -7,7 +7,7 @@
     <param name="register" value="true"/>
     <param name="from-user" value="fe"/>
     <param name="from-domain" value="pvn-shanevici.sip.signalwire.com"/>
-    <param name="caller-id-in-from" value="true"/>
+    <param name="caller-id-in-from" value="false"/>
     <param name="extension" value="fe"/>
     <param name="retry-seconds" value="30"/>
     <param name="expire-seconds" value="600"/>
