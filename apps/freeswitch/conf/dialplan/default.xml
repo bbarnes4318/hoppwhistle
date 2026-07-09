@@ -106,29 +106,37 @@
         <action application="set" data="clean_caller_id=${req_caller_id}" inline="true"/>
         <action application="set" data="effective_caller_id_number=${clean_caller_id}" inline="true"/>
         <action application="set" data="origination_caller_id_number=${clean_caller_id}" inline="true"/>
-        <action application="set" data="sip_from_user=${clean_caller_id}" inline="true"/>
         <action application="set" data="sip_invite_from_uri=sip:${clean_caller_id}@$${domain}" inline="true"/>
         <action application="set" data="effective_caller_id_name=Hopwhistle" inline="true"/>
         <action application="set" data="origination_caller_id_name=Hopwhistle" inline="true"/>
         <action application="set" data="hangup_after_bridge=true"/>
         <!-- Default priority: Telnyx -> BulkVS -> SignalWire -->
         <action application="set" data="gw1=telnyx" inline="true"/>
+        <action application="set" data="gw1_vars=sip_from_user=${clean_caller_id}" inline="true"/>
         <action application="set" data="gw2=bulkvs" inline="true"/>
+        <action application="set" data="gw2_vars=sip_from_user=${clean_caller_id}" inline="true"/>
         <action application="set" data="gw3=signalwire" inline="true"/>
+        <action application="set" data="gw3_vars=sip_from_user=fe" inline="true"/>
       </condition>
 
       <!-- If req_caller_id is a BulkVS number, prioritize BulkVS -> Telnyx -> SignalWire -->
       <condition field="${req_caller_id}" expression="^1?(7252713109|7252713114|8652676323|7252450961|7252713303)$" break="never">
         <action application="set" data="gw1=bulkvs" inline="true"/>
+        <action application="set" data="gw1_vars=sip_from_user=${clean_caller_id}" inline="true"/>
         <action application="set" data="gw2=telnyx" inline="true"/>
+        <action application="set" data="gw2_vars=sip_from_user=${clean_caller_id}" inline="true"/>
         <action application="set" data="gw3=signalwire" inline="true"/>
+        <action application="set" data="gw3_vars=sip_from_user=fe" inline="true"/>
       </condition>
 
       <!-- If req_caller_id is a SignalWire number, prioritize SignalWire -> Telnyx -> BulkVS -->
       <condition field="${req_caller_id}" expression="^1?(8652679650|7253022220)$" break="never">
         <action application="set" data="gw1=signalwire" inline="true"/>
+        <action application="set" data="gw1_vars=sip_from_user=fe" inline="true"/>
         <action application="set" data="gw2=telnyx" inline="true"/>
+        <action application="set" data="gw2_vars=sip_from_user=${clean_caller_id}" inline="true"/>
         <action application="set" data="gw3=bulkvs" inline="true"/>
+        <action application="set" data="gw3_vars=sip_from_user=${clean_caller_id}" inline="true"/>
       </condition>
 
       <!-- If hopwhistle_call_id is NOT empty, apply details and start record_session before bridge -->
@@ -171,7 +179,7 @@
         <anti-action application="log" data="INFO [OUTBOUND-PSTN] Routing to PSTN gateways for 1${clean_dest} with CID ${clean_caller_id}"/>
         <anti-action application="set" data="continue_on_fail=true"/>
         <anti-action application="set" data="fail_on_single_reject=false"/>
-        <anti-action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=Hopwhistle,origination_caller_id_number=${clean_caller_id},sip_from_user=${clean_caller_id}}sofia/gateway/${gw1}/1${clean_dest}|sofia/gateway/${gw2}/1${clean_dest}|sofia/gateway/${gw3}/1${clean_dest}"/>
+        <anti-action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=Hopwhistle,origination_caller_id_number=${clean_caller_id}}[${gw1_vars}]sofia/gateway/${gw1}/1${clean_dest}|[${gw2_vars}]sofia/gateway/${gw2}/1${clean_dest}|[${gw3_vars}]sofia/gateway/${gw3}/1${clean_dest}"/>
         <anti-action application="hangup" data="NORMAL_CLEARING"/>
       </condition>
     </extension>
