@@ -193,6 +193,9 @@ services:
       # SIP ports (internal - use Kamailio for external SIP)
       - '5080:5080/udp'
       - '5080:5080/tcp'
+      # Vapi SIP profile (isolated from agent phones on 5060/5080)
+      - '5070:5070/udp'
+      - '5070:5070/tcp'
       # ESL - Event Socket Layer for API communication
       - '8021:8021/tcp'
       # Verto WebSocket for WebRTC browser calling
