@@ -32,11 +32,11 @@ import { CapturedScriptDataPanel } from './CapturedScriptDataPanel';
 import { ColdCallTransferScriptPanel } from './ColdCallTransferScriptPanel';
 import { CustomerCrmPanel } from './CustomerCrmPanel';
 import { DispositionPanel } from './DispositionPanel';
+import HvacScriptPanel from './HvacScriptPanel';
 import { IncomingCallPanel } from './IncomingCallPanel';
 import IntegratedScriptPanel from './IntegratedScriptPanel';
 import { PreClosedStatsCard } from './PreClosedStatsCard';
 import RetentionScriptPanel from './RetentionScriptPanel';
-import HvacScriptPanel from './HvacScriptPanel';
 import { StatsStrip } from './StatsStrip';
 import type {
   ActiveCallView,
@@ -158,6 +158,9 @@ export function CallCenterPortal(): JSX.Element {
   const [wrapUpCountdown, setWrapUpCountdown] = useState(5);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const wrapUpTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // Leads already dialed this session — the fetched list is never refreshed
+  // mid-run, so lastContactedAt alone can't prevent repeats
+  const dialedLeadIdsRef = useRef<Set<string>>(new Set());
 
   // State - Default directly to agentDashboard (skip role selection menu)
   const [currentView, setCurrentView] = useState<CurrentView>('agentDashboard');
@@ -1024,7 +1027,7 @@ export function CallCenterPortal(): JSX.Element {
       setCrmData(null);
       setCrmPhone('');
 
-      const nextIdx = getNextDialIndex(autoDialIndex);
+      const nextIdx = getNextDialIndex();
       if (isAutoDialing && nextIdx !== -1) {
         setAutoDialStatus('wrapup');
         setWrapUpCountdown(5);
@@ -1050,6 +1053,9 @@ export function CallCenterPortal(): JSX.Element {
   }, [handleSaveDisposition]);
 
   const startCallWithApplication = async (app: ApplicationData) => {
+    if (app.id) {
+      dialedLeadIdsRef.current.add(app.id);
+    }
     const idx = applications.findIndex(a => a.id === app.id);
     if (idx !== -1) {
       setAutoDialIndex(idx);
@@ -1116,26 +1122,23 @@ export function CallCenterPortal(): JSX.Element {
     }
   }, [selectedListId]);
 
-  const getNextDialIndex = useCallback((currentIndex: number): number => {
+  const getNextDialIndex = useCallback((): number => {
     if (applications.length === 0) return -1;
-    
-    // Find first lead in applications that has never been contacted
-    const uncalledIdx = applications.findIndex((app, idx) => {
-      if (idx === currentIndex) return false;
-      return !app.lastContactedAt;
-    });
 
+    const notDialedThisSession = (app: ApplicationData) =>
+      !app.id || !dialedLeadIdsRef.current.has(app.id);
+
+    // Prefer leads never contacted at all
+    const uncalledIdx = applications.findIndex(
+      app => notDialedThisSession(app) && !app.lastContactedAt
+    );
     if (uncalledIdx !== -1) {
       return uncalledIdx;
     }
 
-    // Fallback: If all are called, dial the next sequential one (which defaults to oldest contacted)
-    const nextSeq = currentIndex + 1;
-    if (nextSeq < applications.length) {
-      return nextSeq;
-    }
-
-    return -1;
+    // Fallback for redial lists (everyone has prior contact history):
+    // still never repeat a lead within this session
+    return applications.findIndex(notDialedThisSession);
   }, [applications]);
 
   const handleDeleteList = async () => {
@@ -1152,6 +1155,7 @@ export function CallCenterPortal(): JSX.Element {
       setIsAutoDialing(false);
       setAutoDialIndex(0);
       setAutoDialStatus('idle');
+      dialedLeadIdsRef.current.clear();
       void fetchApplications();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to delete lead list');
@@ -1188,7 +1192,7 @@ export function CallCenterPortal(): JSX.Element {
         }, 1000);
       } else {
         // Countdown hit 0! Start next call
-        const nextIndex = getNextDialIndex(autoDialIndex);
+        const nextIndex = getNextDialIndex();
         if (nextIndex !== -1) {
           setAutoDialIndex(nextIndex);
           setAutoDialStatus('calling');
@@ -1201,6 +1205,7 @@ export function CallCenterPortal(): JSX.Element {
           setIsAutoDialing(false);
           setAutoDialStatus('idle');
           setAutoDialIndex(0);
+          dialedLeadIdsRef.current.clear();
           alert('Auto-dialer complete. All leads in the queue have been dialed.');
         }
       }
@@ -1665,7 +1670,7 @@ export function CallCenterPortal(): JSX.Element {
                 setCrmData(null);
                 setCrmPhone('');
 
-                 const nextIdx = getNextDialIndex(autoDialIndex);
+                const nextIdx = getNextDialIndex();
                 if (isAutoDialing && nextIdx !== -1) {
                   setAutoDialStatus('wrapup');
                   setWrapUpCountdown(5);
@@ -1944,6 +1949,7 @@ export function CallCenterPortal(): JSX.Element {
                         setIsAutoDialing(false);
                         setAutoDialIndex(0);
                         setAutoDialStatus('idle');
+                        dialedLeadIdsRef.current.clear();
                       }}
                       className="bg-transparent text-white text-xs font-mono focus:outline-none cursor-pointer pr-4 font-bold uppercase"
                     >
@@ -1994,9 +2000,21 @@ export function CallCenterPortal(): JSX.Element {
                   ) : (
                     <button
                       onClick={() => {
+                        // Don't redial the current lead if it was already called
+                        // this session (e.g. resuming after a pause)
+                        const current = applications[autoDialIndex];
+                        const idx =
+                          current && current.id && !dialedLeadIdsRef.current.has(current.id)
+                            ? autoDialIndex
+                            : getNextDialIndex();
+                        if (idx === -1) {
+                          alert('All leads in the queue have already been dialed.');
+                          return;
+                        }
                         setIsAutoDialing(true);
                         setAutoDialStatus('calling');
-                        const lead = applications[autoDialIndex];
+                        setAutoDialIndex(idx);
+                        const lead = applications[idx];
                         if (lead) {
                           void startCallWithApplication(lead);
                         }
@@ -2015,6 +2033,7 @@ export function CallCenterPortal(): JSX.Element {
                       setIsAutoDialing(false);
                       setAutoDialStatus('idle');
                       setAutoDialIndex(0);
+                      dialedLeadIdsRef.current.clear();
                     }}
                     disabled={applications.length === 0 || autoDialIndex === 0}
                     className="p-2 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-900 disabled:text-slate-600 disabled:border-slate-850 border border-slate-700 text-slate-400 hover:text-white rounded-lg transition-all disabled:cursor-not-allowed disabled:opacity-50"
