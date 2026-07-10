@@ -24,6 +24,11 @@ import {
 } from 'lucide-react';
 import { useEffect, useState, useCallback, useRef } from 'react';
 
+import {
+  CompactPageShell,
+  CompactPageHeader,
+  MetricStrip,
+} from '@/components/layout/compact-layout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -47,9 +52,6 @@ import {
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Textarea } from '@/components/ui/textarea';
-import { useToast } from '@/components/ui/use-toast';
 import {
   Table,
   TableBody,
@@ -58,8 +60,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
+import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
-import { CompactPageShell, CompactPageHeader, MetricStrip } from '@/components/layout/compact-layout';
 
 // ─── Types ───────────────────────────────────────────────────
 interface VapiAssistant {
@@ -151,29 +155,8 @@ const CATEGORY_MAP: Record<string, string> = {
 // Default Vapi Assistant ID for outbound calls
 const DEFAULT_ASSISTANT_ID = '1fc88d85-4c44-4399-9345-f601628e64fb';
 
-// Merged DID pool — SignalWire DIDs first, then BulkVS DIDs for rotation
-const AVAILABLE_DIDS = [
-  // SignalWire DIDs
-  '+18652679650',
-  '+17253022220',
-  // BulkVS DIDs
-  '+12816989460',
-  '+12816989461',
-  '+14063165877',
-  '+14402992856',
-  '+14402992860',
-  '+16102819660',
-  '+16102819662',
-  '+17038313168',
-  '+17042283589',
-  '+17042286088',
-  '+18036135410',
-  '+18036135412',
-  '+19124185540',
-  '+19124185542',
-  '+19542083921',
-  '+19542083922',
-];
+// Telnyx DIDs — native Vapi↔Telnyx integration (no BYO SIP trunk involved)
+const AVAILABLE_DIDS = ['+18655902220', '+18888229697', '+18882221187'];
 
 const DISPATCH_DELAY_MS = 4000; // 4s between call dispatches
 
@@ -221,7 +204,10 @@ function getOutcomeBadge(reason?: string) {
 function getCallDuration(call: VapiCall): number {
   if (typeof call.duration === 'number' && call.duration > 0) return Math.round(call.duration);
   if (call.startedAt && call.endedAt) {
-    return Math.max(0, Math.round((new Date(call.endedAt).getTime() - new Date(call.startedAt).getTime()) / 1000));
+    return Math.max(
+      0,
+      Math.round((new Date(call.endedAt).getTime() - new Date(call.startedAt).getTime()) / 1000)
+    );
   }
   return 0;
 }
@@ -270,9 +256,7 @@ export default function VoiceAgentsPage() {
       setAssistants(Array.isArray(data) ? data : []);
       // Auto-select first matching agent
       if (!selectedAgent && data.length > 0) {
-        const fe = data.find(
-          (a: VapiAssistant) => getCategoryForAssistant(a.name) === 'roofing'
-        );
+        const fe = data.find((a: VapiAssistant) => getCategoryForAssistant(a.name) === 'roofing');
         setSelectedAgent(fe || data[0]);
       }
     } catch {
@@ -360,7 +344,10 @@ export default function VoiceAgentsPage() {
         .filter((n): n is string => n !== null);
 
       setContacts(parsedNumbers);
-      toast({ title: 'Contacts Loaded', description: `${parsedNumbers.length} valid phone numbers parsed and ready` });
+      toast({
+        title: 'Contacts Loaded',
+        description: `${parsedNumbers.length} valid phone numbers parsed and ready`,
+      });
     };
     reader.readAsText(file);
   };
@@ -442,71 +429,80 @@ export default function VoiceAgentsPage() {
   };
 
   // ─── Dispatch engine — fire-and-backoff ───
-  const dispatchCalls = useCallback(async (contactList: string[], agentId: string) => {
-    setDispatching(true);
-    cancelRef.current = false;
-    pauseRef.current = false;
-    let dispatched = 0;
-    let errors = 0;
-    const activeDIDs = selectedDIDs.length > 0 ? selectedDIDs : AVAILABLE_DIDS;
+  const dispatchCalls = useCallback(
+    async (contactList: string[], agentId: string) => {
+      setDispatching(true);
+      cancelRef.current = false;
+      pauseRef.current = false;
+      let dispatched = 0;
+      let errors = 0;
+      const activeDIDs = selectedDIDs.length > 0 ? selectedDIDs : AVAILABLE_DIDS;
 
-    setCampaign({ running: true, paused: false, dispatched: 0, total: contactList.length, errors: 0 });
+      setCampaign({
+        running: true,
+        paused: false,
+        dispatched: 0,
+        total: contactList.length,
+        errors: 0,
+      });
 
-    for (let i = 0; i < contactList.length; i++) {
-      if (cancelRef.current) break;
+      for (let i = 0; i < contactList.length; i++) {
+        if (cancelRef.current) break;
 
-      // Pause loop — wait until unpaused or cancelled
-      while (pauseRef.current && !cancelRef.current) {
-        await new Promise(r => setTimeout(r, 500));
-      }
-      if (cancelRef.current) break;
-
-      const phone = contactList[i];
-      const didEntry = activeDIDs[i % activeDIDs.length];
-
-      try {
-        const res = await fetch('/vapi-proxy/calls', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            assistantId: agentId,
-            phoneNumberId: didEntry,
-            customer: { number: phone },
-          }),
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          const msg = (err as { error?: string }).error || `HTTP ${res.status}`;
-          if (msg.includes('oncurrency') || msg.includes('capacity')) {
-            toast({ title: 'At capacity', description: 'Waiting 30s for slots...' });
-            await new Promise(r => setTimeout(r, 30000));
-            i--; // Retry this contact
-            continue;
-          }
-          errors++;
-        } else {
-          dispatched++;
+        // Pause loop — wait until unpaused or cancelled
+        while (pauseRef.current && !cancelRef.current) {
+          await new Promise(r => setTimeout(r, 500));
         }
-      } catch {
-        errors++;
+        if (cancelRef.current) break;
+
+        const phone = contactList[i];
+        const didEntry = activeDIDs[i % activeDIDs.length];
+
+        try {
+          const res = await fetch('/vapi-proxy/calls', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              assistantId: agentId,
+              phoneNumberId: didEntry,
+              customer: { number: phone },
+            }),
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            const msg = (err as { error?: string }).error || `HTTP ${res.status}`;
+            if (msg.includes('oncurrency') || msg.includes('capacity')) {
+              toast({ title: 'At capacity', description: 'Waiting 30s for slots...' });
+              await new Promise(r => setTimeout(r, 30000));
+              i--; // Retry this contact
+              continue;
+            }
+            errors++;
+          } else {
+            dispatched++;
+          }
+        } catch {
+          errors++;
+        }
+
+        setCampaign(prev => ({ ...prev, dispatched, errors }));
+
+        // Stagger dispatches
+        if (i < contactList.length - 1 && !cancelRef.current) {
+          await new Promise(r => setTimeout(r, DISPATCH_DELAY_MS));
+        }
       }
 
-      setCampaign(prev => ({ ...prev, dispatched, errors }));
-
-      // Stagger dispatches
-      if (i < contactList.length - 1 && !cancelRef.current) {
-        await new Promise(r => setTimeout(r, DISPATCH_DELAY_MS));
-      }
-    }
-
-    setCampaign(prev => ({ ...prev, running: false, paused: false }));
-    setDispatching(false);
-    toast({
-      title: cancelRef.current ? 'Campaign Stopped' : 'Campaign Complete',
-      description: `${dispatched} dispatched, ${errors} errors`,
-    });
-    if (selectedAgent) void fetchCalls(selectedAgent.id);
-  }, [selectedDIDs, toast, fetchCalls, selectedAgent]);
+      setCampaign(prev => ({ ...prev, running: false, paused: false }));
+      setDispatching(false);
+      toast({
+        title: cancelRef.current ? 'Campaign Stopped' : 'Campaign Complete',
+        description: `${dispatched} dispatched, ${errors} errors`,
+      });
+      if (selectedAgent) void fetchCalls(selectedAgent.id);
+    },
+    [selectedDIDs, toast, fetchCalls, selectedAgent]
+  );
 
   const handleStartCampaign = () => {
     if (!selectedAgent) {
@@ -514,7 +510,11 @@ export default function VoiceAgentsPage() {
       return;
     }
     if (contacts.length === 0) {
-      toast({ title: 'Error', description: 'Upload a contacts file first', variant: 'destructive' });
+      toast({
+        title: 'Error',
+        description: 'Upload a contacts file first',
+        variant: 'destructive',
+      });
       return;
     }
     void dispatchCalls(contacts, selectedAgent.id || DEFAULT_ASSISTANT_ID);
@@ -523,7 +523,10 @@ export default function VoiceAgentsPage() {
   const handlePauseCampaign = () => {
     pauseRef.current = true;
     setCampaign(prev => ({ ...prev, paused: true }));
-    toast({ title: 'Campaign Paused', description: 'Active calls will finish. Resume to continue.' });
+    toast({
+      title: 'Campaign Paused',
+      description: 'Active calls will finish. Resume to continue.',
+    });
   };
 
   const handleResumeCampaign = () => {
@@ -554,7 +557,9 @@ export default function VoiceAgentsPage() {
           </DialogTrigger>
           <DialogContent className="sm:max-w-[600px] border-border/40">
             <DialogHeader>
-              <DialogTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Create Voice Agent</DialogTitle>
+              <DialogTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                Create Voice Agent
+              </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground">
                 Build a custom AI voice agent for outbound calling
               </DialogDescription>
@@ -562,7 +567,9 @@ export default function VoiceAgentsPage() {
             <div className="space-y-3 py-3">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label htmlFor="agent-name" className="text-xs">Agent Name</Label>
+                  <Label htmlFor="agent-name" className="text-xs">
+                    Agent Name
+                  </Label>
                   <Input
                     id="agent-name"
                     placeholder="e.g. Roofing Q1 Outbound"
@@ -572,7 +579,9 @@ export default function VoiceAgentsPage() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="agent-category" className="text-xs">Category</Label>
+                  <Label htmlFor="agent-category" className="text-xs">
+                    Category
+                  </Label>
                   <Select
                     value={newAgent.category}
                     onValueChange={v => setNewAgent(prev => ({ ...prev, category: v }))}
@@ -592,7 +601,9 @@ export default function VoiceAgentsPage() {
               </div>
 
               <div className="space-y-1">
-                <Label htmlFor="first-message" className="text-xs">First Message (greeting)</Label>
+                <Label htmlFor="first-message" className="text-xs">
+                  First Message (greeting)
+                </Label>
                 <Input
                   id="first-message"
                   placeholder="Hey, good afternoon! How's your day going?"
@@ -603,7 +614,9 @@ export default function VoiceAgentsPage() {
               </div>
 
               <div className="space-y-1">
-                <Label htmlFor="system-prompt" className="text-xs">System Prompt (agent instructions)</Label>
+                <Label htmlFor="system-prompt" className="text-xs">
+                  System Prompt (agent instructions)
+                </Label>
                 <Textarea
                   id="system-prompt"
                   placeholder="You are a contractor rep calling about..."
@@ -616,7 +629,9 @@ export default function VoiceAgentsPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label htmlFor="voice-select" className="text-xs">Voice</Label>
+                  <Label htmlFor="voice-select" className="text-xs">
+                    Voice
+                  </Label>
                   <Select
                     value={newAgent.voice}
                     onValueChange={v => setNewAgent(prev => ({ ...prev, voice: v }))}
@@ -635,7 +650,9 @@ export default function VoiceAgentsPage() {
                   </Select>
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="transfer-number" className="text-xs">Transfer Number</Label>
+                  <Label htmlFor="transfer-number" className="text-xs">
+                    Transfer Number
+                  </Label>
                   <Input
                     id="transfer-number"
                     placeholder="+18554800625"
@@ -668,7 +685,9 @@ export default function VoiceAgentsPage() {
             <Phone className="h-4 w-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-[9px] text-muted-foreground uppercase font-semibold tracking-wider truncate">Total Calls</div>
+            <div className="text-[9px] text-muted-foreground uppercase font-semibold tracking-wider truncate">
+              Total Calls
+            </div>
             <div className="text-base font-bold text-white leading-none mt-0.5">{stats.total}</div>
           </div>
         </div>
@@ -677,8 +696,12 @@ export default function VoiceAgentsPage() {
             <PhoneIncoming className="h-4 w-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-[9px] text-muted-foreground uppercase font-semibold tracking-wider truncate">Answered</div>
-            <div className="text-base font-bold text-white leading-none mt-0.5">{stats.answered}</div>
+            <div className="text-[9px] text-muted-foreground uppercase font-semibold tracking-wider truncate">
+              Answered
+            </div>
+            <div className="text-base font-bold text-white leading-none mt-0.5">
+              {stats.answered}
+            </div>
           </div>
         </div>
         <div className="bg-card border border-border/40 rounded p-2.5 flex items-center gap-2.5">
@@ -686,8 +709,12 @@ export default function VoiceAgentsPage() {
             <PhoneOff className="h-4 w-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-[9px] text-muted-foreground uppercase font-semibold tracking-wider truncate">No Answer</div>
-            <div className="text-base font-bold text-white leading-none mt-0.5">{stats.noAnswer}</div>
+            <div className="text-[9px] text-muted-foreground uppercase font-semibold tracking-wider truncate">
+              No Answer
+            </div>
+            <div className="text-base font-bold text-white leading-none mt-0.5">
+              {stats.noAnswer}
+            </div>
           </div>
         </div>
         <div className="bg-card border border-border/40 rounded p-2.5 flex items-center gap-2.5">
@@ -695,8 +722,12 @@ export default function VoiceAgentsPage() {
             <TrendingUp className="h-4 w-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-[9px] text-muted-foreground uppercase font-semibold tracking-wider truncate">Active</div>
-            <div className="text-base font-bold text-white leading-none mt-0.5">{stats.inProgress}</div>
+            <div className="text-[9px] text-muted-foreground uppercase font-semibold tracking-wider truncate">
+              Active
+            </div>
+            <div className="text-base font-bold text-white leading-none mt-0.5">
+              {stats.inProgress}
+            </div>
           </div>
         </div>
         <div className="bg-card border border-border/40 rounded p-2.5 flex items-center gap-2.5">
@@ -704,7 +735,9 @@ export default function VoiceAgentsPage() {
             <PhoneOff className="h-4 w-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-[9px] text-muted-foreground uppercase font-semibold tracking-wider truncate">Errors</div>
+            <div className="text-[9px] text-muted-foreground uppercase font-semibold tracking-wider truncate">
+              Errors
+            </div>
             <div className="text-base font-bold text-white leading-none mt-0.5">{stats.errors}</div>
           </div>
         </div>
@@ -713,7 +746,9 @@ export default function VoiceAgentsPage() {
             <Clock className="h-4 w-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-[9px] text-muted-foreground uppercase font-semibold tracking-wider truncate">Avg Duration</div>
+            <div className="text-[9px] text-muted-foreground uppercase font-semibold tracking-wider truncate">
+              Avg Duration
+            </div>
             <div className="text-base font-bold text-white leading-none mt-0.5">
               {stats.avgDuration > 0 ? `${Math.round(stats.avgDuration)}s` : '—'}
             </div>
@@ -729,8 +764,12 @@ export default function VoiceAgentsPage() {
           <Card className="w-full border-border/40 shadow-sm">
             <CardHeader className="flex-shrink-0 p-3 pb-2 border-b border-border/10 flex flex-row items-center justify-between space-y-0">
               <div>
-                <CardTitle className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Select Voice Agent</CardTitle>
-                <CardDescription className="text-[10px] text-muted-foreground mt-0.5">Choose a pre-built agent or create your own</CardDescription>
+                <CardTitle className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                  Select Voice Agent
+                </CardTitle>
+                <CardDescription className="text-[10px] text-muted-foreground mt-0.5">
+                  Choose a pre-built agent or create your own
+                </CardDescription>
               </div>
               <Button
                 variant="ghost"
@@ -742,11 +781,15 @@ export default function VoiceAgentsPage() {
                 }}
                 disabled={loading}
               >
-                <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+                <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
               </Button>
             </CardHeader>
             <CardContent className="p-3">
-              <Tabs value={activeCategory} onValueChange={setActiveCategory} className="w-full flex flex-col gap-2">
+              <Tabs
+                value={activeCategory}
+                onValueChange={setActiveCategory}
+                className="w-full flex flex-col gap-2"
+              >
                 <TabsList className="w-full justify-start border-b border-border/40 bg-transparent h-9 p-0 mb-3 gap-4 overflow-x-auto flex-nowrap scrollbar-none">
                   {CATEGORIES.map(cat => {
                     const count = assistants.filter(
@@ -761,7 +804,10 @@ export default function VoiceAgentsPage() {
                         <cat.icon className="h-3.5 w-3.5" />
                         <span>{cat.label}</span>
                         {count > 0 && (
-                          <Badge variant="secondary" className="ml-1 text-[9px] h-3.5 px-1 flex items-center justify-center min-w-[14px]">
+                          <Badge
+                            variant="secondary"
+                            className="ml-1 text-[9px] h-3.5 px-1 flex items-center justify-center min-w-[14px]"
+                          >
                             {count}
                           </Badge>
                         )}
@@ -771,7 +817,11 @@ export default function VoiceAgentsPage() {
                 </TabsList>
 
                 {CATEGORIES.map(cat => (
-                  <TabsContent key={cat.key} value={cat.key} className="w-full mt-0 data-[state=active]:flex flex-col">
+                  <TabsContent
+                    key={cat.key}
+                    value={cat.key}
+                    className="w-full mt-0 data-[state=active]:flex flex-col"
+                  >
                     {loading ? (
                       <div className="grid gap-2 grid-cols-1 md:grid-cols-2">
                         {[1, 2].map(i => (
@@ -806,10 +856,10 @@ export default function VoiceAgentsPage() {
                           <Card
                             key={agent.id}
                             className={cn(
-                              "cursor-pointer transition-all hover:border-primary/50 border-border/40",
+                              'cursor-pointer transition-all hover:border-primary/50 border-border/40',
                               selectedAgent?.id === agent.id
-                                ? "border-primary bg-primary/5 ring-1 ring-primary/30"
-                                : "hover:bg-accent/30"
+                                ? 'border-primary bg-primary/5 ring-1 ring-primary/30'
+                                : 'hover:bg-accent/30'
                             )}
                             onClick={() => setSelectedAgent(agent)}
                           >
@@ -817,7 +867,9 @@ export default function VoiceAgentsPage() {
                               <div className="flex items-start justify-between gap-2">
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2">
-                                    <h3 className="font-semibold text-xs truncate text-white">{agent.name}</h3>
+                                    <h3 className="font-semibold text-xs truncate text-white">
+                                      {agent.name}
+                                    </h3>
                                     {selectedAgent?.id === agent.id && (
                                       <Badge className="bg-primary/20 text-primary border-primary/30 text-[9px] h-4 px-1">
                                         Active
@@ -831,13 +883,19 @@ export default function VoiceAgentsPage() {
                                   )}
                                   <div className="flex items-center flex-wrap gap-1 mt-2">
                                     {agent.voice?.provider && (
-                                      <Badge variant="secondary" className="text-[9px] py-0 px-1 h-3.5 leading-none">
+                                      <Badge
+                                        variant="secondary"
+                                        className="text-[9px] py-0 px-1 h-3.5 leading-none"
+                                      >
                                         <Volume2 className="h-2 w-2 mr-0.5" />
                                         {agent.voice.voiceId || agent.voice.provider}
                                       </Badge>
                                     )}
                                     {agent.forwardingPhoneNumber && (
-                                      <Badge variant="outline" className="text-[9px] py-0 px-1 h-3.5 leading-none border-border/40">
+                                      <Badge
+                                        variant="outline"
+                                        className="text-[9px] py-0 px-1 h-3.5 leading-none border-border/40"
+                                      >
                                         Transfer: {agent.forwardingPhoneNumber}
                                       </Badge>
                                     )}
@@ -870,7 +928,9 @@ export default function VoiceAgentsPage() {
           <Card className="w-full border-border/40 shadow-sm">
             <CardHeader className="flex-shrink-0 p-3 pb-2 border-b border-border/10 flex flex-row items-center justify-between space-y-0">
               <div>
-                <CardTitle className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Recent Calls</CardTitle>
+                <CardTitle className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                  Recent Calls
+                </CardTitle>
                 <CardDescription className="text-[10px] text-muted-foreground mt-0.5">
                   {selectedAgent
                     ? `Calls for ${selectedAgent.name}`
@@ -917,7 +977,7 @@ export default function VoiceAgentsPage() {
                             <Badge
                               variant="outline"
                               className={cn(
-                                "text-[10px] py-0 px-1.5 h-4",
+                                'text-[10px] py-0 px-1.5 h-4',
                                 call.status === 'ended'
                                   ? 'bg-slate-500/10 text-muted-foreground border-slate-500/20'
                                   : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
@@ -927,7 +987,10 @@ export default function VoiceAgentsPage() {
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline" className={cn("text-[10px] py-0 px-1.5 h-4", outcome.cls)}>
+                            <Badge
+                              variant="outline"
+                              className={cn('text-[10px] py-0 px-1.5 h-4', outcome.cls)}
+                            >
                               {outcome.label}
                             </Badge>
                           </TableCell>
@@ -954,9 +1017,16 @@ export default function VoiceAgentsPage() {
         {/* Right Column: Campaign Controls & Agent Details */}
         <div className="lg:col-span-1 flex flex-col gap-3">
           {/* Campaign Controls */}
-          <Card className={cn("border-border/40 w-full shadow-sm", selectedAgent && "border-primary/30")}>
+          <Card
+            className={cn(
+              'border-border/40 w-full shadow-sm',
+              selectedAgent && 'border-primary/30'
+            )}
+          >
             <CardHeader className="p-3 pb-2 border-b border-border/10">
-              <CardTitle className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Campaign Controls</CardTitle>
+              <CardTitle className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                Campaign Controls
+              </CardTitle>
               <CardDescription className="text-[10px] text-muted-foreground mt-0.5">
                 {selectedAgent ? selectedAgent.name : 'Select an agent to start'}
               </CardDescription>
@@ -989,7 +1059,9 @@ export default function VoiceAgentsPage() {
                   ) : (
                     <div className="flex flex-col items-center">
                       <Upload className="h-4 w-4 text-muted-foreground/60 mb-0.5" />
-                      <p className="text-xs text-muted-foreground font-medium">Upload contacts (TXT/CSV)</p>
+                      <p className="text-xs text-muted-foreground font-medium">
+                        Upload contacts (TXT/CSV)
+                      </p>
                       <p className="text-[9px] text-muted-foreground/60">One number per line</p>
                     </div>
                   )}
@@ -1020,7 +1092,12 @@ export default function VoiceAgentsPage() {
                       />
                       <span className="font-mono text-[11px] text-white">{did}</span>
                       {idx < 2 && (
-                        <Badge variant="outline" className="text-[8px] px-1 py-0 h-3.5 leading-none ml-auto border-border/40">SW</Badge>
+                        <Badge
+                          variant="outline"
+                          className="text-[8px] px-1 py-0 h-3.5 leading-none ml-auto border-border/40"
+                        >
+                          SW
+                        </Badge>
                       )}
                     </label>
                   ))}
@@ -1036,7 +1113,12 @@ export default function VoiceAgentsPage() {
                     <span className="text-muted-foreground">Progress</span>
                     <div className="flex items-center gap-1.5">
                       {campaign.paused && (
-                        <Badge variant="outline" className="text-amber-500 border-amber-500/50 text-[9px] h-4 py-0 px-1">PAUSED</Badge>
+                        <Badge
+                          variant="outline"
+                          className="text-amber-500 border-amber-500/50 text-[9px] h-4 py-0 px-1"
+                        >
+                          PAUSED
+                        </Badge>
                       )}
                       <span className="font-mono text-[10px]">
                         {campaign.dispatched}/{campaign.total}
@@ -1049,8 +1131,8 @@ export default function VoiceAgentsPage() {
                   <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                     <div
                       className={cn(
-                        "h-full rounded-full transition-all",
-                        campaign.paused ? "bg-amber-500" : "bg-primary"
+                        'h-full rounded-full transition-all',
+                        campaign.paused ? 'bg-amber-500' : 'bg-primary'
                       )}
                       style={{
                         width: `${campaign.total > 0 ? (campaign.dispatched / campaign.total) * 100 : 0}%`,
@@ -1119,12 +1201,16 @@ export default function VoiceAgentsPage() {
           {selectedAgent && (
             <Card className="border-border/40 w-full shadow-sm">
               <CardHeader className="p-3 pb-2 border-b border-border/10">
-                <CardTitle className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Agent Details</CardTitle>
+                <CardTitle className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                  Agent Details
+                </CardTitle>
               </CardHeader>
               <CardContent className="p-3 space-y-1.5 text-[11px]">
                 <div className="flex justify-between items-center py-0.5">
                   <span className="text-muted-foreground">ID</span>
-                  <span className="font-mono text-[10px] text-white">{selectedAgent.id.slice(0, 12)}...</span>
+                  <span className="font-mono text-[10px] text-white">
+                    {selectedAgent.id.slice(0, 12)}...
+                  </span>
                 </div>
                 <Separator className="bg-border/10" />
                 <div className="flex justify-between items-center py-0.5">
@@ -1136,17 +1222,23 @@ export default function VoiceAgentsPage() {
                 <Separator className="bg-border/10" />
                 <div className="flex justify-between items-center py-0.5">
                   <span className="text-muted-foreground">Model</span>
-                  <span className="text-white font-medium">{selectedAgent.model?.model || '—'}</span>
+                  <span className="text-white font-medium">
+                    {selectedAgent.model?.model || '—'}
+                  </span>
                 </div>
                 <Separator className="bg-border/10" />
                 <div className="flex justify-between items-center py-0.5">
                   <span className="text-muted-foreground">Transfer</span>
-                  <span className="font-mono text-white">{selectedAgent.forwardingPhoneNumber || '—'}</span>
+                  <span className="font-mono text-white">
+                    {selectedAgent.forwardingPhoneNumber || '—'}
+                  </span>
                 </div>
                 <Separator className="bg-border/10" />
                 <div className="flex justify-between items-center py-0.5">
                   <span className="text-muted-foreground">Updated</span>
-                  <span className="text-white font-medium">{new Date(selectedAgent.updatedAt).toLocaleDateString()}</span>
+                  <span className="text-white font-medium">
+                    {new Date(selectedAgent.updatedAt).toLocaleDateString()}
+                  </span>
                 </div>
               </CardContent>
             </Card>
