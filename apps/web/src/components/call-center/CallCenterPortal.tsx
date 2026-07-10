@@ -1024,7 +1024,8 @@ export function CallCenterPortal(): JSX.Element {
       setCrmData(null);
       setCrmPhone('');
 
-      if (isAutoDialing && autoDialIndex + 1 < applications.length) {
+      const nextIdx = getNextDialIndex(autoDialIndex);
+      if (isAutoDialing && nextIdx !== -1) {
         setAutoDialStatus('wrapup');
         setWrapUpCountdown(5);
       } else {
@@ -1115,6 +1116,28 @@ export function CallCenterPortal(): JSX.Element {
     }
   }, [selectedListId]);
 
+  const getNextDialIndex = useCallback((currentIndex: number): number => {
+    if (applications.length === 0) return -1;
+    
+    // Find first lead in applications that has never been contacted
+    const uncalledIdx = applications.findIndex((app, idx) => {
+      if (idx === currentIndex) return false;
+      return !app.lastContactedAt;
+    });
+
+    if (uncalledIdx !== -1) {
+      return uncalledIdx;
+    }
+
+    // Fallback: If all are called, dial the next sequential one (which defaults to oldest contacted)
+    const nextSeq = currentIndex + 1;
+    if (nextSeq < applications.length) {
+      return nextSeq;
+    }
+
+    return -1;
+  }, [applications]);
+
   const handleDeleteList = async () => {
     if (!selectedListId) return;
     const selectedList = leadLists.find(l => l.id === selectedListId);
@@ -1165,8 +1188,8 @@ export function CallCenterPortal(): JSX.Element {
         }, 1000);
       } else {
         // Countdown hit 0! Start next call
-        const nextIndex = autoDialIndex + 1;
-        if (nextIndex < applications.length) {
+        const nextIndex = getNextDialIndex(autoDialIndex);
+        if (nextIndex !== -1) {
           setAutoDialIndex(nextIndex);
           setAutoDialStatus('calling');
           const nextApp = applications[nextIndex];
@@ -1195,6 +1218,7 @@ export function CallCenterPortal(): JSX.Element {
     autoDialIndex,
     applications,
     startCallWithApplication,
+    getNextDialIndex,
   ]);
 
   // =========================================================================
@@ -1641,7 +1665,8 @@ export function CallCenterPortal(): JSX.Element {
                 setCrmData(null);
                 setCrmPhone('');
 
-                if (isAutoDialing && autoDialIndex + 1 < applications.length) {
+                 const nextIdx = getNextDialIndex(autoDialIndex);
+                if (isAutoDialing && nextIdx !== -1) {
                   setAutoDialStatus('wrapup');
                   setWrapUpCountdown(5);
                 } else {
