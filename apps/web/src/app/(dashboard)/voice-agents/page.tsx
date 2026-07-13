@@ -156,7 +156,7 @@ const CATEGORY_MAP: Record<string, string> = {
 const DEFAULT_ASSISTANT_ID = '1fc88d85-4c44-4399-9345-f601628e64fb';
 
 // Telnyx DIDs — native Vapi↔Telnyx integration (no BYO SIP trunk involved)
-const AVAILABLE_DIDS = ['+18655902220', '+18888229697', '+18882221187'];
+const AVAILABLE_DIDS = ['+18888229697', '+16083966390', '+16083966279'];
 
 const DISPATCH_DELAY_MS = 4000; // 4s between call dispatches
 
