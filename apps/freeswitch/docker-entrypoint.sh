@@ -36,6 +36,7 @@ if [ -f "$VANILLA_CONF/vars.xml" ]; then
     sed -i "s|\${PUBLIC_IP}|${PUBLIC_IP:-auto}|g" "$VANILLA_CONF/vars.xml"
     sed -i "s|\${SIP_PUBLIC_IP}|${SIP_PUBLIC_IP:-${PUBLIC_IP:-auto}}|g" "$VANILLA_CONF/vars.xml"
     sed -i "s|\${SIP_DOMAIN}|${SIP_DOMAIN:-${PUBLIC_IP:-auto}}|g" "$VANILLA_CONF/vars.xml"
+    sed -i "s|\${SIP_AGENT_PASSWORD}|${SIP_AGENT_PASSWORD:-1234}|g" "$VANILLA_CONF/vars.xml"
     sed -i "s|\${MEDIA_DOMAIN}|${MEDIA_DOMAIN:-}|g" "$VANILLA_CONF/vars.xml"
     sed -i "s|\${OUTBOUND_SIP_PROXY}|${OUTBOUND_SIP_PROXY:-sip.telnyx.com}|g" "$VANILLA_CONF/vars.xml"
     sed -i "s|\${OUTBOUND_SIP_USER}|${OUTBOUND_SIP_USER:-}|g" "$VANILLA_CONF/vars.xml"

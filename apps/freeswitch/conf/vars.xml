@@ -8,8 +8,8 @@
   <X-PRE-PROCESS cmd="set" data="sip_public_ip=${SIP_PUBLIC_IP}"/>
   <!-- Domain MUST match what SIP clients register against -->
   <X-PRE-PROCESS cmd="set" data="domain=${SIP_DOMAIN}"/>
-  <!-- Default password for SIP users -->
-  <X-PRE-PROCESS cmd="set" data="default_password=1234"/>
+  <!-- Default password for SIP users (sourced from env; never hardcode) -->
+  <X-PRE-PROCESS cmd="set" data="default_password=${SIP_AGENT_PASSWORD}"/>
   <X-PRE-PROCESS cmd="set" data="api_url=${API_URL}"/>
   <X-PRE-PROCESS cmd="set" data="api_key=${API_KEY}"/>
 
