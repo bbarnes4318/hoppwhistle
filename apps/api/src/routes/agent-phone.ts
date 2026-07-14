@@ -120,10 +120,7 @@ async function getAgentStatus(userId: string): Promise<AgentStatusData> {
       return JSON.parse(data) as AgentStatusData;
     }
   } catch (err) {
-    console.warn(
-      `[AgentStatus] Redis read failed for ${userId}, returning default:`,
-      (err as Error).message
-    );
+    console.warn(`[AgentStatus] Redis read failed for ${userId}, returning default:`, (err as Error).message);
   }
   return {
     status: 'offline',
@@ -137,10 +134,7 @@ async function setAgentStatus(userId: string, status: AgentStatusData): Promise<
     const key = `${AGENT_STATUS_PREFIX}${userId}`;
     await redis.setex(key, AGENT_STATUS_TTL, JSON.stringify(status));
   } catch (err) {
-    console.warn(
-      `[AgentStatus] Redis write failed for ${userId}, skipping:`,
-      (err as Error).message
-    );
+    console.warn(`[AgentStatus] Redis write failed for ${userId}, skipping:`, (err as Error).message);
   }
 }
 
@@ -211,45 +205,51 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
    * GET /api/v1/agent/my-numbers
    * Returns the authenticated user's assigned phone numbers for caller ID selection
    */
-  fastify.get('/api/v1/agent/my-numbers', async (request, _reply: FastifyReply) => {
-    const { userId, tenantId } = getUser(request);
+  fastify.get(
+    '/api/v1/agent/my-numbers',
+    async (request, _reply: FastifyReply) => {
+      const { userId, tenantId } = getUser(request);
 
-    if (userId === 'demo-agent') {
-      return {
-        numbers: [
-          { id: 'demo-1', number: '12816991120', provider: 'local' },
-          { id: 'demo-2', number: '12816991121', provider: 'local' },
-          { id: 'demo-3', number: '12816991122', provider: 'local' },
-        ],
-      };
-    }
+      if (userId === 'demo-agent') {
+        return {
+          numbers: [
+            { id: 'demo-1', number: '12816991120', provider: 'local' },
+            { id: 'demo-2', number: '12816991121', provider: 'local' },
+            { id: 'demo-3', number: '12816991122', provider: 'local' },
+          ],
+        };
+      }
 
-    const prisma = getPrismaClient();
+      const prisma = getPrismaClient();
 
-    // Fetch all active numbers that are either assigned directly to this user
-    // or are tenant-wide / unassigned (userId: null) so they can be selected.
-    const numbers = await prisma.phoneNumber.findMany({
-      where: {
-        tenantId,
-        status: 'ACTIVE',
-        NOT: {
-          number: {
-            contains: '555',
+      // Fetch all active numbers that are either assigned directly to this user
+      // or are tenant-wide / unassigned (userId: null) so they can be selected.
+      const numbers = await prisma.phoneNumber.findMany({
+        where: {
+          tenantId,
+          status: 'ACTIVE',
+          NOT: {
+            number: {
+              contains: '555',
+            },
           },
+          OR: [
+            { userId },
+            { userId: null },
+          ],
         },
-        OR: [{ userId }, { userId: null }],
-      },
-      select: {
-        id: true,
-        number: true,
-        provider: true,
-        purchasedAt: true,
-      },
-      orderBy: { purchasedAt: 'asc' },
-    });
+        select: {
+          id: true,
+          number: true,
+          provider: true,
+          purchasedAt: true,
+        },
+        orderBy: { purchasedAt: 'asc' },
+      });
 
-    return { numbers };
-  });
+      return { numbers };
+    }
+  );
 
   // ============================================================================
   // Call Control Endpoints
@@ -281,7 +281,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       if (isAuthenticatedUser) {
         // Fetch all active numbers that are either assigned directly to this user
         // or are tenant-wide / unassigned (userId: null) so they can be selected.
-        const userNumbers = await prisma.phoneNumber.findMany({
+        let userNumbers = await prisma.phoneNumber.findMany({
           where: {
             tenantId,
             status: 'ACTIVE',
@@ -290,7 +290,10 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
                 contains: '555',
               },
             },
-            OR: [{ userId }, { userId: null }],
+            OR: [
+              { userId },
+              { userId: null },
+            ],
           },
         });
 
@@ -312,46 +315,18 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
           return {
             error: {
               code: 'NO_ASSIGNED_NUMBER',
-              message:
-                'You do not have any phone numbers assigned to your account. Please add a phone number on the Phone Numbers page first.',
+              message: 'You do not have any phone numbers assigned to your account. Please add a phone number on the Phone Numbers page first.',
             },
           };
         }
 
         if (userNumbers.length > 0) {
-          // Numbers without a provider are imported caller IDs we don't own at any
-          // carrier — Telnyx/BulkVS/SignalWire reject them (SIP 403), so a call
-          // using one can never complete. Restrict outbound to carrier-owned numbers.
-          let dialableNumbers = userNumbers.filter(n => n.provider);
-          if (dialableNumbers.length === 0) {
-            // No carrier-owned number is visible to this user — borrow any active
-            // carrier-owned number in the tenant so the call can actually connect.
-            const tenantNumbers = await prisma.phoneNumber.findMany({
-              where: {
-                tenantId,
-                status: 'ACTIVE',
-                NOT: { number: { contains: '555' } },
-              },
-            });
-            dialableNumbers = tenantNumbers.filter(n => n.provider);
-          }
-          const selectablePool = dialableNumbers.length > 0 ? dialableNumbers : userNumbers;
-
-          const requestedNumber =
-            callerId && callerId !== 'ROTATE'
-              ? selectablePool.find(
-                  n =>
-                    n.number === callerId ||
-                    n.number.replace(/\D/g, '') === callerId.replace(/\D/g, '')
-                )
-              : undefined;
-
-          if (!requestedNumber) {
+          if (callerId === 'ROTATE' || !callerId) {
             // Filter pool for BulkVS numbers if available
-            const bulkVsNumbers = selectablePool.filter(
+            const bulkVsNumbers = userNumbers.filter(
               n => n.provider && n.provider.toLowerCase() === 'bulkvs'
             );
-            const pool = bulkVsNumbers.length > 0 ? bulkVsNumbers : selectablePool;
+            const pool = bulkVsNumbers.length > 0 ? bulkVsNumbers : userNumbers;
 
             // Sort pool by lastAssignedAt ascending (nulls first)
             const sortedPool = [...pool].sort((a, b) => {
@@ -371,11 +346,14 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
               where: { id: selectedRecord.id },
               data: { lastAssignedAt: new Date() },
             });
-            console.log(
-              `[CallerID Rotation] Rotated to ${outboundCallerId} (provider: ${selectedRecord.provider || 'unknown'})`
-            );
+            console.log(`[CallerID Rotation] Rotated to ${outboundCallerId} (provider: ${selectedRecord.provider || 'unknown'})`);
           } else {
-            outboundCallerId = requestedNumber.number;
+            const hasNumber = userNumbers.some(n => n.number === callerId || n.number.replace(/\D/g, '') === callerId?.replace(/\D/g, ''));
+            if (!hasNumber) {
+              outboundCallerId = userNumbers[0].number;
+            } else {
+              outboundCallerId = callerId;
+            }
           }
         }
       }
@@ -428,16 +406,13 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
         },
       });
 
-      request.log.info(
-        {
-          callId: call.id,
-          callSid: call.callSid,
-          fromNumber: fsCallerId,
-          toNumber: phoneNumber,
-          recordingEnabled,
-        },
-        'HOPWHISTLE ORIGINATE DIAGNOSTIC LOG'
-      );
+      request.log.info({
+        callId: call.id,
+        callSid: call.callSid,
+        fromNumber: fsCallerId,
+        toNumber: phoneNumber,
+        recordingEnabled,
+      }, 'HOPWHISTLE ORIGINATE DIAGNOSTIC LOG');
 
       // Update agent status to on-call
       await setAgentStatus(userId, {
@@ -462,10 +437,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
           updatedAt: new Date().toISOString(),
         });
       } catch (err) {
-        console.warn(
-          `[Originate] Redis callState write failed, continuing:`,
-          (err as Error).message
-        );
+        console.warn(`[Originate] Redis callState write failed, continuing:`, (err as Error).message);
       }
 
       // Emit call initiated event
@@ -573,16 +545,13 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       // Auto-start server-side recording via FreeSWITCH ESL
       // This is fire-and-forget - the call should proceed even if recording fails
       if (recordingEnabled) {
-        freeswitchService
-          .startRecording(call.callSid, callId)
-          .then(started => {
+        freeswitchService.startRecording(call.callSid, callId)
+          .then((started) => {
             if (!started) {
-              throw new Error(
-                'Recording start returned false (check FreeSWITCH connection or logs)'
-              );
+              throw new Error('Recording start returned false (check FreeSWITCH connection or logs)');
             }
           })
-          .catch(err => {
+          .catch((err) => {
             console.error(`[Recording] Failed to start recording for call ${callId}:`, err);
             // Mark recording as failed so UI shows correct state
             const prismaForError = getPrismaClient();
@@ -597,11 +566,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       }
 
       // Update Redis state
-      try {
-        await callStateService.updateCallState(callId, { status: 'answered' });
-      } catch (err) {
-        console.warn(`[Answer] Redis callState update failed, continuing:`, (err as Error).message);
-      }
+      try { await callStateService.updateCallState(callId, { status: 'answered' }); } catch (err) { console.warn(`[Answer] Redis callState update failed, continuing:`, (err as Error).message); }
 
       // Update agent status
       await setAgentStatus(userId, {
@@ -644,160 +609,147 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       endedAt?: string;
       endReason?: string;
     };
-  }>('/api/v1/agent/call/:callId/hangup', async (request, reply: FastifyReply) => {
-    const { callId } = request.params;
-    const {
-      duration: bodyDuration,
-      startedAt: bodyStartedAt,
-      answeredAt: bodyAnsweredAt,
-      endedAt: bodyEndedAt,
-      endReason,
-    } = request.body || {};
-    const { userId, tenantId } = getUser(request);
-    const prisma = getPrismaClient();
+  }>(
+    '/api/v1/agent/call/:callId/hangup',
+    async (request, reply: FastifyReply) => {
+      const { callId } = request.params;
+      const { duration: bodyDuration, startedAt: bodyStartedAt, answeredAt: bodyAnsweredAt, endedAt: bodyEndedAt, endReason } = request.body || {};
+      const { userId, tenantId } = getUser(request);
+      const prisma = getPrismaClient();
 
-    // Get call from PostgreSQL
-    const call = await prisma.call.findUnique({
-      where: { id: callId },
-    });
+      // Get call from PostgreSQL
+      const call = await prisma.call.findUnique({
+        where: { id: callId },
+      });
 
-    if (!call) {
-      void reply.code(404);
-      return { error: { code: 'CALL_NOT_FOUND', message: 'Call not found' } };
-    }
+      if (!call) {
+        void reply.code(404);
+        return { error: { code: 'CALL_NOT_FOUND', message: 'Call not found' } };
+      }
 
-    // If call is already COMPLETED, return the existing finalized values.
-    if (call.status === 'COMPLETED') {
-      if (
-        call.recordingStatus === 'PENDING' ||
-        call.recordingStatus === 'RECORDING' ||
-        call.recordingStatus === 'PROCESSING'
-      ) {
+      // If call is already COMPLETED, return the existing finalized values.
+      if (call.status === 'COMPLETED') {
+        if (
+          call.recordingStatus === 'PENDING' ||
+          call.recordingStatus === 'RECORDING' ||
+          call.recordingStatus === 'PROCESSING'
+        ) {
+          const { reconcileRecordingForCall } = await import('../services/recording-reconciler.js');
+          void reconcileRecordingForCall(callId).catch(err => {
+            console.error(`[Recording] Reconcile failed for already completed call ${callId}:`, err);
+          });
+        }
+
+        return {
+          callId,
+          status: 'completed',
+          duration: call.duration ?? 0,
+          endedAt: call.endedAt?.toISOString() || new Date().toISOString(),
+        };
+      }
+
+      const endedAt = bodyEndedAt ? new Date(bodyEndedAt) : new Date();
+      const answeredAt = call.answeredAt || (bodyAnsweredAt ? new Date(bodyAnsweredAt) : null);
+      const startedAt = call.startedAt || (bodyStartedAt ? new Date(bodyStartedAt) : null);
+
+      // Duration calculation logic
+      let duration = 0;
+      if (bodyDuration !== undefined && typeof bodyDuration === 'number' && Number.isFinite(bodyDuration) && bodyDuration >= 0) {
+        duration = bodyDuration;
+      } else if (answeredAt) {
+        duration = Math.floor((endedAt.getTime() - answeredAt.getTime()) / 1000);
+      } else if (startedAt) {
+        duration = Math.floor((endedAt.getTime() - startedAt.getTime()) / 1000);
+      }
+      if (duration < 0) duration = 0;
+
+      // Handle recordingStatus transitions:
+      const recordingUpdate: Record<string, unknown> = {};
+      if (call.recordingStatus === 'RECORDING') {
+        recordingUpdate.recordingStatus = 'PROCESSING';
+      } else if (call.recordingStatus === 'PENDING') {
+        if (!answeredAt) {
+          recordingUpdate.recordingStatus = 'FAILED';
+          recordingUpdate.recordingError = 'Call was not answered, no recording generated.';
+        } else {
+          recordingUpdate.recordingStatus = 'PROCESSING';
+        }
+      }
+
+      // Add metadata.endReason
+      const callMetadata = (call.metadata as Prisma.JsonObject) ?? {};
+      const existingRecordingDebug = (callMetadata.recordingDebug as Record<string, any>) || {};
+      const recordingDebug = {
+        ...existingRecordingDebug,
+        hangupNotifiedAt: endedAt.toISOString(),
+      };
+      const updatedMetadata = {
+        ...callMetadata,
+        ...(endReason ? { endReason } : {}),
+        recordingDebug,
+      };
+
+      // Update call in PostgreSQL
+      await prisma.call.update({
+        where: { id: callId },
+        data: {
+          status: 'COMPLETED',
+          endedAt,
+          answeredAt: answeredAt || undefined,
+          duration,
+          connectedDuration: answeredAt ? duration : 0,
+          metadata: updatedMetadata as Prisma.JsonObject,
+          ...recordingUpdate,
+        },
+      });
+
+      // Update Redis state
+      try { await callStateService.updateCallState(callId, { status: 'completed' }); } catch (err) { console.warn(`[Hangup] Redis callState update failed, continuing:`, (err as Error).message); }
+
+      // Update agent status
+      await setAgentStatus(userId, {
+        status: 'available',
+        lastUpdated: new Date().toISOString(),
+        currentCallId: undefined,
+      });
+
+      // Emit hangup event
+      void eventBus.publish('call.*', {
+        event: 'call.ended',
+        tenantId,
+        data: {
+          callId,
+          agentId: userId,
+          duration,
+          endReason: endReason || 'agent_hangup',
+          timestamp: endedAt.toISOString(),
+        },
+      });
+
+      // ======================================================================
+      // Recording finalization failsafe
+      // ======================================================================
+      const finalRecordingStatus =
+        String(recordingUpdate.recordingStatus || call.recordingStatus || '');
+
+      if (['PENDING', 'RECORDING', 'PROCESSING'].includes(finalRecordingStatus)) {
         const { reconcileRecordingForCall } = await import('../services/recording-reconciler.js');
-        void reconcileRecordingForCall(callId).catch(err => {
-          console.error(`[Recording] Reconcile failed for already completed call ${callId}:`, err);
-        });
+
+        setTimeout(() => {
+          void reconcileRecordingForCall(callId).catch(err => {
+            console.error(`[Recording] Delayed reconcile failed for call ${callId}:`, err);
+          });
+        }, 60_000);
       }
 
       return {
         callId,
         status: 'completed',
-        duration: call.duration ?? 0,
-        endedAt: call.endedAt?.toISOString() || new Date().toISOString(),
+        duration,
+        endedAt: endedAt.toISOString(),
       };
     }
-
-    const endedAt = bodyEndedAt ? new Date(bodyEndedAt) : new Date();
-    const answeredAt = call.answeredAt || (bodyAnsweredAt ? new Date(bodyAnsweredAt) : null);
-    const startedAt = call.startedAt || (bodyStartedAt ? new Date(bodyStartedAt) : null);
-
-    // Duration calculation logic
-    let duration = 0;
-    if (
-      bodyDuration !== undefined &&
-      typeof bodyDuration === 'number' &&
-      Number.isFinite(bodyDuration) &&
-      bodyDuration >= 0
-    ) {
-      duration = bodyDuration;
-    } else if (answeredAt) {
-      duration = Math.floor((endedAt.getTime() - answeredAt.getTime()) / 1000);
-    } else if (startedAt) {
-      duration = Math.floor((endedAt.getTime() - startedAt.getTime()) / 1000);
-    }
-    if (duration < 0) duration = 0;
-
-    // Handle recordingStatus transitions:
-    const recordingUpdate: Record<string, unknown> = {};
-    if (call.recordingStatus === 'RECORDING') {
-      recordingUpdate.recordingStatus = 'PROCESSING';
-    } else if (call.recordingStatus === 'PENDING') {
-      if (!answeredAt) {
-        recordingUpdate.recordingStatus = 'FAILED';
-        recordingUpdate.recordingError = 'Call was not answered, no recording generated.';
-      } else {
-        recordingUpdate.recordingStatus = 'PROCESSING';
-      }
-    }
-
-    // Add metadata.endReason
-    const callMetadata = (call.metadata as Prisma.JsonObject) ?? {};
-    const existingRecordingDebug = (callMetadata.recordingDebug as Record<string, any>) || {};
-    const recordingDebug = {
-      ...existingRecordingDebug,
-      hangupNotifiedAt: endedAt.toISOString(),
-    };
-    const updatedMetadata = {
-      ...callMetadata,
-      ...(endReason ? { endReason } : {}),
-      recordingDebug,
-    };
-
-    // Update call in PostgreSQL
-    await prisma.call.update({
-      where: { id: callId },
-      data: {
-        status: 'COMPLETED',
-        endedAt,
-        answeredAt: answeredAt || undefined,
-        duration,
-        connectedDuration: answeredAt ? duration : 0,
-        metadata: updatedMetadata as Prisma.JsonObject,
-        ...recordingUpdate,
-      },
-    });
-
-    // Update Redis state
-    try {
-      await callStateService.updateCallState(callId, { status: 'completed' });
-    } catch (err) {
-      console.warn(`[Hangup] Redis callState update failed, continuing:`, (err as Error).message);
-    }
-
-    // Update agent status
-    await setAgentStatus(userId, {
-      status: 'available',
-      lastUpdated: new Date().toISOString(),
-      currentCallId: undefined,
-    });
-
-    // Emit hangup event
-    void eventBus.publish('call.*', {
-      event: 'call.ended',
-      tenantId,
-      data: {
-        callId,
-        agentId: userId,
-        duration,
-        endReason: endReason || 'agent_hangup',
-        timestamp: endedAt.toISOString(),
-      },
-    });
-
-    // ======================================================================
-    // Recording finalization failsafe
-    // ======================================================================
-    const finalRecordingStatus = String(
-      recordingUpdate.recordingStatus || call.recordingStatus || ''
-    );
-
-    if (['PENDING', 'RECORDING', 'PROCESSING'].includes(finalRecordingStatus)) {
-      const { reconcileRecordingForCall } = await import('../services/recording-reconciler.js');
-
-      setTimeout(() => {
-        void reconcileRecordingForCall(callId).catch(err => {
-          console.error(`[Recording] Delayed reconcile failed for call ${callId}:`, err);
-        });
-      }, 60_000);
-    }
-
-    return {
-      callId,
-      status: 'completed',
-      duration,
-      endedAt: endedAt.toISOString(),
-    };
-  });
+  );
 
   /**
    * POST /api/v1/agent/call/:callId/hold
@@ -1093,9 +1045,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
 
       // Generate temporary credentials or use static extension mapping
       const username = extension ? `${extension}@${tenantId}` : `${userId}@${tenantId}`;
-      const password = extension
-        ? '1234'
-        : Buffer.from(`${userId}:${Date.now()}`).toString('base64').slice(0, 16);
+      const password = extension ? '1234' : Buffer.from(`${userId}:${Date.now()}`).toString('base64').slice(0, 16);
       const expiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
 
       // Build Verto WebSocket URL
@@ -1183,9 +1133,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
         try {
           const tcpaResult = await tcpaValidationService.validateNumber(callerNumber);
           if (tcpaResult.isLitigator) {
-            console.log(
-              `[TCPA-BLOCK] Blocking litigator ${callerNumber} (cached=${tcpaResult.cached})`
-            );
+            console.log(`[TCPA-BLOCK] Blocking litigator ${callerNumber} (cached=${tcpaResult.cached})`);
 
             // Create a blocked call record for audit trail
             const prismaBlock = getPrismaClient();
