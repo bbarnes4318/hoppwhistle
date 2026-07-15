@@ -226,18 +226,18 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
 
     const prisma = getPrismaClient();
 
-    // Fetch all active numbers that are either assigned directly to this user
-    // or are tenant-wide / unassigned (userId: null) so they can be selected.
+    // The softphone caller-ID picker should offer only the agent's OWN assigned
+    // DIDs, not the tenant-wide rotation pool (that pool is for the auto-dialer).
     const numbers = await prisma.phoneNumber.findMany({
       where: {
         tenantId,
         status: 'ACTIVE',
+        userId,
         NOT: {
           number: {
             contains: '555',
           },
         },
-        OR: [{ userId }, { userId: null }],
       },
       select: {
         id: true,
@@ -279,18 +279,17 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       let outboundCallerId = callerId || process.env.OUTBOUND_CALLER_ID || '12816991120';
 
       if (isAuthenticatedUser) {
-        // Fetch all active numbers that are either assigned directly to this user
-        // or are tenant-wide / unassigned (userId: null) so they can be selected.
+        // Softphone: an agent dials with their OWN assigned number.
         const userNumbers = await prisma.phoneNumber.findMany({
           where: {
             tenantId,
             status: 'ACTIVE',
+            userId,
             NOT: {
               number: {
                 contains: '555',
               },
             },
-            OR: [{ userId }, { userId: null }],
           },
         });
 
@@ -319,45 +318,34 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
         }
 
         if (userNumbers.length > 0) {
-          if (callerId === 'ROTATE' || !callerId) {
-            // Filter pool for BulkVS numbers if available
-            const bulkVsNumbers = userNumbers.filter(
-              n => n.provider && n.provider.toLowerCase() === 'bulkvs'
+          // Use the requested own number if it belongs to the agent, else their first assigned number.
+          if (callerId && callerId !== 'ROTATE') {
+            const requested = userNumbers.find(
+              n =>
+                n.number === callerId || n.number.replace(/\D/g, '') === callerId.replace(/\D/g, '')
             );
-            const pool = bulkVsNumbers.length > 0 ? bulkVsNumbers : userNumbers;
-
-            // Sort pool by lastAssignedAt ascending (nulls first)
+            outboundCallerId = (requested ?? userNumbers[0]).number;
+          } else {
+            outboundCallerId = userNumbers[0].number;
+          }
+        } else {
+          // Admin/owner without an assigned number: rotate the tenant FracTEL pool
+          // so the call still presents a valid carrier-owned DID.
+          const pool = await prisma.phoneNumber.findMany({
+            where: { tenantId, status: 'ACTIVE', userId: null, poolType: 'POOL' },
+          });
+          if (pool.length > 0) {
             const sortedPool = [...pool].sort((a, b) => {
-              if (!a.lastAssignedAt && b.lastAssignedAt) return -1;
-              if (a.lastAssignedAt && !b.lastAssignedAt) return 1;
-              if (!a.lastAssignedAt && !b.lastAssignedAt) return 0;
-              const timeA = new Date(a.lastAssignedAt!).getTime();
-              const timeB = new Date(b.lastAssignedAt!).getTime();
+              const timeA = a.lastAssignedAt ? new Date(a.lastAssignedAt).getTime() : 0;
+              const timeB = b.lastAssignedAt ? new Date(b.lastAssignedAt).getTime() : 0;
               return timeA - timeB;
             });
-
             const selectedRecord = sortedPool[0];
             outboundCallerId = selectedRecord.number;
-
-            // Update lastAssignedAt to current time in DB
             await prisma.phoneNumber.update({
               where: { id: selectedRecord.id },
               data: { lastAssignedAt: new Date() },
             });
-            console.log(
-              `[CallerID Rotation] Rotated to ${outboundCallerId} (provider: ${selectedRecord.provider || 'unknown'})`
-            );
-          } else {
-            const hasNumber = userNumbers.some(
-              n =>
-                n.number === callerId ||
-                n.number.replace(/\D/g, '') === callerId?.replace(/\D/g, '')
-            );
-            if (!hasNumber) {
-              outboundCallerId = userNumbers[0].number;
-            } else {
-              outboundCallerId = callerId;
-            }
           }
         }
       }

@@ -23,7 +23,8 @@ async function main() {
     const metricsServer = http.createServer((req, res) => {
       if (req.url === '/metrics') {
         res.setHeader('Content-Type', 'text/plain');
-        register.metrics()
+        register
+          .metrics()
           .then(metrics => {
             res.end(metrics);
           })
@@ -56,13 +57,13 @@ async function main() {
     await clickhouseETL.start();
     logger.info({ msg: 'ClickHouse ETL worker started' });
 
-    // Start Dialer Worker (The Hopper)
+    // Start Dialer Worker (The Hopper) — the single active outbound dialer.
     await dialerWorker.start();
     logger.info({ msg: 'Dialer worker started' });
 
-    // Start Autodialer
-    await dialer.start();
-    logger.info({ msg: 'Autodialer started' });
+    // Legacy Autodialer is disabled: it double-dialed alongside The Hopper and
+    // targeted the retired `didcentral` gateway. Kept for reference only.
+    // await dialer.start();
   } catch (error) {
     logger.error({ msg: 'Failed to start workers', err: error });
     process.exit(1);
