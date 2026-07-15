@@ -9,6 +9,7 @@ import { BulkvsPurchaseDialog } from '@/components/numbers/bulkvs-purchase-dialo
 import { CreateRouteDialog } from '@/components/numbers/create-route-dialog';
 import { EditNumberDialog } from '@/components/numbers/edit-number-dialog';
 import { EditRouteDialog } from '@/components/numbers/edit-route-dialog';
+import { FractelPurchaseDialog } from '@/components/numbers/fractel-purchase-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -58,6 +59,7 @@ interface DidRoute {
 function NumbersPage() {
   const [search, setSearch] = useState('');
   const [bulkvsPurchaseDialogOpen, setBulkvsPurchaseDialogOpen] = useState(false);
+  const [fractelPurchaseDialogOpen, setFractelPurchaseDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [createRouteOpen, setCreateRouteOpen] = useState(false);
   const [editRouteOpen, setEditRouteOpen] = useState(false);
@@ -123,6 +125,10 @@ function NumbersPage() {
     input.click();
   };
 
+  const handleBuyFractelNumber = () => {
+    setFractelPurchaseDialogOpen(true);
+  };
+
   const handleBuyBulkvsNumber = () => {
     setBulkvsPurchaseDialogOpen(true);
   };
@@ -177,6 +183,12 @@ function NumbersPage() {
           <DropdownMenuContent align="end" className="bg-slate-900 border-white/10 text-white">
             <DropdownMenuLabel className="text-xs text-gray-400">Select Provider</DropdownMenuLabel>
             <DropdownMenuSeparator className="bg-white/10" />
+            <DropdownMenuItem
+              onClick={handleBuyFractelNumber}
+              className="focus:bg-cyan-600 focus:text-white text-xs"
+            >
+              Buy from FracTEL (local &amp; toll-free)
+            </DropdownMenuItem>
             <DropdownMenuItem
               onClick={handleBuyBulkvsNumber}
               className="focus:bg-cyan-600 focus:text-white text-xs"
@@ -439,6 +451,12 @@ function NumbersPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <FractelPurchaseDialog
+        open={fractelPurchaseDialogOpen}
+        onOpenChange={setFractelPurchaseDialogOpen}
+        onSuccess={handlePurchaseSuccess}
+      />
 
       <BulkvsPurchaseDialog
         open={bulkvsPurchaseDialogOpen}

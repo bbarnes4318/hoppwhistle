@@ -345,6 +345,9 @@ async function buildServer() {
   const { registerBulkvsProcurementRoutes } = await import('./routes/bulkvs-procurement.js');
   await server.register(registerBulkvsProcurementRoutes);
 
+  const { registerFractelProcurementRoutes } = await import('./routes/fractel-procurement.js');
+  await server.register(registerFractelProcurementRoutes);
+
   // Register AI Campaign routes (AI outbound calling - Vapi integration hidden from UI)
   const { registerAICampaignRoutes, registerVapiWebhookRoutes } = await import(
     './routes/ai-campaigns.js'
@@ -355,7 +358,6 @@ async function buildServer() {
   // Register Music Console Voice routes
   const { registerMusicVoiceRoutes } = await import('./routes/music-console-voice.js');
   await server.register(registerMusicVoiceRoutes);
-
 
   // Register SignalWire webhook routes (voice, SMS, status callbacks, RELAY events)
   const { registerSignalWireWebhookRoutes } = await import('./routes/signalwire-webhooks.js');

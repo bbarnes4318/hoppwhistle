@@ -5,6 +5,7 @@ import { auditCreate, auditUpdate } from '../audit.js';
 import { AnveoAdapter } from './adapters/anveo-adapter.js';
 import { BandwidthAdapter } from './adapters/bandwidth-adapter.js';
 import { BulkvsAdapter } from './adapters/bulkvs-adapter.js';
+import { FractelAdapter } from './adapters/fractel-adapter.js';
 import { LocalAdapter } from './adapters/local-adapter.js';
 import { SignalWireAdapter } from './adapters/signalwire-adapter.js';
 import { TelnyxAdapter } from './adapters/telnyx-adapter.js';
@@ -19,8 +20,15 @@ import type {
   ProvisioningAdapter,
 } from './types.js';
 
-// Default priority order for provider selection
-const DEFAULT_PROVIDER_ORDER: Provider[] = ['anveo', 'bulkvs', 'signalwire', 'telnyx', 'bandwidth'];
+// Default priority order for provider selection (FracTEL is the live carrier)
+const DEFAULT_PROVIDER_ORDER: Provider[] = [
+  'fractel',
+  'anveo',
+  'bulkvs',
+  'signalwire',
+  'telnyx',
+  'bandwidth',
+];
 
 interface TenantMetadata {
   defaultProvider?: Provider;
@@ -88,6 +96,16 @@ export class ProvisioningService {
       }
     } catch (error) {
       logger.warn('BulkVS adapter not configured, skipping');
+    }
+
+    // FracTEL / FoneStorm — primary carrier for number search & ordering
+    try {
+      const fractel = new FractelAdapter();
+      if (fractel.isConfigured()) {
+        this.adapters.set('fractel', fractel);
+      }
+    } catch (error) {
+      logger.warn('FracTEL adapter not configured, skipping');
     }
   }
 
