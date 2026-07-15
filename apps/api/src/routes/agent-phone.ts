@@ -278,74 +278,63 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       const isAuthenticatedUser = userId !== 'demo-agent';
       let outboundCallerId = callerId || process.env.OUTBOUND_CALLER_ID || '12816991120';
 
+      // Rotate the tenant's FracTEL POOL (least-recently-used) and return the
+      // chosen number, or null if the pool is empty. Used by the call-center
+      // dialer (callerId === 'ROTATE') and as a fallback for unassigned agents.
+      const rotatePoolCallerId = async (): Promise<string | null> => {
+        const pool = await prisma.phoneNumber.findMany({
+          where: { tenantId, status: 'ACTIVE', userId: null, poolType: 'POOL' },
+        });
+        if (pool.length === 0) return null;
+        const sortedPool = [...pool].sort((a, b) => {
+          const timeA = a.lastAssignedAt ? new Date(a.lastAssignedAt).getTime() : 0;
+          const timeB = b.lastAssignedAt ? new Date(b.lastAssignedAt).getTime() : 0;
+          return timeA - timeB;
+        });
+        const selectedRecord = sortedPool[0];
+        await prisma.phoneNumber.update({
+          where: { id: selectedRecord.id },
+          data: { lastAssignedAt: new Date() },
+        });
+        return selectedRecord.number;
+      };
+
       if (isAuthenticatedUser) {
-        // Softphone: an agent dials with their OWN assigned number.
-        const userNumbers = await prisma.phoneNumber.findMany({
-          where: {
-            tenantId,
-            status: 'ACTIVE',
-            userId,
-            NOT: {
-              number: {
-                contains: '555',
-              },
-            },
-          },
-        });
-
-        const userRecord = await prisma.user.findUnique({
-          where: { id: userId },
-          include: {
-            roles: {
-              include: {
-                role: true,
-              },
-            },
-          },
-        });
-        const userRoles = userRecord?.roles.map(ur => ur.role.name) || [];
-        const isAdminOrOwner = userRoles.some(role => role === 'ADMIN' || role === 'OWNER');
-
-        if (userNumbers.length === 0 && !isAdminOrOwner) {
-          void reply.code(400);
-          return {
-            error: {
-              code: 'NO_ASSIGNED_NUMBER',
-              message:
-                'You do not have any phone numbers assigned to your account. Please add a phone number on the Phone Numbers page first.',
-            },
-          };
-        }
-
-        if (userNumbers.length > 0) {
-          // Use the requested own number if it belongs to the agent, else their first assigned number.
-          if (callerId && callerId !== 'ROTATE') {
-            const requested = userNumbers.find(
-              n =>
-                n.number === callerId || n.number.replace(/\D/g, '') === callerId.replace(/\D/g, '')
-            );
-            outboundCallerId = (requested ?? userNumbers[0]).number;
-          } else {
-            outboundCallerId = userNumbers[0].number;
-          }
+        if (callerId === 'ROTATE') {
+          // Call-center auto-dialer: rotate across the tenant DID pool.
+          const rotated = await rotatePoolCallerId();
+          if (rotated) outboundCallerId = rotated;
         } else {
-          // Admin/owner without an assigned number: rotate the tenant FracTEL pool
-          // so the call still presents a valid carrier-owned DID.
-          const pool = await prisma.phoneNumber.findMany({
-            where: { tenantId, status: 'ACTIVE', userId: null, poolType: 'POOL' },
+          // Manual softphone: the agent dials with their OWN assigned number.
+          const userNumbers = await prisma.phoneNumber.findMany({
+            where: {
+              tenantId,
+              status: 'ACTIVE',
+              userId,
+              NOT: {
+                number: {
+                  contains: '555',
+                },
+              },
+            },
           });
-          if (pool.length > 0) {
-            const sortedPool = [...pool].sort((a, b) => {
-              const timeA = a.lastAssignedAt ? new Date(a.lastAssignedAt).getTime() : 0;
-              const timeB = b.lastAssignedAt ? new Date(b.lastAssignedAt).getTime() : 0;
-              return timeA - timeB;
-            });
-            const selectedRecord = sortedPool[0];
-            outboundCallerId = selectedRecord.number;
-            await prisma.phoneNumber.update({
-              where: { id: selectedRecord.id },
-              data: { lastAssignedAt: new Date() },
-            });
+
+          if (userNumbers.length > 0) {
+            if (callerId) {
+              const requested = userNumbers.find(
+                n =>
+                  n.number === callerId ||
+                  n.number.replace(/\D/g, '') === callerId.replace(/\D/g, '')
+              );
+              outboundCallerId = (requested ?? userNumbers[0]).number;
+            } else {
+              outboundCallerId = userNumbers[0].number;
+            }
+          } else {
+            // Agent has no assigned number — fall back to a pool DID so the call
+            // still presents a valid FracTEL number rather than a dead default.
+            const rotated = await rotatePoolCallerId();
+            if (rotated) outboundCallerId = rotated;
           }
         }
       }

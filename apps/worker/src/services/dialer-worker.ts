@@ -15,7 +15,8 @@ const { Connection: ESLConnection } = modesl;
 import { logger } from '../lib/logger.js';
 
 /** Configuration from environment */
-const FREESWITCH_HOST = process.env.FREESWITCH_HOST || 'localhost';
+const FREESWITCH_HOST =
+  process.env.FREESWITCH_ESL_HOST || process.env.FREESWITCH_HOST || 'freeswitch';
 const FREESWITCH_ESL_PORT = parseInt(process.env.FREESWITCH_ESL_PORT || '8021', 10);
 const FREESWITCH_ESL_PASSWORD = process.env.FREESWITCH_ESL_PASSWORD || 'ClueCon';
 const MAX_CONCURRENT_CALLS = parseInt(process.env.MAX_CONCURRENT_CALLS || '10', 10);
