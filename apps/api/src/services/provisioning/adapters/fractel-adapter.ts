@@ -87,7 +87,10 @@ export class FractelAdapter implements ProvisioningAdapter {
       data = {};
     }
 
+    // FoneStorm nests the token: { "auth": { "token": "..." } }
+    const authObj = (data.auth as Record<string, unknown> | undefined) ?? data;
     const token =
+      (authObj.token as string) ||
       (data.token as string) ||
       (data.Token as string) ||
       (data.authorization as string) ||
