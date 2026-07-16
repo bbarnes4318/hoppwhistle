@@ -348,6 +348,10 @@ async function buildServer() {
   const { registerFractelProcurementRoutes } = await import('./routes/fractel-procurement.js');
   await server.register(registerFractelProcurementRoutes);
 
+  // Register AI Voice SSO routes (mints the embedded AI Voice session cookie)
+  const { registerAiVoiceRoutes } = await import('./routes/aivoice.js');
+  await server.register(registerAiVoiceRoutes);
+
   // Register AI Campaign routes (AI outbound calling - Vapi integration hidden from UI)
   const { registerAICampaignRoutes, registerVapiWebhookRoutes } = await import(
     './routes/ai-campaigns.js'
