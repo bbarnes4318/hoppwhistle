@@ -22,27 +22,29 @@ interface RolePriceBand {
 }
 
 // Per-provider, per-role estimated cost band (USD) for a single deep pass.
+// Calibrated to July 2026 MEASURED live runs (Full DD ≈ $6 without repair) so the
+// UI's "expected" range tracks reality instead of a worst-case that never occurs.
 const PROVIDER_ROLE_PRICING: Record<ProviderId, Partial<Record<ProviderRole, RolePriceBand>>> = {
   google: {
-    // Standard Gemini Deep Research ~$1-3/task; Forensic (Max) scales via MODE_MULTIPLIER.
-    primary: { low: 1.0, high: 3.0 },
-    independent: { low: 1.0, high: 3.0 },
-    adjudicator: { low: 0.05, high: 0.5 },
+    // Gemini Deep Research measured ≈ $2/task; Forensic (Max) scales via MODE_MULTIPLIER.
+    primary: { low: 1.0, high: 2.5 },
+    independent: { low: 1.0, high: 2.5 },
+    adjudicator: { low: 0.02, high: 0.2 },
   },
   perplexity: {
-    primary: { low: 1.0, high: 4.0 },
-    independent: { low: 1.0, high: 4.0 },
-    social: { low: 0.5, high: 2.0 },
-    factual_verifier: { low: 0.3, high: 2.0 },
+    primary: { low: 0.5, high: 1.5 },
+    independent: { low: 0.4, high: 1.2 },
+    social: { low: 0.4, high: 1.2 },
+    factual_verifier: { low: 0.05, high: 0.4 },
   },
   xai: {
-    social: { low: 0.5, high: 3.0 },
-    primary: { low: 1.0, high: 4.0 },
-    independent: { low: 1.0, high: 4.0 },
-    adversarial_verifier: { low: 0.5, high: 3.0 },
+    social: { low: 0.5, high: 1.5 },
+    primary: { low: 0.5, high: 1.5 },
+    independent: { low: 0.5, high: 1.5 },
+    adversarial_verifier: { low: 0.5, high: 1.6 },
   },
   anthropic: {
-    synthesis: { low: 0.8, high: 3.5 },
+    synthesis: { low: 0.6, high: 1.6 },
   },
 };
 

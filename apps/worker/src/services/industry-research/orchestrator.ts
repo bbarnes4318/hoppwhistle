@@ -715,6 +715,38 @@ export class ResearchOrchestrator {
 
     // Bounded single repair cycle when repair is required (and not an outright reject).
     if (decision === 'repair_required') {
+      // Budget gate: the repair cycle (Anthropic patch + both re-verifiers) must
+      // fit under the hard cap. If it cannot, stop with budget_exceeded rather
+      // than overrunning the cap — the user can approve a higher cap to resume.
+      const bud = await this.prisma.researchRun.findUnique({
+        where: { id: runId },
+        select: { maxBudgetUsd: true, accruedCostUsd: true },
+      });
+      const cap = bud?.maxBudgetUsd ?? 0;
+      const accrued = bud?.accruedCostUsd ?? 0;
+      const projected = projectedRepairCostUsd(roleEstimate);
+      if (cap > 0 && accrued + projected > cap) {
+        await this.appendProgress(
+          runId,
+          'publish',
+          `Repair needed (~$${projected.toFixed(2)}) but would exceed the $${cap.toFixed(2)} budget (spent $${accrued.toFixed(2)}). Increase the budget to continue.`
+        );
+        if (publishStage)
+          await this.markStage(publishStage.id, {
+            status: 'failed',
+            finishedAt: new Date(),
+            error: `Repair would exceed budget: spent $${accrued.toFixed(2)} + repair ~$${projected.toFixed(2)} > cap $${cap.toFixed(2)}`,
+          });
+        await this.prisma.researchRun.update({
+          where: { id: runId },
+          data: {
+            status: 'budget_exceeded',
+            finishedAt: new Date(),
+            error: `BUDGET_EXCEEDED: report needs one repair (~$${projected.toFixed(2)}) but only $${(cap - accrued).toFixed(2)} of the $${cap.toFixed(2)} budget remains. Approve a higher budget to finish.`,
+          },
+        });
+        return;
+      }
       const cycle = await this.runRepairCycle(
         runId,
         brief,
@@ -1193,6 +1225,19 @@ function deterministicValidation(
   }
   void brief;
   return { ok: errors.length === 0, errors: errors.slice(0, 10) };
+}
+
+/**
+ * Conservative projected maximum incremental cost of ONE repair cycle: the
+ * Anthropic patch call (cheaper than a full synthesis — half the synthesis
+ * estimate) plus a full re-run of both independent verifiers. Used to gate the
+ * repair cycle so a hard budget cap is never overrun.
+ */
+export function projectedRepairCostUsd(roleEstimate: Map<ProviderRole, number>): number {
+  const patch = (roleEstimate.get('synthesis') ?? 1) * 0.5;
+  const factual = roleEstimate.get('factual_verifier') ?? 0.5;
+  const adversarial = roleEstimate.get('adversarial_verifier') ?? 1;
+  return Math.round((patch + factual + adversarial) * 100) / 100;
 }
 
 /** Drop claim source references that don't point at a real source in the ledger.

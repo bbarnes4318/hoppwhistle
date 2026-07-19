@@ -7,6 +7,7 @@ import {
   decideReverifyScope,
   gate,
   gatherDefects,
+  projectedRepairCostUsd,
   sanitizeSourceRefs,
 } from '../orchestrator';
 import { jsonFromText, safeJson } from '../providers';
@@ -249,6 +250,22 @@ describe('gate + stale adjudication after repair', () => {
 
   it('a live reject adjudication still blocks even if verifiers disagree', () => {
     expect(gate(f('repair_required'), a('reject'), adj('reject'))).toBe('reject');
+  });
+});
+
+describe('projectedRepairCostUsd — conservative repair-cycle projection', () => {
+  it('projects half the synthesis estimate + both verifier estimates', () => {
+    const est = new Map<string, number>([
+      ['synthesis', 1.2],
+      ['factual_verifier', 0.3],
+      ['adversarial_verifier', 1.0],
+    ]);
+    // 1.2*0.5 + 0.3 + 1.0 = 1.9
+    expect(projectedRepairCostUsd(est as never)).toBeCloseTo(1.9, 2);
+  });
+
+  it('falls back to safe defaults when estimates are missing', () => {
+    expect(projectedRepairCostUsd(new Map() as never)).toBeGreaterThan(0);
   });
 });
 

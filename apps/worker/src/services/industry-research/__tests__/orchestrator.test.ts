@@ -365,6 +365,59 @@ describe('ResearchOrchestrator (real-only, four-provider architecture, HTTP mock
     expect(fake._reports).toHaveLength(0);
   });
 
+  it('budget gate: repair needed but would exceed the hard cap → budget_exceeded, NO repair, NO report', async () => {
+    const runId = 'run-1';
+    // Factual verifier requires repair; a tiny $1 cap cannot fit a repair cycle.
+    let xaiCalled = false;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('generativelanguage')) {
+          return res(200, {
+            candidates: [
+              {
+                content: { parts: [{ text: 'Findings. https://sec.gov/x' }] },
+                groundingMetadata: {
+                  groundingChunks: [{ web: { uri: 'https://sec.gov/x', title: 'SEC' } }],
+                },
+              },
+            ],
+            usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 500 },
+          });
+        }
+        if (url.includes('api.anthropic.com')) return anthropicSse(validReportJson(runId));
+        if (url.includes('perplexity.ai'))
+          return res(200, {
+            choices: [{ message: { content: factualJson('repair_required') } }],
+            usage: { prompt_tokens: 300, completion_tokens: 200 },
+          });
+        if (url.includes('api.x.ai')) {
+          xaiCalled = true; // a repair cycle would call the xAI verifier
+          return res(200, { output_text: '{}', usage: {} });
+        }
+        return res(404, { error: 'unexpected url' });
+      })
+    );
+    const fake = makeFakePrisma();
+    seedRun(fake, {
+      industry: 'Commercial HVAC maintenance services',
+      capabilities: [],
+      mode: 'rapid_scan',
+      maxBudgetUsd: 1,
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await new ResearchOrchestrator(fake as any).processRun(runId);
+
+    const run = fake._runs.get(runId)!;
+    expect(run.status).toBe('budget_exceeded');
+    expect(String(run.error)).toMatch(/BUDGET_EXCEEDED/);
+    expect(fake._reports).toHaveLength(0);
+    // The repair cycle (which would call the xAI verifier) must never have run.
+    expect(xaiCalled).toBe(false);
+    // The cap is respected — accrued never exceeded it.
+    expect(run.accruedCostUsd as number).toBeLessThanOrEqual(1);
+  });
+
   it('preflight: missing provider keys → run fails immediately, no provider calls, no report', async () => {
     delete process.env.GEMINI_API_KEY;
     delete process.env.PERPLEXITY_API_KEY;

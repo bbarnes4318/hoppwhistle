@@ -27,7 +27,7 @@ export const RESEARCH_MODES: Record<ResearchMode, ModeDefinition> = {
       competitors: 4,
       pricingExamples: 2,
     },
-    defaultBudgetUsd: 10,
+    defaultBudgetUsd: 1.5,
     expectedRuntimeMin: [3, 12],
   },
   full_due_diligence: {
@@ -51,7 +51,7 @@ export const RESEARCH_MODES: Record<ResearchMode, ModeDefinition> = {
       competitors: 10,
       pricingExamples: 5,
     },
-    defaultBudgetUsd: 60,
+    defaultBudgetUsd: 7,
     expectedRuntimeMin: [20, 75],
   },
   forensic_max: {
@@ -75,7 +75,9 @@ export const RESEARCH_MODES: Record<ResearchMode, ModeDefinition> = {
       competitors: 15,
       pricingExamples: 8,
     },
-    defaultBudgetUsd: 150,
+    // Forensic requires an explicit user-chosen budget (no safe default) — the UI
+    // must not pre-fill this; treated as "require explicit selection".
+    defaultBudgetUsd: 15,
     expectedRuntimeMin: [40, 150],
   },
 };

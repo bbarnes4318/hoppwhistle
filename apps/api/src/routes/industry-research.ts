@@ -524,6 +524,62 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
     }
   );
 
+  // --- Approve a higher budget cap (and resume a budget_exceeded run) ---
+  fastify.post<{ Params: { id: string }; Body: { maxBudgetUsd?: number } }>(
+    '/api/v1/industry-research/runs/:id/budget',
+    async (request, reply) => {
+      if (!featureEnabled()) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Feature not enabled' } };
+      }
+      const ctx = await requireAdmin(request, reply);
+      if (!ctx) return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
+
+      const next = Number(request.body?.maxBudgetUsd);
+      if (!Number.isFinite(next) || next <= 0) {
+        void reply.code(400);
+        return { error: { code: 'VALIDATION_ERROR', message: 'maxBudgetUsd must be positive' } };
+      }
+      const run = await prisma.researchRun.findFirst({
+        where: { id: request.params.id, tenantId: ctx.tenantId },
+        select: { id: true, status: true, accruedCostUsd: true, maxBudgetUsd: true },
+      });
+      if (!run) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Run not found' } };
+      }
+      if (next <= run.accruedCostUsd) {
+        void reply.code(400);
+        return {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: `New budget $${next.toFixed(2)} must exceed the $${run.accruedCostUsd.toFixed(2)} already spent`,
+          },
+        };
+      }
+      await prisma.researchRun.update({
+        where: { id: run.id },
+        data: { maxBudgetUsd: next },
+      });
+      // If the run stopped for budget, resume it from the publish stage so it can
+      // finish the repair + publish under the newly-approved cap.
+      let resumed = false;
+      if (run.status === 'budget_exceeded') {
+        await prisma.researchStage.updateMany({
+          where: { runId: run.id, stageKey: 'publish' },
+          data: { status: 'pending', error: null, startedAt: null, finishedAt: null },
+        });
+        await prisma.researchRun.update({
+          where: { id: run.id },
+          data: { status: 'queued', error: null, finishedAt: null },
+        });
+        await emitRunRequested(ctx.tenantId, run.id);
+        resumed = true;
+      }
+      return { data: { maxBudgetUsd: next, resumed } };
+    }
+  );
+
   // --- Cost audit: honest breakdown by cost basis ---
   fastify.get<{ Params: { id: string } }>(
     '/api/v1/industry-research/runs/:id/costs',
