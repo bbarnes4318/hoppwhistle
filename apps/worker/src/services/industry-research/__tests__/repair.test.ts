@@ -1,7 +1,12 @@
 import { adversarialVerificationSchema, type StructuredReport } from '@hopwhistle/shared';
 import { describe, expect, it } from 'vitest';
 
-import { applyPatchSet, decideReverifyScope, gatherDefects } from '../orchestrator';
+import {
+  applyPatchSet,
+  decideReverifyScope,
+  gatherDefects,
+  sanitizeSourceRefs,
+} from '../orchestrator';
 import { jsonFromText, safeJson } from '../providers';
 
 // A tiny but schema-shaped report for deterministic patch tests.
@@ -205,6 +210,23 @@ describe('applyPatchSet — deterministic, targeted (no full regeneration)', () 
     expect(verdictChanged).toBe(true);
     expect(next.executiveVerdict.verdict).toBe('DO_NOT_ENTER');
     expect(next.executiveVerdict.overallScore).toBe(30);
+  });
+});
+
+describe('sanitizeSourceRefs — strips dangling citations, never invents', () => {
+  it('removes a supportingSourceId that is not present in the sources ledger', () => {
+    const r = makeReport();
+    r.evidenceLedger[0].supportingSourceIds = ['google-src-1', 'xai-src-22']; // 2nd is dangling
+    r.evidenceLedger[1].contradictingSourceIds = ['ghost-9'];
+    const clean = sanitizeSourceRefs(r);
+    expect(clean.evidenceLedger[0].supportingSourceIds).toEqual(['google-src-1']);
+    expect(clean.evidenceLedger[1].contradictingSourceIds).toEqual([]);
+  });
+
+  it('is a no-op when every citation resolves', () => {
+    const r = makeReport();
+    r.evidenceLedger[0].supportingSourceIds = ['google-src-1'];
+    expect(sanitizeSourceRefs(r)).toBe(r); // same reference — unchanged
   });
 });
 

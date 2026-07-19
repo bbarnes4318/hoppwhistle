@@ -723,6 +723,11 @@ export class ResearchOrchestrator {
       decision = gate(factual, adversarial, adjudication);
     }
 
+    // Deterministically strip dangling source references (a synthesis artifact
+    // where a claim cites a sourceId that was deduped/dropped from the ledger).
+    // Removing an invalid citation is strictly safer than failing the whole run.
+    structured = sanitizeSourceRefs(structured);
+
     // Deterministic validation gate.
     const deterministic = deterministicValidation(structured, brief);
     if (!deterministic.ok) {
@@ -1166,6 +1171,26 @@ function deterministicValidation(
   }
   void brief;
   return { ok: errors.length === 0, errors: errors.slice(0, 10) };
+}
+
+/** Drop claim source references that don't point at a real source in the ledger.
+ *  Deterministic and safe: an invalid citation is removed, never invented. */
+export function sanitizeSourceRefs(r: StructuredReport): StructuredReport {
+  const known = new Set(r.sources.map(s => s.sourceId));
+  let changed = false;
+  const evidenceLedger = r.evidenceLedger.map(c => {
+    const support = c.supportingSourceIds.filter(id => !id || known.has(id));
+    const contra = c.contradictingSourceIds.filter(id => !id || known.has(id));
+    if (
+      support.length !== c.supportingSourceIds.length ||
+      contra.length !== c.contradictingSourceIds.length
+    ) {
+      changed = true;
+      return { ...c, supportingSourceIds: support, contradictingSourceIds: contra };
+    }
+    return c;
+  });
+  return changed ? { ...r, evidenceLedger } : r;
 }
 
 function mergeSources(a: EvidenceSource[], b: EvidenceSource[]): EvidenceSource[] {
