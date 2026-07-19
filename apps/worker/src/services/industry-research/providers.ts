@@ -519,19 +519,34 @@ async function geminiInteractionPoll(apiKey: string, jobId: string): Promise<Asy
   return { status: 'in_progress' };
 }
 
+/** Model-output steps only, never `thought` (hidden chain-of-thought) steps. */
+function interactionOutputSteps(j: any): any[] {
+  const steps = Array.isArray(j.steps) ? j.steps : [];
+  const outputs = steps.filter((s: any) => s?.type === 'model_output');
+  return outputs.length ? outputs : steps.filter((s: any) => s?.type !== 'thought');
+}
+
 function extractInteractionText(j: any): string {
-  // Try a range of plausible shapes for the completed interaction output.
   if (typeof j.output_text === 'string' && j.output_text) return j.output_text;
   const parts: string[] = [];
-  const walk = (node: any) => {
-    if (!node) return;
-    if (typeof node === 'string') return;
-    if (Array.isArray(node)) return node.forEach(walk);
-    if (typeof node.text === 'string') parts.push(node.text);
-    for (const k of ['output', 'content', 'parts', 'result', 'response', 'message', 'candidates'])
-      if (node[k]) walk(node[k]);
-  };
-  walk(j.output ?? j.result ?? j.response ?? j);
+  for (const s of interactionOutputSteps(j)) {
+    for (const c of s.content ?? []) {
+      // text parts only — skip image/visualization parts (mime_type/data)
+      if (typeof c.text === 'string' && c.text.trim()) parts.push(c.text);
+    }
+  }
+  // Fallback: shallow walk of the completed object, excluding any `thought` node.
+  if (!parts.length) {
+    const walk = (node: any) => {
+      if (!node || typeof node === 'string') return;
+      if (Array.isArray(node)) return node.forEach(walk);
+      if (node.type === 'thought') return;
+      if (typeof node.text === 'string') parts.push(node.text);
+      for (const k of ['output', 'content', 'parts', 'result', 'response', 'message'])
+        if (node[k]) walk(node[k]);
+    };
+    walk(j.output ?? j.result ?? j.response ?? j);
+  }
   return parts.join('\n').trim();
 }
 
@@ -541,12 +556,14 @@ function extractInteractionSources(j: any, text: string): EvidenceSource[] {
     if (!node) return;
     if (Array.isArray(node)) return node.forEach(collect);
     if (typeof node === 'object') {
-      if (typeof node.uri === 'string') urls.add(node.uri);
-      if (typeof node.url === 'string') urls.add(node.url);
+      if (node.type === 'thought') return; // don't mine reasoning
+      if (typeof node.uri === 'string' && /^https?:/.test(node.uri)) urls.add(node.uri);
+      if (typeof node.url === 'string' && /^https?:/.test(node.url)) urls.add(node.url);
       for (const v of Object.values(node)) collect(v);
     }
   };
-  collect(j);
+  // Only mine sources from the model-output steps (and citation metadata therein).
+  for (const s of interactionOutputSteps(j)) collect(s);
   for (const u of text.match(URL_RE) ?? []) urls.add(u);
   return dedupeSources(Array.from(urls).map((u, i) => sourceFrom('google', i + 1, u)));
 }
