@@ -168,8 +168,11 @@ function dedupeSources(sources: EvidenceSource[]): EvidenceSource[] {
   return Array.from(seen.values());
 }
 function jsonFromText(text: string): unknown {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const c = (fenced ? fenced[1] : text).trim();
+  // Reasoning models (Perplexity sonar-reasoning, Grok) may emit a <think>…</think>
+  // block whose braces defeat a naive scan — strip it before extraction.
+  const noThink = text.replace(/<think>[\s\S]*?<\/think>/gi, ' ');
+  const fenced = noThink.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const c = (fenced ? fenced[1] : noThink).trim();
   // 1) direct parse
   try {
     return JSON.parse(c);
@@ -275,26 +278,58 @@ async function perplexitySync(
   model: string,
   system: string,
   user: string,
-  opts: RoleRunOptions
+  opts: RoleRunOptions,
+  // When set, forces schema-valid JSON via Perplexity structured outputs — used by
+  // the factual verifier so its verdict is always machine-parseable.
+  jsonSchema?: Record<string, unknown>
 ): Promise<TransportResult> {
+  const body: Record<string, unknown> = {
+    model,
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: user },
+    ],
+  };
+  if (jsonSchema) {
+    body.response_format = { type: 'json_schema', json_schema: { schema: jsonSchema } };
+  }
   const { json, requestId } = await fetchJson(
     'perplexity',
     'https://api.perplexity.ai/chat/completions',
     {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: user },
-        ],
-      }),
+      body: JSON.stringify(body),
     },
     opts
   );
   return parsePerplexity(json, requestId);
 }
+
+// JSON schema mirroring factualVerificationSchema, for Perplexity structured output.
+const FACTUAL_JSON_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: {
+    verdict: {
+      type: 'string',
+      enum: ['pass', 'pass_with_caveats', 'repair_required', 'reject'],
+    },
+    confidence: { type: 'number' },
+    claimsChecked: { type: 'number' },
+    claimsSupported: { type: 'number' },
+    claimsPartiallySupported: { type: 'number' },
+    claimsUnsupported: { type: 'number' },
+    citationFailures: { type: 'array', items: { type: 'string' } },
+    unsupportedClaims: { type: 'array', items: { type: 'string' } },
+    misleadingClaims: { type: 'array', items: { type: 'string' } },
+    outdatedSources: { type: 'array', items: { type: 'string' } },
+    calculationErrors: { type: 'array', items: { type: 'string' } },
+    missingEvidence: { type: 'array', items: { type: 'string' } },
+    requiredRepairs: { type: 'array', items: { type: 'string' } },
+    blockingDefects: { type: 'array', items: { type: 'string' } },
+  },
+  required: ['verdict'],
+};
 
 async function perplexityAsyncSubmit(
   apiKey: string,
@@ -871,7 +906,7 @@ export class RealAdapter {
       );
     const system = buildRoleAssignment('factual_verifier', brief);
     const user = `Draft report to audit (verdict, claims, sections):\n${JSON.stringify(reportForVerification(structured)).slice(0, 24000)}`;
-    const t = await perplexitySync(this.apiKey, opts.model, system, user, opts);
+    const t = await perplexitySync(this.apiKey, opts.model, system, user, opts, FACTUAL_JSON_SCHEMA);
     const parsed = factualVerificationSchema.safeParse(safeJson(t.text));
     if (!parsed.success)
       throw new ProviderError('Perplexity factual verification returned invalid JSON', this.id);
