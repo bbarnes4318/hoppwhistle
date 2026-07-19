@@ -702,7 +702,16 @@ export class ResearchOrchestrator {
     )) as AdversarialVerification | null;
     const adjudication = (await this.stageOutput(runId, 'adjudicate')) as AdjudicationResult | null;
 
-    let decision = gate(factual, adversarial, adjudication);
+    // An adjudication only gates while its dispute is live. Once the current
+    // verifier verdicts no longer warrant adjudication (they agree and are
+    // publishable — e.g. after a repair cleared the disagreement), the stale
+    // adjudication verdict must not block publication.
+    const effectiveAdjudication = (
+      f: FactualVerification | null,
+      a: AdversarialVerification | null
+    ): AdjudicationResult | null => (adjudicationNeeded(f, a, mode) ? adjudication : null);
+
+    let decision = gate(factual, adversarial, effectiveAdjudication(factual, adversarial));
 
     // Bounded single repair cycle when repair is required (and not an outright reject).
     if (decision === 'repair_required') {
@@ -720,7 +729,7 @@ export class ResearchOrchestrator {
       structured = cycle.structured;
       factual = cycle.factual;
       adversarial = cycle.adversarial;
-      decision = gate(factual, adversarial, adjudication);
+      decision = gate(factual, adversarial, effectiveAdjudication(factual, adversarial));
     }
 
     // Deterministically strip dangling source references (a synthesis artifact
@@ -1123,7 +1132,7 @@ const isPublishable = (v?: string): boolean => v === 'pass' || v === 'pass_with_
 
 /** Decide the run outcome. `pass_with_caveats` is publishable (caveats attached);
  *  only `repair_required` triggers repair and only `reject` blocks publication. */
-function gate(
+export function gate(
   f: FactualVerification | null,
   a: AdversarialVerification | null,
   adj: AdjudicationResult | null
@@ -1139,7 +1148,7 @@ function gate(
 }
 
 /** Adjudicate only on a MATERIAL conflict — not merely because a verifier listed risks. */
-function adjudicationNeeded(
+export function adjudicationNeeded(
   f: FactualVerification | null,
   a: AdversarialVerification | null,
   mode: ResearchMode

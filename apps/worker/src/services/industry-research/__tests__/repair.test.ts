@@ -2,8 +2,10 @@ import { adversarialVerificationSchema, type StructuredReport } from '@hopwhistl
 import { describe, expect, it } from 'vitest';
 
 import {
+  adjudicationNeeded,
   applyPatchSet,
   decideReverifyScope,
+  gate,
   gatherDefects,
   sanitizeSourceRefs,
 } from '../orchestrator';
@@ -210,6 +212,43 @@ describe('applyPatchSet — deterministic, targeted (no full regeneration)', () 
     expect(verdictChanged).toBe(true);
     expect(next.executiveVerdict.verdict).toBe('DO_NOT_ENTER');
     expect(next.executiveVerdict.overallScore).toBe(30);
+  });
+});
+
+describe('gate + stale adjudication after repair', () => {
+  const f = (verdict: string) => ({ verdict }) as never;
+  const a = (verdict: string) => ({ verdict }) as never;
+  const adj = (verdict: string) => ({ verdict }) as never;
+
+  it('repair_required when a verifier requires repair', () => {
+    expect(gate(f('repair_required'), a('pass_with_caveats'), null)).toBe('repair_required');
+  });
+
+  it('publishable once both verifiers agree (pass_with_caveats)', () => {
+    expect(gate(f('pass_with_caveats'), a('pass_with_caveats'), null)).toBe('pass_with_caveats');
+  });
+
+  it('a STALE repair_required adjudication no longer applies once verifiers agree post-repair', () => {
+    // Pre-repair: factual disagreed → adjudication was needed → repair_required.
+    expect(
+      adjudicationNeeded(f('repair_required'), a('pass_with_caveats'), 'full_due_diligence')
+    ).toBe(true);
+    // Post-repair: both verifiers agree and are publishable → adjudication no longer needed,
+    // so the effective adjudication is dropped and the gate publishes.
+    const stillNeeded = adjudicationNeeded(
+      f('pass_with_caveats'),
+      a('pass_with_caveats'),
+      'full_due_diligence'
+    );
+    expect(stillNeeded).toBe(false);
+    const effective = stillNeeded ? adj('repair_required') : null;
+    expect(gate(f('pass_with_caveats'), a('pass_with_caveats'), effective)).toBe(
+      'pass_with_caveats'
+    );
+  });
+
+  it('a live reject adjudication still blocks even if verifiers disagree', () => {
+    expect(gate(f('repair_required'), a('reject'), adj('reject'))).toBe('reject');
   });
 });
 
