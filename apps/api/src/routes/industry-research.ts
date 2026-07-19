@@ -644,6 +644,23 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
 
       // Copy the completed research outputs into the replay run at $0 (reused).
       for (const s of reused) {
+        // Overwrite the reused stage's costDetails with a $0 "reused" basis so the
+        // replay's cost audit honestly attributes zero new spend to research (the
+        // original paid cost lives on the source run, not this benchmark).
+        const reusedOutput =
+          s.output && typeof s.output === 'object'
+            ? {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                ...(s.output as any),
+                costDetails: {
+                  usd: 0,
+                  basis: 'reused',
+                  costLowUsd: 0,
+                  costHighUsd: 0,
+                  pricingAsOf: PRICING_AS_OF,
+                },
+              }
+            : s.output;
         await prisma.researchStage.updateMany({
           where: { runId: newRun.id, stageKey: s.stageKey },
           data: {
@@ -657,7 +674,7 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
             costUsd: 0,
             usedFallback: s.usedFallback,
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            output: (s.output ?? undefined) as any,
+            output: (reusedOutput ?? undefined) as any,
             finishedAt: new Date(),
           },
         });

@@ -1,8 +1,8 @@
 'use client';
 
 import type { Claim, EvidenceSource, StructuredReport } from '@hopwhistle/shared';
-import { Download, FileJson, FileText, Search, ShieldAlert } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { Download, FileJson, FileText, Receipt, Search, ShieldAlert } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 
 import { Badge } from '@/components/ui/badge';
@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 
-import type { ReportResponse } from './api';
+import type { CostAudit, ReportResponse } from './api';
 import { researchApi } from './api';
 import { VerdictBadge } from './StatusBadge';
 
@@ -148,6 +148,11 @@ export function ReportViewer({ runId, report }: { runId: string; report: ReportR
           <li>
             <a href="#sources" className="text-muted-foreground hover:text-foreground">
               Sources
+            </a>
+          </li>
+          <li>
+            <a href="#cost" className="text-muted-foreground hover:text-foreground">
+              Cost &amp; provenance
             </a>
           </li>
         </ul>
@@ -551,8 +556,115 @@ export function ReportViewer({ runId, report }: { runId: string; report: ReportR
           </ul>
           <p className="mt-3 text-xs text-muted-foreground">{r.confidenceAssessment}</p>
         </section>
+
+        {/* Cost & provenance */}
+        <CostPanel runId={runId} />
       </div>
     </div>
+  );
+}
+
+const BASIS_LABEL: Record<string, string> = {
+  provider_reported: 'Confirmed by provider',
+  calculated_complete: 'Calculated from token usage',
+  calculated_partial: 'Calculated (partial usage)',
+  estimated: 'Estimated (no usage reported)',
+  reused: 'Reused (no new spend)',
+};
+
+function BasisChip({ basis }: { basis: string }) {
+  const variant =
+    basis === 'provider_reported'
+      ? 'success'
+      : basis.startsWith('calculated')
+        ? 'default'
+        : basis === 'reused'
+          ? 'outline'
+          : 'warning';
+  return (
+    <Badge variant={variant} className="text-[10px]">
+      {BASIS_LABEL[basis] ?? basis}
+    </Badge>
+  );
+}
+
+function money(n: number): string {
+  return `$${n.toFixed(2)}`;
+}
+
+function CostPanel({ runId }: { runId: string }) {
+  const [cost, setCost] = useState<CostAudit | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    researchApi
+      .getCosts(runId)
+      .then(setCost)
+      .catch(e => setError(String(e?.message ?? e)));
+  }, [runId]);
+
+  return (
+    <section id="cost" className="scroll-mt-4">
+      <h2 className="mb-2 flex items-center gap-2 text-lg font-semibold tracking-tight">
+        <Receipt className="h-4 w-4 text-muted-foreground" /> Cost &amp; provenance
+      </h2>
+      {error ? (
+        <p className="text-sm text-muted-foreground">Cost audit unavailable. {error}</p>
+      ) : !cost ? (
+        <div className="h-24 animate-pulse rounded-lg border border-border bg-muted/40" />
+      ) : (
+        <Card>
+          <CardContent className="space-y-4 pt-6">
+            {/* Honest totals — confirmed/calculated separated from estimates */}
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <Stat label="Confirmed (provider)" value={money(cost.confirmedCostUsd)} />
+              <Stat label="Calculated (tokens)" value={money(cost.calculatedCostUsd)} />
+              <Stat
+                label="Estimated range"
+                value={`${money(cost.estimatedCostLowUsd)} – ${money(cost.estimatedCostHighUsd)}`}
+              />
+              <Stat
+                label="Total range"
+                value={`${money(cost.totalLowUsd)} – ${money(cost.totalHighUsd)}`}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Confirmed and calculated figures are actual spend. Estimates are shown only as a range
+              and are never presented as actual charges. Budget cap {money(cost.maxBudgetUsd)} ·
+              remaining {money(cost.budgetRemainingUsd)}.
+            </p>
+            <div className="overflow-x-auto rounded-lg border border-border">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 text-left text-xs uppercase tracking-wider text-muted-foreground">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">Stage</th>
+                    <th className="px-3 py-2 font-medium">Provider</th>
+                    <th className="px-3 py-2 font-medium">Basis</th>
+                    <th className="px-3 py-2 text-right font-medium">Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cost.stages.map(l => (
+                    <tr key={l.stage} className="border-t border-border/60">
+                      <td className="px-3 py-2 font-medium">{l.stage.replace(/_/g, ' ')}</td>
+                      <td className="px-3 py-2 text-muted-foreground">{l.provider ?? '—'}</td>
+                      <td className="px-3 py-2">
+                        <BasisChip basis={l.costBasis} />
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        {l.costBasis === 'estimated'
+                          ? `${money(l.costLowUsd)} – ${money(l.costHighUsd)}`
+                          : money(l.costUsd)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </section>
   );
 }
 

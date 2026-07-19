@@ -51,6 +51,33 @@ export interface ResearchConfig {
   capabilities: CapabilityCategory[];
 }
 
+export interface CostAuditLine {
+  stage: string;
+  provider: string | null;
+  model: string | null;
+  costUsd: number;
+  costBasis: string;
+  providerReportedCostUsd: number | null;
+  calculatedCostUsd: number | null;
+  estimatedCostUsd: number | null;
+  costLowUsd: number;
+  costHighUsd: number;
+  pricingAsOf: string;
+}
+
+export interface CostAudit {
+  runId: string;
+  confirmedCostUsd: number;
+  calculatedCostUsd: number;
+  estimatedCostLowUsd: number;
+  estimatedCostHighUsd: number;
+  totalLowUsd: number;
+  totalHighUsd: number;
+  maxBudgetUsd: number;
+  budgetRemainingUsd: number;
+  stages: CostAuditLine[];
+}
+
 export interface ReportResponse {
   version: number;
   verdict: string | null;
@@ -86,6 +113,8 @@ export const researchApi = {
   getRun: (id: string) => unwrap<ResearchRunDetail>(apiClient.get(`${BASE}/runs/${id}`)),
 
   getReport: (id: string) => unwrap<ReportResponse>(apiClient.get(`${BASE}/runs/${id}/report`)),
+
+  getCosts: (id: string) => unwrap<CostAudit>(apiClient.get(`${BASE}/runs/${id}/costs`)),
 
   cancel: (id: string) => unwrap<{ status: string }>(apiClient.post(`${BASE}/runs/${id}/cancel`)),
 
