@@ -127,6 +127,34 @@ function res(status: number, body: unknown) {
   });
 }
 
+// Anthropic synthesis now streams (SSE). Build a mock streamed Messages response
+// carrying the report text as a single text_delta plus terminal usage/stop_reason.
+function anthropicSse(
+  text: string,
+  { inputTokens = 2000, outputTokens = 3000, stopReason = 'end_turn' } = {}
+) {
+  const events = [
+    { type: 'message_start', message: { usage: { input_tokens: inputTokens, cache_read_input_tokens: 0 } } },
+    { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text } },
+    { type: 'message_delta', delta: { stop_reason: stopReason }, usage: { output_tokens: outputTokens } },
+    { type: 'message_stop' },
+  ];
+  const payload = events.map(e => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join('');
+  const stream = new ReadableStream<Uint8Array>({
+    start(c) {
+      c.enqueue(new TextEncoder().encode(payload));
+      c.close();
+    },
+  });
+  return Promise.resolve({
+    ok: true,
+    status: 200,
+    headers: { get: (h: string) => (h === 'x-request-id' ? 'req_test_123' : null) },
+    body: stream,
+    text: () => Promise.resolve(payload),
+  });
+}
+
 function validReportJson(runId: string): string {
   return JSON.stringify({
     reportMetadata: {
@@ -224,11 +252,7 @@ describe('ResearchOrchestrator (real-only, four-provider architecture, HTTP mock
             usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 500 },
           });
         }
-        if (url.includes('api.anthropic.com'))
-          return res(200, {
-            content: [{ type: 'text', text: validReportJson(runId) }],
-            usage: { input_tokens: 2000, output_tokens: 3000 },
-          });
+        if (url.includes('api.anthropic.com')) return anthropicSse(validReportJson(runId));
         if (url.includes('perplexity.ai'))
           return res(200, {
             choices: [{ message: { content: factualJson(factualVerdict) } }],

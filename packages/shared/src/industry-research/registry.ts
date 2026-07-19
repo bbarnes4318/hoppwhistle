@@ -77,8 +77,8 @@ export function buildProviderRegistry(env: Env): ProviderConfig[] {
       hasKey: Boolean(env.ANTHROPIC_API_KEY),
       model: env.ANTHROPIC_SYNTHESIS_MODEL || 'claude-opus-4-8',
       fallbackModel: env.ANTHROPIC_SYNTHESIS_FALLBACK_MODEL || 'claude-sonnet-5',
-      timeoutMs: int(env.ANTHROPIC_TIMEOUT_MS, 9 * 60 * 1000),
-      maxRetries: int(env.ANTHROPIC_MAX_RETRIES, 0),
+      timeoutMs: int(env.ANTHROPIC_TIMEOUT_MS, 12 * 60 * 1000),
+      maxRetries: int(env.ANTHROPIC_MAX_RETRIES, 1),
       roles: ['synthesis'],
     },
   ];

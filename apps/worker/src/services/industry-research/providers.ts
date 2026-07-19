@@ -661,6 +661,11 @@ function extractInteractionSources(j: any, text: string): EvidenceSource[] {
 // Anthropic — synthesis only (no web tools, no self-verification)
 // --------------------------------------------------------------------------
 
+// Synthesis produces a large report over several minutes. A non-streaming request
+// leaves the connection silent while the model generates, tripping undici's ~300s
+// headers/body timeout ("fetch failed"). We stream instead: SSE events arrive
+// continuously, so the connection never idles out, and we get stop_reason + usage
+// cleanly from the terminal events. Bounded by our own AbortController (timeoutMs).
 async function anthropicCall(
   apiKey: string,
   model: string,
@@ -668,52 +673,136 @@ async function anthropicCall(
   user: string,
   opts: RoleRunOptions
 ): Promise<TransportResult> {
-  const { json, requestId } = await fetchJson(
-    'anthropic',
-    'https://api.anthropic.com/v1/messages',
-    {
-      method: 'POST',
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: Number(process.env.ANTHROPIC_MAX_OUTPUT_TOKENS) || 14000,
-        // Cache the large, stable synthesis system prompt so repair retries and
-        // subsequent calls in the run read it from cache (cache_read_input_tokens)
-        // instead of re-billing full input. Small prompts simply no-op the cache.
-        system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
-        messages: [{ role: 'user', content: user }],
-      }),
-    },
-    opts
-  );
-  const j = json as any;
-  // Truncated output must not be parsed as a complete report — fail honestly so
-  // the caller retries synthesis (not the whole research pipeline).
-  if (j.stop_reason === 'max_tokens') {
-    throw new ProviderError(
-      'Anthropic synthesis stopped at max_tokens (truncated) — output not parseable',
-      'anthropic'
-    );
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= opts.maxRetries; attempt++) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs);
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          stream: true,
+          max_tokens: Number(process.env.ANTHROPIC_MAX_OUTPUT_TOKENS) || 14000,
+          // Cache the large, stable synthesis system prompt so repair retries read
+          // it from cache (cache_read_input_tokens) instead of re-billing input.
+          system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
+          messages: [{ role: 'user', content: user }],
+        }),
+        signal: ctrl.signal,
+      });
+      const requestId =
+        res.headers.get('x-request-id') || res.headers.get('request-id') || undefined;
+      if (!res.ok) {
+        const body = (await res.text()).slice(0, 500);
+        const permanent = isPermanentStatus(res.status);
+        const err = new ProviderError(
+          `anthropic HTTP ${res.status}: ${sanitize(body)}`,
+          'anthropic',
+          res.status,
+          permanent
+        );
+        if (permanent) throw err;
+        lastErr = err;
+      } else {
+        const parsed = await consumeAnthropicStream(res);
+        // Truncated output must not be parsed as a complete report — fail honestly
+        // so the caller retries synthesis (not the whole research pipeline).
+        if (parsed.stopReason === 'max_tokens') {
+          throw new ProviderError(
+            'Anthropic synthesis stopped at max_tokens (truncated) — output not parseable',
+            'anthropic'
+          );
+        }
+        return {
+          text: parsed.text,
+          sources: [],
+          usage: {
+            inputTokens: parsed.inputTokens,
+            outputTokens: parsed.outputTokens,
+            cachedInputTokens: parsed.cachedInputTokens,
+            requests: 1,
+          },
+          requestId,
+        };
+      }
+    } catch (e) {
+      if (e instanceof ProviderError && e.permanent) throw e;
+      lastErr = e instanceof Error ? e : new ProviderError(String(e), 'anthropic');
+    } finally {
+      clearTimeout(timer);
+    }
+    if (attempt < opts.maxRetries) await sleep(backoffMs(attempt));
   }
-  const text = (j.content ?? [])
-    .filter((b: any) => b.type === 'text' || b.text)
-    .map((b: any) => b.text ?? '')
-    .join('\n');
-  return {
-    text,
-    sources: [],
-    usage: {
-      inputTokens: j.usage?.input_tokens,
-      outputTokens: j.usage?.output_tokens,
-      cachedInputTokens: j.usage?.cache_read_input_tokens,
-      requests: 1,
-    },
-    requestId,
+  throw lastErr instanceof Error ? lastErr : new ProviderError('Anthropic synthesis failed', 'anthropic');
+}
+
+interface AnthropicStreamResult {
+  text: string;
+  stopReason?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  cachedInputTokens?: number;
+}
+
+// Parse Anthropic Messages SSE: accumulate text_delta content, capture usage from
+// message_start (input/cache) and message_delta (output tokens + stop_reason).
+async function consumeAnthropicStream(res: Response): Promise<AnthropicStreamResult> {
+  if (!res.body) throw new ProviderError('Anthropic stream had no body', 'anthropic');
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  const out: AnthropicStreamResult = { text: '' };
+  const handle = (evt: any) => {
+    switch (evt?.type) {
+      case 'message_start':
+        out.inputTokens = evt.message?.usage?.input_tokens ?? out.inputTokens;
+        out.cachedInputTokens =
+          evt.message?.usage?.cache_read_input_tokens ?? out.cachedInputTokens;
+        break;
+      case 'content_block_delta':
+        if (evt.delta?.type === 'text_delta') out.text += evt.delta.text ?? '';
+        break;
+      case 'message_delta':
+        if (evt.delta?.stop_reason) out.stopReason = evt.delta.stop_reason;
+        if (evt.usage?.output_tokens != null) out.outputTokens = evt.usage.output_tokens;
+        break;
+      case 'error':
+        throw new ProviderError(
+          `anthropic stream error: ${sanitize(JSON.stringify(evt.error ?? evt)).slice(0, 300)}`,
+          'anthropic'
+        );
+    }
   };
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    // SSE frames are separated by a blank line; each frame has a `data:` line.
+    let idx: number;
+    while ((idx = buffer.indexOf('\n\n')) >= 0) {
+      const frame = buffer.slice(0, idx);
+      buffer = buffer.slice(idx + 2);
+      for (const line of frame.split('\n')) {
+        const t = line.trim();
+        if (!t.startsWith('data:')) continue;
+        const payload = t.slice(5).trim();
+        if (!payload || payload === '[DONE]') continue;
+        try {
+          handle(JSON.parse(payload));
+        } catch (err) {
+          if (err instanceof ProviderError) throw err;
+          /* ignore keep-alive / partial */
+        }
+      }
+    }
+  }
+  return out;
 }
 
 // --------------------------------------------------------------------------
