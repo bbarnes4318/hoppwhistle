@@ -7,12 +7,16 @@ import ReactMarkdown from 'react-markdown';
 import { researchApi, type ReportResponse } from './api';
 import { CostSummary } from './CostSummary';
 import { SourcesWorkspace } from './SourcesWorkspace';
-import { Highlight, highlightMarkdownComponents } from './ui/highlight';
+import { SearchHighlight, highlightMarkdownComponents } from './ui/highlight';
 import {
   buildRiskRegister,
   deriveEconomicVerdict,
+  deriveReasonsAgainst,
+  deriveReasonsFor,
+  deriveRecommendation,
   firstSectionSentence,
   NOT_ESTABLISHED,
+  type EconomicVerdict,
 } from './ui/report-helpers';
 
 function verdictClass(v: string): string {
@@ -61,16 +65,6 @@ const CATEGORY_DEFS: Array<{ key: string; label: string; re: RegExp }> = [
   { key: 'execution', label: '30/60/90-day plan', re: /90.day|execution|validation test|roadmap/i },
 ];
 
-function firstSentences(md: string, max = 2): string {
-  const plain = md
-    .replace(/[#*_`>-]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return plain
-    .split(/(?<=[.!?])\s+/)
-    .slice(0, max)
-    .join(' ');
-}
 function money(n?: number): string {
   return n == null ? '—' : `$${n.toFixed(2)}`;
 }
@@ -103,7 +97,7 @@ export function InstitutionalReport({
   const [matchIdx, setMatchIdx] = useState(-1);
 
   const sectionEls = useRef<Record<string, HTMLElement | null>>({});
-  const canvasRef = useRef<HTMLDivElement>(null);
+  const reportRef = useRef<HTMLDivElement>(null);
   const drawerCloseRef = useRef<HTMLButtonElement>(null);
   const oppOpenerRef = useRef<HTMLElement | null>(null);
   const mobileOpenerRef = useRef<HTMLButtonElement>(null);
@@ -118,7 +112,6 @@ export function InstitutionalReport({
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  // Active-section highlighting.
   useEffect(() => {
     const obs = new IntersectionObserver(
       entries => {
@@ -134,27 +127,33 @@ export function InstitutionalReport({
     return () => obs.disconnect();
   });
 
-  // Count matches after each render pass that changes the query or layout.
+  // Collect every visible match across the WHOLE report canvas (decision summary,
+  // recommendation, reasons, analysis, economics/opportunity/risk tables, review,
+  // kill criteria, right rail, evidence & sources). Exclude matches inside a
+  // collapsed methodology <details> unless it is open.
+  const scanMarks = () => {
+    const root = reportRef.current;
+    if (!root || !q) return [] as HTMLElement[];
+    return Array.from(root.querySelectorAll<HTMLElement>('[data-ir-mark]')).filter(
+      m => !m.closest('details:not([open])')
+    );
+  };
   useEffect(() => {
-    const root = canvasRef.current;
-    const marks = q && root ? root.querySelectorAll('[data-ir-mark]') : [];
+    const marks = scanMarks();
     setMatchCount(marks.length);
     setMatchIdx(marks.length ? 0 : -1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q, collapsed]);
-
-  // Move to the active match (data attribute, not className → React won't clobber).
   useEffect(() => {
-    const root = canvasRef.current;
-    if (!root) return;
-    const marks = Array.from(root.querySelectorAll<HTMLElement>('[data-ir-mark]'));
+    const marks = scanMarks();
     marks.forEach(m => m.removeAttribute('data-ir-active'));
     if (matchIdx >= 0 && marks[matchIdx]) {
       marks[matchIdx].setAttribute('data-ir-active', '');
       marks[matchIdx].scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matchIdx, matchCount]);
 
-  // Escape closes any open overlay; focus returns to the opener.
   useEffect(() => {
     if (!drawer && !mobileNav) return;
     const onKey = (e: KeyboardEvent) => {
@@ -166,7 +165,6 @@ export function InstitutionalReport({
     return () => document.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drawer, mobileNav]);
-
   useEffect(() => {
     if (drawer) drawerCloseRef.current?.focus();
   }, [drawer]);
@@ -187,20 +185,9 @@ export function InstitutionalReport({
     );
   }, [r.sections]);
 
-  const recommendation = useMemo(() => {
-    const thesis = r.sections.find(s => /thesis|recommend/i.test(s.title));
-    if (thesis) return firstSentences(thesis.markdown, 2);
-    return `${v.biggestOpportunity} — targeting ${v.bestCustomer} with ${v.bestBusinessModel}, beginning in ${meta.geography}.`;
-  }, [r.sections, v, meta.geography]);
-
-  const reasonsFor = [
-    v.biggestOpportunity,
-    ...r.rankedOpportunities.slice(0, 2).map(o => o.opportunity),
-  ]
-    .filter(Boolean)
-    .slice(0, 3);
-  const reasonsAgainst = [v.biggestRisk, ...r.killCriteria.slice(0, 2)].filter(Boolean).slice(0, 3);
-
+  const recommendation = useMemo(() => deriveRecommendation(r), [r]);
+  const reasonsFor = useMemo(() => deriveReasonsFor(r), [r]);
+  const reasonsAgainst = useMemo(() => deriveReasonsAgainst(r), [r]);
   const riskRows = useMemo(
     () => buildRiskRegister(r, report.verification?.adversarial),
     [r, report.verification]
@@ -211,6 +198,8 @@ export function InstitutionalReport({
     firstSectionSentence(r, /90.day|execution|validation|first.customer/i) ??
     'Validate demand with paying customers before committing to fixed costs.';
 
+  const H = ({ text }: { text: string }) => <SearchHighlight text={text} query={q} />;
+
   const toggle = (k: string) =>
     setCollapsed(p => {
       const n = new Set(p);
@@ -219,7 +208,6 @@ export function InstitutionalReport({
       return n;
     });
   const setAll = (c: boolean) => setCollapsed(c ? new Set(categories.map(x => x.key)) : new Set());
-
   const copy = async (id: string, text: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -248,7 +236,6 @@ export function InstitutionalReport({
         URL.revokeObjectURL(url);
       });
   };
-
   function openOpp(o: RankedOpportunity, opener: HTMLElement) {
     oppOpenerRef.current = opener;
     setDrawer(o);
@@ -280,7 +267,7 @@ export function InstitutionalReport({
   ];
 
   return (
-    <div>
+    <div ref={reportRef}>
       {/* Identity row */}
       <div
         style={{
@@ -294,7 +281,7 @@ export function InstitutionalReport({
         <div style={{ minWidth: 0 }}>
           <div className="ir-eyebrow">Industry Research · {meta.mode.replace(/_/g, ' ')}</div>
           <h1 className="ir-h1" style={{ marginTop: 3 }}>
-            {meta.industry}
+            <H text={meta.industry} />
           </h1>
           <div className="ir-muted" style={{ fontSize: 12, marginTop: 2 }}>
             {meta.geography} ·{' '}
@@ -333,20 +320,27 @@ export function InstitutionalReport({
       </div>
 
       {/* Decision strip */}
-      <div className="ir-strip">
+      <div
+        className="ir-strip"
+        data-anchor="decision"
+        ref={el => {
+          sectionEls.current.decision = el;
+        }}
+        id="ir-decision"
+      >
         <div className="ir-strip-cell">
           <div className="ir-strip-label">Verdict</div>
           <div className="ir-strip-value">
             <span className={`ir-verdict ${verdictClass(v.verdict)}`}>
-              {v.verdict.replace(/_/g, ' ')}
+              <H text={v.verdict.replace(/_/g, ' ')} />
             </span>
           </div>
         </div>
-        <StripCell label="Score" value={`${v.overallScore} / 100`} />
-        <StripCell label="Confidence" value={`${Math.round(v.confidence * 100)}%`} />
-        <StripCell label="Time to revenue" value={v.timeToFirstRevenue} />
-        <StripCell label="Capital" value={v.initialCapital} />
-        <StripCell label="Max authorized" value={money(maxBudgetUsd)} />
+        <StripCell label="Score" value={`${v.overallScore} / 100`} q={q} />
+        <StripCell label="Confidence" value={`${Math.round(v.confidence * 100)}%`} q={q} />
+        <StripCell label="Time to revenue" value={v.timeToFirstRevenue} q={q} />
+        <StripCell label="Capital" value={v.initialCapital} q={q} />
+        <StripCell label="Max authorized" value={money(maxBudgetUsd)} q={q} />
       </div>
 
       {/* Recommendation */}
@@ -355,7 +349,7 @@ export function InstitutionalReport({
           Recommended entry
         </div>
         <p style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.5, margin: 0 }}>
-          {recommendation}
+          <H text={recommendation} />
         </p>
         <button
           className="ir-btn ir-btn-ghost ir-noprint"
@@ -378,8 +372,8 @@ export function InstitutionalReport({
           borderTop: '1px solid var(--ir-border)',
         }}
       >
-        <ReasonCol title="Why this can work" cls="ir-pos" items={reasonsFor} />
-        <ReasonCol title="Why this can fail" cls="ir-neg" items={reasonsAgainst} />
+        <ReasonCol title="Why this can work" cls="ir-pos" items={reasonsFor} q={q} />
+        <ReasonCol title="Why this can fail" cls="ir-neg" items={reasonsAgainst} q={q} />
       </div>
 
       {/* Report body grid */}
@@ -403,7 +397,7 @@ export function InstitutionalReport({
           ))}
         </nav>
 
-        <div className="ir-canvas" ref={canvasRef}>
+        <div className="ir-canvas">
           {/* Search toolbar */}
           <div
             className="ir-noprint"
@@ -497,7 +491,7 @@ export function InstitutionalReport({
                     <div key={s.key} style={{ marginTop: 14 }}>
                       {cat.sections.length > 1 && (
                         <div className="ir-h3">
-                          <Highlight text={s.title} query={q} />
+                          <H text={s.title} />
                         </div>
                       )}
                       <div className="ir-body" style={{ marginTop: 6 }}>
@@ -519,7 +513,7 @@ export function InstitutionalReport({
             className="ir-report-section"
           >
             <SectionHead label="Economics" query={q} />
-            <EconomicsTable report={r} verdict={econVerdict} />
+            <EconomicsTable report={r} verdict={econVerdict} q={q} />
           </section>
 
           {/* Opportunities */}
@@ -565,15 +559,29 @@ export function InstitutionalReport({
                         }}
                       >
                         <td className="ir-num">{o.rank}</td>
-                        <td style={{ fontWeight: 600 }}>{o.opportunity}</td>
-                        <td className="ir-muted">{o.customer ?? '—'}</td>
-                        <td className="ir-muted">{o.offer ?? '—'}</td>
-                        <td className="ir-muted">{o.revenueModel ?? '—'}</td>
-                        <td className="ir-muted">{o.startupCost ?? '—'}</td>
-                        <td className="ir-muted">{o.timeToFirstRevenue ?? '—'}</td>
-                        <td className="ir-muted">{o.salesDifficulty ?? '—'}</td>
+                        <td style={{ fontWeight: 600 }}>
+                          <H text={o.opportunity} />
+                        </td>
+                        <td className="ir-muted">
+                          <H text={o.customer ?? '—'} />
+                        </td>
+                        <td className="ir-muted">
+                          <H text={o.offer ?? '—'} />
+                        </td>
+                        <td className="ir-muted">
+                          <H text={o.revenueModel ?? '—'} />
+                        </td>
+                        <td className="ir-muted">
+                          <H text={o.startupCost ?? '—'} />
+                        </td>
+                        <td className="ir-muted">
+                          <H text={o.timeToFirstRevenue ?? '—'} />
+                        </td>
+                        <td className="ir-muted">
+                          <H text={o.salesDifficulty ?? '—'} />
+                        </td>
                         <td className="ir-num" style={{ fontWeight: 600 }}>
-                          {o.opportunityScore}
+                          <H text={String(o.opportunityScore)} />
                         </td>
                       </tr>
                     ))}
@@ -586,7 +594,7 @@ export function InstitutionalReport({
             </section>
           )}
 
-          {/* Risk register — six fields */}
+          {/* Risk register */}
           <section
             id="ir-risks"
             data-anchor="risks"
@@ -612,21 +620,23 @@ export function InstitutionalReport({
                   <tbody>
                     {riskRows.map((rk, i) => (
                       <tr key={i}>
-                        <td style={{ minWidth: 200 }}>{rk.risk}</td>
-                        <td>
-                          <Classified value={rk.probability} />
+                        <td style={{ minWidth: 200 }}>
+                          <H text={rk.risk} />
                         </td>
                         <td>
-                          <Classified value={rk.impact} />
+                          <Classified value={rk.probability} q={q} />
                         </td>
                         <td>
-                          <Classified value={rk.ability} />
+                          <Classified value={rk.impact} q={q} />
+                        </td>
+                        <td>
+                          <Classified value={rk.ability} q={q} />
                         </td>
                         <td className="ir-muted" style={{ minWidth: 180 }}>
-                          {rk.mitigation}
+                          <H text={rk.mitigation} />
                         </td>
                         <td className="ir-muted" style={{ minWidth: 160 }}>
-                          {rk.trigger}
+                          <H text={rk.trigger} />
                         </td>
                       </tr>
                     ))}
@@ -645,7 +655,7 @@ export function InstitutionalReport({
                       <span className="ir-neg" aria-hidden>
                         ✕
                       </span>{' '}
-                      {k}
+                      <H text={k} />
                     </li>
                   ))}
                 </ul>
@@ -664,7 +674,7 @@ export function InstitutionalReport({
               className="ir-report-section"
             >
               <SectionHead label="Independent review" query={q} />
-              <IndependentReview report={report} />
+              <IndependentReview report={report} q={q} />
             </section>
           )}
 
@@ -678,7 +688,7 @@ export function InstitutionalReport({
             className="ir-report-section"
           >
             <SectionHead label="Evidence & sources" query={q} />
-            <SourcesWorkspace sources={report.sources} evidence={report.evidence} />
+            <SourcesWorkspace sources={report.sources} evidence={report.evidence} highlight={q} />
           </section>
 
           {/* Methodology & audit trail */}
@@ -726,31 +736,40 @@ export function InstitutionalReport({
           </section>
         </div>
 
-        {/* Right rail — unique, decision-useful only (no duplicated Confidence/Print/Export) */}
+        {/* Right rail */}
         <aside className="ir-rail">
           <div className="ir-panel" style={{ padding: 14 }}>
             <div className="ir-eyebrow">Immediate next action</div>
             <p style={{ fontSize: 13, marginTop: 6, lineHeight: 1.5 }}>
-              {r.rankedOpportunities[0]
-                ? `Start with ${v.bestSegment}: ${r.rankedOpportunities[0].opportunity}.`
-                : `Focus on ${v.bestSegment}.`}
+              <H
+                text={
+                  r.rankedOpportunities[0]
+                    ? `Start with ${v.bestSegment}: ${r.rankedOpportunities[0].opportunity}.`
+                    : `Focus on ${v.bestSegment}.`
+                }
+              />
             </p>
             <hr className="ir-divider" style={{ margin: '12px 0' }} />
             <div className="ir-eyebrow">Critical economic threshold</div>
             <p style={{ fontSize: 12, marginTop: 4, lineHeight: 1.45 }}>
-              Base-case payback: {base?.paybackPeriod ?? NOT_ESTABLISHED}
-              {base?.grossMargin ? ` · gross margin ${base.grossMargin}` : ''}
+              <H
+                text={`Base-case payback: ${base?.paybackPeriod ?? NOT_ESTABLISHED}${base?.grossMargin ? ` · gross margin ${base.grossMargin}` : ''}`}
+              />
             </p>
             {r.killCriteria[0] && (
               <>
                 <hr className="ir-divider" style={{ margin: '12px 0' }} />
                 <div className="ir-eyebrow ir-neg">Critical kill criterion</div>
-                <p style={{ fontSize: 12, marginTop: 4, lineHeight: 1.45 }}>{r.killCriteria[0]}</p>
+                <p style={{ fontSize: 12, marginTop: 4, lineHeight: 1.45 }}>
+                  <H text={r.killCriteria[0]} />
+                </p>
               </>
             )}
             <hr className="ir-divider" style={{ margin: '12px 0' }} />
             <div className="ir-eyebrow">Execution reminder</div>
-            <p style={{ fontSize: 12, marginTop: 4, lineHeight: 1.45 }}>{executionReminder}</p>
+            <p style={{ fontSize: 12, marginTop: 4, lineHeight: 1.45 }}>
+              <H text={executionReminder} />
+            </p>
           </div>
         </aside>
       </div>
@@ -890,16 +909,28 @@ export function InstitutionalReport({
 
 // ---- sub-components -------------------------------------------------------
 
-function StripCell({ label, value }: { label: string; value: string }) {
+function StripCell({ label, value, q }: { label: string; value: string; q: string }) {
   return (
     <div className="ir-strip-cell">
       <div className="ir-strip-label">{label}</div>
-      <div className="ir-strip-value">{value}</div>
+      <div className="ir-strip-value">
+        <SearchHighlight text={value} query={q} />
+      </div>
     </div>
   );
 }
 
-function ReasonCol({ title, cls, items }: { title: string; cls: string; items: string[] }) {
+function ReasonCol({
+  title,
+  cls,
+  items,
+  q,
+}: {
+  title: string;
+  cls: string;
+  items: string[];
+  q: string;
+}) {
   return (
     <div>
       <div className={`ir-eyebrow ${cls}`}>{title}</div>
@@ -912,7 +943,9 @@ function ReasonCol({ title, cls, items }: { title: string; cls: string; items: s
             <span className={`ir-num ${cls}`} style={{ fontWeight: 600, flexShrink: 0 }}>
               {String(i + 1).padStart(2, '0')}
             </span>
-            <span>{t}</span>
+            <span>
+              <SearchHighlight text={t} query={q} />
+            </span>
           </li>
         ))}
         {items.length === 0 && <li className="ir-muted">—</li>}
@@ -955,7 +988,7 @@ function SectionHead({
           }}
         >
           <span className="ir-h2">
-            <Highlight text={label} query={query} />
+            <SearchHighlight text={label} query={query} />
           </span>
           <span className="ir-muted" style={{ fontSize: 12 }} aria-hidden>
             {collapsed ? '▸' : '▾'}
@@ -963,7 +996,7 @@ function SectionHead({
         </button>
       ) : (
         <span className="ir-h2" style={{ flex: 1 }}>
-          <Highlight text={label} query={query} />
+          <SearchHighlight text={label} query={query} />
         </span>
       )}
       {onCopy && (
@@ -980,9 +1013,7 @@ function SectionHead({
   );
 }
 
-// A classified value (probability/impact/ability) — text carries the meaning, a
-// dot only reinforces it (status is never communicated by colour alone).
-function Classified({ value }: { value: string }) {
+function Classified({ value, q }: { value: string; q: string }) {
   const cls =
     value === 'High' || value === 'Likely'
       ? 'ir-neg'
@@ -997,10 +1028,15 @@ function Classified({ value }: { value: string }) {
       : value === 'Possible' || value === 'Moderate'
         ? 'ir-dot-warn'
         : 'ir-dot-muted';
-  if (value === NOT_ESTABLISHED) return <span className="ir-muted">{value}</span>;
+  if (value === NOT_ESTABLISHED)
+    return (
+      <span className="ir-muted">
+        <SearchHighlight text={value} query={q} />
+      </span>
+    );
   return (
     <span className={`ir-status ${cls}`}>
-      <span className={`ir-dot ${dot}`} aria-hidden /> {value}
+      <span className={`ir-dot ${dot}`} aria-hidden /> <SearchHighlight text={value} query={q} />
     </span>
   );
 }
@@ -1008,16 +1044,19 @@ function Classified({ value }: { value: string }) {
 function EconomicsTable({
   report,
   verdict,
+  q,
 }: {
   report: StructuredReport;
-  verdict: { label: string; cls: string; sentence: string };
+  verdict: EconomicVerdict;
+  q: string;
 }) {
   const s = (name: string) => report.unitEconomicsScenarios.find(x => x.name === name);
   const cons = s('conservative');
   const base = s('base');
   const agg = s('aggressive');
-  const cell = (val?: string) => <td className="ir-num">{val ?? NOT_ESTABLISHED}</td>;
-  // Required rows; existing schema only provides asp/grossMargin/cac/paybackPeriod/ltv.
+  const cell = (val?: string) => (
+    <td className="ir-num">{val ? <SearchHighlight text={val} query={q} /> : NOT_ESTABLISHED}</td>
+  );
   const rows: Array<[string, keyof NonNullable<typeof base> | null]> = [
     ['Monthly revenue at maturity', null],
     ['Average contract value', 'asp'],
@@ -1044,7 +1083,7 @@ function EconomicsTable({
             <tr>
               <td>Startup capital</td>
               <td className="ir-num" colSpan={3} style={{ textAlign: 'left' }}>
-                {report.executiveVerdict.initialCapital}
+                <SearchHighlight text={report.executiveVerdict.initialCapital} query={q} />
               </td>
             </tr>
             {rows.map(([label, key]) => (
@@ -1074,18 +1113,18 @@ function EconomicsTable({
         <div className="ir-eyebrow">
           Economic verdict ·{' '}
           <span className={verdict.cls} style={{ fontWeight: 700 }}>
-            {verdict.label}
+            <SearchHighlight text={verdict.label} query={q} />
           </span>
         </div>
         <p className="ir-body" style={{ marginTop: 4 }}>
-          {verdict.sentence}
+          <SearchHighlight text={verdict.sentence} query={q} />
         </p>
       </div>
     </div>
   );
 }
 
-function IndependentReview({ report }: { report: ReportResponse }) {
+function IndependentReview({ report, q }: { report: ReportResponse; q: string }) {
   const f = report.verification?.factual;
   const a = report.verification?.adversarial;
   const adj = report.verification?.adjudication;
@@ -1104,13 +1143,17 @@ function IndependentReview({ report }: { report: ReportResponse }) {
           <tr>
             <td>Factual accuracy</td>
             <td>
-              <span className={fp.cls}>{fp.label}</span>
+              <span className={fp.cls}>
+                <SearchHighlight text={fp.label} query={q} />
+              </span>
             </td>
           </tr>
           <tr>
             <td>Adversarial risk review</td>
             <td>
-              <span className={ap.cls}>{ap.label}</span>
+              <span className={ap.cls}>
+                <SearchHighlight text={ap.label} query={q} />
+              </span>
             </td>
           </tr>
           <tr>
@@ -1136,7 +1179,7 @@ function IndependentReview({ report }: { report: ReportResponse }) {
                 <span className="ir-muted" aria-hidden>
                   •
                 </span>{' '}
-                {c}
+                <SearchHighlight text={c} query={q} />
               </li>
             ))}
           </ul>

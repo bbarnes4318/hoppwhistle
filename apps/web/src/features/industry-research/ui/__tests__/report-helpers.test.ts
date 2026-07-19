@@ -1,13 +1,18 @@
-import type { AdversarialVerification, StructuredReport } from '@hopwhistle/shared';
+import type { AdversarialVerification, EvidenceSource, StructuredReport } from '@hopwhistle/shared';
 import { describe, expect, it } from 'vitest';
 
 import {
   buildRiskRegister,
+  buildSourcePreview,
+  collectSearchableRegions,
   deriveEconomicVerdict,
   deriveProbability,
+  domainOf,
   firstSectionSentence,
   NOT_ESTABLISHED,
+  regionMatches,
   splitHighlight,
+  stepIndex,
 } from '../report-helpers';
 
 function makeReport(over: Partial<StructuredReport> = {}): StructuredReport {
@@ -28,25 +33,27 @@ function makeReport(over: Partial<StructuredReport> = {}): StructuredReport {
       overallScore: 60,
       confidence: 0.6,
       bestSegment: 'SMB',
-      bestCustomer: 'Owners',
-      bestBusinessModel: 'Service',
+      bestCustomer: 'Property managers',
+      bestBusinessModel: 'Managed service',
       timeToFirstRevenue: '30d',
-      initialCapital: '$25k',
-      biggestOpportunity: 'Automation',
+      initialCapital: '$20k',
+      biggestOpportunity: 'Recurring maintenance automation',
       biggestRisk: 'Technician shortage is a common constraint for growth',
       oneSentenceConclusion: 'Enter narrow.',
     },
     assumptions: [],
     sections: [
       {
-        key: 'economics',
-        title: 'Economics',
-        markdown: 'Margins around 40%. Payback in 6 months.',
+        key: 'thesis',
+        title: 'Recommended Entry Thesis',
+        markdown:
+          'Launch a recurring maintenance service targeting property managers with 5-100 locations.',
       },
       {
         key: 'execution',
         title: '90-Day Execution Plan',
-        markdown: 'Build an apprenticeship pipeline to keep technicians available and utilized.',
+        markdown:
+          'We will require ACH deposit terms to reduce collections risk and manage working-capital pressure. Build an apprenticeship pipeline for technicians.',
       },
     ],
     competitors: [],
@@ -57,10 +64,23 @@ function makeReport(over: Partial<StructuredReport> = {}): StructuredReport {
         grossMargin: '39%',
         cac: '$1,300',
         paybackPeriod: '5 months',
+        ltv: '$6,500',
         notes: 'Viable only if recurring contracts exceed 55% of revenue.',
       },
     ],
-    rankedOpportunities: [],
+    rankedOpportunities: [
+      {
+        rank: 1,
+        opportunity: 'Recurring maintenance contracts',
+        customer: 'Property managers',
+        offer: 'Managed service',
+        revenueModel: 'Subscription',
+        startupCost: '$20k',
+        timeToFirstRevenue: '30d',
+        salesDifficulty: 'Moderate',
+        opportunityScore: 72,
+      },
+    ],
     killCriteria: ['Technician fill rate stays below 70% after month four'],
     contradictions: [],
     unknowns: [],
@@ -70,6 +90,17 @@ function makeReport(over: Partial<StructuredReport> = {}): StructuredReport {
     ...over,
   } as StructuredReport;
 }
+
+const adversarial = {
+  economicWeaknesses: [
+    'Slow collections raise working-capital needs',
+    'Recurring revenue depends on retention and could fall if churn rises',
+  ],
+  regulatoryWeaknesses: [],
+  operatorWarnings: ['Scheduling is often chaotic in peak season'],
+  customerWarnings: [],
+  blockingDefects: [],
+} as unknown as AdversarialVerification;
 
 describe('deriveProbability', () => {
   it('reads explicit likelihood language', () => {
@@ -82,64 +113,138 @@ describe('deriveProbability', () => {
   });
 });
 
-describe('deriveEconomicVerdict', () => {
-  it('Unattractive for DO_NOT_ENTER', () => {
-    const rep = makeReport();
-    rep.executiveVerdict.verdict = 'DO_NOT_ENTER';
-    expect(deriveEconomicVerdict(rep).label).toBe('Unattractive');
+describe('deriveEconomicVerdict — economics-driven, not verdict-driven', () => {
+  it('Not established when too few economic signals and no notes', () => {
+    const rep = makeReport({
+      unitEconomicsScenarios: [{ name: 'base', grossMargin: '39%' }],
+    });
+    expect(deriveEconomicVerdict(rep).label).toBe('Not established');
   });
-  it('Attractive for GO with high score', () => {
-    const rep = makeReport();
-    rep.executiveVerdict.verdict = 'GO';
-    rep.executiveVerdict.overallScore = 78;
-    expect(deriveEconomicVerdict(rep).label).toBe('Attractive');
-  });
-  it('Conditional otherwise, and uses base scenario notes as the sentence', () => {
-    const rep = makeReport();
-    const ev = deriveEconomicVerdict(rep);
+  it('Conditional when base notes are conditional (only if…)', () => {
+    const ev = deriveEconomicVerdict(makeReport());
     expect(ev.label).toBe('Conditional');
     expect(ev.sentence).toContain('recurring contracts exceed 55%');
   });
+  it('Attractive from strong economics EVEN IF the overall verdict is DO_NOT_ENTER', () => {
+    const rep = makeReport({
+      unitEconomicsScenarios: [
+        {
+          name: 'base',
+          grossMargin: '50%',
+          paybackPeriod: '3 months',
+          cac: '$1,000',
+          ltv: '$8,000',
+        },
+      ],
+    });
+    rep.executiveVerdict.verdict = 'DO_NOT_ENTER';
+    expect(deriveEconomicVerdict(rep).label).toBe('Attractive');
+  });
+  it('Unattractive from weak economics EVEN IF the overall verdict is GO', () => {
+    const rep = makeReport({
+      unitEconomicsScenarios: [{ name: 'base', grossMargin: '18%', paybackPeriod: '20 months' }],
+    });
+    rep.executiveVerdict.verdict = 'GO';
+    expect(deriveEconomicVerdict(rep).label).toBe('Unattractive');
+  });
 });
 
-describe('buildRiskRegister', () => {
-  const adversarial = {
-    economicWeaknesses: ['Working-capital demands may rise faster than collections'],
-    regulatoryWeaknesses: [],
-    operatorWarnings: ['Scheduling is often chaotic in peak season'],
-    customerWarnings: [],
-    blockingDefects: [],
-  } as unknown as AdversarialVerification;
-
-  it('produces six-field rows grounded in evidence or Not established', () => {
+describe('buildRiskRegister — six fields, strict mitigation', () => {
+  it('maps probability/impact/trigger from evidence', () => {
     const rows = buildRiskRegister(makeReport(), adversarial);
-    expect(rows.length).toBeGreaterThan(0);
-    const row = rows[0];
-    // every field exists
+    const tech = rows.find(r => r.risk.startsWith('Technician shortage'))!;
     for (const k of ['risk', 'probability', 'impact', 'ability', 'mitigation', 'trigger'] as const)
-      expect(typeof row[k]).toBe('string');
-    // biggestRisk is impact High and reads as Likely (contains "common")
-    expect(row.impact).toBe('High');
-    expect(row.probability).toBe('Likely');
-    // trigger pulled from a matching kill criterion (shares "technician")
-    expect(row.trigger.toLowerCase()).toContain('technician');
-    // ability is honestly Not established (no data)
-    expect(row.ability).toBe(NOT_ESTABLISHED);
+      expect(typeof tech[k]).toBe('string');
+    expect(tech.impact).toBe('High');
+    expect(tech.probability).toBe('Likely');
+    expect(tech.trigger.toLowerCase()).toContain('technician');
+    expect(tech.ability).toBe(NOT_ESTABLISHED);
+    // no action+overlap sentence for the technician risk → honest Not established
+    expect(tech.mitigation).toBe(NOT_ESTABLISHED);
   });
-
-  it('softer warnings get Not established impact, not an invented value', () => {
+  it('only populates Mitigation with real action language + ≥2 shared terms', () => {
     const rows = buildRiskRegister(makeReport(), adversarial);
-    const opWarn = rows.find(r => r.risk.includes('Scheduling'));
-    expect(opWarn?.impact).toBe(NOT_ESTABLISHED);
+    const collections = rows.find(r => r.risk.startsWith('Slow collections'))!;
+    expect(collections.mitigation).toContain('ACH'); // require/reduce/manage + collections/working/capital
+  });
+  it('softer warnings get Not established impact, never invented', () => {
+    const rows = buildRiskRegister(makeReport(), adversarial);
+    const opWarn = rows.find(r => r.risk.includes('Scheduling'))!;
+    expect(opWarn.impact).toBe(NOT_ESTABLISHED);
+  });
+});
+
+describe('comprehensive report search — found and navigable', () => {
+  it('matches "recurring" across decision, economics, opportunity, and risk regions', () => {
+    const regions = collectSearchableRegions(makeReport(), adversarial);
+    const matches = regionMatches(regions, 'recurring');
+    expect(matches.length).toBeGreaterThan(0);
+    const hitRegions = new Set(matches.map(m => m.region));
+    for (const region of ['decision', 'economics', 'opportunity', 'risk'] as const)
+      expect(hitRegions.has(region)).toBe(true);
+  });
+  it('Previous/Next navigation wraps around the full match list', () => {
+    const regions = collectSearchableRegions(makeReport(), adversarial);
+    const total = regionMatches(regions, 'recurring').length;
+    expect(total).toBeGreaterThan(1);
+    expect(stepIndex(total, 0, 1)).toBe(1);
+    expect(stepIndex(total, total - 1, 1)).toBe(0); // Next wraps to first
+    expect(stepIndex(total, 0, -1)).toBe(total - 1); // Previous wraps to last
+  });
+  it('no query yields no matches', () => {
+    expect(regionMatches(collectSearchableRegions(makeReport(), adversarial), '')).toHaveLength(0);
   });
 });
 
 describe('firstSectionSentence', () => {
   it('returns the first readable sentence of a matching section', () => {
-    expect(firstSectionSentence(makeReport(), /execution/i)).toContain('apprenticeship');
+    expect(firstSectionSentence(makeReport(), /execution/i)).toContain('require ACH');
   });
   it('returns null when no section matches', () => {
     expect(firstSectionSentence(makeReport(), /nonexistent-section/i)).toBeNull();
+  });
+});
+
+describe('source preview — only available metadata, honest fallbacks', () => {
+  it('maps available fields and reports no preview text', () => {
+    const s = {
+      sourceId: 'x',
+      title: 'SEC filing',
+      url: 'https://www.sec.gov/edgar/x',
+      publisher: 'SEC',
+      publishedDate: '2026-02-01',
+      sourceType: 'regulatory',
+      validated: true,
+      validationNote: 'URL syntactically valid',
+      provider: 'google',
+      normalizedUrl: 'sec.gov/edgar/x',
+    } as EvidenceSource;
+    const p = buildSourcePreview(s);
+    expect(p.title).toBe('SEC filing');
+    expect(p.domain).toBe('SEC');
+    expect(p.publishedDate).toBe('2026-02-01');
+    expect(p.sourceType).toBe('regulatory');
+    expect(p.validation).toContain('Validated');
+    expect(p.provider).toBe('google');
+    expect(p.previewText).toBeNull();
+  });
+  it('uses Not established for missing metadata and the domain when no publisher', () => {
+    const s = {
+      sourceId: 'y',
+      url: 'https://www.example.com/a',
+      validated: false,
+      provider: 'xai',
+      normalizedUrl: 'example.com/a',
+    } as EvidenceSource;
+    const p = buildSourcePreview(s);
+    expect(p.title).toBe(NOT_ESTABLISHED);
+    expect(p.publishedDate).toBe(NOT_ESTABLISHED);
+    expect(p.sourceType).toBe(NOT_ESTABLISHED);
+    expect(p.domain).toBe('example.com');
+    expect(p.validation).toBe('Unverified');
+  });
+  it('domainOf strips protocol and www', () => {
+    expect(domainOf('https://www.sec.gov/x')).toBe('sec.gov');
   });
 });
 
@@ -150,7 +255,6 @@ describe('splitHighlight', () => {
     expect(parts.map(p => p.text).join('')).toBe('Hello WORLD world');
   });
   it('returns a single plain part for an empty query', () => {
-    const parts = splitHighlight('anything', '');
-    expect(parts).toEqual([{ text: 'anything', mark: false }]);
+    expect(splitHighlight('anything', '')).toEqual([{ text: 'anything', mark: false }]);
   });
 });

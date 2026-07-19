@@ -1,12 +1,10 @@
 'use client';
 
 import type { Claim, EvidenceSource } from '@hopwhistle/shared';
-import { ExternalLink, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { cn } from '@/lib/utils';
+import { SearchHighlight } from './ui/highlight';
+import { buildSourcePreview, domainOf } from './ui/report-helpers';
 
 const STRONG = new Set(['verified_fact']);
 const WEAK = new Set(['unverified_industry_claim', 'hypothesis']);
@@ -16,48 +14,54 @@ function isStrong(c: Claim): boolean {
 }
 
 /**
- * Searchable, filterable Sources & Evidence workspace. Replaces the count-only
- * Evidence tab: users can search claims and sources, filter by classification /
- * provider / confidence, follow a claim to its sources and vice-versa, and see
- * contradictory and unresolved evidence — no raw JSON.
+ * Sources & Evidence workspace in the institutional design (compact summary strip,
+ * thin dividers, institutional tables, expandable rows, restrained status text —
+ * no oversized number cards, rounded claim cards, or decorative badges). Supports
+ * claim→source and source→claim navigation and a real source preview.
  */
 export function SourcesWorkspace({
   sources,
   evidence,
+  highlight = '',
 }: {
   sources: EvidenceSource[];
   evidence: Claim[];
+  highlight?: string;
 }) {
   const [tab, setTab] = useState<'claims' | 'sources'>('claims');
   const [q, setQ] = useState('');
   const [classFilter, setClassFilter] = useState('all');
   const [providerFilter, setProviderFilter] = useState('all');
   const [minConf, setMinConf] = useState(0);
-  const [expandedSource, setExpandedSource] = useState<string | null>(null);
+  const [openSource, setOpenSource] = useState<string | null>(null);
+  const [openClaim, setOpenClaim] = useState<string | null>(null);
 
   const sourceById = useMemo(() => new Map(sources.map(s => [s.sourceId, s])), [sources]);
-  const claimsBySource = useMemo(() => {
+  const supportingClaims = useMemo(() => {
     const m = new Map<string, Claim[]>();
     for (const c of evidence)
-      for (const sid of c.supportingSourceIds) {
-        if (!m.has(sid)) m.set(sid, []);
-        m.get(sid)!.push(c);
-      }
+      for (const sid of c.supportingSourceIds) (m.get(sid) ?? m.set(sid, []).get(sid)!).push(c);
+    return m;
+  }, [evidence]);
+  const contradictingClaims = useMemo(() => {
+    const m = new Map<string, Claim[]>();
+    for (const c of evidence)
+      for (const sid of c.contradictingSourceIds) (m.get(sid) ?? m.set(sid, []).get(sid)!).push(c);
     return m;
   }, [evidence]);
 
-  const summary = useMemo(() => {
-    const material = evidence.filter(c => c.materiality >= 0.5);
-    return {
+  const summary = useMemo(
+    () => ({
       sources: sources.length,
-      material: material.length,
+      material: evidence.filter(c => c.materiality >= 0.5).length,
       strong: evidence.filter(isStrong).length,
       partial: evidence.filter(c => c.supportingSourceIds.length === 1 && !isStrong(c)).length,
       unresolved: evidence.filter(
         c => WEAK.has(c.classification) || c.supportingSourceIds.length === 0
       ).length,
-    };
-  }, [evidence, sources]);
+    }),
+    [evidence, sources]
+  );
 
   const classifications = useMemo(
     () => Array.from(new Set(evidence.map(c => c.classification))),
@@ -68,74 +72,95 @@ export function SourcesWorkspace({
     [evidence, sources]
   );
 
-  const filteredClaims = useMemo(() => {
-    const query = q.trim().toLowerCase();
-    return evidence.filter(c => {
-      if (query && !c.text.toLowerCase().includes(query)) return false;
-      if (classFilter !== 'all' && c.classification !== classFilter) return false;
-      if (providerFilter !== 'all' && c.provider !== providerFilter) return false;
-      if (c.confidence < minConf) return false;
-      return true;
-    });
-  }, [evidence, q, classFilter, providerFilter, minConf]);
+  const query = q.trim().toLowerCase();
+  const filteredClaims = useMemo(
+    () =>
+      evidence.filter(c => {
+        if (query && !c.text.toLowerCase().includes(query)) return false;
+        if (classFilter !== 'all' && c.classification !== classFilter) return false;
+        if (providerFilter !== 'all' && c.provider !== providerFilter) return false;
+        if (c.confidence < minConf) return false;
+        return true;
+      }),
+    [evidence, query, classFilter, providerFilter, minConf]
+  );
+  const filteredSources = useMemo(
+    () =>
+      sources.filter(s => {
+        if (
+          query &&
+          !(s.title ?? '').toLowerCase().includes(query) &&
+          !s.url.toLowerCase().includes(query)
+        )
+          return false;
+        if (providerFilter !== 'all' && s.provider !== providerFilter) return false;
+        return true;
+      }),
+    [sources, query, providerFilter]
+  );
 
-  const filteredSources = useMemo(() => {
-    const query = q.trim().toLowerCase();
-    return sources.filter(s => {
-      if (
-        query &&
-        !(s.title ?? '').toLowerCase().includes(query) &&
-        !s.url.toLowerCase().includes(query)
-      )
-        return false;
-      if (providerFilter !== 'all' && s.provider !== providerFilter) return false;
-      return true;
-    });
-  }, [sources, q, providerFilter]);
+  const selectStyle = 'ir-field';
 
   return (
-    <div className="space-y-4">
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-        <SummaryCard label="Sources" value={summary.sources} />
-        <SummaryCard label="Material claims" value={summary.material} />
-        <SummaryCard label="Strongly supported" value={summary.strong} tone="good" />
-        <SummaryCard label="Partially supported" value={summary.partial} tone="warn" />
-        <SummaryCard label="Unresolved" value={summary.unresolved} tone="bad" />
+    <div>
+      {/* Compact summary strip */}
+      <div className="ir-strip" style={{ marginBottom: 12 }}>
+        <StripStat label="Sources" value={summary.sources} />
+        <StripStat label="Material claims" value={summary.material} />
+        <StripStat label="Strongly supported" value={summary.strong} cls="ir-pos" />
+        <StripStat label="Partially supported" value={summary.partial} cls="ir-warn" />
+        <StripStat label="Unresolved" value={summary.unresolved} cls="ir-neg" />
       </div>
 
       {/* Controls */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="inline-flex rounded-lg border border-border p-0.5">
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 8,
+          alignItems: 'center',
+          marginBottom: 10,
+        }}
+      >
+        <div
+          style={{ display: 'inline-flex', border: '1px solid var(--ir-border)', borderRadius: 4 }}
+        >
           {(['claims', 'sources'] as const).map(t => (
             <button
               key={t}
               type="button"
               onClick={() => setTab(t)}
-              className={cn(
-                'rounded-md px-3 py-1 text-sm font-medium capitalize transition-colors',
-                tab === t ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'
-              )}
+              aria-pressed={tab === t}
+              style={{
+                height: 30,
+                padding: '0 12px',
+                border: 0,
+                background: tab === t ? 'var(--ir-accent)' : 'transparent',
+                color: tab === t ? '#fff' : 'var(--ir-text-2)',
+                fontSize: 13,
+                fontWeight: 500,
+                textTransform: 'capitalize',
+                cursor: 'pointer',
+              }}
             >
               {t}
             </button>
           ))}
         </div>
-        <div className="relative min-w-[180px] flex-1">
-          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={q}
-            onChange={e => setQ(e.target.value)}
-            placeholder={tab === 'claims' ? 'Search claims…' : 'Search sources…'}
-            className="h-9 pl-8"
-            aria-label={`Search ${tab}`}
-          />
-        </div>
+        <input
+          className="ir-field"
+          style={{ height: 30, flex: 1, minWidth: 160 }}
+          value={q}
+          onChange={e => setQ(e.target.value)}
+          placeholder={tab === 'claims' ? 'Filter claims…' : 'Filter sources…'}
+          aria-label={`Filter ${tab}`}
+        />
         {tab === 'claims' && (
           <select
+            className={selectStyle}
+            style={{ height: 30, width: 'auto' }}
             value={classFilter}
             onChange={e => setClassFilter(e.target.value)}
-            className="h-9 rounded-md border border-border bg-background px-2 text-sm"
             aria-label="Filter by classification"
           >
             <option value="all">All types</option>
@@ -147,12 +172,13 @@ export function SourcesWorkspace({
           </select>
         )}
         <select
+          className={selectStyle}
+          style={{ height: 30, width: 'auto' }}
           value={providerFilter}
           onChange={e => setProviderFilter(e.target.value)}
-          className="h-9 rounded-md border border-border bg-background px-2 text-sm"
-          aria-label="Filter by source"
+          aria-label="Filter by discovering provider"
         >
-          <option value="all">All sources</option>
+          <option value="all">All providers</option>
           {providers.map(p => (
             <option key={p} value={p}>
               {p}
@@ -160,168 +186,254 @@ export function SourcesWorkspace({
           ))}
         </select>
         {tab === 'claims' && (
-          <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            min conf
-            <select
-              value={minConf}
-              onChange={e => setMinConf(Number(e.target.value))}
-              className="h-9 rounded-md border border-border bg-background px-2 text-sm"
-              aria-label="Minimum confidence"
-            >
-              <option value={0}>any</option>
-              <option value={0.5}>50%+</option>
-              <option value={0.7}>70%+</option>
-              <option value={0.9}>90%+</option>
-            </select>
-          </label>
+          <select
+            className={selectStyle}
+            style={{ height: 30, width: 'auto' }}
+            value={minConf}
+            onChange={e => setMinConf(Number(e.target.value))}
+            aria-label="Minimum confidence"
+          >
+            <option value={0}>Any confidence</option>
+            <option value={0.5}>50%+</option>
+            <option value={0.7}>70%+</option>
+            <option value={0.9}>90%+</option>
+          </select>
         )}
       </div>
 
-      {/* Claims */}
+      {/* Claims — thin-divider rows, expandable to sources */}
       {tab === 'claims' &&
         (filteredClaims.length === 0 ? (
-          <Empty>No claims match these filters.</Empty>
+          <p className="ir-muted" style={{ fontSize: 13 }}>
+            No claims match these filters.
+          </p>
         ) : (
-          <ul className="space-y-2">
-            {filteredClaims.map(c => (
-              <li key={c.claimId} className="rounded-lg border border-border p-3">
-                <p className="text-sm">{c.text}</p>
-                <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
-                  <Badge variant="outline" className="text-[10px]">
-                    {c.classification.replace(/_/g, ' ')}
-                  </Badge>
-                  <span className="text-muted-foreground">
-                    conf {Math.round(c.confidence * 100)}%
-                  </span>
-                  <span className="text-muted-foreground">
-                    · materiality {Math.round(c.materiality * 100)}%
-                  </span>
-                  {c.contradictingSourceIds.length > 0 && (
-                    <Badge variant="warning" className="text-[10px]">
-                      {c.contradictingSourceIds.length} contradicting
-                    </Badge>
-                  )}
-                </div>
-                {c.supportingSourceIds.length > 0 && (
-                  <div className="mt-2 space-y-1">
-                    {c.supportingSourceIds.map(sid => {
-                      const s = sourceById.get(sid);
-                      if (!s) return null;
-                      return (
-                        <a
-                          key={sid}
-                          href={s.url}
-                          target="_blank"
-                          rel="noreferrer noopener"
-                          className="flex items-center gap-1 text-xs text-primary hover:underline"
-                        >
-                          <ExternalLink className="h-3 w-3 flex-shrink-0" />
-                          <span className="truncate">{s.title ?? s.url}</span>
-                        </a>
-                      );
-                    })}
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
-        ))}
-
-      {/* Sources */}
-      {tab === 'sources' &&
-        (filteredSources.length === 0 ? (
-          <Empty>No sources match these filters.</Empty>
-        ) : (
-          <ul className="space-y-2">
-            {filteredSources.map(s => {
-              const supports = claimsBySource.get(s.sourceId) ?? [];
-              const open = expandedSource === s.sourceId;
+          <div style={{ borderTop: '1px solid var(--ir-border)' }}>
+            {filteredClaims.map(c => {
+              const open = openClaim === c.claimId;
+              const srcs = c.supportingSourceIds
+                .map(id => sourceById.get(id))
+                .filter(Boolean) as EvidenceSource[];
               return (
-                <li key={s.sourceId} className="rounded-lg border border-border p-3">
-                  <div className="flex items-start gap-2">
-                    <Badge
-                      variant={s.validated ? 'success' : 'outline'}
-                      className="mt-0.5 flex-shrink-0 text-[10px]"
-                    >
-                      {s.validated ? 'validated' : 'unverified'}
-                    </Badge>
-                    <a
-                      href={s.url}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      className="break-all text-sm text-primary hover:underline"
-                      aria-label={`Open source in a new tab: ${s.title ?? s.url}`}
-                    >
-                      {s.title ?? s.url}
-                    </a>
+                <div
+                  key={c.claimId}
+                  style={{ borderBottom: '1px solid var(--ir-border)', padding: '10px 0' }}
+                >
+                  <div style={{ fontSize: 14 }}>
+                    <SearchHighlight text={c.text} query={highlight} />
                   </div>
-                  <div className="mt-1 pl-1 text-xs">
-                    {supports.length > 0 ? (
+                  <div
+                    className="ir-muted"
+                    style={{
+                      fontSize: 11,
+                      marginTop: 4,
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: 10,
+                    }}
+                  >
+                    <span>{c.classification.replace(/_/g, ' ')}</span>
+                    <span>conf {Math.round(c.confidence * 100)}%</span>
+                    <span>materiality {Math.round(c.materiality * 100)}%</span>
+                    <span>via {c.provider}</span>
+                    {c.contradictingSourceIds.length > 0 && (
+                      <span className="ir-warn">
+                        {c.contradictingSourceIds.length} contradicting
+                      </span>
+                    )}
+                    {srcs.length > 0 && (
                       <button
                         type="button"
                         aria-expanded={open}
-                        onClick={() => setExpandedSource(open ? null : s.sourceId)}
-                        className="text-primary hover:underline"
+                        onClick={() => setOpenClaim(open ? null : c.claimId)}
+                        style={{
+                          background: 'none',
+                          border: 0,
+                          padding: 0,
+                          color: 'var(--ir-accent)',
+                          cursor: 'pointer',
+                          fontSize: 11,
+                        }}
                       >
-                        {open ? 'Hide' : 'Show'} {supports.length} supported claim
-                        {supports.length === 1 ? '' : 's'}
+                        {open ? 'Hide' : 'Show'} {srcs.length} source{srcs.length === 1 ? '' : 's'}
                       </button>
-                    ) : (
-                      <span className="text-muted-foreground">
-                        Not yet tied to a specific claim
-                      </span>
                     )}
                   </div>
-                  {open && supports.length > 0 && (
-                    <ul className="mt-2 space-y-1 border-t border-border/60 pt-2">
-                      {supports.map(c => (
-                        <li key={c.claimId} className="flex items-start gap-1.5 text-xs">
-                          <Badge variant="outline" className="mt-0.5 flex-shrink-0 text-[9px]">
-                            {c.classification.replace(/_/g, ' ')}
-                          </Badge>
-                          <span>{c.text}</span>
+                  {open && srcs.length > 0 && (
+                    <ul style={{ margin: '8px 0 0', paddingLeft: 0, listStyle: 'none' }}>
+                      {srcs.map(s => (
+                        <li key={s.sourceId} style={{ padding: '2px 0' }}>
+                          <a
+                            href={s.url}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            style={{ fontSize: 12, color: 'var(--ir-accent)' }}
+                            aria-label={`Open source in a new tab: ${s.title ?? s.url}`}
+                          >
+                            {s.title ?? s.url} ↗
+                          </a>
                         </li>
                       ))}
                     </ul>
                   )}
-                </li>
+                </div>
               );
             })}
-          </ul>
+          </div>
+        ))}
+
+      {/* Sources — thin-divider rows, expandable to a real preview */}
+      {tab === 'sources' &&
+        (filteredSources.length === 0 ? (
+          <p className="ir-muted" style={{ fontSize: 13 }}>
+            No sources match these filters.
+          </p>
+        ) : (
+          <div style={{ borderTop: '1px solid var(--ir-border)' }}>
+            {filteredSources.map(s => {
+              const open = openSource === s.sourceId;
+              const support = supportingClaims.get(s.sourceId) ?? [];
+              const contra = contradictingClaims.get(s.sourceId) ?? [];
+              return (
+                <div
+                  key={s.sourceId}
+                  style={{ borderBottom: '1px solid var(--ir-border)', padding: '10px 0' }}
+                >
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+                    <span
+                      className={s.validated ? 'ir-pos' : 'ir-muted'}
+                      style={{ fontSize: 11, fontWeight: 600, flexShrink: 0 }}
+                    >
+                      {s.validated ? 'Validated' : 'Unverified'}
+                    </span>
+                    <a
+                      href={s.url}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      style={{ fontSize: 14, color: 'var(--ir-accent)', wordBreak: 'break-word' }}
+                      aria-label={`Open source in a new tab: ${s.title ?? s.url}`}
+                    >
+                      <SearchHighlight text={s.title ?? s.url} query={highlight} /> ↗
+                    </a>
+                  </div>
+                  <div
+                    className="ir-muted"
+                    style={{
+                      fontSize: 11,
+                      marginTop: 3,
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: 10,
+                    }}
+                  >
+                    <span>{domainOf(s.url)}</span>
+                    <span>via {s.provider}</span>
+                    {support.length > 0 && (
+                      <span>
+                        {support.length} supported claim{support.length === 1 ? '' : 's'}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      aria-expanded={open}
+                      onClick={() => setOpenSource(open ? null : s.sourceId)}
+                      style={{
+                        background: 'none',
+                        border: 0,
+                        padding: 0,
+                        color: 'var(--ir-accent)',
+                        cursor: 'pointer',
+                        fontSize: 11,
+                      }}
+                    >
+                      {open ? 'Hide preview' : 'Preview'}
+                    </button>
+                  </div>
+
+                  {open &&
+                    (() => {
+                      const preview = buildSourcePreview(s);
+                      return (
+                        <div
+                          style={{
+                            marginTop: 8,
+                            border: '1px solid var(--ir-border)',
+                            borderRadius: 4,
+                            padding: 12,
+                          }}
+                        >
+                          <table className="ir-table">
+                            <tbody>
+                              <PreviewRow k="Title" v={preview.title} />
+                              <PreviewRow k="Domain / publisher" v={preview.domain} />
+                              <PreviewRow k="Publication date" v={preview.publishedDate} />
+                              <PreviewRow k="Source type" v={preview.sourceType} />
+                              <PreviewRow k="Validation status" v={preview.validation} />
+                              <PreviewRow k="Discovered by" v={preview.provider} />
+                            </tbody>
+                          </table>
+                          <div
+                            className="ir-muted"
+                            style={{ fontSize: 12, marginTop: 8, fontStyle: 'italic' }}
+                          >
+                            {preview.previewText ?? 'No preview text available.'}
+                          </div>
+                          {support.length > 0 && (
+                            <div style={{ marginTop: 10 }}>
+                              <div className="ir-eyebrow">Supporting claims</div>
+                              <ul style={{ margin: '4px 0 0', paddingLeft: 0, listStyle: 'none' }}>
+                                {support.map(c => (
+                                  <li key={c.claimId} style={{ fontSize: 12, padding: '2px 0' }}>
+                                    {c.text}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {contra.length > 0 && (
+                            <div style={{ marginTop: 10 }}>
+                              <div className="ir-eyebrow ir-warn">Contradicting claims</div>
+                              <ul style={{ margin: '4px 0 0', paddingLeft: 0, listStyle: 'none' }}>
+                                {contra.map(c => (
+                                  <li
+                                    key={c.claimId}
+                                    className="ir-warn"
+                                    style={{ fontSize: 12, padding: '2px 0' }}
+                                  >
+                                    {c.text}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+                </div>
+              );
+            })}
+          </div>
         ))}
     </div>
   );
 }
 
-function SummaryCard({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number;
-  tone?: 'good' | 'warn' | 'bad';
-}) {
-  const color =
-    tone === 'good'
-      ? 'text-emerald-500'
-      : tone === 'warn'
-        ? 'text-amber-500'
-        : tone === 'bad'
-          ? 'text-destructive'
-          : 'text-foreground';
+function StripStat({ label, value, cls }: { label: string; value: number; cls?: string }) {
   return (
-    <div className="rounded-lg border border-border p-3 text-center">
-      <div className={cn('text-2xl font-bold tabular-nums', color)}>{value}</div>
-      <div className="mt-0.5 text-[11px] text-muted-foreground">{label}</div>
+    <div className="ir-strip-cell">
+      <div className="ir-strip-label">{label}</div>
+      <div className={`ir-strip-value ${cls ?? ''}`}>{value}</div>
     </div>
   );
 }
 
-function Empty({ children }: { children: React.ReactNode }) {
+function PreviewRow({ k, v }: { k: string; v?: string }) {
   return (
-    <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-      {children}
-    </div>
+    <tr>
+      <td className="ir-muted" style={{ width: 150 }}>
+        {k}
+      </td>
+      <td>{v ?? 'Not established'}</td>
+    </tr>
   );
 }

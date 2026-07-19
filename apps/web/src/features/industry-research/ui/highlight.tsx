@@ -5,9 +5,11 @@ import type { Components } from 'react-markdown';
 
 import { splitHighlight } from './report-helpers';
 
-/** Render a plain string with case-insensitive matches wrapped in <mark>.
- *  Pure React (no dangerouslySetInnerHTML) → safe against HTML injection. */
-export function Highlight({ text, query }: { text: string; query: string }): JSX.Element {
+/** Shared presentation helper: render any user-visible string with
+ *  case-insensitive matches wrapped in <mark data-ir-mark>. Pure React (no
+ *  dangerouslySetInnerHTML) → safe against HTML injection. Used for every
+ *  textual value in the report so search coverage is comprehensive. */
+export function SearchHighlight({ text, query }: { text: string; query: string }): JSX.Element {
   const parts = splitHighlight(text, query);
   return (
     <>
@@ -23,6 +25,9 @@ export function Highlight({ text, query }: { text: string; query: string }): JSX
     </>
   );
 }
+
+/** Back-compat alias. */
+export const Highlight = SearchHighlight;
 
 // Recursively highlight only the STRING children; nested elements are handled by
 // their own component override, so highlighting composes through the tree.
