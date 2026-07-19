@@ -647,7 +647,10 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
         await prisma.researchStage.updateMany({
           where: { runId: newRun.id, stageKey: s.stageKey },
           data: {
-            status: s.status,
+            // Force 'completed' so the worker unconditionally skips it (it only
+            // skips completed/skipped, not 'fallback') — guaranteeing the paid
+            // research is never re-run. Provenance is kept in usedFallback.
+            status: 'completed',
             provider: s.provider,
             model: s.model,
             sourcesFound: s.sourcesFound,

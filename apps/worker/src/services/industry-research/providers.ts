@@ -646,7 +646,10 @@ async function anthropicCall(
       body: JSON.stringify({
         model,
         max_tokens: Number(process.env.ANTHROPIC_MAX_OUTPUT_TOKENS) || 14000,
-        system,
+        // Cache the large, stable synthesis system prompt so repair retries and
+        // subsequent calls in the run read it from cache (cache_read_input_tokens)
+        // instead of re-billing full input. Small prompts simply no-op the cache.
+        system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
         messages: [{ role: 'user', content: user }],
       }),
     },
