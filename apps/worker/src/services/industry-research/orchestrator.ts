@@ -858,9 +858,13 @@ export class ResearchOrchestrator {
     const synthStage = await this.prisma.researchStage.findFirst({
       where: { runId, stageKey: 'synthesis' },
     });
-    if (synthStage)
+    if (synthStage) {
+      // Preserve the original synthesis output (esp. costDetails) so the cost
+      // audit stays complete after a repair; only swap in the repaired report.
+      const prevSynth = (synthStage.output as Record<string, unknown> | null) ?? {};
       await this.markStage(synthStage.id, {
         output: {
+          ...prevSynth,
           structured: repaired,
           markdown: renderMarkdown(repaired),
           provider: assignments.synthesis,
@@ -868,6 +872,7 @@ export class ResearchOrchestrator {
           patchSet,
         } as unknown as Prisma.InputJsonValue,
       });
+    }
 
     // 4. Decide re-verification breadth, then run both verifiers concurrently.
     const { full, scope } = decideReverifyScope(
@@ -912,12 +917,20 @@ export class ResearchOrchestrator {
     const as = await this.prisma.researchStage.findFirst({
       where: { runId, stageKey: 'verify_adversarial' },
     });
-    if (fs && nextFactual)
-      await this.markStage(fs.id, { output: nextFactual as unknown as Prisma.InputJsonValue });
-    if (as && nextAdversarial)
-      await this.markStage(as.id, {
-        output: nextAdversarial as unknown as Prisma.InputJsonValue,
+    // Merge over the prior verifier output so the original stage costDetails
+    // survive re-verification (the re-verify spend is folded into repairCostUsd).
+    if (fs && nextFactual) {
+      const prevF = (fs.output as Record<string, unknown> | null) ?? {};
+      await this.markStage(fs.id, {
+        output: { ...prevF, ...nextFactual } as unknown as Prisma.InputJsonValue,
       });
+    }
+    if (as && nextAdversarial) {
+      const prevA = (as.output as Record<string, unknown> | null) ?? {};
+      await this.markStage(as.id, {
+        output: { ...prevA, ...nextAdversarial } as unknown as Prisma.InputJsonValue,
+      });
+    }
 
     await this.addCost(runId, repairCostUsd);
 
