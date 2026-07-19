@@ -22,18 +22,18 @@ import {
 // Helper to extract the actual SIP Call-ID header from a SIP.js Session object
 function getSipCallId(session: any): string {
   if (!session) return '';
-  
+
   // Strategy 1: Check request headers (standard SIP header)
   if (session.request && typeof session.request.getHeader === 'function') {
     const headerVal = session.request.getHeader('Call-ID');
     if (headerVal) return headerVal.trim();
   }
-  
+
   // Strategy 2: Check request.callId
   if (session.request && session.request.callId) {
     return session.request.callId.trim();
   }
-  
+
   // Strategy 3: Check incomingMessage or outgoingRequest
   if (session.incomingMessage && session.incomingMessage.callId) {
     return session.incomingMessage.callId.trim();
@@ -41,7 +41,7 @@ function getSipCallId(session: any): string {
   if (session.outgoingRequestMessage && session.outgoingRequestMessage.callId) {
     return session.outgoingRequestMessage.callId.trim();
   }
-  
+
   // Fallback to session.id
   return (session.id || '').trim();
 }
@@ -224,10 +224,7 @@ interface PhoneProviderProps {
   apiUrl?: string;
 }
 
-export function PhoneProvider({
-  children,
-  apiUrl,
-}: PhoneProviderProps): JSX.Element {
+export function PhoneProvider({ children, apiUrl }: PhoneProviderProps): JSX.Element {
   // In the browser, always derive the API base from the current origin so
   // requests use the same protocol/domain (avoids Mixed Content when the
   // build-time NEXT_PUBLIC_API_URL was baked with an http:// address).
@@ -295,7 +292,9 @@ export function PhoneProvider({
   const [pendingDispositionCall, setPendingDispositionCall] =
     useState<PendingDispositionCall | null>(null);
   const [dialerNumber, setDialerNumber] = useState<string>('');
-  const [userNumbers, setUserNumbers] = useState<Array<{ id: string; number: string; provider?: string | null }>>([]);
+  const [userNumbers, setUserNumbers] = useState<
+    Array<{ id: string; number: string; provider?: string | null }>
+  >([]);
   const [selectedCallerId, setSelectedCallerId] = useState<string | null>(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('selectedCallerId');
@@ -317,42 +316,49 @@ export function PhoneProvider({
   const reportedAnsweredCallsRef = useRef<Set<string>>(new Set());
   const reportedEndedCallsRef = useRef<Set<string>>(new Set());
   const audioContextRef = useRef<AudioContext | null>(null);
+  const ringOscRef = useRef<{ interval: ReturnType<typeof setInterval> } | null>(null);
 
   // ============================================================================
   // Audio Utilities
   // ============================================================================
 
-  // Pre-create and unlock ringtone on first user interaction to bypass autoplay restrictions
+  // Unlock audio (ringtone + AudioContext) on user interaction to bypass autoplay.
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      if (!ringtoneRef.current) {
-        ringtoneRef.current = new Audio('/sounds/ringtone.mp3');
-        ringtoneRef.current.loop = true;
-      }
-
-      const unlock = () => {
-        if (ringtoneRef.current) {
-          ringtoneRef.current.play()
-            .then(() => {
-              ringtoneRef.current?.pause();
-              ringtoneRef.current!.currentTime = 0;
-            })
-            .catch((err) => {
-              console.log('[Phone] Ringtone unlock failed, will retry on next interaction:', err);
-            });
-        }
-        window.removeEventListener('click', unlock);
-        window.removeEventListener('keydown', unlock);
-      };
-
-      window.addEventListener('click', unlock);
-      window.addEventListener('keydown', unlock);
-
-      return () => {
-        window.removeEventListener('click', unlock);
-        window.removeEventListener('keydown', unlock);
-      };
+    if (typeof window === 'undefined') return;
+    if (!ringtoneRef.current) {
+      ringtoneRef.current = new Audio('/sounds/ringtone.mp3');
+      ringtoneRef.current.loop = true;
     }
+    const unlock = () => {
+      try {
+        const AC =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        if (AC) {
+          if (!audioContextRef.current) audioContextRef.current = new AC();
+          if (audioContextRef.current.state === 'suspended') void audioContextRef.current.resume();
+        }
+      } catch {
+        /* ignore */
+      }
+      if (ringtoneRef.current) {
+        ringtoneRef.current
+          .play()
+          .then(() => {
+            ringtoneRef.current?.pause();
+            if (ringtoneRef.current) ringtoneRef.current.currentTime = 0;
+          })
+          .catch(() => {});
+      }
+    };
+    window.addEventListener('click', unlock);
+    window.addEventListener('keydown', unlock);
+    window.addEventListener('pointerdown', unlock);
+    return () => {
+      window.removeEventListener('click', unlock);
+      window.removeEventListener('keydown', unlock);
+      window.removeEventListener('pointerdown', unlock);
+    };
   }, []);
 
   // Fetch user's assigned phone numbers for caller ID selection
@@ -374,7 +380,7 @@ export function PhoneProvider({
   }, [normalizedApiUrl, getApiHeaders, selectedCallerId]);
 
   useEffect(() => {
-    refreshUserNumbers();
+    void refreshUserNumbers();
   }, [refreshUserNumbers]);
 
   // Persist selected caller ID to localStorage
@@ -385,18 +391,49 @@ export function PhoneProvider({
   }, [selectedCallerId]);
 
   const playRingtone = useCallback(() => {
-    if (typeof window !== 'undefined') {
-      if (!ringtoneRef.current) {
-        ringtoneRef.current = new Audio('/sounds/ringtone.mp3');
-        ringtoneRef.current.loop = true;
-      }
-      ringtoneRef.current.play().catch((err) => {
-        console.warn('[Phone] Ringtone play blocked or failed:', err);
-      });
+    if (typeof window === 'undefined') return;
+    try {
+      const AC =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!audioContextRef.current) audioContextRef.current = new AC();
+      const ctx = audioContextRef.current;
+      if (ctx.state === 'suspended') void ctx.resume();
+      const ringOnce = () => {
+        const gain = ctx.createGain();
+        gain.gain.value = 0;
+        gain.connect(ctx.destination);
+        const o1 = ctx.createOscillator();
+        o1.type = 'sine';
+        o1.frequency.value = 440;
+        o1.connect(gain);
+        const o2 = ctx.createOscillator();
+        o2.type = 'sine';
+        o2.frequency.value = 480;
+        o2.connect(gain);
+        const t = ctx.currentTime;
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(0.35, t + 0.03);
+        gain.gain.setValueAtTime(0.35, t + 1.8);
+        gain.gain.linearRampToValueAtTime(0, t + 1.9);
+        o1.start(t);
+        o2.start(t);
+        o1.stop(t + 1.95);
+        o2.stop(t + 1.95);
+      };
+      if (ringOscRef.current?.interval) clearInterval(ringOscRef.current.interval);
+      ringOnce();
+      ringOscRef.current = { interval: setInterval(ringOnce, 4000) };
+    } catch (err) {
+      console.warn('[Phone] Ring failed:', err);
     }
   }, []);
 
   const stopRingtone = useCallback(() => {
+    if (ringOscRef.current?.interval) {
+      clearInterval(ringOscRef.current.interval);
+      ringOscRef.current = null;
+    }
     if (ringtoneRef.current) {
       ringtoneRef.current.pause();
       ringtoneRef.current.currentTime = 0;
@@ -537,7 +574,9 @@ export function PhoneProvider({
           if (retryStream.getAudioTracks().length > 0) {
             attachAndPlay(retryStream);
           }
-        } catch { /* PC may be closed */ }
+        } catch {
+          /* PC may be closed */
+        }
       }, 500);
     }
   }, []);
@@ -701,7 +740,7 @@ export function PhoneProvider({
       if (restoredCall) {
         restoredCall.isOnHold = false;
         restoredCall.state = 'active';
-        
+
         // Unhold/unmute audio tracks in the browser RTCPeerConnection
         try {
           const sdh = sessionRef.current.sessionDescriptionHandler as any;
@@ -835,9 +874,11 @@ export function PhoneProvider({
         try {
           if (sessionRef.current.state !== SessionState.Terminated) {
             console.log('[Phone] Cleaning up stale session before new call');
-            sessionRef.current.dispose();
+            void sessionRef.current.dispose();
           }
-        } catch { /* ignore disposal errors */ }
+        } catch {
+          /* ignore disposal errors */
+        }
         sessionRef.current = null;
       }
 
@@ -851,7 +892,10 @@ export function PhoneProvider({
         const response = await fetch(url, {
           method: 'POST',
           headers: getApiHeaders(),
-          body: JSON.stringify({ phoneNumber, callerId: callerIdOverride || selectedCallerId || undefined }),
+          body: JSON.stringify({
+            phoneNumber,
+            callerId: callerIdOverride || selectedCallerId || undefined,
+          }),
         });
 
         if (!response.ok) {
@@ -865,7 +909,11 @@ export function PhoneProvider({
         const chosenCallerId = data.callerId || '';
 
         // SIP INVITE - use registered server host for the target domain (must match FreeSWITCH)
-        const sipTargetDomain = userAgentRef.current?.configuration.uri.host || process.env.NEXT_PUBLIC_SIP_DOMAIN || process.env.NEXT_PUBLIC_IP || (typeof window !== 'undefined' ? window.location.hostname : 'localhost');
+        const sipTargetDomain =
+          userAgentRef.current?.configuration.uri.host ||
+          process.env.NEXT_PUBLIC_SIP_DOMAIN ||
+          process.env.NEXT_PUBLIC_IP ||
+          (typeof window !== 'undefined' ? window.location.hostname : 'localhost');
         const target = UserAgent.makeURI(`sip:${phoneNumber}@${sipTargetDomain}`);
         if (!target) throw new Error('Invalid target URI');
 
@@ -889,10 +937,10 @@ export function PhoneProvider({
                 { urls: 'stun:stun1.l.google.com:19302' },
                 { urls: 'stun:stun2.l.google.com:19302' },
                 { urls: 'stun:stun3.l.google.com:19302' },
-                { urls: 'stun:stun4.l.google.com:19302' }
-              ]
-            }
-          }
+                { urls: 'stun:stun4.l.google.com:19302' },
+              ],
+            },
+          },
         });
         sessionRef.current = inviter;
 
@@ -984,9 +1032,9 @@ export function PhoneProvider({
                 { urls: 'stun:stun1.l.google.com:19302' },
                 { urls: 'stun:stun2.l.google.com:19302' },
                 { urls: 'stun:stun3.l.google.com:19302' },
-                { urls: 'stun:stun4.l.google.com:19302' }
-              ]
-            }
+                { urls: 'stun:stun4.l.google.com:19302' },
+              ],
+            },
           },
         })
         .then(() => {
@@ -1185,7 +1233,9 @@ export function PhoneProvider({
         toggleHold();
 
         // 2. Stash the current session and call info
-        heldCallInfoRef.current = currentCall ? { ...currentCall, isOnHold: true, state: 'hold' } : null;
+        heldCallInfoRef.current = currentCall
+          ? { ...currentCall, isOnHold: true, state: 'hold' }
+          : null;
         heldSessionRef.current = sessionRef.current;
         setHasHeldCalls(true);
         sessionRef.current = null; // Clear so makeCall starts fresh
@@ -1252,7 +1302,7 @@ export function PhoneProvider({
       // Hang up the held session locally to clean up WebRTC state in the browser
       if (heldSessionRef.current) {
         try {
-          heldSessionRef.current.bye();
+          void heldSessionRef.current.bye();
         } catch (e) {
           console.warn('[Phone] Failed to send BYE for held session:', e);
         }
@@ -1315,13 +1365,19 @@ export function PhoneProvider({
         const sipPass = creds.password;
 
         // SIP realm must match FreeSWITCH's configured domain
-        const sipDomain = creds.realm || process.env.NEXT_PUBLIC_SIP_DOMAIN || process.env.NEXT_PUBLIC_IP || (typeof window !== 'undefined' ? window.location.hostname : 'localhost');
+        const sipDomain =
+          creds.realm ||
+          process.env.NEXT_PUBLIC_SIP_DOMAIN ||
+          process.env.NEXT_PUBLIC_IP ||
+          (typeof window !== 'undefined' ? window.location.hostname : 'localhost');
         // WebSocket host uses window hostname for SSL cert validation
         const wsHost = window.location.hostname;
         const isSecure = window.location.protocol === 'https:';
-        // Use returned wsUrl or build fallback
-        // Port 7443: FreeSWITCH native WSS (requires valid SSL certs)
-        // Port 8083: Direct WS for local/dev
+        // Connect directly to FreeSWITCH's native WSS (7443) / WS (8083) binding.
+        // Direct connection preserves the WSS transport label so FreeSWITCH can
+        // route call responses back over the same socket. (A TLS-terminating
+        // reverse proxy hands FreeSWITCH a plain-WS connection while the client
+        // still advertises Via WSS, which breaks INVITE response routing.)
         let sipWsUrl = creds.wsUrl;
         if (isSecure) {
           sipWsUrl = `wss://${wsHost}:7443`;
@@ -1343,7 +1399,10 @@ export function PhoneProvider({
           persistentMicStream = await navigator.mediaDevices.getUserMedia({ audio: true });
           console.log('[Phone] Persistent mic stream acquired successfully');
         } catch (err) {
-          console.warn('[Phone] Failed to acquire persistent mic stream (will continue initializing):', err);
+          console.warn(
+            '[Phone] Failed to acquire persistent mic stream (will continue initializing):',
+            err
+          );
         }
 
         const options: UserAgentOptions = {
@@ -1362,9 +1421,9 @@ export function PhoneProvider({
                 { urls: 'stun:stun1.l.google.com:19302' },
                 { urls: 'stun:stun2.l.google.com:19302' },
                 { urls: 'stun:stun3.l.google.com:19302' },
-                { urls: 'stun:stun4.l.google.com:19302' }
-              ]
-            }
+                { urls: 'stun:stun4.l.google.com:19302' },
+              ],
+            },
           },
           delegate: {
             onConnect: () => {

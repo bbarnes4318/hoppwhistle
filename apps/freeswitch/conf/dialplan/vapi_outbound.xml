@@ -196,7 +196,8 @@
         <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
         <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
 
-        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC}sofia/gateway/bulkvs/$1"/>
+        <!-- Route through FracTEL (BulkVS is retired); present a FracTEL DID for attestation -->
+        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC,origination_caller_id_number=19138999080,sip_from_user=19138999080}sofia/gateway/fractel1/$1|sofia/gateway/fractel2/$1|sofia/gateway/fractel3/$1|sofia/gateway/fractel4/$1|sofia/gateway/fractel5/$1|sofia/gateway/fractel6/$1"/>
       </condition>
     </extension>
 
