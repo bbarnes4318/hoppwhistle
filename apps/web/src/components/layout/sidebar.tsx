@@ -17,6 +17,7 @@ import {
   Receipt,
   Settings,
   Shield,
+  Telescope,
   Users,
 } from 'lucide-react';
 import Image from 'next/image';
@@ -153,6 +154,12 @@ export function Sidebar() {
           name: 'Campaign Map',
           href: '/tools/campaign-map',
           icon: Globe,
+        },
+        {
+          name: 'Industry Research',
+          href: '/tools/industry-research',
+          icon: Telescope,
+          title: 'Multi-provider forensic industry-entry research',
         },
       ]
     : [];

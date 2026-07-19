@@ -1,0 +1,930 @@
+import {
+  SCHEMA_VERSION,
+  adjudicationResultSchema,
+  adversarialVerificationSchema,
+  buildForensicSynthesisPrompt,
+  buildRoleAssignment,
+  canonicalizeUrl,
+  factualVerificationSchema,
+  structuredReportSchema,
+  type AdjudicationResult,
+  type AdversarialVerification,
+  type CanonicalBrief,
+  type Claim,
+  type EvidenceSource,
+  type FactualVerification,
+  type ProviderId,
+  type ProviderReport,
+  type ProviderRole,
+  type ProviderUsage,
+  type StructuredReport,
+} from '@hopwhistle/shared';
+
+export interface RoleRunOptions {
+  model: string;
+  timeoutMs: number;
+  maxRetries: number;
+  /** Gemini Deep Research agent id (only for async Gemini primary). */
+  agent?: string;
+  /** Stable idempotency key for async submissions (prevents duplicate paid jobs). */
+  idempotencyKey?: string;
+}
+
+export interface SynthesisInput {
+  brief: CanonicalBrief;
+  runId: string;
+  plan: unknown;
+  reports: ProviderReport[];
+  claims: Claim[];
+  sources: EvidenceSource[];
+  contradictionsNote: string;
+}
+
+export interface SynthesisResult {
+  structured: StructuredReport;
+  markdown: string;
+  provider: ProviderId;
+  model: string;
+  usage: ProviderUsage;
+  requestId?: string;
+}
+
+/** Result of submitting an async provider job (Gemini Interactions / Perplexity async). */
+export interface AsyncSubmit {
+  jobId: string;
+  status: string;
+  agentOrModel: string;
+}
+
+/** Result of polling an async provider job. */
+export interface AsyncPoll {
+  status: 'in_progress' | 'completed' | 'failed' | 'cancelled';
+  report?: ProviderReport;
+  error?: string;
+}
+
+export interface ToolUsage {
+  webSearchCalls: number;
+  xSearchCalls: number;
+  codeInterpreterCalls: number;
+}
+
+export class ProviderError extends Error {
+  constructor(
+    message: string,
+    public readonly provider: ProviderId,
+    public readonly status?: number,
+    public readonly permanent = false
+  ) {
+    super(message);
+    this.name = 'ProviderError';
+  }
+}
+
+// --------------------------------------------------------------------------
+// Shared helpers
+// --------------------------------------------------------------------------
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(r => setTimeout(r, ms));
+}
+function backoffMs(attempt: number): number {
+  return Math.min(30_000, 1000 * 2 ** attempt) + attempt * 250;
+}
+function isPermanentStatus(status: number): boolean {
+  return status === 400 || status === 401 || status === 403 || status === 404 || status === 422;
+}
+
+async function fetchJson(
+  provider: ProviderId,
+  url: string,
+  init: RequestInit,
+  opts: RoleRunOptions
+): Promise<{ json: unknown; requestId?: string }> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= opts.maxRetries; attempt++) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs);
+    try {
+      const res = await fetch(url, { ...init, signal: ctrl.signal });
+      const requestId =
+        res.headers.get('x-request-id') || res.headers.get('request-id') || undefined;
+      if (!res.ok) {
+        const body = (await res.text()).slice(0, 500);
+        const permanent = isPermanentStatus(res.status);
+        const err = new ProviderError(
+          `${provider} HTTP ${res.status}: ${sanitize(body)}`,
+          provider,
+          res.status,
+          permanent
+        );
+        if (permanent) throw err;
+        lastErr = err;
+      } else {
+        return { json: await res.json(), requestId };
+      }
+    } catch (e) {
+      if (e instanceof ProviderError && e.permanent) throw e;
+      lastErr = e instanceof Error ? e : new ProviderError(String(e), provider);
+    } finally {
+      clearTimeout(timer);
+    }
+    if (attempt < opts.maxRetries) await sleep(backoffMs(attempt));
+  }
+  throw lastErr instanceof Error ? lastErr : new ProviderError('Unknown provider error', provider);
+}
+
+function sanitize(s: string): string {
+  return s
+    .replace(/(sk-[A-Za-z0-9_-]{6})[A-Za-z0-9_-]+/g, '$1…')
+    .replace(/(Bearer\s+)[A-Za-z0-9._-]+/gi, '$1…')
+    .replace(/(pplx-|xai-|AQ\.)[A-Za-z0-9._-]+/g, '$1…');
+}
+
+const URL_RE = /\bhttps?:\/\/[^\s)"'>\]]+/gi;
+
+function sourceFrom(
+  provider: ProviderId,
+  idx: number,
+  url: string,
+  extra: Partial<EvidenceSource> = {}
+): EvidenceSource {
+  const clean = url.replace(/[.,;]+$/, '');
+  return {
+    sourceId: `${provider}-src-${idx}`,
+    url: clean,
+    normalizedUrl: canonicalizeUrl(clean),
+    provider,
+    validated: false,
+    ...extra,
+  };
+}
+function dedupeSources(sources: EvidenceSource[]): EvidenceSource[] {
+  const seen = new Map<string, EvidenceSource>();
+  for (const s of sources) {
+    const key = s.normalizedUrl || canonicalizeUrl(s.url);
+    if (!seen.has(key)) seen.set(key, s);
+  }
+  return Array.from(seen.values());
+}
+function jsonFromText(text: string): unknown {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const c = fenced ? fenced[1] : text;
+  const s = c.indexOf('{');
+  const e = c.lastIndexOf('}');
+  if (s >= 0 && e > s) return JSON.parse(c.slice(s, e + 1));
+  return JSON.parse(c);
+}
+function safeJson(text: string): unknown {
+  try {
+    return jsonFromText(text);
+  } catch {
+    return {};
+  }
+}
+
+interface TransportResult {
+  text: string;
+  sources: EvidenceSource[];
+  usage: ProviderUsage;
+  toolUsage?: ToolUsage;
+  requestId?: string;
+}
+
+// --------------------------------------------------------------------------
+// Perplexity — sync + async Sonar Deep Research
+// --------------------------------------------------------------------------
+
+function parsePerplexity(j: any, requestId?: string): TransportResult {
+  const text = j?.choices?.[0]?.message?.content ?? '';
+  const sources: EvidenceSource[] = [];
+  let i = 0;
+  for (const sr of j?.search_results ?? [])
+    if (sr?.url)
+      sources.push(
+        sourceFrom('perplexity', ++i, sr.url, { title: sr.title, publishedDate: sr.date })
+      );
+  for (const c of j?.citations ?? []) sources.push(sourceFrom('perplexity', ++i, c));
+  return {
+    text,
+    sources: dedupeSources(sources),
+    usage: {
+      inputTokens: j?.usage?.prompt_tokens,
+      outputTokens: j?.usage?.completion_tokens,
+      searches: j?.usage?.num_search_queries,
+      requests: 1,
+    },
+    requestId,
+  };
+}
+
+async function perplexitySync(
+  apiKey: string,
+  model: string,
+  system: string,
+  user: string,
+  opts: RoleRunOptions
+): Promise<TransportResult> {
+  const { json, requestId } = await fetchJson(
+    'perplexity',
+    'https://api.perplexity.ai/chat/completions',
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
+      }),
+    },
+    opts
+  );
+  return parsePerplexity(json, requestId);
+}
+
+async function perplexityAsyncSubmit(
+  apiKey: string,
+  model: string,
+  system: string,
+  user: string,
+  opts: RoleRunOptions
+): Promise<AsyncSubmit> {
+  const { json } = await fetchJson(
+    'perplexity',
+    'https://api.perplexity.ai/v1/async/sonar',
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        request: {
+          model,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: user },
+          ],
+        },
+        ...(opts.idempotencyKey ? { idempotency_key: opts.idempotencyKey } : {}),
+      }),
+    },
+    { ...opts, timeoutMs: 60_000 }
+  );
+  const j = json as { id?: string; request_id?: string; status?: string };
+  const id = j.id ?? j.request_id;
+  if (!id) throw new ProviderError('Perplexity async submit returned no id', 'perplexity');
+  return { jobId: id, status: j.status ?? 'CREATED', agentOrModel: model };
+}
+
+async function perplexityAsyncPoll(apiKey: string, jobId: string): Promise<AsyncPoll> {
+  const { json } = await fetchJson(
+    'perplexity',
+    `https://api.perplexity.ai/v1/async/sonar/${jobId}`,
+    { method: 'GET', headers: { Authorization: `Bearer ${apiKey}` } },
+    { model: '', timeoutMs: 60_000, maxRetries: 1 }
+  );
+  const j = json as { status?: string; response?: any; error_message?: string };
+  const status = (j.status ?? '').toUpperCase();
+  if (status === 'COMPLETED') {
+    const t = parsePerplexity(j.response, jobId);
+    return {
+      status: 'completed',
+      report: transportToReport(
+        'independent',
+        'perplexity',
+        j.response?.model ?? 'sonar-deep-research',
+        t,
+        jobId
+      ),
+    };
+  }
+  if (status === 'FAILED')
+    return { status: 'failed', error: j.error_message ?? 'Perplexity async job failed' };
+  return { status: 'in_progress' };
+}
+
+// --------------------------------------------------------------------------
+// xAI — Responses API with web_search + x_search + code_interpreter
+// --------------------------------------------------------------------------
+
+async function xaiResponses(
+  apiKey: string,
+  model: string,
+  system: string,
+  user: string,
+  opts: RoleRunOptions,
+  tools: Array<{ type: string }>
+): Promise<TransportResult> {
+  const { json, requestId } = await fetchJson(
+    'xai',
+    'https://api.x.ai/v1/responses',
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        input: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
+        tools,
+      }),
+    },
+    opts
+  );
+  const j = json as any;
+  let text = j.output_text ?? '';
+  const sources: EvidenceSource[] = [];
+  let i = 0;
+  for (const item of j.output ?? []) {
+    for (const c of item.content ?? []) {
+      if (c.text) {
+        if (!j.output_text) text += (text ? '\n' : '') + c.text;
+        for (const a of c.annotations ?? [])
+          if (a.type === 'url_citation' && a.url)
+            sources.push(sourceFrom('xai', ++i, a.url, { title: a.title }));
+      }
+    }
+  }
+  if (sources.length === 0)
+    for (const u of text.match(URL_RE) ?? []) sources.push(sourceFrom('xai', ++i, u));
+  const td = j.usage?.server_side_tool_usage_details ?? {};
+  return {
+    text,
+    sources: dedupeSources(sources),
+    usage: {
+      inputTokens: j.usage?.input_tokens,
+      outputTokens: j.usage?.output_tokens,
+      searches: sources.length,
+      requests: 1,
+    },
+    toolUsage: {
+      webSearchCalls: td.web_search_calls ?? 0,
+      xSearchCalls: td.x_search_calls ?? 0,
+      codeInterpreterCalls: td.code_interpreter_calls ?? 0,
+    },
+    requestId: requestId ?? j.id,
+  };
+}
+
+const XAI_TOOLS = [{ type: 'web_search' }, { type: 'x_search' }, { type: 'code_interpreter' }];
+
+// --------------------------------------------------------------------------
+// Google Gemini — grounded (generateContent) + Deep Research (Interactions API)
+// --------------------------------------------------------------------------
+
+async function geminiGrounded(
+  apiKey: string,
+  model: string,
+  prompt: string,
+  opts: RoleRunOptions
+): Promise<TransportResult> {
+  const { json, requestId } = await fetchJson(
+    'google',
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+    {
+      method: 'POST',
+      headers: { 'x-goog-api-key': apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        tools: [{ google_search: {} }],
+      }),
+    },
+    opts
+  );
+  const j = json as any;
+  const cand = j.candidates?.[0];
+  const text = (cand?.content?.parts ?? []).map((p: any) => p.text ?? '').join('\n');
+  const chunks = cand?.groundingMetadata?.groundingChunks ?? [];
+  const sources = dedupeSources(
+    chunks
+      .filter((c: any) => c.web?.uri)
+      .map((c: any, idx: number) =>
+        sourceFrom('google', idx + 1, c.web.uri, { title: c.web?.title })
+      )
+  );
+  return {
+    text,
+    sources,
+    usage: {
+      inputTokens: j.usageMetadata?.promptTokenCount,
+      outputTokens: j.usageMetadata?.candidatesTokenCount,
+      searches: sources.length,
+      requests: 1,
+    },
+    requestId,
+  };
+}
+
+/** Standard Gemini generateContent (no grounding) for JSON adjudication. */
+async function geminiGenerateJson(
+  apiKey: string,
+  model: string,
+  prompt: string,
+  opts: RoleRunOptions
+): Promise<TransportResult> {
+  const { json, requestId } = await fetchJson(
+    'google',
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+    {
+      method: 'POST',
+      headers: { 'x-goog-api-key': apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }] }),
+    },
+    opts
+  );
+  const j = json as any;
+  const text = (j.candidates?.[0]?.content?.parts ?? []).map((p: any) => p.text ?? '').join('\n');
+  return {
+    text,
+    sources: [],
+    usage: {
+      inputTokens: j.usageMetadata?.promptTokenCount,
+      outputTokens: j.usageMetadata?.candidatesTokenCount,
+      requests: 1,
+    },
+    requestId,
+  };
+}
+
+async function geminiInteractionSubmit(
+  apiKey: string,
+  agent: string,
+  prompt: string,
+  maxDepth: boolean
+): Promise<AsyncSubmit> {
+  const { json } = await fetchJson(
+    'google',
+    'https://generativelanguage.googleapis.com/v1beta/interactions',
+    {
+      method: 'POST',
+      headers: { 'x-goog-api-key': apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        input: prompt,
+        agent,
+        agent_config: {
+          type: 'deep-research',
+          thinking_summaries: 'auto',
+          visualization: 'auto',
+          collaborative_planning: false,
+          ...(maxDepth ? { effort: 'max' } : {}),
+        },
+        background: true,
+        store: true,
+      }),
+    },
+    { model: agent, timeoutMs: 60_000, maxRetries: 1 }
+  );
+  const j = json as { id?: string; status?: string; agent?: string };
+  if (!j.id) throw new ProviderError('Gemini interaction submit returned no id', 'google');
+  return { jobId: j.id, status: j.status ?? 'in_progress', agentOrModel: j.agent ?? agent };
+}
+
+async function geminiInteractionPoll(apiKey: string, jobId: string): Promise<AsyncPoll> {
+  const { json } = await fetchJson(
+    'google',
+    `https://generativelanguage.googleapis.com/v1beta/interactions/${jobId}`,
+    { method: 'GET', headers: { 'x-goog-api-key': apiKey } },
+    { model: '', timeoutMs: 60_000, maxRetries: 1 }
+  );
+  const j = json as any;
+  const status = String(j.status ?? '').toLowerCase();
+  if (status === 'completed' || status === 'succeeded') {
+    // Defensive extraction of text + citations from the interaction result.
+    const text = extractInteractionText(j);
+    if (!text)
+      throw new ProviderError('Gemini interaction completed with no extractable output', 'google');
+    const sources = extractInteractionSources(j, text);
+    const t: TransportResult = {
+      text,
+      sources,
+      usage: {
+        inputTokens: j.usage?.input_tokens ?? j.usageMetadata?.promptTokenCount,
+        outputTokens: j.usage?.output_tokens ?? j.usageMetadata?.candidatesTokenCount,
+        searches: sources.length,
+        requests: 1,
+      },
+      requestId: jobId,
+    };
+    return {
+      status: 'completed',
+      report: transportToReport('primary', 'google', j.agent ?? 'deep-research', t, jobId),
+    };
+  }
+  if (status === 'failed' || status === 'cancelled' || status === 'error')
+    return {
+      status: status === 'cancelled' ? 'cancelled' : 'failed',
+      error: j.error?.message ?? 'Gemini interaction failed',
+    };
+  return { status: 'in_progress' };
+}
+
+function extractInteractionText(j: any): string {
+  // Try a range of plausible shapes for the completed interaction output.
+  if (typeof j.output_text === 'string' && j.output_text) return j.output_text;
+  const parts: string[] = [];
+  const walk = (node: any) => {
+    if (!node) return;
+    if (typeof node === 'string') return;
+    if (Array.isArray(node)) return node.forEach(walk);
+    if (typeof node.text === 'string') parts.push(node.text);
+    for (const k of ['output', 'content', 'parts', 'result', 'response', 'message', 'candidates'])
+      if (node[k]) walk(node[k]);
+  };
+  walk(j.output ?? j.result ?? j.response ?? j);
+  return parts.join('\n').trim();
+}
+
+function extractInteractionSources(j: any, text: string): EvidenceSource[] {
+  const urls = new Set<string>();
+  const collect = (node: any) => {
+    if (!node) return;
+    if (Array.isArray(node)) return node.forEach(collect);
+    if (typeof node === 'object') {
+      if (typeof node.uri === 'string') urls.add(node.uri);
+      if (typeof node.url === 'string') urls.add(node.url);
+      for (const v of Object.values(node)) collect(v);
+    }
+  };
+  collect(j);
+  for (const u of text.match(URL_RE) ?? []) urls.add(u);
+  return dedupeSources(Array.from(urls).map((u, i) => sourceFrom('google', i + 1, u)));
+}
+
+// --------------------------------------------------------------------------
+// Anthropic — synthesis only (no web tools, no self-verification)
+// --------------------------------------------------------------------------
+
+async function anthropicCall(
+  apiKey: string,
+  model: string,
+  system: string,
+  user: string,
+  opts: RoleRunOptions
+): Promise<TransportResult> {
+  const { json, requestId } = await fetchJson(
+    'anthropic',
+    'https://api.anthropic.com/v1/messages',
+    {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: Number(process.env.ANTHROPIC_MAX_OUTPUT_TOKENS) || 14000,
+        system,
+        messages: [{ role: 'user', content: user }],
+      }),
+    },
+    opts
+  );
+  const j = json as any;
+  const text = (j.content ?? [])
+    .filter((b: any) => b.type === 'text' || b.text)
+    .map((b: any) => b.text ?? '')
+    .join('\n');
+  return {
+    text,
+    sources: [],
+    usage: {
+      inputTokens: j.usage?.input_tokens,
+      outputTokens: j.usage?.output_tokens,
+      requests: 1,
+    },
+    requestId,
+  };
+}
+
+// --------------------------------------------------------------------------
+function transportToReport(
+  role: ProviderRole,
+  provider: ProviderId,
+  model: string,
+  t: TransportResult,
+  requestId?: string
+): ProviderReport {
+  return {
+    role,
+    provider,
+    model,
+    status: 'completed',
+    markdown: t.text,
+    claims: [],
+    sources: t.sources,
+    usage: t.usage,
+    costUsd: 0,
+    usedFallback: false,
+    error: null,
+    requestId: requestId ?? t.requestId,
+    suspectedPromptInjection: [],
+  };
+}
+
+const RESEARCH_SYSTEM =
+  'You are a rigorous, adversarial research investigator. Use your live search tools. Cite sources with full URLs. Never fabricate sources, numbers, quotes, or pricing. State "unknown" when a fact cannot be verified.';
+
+// --------------------------------------------------------------------------
+// Real adapter
+// --------------------------------------------------------------------------
+
+export interface FactualVerificationOut {
+  result: FactualVerification;
+  provider: ProviderId;
+  model: string;
+  usage: ProviderUsage;
+  requestId?: string;
+}
+export interface AdversarialVerificationOut {
+  result: AdversarialVerification;
+  provider: ProviderId;
+  model: string;
+  usage: ProviderUsage;
+  toolUsage: ToolUsage;
+  requestId?: string;
+}
+export interface AdjudicationOut {
+  result: AdjudicationResult;
+  provider: ProviderId;
+  model: string;
+  usage: ProviderUsage;
+  requestId?: string;
+}
+
+export class RealAdapter {
+  constructor(
+    public id: ProviderId,
+    private apiKey: string
+  ) {}
+
+  /** Synchronous research (grounded Gemini / Perplexity sync / xAI web+X+code). */
+  async runSyncRole(
+    role: ProviderRole,
+    brief: CanonicalBrief,
+    opts: RoleRunOptions
+  ): Promise<ProviderReport> {
+    const prompt = buildRoleAssignment(role, brief);
+    let t: TransportResult;
+    if (this.id === 'google')
+      t = await geminiGrounded(this.apiKey, opts.model, `${RESEARCH_SYSTEM}\n\n${prompt}`, opts);
+    else if (this.id === 'perplexity')
+      t = await perplexitySync(this.apiKey, opts.model, RESEARCH_SYSTEM, prompt, opts);
+    else if (this.id === 'xai')
+      t = await xaiResponses(this.apiKey, opts.model, RESEARCH_SYSTEM, prompt, opts, XAI_TOOLS);
+    else
+      throw new ProviderError(
+        `Provider ${this.id} cannot run sync research`,
+        this.id,
+        undefined,
+        true
+      );
+    if (!t.text.trim()) throw new ProviderError('Empty provider response', this.id);
+    const report = transportToReport(role, this.id, opts.model, t);
+    (report as ProviderReport & { toolUsage?: ToolUsage }).toolUsage = t.toolUsage;
+    return report;
+  }
+
+  /** Submit an async research job (Gemini Deep Research / Perplexity async Sonar). */
+  async submitAsyncRole(
+    role: ProviderRole,
+    brief: CanonicalBrief,
+    opts: RoleRunOptions
+  ): Promise<AsyncSubmit> {
+    const prompt = `${RESEARCH_SYSTEM}\n\n${buildRoleAssignment(role, brief)}`;
+    if (this.id === 'google') {
+      if (!opts.agent)
+        throw new ProviderError('Gemini Deep Research agent id missing', 'google', undefined, true);
+      return geminiInteractionSubmit(this.apiKey, opts.agent, prompt, /max/i.test(opts.agent));
+    }
+    if (this.id === 'perplexity')
+      return perplexityAsyncSubmit(
+        this.apiKey,
+        opts.model,
+        RESEARCH_SYSTEM,
+        buildRoleAssignment(role, brief),
+        opts
+      );
+    throw new ProviderError(
+      `Provider ${this.id} has no async research workflow`,
+      this.id,
+      undefined,
+      true
+    );
+  }
+
+  async pollAsyncRole(jobId: string): Promise<AsyncPoll> {
+    if (this.id === 'google') return geminiInteractionPoll(this.apiKey, jobId);
+    if (this.id === 'perplexity') return perplexityAsyncPoll(this.apiKey, jobId);
+    throw new ProviderError(`Provider ${this.id} cannot poll async jobs`, this.id, undefined, true);
+  }
+
+  async runSynthesis(input: SynthesisInput, opts: RoleRunOptions): Promise<SynthesisResult> {
+    if (this.id !== 'anthropic')
+      throw new ProviderError('Only Anthropic performs synthesis', this.id, undefined, true);
+    const system = buildForensicSynthesisPrompt(input.brief);
+    const evidenceBlob = JSON.stringify({
+      plan: input.plan,
+      reports: input.reports.map(r => ({
+        role: r.role,
+        provider: r.provider,
+        markdown: r.markdown.slice(0, 16000),
+      })),
+      sources: input.sources.slice(0, 300),
+      contradictionsNote: input.contradictionsNote,
+    });
+    const shapeSpec = SYNTH_SHAPE_SPEC(SCHEMA_VERSION);
+    const brevity =
+      'IMPORTANT: keep each section.markdown to 2-4 sentences, include the 12-20 most material claims in evidenceLedger, at most 8 competitors and 8 rankedOpportunities. Be concise so the ENTIRE JSON is complete and never truncated.';
+    const user = `Adjudicate the following REAL research evidence (JSON) into the forensic report. ${shapeSpec}\n${brevity}\nUse runId="${input.runId}" and briefId="${input.brief.researchBriefId}".\n\nEvidence:\n${evidenceBlob}`;
+
+    let attempt = await anthropicCall(this.apiKey, opts.model, system, user, opts);
+    const usage: ProviderUsage = { ...attempt.usage };
+    let parsed = structuredReportSchema.safeParse(
+      coerceStructured(safeJson(attempt.text), input, opts.model)
+    );
+    if (!parsed.success) {
+      const errs = parsed.error.errors
+        .map(e => `- ${e.path.join('.')}: ${e.message}`)
+        .slice(0, 25)
+        .join('\n');
+      const repair = `Your previous JSON failed schema validation:\n${errs}\n\nReturn the COMPLETE corrected JSON only. ${shapeSpec}\n\nEvidence:\n${evidenceBlob}`;
+      attempt = await anthropicCall(this.apiKey, opts.model, system, repair, opts);
+      usage.inputTokens = (usage.inputTokens ?? 0) + (attempt.usage.inputTokens ?? 0);
+      usage.outputTokens = (usage.outputTokens ?? 0) + (attempt.usage.outputTokens ?? 0);
+      parsed = structuredReportSchema.safeParse(
+        coerceStructured(safeJson(attempt.text), input, opts.model)
+      );
+    }
+    if (!parsed.success)
+      throw new ProviderError(
+        `Synthesis output failed schema validation after repair: ${parsed.error.message.slice(0, 200)}`,
+        this.id
+      );
+    const structured = parsed.data as StructuredReport;
+    return {
+      structured,
+      markdown: renderMarkdown(structured),
+      provider: this.id,
+      model: opts.model,
+      usage,
+      requestId: attempt.requestId,
+    };
+  }
+
+  /** Perplexity independent factual verification of Anthropic's draft report. */
+  async runFactualVerification(
+    brief: CanonicalBrief,
+    structured: StructuredReport,
+    opts: RoleRunOptions
+  ): Promise<FactualVerificationOut> {
+    if (this.id !== 'perplexity')
+      throw new ProviderError(
+        'Factual verification is a Perplexity role',
+        this.id,
+        undefined,
+        true
+      );
+    const system = buildRoleAssignment('factual_verifier', brief);
+    const user = `Draft report to audit (verdict, claims, sections):\n${JSON.stringify(reportForVerification(structured)).slice(0, 24000)}`;
+    const t = await perplexitySync(this.apiKey, opts.model, system, user, opts);
+    const parsed = factualVerificationSchema.safeParse(safeJson(t.text));
+    if (!parsed.success)
+      throw new ProviderError('Perplexity factual verification returned invalid JSON', this.id);
+    return {
+      result: parsed.data as FactualVerification,
+      provider: this.id,
+      model: opts.model,
+      usage: t.usage,
+      requestId: t.requestId,
+    };
+  }
+
+  /** xAI independent adversarial verification (web + X + code). */
+  async runAdversarialVerification(
+    brief: CanonicalBrief,
+    structured: StructuredReport,
+    opts: RoleRunOptions
+  ): Promise<AdversarialVerificationOut> {
+    if (this.id !== 'xai')
+      throw new ProviderError('Adversarial verification is an xAI role', this.id, undefined, true);
+    const system = buildRoleAssignment('adversarial_verifier', brief);
+    const user = `Draft report to disprove (verdict, thesis, sections):\n${JSON.stringify(reportForVerification(structured)).slice(0, 24000)}`;
+    const t = await xaiResponses(this.apiKey, opts.model, system, user, opts, XAI_TOOLS);
+    const parsed = adversarialVerificationSchema.safeParse(safeJson(t.text));
+    if (!parsed.success)
+      throw new ProviderError('xAI adversarial verification returned invalid JSON', this.id);
+    const tu = t.toolUsage ?? { webSearchCalls: 0, xSearchCalls: 0, codeInterpreterCalls: 0 };
+    const result = {
+      ...(parsed.data as AdversarialVerification),
+      webSearchUsed: tu.webSearchCalls > 0,
+      xSearchUsed: tu.xSearchCalls > 0,
+      codeExecutionUsed: tu.codeInterpreterCalls > 0,
+    };
+    return {
+      result,
+      provider: this.id,
+      model: opts.model,
+      usage: t.usage,
+      toolUsage: tu,
+      requestId: t.requestId,
+    };
+  }
+
+  /** Gemini conflict adjudication (standard high-capability model, disputed items only). */
+  async runAdjudication(
+    brief: CanonicalBrief,
+    disputePayload: unknown,
+    opts: RoleRunOptions
+  ): Promise<AdjudicationOut> {
+    if (this.id !== 'google')
+      throw new ProviderError('Adjudication is a Gemini role', this.id, undefined, true);
+    const system = buildRoleAssignment('adjudicator', brief);
+    const user = `Disputed items, evidence, and both verifiers' findings:\n${JSON.stringify(disputePayload).slice(0, 24000)}`;
+    const t = await geminiGenerateJson(this.apiKey, opts.model, `${system}\n\n${user}`, opts);
+    const parsed = adjudicationResultSchema.safeParse(safeJson(t.text));
+    if (!parsed.success)
+      throw new ProviderError('Gemini adjudication returned invalid JSON', this.id);
+    return {
+      result: parsed.data as AdjudicationResult,
+      provider: this.id,
+      model: opts.model,
+      usage: t.usage,
+      requestId: t.requestId,
+    };
+  }
+}
+
+function reportForVerification(r: StructuredReport) {
+  return {
+    verdict: r.executiveVerdict,
+    sections: r.sections.map(s => ({ title: s.title, markdown: s.markdown.slice(0, 1500) })),
+    evidenceLedger: r.evidenceLedger.slice(0, 40),
+    sources: r.sources.slice(0, 60),
+  };
+}
+
+function SYNTH_SHAPE_SPEC(v: string): string {
+  return `Return ONLY one JSON object (no fences/prose) with EXACTLY these keys: reportMetadata{researchRunId,researchBriefId,industry,geography,mode,generatedAt,synthesisProvider,synthesisModel,schemaVersion:"${v}"}, executiveVerdict{verdict:"GO"|"CONDITIONAL_GO"|"DO_NOT_ENTER"(REQUIRED),overallScore:0-100,confidence:0-1,bestSegment,bestCustomer,bestBusinessModel,timeToFirstRevenue,initialCapital,biggestOpportunity,biggestRisk,oneSentenceConclusion}, assumptions[], sections[{key,title,markdown}], competitors[{name}], unitEconomicsScenarios[{name:"conservative"|"base"|"aggressive"}], rankedOpportunities[{rank,opportunity,opportunityScore:0-100}], killCriteria[string], contradictions[{topic,positionA,positionB,cause:"definition"|"date"|"geography"|"segment"|"methodology"|"vendor_bias"|"sample_bias"|"genuine_uncertainty"}], unknowns[{topic,whyItMatters,howToObtain}], evidenceLedger[{claimId,text,category,classification:"verified_fact"|"reported_experience"|"estimate"|"inference"|"hypothesis"|"unverified_industry_claim",supportingSourceIds:[],contradictingSourceIds:[],provider:"google"|"perplexity"|"xai"|"anthropic",confidence:0-1,materiality:0-1}], sources[{sourceId,url,normalizedUrl,validated,provider}], confidenceAssessment. Base claims only on provided evidence.`;
+}
+
+function coerceStructured(raw: unknown, input: SynthesisInput, model: string): unknown {
+  if (raw && typeof raw === 'object') {
+    const obj = raw as Record<string, unknown>;
+    const meta = (obj.reportMetadata as Record<string, unknown>) ?? {};
+    obj.reportMetadata = {
+      generatedAt: input.brief.researchDate,
+      ...meta,
+      researchRunId: input.runId,
+      researchBriefId: input.brief.researchBriefId,
+      industry: input.brief.industry,
+      geography: input.brief.geography ?? 'United States',
+      mode: input.brief.mode,
+      synthesisProvider: 'anthropic',
+      synthesisModel: model,
+      schemaVersion: SCHEMA_VERSION,
+    };
+  }
+  return raw;
+}
+
+export function renderMarkdown(r: StructuredReport): string {
+  const v = r.executiveVerdict;
+  const lines: string[] = [];
+  lines.push(
+    `# Industry Entry Research — ${r.reportMetadata.industry} (${r.reportMetadata.geography})`,
+    ''
+  );
+  lines.push(`## Executive Verdict: ${v.verdict.replace(/_/g, ' ')}`);
+  lines.push(
+    `- **Overall score:** ${v.overallScore}/100 (confidence ${(v.confidence * 100).toFixed(0)}%)`
+  );
+  lines.push(
+    `- **Best segment:** ${v.bestSegment}`,
+    `- **Best customer:** ${v.bestCustomer}`,
+    `- **Best business model:** ${v.bestBusinessModel}`
+  );
+  lines.push(
+    `- **Time to first revenue:** ${v.timeToFirstRevenue}`,
+    `- **Initial capital:** ${v.initialCapital}`
+  );
+  lines.push(
+    `- **Biggest opportunity:** ${v.biggestOpportunity}`,
+    `- **Biggest risk:** ${v.biggestRisk}`,
+    '',
+    `> ${v.oneSentenceConclusion}`,
+    ''
+  );
+  for (const s of r.sections) lines.push(`## ${s.title}`, s.markdown, '');
+  if (r.killCriteria.length) {
+    lines.push('## Kill Criteria');
+    for (const k of r.killCriteria) lines.push(`- ${k}`);
+    lines.push('');
+  }
+  lines.push(
+    '## Evidence Ledger',
+    `${r.evidenceLedger.length} claims, ${r.sources.length} sources.`
+  );
+  return lines.join('\n');
+}

@@ -99,6 +99,35 @@
 - `S3_ENDPOINT` = Leave empty or use AWS endpoint
 - `S3_REGION` = Your AWS region (e.g., `us-east-1`)
 
+### Industry Research (multi-provider forensic research — real providers only, admin-only)
+
+The Industry Research tool (`/tools/industry-research`) runs an additive, tenant-isolated
+research pipeline in the worker against **real provider APIs only**. There is no mock mode and no
+mock fallback: a run that cannot reach its required real providers fails with a visible error and
+publishes no report.
+
+Feature switch (API + worker):
+- `INDUSTRY_RESEARCH_ENABLED` — `true` (default) exposes the routes + starts the worker; `false` fully disables the feature.
+
+Behavior switches:
+- `INDUSTRY_RESEARCH_REAL_FALLBACK` — `true` (default). When a role's provider fails, an explicitly-configured **real** fallback provider may be tried. Never falls back to mock data.
+- `INDUSTRY_RESEARCH_ALLOW_MOCKS` / `INDUSTRY_RESEARCH_MOCK_FALLBACK` — accepted for clarity but have no effect: mock data does not exist in any runtime path.
+- `INDUSTRY_RESEARCH_FAIL_ON_PROVIDER_ERROR` — documents the always-on behavior: a failed required stage fails the run.
+
+Four providers only — **no OpenAI**. Anthropic performs synthesis ONLY (it never verifies its own
+report). Independent verification is Perplexity (factual) + xAI (adversarial); Gemini adjudicates
+disputes. A run's mode preflights the required roles; a missing required key blocks the run.
+
+- **Gemini** (`GEMINI_API_KEY`): `GOOGLE_DEEP_RESEARCH_MODEL` (Full DD Deep Research agent, Interactions API), `GOOGLE_DEEP_RESEARCH_MAX_MODEL` (Forensic), `GOOGLE_GROUNDED_MODEL` (Rapid Scan grounded search), `GOOGLE_ADJUDICATOR_MODEL` (conflict adjudication), `GOOGLE_DEEP_RESEARCH_ENABLED`
+- **Perplexity** (`PERPLEXITY_API_KEY`): `PERPLEXITY_RESEARCH_MODEL` (async Sonar Deep Research for Full/Forensic), `PERPLEXITY_VERIFIER_MODEL` (`sonar-pro`, factual verification), `PERPLEXITY_MAX_VERIFIER_MODEL`, `PERPLEXITY_RESEARCH_ENABLED`
+- **xAI** (`XAI_API_KEY`): `XAI_RESEARCH_MODEL` (Responses API web_search + x_search + code_interpreter, operator intelligence + adversarial verification), `XAI_WEB_SEARCH_ENABLED`
+- **Anthropic** (`ANTHROPIC_API_KEY`): `ANTHROPIC_SYNTHESIS_MODEL`, `ANTHROPIC_SYNTHESIS_FALLBACK_MODEL`, `ANTHROPIC_MAX_OUTPUT_TOKENS`, `ANTHROPIC_TIMEOUT_MS`, `ANTHROPIC_MAX_RETRIES`, `ANTHROPIC_WEB_SEARCH_ENABLED`
+- Optional per-provider tuning: `<PROVIDER>_TIMEOUT_MS`, `<PROVIDER>_MAX_RETRIES`
+- `INDUSTRY_RESEARCH_REAL_FALLBACK` — `true` (default): a role may fall back to another **real** provider (never mock).
+
+Secrets are loaded server-side only (`.env` / `.env.local`, gitignored) and never sent to the browser.
+Requires: Postgres (migration `20260718000000_add_industry_research`) + Redis (existing `events:stream`) + a running worker.
+
 ## Quick Setup Checklist
 
 - [ ] `JWT_SECRET` generated and set

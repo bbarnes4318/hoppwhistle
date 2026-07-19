@@ -1,0 +1,553 @@
+import { randomUUID } from 'crypto';
+
+import {
+  CAPABILITY_CATEGORIES,
+  PRICING_AS_OF,
+  PROVIDER_ROLE_LABELS,
+  RESEARCH_MODES,
+  STAGE_DEFINITIONS,
+  buildProviderRegistry,
+  estimateRunCost,
+  normalizeBrief,
+  preflightRun,
+  researchBriefInputSchema,
+  resolveAssignments,
+  type ProviderRole,
+  type ResearchRunSummary,
+  type StageInfo,
+} from '@hopwhistle/shared';
+import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+
+import { getPrismaClient } from '../lib/prisma.js';
+import { getRedisClient } from '../services/redis.js';
+
+const prisma = getPrismaClient();
+
+const RESEARCH_CHANNEL = 'industry_research.*';
+const RUN_REQUESTED_EVENT = 'industry_research.run.requested';
+
+interface AuthCtx {
+  tenantId: string;
+  userId: string;
+}
+
+function featureEnabled(): boolean {
+  // Additive admin tool; enabled by default but live provider spend is a
+  // separate switch (INDUSTRY_RESEARCH_LIVE_PROVIDERS, off by default).
+  return process.env.INDUSTRY_RESEARCH_ENABLED !== 'false';
+}
+
+/** Require an authenticated Owner/Admin. Returns null and writes an error otherwise. */
+function requireAdmin(request: FastifyRequest, reply: FastifyReply): AuthCtx | null {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const user = (request as any).user as
+    | { tenantId?: string; userId?: string; roles?: string[] }
+    | undefined;
+  const tenantId = user?.tenantId;
+  const userId = user?.userId;
+  if (!tenantId || !userId) {
+    void reply.code(401);
+    return null;
+  }
+  const roles = (user?.roles ?? []).map(r => r.toUpperCase());
+  if (!roles.includes('OWNER') && !roles.includes('ADMIN')) {
+    void reply.code(403);
+    return null;
+  }
+  return { tenantId, userId };
+}
+
+function planStages(mode: keyof typeof RESEARCH_MODES): Array<{
+  stageKey: string;
+  label: string;
+  role: string | null;
+  status: string;
+}> {
+  const activeRoleSet = new Set<ProviderRole>(RESEARCH_MODES[mode].roles);
+  return STAGE_DEFINITIONS.map(def => {
+    const isRoleStage = Boolean(def.role);
+    const skipped = isRoleStage && !activeRoleSet.has(def.role as ProviderRole);
+    return {
+      stageKey: def.key,
+      label: def.label,
+      role: def.role ?? null,
+      status: skipped ? 'skipped' : 'pending',
+    };
+  });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function runToSummary(run: any): ResearchRunSummary {
+  return {
+    id: run.id,
+    industry: run.industry,
+    geography: run.geography,
+    mode: run.mode,
+    status: run.status,
+    createdAt: run.createdAt?.toISOString?.() ?? String(run.createdAt),
+    startedAt: run.startedAt ? run.startedAt.toISOString() : null,
+    finishedAt: run.finishedAt ? run.finishedAt.toISOString() : null,
+    estimatedCostUsd: run.estimatedCostUsd ?? 0,
+    accruedCostUsd: run.accruedCostUsd ?? 0,
+    maxBudgetUsd: run.maxBudgetUsd ?? 0,
+    verdict: run.verdict ?? null,
+    overallScore: run.overallScore ?? null,
+    hasReport: Array.isArray(run.reports) ? run.reports.length > 0 : false,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function stageToInfo(s: any): StageInfo {
+  return {
+    key: s.stageKey,
+    label: s.label,
+    status: s.status,
+    role: s.role ?? undefined,
+    provider: s.provider ?? undefined,
+    model: s.model ?? undefined,
+    startedAt: s.startedAt ? s.startedAt.toISOString() : undefined,
+    finishedAt: s.finishedAt ? s.finishedAt.toISOString() : undefined,
+    durationMs:
+      s.startedAt && s.finishedAt
+        ? new Date(s.finishedAt).getTime() - new Date(s.startedAt).getTime()
+        : undefined,
+    sourcesFound: s.sourcesFound ?? undefined,
+    searches: s.searches ?? undefined,
+    costUsd: s.costUsd ?? 0,
+    usedFallback: s.usedFallback ?? false,
+    error: s.error ?? null,
+  };
+}
+
+async function emitRunRequested(tenantId: string, runId: string): Promise<void> {
+  const redis = getRedisClient();
+  await redis.xadd(
+    'events:stream',
+    '*',
+    'channel',
+    RESEARCH_CHANNEL,
+    'payload',
+    JSON.stringify({ event: RUN_REQUESTED_EVENT, tenantId, data: { runId } })
+  );
+}
+
+export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
+  await Promise.resolve();
+
+  // --- Config: registry (no secrets), modes, capabilities, pricing date ---
+  fastify.get('/api/v1/industry-research/config', async (request, reply) => {
+    if (!featureEnabled()) {
+      void reply.code(404);
+      return { error: { code: 'NOT_FOUND', message: 'Feature not enabled' } };
+    }
+    const ctx = requireAdmin(request, reply);
+    if (!ctx) return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
+
+    const registry = buildProviderRegistry(process.env).map(c => ({
+      id: c.id,
+      label: c.label,
+      enabled: c.enabled,
+      hasKey: c.hasKey,
+      model: c.model,
+      fallbackModel: c.fallbackModel,
+      roles: c.roles,
+      apiKeyEnv: c.apiKeyEnv,
+    }));
+
+    return {
+      data: {
+        pricingAsOf: PRICING_AS_OF,
+        providers: registry,
+        roleLabels: PROVIDER_ROLE_LABELS,
+        modes: Object.values(RESEARCH_MODES),
+        capabilities: CAPABILITY_CATEGORIES,
+      },
+    };
+  });
+
+  // --- Cost estimate ---
+  fastify.post<{ Body: { mode?: string; providerOverrides?: Record<string, string> } }>(
+    '/api/v1/industry-research/estimate',
+    async (request, reply) => {
+      if (!featureEnabled()) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Feature not enabled' } };
+      }
+      const ctx = requireAdmin(request, reply);
+      if (!ctx) return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
+
+      const mode = (request.body?.mode ?? 'full_due_diligence') as keyof typeof RESEARCH_MODES;
+      if (!RESEARCH_MODES[mode]) {
+        void reply.code(400);
+        return { error: { code: 'VALIDATION_ERROR', message: 'Invalid mode' } };
+      }
+      const assignments = resolveAssignments(process.env, {
+        mode,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        providerOverrides: request.body?.providerOverrides as any,
+      });
+      const estimate = estimateRunCost(mode, assignments);
+      return { data: { estimate, assignments, mode } };
+    }
+  );
+
+  // --- Create a run (brief) ---
+  fastify.post('/api/v1/industry-research/runs', async (request, reply) => {
+    if (!featureEnabled()) {
+      void reply.code(404);
+      return { error: { code: 'NOT_FOUND', message: 'Feature not enabled' } };
+    }
+    const ctx = requireAdmin(request, reply);
+    if (!ctx) return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
+
+    const parsed = researchBriefInputSchema.safeParse(request.body);
+    if (!parsed.success) {
+      void reply.code(400);
+      return {
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: parsed.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join('; '),
+        },
+      };
+    }
+
+    const input = parsed.data;
+
+    // Real providers only: refuse to create a run unless every required role
+    // for the selected mode has a real, configured, key-bearing provider.
+    const pf = preflightRun(process.env, input);
+    if (!pf.ok) {
+      void reply.code(422);
+      return {
+        error: {
+          code: 'PROVIDER_CONFIG_MISSING',
+          message: `Required providers are not configured: ${pf.errors
+            .map(e => `${e.role} → ${e.provider} (${e.reason})`)
+            .join('; ')}`,
+          details: pf.errors,
+        },
+      };
+    }
+
+    const researchBriefId = randomUUID();
+    const brief = normalizeBrief(input, { researchBriefId, now: new Date() });
+    const assignments = resolveAssignments(process.env, input);
+    const estimate = estimateRunCost(input.mode, assignments);
+    const estimatedCostUsd = (estimate.lowUsd + estimate.highUsd) / 2;
+
+    const run = await prisma.researchRun.create({
+      data: {
+        tenantId: ctx.tenantId,
+        userId: ctx.userId,
+        researchBriefId,
+        industry: brief.industry,
+        geography: brief.geography || 'United States',
+        mode: brief.mode,
+        status: 'queued',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        brief: brief as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        providerAssignments: assignments as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        costEstimate: estimate as any,
+        maxBudgetUsd: input.maxBudgetUsd,
+        estimatedCostUsd,
+        accruedCostUsd: 0,
+        progress: [],
+        stages: {
+          create: planStages(input.mode).map(s => ({
+            stageKey: s.stageKey,
+            label: s.label,
+            role: s.role,
+            status: s.status,
+          })),
+        },
+      },
+      select: { id: true, createdAt: true },
+    });
+
+    await emitRunRequested(ctx.tenantId, run.id);
+
+    return {
+      data: {
+        id: run.id,
+        estimate,
+        assignments,
+        budgetWarning: estimate.highUsd > input.maxBudgetUsd,
+      },
+    };
+  });
+
+  // --- List runs ---
+  fastify.get<{ Querystring: { limit?: string; status?: string } }>(
+    '/api/v1/industry-research/runs',
+    async (request, reply) => {
+      if (!featureEnabled()) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Feature not enabled' } };
+      }
+      const ctx = requireAdmin(request, reply);
+      if (!ctx) return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
+
+      const limit = Math.min(Number(request.query.limit) || 50, 200);
+      const status = request.query.status;
+      const runs = await prisma.researchRun.findMany({
+        where: { tenantId: ctx.tenantId, ...(status ? { status } : {}) },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        include: { reports: { select: { id: true } } },
+      });
+      return { data: runs.map(runToSummary) };
+    }
+  );
+
+  // --- Run detail ---
+  fastify.get<{ Params: { id: string } }>(
+    '/api/v1/industry-research/runs/:id',
+    async (request, reply) => {
+      if (!featureEnabled()) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Feature not enabled' } };
+      }
+      const ctx = requireAdmin(request, reply);
+      if (!ctx) return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
+
+      const run = await prisma.researchRun.findFirst({
+        where: { id: request.params.id, tenantId: ctx.tenantId },
+        include: {
+          stages: { orderBy: { createdAt: 'asc' } },
+          reports: { select: { id: true }, orderBy: { version: 'desc' } },
+        },
+      });
+      if (!run) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Run not found' } };
+      }
+
+      return {
+        data: {
+          ...runToSummary(run),
+          brief: run.brief,
+          providerAssignments: run.providerAssignments,
+          costEstimate: run.costEstimate,
+          plan: run.plan ?? null,
+          progress: run.progress ?? [],
+          insufficientEvidence: run.insufficientEvidence,
+          stages: run.stages.map(s => ({ ...stageToInfo(s), output: s.output ?? null })),
+        },
+      };
+    }
+  );
+
+  // --- Latest report (json/markdown) ---
+  fastify.get<{ Params: { id: string }; Querystring: { format?: string } }>(
+    '/api/v1/industry-research/runs/:id/report',
+    async (request, reply) => {
+      if (!featureEnabled()) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Feature not enabled' } };
+      }
+      const ctx = requireAdmin(request, reply);
+      if (!ctx) return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
+
+      const run = await prisma.researchRun.findFirst({
+        where: { id: request.params.id, tenantId: ctx.tenantId },
+        select: { id: true },
+      });
+      if (!run) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Run not found' } };
+      }
+
+      const report = await prisma.researchReport.findFirst({
+        where: { runId: request.params.id, tenantId: ctx.tenantId },
+        orderBy: { version: 'desc' },
+      });
+      if (!report) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'No report yet' } };
+      }
+
+      const format = request.query.format;
+      if (format === 'markdown') {
+        return reply
+          .header('Content-Type', 'text/markdown; charset=utf-8')
+          .header('Content-Disposition', `attachment; filename="research-${request.params.id}.md"`)
+          .send(report.markdown);
+      }
+      if (format === 'json') {
+        return reply
+          .header('Content-Type', 'application/json; charset=utf-8')
+          .header(
+            'Content-Disposition',
+            `attachment; filename="research-${request.params.id}.json"`
+          )
+          .send(JSON.stringify(report.structured, null, 2));
+      }
+
+      return {
+        data: {
+          version: report.version,
+          verdict: report.verdict,
+          overallScore: report.overallScore,
+          markdown: report.markdown,
+          structured: report.structured,
+          evidence: report.evidence ?? [],
+          sources: report.sources ?? [],
+          verification: report.verification ?? null,
+          synthesisProvider: report.synthesisProvider,
+          synthesisModel: report.synthesisModel,
+          createdAt: report.createdAt.toISOString(),
+        },
+      };
+    }
+  );
+
+  // --- Cancel ---
+  fastify.post<{ Params: { id: string } }>(
+    '/api/v1/industry-research/runs/:id/cancel',
+    async (request, reply) => {
+      if (!featureEnabled()) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Feature not enabled' } };
+      }
+      const ctx = requireAdmin(request, reply);
+      if (!ctx) return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
+
+      const run = await prisma.researchRun.findFirst({
+        where: { id: request.params.id, tenantId: ctx.tenantId },
+        select: { id: true, status: true },
+      });
+      if (!run) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Run not found' } };
+      }
+      if (['completed', 'failed', 'canceled'].includes(run.status)) {
+        return { data: { status: run.status } };
+      }
+      await prisma.researchRun.update({
+        where: { id: run.id },
+        data: { status: 'canceled', finishedAt: new Date() },
+      });
+      await prisma.researchStage.updateMany({
+        where: { runId: run.id, status: { in: ['pending', 'running'] } },
+        data: { status: 'canceled' },
+      });
+      return { data: { status: 'canceled' } };
+    }
+  );
+
+  // --- Rerun a failed stage (and everything downstream) ---
+  fastify.post<{ Params: { id: string }; Body: { stageKey?: string } }>(
+    '/api/v1/industry-research/runs/:id/rerun-stage',
+    async (request, reply) => {
+      if (!featureEnabled()) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Feature not enabled' } };
+      }
+      const ctx = requireAdmin(request, reply);
+      if (!ctx) return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
+
+      const stageKey = request.body?.stageKey;
+      if (!stageKey) {
+        void reply.code(400);
+        return { error: { code: 'VALIDATION_ERROR', message: 'stageKey is required' } };
+      }
+      const run = await prisma.researchRun.findFirst({
+        where: { id: request.params.id, tenantId: ctx.tenantId },
+        select: { id: true },
+      });
+      if (!run) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Run not found' } };
+      }
+
+      const order = STAGE_DEFINITIONS.map(d => d.key);
+      const fromIdx = order.indexOf(stageKey as (typeof order)[number]);
+      if (fromIdx < 0) {
+        void reply.code(400);
+        return { error: { code: 'VALIDATION_ERROR', message: 'Unknown stageKey' } };
+      }
+      const downstream = order.slice(fromIdx);
+      // Only reset stages that are not skipped.
+      await prisma.researchStage.updateMany({
+        where: {
+          runId: run.id,
+          stageKey: { in: downstream },
+          status: { not: 'skipped' },
+        },
+        data: { status: 'pending', error: null, startedAt: null, finishedAt: null },
+      });
+      await prisma.researchRun.update({
+        where: { id: run.id },
+        data: { status: 'queued', error: null, finishedAt: null },
+      });
+      await emitRunRequested(ctx.tenantId, run.id);
+      return { data: { status: 'queued', rerunFrom: stageKey } };
+    }
+  );
+
+  // --- Team profiles ---
+  fastify.get('/api/v1/industry-research/team-profiles', async (request, reply) => {
+    if (!featureEnabled()) {
+      void reply.code(404);
+      return { error: { code: 'NOT_FOUND', message: 'Feature not enabled' } };
+    }
+    const ctx = requireAdmin(request, reply);
+    if (!ctx) return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
+    const profiles = await prisma.researchTeamProfile.findMany({
+      where: { tenantId: ctx.tenantId },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+    return {
+      data: profiles.map(p => ({
+        id: p.id,
+        name: p.name,
+        capabilities: p.capabilities,
+        createdAt: p.createdAt.toISOString(),
+      })),
+    };
+  });
+
+  fastify.post<{ Body: { name?: string; capabilities?: string[] } }>(
+    '/api/v1/industry-research/team-profiles',
+    async (request, reply) => {
+      if (!featureEnabled()) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Feature not enabled' } };
+      }
+      const ctx = requireAdmin(request, reply);
+      if (!ctx) return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
+      const name = (request.body?.name ?? '').trim();
+      const capabilities = Array.isArray(request.body?.capabilities)
+        ? request.body!.capabilities
+        : [];
+      if (!name) {
+        void reply.code(400);
+        return { error: { code: 'VALIDATION_ERROR', message: 'name is required' } };
+      }
+      const p = await prisma.researchTeamProfile.create({
+        data: { tenantId: ctx.tenantId, userId: ctx.userId, name, capabilities },
+        select: { id: true, name: true, capabilities: true, createdAt: true },
+      });
+      return { data: { ...p, createdAt: p.createdAt.toISOString() } };
+    }
+  );
+
+  fastify.delete<{ Params: { id: string } }>(
+    '/api/v1/industry-research/team-profiles/:id',
+    async (request, reply) => {
+      if (!featureEnabled()) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Feature not enabled' } };
+      }
+      const ctx = requireAdmin(request, reply);
+      if (!ctx) return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
+      await prisma.researchTeamProfile.deleteMany({
+        where: { id: request.params.id, tenantId: ctx.tenantId },
+      });
+      return { data: { deleted: true } };
+    }
+  );
+}

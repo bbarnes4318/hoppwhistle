@@ -294,6 +294,10 @@ async function buildServer() {
   );
   await server.register(registerRecordingAnalysisUploadRoutes);
 
+  // Register Industry Research routes (multi-provider forensic research pipeline)
+  const { registerIndustryResearchRoutes } = await import('./routes/industry-research.js');
+  await server.register(registerIndustryResearchRoutes);
+
   // Register Agent Phone routes (VOIP softphone for agents)
   const { registerAgentPhoneRoutes } = await import('./routes/agent-phone.js');
   await server.register(registerAgentPhoneRoutes);
