@@ -258,8 +258,13 @@ function parsePerplexity(j: any, requestId?: string): TransportResult {
     usage: {
       inputTokens: j?.usage?.prompt_tokens,
       outputTokens: j?.usage?.completion_tokens,
+      reasoningTokens: j?.usage?.reasoning_tokens,
+      citationTokens: j?.usage?.citation_tokens,
       searches: j?.usage?.num_search_queries,
       requests: 1,
+      // Perplexity returns an authoritative dollar cost — prefer it over token math.
+      providerReportedCostUsd:
+        typeof j?.usage?.cost?.total_cost === 'number' ? j.usage.cost.total_cost : undefined,
     },
     requestId,
   };
@@ -511,8 +516,10 @@ async function geminiInteractionSubmit(
         agent,
         agent_config: {
           type: 'deep-research',
-          thinking_summaries: 'auto',
-          visualization: 'auto',
+          // Standard Full DD: no visualizations / thinking summaries (faster, cheaper,
+          // avoids embedding base64 images in the output). Max mode keeps auto.
+          thinking_summaries: maxDepth ? 'auto' : 'none',
+          visualization: maxDepth ? 'auto' : 'off',
           collaborative_planning: false,
           ...(maxDepth ? { effort: 'max' } : {}),
         },

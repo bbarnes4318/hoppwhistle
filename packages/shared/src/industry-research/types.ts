@@ -266,9 +266,17 @@ export interface ResearchGap {
 export interface ProviderUsage {
   inputTokens?: number;
   outputTokens?: number;
+  cachedInputTokens?: number;
+  reasoningTokens?: number;
+  citationTokens?: number;
   searches?: number;
   toolCalls?: number;
+  webSearchCalls?: number;
+  xSearchCalls?: number;
+  codeExecutionCalls?: number;
   requests?: number;
+  /** Authoritative dollar cost when the provider reports one (Perplexity). */
+  providerReportedCostUsd?: number;
 }
 
 export interface ProviderReport {
@@ -374,7 +382,7 @@ export interface StructuredReport {
   confidenceAssessment: string;
 }
 
-export type VerificationVerdict = 'pass' | 'repair_required' | 'reject';
+export type VerificationVerdict = 'pass' | 'pass_with_caveats' | 'repair_required' | 'reject';
 
 /** Perplexity independent factual / citation audit. */
 export interface FactualVerification {

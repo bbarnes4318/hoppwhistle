@@ -6,6 +6,7 @@ import {
   buildResearchPlan,
   canonicalizeUrl,
   computeActualCost,
+  computeStageCost,
   estimateRunCost,
   geminiAdjudicatorModel,
   geminiPrimaryConfig,
@@ -39,6 +40,13 @@ import { ProviderError, RealAdapter, renderMarkdown, type RoleRunOptions } from 
 const PROGRESS_CAP = 200;
 const POLL_INTERVAL_MS = 15_000;
 
+/** Sentinel to unwind the phased pipeline for cancellation / budget stops. */
+class PhaseSignal extends Error {
+  constructor(public readonly kind: 'canceled' | 'budget_exceeded') {
+    super(kind);
+  }
+}
+
 export class ResearchOrchestrator {
   constructor(private prisma: PrismaClient) {}
 
@@ -70,44 +78,70 @@ export class ResearchOrchestrator {
       where: { id: runId },
       data: { status: 'running', startedAt: run.startedAt ?? new Date() },
     });
-    const order = STAGE_DEFINITIONS.map(d => d.key);
-    const stageByKey = new Map(run.stages.map(s => [s.stageKey as StageKey, s]));
+
+    // Run a single stage only if it is still pending (resume-safe), after a
+    // cancellation + hard-budget check. Throws sentinel errors to unwind phases.
+    const runStageIfPending = async (key: StageKey): Promise<void> => {
+      const st = await this.prisma.researchStage.findFirst({
+        where: { runId, stageKey: key },
+        select: { id: true, status: true },
+      });
+      if (!st || st.status === 'completed' || st.status === 'skipped') return;
+
+      const fresh = await this.prisma.researchRun.findUnique({
+        where: { id: runId },
+        select: { status: true, accruedCostUsd: true },
+      });
+      if (fresh?.status === 'canceled') throw new PhaseSignal('canceled');
+
+      const def = STAGE_DEFINITIONS.find(d => d.key === key)!;
+      const role = def.role as ProviderRole | undefined;
+      if (role && run.maxBudgetUsd > 0) {
+        const projected = roleEstimate.get(role) ?? 0;
+        if ((fresh?.accruedCostUsd ?? 0) + projected > run.maxBudgetUsd) {
+          await this.markStage(st.id, {
+            status: 'failed',
+            error: `Hard budget cap reached ($${(fresh?.accruedCostUsd ?? 0).toFixed(2)}/$${run.maxBudgetUsd})`,
+            finishedAt: new Date(),
+          });
+          throw new PhaseSignal('budget_exceeded');
+        }
+      }
+      await this.runStage(runId, key, brief, assignments, roleEstimate, mode);
+    };
 
     try {
-      for (const key of order) {
-        const stage = stageByKey.get(key);
-        if (!stage) continue;
-        if (stage.status === 'completed' || stage.status === 'skipped') continue;
+      // Phase 1 — normalize + plan (fast, deterministic, sequential)
+      for (const key of ['normalize', 'plan'] as StageKey[]) await runStageIfPending(key);
 
-        const fresh = await this.prisma.researchRun.findUnique({
-          where: { id: runId },
-          select: { status: true, accruedCostUsd: true },
-        });
-        if (fresh?.status === 'canceled')
-          return logger.info({ msg: 'Run canceled mid-pipeline', runId });
+      // Phase 2 — RESEARCH FAN-OUT: Gemini + Perplexity + xAI concurrently.
+      await this.runConcurrent(['primary', 'independent', 'social'], runStageIfPending);
 
-        const def = STAGE_DEFINITIONS.find(d => d.key === key)!;
-        const role = def.role as ProviderRole | undefined;
-        if (role && run.maxBudgetUsd > 0) {
-          const projected = roleEstimate.get(role) ?? 0;
-          const accrued = fresh?.accruedCostUsd ?? 0;
-          if (accrued + projected > run.maxBudgetUsd) {
-            await this.markStage(stage.id, {
-              status: 'failed',
-              error: `Hard budget cap reached ($${accrued.toFixed(2)}/$${run.maxBudgetUsd})`,
-              finishedAt: new Date(),
-            });
-            await this.prisma.researchRun.update({
-              where: { id: runId },
-              data: { status: 'budget_exceeded', finishedAt: new Date() },
-            });
-            return;
-          }
-        }
-        await this.runStage(runId, key, brief, assignments, roleEstimate, mode);
-      }
+      // Phase 3 — evidence fan-in (deterministic, sequential)
+      for (const key of ['evidence', 'validation', 'contradictions'] as StageKey[])
+        await runStageIfPending(key);
+
+      // Phase 4 — synthesis
+      await runStageIfPending('synthesis');
+
+      // Phase 5 — VERIFIER FAN-OUT: Perplexity factual + xAI adversarial concurrently
+      // (neither sees the other's result before both finish — independence preserved).
+      await this.runConcurrent(['verify_factual', 'verify_adversarial'], runStageIfPending);
+
+      // Phase 6 — conditional Gemini adjudication (runStage decides if it is needed)
+      await runStageIfPending('adjudicate');
+
+      // Phase 7 — deterministic validation + publish/repair/reject
       await this.publish(runId, brief, assignments, roleEstimate, mode);
     } catch (err) {
+      if (err instanceof PhaseSignal) {
+        if (err.kind === 'canceled') return logger.info({ msg: 'Run canceled mid-pipeline', runId });
+        await this.prisma.researchRun.update({
+          where: { id: runId },
+          data: { status: 'budget_exceeded', finishedAt: new Date() },
+        });
+        return;
+      }
       const message = err instanceof Error ? err.message : 'Unknown error';
       logger.error({ msg: 'Research run failed', runId, error: message });
       await this.prisma.researchRun.update({
@@ -115,6 +149,16 @@ export class ResearchOrchestrator {
         data: { status: 'failed', error: message, finishedAt: new Date() },
       });
     }
+  }
+
+  /** Run several stages concurrently (fan-out). A stage failure fails the run. */
+  private async runConcurrent(
+    keys: StageKey[],
+    runStageIfPending: (key: StageKey) => Promise<void>
+  ): Promise<void> {
+    const results = await Promise.allSettled(keys.map(k => runStageIfPending(k)));
+    const rejected = results.find(r => r.status === 'rejected') as PromiseRejectedResult | undefined;
+    if (rejected) throw rejected.reason;
   }
 
   // -----------------------------------------------------------------------
@@ -181,7 +225,7 @@ export class ResearchOrchestrator {
             }
           }
           const cost =
-            computeActualCost(report.provider, report.usage) ?? roleEstimate.get(role!) ?? 0;
+            computeStageCost(report.provider, report.usage, roleEstimate.get(role!) ?? 0).usd;
           await this.markStage(stage.id, {
             status: usedFallback ? 'fallback' : 'completed',
             finishedAt: new Date(),
@@ -453,7 +497,7 @@ export class ResearchOrchestrator {
       sources: mergeSources(evidence.sources, result.structured.sources),
     };
     const cost =
-      computeActualCost(result.provider, result.usage) ?? roleEstimate.get('synthesis') ?? 0;
+      computeStageCost(result.provider, result.usage, roleEstimate.get('synthesis') ?? 0).usd;
     await this.addCost(runId, cost);
     await this.markStage(stageId, {
       status: 'completed',
@@ -495,7 +539,7 @@ export class ResearchOrchestrator {
     );
     const v = await adapter.runFactualVerification(brief, structured, opts);
     const cost =
-      computeActualCost(v.provider, v.usage) ?? roleEstimate.get('factual_verifier') ?? 0;
+      computeStageCost(v.provider, v.usage, roleEstimate.get('factual_verifier') ?? 0).usd;
     await this.addCost(runId, cost);
     await this.markStage(stageId, {
       status: 'completed',
@@ -540,7 +584,7 @@ export class ResearchOrchestrator {
       );
     }
     const cost =
-      computeActualCost(v.provider, v.usage) ?? roleEstimate.get('adversarial_verifier') ?? 0;
+      computeStageCost(v.provider, v.usage, roleEstimate.get('adversarial_verifier') ?? 0).usd;
     await this.addCost(runId, cost);
     await this.markStage(stageId, {
       status: 'completed',
@@ -611,7 +655,7 @@ export class ResearchOrchestrator {
       `Adjudication submitted (${adapter.id}/${opts.model})`
     );
     const a = await adapter.runAdjudication(brief, disputes, opts);
-    const cost = computeActualCost(a.provider, a.usage) ?? roleEstimate.get('adjudicator') ?? 0;
+    const cost = computeStageCost(a.provider, a.usage, roleEstimate.get('adjudicator') ?? 0).usd;
     await this.addCost(runId, cost);
     await this.markStage(stageId, {
       status: 'completed',
@@ -764,7 +808,7 @@ export class ResearchOrchestrator {
       opts
     );
     const cost =
-      computeActualCost(result.provider, result.usage) ?? roleEstimate.get('synthesis') ?? 0;
+      computeStageCost(result.provider, result.usage, roleEstimate.get('synthesis') ?? 0).usd;
     await this.addCost(runId, cost);
     const repaired = {
       ...result.structured,
@@ -1004,30 +1048,38 @@ export class ResearchOrchestrator {
 
 // ----- Pure gating helpers -------------------------------------------------
 
+type GateDecision = 'pass' | 'pass_with_caveats' | 'repair_required' | 'reject';
+
+const isPublishable = (v?: string): boolean => v === 'pass' || v === 'pass_with_caveats';
+
+/** Decide the run outcome. `pass_with_caveats` is publishable (caveats attached);
+ *  only `repair_required` triggers repair and only `reject` blocks publication. */
 function gate(
   f: FactualVerification | null,
   a: AdversarialVerification | null,
   adj: AdjudicationResult | null
-): 'pass' | 'repair_required' | 'reject' {
+): GateDecision {
   const verdicts = [f?.verdict, a?.verdict, adj?.verdict].filter(Boolean) as string[];
+  if (!verdicts.length) return 'reject'; // no verifier ran → cannot publish
   if (verdicts.includes('reject')) {
-    // Adjudication can overturn a single reject to repair/pass.
-    if (adj && adj.verdict !== 'reject') return adj.verdict as 'pass' | 'repair_required';
+    if (adj && adj.verdict !== 'reject') return adj.verdict as GateDecision; // adjudication can overturn
     return 'reject';
   }
   if (verdicts.includes('repair_required')) return 'repair_required';
-  return verdicts.length ? 'pass' : 'reject'; // no verifier ran → cannot publish
+  return verdicts.includes('pass_with_caveats') ? 'pass_with_caveats' : 'pass';
 }
 
+/** Adjudicate only on a MATERIAL conflict — not merely because a verifier listed risks. */
 function adjudicationNeeded(
   f: FactualVerification | null,
   a: AdversarialVerification | null,
   mode: ResearchMode
 ): boolean {
-  if (mode === 'forensic_max') return Boolean(f && a); // mandatory when both verifiers ran
   if (!f || !a) return false;
-  if (f.verdict !== a.verdict) return true;
-  if (f.blockingDefects.length > 0 || a.blockingDefects.length > 0) return true;
+  if (mode === 'forensic_max') return true; // mandatory when both verifiers ran
+  if (f.verdict === 'reject' || a.verdict === 'reject') return true;
+  // They disagree on whether the report is publishable (one publishable, one repair_required).
+  if (isPublishable(f.verdict) !== isPublishable(a.verdict)) return true;
   return false;
 }
 

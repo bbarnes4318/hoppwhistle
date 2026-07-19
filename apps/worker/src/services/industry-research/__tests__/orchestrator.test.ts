@@ -285,6 +285,27 @@ describe('ResearchOrchestrator (real-only, four-provider architecture, HTTP mock
     expect(fake._reports).toHaveLength(0);
   });
 
+  it('pass_with_caveats: factual verifier returns pass_with_caveats → run COMPLETED, report PUBLISHED', async () => {
+    const runId = 'run-1';
+    mockRapid(runId, 'pass_with_caveats');
+    const fake = makeFakePrisma();
+    seedRun(fake, {
+      industry: 'Commercial HVAC maintenance services',
+      capabilities: [],
+      mode: 'rapid_scan',
+      maxBudgetUsd: 40,
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await new ResearchOrchestrator(fake as any).processRun(runId);
+
+    const run = fake._runs.get(runId)!;
+    expect(run.status).toBe('completed');
+    expect(fake._reports).toHaveLength(1);
+    // caveats are attached via the stored verification object
+    const rep = fake._reports.at(-1)!;
+    expect((rep.verification as { factual?: { verdict?: string } }).factual?.verdict).toBe('pass_with_caveats');
+  });
+
   it('provider failure: primary errors (no fallback) → failed stage → failed run → NO report', async () => {
     const runId = 'run-1';
     vi.stubGlobal(

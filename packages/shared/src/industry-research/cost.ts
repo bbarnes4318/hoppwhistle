@@ -24,9 +24,10 @@ interface RolePriceBand {
 // Per-provider, per-role estimated cost band (USD) for a single deep pass.
 const PROVIDER_ROLE_PRICING: Record<ProviderId, Partial<Record<ProviderRole, RolePriceBand>>> = {
   google: {
-    primary: { low: 2.0, high: 8.0 },
-    independent: { low: 2.0, high: 8.0 },
-    adjudicator: { low: 0.3, high: 1.5 },
+    // Standard Gemini Deep Research ~$1-3/task; Forensic (Max) scales via MODE_MULTIPLIER.
+    primary: { low: 1.0, high: 3.0 },
+    independent: { low: 1.0, high: 3.0 },
+    adjudicator: { low: 0.05, high: 0.5 },
   },
   perplexity: {
     primary: { low: 1.0, high: 4.0 },
@@ -106,9 +107,47 @@ export function budgetFits(estimate: CostEstimate, maxBudgetUsd: number): boolea
 const TOKEN_PRICING: Record<ProviderId, { inPerM: number; outPerM: number }> = {
   google: { inPerM: 2.5, outPerM: 10 },
   perplexity: { inPerM: 2, outPerM: 8 },
-  xai: { inPerM: 3, outPerM: 15 },
+  // Grok 4.5 current pricing: input $2/M, output $6/M (cached input $0.50/M);
+  // server-side web/X/code tool calls are billed separately by invocation count.
+  xai: { inPerM: 2, outPerM: 6 },
   anthropic: { inPerM: 5, outPerM: 25 },
 };
+
+export type CostBasis = 'provider_reported' | 'calculated_complete' | 'calculated_partial' | 'estimated';
+
+export interface StageCost {
+  usd: number;
+  basis: CostBasis;
+  providerReportedCostUsd?: number;
+  calculatedCostUsd?: number;
+  estimatedCostUsd?: number;
+}
+
+/**
+ * Resolve a stage's cost with an explicit basis, never presenting an estimate as
+ * an actual charge:
+ *  - provider_reported: the provider returned a dollar cost (authoritative)
+ *  - calculated_complete: computed from real token usage
+ *  - estimated: no usage/cost available → the mode band midpoint (clearly an estimate)
+ */
+export function computeStageCost(
+  provider: ProviderId,
+  usage: ActualUsageLike & { providerReportedCostUsd?: number },
+  estimateUsd: number
+): StageCost {
+  if (usage.providerReportedCostUsd != null && usage.providerReportedCostUsd >= 0) {
+    return {
+      usd: round2(usage.providerReportedCostUsd),
+      basis: 'provider_reported',
+      providerReportedCostUsd: round2(usage.providerReportedCostUsd),
+    };
+  }
+  const calc = computeActualCost(provider, usage);
+  if (calc != null) {
+    return { usd: calc, basis: 'calculated_complete', calculatedCostUsd: calc };
+  }
+  return { usd: round2(estimateUsd), basis: 'estimated', estimatedCostUsd: round2(estimateUsd) };
+}
 
 export interface ActualUsageLike {
   inputTokens?: number;

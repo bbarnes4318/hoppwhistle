@@ -15,7 +15,12 @@ export const providerRoleSchema = z.enum([
   'adversarial_verifier',
   'adjudicator',
 ]);
-export const verificationVerdictSchema = z.enum(['pass', 'repair_required', 'reject']);
+export const verificationVerdictSchema = z.enum([
+  'pass',
+  'pass_with_caveats',
+  'repair_required',
+  'reject',
+]);
 
 export const researchBriefInputSchema = z.object({
   industry: z.string().trim().min(2, 'Industry is required').max(200),
