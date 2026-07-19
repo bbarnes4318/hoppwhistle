@@ -169,11 +169,58 @@ function dedupeSources(sources: EvidenceSource[]): EvidenceSource[] {
 }
 function jsonFromText(text: string): unknown {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const c = fenced ? fenced[1] : text;
+  const c = (fenced ? fenced[1] : text).trim();
+  // 1) direct parse
+  try {
+    return JSON.parse(c);
+  } catch {
+    /* continue */
+  }
+  // 2) first { to last }
   const s = c.indexOf('{');
   const e = c.lastIndexOf('}');
-  if (s >= 0 && e > s) return JSON.parse(c.slice(s, e + 1));
-  return JSON.parse(c);
+  if (s >= 0 && e > s) {
+    try {
+      return JSON.parse(c.slice(s, e + 1));
+    } catch {
+      /* continue */
+    }
+  }
+  // 3) balanced-brace scan for the object that carries the expected shape (handles
+  //    models that wrap the JSON in analysis prose).
+  for (let i = 0; i < c.length; i++) {
+    if (c[i] !== '{') continue;
+    let depth = 0;
+    let inStr = false;
+    let esc = false;
+    for (let j = i; j < c.length; j++) {
+      const ch = c[j];
+      if (esc) {
+        esc = false;
+        continue;
+      }
+      if (ch === '\\') {
+        esc = true;
+        continue;
+      }
+      if (ch === '"') inStr = !inStr;
+      if (inStr) continue;
+      if (ch === '{') depth++;
+      else if (ch === '}') {
+        depth--;
+        if (depth === 0) {
+          try {
+            const o = JSON.parse(c.slice(i, j + 1)) as Record<string, unknown>;
+            if (o && typeof o === 'object' && ('verdict' in o || 'executiveVerdict' in o)) return o;
+          } catch {
+            /* try next */
+          }
+          break;
+        }
+      }
+    }
+  }
+  throw new Error('No parseable JSON object found');
 }
 function safeJson(text: string): unknown {
   try {
