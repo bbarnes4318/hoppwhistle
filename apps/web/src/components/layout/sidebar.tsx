@@ -76,6 +76,12 @@ export function Sidebar() {
       { name: 'Flows', href: '/flows', icon: GitBranch },
       { name: 'Call Logs', href: '/calls', icon: AudioLines },
       { name: 'Reports', href: '/reports', icon: BarChart3 },
+      {
+        name: 'Industry Research',
+        href: '/tools/industry-research',
+        icon: Telescope,
+        title: 'Multi-provider forensic industry-entry research',
+      },
       { name: 'Billing', href: '/billing', icon: Receipt },
       { name: 'Settings', href: '/settings', icon: Settings },
     ];
