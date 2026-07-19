@@ -1,34 +1,14 @@
 'use client';
 
 import type { ProgressEvent, ResearchRunDetail, StageInfo } from '@hopwhistle/shared';
-import {
-  AlertTriangle,
-  ArrowLeft,
-  Ban,
-  Check,
-  ChevronDown,
-  Loader2,
-  RefreshCw,
-  Wallet,
-} from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
 
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
-import { cn } from '@/lib/utils';
 
 import { researchApi, type ReportResponse } from './api';
-import { CostSummary } from './CostSummary';
+import { InstitutionalReport } from './InstitutionalReport';
 import { computePhases, FRIENDLY_STAGE, RESEARCH_STREAMS, type PhaseState } from './phases';
-import { ReportViewer } from './ReportViewer';
-import { SourcesWorkspace } from './SourcesWorkspace';
-import { StatusBadge } from './StatusBadge';
 
 const ACTIVE = new Set(['queued', 'planning', 'running', 'waiting']);
 type StageWithOutput = StageInfo & { output?: unknown };
@@ -39,19 +19,19 @@ export function RunView({ runId }: { runId: string }) {
   const [report, setReport] = useState<ReportResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
-  const [adminOpen, setAdminOpen] = useState(false);
+  const [tab, setTab] = useState<'report' | 'progress'>('report');
+  const [tech, setTech] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
     try {
       const detail = await researchApi.getRun(runId);
       setRun(detail);
-      if (detail.hasReport && !report) {
+      if (detail.hasReport && !report)
         researchApi
           .getReport(runId)
           .then(setReport)
           .catch(() => undefined);
-      }
       return detail.status;
     } catch (e) {
       setError(String(e));
@@ -84,6 +64,10 @@ export function RunView({ runId }: { runId: string }) {
     return () => clearInterval(id);
   }, [run?.startedAt, run?.finishedAt]);
 
+  useEffect(() => {
+    if (run) setTab(run.hasReport ? 'report' : 'progress');
+  }, [run?.hasReport]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const cancel = async () => {
     try {
       await researchApi.cancel(runId);
@@ -94,7 +78,7 @@ export function RunView({ runId }: { runId: string }) {
     }
   };
 
-  const rerun = async (stageKey: string) => {
+  const doRerun = async (stageKey: string) => {
     try {
       await researchApi.rerunStage(runId, stageKey);
       toast({ title: 'Retrying', description: FRIENDLY_STAGE[stageKey] ?? stageKey });
@@ -105,16 +89,8 @@ export function RunView({ runId }: { runId: string }) {
     }
   };
 
-  if (error) {
-    return <FriendlyError message={error} />;
-  }
-  if (!run) {
-    return (
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" /> Loading…
-      </div>
-    );
-  }
+  if (error && !run) return <FriendlyError message={error} />;
+  if (!run) return <p className="ir-muted">Loading…</p>;
 
   const stages = run.stages as StageWithOutput[];
   const phases = computePhases(stages);
@@ -122,48 +98,45 @@ export function RunView({ runId }: { runId: string }) {
   const isActive = ACTIVE.has(run.status);
 
   return (
-    <div className="space-y-6">
+    <div>
       <Link
         href="/tools/industry-research"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        style={{ fontSize: 13, color: 'var(--ir-text-2)', textDecoration: 'none' }}
       >
-        <ArrowLeft className="h-4 w-4" /> All investigations
+        ← All investigations
       </Link>
 
-      {/* Header */}
-      <Card>
-        <CardContent className="flex flex-wrap items-center gap-x-6 gap-y-3 p-4">
-          <div className="min-w-0">
-            <div className="truncate text-lg font-semibold">{run.industry}</div>
-            <div className="text-sm text-muted-foreground">{run.geography}</div>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 20,
+          flexWrap: 'wrap',
+          padding: '12px 0',
+          borderBottom: '1px solid var(--ir-border)',
+          marginTop: 6,
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <div className="ir-h2" style={{ lineHeight: 1.2 }}>
+            {run.industry}
           </div>
-          <Meta label="Status" node={<StatusBadge status={run.status} />} />
-          <Meta label="Elapsed" value={fmtDuration(elapsed)} />
-          <div className="min-w-[130px]">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Cost
-            </div>
-            <div className="text-sm font-medium">
-              <CostSummary
-                runId={runId}
-                status={run.status}
-                accruedCostUsd={run.accruedCostUsd}
-                maxBudgetUsd={run.maxBudgetUsd}
-                variant="inline"
-              />
-            </div>
+          <div className="ir-muted" style={{ fontSize: 12 }}>
+            {run.geography}
           </div>
-          <div className="ml-auto flex gap-2">
-            {isActive && (
-              <Button variant="outline" size="sm" onClick={cancel}>
-                <Ban className="mr-1 h-4 w-4" /> Cancel
-              </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+        </div>
+        <Meta label="Status" value={statusLabel(run.status)} />
+        <Meta label="Elapsed" value={fmtDuration(elapsed)} />
+        <Meta label="Cost" value={`$${run.accruedCostUsd.toFixed(2)} / $${run.maxBudgetUsd}`} />
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+          {isActive && (
+            <button className="ir-btn" onClick={cancel}>
+              Cancel
+            </button>
+          )}
+        </div>
+      </div>
 
-      {/* Budget paused → approve more */}
       {run.status === 'budget_exceeded' && (
         <BudgetPaused
           runId={runId}
@@ -176,179 +149,194 @@ export function RunView({ runId }: { runId: string }) {
         />
       )}
 
-      {/* Verification rejected */}
-      {run.status === 'failed' && /VERIFICATION_REJECTED/.test(String(error ?? '')) === false && (
+      {run.status === 'failed' && (
         <RunFailedNote
           stage={failedStage}
-          onRetry={failedStage ? () => rerun(failedStage.key) : undefined}
+          onRetry={failedStage ? () => doRerun(failedStage.key) : undefined}
         />
       )}
 
-      <Tabs defaultValue={run.hasReport ? 'report' : 'progress'}>
-        <TabsList>
-          <TabsTrigger value="progress">Progress</TabsTrigger>
-          <TabsTrigger value="report" disabled={!run.hasReport}>
-            Report
-          </TabsTrigger>
-          <TabsTrigger value="sources" disabled={!report}>
-            Sources
-          </TabsTrigger>
-        </TabsList>
+      <div style={{ display: 'flex', gap: 8, margin: '16px 0' }}>
+        <TabBtn active={tab === 'report'} disabled={!report} onClick={() => setTab('report')}>
+          Report
+        </TabBtn>
+        <TabBtn active={tab === 'progress'} onClick={() => setTab('progress')}>
+          Progress
+        </TabBtn>
+      </div>
 
-        {/* PROGRESS — high-level phases */}
-        <TabsContent value="progress" className="space-y-4">
-          <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-            <div className="space-y-2.5">
-              {phases.map(p => (
-                <PhaseRow key={p.key} phase={p} />
-              ))}
-            </div>
-            <ActivityFeed progress={run.progress} active={isActive} />
-          </div>
+      {tab === 'report' && report ? (
+        <InstitutionalReport
+          runId={runId}
+          report={report}
+          status={run.status}
+          accruedCostUsd={run.accruedCostUsd}
+          maxBudgetUsd={run.maxBudgetUsd}
+        />
+      ) : (
+        <div className="ir-report-grid" style={{ gridTemplateColumns: 'minmax(0,1fr) 320px' }}>
+          <div>
+            {phases.map(p => (
+              <PhaseRow key={p.key} phase={p} />
+            ))}
 
-          {/* Admin / technical area — collapsed by default */}
-          <div className="rounded-xl border border-border">
-            <button
-              type="button"
-              aria-expanded={adminOpen}
-              onClick={() => setAdminOpen(o => !o)}
-              className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            >
-              Technical details
-              <ChevronDown
-                className={cn('h-4 w-4 transition-transform', adminOpen && 'rotate-180')}
-              />
-            </button>
-            {adminOpen && (
-              <div className="space-y-6 border-t border-border p-4">
-                <AdminStages stages={stages} onRerun={rerun} />
-                <AdminFindings stages={stages} />
-                <div>
-                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Cost audit
-                  </h4>
-                  <CostSummary
-                    runId={runId}
-                    status={run.status}
-                    accruedCostUsd={run.accruedCostUsd}
-                    maxBudgetUsd={run.maxBudgetUsd}
-                    estimateLowUsd={run.costEstimate?.lowUsd}
-                    estimateHighUsd={run.costEstimate?.highUsd}
-                  />
+            <div className="ir-panel" style={{ marginTop: 14 }}>
+              <button
+                onClick={() => setTech(t => !t)}
+                aria-expanded={tech}
+                style={{
+                  width: '100%',
+                  textAlign: 'left',
+                  background: 'none',
+                  border: 0,
+                  padding: '12px 14px',
+                  cursor: 'pointer',
+                  color: 'var(--ir-text-2)',
+                  fontSize: 13,
+                  fontWeight: 500,
+                }}
+              >
+                Technical details {tech ? '▾' : '▸'}
+              </button>
+              {tech && (
+                <div style={{ borderTop: '1px solid var(--ir-border)', padding: 14 }}>
+                  <table className="ir-table">
+                    <tbody>
+                      {stages.map(s => (
+                        <tr key={s.key}>
+                          <td>
+                            {s.label}
+                            {s.provider ? (
+                              <span className="ir-muted" style={{ marginLeft: 8, fontSize: 11 }}>
+                                {s.provider}
+                                {s.model ? ` · ${s.model}` : ''}
+                              </span>
+                            ) : null}
+                          </td>
+                          <td className="ir-num ir-muted" style={{ width: 60 }}>
+                            {s.durationMs != null ? `${(s.durationMs / 1000).toFixed(0)}s` : ''}
+                          </td>
+                          <td className="ir-num ir-muted" style={{ width: 60 }}>
+                            {s.costUsd ? `$${s.costUsd.toFixed(2)}` : ''}
+                          </td>
+                          <td style={{ width: 90 }}>
+                            <span className={`ir-status ${stageCls(s.status)}`}>
+                              <span className={`ir-dot ${stageDot(s.status)}`} />
+                              {s.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-                <AdminLogs progress={run.progress} />
-              </div>
-            )}
+              )}
+            </div>
           </div>
-        </TabsContent>
 
-        {/* REPORT */}
-        <TabsContent value="report">
-          {report ? (
-            <ReportViewer
-              runId={runId}
-              report={report}
-              status={run.status}
-              accruedCostUsd={run.accruedCostUsd}
-              maxBudgetUsd={run.maxBudgetUsd}
-            />
-          ) : (
-            <Empty>
-              {run.hasReport
-                ? 'Loading report…'
-                : 'Your report appears here once the investigation finishes.'}
-            </Empty>
-          )}
-        </TabsContent>
-
-        {/* SOURCES */}
-        <TabsContent value="sources">
-          {report ? (
-            <SourcesWorkspace sources={report.sources} evidence={report.evidence} />
-          ) : (
-            <Empty>Sources and evidence appear here once the report is ready.</Empty>
-          )}
-        </TabsContent>
-      </Tabs>
+          <aside className="ir-rail">
+            <div className="ir-panel" style={{ padding: 14 }}>
+              <div className="ir-eyebrow">Live activity</div>
+              <ActivityFeed progress={run.progress} />
+            </div>
+          </aside>
+        </div>
+      )}
     </div>
   );
 }
 
 function PhaseRow({ phase }: { phase: PhaseState }) {
   const isResearch = phase.key === 'researching';
-  const icon =
-    phase.status === 'complete' ? (
-      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-500">
-        <Check className="h-3.5 w-3.5" />
-      </span>
-    ) : phase.status === 'active' ? (
-      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/15 text-primary">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-      </span>
-    ) : phase.status === 'failed' ? (
-      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-destructive/15 text-destructive">
-        <AlertTriangle className="h-3.5 w-3.5" />
-      </span>
-    ) : (
-      <span className="flex h-6 w-6 items-center justify-center rounded-full border border-border text-muted-foreground/50">
-        <span className="h-1.5 w-1.5 rounded-full bg-current" />
-      </span>
-    );
-
+  const mark =
+    phase.status === 'complete'
+      ? { c: 'ir-pos', s: '✓' }
+      : phase.status === 'active'
+        ? { c: 'ir-info', s: '●' }
+        : phase.status === 'failed'
+          ? { c: 'ir-neg', s: '✕' }
+          : { c: 'ir-muted', s: '○' };
   return (
     <div
-      className={cn(
-        'rounded-xl border p-4',
-        phase.status === 'active' ? 'border-primary/40 bg-primary/5' : 'border-border'
-      )}
+      style={{
+        display: 'flex',
+        gap: 12,
+        padding: '14px 16px',
+        border: '1px solid var(--ir-border)',
+        borderRadius: 5,
+        marginBottom: 8,
+        background: phase.status === 'active' ? 'var(--ir-surface)' : 'transparent',
+      }}
     >
-      <div className="flex items-center gap-3">
-        {icon}
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="font-medium">{phase.label}</span>
-            {phase.status === 'skipped' && (
-              <Badge variant="outline" className="text-[10px]">
-                skipped
-              </Badge>
-            )}
-          </div>
-          <div className="text-xs text-muted-foreground">{phase.blurb}</div>
-        </div>
-      </div>
-
-      {/* Concurrent research streams */}
-      {isResearch && phase.status !== 'pending' && (
-        <div className="mt-3 space-y-1.5 pl-9">
-          {phase.stages.map(s => (
-            <div key={s.key} className="flex items-center justify-between gap-2 text-sm">
-              <span className="text-muted-foreground">{RESEARCH_STREAMS[s.key] ?? s.label}</span>
-              <StreamStatus status={s.status} />
-            </div>
-          ))}
-          {phase.status === 'active' && (
-            <p className="pt-1 text-xs italic text-muted-foreground">
-              All three investigations run at once — the report begins once they finish.
-            </p>
+      <span className={mark.c} style={{ fontWeight: 700, width: 16 }}>
+        {mark.s}
+      </span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontWeight: 600 }}>{phase.label}</span>
+          {phase.status === 'skipped' && (
+            <span className="ir-muted" style={{ fontSize: 11 }}>
+              skipped
+            </span>
           )}
         </div>
-      )}
+        <div className="ir-muted" style={{ fontSize: 12 }}>
+          {phase.blurb}
+        </div>
+        {isResearch && phase.status !== 'pending' && (
+          <div style={{ marginTop: 8 }}>
+            {phase.stages.map(s => (
+              <div
+                key={s.key}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  fontSize: 13,
+                  padding: '2px 0',
+                }}
+              >
+                <span className="ir-muted">{RESEARCH_STREAMS[s.key] ?? s.label}</span>
+                <span className={stageCls(s.status)} style={{ fontWeight: 600, fontSize: 12 }}>
+                  {s.status === 'completed' || s.status === 'fallback'
+                    ? 'Complete'
+                    : s.status === 'running'
+                      ? 'Running'
+                      : s.status === 'failed'
+                        ? 'Failed'
+                        : 'Waiting'}
+                </span>
+              </div>
+            ))}
+            {phase.status === 'active' && (
+              <p className="ir-muted" style={{ fontSize: 12, marginTop: 4, fontStyle: 'italic' }}>
+                All three investigations run at once — the report begins once they finish.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-function StreamStatus({ status }: { status: string }) {
-  if (status === 'completed' || status === 'fallback')
-    return <span className="text-xs font-medium text-emerald-500">Complete</span>;
-  if (status === 'running')
+function ActivityFeed({ progress }: { progress: ProgressEvent[] }) {
+  const recent = [...progress].slice(-14).reverse();
+  if (recent.length === 0)
     return (
-      <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
-        <Loader2 className="h-3 w-3 animate-spin" /> Running
-      </span>
+      <p className="ir-muted" style={{ fontSize: 13, marginTop: 8 }}>
+        Getting started…
+      </p>
     );
-  if (status === 'failed')
-    return <span className="text-xs font-medium text-destructive">Failed</span>;
-  return <span className="text-xs text-muted-foreground">Waiting</span>;
+  return (
+    <ul style={{ margin: '8px 0 0', padding: 0, listStyle: 'none' }}>
+      {recent.map((p, i) => (
+        <li key={i} style={{ display: 'flex', gap: 8, fontSize: 12, padding: '2px 0' }}>
+          <span className="ir-muted ir-num">{new Date(p.ts).toLocaleTimeString()}</span>
+          <span style={{ color: 'var(--ir-text-2)' }}>{p.message}</span>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 function BudgetPaused({
@@ -365,242 +353,202 @@ function BudgetPaused({
   const { toast } = useToast();
   const [amount, setAmount] = useState(Math.ceil(maxBudgetUsd + 3));
   const [busy, setBusy] = useState(false);
-  const approve = async () => {
-    setBusy(true);
-    try {
-      await researchApi.raiseBudget(runId, amount);
-      toast({ title: 'Budget approved', description: 'Finishing your investigation.' });
-      onResumed();
-    } catch (e) {
-      toast({ title: 'Could not update budget', description: String(e), variant: 'destructive' });
-    } finally {
-      setBusy(false);
-    }
-  };
   return (
-    <Card className="border-amber-500/40 bg-amber-500/5">
-      <CardContent className="flex flex-wrap items-center gap-4 p-4">
-        <Wallet className="h-6 w-6 flex-shrink-0 text-amber-500" />
-        <div className="min-w-0 flex-1">
-          <div className="font-medium">Investigation paused to protect your budget</div>
-          <p className="text-sm text-muted-foreground">
-            The report needs one more improvement pass, but finishing it would exceed your $
-            {maxBudgetUsd.toFixed(2)} maximum (${accruedCostUsd.toFixed(2)} spent so far). Approve a
-            higher maximum to complete it — we still never overspend.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-muted-foreground">$</span>
-          <Input
-            type="number"
-            min={Math.ceil(accruedCostUsd) + 1}
-            value={amount}
-            onChange={e => setAmount(Number(e.target.value))}
-            className="w-24"
-            aria-label="New maximum budget"
-          />
-          <Button onClick={approve} disabled={busy || amount <= accruedCostUsd}>
-            {busy ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
-            Approve & continue
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+    <div
+      className="ir-panel"
+      style={{
+        borderColor: 'var(--ir-warning)',
+        padding: 16,
+        marginTop: 14,
+        display: 'flex',
+        gap: 16,
+        alignItems: 'center',
+        flexWrap: 'wrap',
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 220 }}>
+        <div className="ir-h3">Investigation paused to protect your budget</div>
+        <p className="ir-muted" style={{ fontSize: 13, marginTop: 4 }}>
+          The report needs one improvement pass, but finishing it would exceed your $
+          {maxBudgetUsd.toFixed(2)} maximum (${accruedCostUsd.toFixed(2)} spent). Approve a higher
+          maximum to complete it — we never overspend.
+        </p>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span className="ir-muted">$</span>
+        <input
+          className="ir-field"
+          type="number"
+          min={Math.ceil(accruedCostUsd) + 1}
+          value={amount}
+          onChange={e => setAmount(Number(e.target.value))}
+          style={{ width: 90 }}
+          aria-label="New maximum budget"
+        />
+        <button
+          className="ir-btn ir-btn-primary"
+          disabled={busy || amount <= accruedCostUsd}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              await researchApi.raiseBudget(runId, amount);
+              toast({ title: 'Budget approved', description: 'Finishing your investigation.' });
+              onResumed();
+            } catch (e) {
+              toast({
+                title: 'Could not update budget',
+                description: String(e),
+                variant: 'destructive',
+              });
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          Approve &amp; continue
+        </button>
+      </div>
+    </div>
   );
 }
 
 function RunFailedNote({ stage, onRetry }: { stage?: StageInfo; onRetry?: () => void }) {
   const friendly = stage ? (FRIENDLY_STAGE[stage.key] ?? stage.label) : 'A step';
   return (
-    <Card className="border-destructive/40 bg-destructive/5">
-      <CardContent className="flex flex-wrap items-center gap-4 p-4">
-        <AlertTriangle className="h-6 w-6 flex-shrink-0 text-destructive" />
-        <div className="min-w-0 flex-1">
-          <div className="font-medium">{friendly} couldn’t complete</div>
-          <p className="text-sm text-muted-foreground">
-            No report was published and no substitute data was used. You can retry this step.
-          </p>
-          {stage?.error && (
-            <details className="mt-1 text-xs text-muted-foreground">
-              <summary className="cursor-pointer">Error details</summary>
-              <code className="mt-1 block whitespace-pre-wrap break-words">{stage.error}</code>
-            </details>
-          )}
-        </div>
-        {onRetry && (
-          <Button variant="outline" size="sm" onClick={onRetry}>
-            <RefreshCw className="mr-1 h-4 w-4" /> Retry this step
-          </Button>
+    <div
+      className="ir-panel"
+      style={{
+        borderColor: 'var(--ir-negative)',
+        padding: 16,
+        marginTop: 14,
+        display: 'flex',
+        gap: 16,
+        alignItems: 'center',
+        flexWrap: 'wrap',
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 220 }}>
+        <div className="ir-h3">{friendly} couldn’t complete</div>
+        <p className="ir-muted" style={{ fontSize: 13, marginTop: 4 }}>
+          No report was published and no substitute data was used.
+        </p>
+        {stage?.error && (
+          <details style={{ marginTop: 6, fontSize: 12 }}>
+            <summary className="ir-muted" style={{ cursor: 'pointer' }}>
+              Error details
+            </summary>
+            <code
+              style={{
+                display: 'block',
+                marginTop: 4,
+                whiteSpace: 'pre-wrap',
+                color: 'var(--ir-text-2)',
+              }}
+            >
+              {stage.error}
+            </code>
+          </details>
         )}
-      </CardContent>
-    </Card>
+      </div>
+      {onRetry && (
+        <button className="ir-btn" onClick={onRetry}>
+          Retry this step
+        </button>
+      )}
+    </div>
   );
 }
 
 function FriendlyError({ message }: { message: string }) {
   return (
-    <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm">
-      <div className="font-medium text-destructive">We couldn’t load this investigation</div>
-      <details className="mt-1 text-xs text-muted-foreground">
-        <summary className="cursor-pointer">Error details</summary>
-        <code className="mt-1 block whitespace-pre-wrap break-words">{message}</code>
+    <div className="ir-panel" style={{ padding: 16, borderColor: 'var(--ir-negative)' }}>
+      <div className="ir-h3 ir-neg">We couldn’t load this investigation</div>
+      <details style={{ marginTop: 6, fontSize: 12 }}>
+        <summary className="ir-muted" style={{ cursor: 'pointer' }}>
+          Error details
+        </summary>
+        <code
+          style={{
+            display: 'block',
+            marginTop: 4,
+            whiteSpace: 'pre-wrap',
+            color: 'var(--ir-text-2)',
+          }}
+        >
+          {message}
+        </code>
       </details>
     </div>
   );
 }
 
-function ActivityFeed({ progress, active }: { progress: ProgressEvent[]; active: boolean }) {
-  const recent = [...progress].slice(-12).reverse();
-  return (
-    <Card className="lg:sticky lg:top-4 lg:self-start">
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm">
-          {active && <Loader2 className="h-4 w-4 animate-spin text-primary" />} Live activity
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {recent.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Getting started…</p>
-        ) : (
-          <ul className="space-y-1.5 text-sm">
-            {recent.map((p, i) => (
-              <li key={i} className="flex gap-2 text-muted-foreground">
-                <span className="text-foreground/50">{new Date(p.ts).toLocaleTimeString()}</span>
-                <span>{p.message}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function AdminStages({
-  stages,
-  onRerun,
+function TabBtn({
+  active,
+  disabled,
+  onClick,
+  children,
 }: {
-  stages: StageWithOutput[];
-  onRerun: (k: string) => void;
+  active: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
 }) {
   return (
-    <div>
-      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Stages & controls
-      </h4>
-      <div className="space-y-1.5">
-        {stages.map(s => (
-          <div
-            key={s.key}
-            className="flex items-center gap-3 rounded-lg border border-border px-3 py-2 text-sm"
-          >
-            <span className="min-w-0 flex-1 truncate">
-              {s.label}
-              {s.provider && (
-                <span className="ml-2 text-xs text-muted-foreground">
-                  {s.provider}
-                  {s.model ? ` · ${s.model}` : ''}
-                </span>
-              )}
-            </span>
-            {s.durationMs != null && (
-              <span className="text-xs tabular-nums text-muted-foreground">
-                {(s.durationMs / 1000).toFixed(0)}s
-              </span>
-            )}
-            {s.costUsd ? (
-              <span className="text-xs tabular-nums text-muted-foreground">
-                ${s.costUsd.toFixed(2)}
-              </span>
-            ) : null}
-            <StatusBadge status={s.status} />
-            {s.status === 'failed' && (
-              <Button variant="ghost" size="sm" onClick={() => onRerun(s.key)}>
-                <RefreshCw className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function AdminFindings({ stages }: { stages: StageWithOutput[] }) {
-  const items = ['primary', 'independent', 'social']
-    .map(k => stages.find(s => s.key === k))
-    .filter(s => (s?.output as { markdown?: string })?.markdown) as StageWithOutput[];
-  if (items.length === 0) return null;
-  return (
-    <div>
-      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Raw provider findings
-      </h4>
-      <div className="space-y-2">
-        {items.map(s => {
-          const md = (s.output as { markdown?: string }).markdown ?? '';
-          return (
-            <details key={s.key} className="rounded-lg border border-border p-3">
-              <summary className="cursor-pointer text-sm font-medium">
-                {s.label}
-                {s.provider && (
-                  <span className="ml-2 text-xs text-muted-foreground">{s.provider}</span>
-                )}
-              </summary>
-              <div className="prose prose-sm mt-2 max-w-none dark:prose-invert prose-p:text-muted-foreground">
-                <ReactMarkdown>{md.slice(0, 8000)}</ReactMarkdown>
-              </div>
-            </details>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function AdminLogs({ progress }: { progress: ProgressEvent[] }) {
-  return (
-    <div>
-      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Technical log
-      </h4>
-      <div className="max-h-64 overflow-auto rounded-lg border border-border bg-muted/30 p-3 font-mono text-xs">
-        {progress.length === 0 ? (
-          <span className="text-muted-foreground">No log events yet.</span>
-        ) : (
-          progress.map((p, i) => (
-            <div key={i} className="text-muted-foreground">
-              <span className="text-foreground/60">{new Date(p.ts).toLocaleTimeString()}</span> [
-              {p.stage}] {p.message}
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  );
-}
-
-function Meta({ label, value, node }: { label: string; value?: string; node?: React.ReactNode }) {
-  return (
-    <div>
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-        {label}
-      </div>
-      <div className="text-sm font-medium capitalize">{node ?? value}</div>
-    </div>
-  );
-}
-
-function Empty({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        height: 34,
+        padding: '0 14px',
+        borderRadius: 4,
+        border: '1px solid var(--ir-border)',
+        background: active ? 'var(--ir-accent)' : 'var(--ir-surface)',
+        color: active ? '#fff' : disabled ? 'var(--ir-text-3)' : 'var(--ir-text)',
+        fontSize: 13,
+        fontWeight: 500,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+      }}
+    >
       {children}
+    </button>
+  );
+}
+
+function Meta({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="ir-strip-label">{label}</div>
+      <div style={{ fontSize: 13, fontWeight: 600 }}>{value}</div>
     </div>
   );
 }
 
+function stageCls(s: string): string {
+  if (s === 'completed' || s === 'fallback') return 'ir-pos';
+  if (s === 'running') return 'ir-info';
+  if (s === 'failed') return 'ir-neg';
+  return 'ir-muted';
+}
+function stageDot(s: string): string {
+  if (s === 'completed' || s === 'fallback') return 'ir-dot-pos';
+  if (s === 'running') return 'ir-dot-warn';
+  if (s === 'failed') return 'ir-dot-neg';
+  return 'ir-dot-muted';
+}
+function statusLabel(s: string): string {
+  const m: Record<string, string> = {
+    completed: 'Completed',
+    failed: 'Failed',
+    budget_exceeded: 'Paused — budget',
+    running: 'In progress',
+    queued: 'Queued',
+    planning: 'Planning',
+    waiting: 'Waiting',
+    canceled: 'Canceled',
+  };
+  return m[s] ?? s;
+}
 function fmtDuration(sec: number): string {
   if (sec < 60) return `${sec}s`;
-  const m = Math.floor(sec / 60);
-  return `${m}m ${sec % 60}s`;
+  return `${Math.floor(sec / 60)}m ${sec % 60}s`;
 }
