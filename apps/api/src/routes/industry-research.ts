@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 
 import {
   CAPABILITY_CATEGORIES,
+  FRESH_PROVENANCE,
   PRICING_AS_OF,
   PROVIDER_ROLE_LABELS,
   RESEARCH_MODES,
@@ -14,6 +15,7 @@ import {
   resolveAssignments,
   type ProviderRole,
   type ResearchRunSummary,
+  type RunProvenance,
   type StageInfo,
 } from '@hopwhistle/shared';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -90,6 +92,23 @@ function planStages(mode: keyof typeof RESEARCH_MODES): Array<{
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+function provenanceOf(run: any): RunProvenance {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const p = (run?.brief as any)?.provenance as Partial<RunProvenance> | undefined;
+  if (p && p.executionType) {
+    return {
+      executionType: p.executionType,
+      reusedFromRunId: p.reusedFromRunId,
+      reusedResearch: p.reusedResearch ?? false,
+      reusedSourceCount: p.reusedSourceCount ?? 0,
+      avoidedProviderCalls: p.avoidedProviderCalls ?? 0,
+      avoidedEstimatedCost: p.avoidedEstimatedCost ?? 0,
+    };
+  }
+  return { ...FRESH_PROVENANCE };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function runToSummary(run: any): ResearchRunSummary {
   return {
     id: run.id,
@@ -106,6 +125,7 @@ function runToSummary(run: any): ResearchRunSummary {
     verdict: run.verdict ?? null,
     overallScore: run.overallScore ?? null,
     hasReport: Array.isArray(run.reports) ? run.reports.length > 0 : false,
+    provenance: provenanceOf(run),
   };
 }
 
@@ -244,6 +264,9 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
 
     const researchBriefId = randomUUID();
     const brief = normalizeBrief(input, { researchBriefId, now: new Date() });
+    // Fresh end-to-end run — mark provenance so its stats are never conflated
+    // with replay/reuse benchmarks.
+    brief.provenance = { ...FRESH_PROVENANCE };
     const assignments = resolveAssignments(process.env, input);
     const estimate = estimateRunCost(input.mode, assignments);
     const estimatedCostUsd = (estimate.lowUsd + estimate.highUsd) / 2;
@@ -365,7 +388,7 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
 
       const run = await prisma.researchRun.findFirst({
         where: { id: request.params.id, tenantId: ctx.tenantId },
-        select: { id: true },
+        select: { id: true, brief: true },
       });
       if (!run) {
         void reply.code(404);
@@ -410,6 +433,7 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
           verification: report.verification ?? null,
           synthesisProvider: report.synthesisProvider,
           synthesisModel: report.synthesisModel,
+          provenance: provenanceOf(run),
           createdAt: report.createdAt.toISOString(),
         },
       };
@@ -513,7 +537,7 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
 
       const run = await prisma.researchRun.findFirst({
         where: { id: request.params.id, tenantId: ctx.tenantId },
-        select: { id: true, maxBudgetUsd: true, accruedCostUsd: true },
+        select: { id: true, maxBudgetUsd: true, accruedCostUsd: true, brief: true },
       });
       if (!run) {
         void reply.code(404);
@@ -540,14 +564,22 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
           costLowUsd: cd.costLowUsd,
           costHighUsd: cd.costHighUsd,
           pricingAsOf: cd.pricingAsOf,
+          components: cd.components ?? null,
+          cache: cd.cache ?? null,
         }));
       let confirmed = 0,
         calculated = 0,
         estLow = 0,
         estHigh = 0,
         low = 0,
-        high = 0;
+        high = 0,
+        reusedCount = 0,
+        cacheSavingsUsd = 0;
       for (const c of lines) {
+        if (c.costBasis === 'reused') {
+          reusedCount += 1;
+          continue; // reused stages contribute $0 new spend
+        }
         if (c.costBasis === 'provider_reported') confirmed += c.costUsd;
         else if (String(c.costBasis).startsWith('calculated')) calculated += c.costUsd;
         else {
@@ -556,18 +588,26 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
         }
         low += c.costLowUsd;
         high += c.costHighUsd;
+        if (c.cache?.cacheSavingsUsd) cacheSavingsUsd += c.cache.cacheSavingsUsd;
       }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const repairOutcome =
+        (stages.find(s => s.stageKey === 'publish')?.output as any)?.repairOutcome ?? null;
       return {
         data: {
           runId: run.id,
+          provenance: provenanceOf(run),
           confirmedCostUsd: r2(confirmed),
           calculatedCostUsd: r2(calculated),
           estimatedCostLowUsd: r2(estLow),
           estimatedCostHighUsd: r2(estHigh),
           totalLowUsd: r2(low),
           totalHighUsd: r2(high),
+          reusedStageCount: reusedCount,
+          cacheSavingsUsd: r2(cacheSavingsUsd),
           maxBudgetUsd: run.maxBudgetUsd,
           budgetRemainingUsd: r2(run.maxBudgetUsd - high),
+          repairOutcome,
           stages: lines,
         },
       };
@@ -594,7 +634,14 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
         void reply.code(404);
         return { error: { code: 'NOT_FOUND', message: 'Source run not found' } };
       }
-      const reuseKeys = ['primary', 'independent', 'social', 'evidence', 'validation', 'contradictions'];
+      const reuseKeys = [
+        'primary',
+        'independent',
+        'social',
+        'evidence',
+        'validation',
+        'contradictions',
+      ];
       const reused = src.stages.filter(
         s => reuseKeys.includes(s.stageKey) && (s.status === 'completed' || s.status === 'fallback')
       );
@@ -602,10 +649,31 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
         .filter(s => s.stageKey === 'evidence')
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .reduce((n, s) => n + ((s.output as any)?.sources?.length ?? 0), 0);
+      const researchStageKeys = ['primary', 'independent', 'social'];
+      const avoidedProviderCalls = reused.filter(s =>
+        researchStageKeys.includes(s.stageKey)
+      ).length;
+      // Reported/calculated research spend we did NOT incur by reusing artifacts.
+      const avoidedEstimatedCost =
+        Math.round(
+          reused
+            .filter(s => researchStageKeys.includes(s.stageKey))
+            .reduce((sum, s) => sum + (s.costUsd ?? 0), 0) * 100
+        ) / 100;
 
+      const provenance: RunProvenance = {
+        executionType: 'replay',
+        reusedFromRunId: src.id,
+        reusedResearch: true,
+        reusedSourceCount: reusedSources,
+        avoidedProviderCalls,
+        avoidedEstimatedCost,
+      };
       const replayBrief = {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ...(src.brief as any),
+        provenance,
+        // Legacy flat fields kept for backward compatibility.
         reusedFromRunId: src.id,
         reusedResearchStages: true,
         reusedSourceCount: reusedSources,
@@ -684,10 +752,12 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
       return {
         data: {
           id: newRun.id,
+          executionType: 'replay',
           reusedFromRunId: src.id,
           reusedResearchStages: reused.map(s => s.stageKey),
           reusedSourceCount: reusedSources,
-          avoidedProviderCalls: reused.filter(s => ['primary', 'independent', 'social'].includes(s.stageKey)).length,
+          avoidedProviderCalls,
+          avoidedEstimatedCost,
         },
       };
     }

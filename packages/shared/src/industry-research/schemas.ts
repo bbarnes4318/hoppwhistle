@@ -205,6 +205,20 @@ export const structuredReportSchema = z.object({
   confidenceAssessment: z.string(),
 });
 
+// A structured, patchable defect emitted by a verifier. All fields except the
+// human-readable problem/change are optional so a verifier that only fills the
+// legacy string arrays still validates.
+export const repairDefectSchema = z.object({
+  defectId: z.string().default(''),
+  severity: z.enum(['blocking', 'major', 'minor']).default('major'),
+  claimId: z.string().optional(),
+  sectionKey: z.string().optional(),
+  problem: z.string(),
+  requiredChange: z.string().default(''),
+  affectedSourceIds: z.array(z.string()).default([]),
+  recommendationChanging: z.boolean().default(false),
+});
+
 export const factualVerificationSchema = z.object({
   verdict: verificationVerdictSchema,
   confidence: z.number().min(0).max(1).default(0.5),
@@ -220,6 +234,7 @@ export const factualVerificationSchema = z.object({
   missingEvidence: z.array(z.string()).default([]),
   requiredRepairs: z.array(z.string()).default([]),
   blockingDefects: z.array(z.string()).default([]),
+  defects: z.array(repairDefectSchema).default([]),
 });
 
 export const adversarialVerificationSchema = z.object({
@@ -238,6 +253,7 @@ export const adversarialVerificationSchema = z.object({
   regulatoryWeaknesses: z.array(z.string()).default([]),
   requiredRepairs: z.array(z.string()).default([]),
   blockingDefects: z.array(z.string()).default([]),
+  defects: z.array(repairDefectSchema).default([]),
 });
 
 export const adjudicationResultSchema = z.object({
@@ -247,4 +263,54 @@ export const adjudicationResultSchema = z.object({
   additionalEvidence: z.array(z.string()).default([]),
   requiredRepairs: z.array(z.string()).default([]),
   blockingDefects: z.array(z.string()).default([]),
+});
+
+// --- Patch-based targeted repair ----------------------------------------
+
+export const sectionPatchSchema = z.object({
+  key: z.string(),
+  title: z.string().optional(),
+  markdown: z.string(),
+});
+
+export const claimPatchSchema = z.object({
+  claimId: z.string(),
+  text: z.string().optional(),
+  classification: z
+    .enum([
+      'verified_fact',
+      'reported_experience',
+      'estimate',
+      'inference',
+      'hypothesis',
+      'unverified_industry_claim',
+    ])
+    .optional(),
+  confidence: z.number().min(0).max(1).optional(),
+  materiality: z.number().min(0).max(1).optional(),
+  supportingSourceIds: z.array(z.string()).optional(),
+  contradictingSourceIds: z.array(z.string()).optional(),
+  notes: z.string().optional(),
+  remove: z.boolean().optional(),
+});
+
+export const verdictPatchSchema = z.object({
+  verdict: z.enum(['GO', 'CONDITIONAL_GO', 'DO_NOT_ENTER']).optional(),
+  overallScore: z.number().min(0).max(100).optional(),
+  confidence: z.number().min(0).max(1).optional(),
+  bestSegment: z.string().optional(),
+  bestCustomer: z.string().optional(),
+  bestBusinessModel: z.string().optional(),
+  timeToFirstRevenue: z.string().optional(),
+  initialCapital: z.string().optional(),
+  biggestOpportunity: z.string().optional(),
+  biggestRisk: z.string().optional(),
+  oneSentenceConclusion: z.string().optional(),
+});
+
+export const repairPatchSetSchema = z.object({
+  sectionPatches: z.array(sectionPatchSchema).default([]),
+  claimPatches: z.array(claimPatchSchema).default([]),
+  verdictPatch: verdictPatchSchema.nullable().default(null),
+  reasonForVerdictChange: z.string().nullable().default(null),
 });

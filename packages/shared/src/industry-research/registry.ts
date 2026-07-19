@@ -42,7 +42,8 @@ export function buildProviderRegistry(env: Env): ProviderConfig[] {
       apiKeyEnv: 'GEMINI_API_KEY',
       hasKey: Boolean(env.GEMINI_API_KEY),
       model: env.GOOGLE_DEEP_RESEARCH_MODEL || 'deep-research-preview-04-2026',
-      fallbackModel: env.GOOGLE_RAPID_RESEARCH_MODEL || env.GOOGLE_GROUNDED_MODEL || 'gemini-flash-latest',
+      fallbackModel:
+        env.GOOGLE_RAPID_RESEARCH_MODEL || env.GOOGLE_GROUNDED_MODEL || 'gemini-flash-latest',
       timeoutMs: int(env.GOOGLE_DEEP_RESEARCH_TIMEOUT_MS, 25 * 60 * 1000),
       maxRetries: int(env.GOOGLE_DEEP_RESEARCH_MAX_RETRIES, 1),
       roles: ['primary', 'independent', 'adjudicator'],

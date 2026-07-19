@@ -122,6 +122,34 @@ export interface Assumption {
   rationale: string;
 }
 
+/**
+ * How a run was executed. A `replay` (or `*_reused`) run reuses previously
+ * purchased research and must NEVER be reported as a fresh Full Due Diligence
+ * benchmark for typical-duration/typical-cost claims.
+ */
+export type ExecutionType = 'fresh' | 'replay' | 'partially_reused' | 'fully_reused';
+
+/** Reuse/benchmark provenance for a run — kept separate from paid-cost accounting. */
+export interface RunProvenance {
+  executionType: ExecutionType;
+  /** Source run whose research artifacts were reused (for replay / reuse). */
+  reusedFromRunId?: string;
+  reusedResearch: boolean;
+  reusedSourceCount: number;
+  /** Number of paid research provider calls avoided by reuse. */
+  avoidedProviderCalls: number;
+  /** Reported/calculated research spend avoided by reuse (USD). */
+  avoidedEstimatedCost: number;
+}
+
+export const FRESH_PROVENANCE: RunProvenance = {
+  executionType: 'fresh',
+  reusedResearch: false,
+  reusedSourceCount: 0,
+  avoidedProviderCalls: 0,
+  avoidedEstimatedCost: 0,
+};
+
 export interface SourceTargets {
   totalSources: number;
   primarySources: number;
@@ -139,6 +167,8 @@ export interface CanonicalBrief extends ResearchBriefInput {
   assumptions: Assumption[];
   requiredSections: string[];
   sourceTargets: SourceTargets;
+  /** Set on replay/reuse runs so the pipeline and UI can label them honestly. */
+  provenance?: RunProvenance;
 }
 
 // ---------------------------------------------------------------------------
@@ -267,6 +297,8 @@ export interface ProviderUsage {
   inputTokens?: number;
   outputTokens?: number;
   cachedInputTokens?: number;
+  /** Anthropic cache-write tokens (billed at a premium, then read cheaply). */
+  cacheCreationInputTokens?: number;
   reasoningTokens?: number;
   citationTokens?: number;
   searches?: number;
@@ -400,6 +432,8 @@ export interface FactualVerification {
   missingEvidence: string[];
   requiredRepairs: string[];
   blockingDefects: string[];
+  /** Structured, patchable defects (optional — enables targeted repair). */
+  defects?: RepairDefect[];
 }
 
 /** xAI independent adversarial audit (web + X + code). */
@@ -419,6 +453,8 @@ export interface AdversarialVerification {
   regulatoryWeaknesses: string[];
   requiredRepairs: string[];
   blockingDefects: string[];
+  /** Structured, patchable defects (optional — enables targeted repair). */
+  defects?: RepairDefect[];
 }
 
 /** Gemini conflict adjudication (only when verifiers disagree or a defect is material). */
@@ -429,6 +465,75 @@ export interface AdjudicationResult {
   additionalEvidence: string[];
   requiredRepairs: string[];
   blockingDefects: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Patch-based targeted repair (never full-regenerate an unaffected report)
+// ---------------------------------------------------------------------------
+
+/** A single structured defect emitted by a verifier, precise enough to patch. */
+export interface RepairDefect {
+  defectId: string;
+  severity: 'blocking' | 'major' | 'minor';
+  claimId?: string;
+  sectionKey?: string;
+  problem: string;
+  requiredChange: string;
+  affectedSourceIds: string[];
+  /** True when fixing this defect could change the executive recommendation. */
+  recommendationChanging: boolean;
+}
+
+export interface SectionPatch {
+  key: string;
+  title?: string;
+  markdown: string;
+}
+
+export interface ClaimPatch {
+  claimId: string;
+  text?: string;
+  classification?: ClaimClassification;
+  confidence?: number;
+  materiality?: number;
+  supportingSourceIds?: string[];
+  contradictingSourceIds?: string[];
+  notes?: string;
+  /** When true, the claim is removed rather than edited. */
+  remove?: boolean;
+}
+
+export interface VerdictPatch {
+  verdict?: Verdict;
+  overallScore?: number;
+  confidence?: number;
+  bestSegment?: string;
+  bestCustomer?: string;
+  bestBusinessModel?: string;
+  timeToFirstRevenue?: string;
+  initialCapital?: string;
+  biggestOpportunity?: string;
+  biggestRisk?: string;
+  oneSentenceConclusion?: string;
+}
+
+/** Anthropic's targeted repair output — patches only, never a whole new report. */
+export interface RepairPatchSet {
+  sectionPatches: SectionPatch[];
+  claimPatches: ClaimPatch[];
+  verdictPatch: VerdictPatch | null;
+  reasonForVerdictChange: string | null;
+}
+
+/** Provenance of a repair cycle, persisted for auditability. */
+export interface RepairOutcome {
+  sectionsRepaired: string[];
+  claimsRepaired: string[];
+  claimsReverified: string[];
+  fullRegenerationUsed: boolean;
+  fullReverificationUsed: boolean;
+  repairDurationMs: number;
+  repairCostUsd: number;
 }
 
 /** Async provider job tracking (Gemini Interactions, Perplexity async). */
@@ -481,6 +586,8 @@ export interface ResearchRunSummary {
   verdict?: Verdict | null;
   overallScore?: number | null;
   hasReport: boolean;
+  /** Fresh vs replay/reuse — replay runs are excluded from typical-run stats. */
+  provenance: RunProvenance;
 }
 
 export interface ResearchRunDetail extends ResearchRunSummary {

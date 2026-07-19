@@ -80,7 +80,9 @@ export function RunsList() {
           <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-muted-foreground">
             Four independent research engines investigate an industry, cross-check one another, and
             deliver a cited{' '}
-            <span className="font-medium text-foreground">GO&nbsp;/&nbsp;CONDITIONAL&nbsp;GO&nbsp;/&nbsp;DO&nbsp;NOT&nbsp;ENTER</span>{' '}
+            <span className="font-medium text-foreground">
+              GO&nbsp;/&nbsp;CONDITIONAL&nbsp;GO&nbsp;/&nbsp;DO&nbsp;NOT&nbsp;ENTER
+            </span>{' '}
             verdict — with the real economics, competitors, risks, entry wedge, and a 90-day plan.
           </p>
           <div className="mt-7 flex flex-wrap items-center gap-3">
@@ -212,12 +214,29 @@ export function RunsList() {
                       className="group border-b border-border/60 transition-colors last:border-0 hover:bg-muted/40"
                     >
                       <td className="px-4 py-3">
-                        <Link
-                          href={`/tools/industry-research/${r.id}`}
-                          className="font-medium text-foreground hover:text-primary"
-                        >
-                          {r.industry}
-                        </Link>
+                        <div className="flex items-center gap-2">
+                          <Link
+                            href={`/tools/industry-research/${r.id}`}
+                            className="font-medium text-foreground hover:text-primary"
+                          >
+                            {r.industry}
+                          </Link>
+                          {r.provenance && r.provenance.executionType !== 'fresh' && (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] uppercase tracking-wide"
+                              title={
+                                r.provenance.reusedFromRunId
+                                  ? `Reused research from run ${r.provenance.reusedFromRunId.slice(0, 8)} — no new research charges`
+                                  : 'Reused research — no new research charges'
+                              }
+                            >
+                              {r.provenance.executionType === 'replay'
+                                ? 'Replay'
+                                : r.provenance.executionType.replace(/_/g, ' ')}
+                            </Badge>
+                          )}
+                        </div>
                         <div className="text-xs text-muted-foreground sm:hidden">{r.geography}</div>
                       </td>
                       <td className="hidden px-4 py-3 text-muted-foreground sm:table-cell">
@@ -240,7 +259,9 @@ export function RunsList() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         {r.overallScore != null ? (
-                          <span className={cn('font-semibold tabular-nums', scoreColor(r.overallScore))}>
+                          <span
+                            className={cn('font-semibold tabular-nums', scoreColor(r.overallScore))}
+                          >
                             {r.overallScore}
                           </span>
                         ) : (

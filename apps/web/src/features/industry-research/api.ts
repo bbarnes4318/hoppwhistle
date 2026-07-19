@@ -1,15 +1,19 @@
 import type {
   AdjudicationResult,
   AdversarialVerification,
+  CacheMetrics,
   CapabilityCategory,
   CostEstimate,
   FactualVerification,
   ModeDefinition,
   ProviderAssignments,
   ProviderRole,
+  RepairOutcome,
   ResearchBriefInput,
   ResearchRunDetail,
   ResearchRunSummary,
+  RunProvenance,
+  StageCostComponents,
   StructuredReport,
   TeamProfileSummary,
 } from '@hopwhistle/shared';
@@ -63,18 +67,24 @@ export interface CostAuditLine {
   costLowUsd: number;
   costHighUsd: number;
   pricingAsOf: string;
+  components: StageCostComponents | null;
+  cache: CacheMetrics | null;
 }
 
 export interface CostAudit {
   runId: string;
+  provenance: RunProvenance;
   confirmedCostUsd: number;
   calculatedCostUsd: number;
   estimatedCostLowUsd: number;
   estimatedCostHighUsd: number;
   totalLowUsd: number;
   totalHighUsd: number;
+  reusedStageCount: number;
+  cacheSavingsUsd: number;
   maxBudgetUsd: number;
   budgetRemainingUsd: number;
+  repairOutcome: RepairOutcome | null;
   stages: CostAuditLine[];
 }
 
@@ -89,6 +99,7 @@ export interface ReportResponse {
   verification: ReportVerification | null;
   synthesisProvider: string | null;
   synthesisModel: string | null;
+  provenance?: RunProvenance;
   createdAt: string;
 }
 

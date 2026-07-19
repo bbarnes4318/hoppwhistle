@@ -196,6 +196,19 @@ export function ReportViewer({ runId, report }: { runId: string; report: ReportR
           </div>
         </div>
 
+        {report.provenance && report.provenance.executionType !== 'fresh' && (
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs">
+            <strong className="uppercase tracking-wide text-amber-600 dark:text-amber-400">
+              Replay benchmark
+            </strong>{' '}
+            — research evidence reused from an earlier run
+            {report.provenance.reusedFromRunId
+              ? ` (${report.provenance.reusedFromRunId.slice(0, 8)})`
+              : ''}
+            . Synthesis and verification were re-run; no new Gemini/Perplexity/xAI research charges
+            were incurred. This is not a fresh Full Due Diligence run.
+          </div>
+        )}
         {(report.synthesisProvider || report.synthesisModel) && (
           <div className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
             Synthesized by <strong>{report.synthesisProvider}</strong>
@@ -592,6 +605,30 @@ function money(n: number): string {
   return `$${n.toFixed(2)}`;
 }
 
+// Compact per-stage component breakdown: tokens + tool calls (xAI) or cache (Anthropic).
+function componentSummary(l: CostAudit['stages'][number]): string {
+  if (l.costBasis === 'reused') return 'reused artifact';
+  const c = l.components;
+  if (!c) return '—';
+  const parts: string[] = [];
+  if (c.inputTokens != null) parts.push(`in ${fmtTok(c.inputTokens)}`);
+  if (l.cache && l.cache.cacheReadInputTokens > 0)
+    parts.push(`cache-read ${fmtTok(l.cache.cacheReadInputTokens)}`);
+  else if (c.cachedInputTokens) parts.push(`cached ${fmtTok(c.cachedInputTokens)}`);
+  if (c.outputTokens != null) parts.push(`out ${fmtTok(c.outputTokens)}`);
+  const tools: string[] = [];
+  if (c.webSearchCalls) tools.push(`web×${c.webSearchCalls}`);
+  if (c.xSearchCalls) tools.push(`X×${c.xSearchCalls}`);
+  if (c.codeExecutionCalls) tools.push(`code×${c.codeExecutionCalls}`);
+  if (tools.length) parts.push(tools.join(' '));
+  if (l.cache && l.cache.cacheSavingsUsd > 0) parts.push(`saved ${money(l.cache.cacheSavingsUsd)}`);
+  return parts.join(' · ') || '—';
+}
+
+function fmtTok(n: number): string {
+  return n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n);
+}
+
 function CostPanel({ runId }: { runId: string }) {
   const [cost, setCost] = useState<CostAudit | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -615,23 +652,51 @@ function CostPanel({ runId }: { runId: string }) {
       ) : (
         <Card>
           <CardContent className="space-y-4 pt-6">
+            {/* Replay/reuse provenance — never fold this into a "typical run" figure */}
+            {cost.provenance && cost.provenance.executionType !== 'fresh' && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs">
+                <div className="font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
+                  Replay benchmark
+                </div>
+                <p className="mt-1 text-muted-foreground">
+                  Research evidence reused from an earlier run
+                  {cost.provenance.reusedFromRunId
+                    ? ` (${cost.provenance.reusedFromRunId.slice(0, 8)})`
+                    : ''}
+                  . No new Gemini, Perplexity Deep Research, or xAI research charges were incurred
+                  {cost.provenance.avoidedProviderCalls
+                    ? ` — ${cost.provenance.avoidedProviderCalls} paid research call(s) avoided (~${money(cost.provenance.avoidedEstimatedCost)} not spent)`
+                    : ''}
+                  . The figures below are NEW processing only (synthesis + verification + publish)
+                  and are not a fresh Full Due Diligence cost.
+                </p>
+              </div>
+            )}
             {/* Honest totals — confirmed/calculated separated from estimates */}
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Stat label="Confirmed (provider)" value={money(cost.confirmedCostUsd)} />
-              <Stat label="Calculated (tokens)" value={money(cost.calculatedCostUsd)} />
+              <Stat label="Calculated" value={money(cost.calculatedCostUsd)} />
               <Stat
                 label="Estimated range"
                 value={`${money(cost.estimatedCostLowUsd)} – ${money(cost.estimatedCostHighUsd)}`}
               />
               <Stat
-                label="Total range"
+                label={
+                  cost.provenance && cost.provenance.executionType !== 'fresh'
+                    ? 'New processing'
+                    : 'Total range'
+                }
                 value={`${money(cost.totalLowUsd)} – ${money(cost.totalHighUsd)}`}
               />
             </div>
             <p className="text-xs text-muted-foreground">
-              Confirmed and calculated figures are actual spend. Estimates are shown only as a range
-              and are never presented as actual charges. Budget cap {money(cost.maxBudgetUsd)} ·
-              remaining {money(cost.budgetRemainingUsd)}.
+              Provider-confirmed charges are authoritative. Calculated charges are based on the
+              usage and pricing information available to the application; partial calculations are
+              labeled separately. Budget cap {money(cost.maxBudgetUsd)} · remaining{' '}
+              {money(cost.budgetRemainingUsd)}.
+              {cost.cacheSavingsUsd > 0
+                ? ` Anthropic prompt cache saved ${money(cost.cacheSavingsUsd)} on this run.`
+                : ''}
             </p>
             <div className="overflow-x-auto rounded-lg border border-border">
               <table className="w-full text-sm">
@@ -640,16 +705,20 @@ function CostPanel({ runId }: { runId: string }) {
                     <th className="px-3 py-2 font-medium">Stage</th>
                     <th className="px-3 py-2 font-medium">Provider</th>
                     <th className="px-3 py-2 font-medium">Basis</th>
+                    <th className="px-3 py-2 font-medium">Components</th>
                     <th className="px-3 py-2 text-right font-medium">Cost</th>
                   </tr>
                 </thead>
                 <tbody>
                   {cost.stages.map(l => (
-                    <tr key={l.stage} className="border-t border-border/60">
+                    <tr key={l.stage} className="border-t border-border/60 align-top">
                       <td className="px-3 py-2 font-medium">{l.stage.replace(/_/g, ' ')}</td>
                       <td className="px-3 py-2 text-muted-foreground">{l.provider ?? '—'}</td>
                       <td className="px-3 py-2">
                         <BasisChip basis={l.costBasis} />
+                      </td>
+                      <td className="px-3 py-2 text-xs text-muted-foreground">
+                        {componentSummary(l)}
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums">
                         {l.costBasis === 'estimated'
@@ -661,6 +730,21 @@ function CostPanel({ runId }: { runId: string }) {
                 </tbody>
               </table>
             </div>
+            {cost.repairOutcome && (
+              <p className="text-xs text-muted-foreground">
+                Targeted repair: {cost.repairOutcome.sectionsRepaired.length} section(s),{' '}
+                {cost.repairOutcome.claimsRepaired.length} claim(s) patched ·{' '}
+                {cost.repairOutcome.fullRegenerationUsed
+                  ? 'full regeneration'
+                  : 'no full regeneration'}{' '}
+                ·{' '}
+                {cost.repairOutcome.fullReverificationUsed
+                  ? 'full re-verification'
+                  : `${cost.repairOutcome.claimsReverified.length} claim(s) re-verified`}{' '}
+                · {money(cost.repairOutcome.repairCostUsd)} ·{' '}
+                {Math.round(cost.repairOutcome.repairDurationMs / 1000)}s.
+              </p>
+            )}
           </CardContent>
         </Card>
       )}
@@ -695,8 +779,7 @@ function VerdictChip({
 }: {
   verdict: 'pass' | 'pass_with_caveats' | 'repair_required' | 'reject';
 }) {
-  const variant =
-    verdict === 'pass' ? 'success' : verdict === 'reject' ? 'destructive' : 'warning';
+  const variant = verdict === 'pass' ? 'success' : verdict === 'reject' ? 'destructive' : 'warning';
   return (
     <Badge variant={variant} className="text-[10px]">
       {verdict.replace(/_/g, ' ')}

@@ -134,9 +134,16 @@ function anthropicSse(
   { inputTokens = 2000, outputTokens = 3000, stopReason = 'end_turn' } = {}
 ) {
   const events = [
-    { type: 'message_start', message: { usage: { input_tokens: inputTokens, cache_read_input_tokens: 0 } } },
+    {
+      type: 'message_start',
+      message: { usage: { input_tokens: inputTokens, cache_read_input_tokens: 0 } },
+    },
     { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text } },
-    { type: 'message_delta', delta: { stop_reason: stopReason }, usage: { output_tokens: outputTokens } },
+    {
+      type: 'message_delta',
+      delta: { stop_reason: stopReason },
+      usage: { output_tokens: outputTokens },
+    },
     { type: 'message_stop' },
   ];
   const payload = events.map(e => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join('');
@@ -327,7 +334,9 @@ describe('ResearchOrchestrator (real-only, four-provider architecture, HTTP mock
     expect(fake._reports).toHaveLength(1);
     // caveats are attached via the stored verification object
     const rep = fake._reports.at(-1)!;
-    expect((rep.verification as { factual?: { verdict?: string } }).factual?.verdict).toBe('pass_with_caveats');
+    expect((rep.verification as { factual?: { verdict?: string } }).factual?.verdict).toBe(
+      'pass_with_caveats'
+    );
   });
 
   it('provider failure: primary errors (no fallback) → failed stage → failed run → NO report', async () => {

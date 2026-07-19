@@ -5,7 +5,6 @@ import {
   buildProviderRegistry,
   buildResearchPlan,
   canonicalizeUrl,
-  computeActualCost,
   computeStageCost,
   estimateRunCost,
   geminiAdjudicatorModel,
@@ -21,6 +20,7 @@ import {
   type AsyncJobRef,
   type CanonicalBrief,
   type Claim,
+  type ClaimClassification,
   type EvidenceSource,
   type FactualVerification,
   type ProgressEvent,
@@ -28,6 +28,9 @@ import {
   type ProviderId,
   type ProviderReport,
   type ProviderRole,
+  type RepairDefect,
+  type RepairOutcome,
+  type RepairPatchSet,
   type ResearchMode,
   type StageKey,
   type StructuredReport,
@@ -35,7 +38,13 @@ import {
 
 import { logger } from '../../lib/logger.js';
 
-import { ProviderError, RealAdapter, renderMarkdown, type RoleRunOptions } from './providers.js';
+import {
+  ProviderError,
+  RealAdapter,
+  renderMarkdown,
+  type RoleRunOptions,
+  type VerificationScope,
+} from './providers.js';
 
 const PROGRESS_CAP = 200;
 const POLL_INTERVAL_MS = 15_000;
@@ -135,7 +144,8 @@ export class ResearchOrchestrator {
       await this.publish(runId, brief, assignments, roleEstimate, mode);
     } catch (err) {
       if (err instanceof PhaseSignal) {
-        if (err.kind === 'canceled') return logger.info({ msg: 'Run canceled mid-pipeline', runId });
+        if (err.kind === 'canceled')
+          return logger.info({ msg: 'Run canceled mid-pipeline', runId });
         await this.prisma.researchRun.update({
           where: { id: runId },
           data: { status: 'budget_exceeded', finishedAt: new Date() },
@@ -157,7 +167,9 @@ export class ResearchOrchestrator {
     runStageIfPending: (key: StageKey) => Promise<void>
   ): Promise<void> {
     const results = await Promise.allSettled(keys.map(k => runStageIfPending(k)));
-    const rejected = results.find(r => r.status === 'rejected') as PromiseRejectedResult | undefined;
+    const rejected = results.find(r => r.status === 'rejected') as
+      | PromiseRejectedResult
+      | undefined;
     if (rejected) throw rejected.reason;
   }
 
@@ -694,29 +706,20 @@ export class ResearchOrchestrator {
 
     // Bounded single repair cycle when repair is required (and not an outright reject).
     if (decision === 'repair_required') {
-      await this.appendProgress(
-        runId,
-        'publish',
-        'Repair required — running one bounded repair cycle'
-      );
-      const repairs = [
-        ...(factual?.requiredRepairs ?? []),
-        ...(adversarial?.requiredRepairs ?? []),
-        ...(adjudication?.requiredRepairs ?? []),
-      ];
-      structured = await this.repairReport(
+      const cycle = await this.runRepairCycle(
         runId,
         brief,
         assignments,
         structured,
-        repairs,
+        factual,
+        adversarial,
+        adjudication,
         roleEstimate,
         mode
       );
-      // Re-run both independent verifiers once against the repaired report.
-      const fa = await this.reverify(runId, brief, assignments, structured, roleEstimate, mode);
-      factual = fa.factual;
-      adversarial = fa.adversarial;
+      structured = cycle.structured;
+      factual = cycle.factual;
+      adversarial = cycle.adversarial;
       decision = gate(factual, adversarial, adjudication);
     }
 
@@ -779,39 +782,65 @@ export class ResearchOrchestrator {
     await this.appendProgress(runId, 'publish', 'Report published after independent verification');
   }
 
-  private async repairReport(
+  /**
+   * One bounded, TARGETED repair cycle:
+   *  1. gather structured defects from the verifiers,
+   *  2. ask Anthropic for a JSON PATCH SET (never a full regeneration),
+   *  3. apply patches deterministically to the report,
+   *  4. re-verify ONLY the changed claims/sections (both verifiers concurrently),
+   *     escalating to a full re-verification only when the change is systemic.
+   * Persists a RepairOutcome for auditability.
+   */
+  private async runRepairCycle(
     runId: string,
     brief: CanonicalBrief,
     assignments: ProviderAssignments,
     structured: StructuredReport,
-    repairs: string[],
+    factual: FactualVerification | null,
+    adversarial: AdversarialVerification | null,
+    adjudication: AdjudicationResult | null,
     roleEstimate: Map<ProviderRole, number>,
     mode: ResearchMode
-  ): Promise<StructuredReport> {
-    const evidence = await this.loadEvidence(runId);
-    const reports = await this.loadProviderReports(runId);
-    const { adapter, opts } = this.makeAdapter(assignments.synthesis, 'synthesis', mode);
-    const note = `Independent verifiers required these repairs (fix ONLY these, keep everything else): ${repairs.slice(0, 20).join(' | ')}`;
-    const result = await adapter.runSynthesis(
-      {
-        brief,
-        runId,
-        plan: null,
-        reports,
-        claims: evidence.claims,
-        sources: evidence.sources,
-        contradictionsNote: note,
-      },
-      opts
+  ): Promise<{
+    structured: StructuredReport;
+    factual: FactualVerification | null;
+    adversarial: AdversarialVerification | null;
+  }> {
+    const startedAt = Date.now();
+    let repairCostUsd = 0;
+    const defects = gatherDefects(factual, adversarial, adjudication);
+    await this.appendProgress(
+      runId,
+      'publish',
+      `Repair required — targeted patch of ${defects.length} defect(s)`
     );
-    const cost =
-      computeStageCost(result.provider, result.usage, roleEstimate.get('synthesis') ?? 0).usd;
-    await this.addCost(runId, cost);
-    const repaired = {
-      ...result.structured,
-      sources: mergeSources(evidence.sources, result.structured.sources),
+
+    // 1-3. Patch set from Anthropic, applied deterministically.
+    const { adapter, opts } = this.makeAdapter(assignments.synthesis, 'synthesis', mode);
+    let patchSet: RepairPatchSet = {
+      sectionPatches: [],
+      claimPatches: [],
+      verdictPatch: null,
+      reasonForVerdictChange: null,
     };
-    // Persist the repaired draft as a new synthesis output revision.
+    let fullRegenerationUsed = false;
+    try {
+      const repair = await adapter.runRepairPatches(brief, structured, defects, opts);
+      patchSet = repair.patchSet;
+      repairCostUsd += computeStageCost(repair.provider, repair.usage, 0).usd;
+    } catch (e) {
+      // A patch failure must not sink the run — fall back to leaving the report
+      // unchanged (the gate below will still reject if defects were blocking).
+      logger.warn({
+        msg: 'Targeted repair patch failed; leaving report unchanged',
+        runId,
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+    const applied = applyPatchSet(structured, patchSet);
+    const repaired = applied.next;
+
+    // Persist the repaired draft as a synthesis revision (keeps provenance).
     const synthStage = await this.prisma.researchStage.findFirst({
       where: { runId, stageKey: 'synthesis' },
     });
@@ -820,46 +849,84 @@ export class ResearchOrchestrator {
         output: {
           structured: repaired,
           markdown: renderMarkdown(repaired),
-          provider: result.provider,
-          model: result.model,
-          usage: result.usage,
+          provider: assignments.synthesis,
           repaired: true,
+          patchSet,
         } as unknown as Prisma.InputJsonValue,
       });
-    return repaired;
-  }
 
-  private async reverify(
-    runId: string,
-    brief: CanonicalBrief,
-    assignments: ProviderAssignments,
-    structured: StructuredReport,
-    roleEstimate: Map<ProviderRole, number>,
-    mode: ResearchMode
-  ): Promise<{ factual: FactualVerification; adversarial: AdversarialVerification }> {
+    // 4. Decide re-verification breadth, then run both verifiers concurrently.
+    const { full, scope } = decideReverifyScope(
+      structured,
+      applied.sectionsRepaired,
+      applied.claimsRepaired,
+      applied.verdictChanged
+    );
+    await this.appendProgress(
+      runId,
+      'publish',
+      full
+        ? 'Systemic change — full independent re-verification'
+        : `Targeted re-verification of ${scope.changedSections.length} section(s) / ${scope.changedClaims.length} claim(s)`
+    );
     const f = this.makeAdapter(assignments.factual_verifier, 'factual_verifier', mode);
     const a = this.makeAdapter(
       assignments.adversarial_verifier,
       'adversarial_verifier',
       'full_due_diligence'
     );
-    const fr = await f.adapter.runFactualVerification(brief, structured, f.opts);
-    const ar = await a.adapter.runAdversarialVerification(brief, structured, a.opts);
-    await this.addCost(
-      runId,
-      (computeActualCost(fr.provider, fr.usage) ?? 0) +
-        (computeActualCost(ar.provider, ar.usage) ?? 0)
-    );
-    // Update the verifier stage outputs to reflect re-verification.
+    const reScope = full ? undefined : scope;
+    const [frRes, arRes] = await Promise.allSettled([
+      f.adapter.runFactualVerification(brief, repaired, f.opts, reScope),
+      a.adapter.runAdversarialVerification(brief, repaired, a.opts, reScope),
+    ]);
+    let nextFactual = factual;
+    let nextAdversarial = adversarial;
+    if (frRes.status === 'fulfilled') {
+      nextFactual = frRes.value.result;
+      repairCostUsd += computeStageCost(frRes.value.provider, frRes.value.usage, 0).usd;
+    }
+    if (arRes.status === 'fulfilled') {
+      nextAdversarial = arRes.value.result;
+      repairCostUsd += computeStageCost(arRes.value.provider, arRes.value.usage, 0).usd;
+    }
+
+    // Update verifier stage outputs to reflect re-verification.
     const fs = await this.prisma.researchStage.findFirst({
       where: { runId, stageKey: 'verify_factual' },
     });
     const as = await this.prisma.researchStage.findFirst({
       where: { runId, stageKey: 'verify_adversarial' },
     });
-    if (fs) await this.markStage(fs.id, { output: fr.result as unknown as Prisma.InputJsonValue });
-    if (as) await this.markStage(as.id, { output: ar.result as unknown as Prisma.InputJsonValue });
-    return { factual: fr.result, adversarial: ar.result };
+    if (fs && nextFactual)
+      await this.markStage(fs.id, { output: nextFactual as unknown as Prisma.InputJsonValue });
+    if (as && nextAdversarial)
+      await this.markStage(as.id, {
+        output: nextAdversarial as unknown as Prisma.InputJsonValue,
+      });
+
+    await this.addCost(runId, repairCostUsd);
+
+    const outcome: RepairOutcome = {
+      sectionsRepaired: applied.sectionsRepaired,
+      claimsRepaired: applied.claimsRepaired,
+      claimsReverified: full ? repaired.evidenceLedger.map(c => c.claimId) : scope.changedClaims,
+      fullRegenerationUsed,
+      fullReverificationUsed: full,
+      repairDurationMs: Date.now() - startedAt,
+      repairCostUsd: Math.round(repairCostUsd * 100) / 100,
+    };
+    const publishStage = await this.prisma.researchStage.findFirst({
+      where: { runId, stageKey: 'publish' },
+    });
+    if (publishStage) {
+      const prev = (publishStage.output as Record<string, unknown> | null) ?? {};
+      await this.markStage(publishStage.id, {
+        output: { ...prev, repairOutcome: outcome } as unknown as Prisma.InputJsonValue,
+      });
+    }
+    void fullRegenerationUsed;
+    return { structured: repaired, factual: nextFactual, adversarial: nextAdversarial };
   }
 
   private async rejectRun(runId: string, reason: string): Promise<void> {
@@ -1108,6 +1175,146 @@ function mergeSources(a: EvidenceSource[], b: EvidenceSource[]): EvidenceSource[
     if (!seen.has(key)) seen.set(key, s);
   }
   return Array.from(seen.values());
+}
+
+// ----- Targeted repair helpers (pure, unit-tested) -------------------------
+
+/** Collect structured verifier defects; synthesize from legacy string arrays
+ *  when a verifier only populated requiredRepairs/blockingDefects. */
+export function gatherDefects(
+  f: FactualVerification | null,
+  a: AdversarialVerification | null,
+  adj: AdjudicationResult | null
+): RepairDefect[] {
+  const out: RepairDefect[] = [];
+  for (const d of f?.defects ?? []) out.push(d);
+  for (const d of a?.defects ?? []) out.push(d);
+  if (out.length) {
+    const byId = new Map<string, RepairDefect>();
+    let i = 0;
+    for (const d of out) byId.set(d.defectId || `D${++i}`, d);
+    return Array.from(byId.values());
+  }
+  // Fallback so patch-based repair still functions without structured defects.
+  let n = 0;
+  const fromStrings = (items: string[] | undefined, severity: RepairDefect['severity']) =>
+    (items ?? []).forEach(s =>
+      out.push({
+        defectId: `D${++n}`,
+        severity,
+        problem: s,
+        requiredChange: s,
+        affectedSourceIds: [],
+        recommendationChanging: severity === 'blocking',
+      })
+    );
+  fromStrings(f?.blockingDefects, 'blocking');
+  fromStrings(a?.blockingDefects, 'blocking');
+  fromStrings(adj?.blockingDefects, 'blocking');
+  fromStrings(f?.requiredRepairs, 'major');
+  fromStrings(a?.requiredRepairs, 'major');
+  fromStrings(adj?.requiredRepairs, 'major');
+  return out;
+}
+
+/** Apply a repair patch set deterministically — only patched sections/claims
+ *  change; everything else is preserved verbatim. */
+export function applyPatchSet(
+  r: StructuredReport,
+  patchSet: RepairPatchSet
+): {
+  next: StructuredReport;
+  sectionsRepaired: string[];
+  claimsRepaired: string[];
+  verdictChanged: boolean;
+} {
+  const sectionsRepaired: string[] = [];
+  const claimsRepaired: string[] = [];
+
+  const sections = r.sections.map(s => ({ ...s }));
+  for (const p of patchSet.sectionPatches ?? []) {
+    const idx = sections.findIndex(s => s.key === p.key);
+    if (idx >= 0) {
+      sections[idx] = {
+        ...sections[idx],
+        ...(p.title ? { title: p.title } : {}),
+        markdown: p.markdown,
+      };
+    } else {
+      sections.push({ key: p.key, title: p.title ?? p.key, markdown: p.markdown });
+    }
+    sectionsRepaired.push(p.key);
+  }
+
+  const evidenceLedger = r.evidenceLedger.map(c => ({ ...c }));
+  for (const p of patchSet.claimPatches ?? []) {
+    const idx = evidenceLedger.findIndex(c => c.claimId === p.claimId);
+    if (idx < 0) continue; // never invent a claim during repair
+    if (p.remove) {
+      evidenceLedger.splice(idx, 1);
+      claimsRepaired.push(p.claimId);
+      continue;
+    }
+    const cur = evidenceLedger[idx];
+    evidenceLedger[idx] = {
+      ...cur,
+      ...(p.text != null ? { text: p.text } : {}),
+      ...(p.classification != null
+        ? { classification: p.classification as ClaimClassification }
+        : {}),
+      ...(p.confidence != null ? { confidence: p.confidence } : {}),
+      ...(p.materiality != null ? { materiality: p.materiality } : {}),
+      ...(p.supportingSourceIds != null ? { supportingSourceIds: p.supportingSourceIds } : {}),
+      ...(p.contradictingSourceIds != null
+        ? { contradictingSourceIds: p.contradictingSourceIds }
+        : {}),
+      ...(p.notes != null ? { notes: p.notes } : {}),
+    };
+    claimsRepaired.push(p.claimId);
+  }
+
+  let executiveVerdict = r.executiveVerdict;
+  let verdictChanged = false;
+  if (patchSet.verdictPatch) {
+    const vp = patchSet.verdictPatch;
+    const clean = Object.fromEntries(Object.entries(vp).filter(([, v]) => v != null)) as Partial<
+      typeof executiveVerdict
+    >;
+    const merged = { ...executiveVerdict, ...clean };
+    verdictChanged =
+      merged.verdict !== executiveVerdict.verdict ||
+      merged.overallScore !== executiveVerdict.overallScore ||
+      merged.bestBusinessModel !== executiveVerdict.bestBusinessModel;
+    executiveVerdict = merged;
+  }
+
+  return {
+    next: { ...r, sections, evidenceLedger, executiveVerdict },
+    sectionsRepaired,
+    claimsRepaired,
+    verdictChanged,
+  };
+}
+
+const ECONOMICS_SECTION_RE = /econom|business.?model|thesis|verdict|recommend/i;
+
+/** Full re-verification is warranted only when a repair is SYSTEMIC: the verdict
+ *  changed, >25% of sections changed, or a core economics/thesis section changed.
+ *  Otherwise re-verify only the changed sections/claims. */
+export function decideReverifyScope(
+  original: StructuredReport,
+  sectionsRepaired: string[],
+  claimsRepaired: string[],
+  verdictChanged: boolean
+): { full: boolean; scope: VerificationScope } {
+  const totalSections = Math.max(1, original.sections.length);
+  const changedRatio = sectionsRepaired.length / totalSections;
+  const coreSectionChanged = sectionsRepaired.some(k => {
+    const sec = original.sections.find(s => s.key === k);
+    return ECONOMICS_SECTION_RE.test(k) || (sec ? ECONOMICS_SECTION_RE.test(sec.title) : false);
+  });
+  const full = verdictChanged || changedRatio > 0.25 || coreSectionChanged;
+  return { full, scope: { changedSections: sectionsRepaired, changedClaims: claimsRepaired } };
 }
 
 function sleep(ms: number): Promise<void> {
