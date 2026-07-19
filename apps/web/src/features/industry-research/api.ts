@@ -129,6 +129,11 @@ export const researchApi = {
 
   cancel: (id: string) => unwrap<{ status: string }>(apiClient.post(`${BASE}/runs/${id}/cancel`)),
 
+  raiseBudget: (id: string, maxBudgetUsd: number) =>
+    unwrap<{ maxBudgetUsd: number; resumed: boolean }>(
+      apiClient.post(`${BASE}/runs/${id}/budget`, { maxBudgetUsd })
+    ),
+
   rerunStage: (id: string, stageKey: string) =>
     unwrap<{ status: string }>(apiClient.post(`${BASE}/runs/${id}/rerun-stage`, { stageKey })),
 

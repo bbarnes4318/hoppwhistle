@@ -1,19 +1,31 @@
 'use client';
 
-import type {
-  CostEstimate,
-  ModeDefinition,
-  ProviderAssignments,
-  ResearchBriefInput,
-  ResearchMode,
+import {
+  CAPABILITY_CATEGORIES,
+  type CostEstimate,
+  type ModeDefinition,
+  type ProviderAssignments,
+  type ResearchBriefInput,
+  type ResearchMode,
+  type TeamProfileSummary,
 } from '@hopwhistle/shared';
-import { AlertTriangle, ChevronDown, Loader2, Save, Telescope } from 'lucide-react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  ChevronDown,
+  Gauge,
+  Loader2,
+  Save,
+  Sparkles,
+  Telescope,
+  Wand2,
+} from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -26,15 +38,66 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
+import { cn } from '@/lib/utils';
 
 import { researchApi, type ResearchConfig } from './api';
 import { CapabilityPicker } from './CapabilityPicker';
 
-const RISK: Array<{ value: string; label: string }> = [
-  { value: 'low', label: 'Low' },
-  { value: 'moderate', label: 'Moderate' },
-  { value: 'high', label: 'High' },
+// Human labels for each research depth — provider/model names deliberately hidden.
+const MODE_COPY: Record<ResearchMode, { tagline: string; body: string; recommended?: boolean }> = {
+  rapid_scan: {
+    tagline: 'Fast initial assessment',
+    body: 'Best for quickly deciding whether a market deserves deeper investigation.',
+  },
+  full_due_diligence: {
+    tagline: 'The complete decision',
+    body: 'Independent market research, operator intelligence, economics, risks, opportunities, and cross-checked verification — everything you need to decide.',
+    recommended: true,
+  },
+  forensic_max: {
+    tagline: 'Maximum investigation',
+    body: 'For major commitments, investments, or highly regulated markets. The deepest possible research with mandatory adjudication.',
+  },
+};
+
+const INDUSTRY_EXAMPLES = [
+  'Commercial HVAC service',
+  'Mobile car detailing',
+  'Pet insurance',
+  'Restaurant POS software',
+  'Residential solar installation',
 ];
+const GEO_SUGGESTIONS = [
+  'United States',
+  'Austin, Texas, USA',
+  'Southern California, USA',
+  'United Kingdom',
+  'Canada',
+  'Australia',
+];
+
+// Best-effort natural-language → capability detection (bidirectional word match).
+// The user always edits the result, so this only needs to be helpful, not perfect.
+function detectCapabilities(text: string): string[] {
+  const t = ` ${text.toLowerCase()} `;
+  const textWords = new Set(t.split(/[^a-z0-9]+/).filter(w => w.length >= 4));
+  const hits = new Set<string>();
+  for (const cat of CAPABILITY_CATEGORIES) {
+    for (const item of cat.items) {
+      const label = item.label.toLowerCase();
+      if (t.includes(` ${label} `)) {
+        hits.add(item.id);
+        continue;
+      }
+      const labelWords = label.split(/[^a-z0-9]+/).filter(w => w.length >= 4);
+      const overlap = labelWords.some(
+        lw => textWords.has(lw) || [...textWords].some(tw => lw.includes(tw) || tw.includes(lw))
+      );
+      if (overlap) hits.add(item.id);
+    }
+  }
+  return [...hits];
+}
 
 const emptyBrief: ResearchBriefInput = {
   industry: '',
@@ -48,7 +111,7 @@ const emptyBrief: ResearchBriefInput = {
   constraints: '',
   capabilities: [],
   mode: 'full_due_diligence',
-  maxBudgetUsd: 40,
+  maxBudgetUsd: 7,
   includeSocial: true,
   includeLegal: true,
   includeTech: true,
@@ -59,6 +122,8 @@ const emptyBrief: ResearchBriefInput = {
   language: 'English',
 };
 
+const STEPS = ['The opportunity', 'Your advantages', 'Research depth', 'Review & launch'];
+
 export function ResearchConfigForm() {
   const router = useRouter();
   const { toast } = useToast();
@@ -67,10 +132,14 @@ export function ResearchConfigForm() {
   const [brief, setBrief] = useState<ResearchBriefInput>(emptyBrief);
   const [estimate, setEstimate] = useState<CostEstimate | null>(null);
   const [assignments, setAssignments] = useState<ProviderAssignments | null>(null);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [step, setStep] = useState(0);
+  const [nlText, setNlText] = useState('');
+  const [profiles, setProfiles] = useState<TeamProfileSummary[]>([]);
   const [profileName, setProfileName] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
+  const [budgetTouched, setBudgetTouched] = useState(false);
+  const [customizeOpen, setCustomizeOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const set = useCallback(
     <K extends keyof ResearchBriefInput>(key: K, value: ResearchBriefInput[K]) => {
@@ -86,9 +155,14 @@ export function ResearchConfigForm() {
       .catch(e =>
         toast({ title: 'Failed to load config', description: String(e), variant: 'destructive' })
       );
+    researchApi
+      .listProfiles()
+      .then(setProfiles)
+      .catch(() => undefined);
   }, [toast]);
 
-  // Re-estimate when mode changes.
+  // Re-estimate when the depth changes; keep a mode-appropriate default budget
+  // unless the user has explicitly set one.
   useEffect(() => {
     let active = true;
     researchApi
@@ -97,8 +171,6 @@ export function ResearchConfigForm() {
         if (!active) return;
         setEstimate(r.estimate);
         setAssignments(r.assignments);
-        // Default the budget to the mode default the first time.
-        setBrief(b => ({ ...b, maxBudgetUsd: b.maxBudgetUsd || Math.ceil(r.estimate.highUsd) }));
       })
       .catch(() => undefined);
     return () => {
@@ -111,23 +183,28 @@ export function ResearchConfigForm() {
     [config, brief.mode]
   );
 
-  const assumptions = useMemo(() => {
-    const out: string[] = [];
-    if (!brief.geography?.trim()) out.push('Geographic market → United States');
-    if (!brief.customer?.trim()) out.push('Customer → analyze multiple personas');
-    if (!brief.businessModel?.trim()) out.push('Business model → open to any model');
-    if (!brief.startingCapital?.trim()) out.push('Starting capital → under $25,000');
-    if (!brief.timeToFirstRevenue?.trim()) out.push('Time to first revenue → 90 days');
-    if (!brief.riskTolerance) out.push('Risk tolerance → moderate');
-    if (brief.capabilities.length === 0)
-      out.push('Capabilities → generalist software + sales team');
-    return out;
-  }, [brief]);
+  // Mode-specific default caps: Rapid $1.50, Full DD $7, Forensic requires explicit.
+  const setMode = (mode: ResearchMode) => {
+    setBrief(b => {
+      const next = { ...b, mode };
+      if (!budgetTouched) {
+        next.maxBudgetUsd = mode === 'rapid_scan' ? 1.5 : mode === 'full_due_diligence' ? 7 : 0;
+      }
+      return next;
+    });
+  };
 
-  const budgetWarning = estimate ? estimate.highUsd > brief.maxBudgetUsd : false;
+  const forensicNeedsBudget = brief.mode === 'forensic_max' && !(brief.maxBudgetUsd > 0);
 
-  // Real preflight: which required roles for the selected mode lack a usable,
-  // key-bearing provider. The Start button is disabled until these are resolved.
+  // Expected (mid-weighted) range vs the hard authorized maximum.
+  const expected = useMemo(() => {
+    if (!estimate) return null;
+    const lo = estimate.lowUsd;
+    const hi = estimate.highUsd;
+    const mid = (lo + hi) / 2;
+    return { low: Math.max(lo, mid * 0.75), high: Math.min(hi, mid * 1.15) };
+  }, [estimate]);
+
   const missingProviders = useMemo(() => {
     if (!config || !modeDef || !assignments) return [] as string[];
     const byId = new Map(config.providers.map(p => [p.id, p]));
@@ -135,35 +212,36 @@ export function ResearchConfigForm() {
     for (const role of modeDef.roles) {
       const providerId = (assignments as Record<string, string>)[role];
       const p = byId.get(providerId);
-      if (!p || !p.enabled || !p.hasKey) {
-        const label = config.roleLabels[role as never] ?? role;
-        out.push(`${label}: ${p ? p.label : providerId} not configured`);
-      }
+      if (!p || !p.enabled || !p.hasKey) out.push(role);
     }
     return out;
   }, [config, modeDef, assignments]);
 
-  const submit = async () => {
-    if (brief.industry.trim().length < 2) {
-      toast({ title: 'Industry is required', variant: 'destructive' });
+  const applyNl = () => {
+    const detected = detectCapabilities(nlText);
+    if (detected.length === 0) {
+      toast({
+        title: 'Nothing detected yet',
+        description: 'Try naming skills, assets, or industries you know. You can also pick below.',
+      });
       return;
     }
-    setSubmitting(true);
-    try {
-      const res = await researchApi.createRun(brief);
-      toast({ title: 'Research started', description: 'Your run is queued.' });
-      router.push(`/tools/industry-research/${res.id}`);
-    } catch (e) {
-      toast({ title: 'Failed to start research', description: String(e), variant: 'destructive' });
-      setSubmitting(false);
-    }
+    const merged = Array.from(new Set([...brief.capabilities, ...detected]));
+    set('capabilities', merged);
+    toast({ title: `Added ${detected.length} capabilities`, description: 'Edit them below.' });
+  };
+
+  const loadProfile = (p: TeamProfileSummary) => {
+    set('capabilities', Array.from(new Set([...brief.capabilities, ...p.capabilities])));
+    toast({ title: `Loaded "${p.name}"` });
   };
 
   const saveProfile = async () => {
     if (!profileName.trim() || brief.capabilities.length === 0) return;
     setSavingProfile(true);
     try {
-      await researchApi.saveProfile(profileName.trim(), brief.capabilities);
+      const p = await researchApi.saveProfile(profileName.trim(), brief.capabilities);
+      setProfiles(prev => [p, ...prev]);
       toast({ title: 'Team profile saved' });
       setProfileName('');
     } catch (e) {
@@ -173,417 +251,593 @@ export function ResearchConfigForm() {
     }
   };
 
+  const submit = async () => {
+    if (brief.industry.trim().length < 2) {
+      setStep(0);
+      toast({ title: 'Tell us the market first', variant: 'destructive' });
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const res = await researchApi.createRun(brief);
+      toast({ title: 'Investigation started', description: 'Building your evidence now.' });
+      router.push(`/tools/industry-research/${res.id}`);
+    } catch (e) {
+      toast({
+        title: 'Could not start',
+        description: String(e),
+        variant: 'destructive',
+      });
+      setSubmitting(false);
+    }
+  };
+
+  const canNext =
+    step === 0 ? brief.industry.trim().length >= 2 : step === 2 ? !forensicNeedsBudget : true;
+
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-      {/* Left: form */}
-      <div className="space-y-6">
-        {missingProviders.length > 0 && (
-          <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-            <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
-            <div>
-              <strong>Real providers required.</strong> This mode cannot run until every required
-              provider is configured with an API key:
-              <ul className="mt-1 list-disc pl-5">
-                {missingProviders.map(m => (
-                  <li key={m}>{m}</li>
-                ))}
-              </ul>
+    <div className="mx-auto max-w-3xl space-y-6">
+      <Stepper step={step} onJump={setStep} industryDone={brief.industry.trim().length >= 2} />
+
+      {missingProviders.length > 0 && step >= 2 && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          This depth can’t run yet — the research engines aren’t fully configured. An administrator
+          needs to finish setup before you launch.
+        </div>
+      )}
+
+      {/* STEP 1 — The opportunity */}
+      {step === 0 && (
+        <StepCard
+          title="What market are you considering?"
+          subtitle="Name the industry or business you’re thinking about entering."
+        >
+          <div>
+            <Input
+              autoFocus
+              value={brief.industry}
+              onChange={e => set('industry', e.target.value)}
+              placeholder="e.g. Mobile car detailing"
+              className="h-14 text-lg"
+              aria-label="Market or industry"
+            />
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {INDUSTRY_EXAMPLES.map(ex => (
+                <Chip key={ex} onClick={() => set('industry', ex)}>
+                  {ex}
+                </Chip>
+              ))}
             </div>
           </div>
-        )}
 
-        {/* Research target */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Research target</CardTitle>
-            <CardDescription>
-              What should we investigate? Blank fields become explicit assumptions.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
-            <Field label="Industry" required className="sm:col-span-2">
-              <Input
-                value={brief.industry}
-                onChange={e => set('industry', e.target.value)}
-                placeholder="e.g. Commercial HVAC service, Pet insurance, Restaurant POS…"
-              />
-            </Field>
-            <Field label="Geographic market">
-              <Input
-                value={brief.geography}
-                onChange={e => set('geography', e.target.value)}
-                placeholder="United States"
-              />
-            </Field>
-            <Field label="Potential customer">
-              <Input
-                value={brief.customer}
-                onChange={e => set('customer', e.target.value)}
-                placeholder="Owner-operators, SMBs…"
-              />
-            </Field>
-            <Field label="Potential business model">
-              <Input
-                value={brief.businessModel}
-                onChange={e => set('businessModel', e.target.value)}
-                placeholder="Open to any model"
-              />
-            </Field>
-            <Field label="Available starting capital">
-              <Input
-                value={brief.startingCapital}
-                onChange={e => set('startingCapital', e.target.value)}
-                placeholder="$25,000"
-              />
-            </Field>
-            <Field label="Time to first revenue">
-              <Input
-                value={brief.timeToFirstRevenue}
-                onChange={e => set('timeToFirstRevenue', e.target.value)}
-                placeholder="90 days"
-              />
-            </Field>
-            <Field label="Time to meaningful profit">
-              <Input
-                value={brief.timeToProfit}
-                onChange={e => set('timeToProfit', e.target.value)}
-                placeholder="12 months"
-              />
-            </Field>
-            <Field label="Risk tolerance">
-              <Select
-                value={brief.riskTolerance ?? ''}
-                onValueChange={v => set('riskTolerance', v as ResearchBriefInput['riskTolerance'])}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Moderate" />
-                </SelectTrigger>
-                <SelectContent>
-                  {RISK.map(r => (
-                    <SelectItem key={r.value} value={r.value}>
-                      {r.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="Additional constraints or advantages" className="sm:col-span-2">
-              <Textarea
-                value={brief.constraints}
-                onChange={e => set('constraints', e.target.value)}
-                placeholder="Existing call center, carrier relationships, offshore team, licenses…"
-                rows={3}
-              />
-            </Field>
-          </CardContent>
-        </Card>
-
-        {/* Team capabilities */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Team capabilities</CardTitle>
-            <CardDescription>
-              Select everything that applies; add custom capabilities freely.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <CapabilityPicker
-              categories={config?.capabilities}
-              selected={brief.capabilities}
-              onChange={next => set('capabilities', next)}
+          <FieldBlock label="Where do you want to operate?" hint="Defaults to United States.">
+            <Input
+              value={brief.geography}
+              onChange={e => set('geography', e.target.value)}
+              placeholder="United States"
             />
-            <div className="flex items-center gap-2 border-t border-border pt-3">
-              <Input
-                value={profileName}
-                onChange={e => setProfileName(e.target.value)}
-                placeholder="Save these as a reusable team profile…"
-                className="max-w-xs"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={saveProfile}
-                disabled={savingProfile || !profileName.trim() || brief.capabilities.length === 0}
-              >
-                <Save className="mr-1 h-4 w-4" /> Save profile
-              </Button>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {GEO_SUGGESTIONS.map(g => (
+                <Chip key={g} onClick={() => set('geography', g)}>
+                  {g}
+                </Chip>
+              ))}
             </div>
-          </CardContent>
-        </Card>
+          </FieldBlock>
 
-        {/* Research mode */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Research depth</CardTitle>
-            <CardDescription>
-              Deeper modes use more providers, take longer, and cost more.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {config?.modes.map(m => (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() => set('mode', m.id as ResearchMode)}
-                className={`flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors ${
-                  brief.mode === m.id
-                    ? 'border-primary bg-primary/5'
-                    : 'border-border hover:border-primary/40'
-                }`}
-              >
-                <div
-                  className={`mt-0.5 h-4 w-4 flex-shrink-0 rounded-full border-2 ${
-                    brief.mode === m.id ? 'border-primary bg-primary' : 'border-muted-foreground/40'
-                  }`}
-                />
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold">{m.label}</span>
-                    <Badge variant="outline" className="text-[10px]">
-                      {m.expectedRuntimeMin[0]}–{m.expectedRuntimeMin[1]} min
-                    </Badge>
-                  </div>
-                  <p className="mt-0.5 text-xs text-muted-foreground">{m.description}</p>
-                </div>
-              </button>
-            ))}
-          </CardContent>
-        </Card>
+          <FieldBlock
+            label="Who do you think the customer might be?"
+            hint="Optional — leave blank and we’ll analyze several."
+          >
+            <Input
+              value={brief.customer}
+              onChange={e => set('customer', e.target.value)}
+              placeholder="e.g. Busy suburban homeowners"
+            />
+          </FieldBlock>
+        </StepCard>
+      )}
 
-        {/* Advanced controls */}
-        <Card>
-          <CardHeader className="cursor-pointer" onClick={() => setAdvancedOpen(o => !o)}>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Advanced controls</CardTitle>
-                <CardDescription>
-                  Budget, runtime, source targets, domains, and output.
-                </CardDescription>
-              </div>
-              <ChevronDown
-                className={`h-5 w-5 transition-transform ${advancedOpen ? 'rotate-180' : ''}`}
-              />
-            </div>
-          </CardHeader>
-          {advancedOpen && (
-            <CardContent className="grid gap-4 sm:grid-cols-2">
-              <Field label="Maximum budget (USD)">
-                <Input
-                  type="number"
-                  min={1}
-                  value={brief.maxBudgetUsd}
-                  onChange={e => set('maxBudgetUsd', Number(e.target.value))}
-                />
-              </Field>
-              <Field label="Maximum runtime (minutes)">
-                <Input
-                  type="number"
-                  min={1}
-                  value={brief.maxRuntimeMin ?? ''}
-                  onChange={e =>
-                    set('maxRuntimeMin', e.target.value ? Number(e.target.value) : undefined)
-                  }
-                  placeholder={modeDef ? String(modeDef.expectedRuntimeMin[1]) : ''}
-                />
-              </Field>
-              <Field label="Minimum sources">
-                <Input
-                  type="number"
-                  min={1}
-                  value={brief.minSources ?? ''}
-                  onChange={e =>
-                    set('minSources', e.target.value ? Number(e.target.value) : undefined)
-                  }
-                  placeholder={modeDef ? String(modeDef.sourceTargets.totalSources) : ''}
-                />
-              </Field>
-              <Field label="Output detail">
-                <Select
-                  value={brief.outputDetail ?? 'detailed'}
-                  onValueChange={v => set('outputDetail', v as ResearchBriefInput['outputDetail'])}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="standard">Standard</SelectItem>
-                    <SelectItem value="detailed">Detailed</SelectItem>
-                    <SelectItem value="exhaustive">Exhaustive</SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field
-                label="Preferred / required domains (comma-separated)"
-                className="sm:col-span-2"
-              >
-                <Input
-                  value={(brief.includeDomains ?? []).join(', ')}
-                  onChange={e => set('includeDomains', splitCsv(e.target.value))}
-                  placeholder="sec.gov, g2.com"
-                />
-              </Field>
-              <Field label="Excluded domains (comma-separated)" className="sm:col-span-2">
-                <Input
-                  value={(brief.excludeDomains ?? []).join(', ')}
-                  onChange={e => set('excludeDomains', splitCsv(e.target.value))}
-                  placeholder="pinterest.com"
-                />
-              </Field>
-              <div className="sm:col-span-2 grid gap-2">
-                <ToggleRow
-                  label="Include social / practitioner evidence"
-                  value={!!brief.includeSocial}
-                  onChange={v => set('includeSocial', v)}
-                />
-                <ToggleRow
-                  label="Include legal / regulatory analysis"
-                  value={!!brief.includeLegal}
-                  onChange={v => set('includeLegal', v)}
-                />
-                <ToggleRow
-                  label="Include technology / AI opportunities"
-                  value={!!brief.includeTech}
-                  onChange={v => set('includeTech', v)}
-                />
-                <ToggleRow
-                  label="Include acquisition targets"
-                  value={!!brief.includeAcquisitions}
-                  onChange={v => set('includeAcquisitions', v)}
-                />
-                <ToggleRow
-                  label="Include first-customer & 90-day plans"
-                  value={!!brief.includeFirstCustomerPlan}
-                  onChange={v => set('includeFirstCustomerPlan', v)}
-                />
-              </div>
-            </CardContent>
-          )}
-        </Card>
-      </div>
-
-      {/* Right: pre-run review (sticky) */}
-      <div className="lg:sticky lg:top-4 lg:self-start">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Telescope className="h-5 w-5 text-primary" /> Pre-run review
-            </CardTitle>
-            <CardDescription>Confirm scope before launching.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4 text-sm">
-            <Review label="Industry" value={brief.industry || '—'} />
-            <Review label="Market" value={brief.geography || 'United States (assumed)'} />
-            <Review label="Mode" value={modeDef?.label ?? brief.mode} />
-
-            <div>
-              <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Estimated cost
-              </div>
-              {estimate ? (
-                <div className="flex items-baseline gap-2">
-                  <span className="text-lg font-semibold">
-                    ${estimate.lowUsd.toFixed(2)}–${estimate.highUsd.toFixed(2)}
-                  </span>
-                  <span className="text-xs text-muted-foreground">{estimate.currency}</span>
-                </div>
-              ) : (
-                <span className="text-muted-foreground">Calculating…</span>
-              )}
-              {budgetWarning && (
-                <div className="mt-1 flex items-center gap-1 text-xs text-amber-500">
-                  <AlertTriangle className="h-3 w-3" /> High estimate exceeds your $
-                  {brief.maxBudgetUsd} cap.
-                </div>
-              )}
-            </div>
-
-            {assignments && (
-              <div>
-                <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Providers
-                </div>
-                <div className="space-y-1">
-                  {(Object.entries(assignments) as Array<[string, string]>)
-                    .filter(([role]) => modeDef?.roles.includes(role as never))
-                    .map(([role, provider]) => {
-                      const p = config?.providers.find(x => x.id === provider);
-                      const configured = Boolean(p?.enabled && p?.hasKey);
-                      return (
-                        <div key={role} className="flex items-center justify-between gap-2">
-                          <span className="text-muted-foreground">
-                            {config?.roleLabels[role as never] ?? role}
-                          </span>
-                          <Badge
-                            variant={configured ? 'secondary' : 'destructive'}
-                            className="text-[10px]"
-                            title={p?.model}
-                          >
-                            {provider}
-                            {p?.model ? ` · ${p.model}` : ''}
-                          </Badge>
-                        </div>
-                      );
-                    })}
-                </div>
-              </div>
-            )}
-
-            {assumptions.length > 0 && (
-              <div>
-                <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Assumptions ({assumptions.length})
-                </div>
-                <ul className="space-y-0.5 text-xs text-muted-foreground">
-                  {assumptions.map(a => (
-                    <li key={a}>• {a}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
+      {/* STEP 2 — Your advantages */}
+      {step === 1 && (
+        <StepCard
+          title="What can you bring to this market?"
+          subtitle="Your skills, experience, assets, or relationships. This shapes the entry strategy."
+        >
+          <FieldBlock
+            label="Describe it in your own words"
+            hint="We’ll turn this into capabilities you can edit."
+          >
+            <Textarea
+              value={nlText}
+              onChange={e => setNlText(e.target.value)}
+              rows={3}
+              placeholder="e.g. We’re full-stack developers, strong with AI, own a call center, and have insurance and telephony experience."
+            />
             <Button
-              className="w-full"
-              onClick={submit}
-              disabled={
-                submitting || brief.industry.trim().length < 2 || missingProviders.length > 0
-              }
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-2"
+              onClick={applyNl}
+              disabled={!nlText.trim()}
             >
-              {submitting ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Telescope className="mr-2 h-4 w-4" />
-              )}
-              Start research
+              <Wand2 className="mr-1.5 h-4 w-4" /> Detect capabilities
             </Button>
-            <p className="text-center text-[11px] text-muted-foreground">
-              Runs as a durable background job. You can leave this page.
+          </FieldBlock>
+
+          {profiles.length > 0 && (
+            <FieldBlock label="Reuse a saved team profile">
+              <div className="flex flex-wrap gap-1.5">
+                {profiles.slice(0, 6).map(p => (
+                  <Chip key={p.id} onClick={() => loadProfile(p)}>
+                    <Sparkles className="mr-1 inline h-3 w-3" />
+                    {p.name}
+                  </Chip>
+                ))}
+              </div>
+            </FieldBlock>
+          )}
+
+          <CapabilityPicker
+            categories={config?.capabilities}
+            selected={brief.capabilities}
+            onChange={next => set('capabilities', next)}
+          />
+
+          <div className="flex items-center gap-2 border-t border-border pt-3">
+            <Input
+              value={profileName}
+              onChange={e => setProfileName(e.target.value)}
+              placeholder="Save these as a reusable team profile…"
+              className="max-w-xs"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={saveProfile}
+              disabled={savingProfile || !profileName.trim() || brief.capabilities.length === 0}
+            >
+              <Save className="mr-1 h-4 w-4" /> Save
+            </Button>
+          </div>
+        </StepCard>
+      )}
+
+      {/* STEP 3 — Research depth */}
+      {step === 2 && (
+        <StepCard
+          title="How deep should we investigate?"
+          subtitle="Deeper research takes longer and costs more. You can start with a quick scan and go deeper later."
+        >
+          <div role="radiogroup" aria-label="Research depth" className="grid gap-3">
+            {config?.modes.map(m => {
+              const copy = MODE_COPY[m.id as ResearchMode];
+              const active = brief.mode === m.id;
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => setMode(m.id as ResearchMode)}
+                  className={cn(
+                    'rounded-xl border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                    active ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <span
+                      aria-hidden
+                      className={cn(
+                        'flex h-4 w-4 items-center justify-center rounded-full border-2',
+                        active ? 'border-primary bg-primary' : 'border-muted-foreground/40'
+                      )}
+                    >
+                      {active && <Check className="h-2.5 w-2.5 text-primary-foreground" />}
+                    </span>
+                    <span className="text-base font-semibold">{m.label}</span>
+                    {copy?.recommended && (
+                      <Badge className="text-[10px] uppercase tracking-wide">Recommended</Badge>
+                    )}
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      ≈ {m.expectedRuntimeMin[0]}–{m.expectedRuntimeMin[1]} min
+                    </span>
+                  </div>
+                  <div className="mt-1 pl-6">
+                    <div className="text-sm font-medium">{copy?.tagline}</div>
+                    <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                      {copy?.body}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {forensicNeedsBudget && (
+            <FieldBlock
+              label="Set a maximum budget for Forensic depth"
+              hint="Forensic has no default cap — choose the most you want to authorize."
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground">$</span>
+                <Input
+                  type="number"
+                  min={1}
+                  value={brief.maxBudgetUsd || ''}
+                  onChange={e => {
+                    setBudgetTouched(true);
+                    set('maxBudgetUsd', Number(e.target.value));
+                  }}
+                  className="max-w-[140px]"
+                  placeholder="15"
+                />
+              </div>
+            </FieldBlock>
+          )}
+        </StepCard>
+      )}
+
+      {/* STEP 4 — Review & launch */}
+      {step === 3 && (
+        <StepCard
+          title="Review and launch"
+          subtitle="Confirm the scope. You can leave this page — the investigation runs in the background."
+        >
+          <div className="rounded-xl border border-border">
+            <ReviewRow label="Market" value={brief.industry || '—'} onEdit={() => setStep(0)} />
+            <ReviewRow
+              label="Where"
+              value={brief.geography || 'United States (assumed)'}
+              onEdit={() => setStep(0)}
+            />
+            <ReviewRow
+              label="Your advantages"
+              value={
+                brief.capabilities.length
+                  ? `${brief.capabilities.length} selected`
+                  : 'Generalist (assumed)'
+              }
+              onEdit={() => setStep(1)}
+            />
+            <ReviewRow
+              label="Depth"
+              value={modeDef?.label ?? brief.mode}
+              onEdit={() => setStep(2)}
+            />
+          </div>
+
+          {/* Cost — expected vs authorized, never one number for both */}
+          <div className="rounded-xl border border-border p-4">
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <Gauge className="h-4 w-4 text-primary" /> Cost
+            </div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div>
+                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Expected
+                </div>
+                <div className="text-lg font-semibold">
+                  {expected ? `$${expected.low.toFixed(2)}–$${expected.high.toFixed(2)}` : '—'}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Maximum authorized
+                </div>
+                <div className="flex items-center gap-1 text-lg font-semibold">
+                  <span className="text-muted-foreground">$</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={brief.maxBudgetUsd || ''}
+                    onChange={e => {
+                      setBudgetTouched(true);
+                      set('maxBudgetUsd', Number(e.target.value));
+                    }}
+                    className="w-20 rounded-md border border-border bg-background px-2 py-0.5"
+                    aria-label="Maximum authorized budget"
+                  />
+                </div>
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              We stop before exceeding your maximum. If the report needs a repair pass that wouldn’t
+              fit, we pause and ask you to approve more — we never overspend.
             </p>
-          </CardContent>
-        </Card>
+          </div>
+
+          <div className="rounded-xl border border-border bg-muted/30 p-4 text-sm">
+            <div className="mb-1 font-medium">Your report will include</div>
+            <p className="text-muted-foreground">
+              A clear GO / CONDITIONAL GO / DO NOT ENTER verdict, the best entry opportunity, real
+              economics, the strongest reasons for and against, competitors, risks, a first-customer
+              plan, and a 90-day execution plan — every claim traceable to a real source.
+            </p>
+          </div>
+
+          {/* Customize (advanced) — hidden by default */}
+          <div className="rounded-xl border border-border">
+            <button
+              type="button"
+              aria-expanded={customizeOpen}
+              onClick={() => setCustomizeOpen(o => !o)}
+              className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              Customize research
+              <ChevronDown
+                className={cn('h-4 w-4 transition-transform', customizeOpen && 'rotate-180')}
+              />
+            </button>
+            {customizeOpen && <Advanced brief={brief} set={set} modeDef={modeDef} />}
+          </div>
+        </StepCard>
+      )}
+
+      {/* Nav */}
+      <div className="flex items-center justify-between">
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => setStep(s => Math.max(0, s - 1))}
+          disabled={step === 0}
+        >
+          <ArrowLeft className="mr-1.5 h-4 w-4" /> Back
+        </Button>
+        {step < 3 ? (
+          <Button type="button" onClick={() => setStep(s => s + 1)} disabled={!canNext}>
+            Continue <ArrowRight className="ml-1.5 h-4 w-4" />
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            size="lg"
+            onClick={submit}
+            disabled={submitting || missingProviders.length > 0 || forensicNeedsBudget}
+          >
+            {submitting ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Telescope className="mr-2 h-4 w-4" />
+            )}
+            Start investigation
+          </Button>
+        )}
       </div>
     </div>
   );
 }
 
-function Field({
-  label,
-  required,
-  className,
+function Stepper({
+  step,
+  onJump,
+  industryDone,
+}: {
+  step: number;
+  onJump: (s: number) => void;
+  industryDone: boolean;
+}) {
+  return (
+    <ol className="flex items-center gap-2">
+      {STEPS.map((label, i) => {
+        const done = i < step;
+        const active = i === step;
+        const reachable = i === 0 || industryDone;
+        return (
+          <li key={label} className="flex flex-1 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => reachable && onJump(i)}
+              disabled={!reachable}
+              className={cn(
+                'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border text-xs font-semibold transition-colors',
+                active
+                  ? 'border-primary bg-primary text-primary-foreground'
+                  : done
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border text-muted-foreground'
+              )}
+              aria-current={active ? 'step' : undefined}
+            >
+              {done ? <Check className="h-3.5 w-3.5" /> : i + 1}
+            </button>
+            <span
+              className={cn(
+                'hidden text-xs font-medium sm:inline',
+                active ? 'text-foreground' : 'text-muted-foreground'
+              )}
+            >
+              {label}
+            </span>
+            {i < STEPS.length - 1 && <span className="h-px flex-1 bg-border" aria-hidden />}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function StepCard({
+  title,
+  subtitle,
   children,
 }: {
-  label: string;
-  required?: boolean;
-  className?: string;
+  title: string;
+  subtitle: string;
   children: React.ReactNode;
 }) {
   return (
-    <div className={className}>
-      <Label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-        {label}
-        {required && <span className="ml-0.5 text-destructive">*</span>}
-      </Label>
+    <div className="space-y-5 rounded-2xl border border-border bg-card p-6 sm:p-8">
+      <div>
+        <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
+        <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
+      </div>
       {children}
+    </div>
+  );
+}
+
+function FieldBlock({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <Label className="mb-1.5 block text-sm font-medium">{label}</Label>
+      {children}
+      {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
+    </div>
+  );
+}
+
+function Chip({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+    >
+      {children}
+    </button>
+  );
+}
+
+function ReviewRow({ label, value, onEdit }: { label: string; value: string; onEdit: () => void }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3 last:border-0">
+      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        {label}
+      </span>
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="truncate text-sm font-medium">{value}</span>
+        <button
+          type="button"
+          onClick={onEdit}
+          className="text-xs font-medium text-primary hover:underline"
+        >
+          Edit
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Advanced({
+  brief,
+  set,
+  modeDef,
+}: {
+  brief: ResearchBriefInput;
+  set: <K extends keyof ResearchBriefInput>(k: K, v: ResearchBriefInput[K]) => void;
+  modeDef?: ModeDefinition;
+}) {
+  return (
+    <div className="grid gap-4 border-t border-border p-4 sm:grid-cols-2">
+      <FieldBlock label="Maximum runtime (minutes)">
+        <Input
+          type="number"
+          min={1}
+          value={brief.maxRuntimeMin ?? ''}
+          onChange={e => set('maxRuntimeMin', e.target.value ? Number(e.target.value) : undefined)}
+          placeholder={modeDef ? String(modeDef.expectedRuntimeMin[1]) : ''}
+        />
+      </FieldBlock>
+      <FieldBlock label="Minimum sources">
+        <Input
+          type="number"
+          min={1}
+          value={brief.minSources ?? ''}
+          onChange={e => set('minSources', e.target.value ? Number(e.target.value) : undefined)}
+          placeholder={modeDef ? String(modeDef.sourceTargets.totalSources) : ''}
+        />
+      </FieldBlock>
+      <FieldBlock label="Business model (optional)">
+        <Input
+          value={brief.businessModel}
+          onChange={e => set('businessModel', e.target.value)}
+          placeholder="Open to any model"
+        />
+      </FieldBlock>
+      <FieldBlock label="Starting capital (optional)">
+        <Input
+          value={brief.startingCapital}
+          onChange={e => set('startingCapital', e.target.value)}
+          placeholder="$25,000"
+        />
+      </FieldBlock>
+      <FieldBlock label="Risk tolerance">
+        <Select
+          value={brief.riskTolerance ?? ''}
+          onValueChange={v => set('riskTolerance', v as ResearchBriefInput['riskTolerance'])}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Moderate" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="low">Low</SelectItem>
+            <SelectItem value="moderate">Moderate</SelectItem>
+            <SelectItem value="high">High</SelectItem>
+          </SelectContent>
+        </Select>
+      </FieldBlock>
+      <FieldBlock label="Output detail">
+        <Select
+          value={brief.outputDetail ?? 'detailed'}
+          onValueChange={v => set('outputDetail', v as ResearchBriefInput['outputDetail'])}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="standard">Standard</SelectItem>
+            <SelectItem value="detailed">Detailed</SelectItem>
+            <SelectItem value="exhaustive">Exhaustive</SelectItem>
+          </SelectContent>
+        </Select>
+      </FieldBlock>
+      <FieldBlock label="Preferred domains (comma-separated)">
+        <Input
+          value={(brief.includeDomains ?? []).join(', ')}
+          onChange={e => set('includeDomains', splitCsv(e.target.value))}
+          placeholder="sec.gov, g2.com"
+        />
+      </FieldBlock>
+      <FieldBlock label="Excluded domains (comma-separated)">
+        <Input
+          value={(brief.excludeDomains ?? []).join(', ')}
+          onChange={e => set('excludeDomains', splitCsv(e.target.value))}
+          placeholder="pinterest.com"
+        />
+      </FieldBlock>
+      <div className="sm:col-span-2 grid gap-2">
+        <ToggleRow
+          label="Operator & customer intelligence (web + social)"
+          value={!!brief.includeSocial}
+          onChange={v => set('includeSocial', v)}
+        />
+        <ToggleRow
+          label="Legal / regulatory analysis"
+          value={!!brief.includeLegal}
+          onChange={v => set('includeLegal', v)}
+        />
+        <ToggleRow
+          label="Technology / AI opportunities"
+          value={!!brief.includeTech}
+          onChange={v => set('includeTech', v)}
+        />
+        <ToggleRow
+          label="First-customer & 90-day plans"
+          value={!!brief.includeFirstCustomerPlan}
+          onChange={v => set('includeFirstCustomerPlan', v)}
+        />
+      </div>
     </div>
   );
 }
@@ -600,18 +854,7 @@ function ToggleRow({
   return (
     <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
       <span className="text-sm">{label}</span>
-      <Switch checked={value} onCheckedChange={onChange} />
-    </div>
-  );
-}
-
-function Review({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-2">
-      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        {label}
-      </span>
-      <span className="truncate text-right font-medium">{value}</span>
+      <Switch checked={value} onCheckedChange={onChange} aria-label={label} />
     </div>
   );
 }

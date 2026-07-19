@@ -117,14 +117,17 @@ export class DidRouteService {
         });
 
         if (existingRoute) {
-          // If the route already has a manually configured valid destination (and it's not a campaign),
-          // preserve it, except if we are now routing to a campaign.
+          // Auto-created routes (label "Auto-routed …") must follow the CURRENT
+          // assignment — otherwise reassigning a number keeps ringing the previous
+          // owner's extension. Only a route with a human-set label is preserved.
+          const isAutoRoute =
+            !existingRoute.label || existingRoute.label.startsWith('Auto-routed');
           const shouldUpdateDestination =
-            hasCampaign || !isValidPhoneDestination(existingRoute.destination);
+            hasCampaign || isAutoRoute || !isValidPhoneDestination(existingRoute.destination);
 
           const updateData: Record<string, unknown> = {
             status: 'ACTIVE',
-            label: existingRoute.label || label,
+            label: isAutoRoute ? label : existingRoute.label || label,
             campaignId: campaignId,
           };
 
@@ -148,13 +151,15 @@ export class DidRouteService {
           });
 
           if (duplicate) {
+            const isAutoDuplicate =
+              !duplicate.label || duplicate.label.startsWith('Auto-routed');
             const shouldUpdateDestination =
-              hasCampaign || !isValidPhoneDestination(duplicate.destination);
+              hasCampaign || isAutoDuplicate || !isValidPhoneDestination(duplicate.destination);
 
             const updateData: Record<string, unknown> = {
               phoneNumberId: phoneNumber.id,
               status: 'ACTIVE',
-              label: duplicate.label || label,
+              label: isAutoDuplicate ? label : duplicate.label || label,
               campaignId: campaignId,
             };
 
