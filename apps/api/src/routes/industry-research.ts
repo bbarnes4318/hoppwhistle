@@ -37,8 +37,9 @@ function featureEnabled(): boolean {
   return process.env.INDUSTRY_RESEARCH_ENABLED !== 'false';
 }
 
-/** Require an authenticated Owner/Admin. Returns null and writes an error otherwise. */
-function requireAdmin(request: FastifyRequest, reply: FastifyReply): AuthCtx | null {
+/** Require an authenticated Owner/Admin. Verifies roles against the DB (the
+ *  session token does not always embed roles), returns null + error otherwise. */
+async function requireAdmin(request: FastifyRequest, reply: FastifyReply): Promise<AuthCtx | null> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const user = (request as any).user as
     | { tenantId?: string; userId?: string; roles?: string[] }
@@ -49,12 +50,24 @@ function requireAdmin(request: FastifyRequest, reply: FastifyReply): AuthCtx | n
     void reply.code(401);
     return null;
   }
-  const roles = (user?.roles ?? []).map(r => r.toUpperCase());
-  if (!roles.includes('OWNER') && !roles.includes('ADMIN')) {
-    void reply.code(403);
-    return null;
+  const hasAdmin = (roles: string[]) =>
+    roles.map(r => r.toUpperCase()).some(r => r === 'OWNER' || r === 'ADMIN');
+
+  if (hasAdmin(user?.roles ?? [])) return { tenantId, userId };
+
+  // Token did not carry roles — authoritatively check the database.
+  try {
+    const dbUser = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { roles: { include: { role: true } } },
+    });
+    const dbRoles = (dbUser?.roles ?? []).map(ur => ur.role.name);
+    if (hasAdmin(dbRoles)) return { tenantId, userId };
+  } catch {
+    /* fall through to 403 */
   }
-  return { tenantId, userId };
+  void reply.code(403);
+  return null;
 }
 
 function planStages(mode: keyof typeof RESEARCH_MODES): Array<{
@@ -140,7 +153,7 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
       void reply.code(404);
       return { error: { code: 'NOT_FOUND', message: 'Feature not enabled' } };
     }
-    const ctx = requireAdmin(request, reply);
+    const ctx = await requireAdmin(request, reply);
     if (!ctx) return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
 
     const registry = buildProviderRegistry(process.env).map(c => ({
@@ -173,7 +186,7 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
         void reply.code(404);
         return { error: { code: 'NOT_FOUND', message: 'Feature not enabled' } };
       }
-      const ctx = requireAdmin(request, reply);
+      const ctx = await requireAdmin(request, reply);
       if (!ctx) return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
 
       const mode = (request.body?.mode ?? 'full_due_diligence') as keyof typeof RESEARCH_MODES;
@@ -197,7 +210,7 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
       void reply.code(404);
       return { error: { code: 'NOT_FOUND', message: 'Feature not enabled' } };
     }
-    const ctx = requireAdmin(request, reply);
+    const ctx = await requireAdmin(request, reply);
     if (!ctx) return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
 
     const parsed = researchBriefInputSchema.safeParse(request.body);
@@ -286,7 +299,7 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
         void reply.code(404);
         return { error: { code: 'NOT_FOUND', message: 'Feature not enabled' } };
       }
-      const ctx = requireAdmin(request, reply);
+      const ctx = await requireAdmin(request, reply);
       if (!ctx) return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
 
       const limit = Math.min(Number(request.query.limit) || 50, 200);
@@ -309,7 +322,7 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
         void reply.code(404);
         return { error: { code: 'NOT_FOUND', message: 'Feature not enabled' } };
       }
-      const ctx = requireAdmin(request, reply);
+      const ctx = await requireAdmin(request, reply);
       if (!ctx) return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
 
       const run = await prisma.researchRun.findFirst({
@@ -347,7 +360,7 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
         void reply.code(404);
         return { error: { code: 'NOT_FOUND', message: 'Feature not enabled' } };
       }
-      const ctx = requireAdmin(request, reply);
+      const ctx = await requireAdmin(request, reply);
       if (!ctx) return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
 
       const run = await prisma.researchRun.findFirst({
@@ -411,7 +424,7 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
         void reply.code(404);
         return { error: { code: 'NOT_FOUND', message: 'Feature not enabled' } };
       }
-      const ctx = requireAdmin(request, reply);
+      const ctx = await requireAdmin(request, reply);
       if (!ctx) return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
 
       const run = await prisma.researchRun.findFirst({
@@ -445,7 +458,7 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
         void reply.code(404);
         return { error: { code: 'NOT_FOUND', message: 'Feature not enabled' } };
       }
-      const ctx = requireAdmin(request, reply);
+      const ctx = await requireAdmin(request, reply);
       if (!ctx) return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
 
       const stageKey = request.body?.stageKey;
@@ -493,7 +506,7 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
       void reply.code(404);
       return { error: { code: 'NOT_FOUND', message: 'Feature not enabled' } };
     }
-    const ctx = requireAdmin(request, reply);
+    const ctx = await requireAdmin(request, reply);
     if (!ctx) return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
     const profiles = await prisma.researchTeamProfile.findMany({
       where: { tenantId: ctx.tenantId },
@@ -517,7 +530,7 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
         void reply.code(404);
         return { error: { code: 'NOT_FOUND', message: 'Feature not enabled' } };
       }
-      const ctx = requireAdmin(request, reply);
+      const ctx = await requireAdmin(request, reply);
       if (!ctx) return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
       const name = (request.body?.name ?? '').trim();
       const capabilities = Array.isArray(request.body?.capabilities)
@@ -542,7 +555,7 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
         void reply.code(404);
         return { error: { code: 'NOT_FOUND', message: 'Feature not enabled' } };
       }
-      const ctx = requireAdmin(request, reply);
+      const ctx = await requireAdmin(request, reply);
       if (!ctx) return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
       await prisma.researchTeamProfile.deleteMany({
         where: { id: request.params.id, tenantId: ctx.tenantId },

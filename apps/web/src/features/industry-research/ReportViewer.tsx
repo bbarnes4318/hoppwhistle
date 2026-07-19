@@ -578,8 +578,13 @@ function ScoreRing({ score }: { score: number }) {
   );
 }
 
-function VerdictChip({ verdict }: { verdict: 'pass' | 'repair_required' | 'reject' }) {
-  const variant = verdict === 'pass' ? 'success' : verdict === 'reject' ? 'destructive' : 'warning';
+function VerdictChip({
+  verdict,
+}: {
+  verdict: 'pass' | 'pass_with_caveats' | 'repair_required' | 'reject';
+}) {
+  const variant =
+    verdict === 'pass' ? 'success' : verdict === 'reject' ? 'destructive' : 'warning';
   return (
     <Badge variant={variant} className="text-[10px]">
       {verdict.replace(/_/g, ' ')}
