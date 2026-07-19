@@ -7,8 +7,13 @@ import ReactMarkdown from 'react-markdown';
 import { researchApi, type ReportResponse } from './api';
 import { CostSummary } from './CostSummary';
 import { SourcesWorkspace } from './SourcesWorkspace';
-
-// ---- helpers -------------------------------------------------------------
+import { Highlight, highlightMarkdownComponents } from './ui/highlight';
+import {
+  buildRiskRegister,
+  deriveEconomicVerdict,
+  firstSectionSentence,
+  NOT_ESTABLISHED,
+} from './ui/report-helpers';
 
 function verdictClass(v: string): string {
   return v === 'GO' ? 'ir-verdict-go' : v === 'DO_NOT_ENTER' ? 'ir-verdict-no' : 'ir-verdict-cond';
@@ -28,7 +33,6 @@ function reviewPhrase(v?: string): { label: string; cls: string } {
   }
 }
 
-// Map arbitrary AI section titles into a small set of institutional categories.
 const CATEGORY_DEFS: Array<{ key: string; label: string; re: RegExp }> = [
   {
     key: 'market',
@@ -62,15 +66,14 @@ function firstSentences(md: string, max = 2): string {
     .replace(/[#*_`>-]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
-  const parts = plain.split(/(?<=[.!?])\s+/).slice(0, max);
-  return parts.join(' ');
+  return plain
+    .split(/(?<=[.!?])\s+/)
+    .slice(0, max)
+    .join(' ');
 }
-
 function money(n?: number): string {
   return n == null ? '—' : `$${n.toFixed(2)}`;
 }
-
-// ---- component -----------------------------------------------------------
 
 export function InstitutionalReport({
   runId,
@@ -96,7 +99,18 @@ export function InstitutionalReport({
   const [copied, setCopied] = useState('');
   const [showTop, setShowTop] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
+  const [matchCount, setMatchCount] = useState(0);
+  const [matchIdx, setMatchIdx] = useState(-1);
+
   const sectionEls = useRef<Record<string, HTMLElement | null>>({});
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const drawerCloseRef = useRef<HTMLButtonElement>(null);
+  const oppOpenerRef = useRef<HTMLElement | null>(null);
+  const mobileOpenerRef = useRef<HTMLButtonElement>(null);
+  const mobileCloseRef = useRef<HTMLButtonElement>(null);
+
+  const q = query.trim().toLowerCase();
+  const mdComponents = useMemo(() => highlightMarkdownComponents(q), [q]);
 
   useEffect(() => {
     const onScroll = () => setShowTop(window.scrollY > 700);
@@ -104,7 +118,7 @@ export function InstitutionalReport({
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  // Active-section highlighting via IntersectionObserver.
+  // Active-section highlighting.
   useEffect(() => {
     const obs = new IntersectionObserver(
       entries => {
@@ -120,7 +134,46 @@ export function InstitutionalReport({
     return () => obs.disconnect();
   });
 
-  // Bucket sections into institutional categories (first match wins; unmatched → market).
+  // Count matches after each render pass that changes the query or layout.
+  useEffect(() => {
+    const root = canvasRef.current;
+    const marks = q && root ? root.querySelectorAll('[data-ir-mark]') : [];
+    setMatchCount(marks.length);
+    setMatchIdx(marks.length ? 0 : -1);
+  }, [q, collapsed]);
+
+  // Move to the active match (data attribute, not className → React won't clobber).
+  useEffect(() => {
+    const root = canvasRef.current;
+    if (!root) return;
+    const marks = Array.from(root.querySelectorAll<HTMLElement>('[data-ir-mark]'));
+    marks.forEach(m => m.removeAttribute('data-ir-active'));
+    if (matchIdx >= 0 && marks[matchIdx]) {
+      marks[matchIdx].setAttribute('data-ir-active', '');
+      marks[matchIdx].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [matchIdx, matchCount]);
+
+  // Escape closes any open overlay; focus returns to the opener.
+  useEffect(() => {
+    if (!drawer && !mobileNav) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (drawer) closeDrawer();
+      if (mobileNav) closeMobile();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawer, mobileNav]);
+
+  useEffect(() => {
+    if (drawer) drawerCloseRef.current?.focus();
+  }, [drawer]);
+  useEffect(() => {
+    if (mobileNav) mobileCloseRef.current?.focus();
+  }, [mobileNav]);
+
   const categories = useMemo(() => {
     const buckets = new Map<string, { label: string; sections: typeof r.sections }>();
     for (const c of CATEGORY_DEFS) buckets.set(c.key, { label: c.label, sections: [] });
@@ -137,8 +190,7 @@ export function InstitutionalReport({
   const recommendation = useMemo(() => {
     const thesis = r.sections.find(s => /thesis|recommend/i.test(s.title));
     if (thesis) return firstSentences(thesis.markdown, 2);
-    const geo = meta.geography;
-    return `${v.biggestOpportunity} — targeting ${v.bestCustomer} with ${v.bestBusinessModel}, beginning in ${geo}.`;
+    return `${v.biggestOpportunity} — targeting ${v.bestCustomer} with ${v.bestBusinessModel}, beginning in ${meta.geography}.`;
   }, [r.sections, v, meta.geography]);
 
   const reasonsFor = [
@@ -149,24 +201,21 @@ export function InstitutionalReport({
     .slice(0, 3);
   const reasonsAgainst = [v.biggestRisk, ...r.killCriteria.slice(0, 2)].filter(Boolean).slice(0, 3);
 
-  const risks = useMemo(() => {
-    const adv = report.verification?.adversarial;
-    const out: Array<{ text: string; cat: string; sev: string }> = [];
-    if (v.biggestRisk) out.push({ text: v.biggestRisk, cat: 'Primary', sev: 'Critical' });
-    const add = (arr: string[] | undefined, cat: string, sev: string) =>
-      (arr ?? []).slice(0, 3).forEach(t => out.push({ text: t, cat, sev }));
-    add(adv?.economicWeaknesses, 'Economic', 'High');
-    add(adv?.regulatoryWeaknesses, 'Regulatory', 'High');
-    add(adv?.operatorWarnings, 'Operational', 'Moderate');
-    add(adv?.customerWarnings, 'Customer', 'Moderate');
-    const seen = new Set<string>();
-    return out.filter(x => (seen.has(x.text) ? false : (seen.add(x.text), true))).slice(0, 8);
-  }, [report.verification, v.biggestRisk]);
+  const riskRows = useMemo(
+    () => buildRiskRegister(r, report.verification?.adversarial),
+    [r, report.verification]
+  );
+  const econVerdict = useMemo(() => deriveEconomicVerdict(r), [r]);
+  const base = r.unitEconomicsScenarios.find(s => s.name === 'base');
+  const executionReminder =
+    firstSectionSentence(r, /90.day|execution|validation|first.customer/i) ??
+    'Validate demand with paying customers before committing to fixed costs.';
 
   const toggle = (k: string) =>
     setCollapsed(p => {
       const n = new Set(p);
-      n.has(k) ? n.delete(k) : n.add(k);
+      if (n.has(k)) n.delete(k);
+      else n.add(k);
       return n;
     });
   const setAll = (c: boolean) => setCollapsed(c ? new Set(categories.map(x => x.key)) : new Set());
@@ -182,7 +231,7 @@ export function InstitutionalReport({
   };
   const goto = (id: string) => {
     sectionEls.current[id]?.scrollIntoView({ behavior: 'smooth' });
-    setMobileNav(false);
+    closeMobile();
   };
   const dl = (fmt: 'markdown' | 'json') => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
@@ -200,6 +249,21 @@ export function InstitutionalReport({
       });
   };
 
+  function openOpp(o: RankedOpportunity, opener: HTMLElement) {
+    oppOpenerRef.current = opener;
+    setDrawer(o);
+  }
+  function closeDrawer() {
+    setDrawer(null);
+    oppOpenerRef.current?.focus();
+  }
+  function closeMobile() {
+    setMobileNav(false);
+    mobileOpenerRef.current?.focus();
+  }
+  const stepMatch = (delta: number) =>
+    setMatchIdx(i => (matchCount ? (i + delta + matchCount) % matchCount : -1));
+
   const navItems: Array<{ id: string; label: string; group?: string }> = [
     { id: 'decision', label: 'Decision summary', group: 'Summary' },
     ...categories.map((c, i) => ({
@@ -215,12 +279,9 @@ export function InstitutionalReport({
     { id: 'methodology', label: 'Methodology & audit' },
   ];
 
-  const q = query.trim().toLowerCase();
-  const matches = (text: string) => !q || text.toLowerCase().includes(q);
-
   return (
     <div>
-      {/* ── Identity row ─────────────────────────────────────────── */}
+      {/* Identity row */}
       <div
         style={{
           display: 'flex',
@@ -245,24 +306,33 @@ export function InstitutionalReport({
           </div>
         </div>
         <div className="ir-noprint" style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-          <button className="ir-btn" onClick={() => dl('markdown')}>
+          <button
+            className="ir-btn"
+            onClick={() => dl('markdown')}
+            aria-label="Export report as Markdown"
+          >
             Export
           </button>
-          <button className="ir-btn" onClick={() => window.print()}>
-            Print
+          <button
+            className="ir-btn"
+            onClick={() => window.print()}
+            aria-label="Print or save as PDF"
+          >
+            Print / Save PDF
           </button>
           <button
             className="ir-btn"
             onClick={() =>
               copy('share', typeof window !== 'undefined' ? window.location.href : runId)
             }
+            aria-label="Copy shareable link"
           >
             {copied === 'share' ? 'Link copied' : 'Share'}
           </button>
         </div>
       </div>
 
-      {/* ── Decision strip ───────────────────────────────────────── */}
+      {/* Decision strip */}
       <div className="ir-strip">
         <div className="ir-strip-cell">
           <div className="ir-strip-label">Verdict</div>
@@ -279,7 +349,7 @@ export function InstitutionalReport({
         <StripCell label="Max authorized" value={money(maxBudgetUsd)} />
       </div>
 
-      {/* ── Recommendation ───────────────────────────────────────── */}
+      {/* Recommendation */}
       <div style={{ marginTop: 14, display: 'flex', alignItems: 'baseline', gap: 12 }}>
         <div className="ir-eyebrow" style={{ flexShrink: 0, paddingTop: 2 }}>
           Recommended entry
@@ -291,12 +361,13 @@ export function InstitutionalReport({
           className="ir-btn ir-btn-ghost ir-noprint"
           style={{ flexShrink: 0, height: 26 }}
           onClick={() => copy('rec', recommendation)}
+          aria-label="Copy recommendation"
         >
           {copied === 'rec' ? 'Copied' : 'Copy'}
         </button>
       </div>
 
-      {/* ── Reasons for / against (first viewport) ──────────────── */}
+      {/* Reasons for / against */}
       <div
         style={{
           display: 'grid',
@@ -311,10 +382,9 @@ export function InstitutionalReport({
         <ReasonCol title="Why this can fail" cls="ir-neg" items={reasonsAgainst} />
       </div>
 
-      {/* ── Report body grid ─────────────────────────────────────── */}
+      {/* Report body grid */}
       <div className="ir-report-grid" style={{ marginTop: 28 }}>
-        {/* Left nav */}
-        <nav className="ir-nav-col">
+        <nav className="ir-nav-col" aria-label="Report sections">
           {navItems.map(it => (
             <div key={it.id}>
               {it.group && <div className="ir-nav-group">{it.group}</div>}
@@ -333,35 +403,72 @@ export function InstitutionalReport({
           ))}
         </nav>
 
-        {/* Main canvas */}
-        <div className="ir-canvas">
-          {/* toolbar */}
+        <div className="ir-canvas" ref={canvasRef}>
+          {/* Search toolbar */}
           <div
             className="ir-noprint"
-            style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}
+            style={{
+              display: 'flex',
+              gap: 8,
+              alignItems: 'center',
+              marginBottom: 8,
+              flexWrap: 'wrap',
+            }}
           >
             <input
               className="ir-field"
-              style={{ height: 32, maxWidth: 260 }}
+              style={{ height: 32, maxWidth: 240 }}
               placeholder="Search the report…"
               value={query}
               onChange={e => setQuery(e.target.value)}
               aria-label="Search report"
             />
+            {q && (
+              <>
+                <span className="ir-muted ir-num" style={{ fontSize: 12 }} aria-live="polite">
+                  {matchCount ? `${matchIdx + 1} of ${matchCount}` : 'No matches'}
+                </span>
+                <button
+                  className="ir-btn"
+                  style={{ height: 32 }}
+                  onClick={() => stepMatch(-1)}
+                  disabled={!matchCount}
+                  aria-label="Previous match"
+                >
+                  ‹
+                </button>
+                <button
+                  className="ir-btn"
+                  style={{ height: 32 }}
+                  onClick={() => stepMatch(1)}
+                  disabled={!matchCount}
+                  aria-label="Next match"
+                >
+                  ›
+                </button>
+                <button
+                  className="ir-btn ir-btn-ghost"
+                  style={{ height: 32 }}
+                  onClick={() => setQuery('')}
+                  aria-label="Clear search"
+                >
+                  Clear
+                </button>
+              </>
+            )}
             <button
               className="ir-btn"
-              style={{ height: 32 }}
+              style={{ height: 32, marginLeft: 'auto' }}
               onClick={() => setAll(collapsed.size === 0)}
+              aria-label={collapsed.size === 0 ? 'Collapse all sections' : 'Expand all sections'}
             >
               {collapsed.size === 0 ? 'Collapse all' : 'Expand all'}
             </button>
           </div>
 
-          {/* Core analysis categories */}
+          {/* Core analysis */}
           {categories.map(cat => {
-            const anyMatch = cat.sections.some(s => matches(s.title) || matches(s.markdown));
-            if (!anyMatch) return null;
-            const isCollapsed = collapsed.has(cat.key);
+            const isCollapsed = collapsed.has(cat.key) && !q;
             return (
               <section
                 key={cat.key}
@@ -374,6 +481,7 @@ export function InstitutionalReport({
               >
                 <SectionHead
                   label={cat.label}
+                  query={q}
                   collapsed={isCollapsed}
                   onToggle={() => toggle(cat.key)}
                   onCopy={() =>
@@ -387,9 +495,13 @@ export function InstitutionalReport({
                 {!isCollapsed &&
                   cat.sections.map(s => (
                     <div key={s.key} style={{ marginTop: 14 }}>
-                      {cat.sections.length > 1 && <div className="ir-h3">{s.title}</div>}
+                      {cat.sections.length > 1 && (
+                        <div className="ir-h3">
+                          <Highlight text={s.title} query={q} />
+                        </div>
+                      )}
                       <div className="ir-body" style={{ marginTop: 6 }}>
-                        <ReactMarkdown>{s.markdown}</ReactMarkdown>
+                        <ReactMarkdown components={mdComponents}>{s.markdown}</ReactMarkdown>
                       </div>
                     </div>
                   ))}
@@ -406,8 +518,8 @@ export function InstitutionalReport({
             }}
             className="ir-report-section"
           >
-            <SectionHead label="Economics" />
-            <EconomicsTable report={r} />
+            <SectionHead label="Economics" query={q} />
+            <EconomicsTable report={r} verdict={econVerdict} />
           </section>
 
           {/* Opportunities */}
@@ -420,27 +532,46 @@ export function InstitutionalReport({
               }}
               className="ir-report-section"
             >
-              <SectionHead label="Ranked entry opportunities" />
+              <SectionHead label="Ranked entry opportunities" query={q} />
               <div style={{ overflowX: 'auto' }}>
                 <table className="ir-table">
                   <thead>
                     <tr>
-                      <th className="ir-num">#</th>
+                      <th className="ir-num">Rank</th>
                       <th>Opportunity</th>
-                      <th>Customer</th>
-                      <th>Model</th>
-                      <th>To revenue</th>
+                      <th>Target customer</th>
+                      <th>Offer</th>
+                      <th>Revenue model</th>
+                      <th>Startup capital</th>
+                      <th>Time to revenue</th>
+                      <th>Difficulty</th>
                       <th className="ir-num">Score</th>
                     </tr>
                   </thead>
                   <tbody>
                     {r.rankedOpportunities.map(o => (
-                      <tr key={o.rank} className="ir-clickable" onClick={() => setDrawer(o)}>
+                      <tr
+                        key={o.rank}
+                        className="ir-clickable"
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Open details for opportunity ${o.rank}: ${o.opportunity}`}
+                        onClick={e => openOpp(o, e.currentTarget)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            openOpp(o, e.currentTarget);
+                          }
+                        }}
+                      >
                         <td className="ir-num">{o.rank}</td>
                         <td style={{ fontWeight: 600 }}>{o.opportunity}</td>
                         <td className="ir-muted">{o.customer ?? '—'}</td>
+                        <td className="ir-muted">{o.offer ?? '—'}</td>
                         <td className="ir-muted">{o.revenueModel ?? '—'}</td>
+                        <td className="ir-muted">{o.startupCost ?? '—'}</td>
                         <td className="ir-muted">{o.timeToFirstRevenue ?? '—'}</td>
+                        <td className="ir-muted">{o.salesDifficulty ?? '—'}</td>
                         <td className="ir-num" style={{ fontWeight: 600 }}>
                           {o.opportunityScore}
                         </td>
@@ -455,7 +586,7 @@ export function InstitutionalReport({
             </section>
           )}
 
-          {/* Risks */}
+          {/* Risk register — six fields */}
           <section
             id="ir-risks"
             data-anchor="risks"
@@ -464,24 +595,38 @@ export function InstitutionalReport({
             }}
             className="ir-report-section"
           >
-            <SectionHead label="Risk register" />
-            {risks.length > 0 ? (
+            <SectionHead label="Risk register" query={q} />
+            {riskRows.length > 0 ? (
               <div style={{ overflowX: 'auto' }}>
                 <table className="ir-table">
                   <thead>
                     <tr>
                       <th>Risk</th>
-                      <th>Category</th>
-                      <th>Severity</th>
+                      <th>Probability</th>
+                      <th>Impact</th>
+                      <th>Ability to overcome</th>
+                      <th>Mitigation</th>
+                      <th>Trigger</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {risks.map((rk, i) => (
+                    {riskRows.map((rk, i) => (
                       <tr key={i}>
-                        <td>{rk.text}</td>
-                        <td className="ir-muted">{rk.cat}</td>
+                        <td style={{ minWidth: 200 }}>{rk.risk}</td>
                         <td>
-                          <SeverityTag sev={rk.sev} />
+                          <Classified value={rk.probability} />
+                        </td>
+                        <td>
+                          <Classified value={rk.impact} />
+                        </td>
+                        <td>
+                          <Classified value={rk.ability} />
+                        </td>
+                        <td className="ir-muted" style={{ minWidth: 180 }}>
+                          {rk.mitigation}
+                        </td>
+                        <td className="ir-muted" style={{ minWidth: 160 }}>
+                          {rk.trigger}
                         </td>
                       </tr>
                     ))}
@@ -497,7 +642,10 @@ export function InstitutionalReport({
                 <ul style={{ margin: '8px 0 0', paddingLeft: 0, listStyle: 'none' }}>
                   {r.killCriteria.map((k, i) => (
                     <li key={i} style={{ display: 'flex', gap: 8, padding: '3px 0', fontSize: 14 }}>
-                      <span className="ir-neg">✕</span> {k}
+                      <span className="ir-neg" aria-hidden>
+                        ✕
+                      </span>{' '}
+                      {k}
                     </li>
                   ))}
                 </ul>
@@ -515,7 +663,7 @@ export function InstitutionalReport({
               }}
               className="ir-report-section"
             >
-              <SectionHead label="Independent review" />
+              <SectionHead label="Independent review" query={q} />
               <IndependentReview report={report} />
             </section>
           )}
@@ -529,11 +677,11 @@ export function InstitutionalReport({
             }}
             className="ir-report-section"
           >
-            <SectionHead label="Evidence & sources" />
+            <SectionHead label="Evidence & sources" query={q} />
             <SourcesWorkspace sources={report.sources} evidence={report.evidence} />
           </section>
 
-          {/* Methodology & audit trail — collapsed */}
+          {/* Methodology & audit trail */}
           <section
             id="ir-methodology"
             data-anchor="methodology"
@@ -578,7 +726,7 @@ export function InstitutionalReport({
           </section>
         </div>
 
-        {/* Right rail */}
+        {/* Right rail — unique, decision-useful only (no duplicated Confidence/Print/Export) */}
         <aside className="ir-rail">
           <div className="ir-panel" style={{ padding: 14 }}>
             <div className="ir-eyebrow">Immediate next action</div>
@@ -588,10 +736,11 @@ export function InstitutionalReport({
                 : `Focus on ${v.bestSegment}.`}
             </p>
             <hr className="ir-divider" style={{ margin: '12px 0' }} />
-            <div className="ir-eyebrow">Confidence</div>
-            <div className="ir-num" style={{ fontSize: 18, fontWeight: 600, marginTop: 2 }}>
-              {Math.round(v.confidence * 100)}%
-            </div>
+            <div className="ir-eyebrow">Critical economic threshold</div>
+            <p style={{ fontSize: 12, marginTop: 4, lineHeight: 1.45 }}>
+              Base-case payback: {base?.paybackPeriod ?? NOT_ESTABLISHED}
+              {base?.grossMargin ? ` · gross margin ${base.grossMargin}` : ''}
+            </p>
             {r.killCriteria[0] && (
               <>
                 <hr className="ir-divider" style={{ margin: '12px 0' }} />
@@ -600,20 +749,15 @@ export function InstitutionalReport({
               </>
             )}
             <hr className="ir-divider" style={{ margin: '12px 0' }} />
-            <div className="ir-noprint" style={{ display: 'flex', gap: 6 }}>
-              <button className="ir-btn" style={{ flex: 1 }} onClick={() => window.print()}>
-                Print
-              </button>
-              <button className="ir-btn" style={{ flex: 1 }} onClick={() => dl('markdown')}>
-                Export
-              </button>
-            </div>
+            <div className="ir-eyebrow">Execution reminder</div>
+            <p style={{ fontSize: 12, marginTop: 4, lineHeight: 1.45 }}>{executionReminder}</p>
           </div>
         </aside>
       </div>
 
       {/* Mobile section navigator */}
       <button
+        ref={mobileOpenerRef}
         className="ir-btn ir-btn-primary ir-noprint"
         style={{
           position: 'fixed',
@@ -621,19 +765,40 @@ export function InstitutionalReport({
           left: '50%',
           transform: 'translateX(-50%)',
           zIndex: 40,
-          display: 'none',
         }}
         data-ir-mobile-nav
+        aria-haspopup="dialog"
         onClick={() => setMobileNav(true)}
       >
         Sections
       </button>
       {mobileNav && (
         <>
-          <div className="ir-drawer-scrim" onClick={() => setMobileNav(false)} />
-          <div className="ir-drawer" style={{ padding: 16 }}>
-            <div className="ir-h3" style={{ marginBottom: 10 }}>
-              Jump to section
+          <div className="ir-drawer-scrim" onClick={closeMobile} />
+          <div
+            className="ir-drawer"
+            style={{ padding: 16 }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Report sections"
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 10,
+              }}
+            >
+              <div className="ir-h3">Jump to section</div>
+              <button
+                ref={mobileCloseRef}
+                className="ir-btn ir-btn-ghost"
+                onClick={closeMobile}
+                aria-label="Close section navigator"
+              >
+                Close
+              </button>
             </div>
             {navItems.map(it => (
               <a
@@ -655,11 +820,22 @@ export function InstitutionalReport({
       {/* Opportunity drawer */}
       {drawer && (
         <>
-          <div className="ir-drawer-scrim" onClick={() => setDrawer(null)} />
-          <div className="ir-drawer" style={{ padding: 20 }}>
+          <div className="ir-drawer-scrim" onClick={closeDrawer} />
+          <div
+            className="ir-drawer"
+            style={{ padding: 20 }}
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Opportunity ${drawer.rank}: ${drawer.opportunity}`}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
               <div className="ir-eyebrow">Opportunity #{drawer.rank}</div>
-              <button className="ir-btn ir-btn-ghost" onClick={() => setDrawer(null)}>
+              <button
+                ref={drawerCloseRef}
+                className="ir-btn ir-btn-ghost"
+                onClick={closeDrawer}
+                aria-label="Close opportunity details"
+              >
                 Close
               </button>
             </div>
@@ -672,7 +848,7 @@ export function InstitutionalReport({
                 <DrawerRow k="Offer" val={drawer.offer} />
                 <DrawerRow k="Revenue model" val={drawer.revenueModel} />
                 <DrawerRow k="Price" val={drawer.price} />
-                <DrawerRow k="Startup cost" val={drawer.startupCost} />
+                <DrawerRow k="Startup capital" val={drawer.startupCost} />
                 <DrawerRow k="Time to MVP" val={drawer.timeToMvp} />
                 <DrawerRow k="Time to revenue" val={drawer.timeToFirstRevenue} />
                 <DrawerRow k="Gross margin" val={drawer.grossMarginRange} />
@@ -747,12 +923,14 @@ function ReasonCol({ title, cls, items }: { title: string; cls: string; items: s
 
 function SectionHead({
   label,
+  query = '',
   collapsed,
   onToggle,
   onCopy,
   copied,
 }: {
   label: string;
+  query?: string;
   collapsed?: boolean;
   onToggle?: () => void;
   onCopy?: () => void;
@@ -764,7 +942,6 @@ function SectionHead({
         <button
           onClick={onToggle}
           aria-expanded={!collapsed}
-          className="ir-btn-ghost"
           style={{
             background: 'none',
             border: 0,
@@ -774,20 +951,28 @@ function SectionHead({
             gap: 8,
             alignItems: 'center',
             flex: 1,
+            color: 'inherit',
           }}
         >
-          <span className="ir-h2">{label}</span>
-          <span className="ir-muted" style={{ fontSize: 12 }}>
+          <span className="ir-h2">
+            <Highlight text={label} query={query} />
+          </span>
+          <span className="ir-muted" style={{ fontSize: 12 }} aria-hidden>
             {collapsed ? '▸' : '▾'}
           </span>
         </button>
       ) : (
         <span className="ir-h2" style={{ flex: 1 }}>
-          {label}
+          <Highlight text={label} query={query} />
         </span>
       )}
       {onCopy && (
-        <button className="ir-btn ir-btn-ghost ir-noprint" style={{ height: 26 }} onClick={onCopy}>
+        <button
+          className="ir-btn ir-btn-ghost ir-noprint"
+          style={{ height: 26 }}
+          onClick={onCopy}
+          aria-label={`Copy ${label} section`}
+        >
           {copied ? 'Copied' : 'Copy'}
         </button>
       )}
@@ -795,35 +980,52 @@ function SectionHead({
   );
 }
 
-function SeverityTag({ sev }: { sev: string }) {
+// A classified value (probability/impact/ability) — text carries the meaning, a
+// dot only reinforces it (status is never communicated by colour alone).
+function Classified({ value }: { value: string }) {
   const cls =
-    sev === 'Critical'
+    value === 'High' || value === 'Likely'
       ? 'ir-neg'
-      : sev === 'High'
+      : value === 'Possible' || value === 'Moderate'
         ? 'ir-warn'
-        : sev === 'Moderate'
+        : value === 'Low'
           ? 'ir-info'
           : 'ir-muted';
-  const dot = sev === 'Critical' ? 'ir-dot-neg' : sev === 'High' ? 'ir-dot-warn' : 'ir-dot-muted';
+  const dot =
+    value === 'High' || value === 'Likely'
+      ? 'ir-dot-neg'
+      : value === 'Possible' || value === 'Moderate'
+        ? 'ir-dot-warn'
+        : 'ir-dot-muted';
+  if (value === NOT_ESTABLISHED) return <span className="ir-muted">{value}</span>;
   return (
     <span className={`ir-status ${cls}`}>
-      <span className={`ir-dot ${dot}`} />
-      {sev}
+      <span className={`ir-dot ${dot}`} aria-hidden /> {value}
     </span>
   );
 }
 
-function EconomicsTable({ report }: { report: StructuredReport }) {
+function EconomicsTable({
+  report,
+  verdict,
+}: {
+  report: StructuredReport;
+  verdict: { label: string; cls: string; sentence: string };
+}) {
   const s = (name: string) => report.unitEconomicsScenarios.find(x => x.name === name);
   const cons = s('conservative');
   const base = s('base');
   const agg = s('aggressive');
-  const cell = (val?: string) => <td className="ir-num">{val ?? 'Not established'}</td>;
-  const rows: Array<[string, keyof NonNullable<typeof base>]> = [
+  const cell = (val?: string) => <td className="ir-num">{val ?? NOT_ESTABLISHED}</td>;
+  // Required rows; existing schema only provides asp/grossMargin/cac/paybackPeriod/ltv.
+  const rows: Array<[string, keyof NonNullable<typeof base> | null]> = [
+    ['Monthly revenue at maturity', null],
     ['Average contract value', 'asp'],
     ['Gross margin', 'grossMargin'],
     ['Customer acquisition cost', 'cac'],
     ['Payback period', 'paybackPeriod'],
+    ['Break-even timeline', null],
+    ['Working-capital requirement', null],
     ['Lifetime value', 'ltv'],
   ];
   return (
@@ -848,22 +1050,37 @@ function EconomicsTable({ report }: { report: StructuredReport }) {
             {rows.map(([label, key]) => (
               <tr key={label}>
                 <td>{label}</td>
-                {cell(cons?.[key] as string | undefined)}
-                {cell(base?.[key] as string | undefined)}
-                {cell(agg?.[key] as string | undefined)}
+                {key ? (
+                  cell(cons?.[key] as string | undefined)
+                ) : (
+                  <td className="ir-num ir-muted">{NOT_ESTABLISHED}</td>
+                )}
+                {key ? (
+                  cell(base?.[key] as string | undefined)
+                ) : (
+                  <td className="ir-num ir-muted">{NOT_ESTABLISHED}</td>
+                )}
+                {key ? (
+                  cell(agg?.[key] as string | undefined)
+                ) : (
+                  <td className="ir-num ir-muted">{NOT_ESTABLISHED}</td>
+                )}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      {base?.notes && (
-        <div style={{ marginTop: 14 }}>
-          <div className="ir-eyebrow">Economic verdict</div>
-          <p className="ir-body" style={{ marginTop: 4 }}>
-            {base.notes}
-          </p>
+      <div style={{ marginTop: 14 }}>
+        <div className="ir-eyebrow">
+          Economic verdict ·{' '}
+          <span className={verdict.cls} style={{ fontWeight: 700 }}>
+            {verdict.label}
+          </span>
         </div>
-      )}
+        <p className="ir-body" style={{ marginTop: 4 }}>
+          {verdict.sentence}
+        </p>
+      </div>
     </div>
   );
 }
@@ -916,7 +1133,10 @@ function IndependentReview({ report }: { report: ReportResponse }) {
           <ul style={{ margin: '8px 0 0', paddingLeft: 0, listStyle: 'none' }}>
             {caveats.map((c, i) => (
               <li key={i} style={{ display: 'flex', gap: 8, padding: '3px 0', fontSize: 14 }}>
-                <span className="ir-muted">•</span> {c}
+                <span className="ir-muted" aria-hidden>
+                  •
+                </span>{' '}
+                {c}
               </li>
             ))}
           </ul>
@@ -932,7 +1152,7 @@ function DrawerRow({ k, val }: { k: string; val?: string }) {
       <td className="ir-muted" style={{ width: 140 }}>
         {k}
       </td>
-      <td>{val ?? 'Not established'}</td>
+      <td>{val ?? NOT_ESTABLISHED}</td>
     </tr>
   );
 }

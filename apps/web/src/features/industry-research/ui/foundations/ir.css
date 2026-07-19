@@ -510,9 +510,31 @@
 [data-product='industry-research'] .ir-kbd {
   font-variant-numeric: tabular-nums;
 }
-[data-product='industry-research'] mark {
-  background: color-mix(in srgb, var(--ir-warning) 30%, transparent);
+[data-product='industry-research'] mark,
+[data-product='industry-research'] .ir-mark {
+  background: color-mix(in srgb, var(--ir-warning) 28%, transparent);
   color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+[data-product='industry-research'] .ir-mark[data-ir-active] {
+  background: color-mix(in srgb, var(--ir-warning) 55%, transparent);
+  outline: 2px solid var(--ir-accent);
+  outline-offset: 1px;
+}
+
+/* Visible focus for keyboard users on every interactive surface */
+[data-product='industry-research'] .ir-btn:focus-visible,
+[data-product='industry-research'] .ir-nav-link:focus-visible,
+[data-product='industry-research'] .ir-table tr[role='button']:focus-visible,
+[data-product='industry-research'] a:focus-visible,
+[data-product='industry-research'] button:focus-visible,
+[data-product='industry-research'] summary:focus-visible {
+  outline: 2px solid var(--ir-accent);
+  outline-offset: 1px;
+}
+[data-product='industry-research'] .ir-table tr[role='button'] {
+  outline-offset: -2px;
 }
 
 [data-product='industry-research'] [data-ir-mobile-nav] {
@@ -533,14 +555,70 @@
   gap: 4px;
 }
 
+/* Clean institutional print / Save-as-PDF document */
 @media print {
+  [data-product='industry-research'] {
+    background: #fff !important;
+    color: #111 !important;
+  }
   [data-product='industry-research'] .ir-header,
   [data-product='industry-research'] .ir-nav-col,
   [data-product='industry-research'] .ir-rail,
-  [data-product='industry-research'] .ir-noprint {
+  [data-product='industry-research'] .ir-noprint,
+  [data-product='industry-research'] [data-ir-mobile-nav],
+  [data-product='industry-research'] .ir-drawer,
+  [data-product='industry-research'] .ir-drawer-scrim,
+  [data-product='industry-research'] .ir-btn {
     display: none !important;
   }
   [data-product='industry-research'] .ir-report-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr !important;
+    gap: 0 !important;
+  }
+  [data-product='industry-research'] .ir-canvas {
+    max-width: 100% !important;
+  }
+  [data-product='industry-research'] .ir-panel,
+  [data-product='industry-research'] .ir-strip,
+  [data-product='industry-research'] .ir-table {
+    background: #fff !important;
+    color: #111 !important;
+    border-color: #999 !important;
+  }
+  [data-product='industry-research'] .ir-h1,
+  [data-product='industry-research'] .ir-h2,
+  [data-product='industry-research'] .ir-h3,
+  [data-product='industry-research'] .ir-body,
+  [data-product='industry-research'] p,
+  [data-product='industry-research'] td,
+  [data-product='industry-research'] th,
+  [data-product='industry-research'] a {
+    color: #111 !important;
+  }
+  /* keep headings with their content, avoid ugly table/row splits */
+  [data-product='industry-research'] .ir-report-section {
+    break-inside: avoid-page;
+  }
+  [data-product='industry-research'] .ir-h2,
+  [data-product='industry-research'] .ir-h3 {
+    break-after: avoid;
+  }
+  [data-product='industry-research'] .ir-table thead {
+    display: table-header-group;
+  }
+  [data-product='industry-research'] .ir-table tr {
+    break-inside: avoid;
+  }
+  /* methodology/audit trail is collapsed detail — open it for the printed record */
+  [data-product='industry-research'] details {
+    display: block !important;
+  }
+  [data-product='industry-research'] details > summary {
+    list-style: none;
+  }
+  [data-product='industry-research'] .ir-mark,
+  [data-product='industry-research'] mark {
+    background: transparent !important;
+    outline: none !important;
   }
 }

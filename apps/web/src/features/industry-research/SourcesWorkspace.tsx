@@ -33,6 +33,7 @@ export function SourcesWorkspace({
   const [classFilter, setClassFilter] = useState('all');
   const [providerFilter, setProviderFilter] = useState('all');
   const [minConf, setMinConf] = useState(0);
+  const [expandedSource, setExpandedSource] = useState<string | null>(null);
 
   const sourceById = useMemo(() => new Map(sources.map(s => [s.sourceId, s])), [sources]);
   const claimsBySource = useMemo(() => {
@@ -234,6 +235,7 @@ export function SourcesWorkspace({
           <ul className="space-y-2">
             {filteredSources.map(s => {
               const supports = claimsBySource.get(s.sourceId) ?? [];
+              const open = expandedSource === s.sourceId;
               return (
                 <li key={s.sourceId} className="rounded-lg border border-border p-3">
                   <div className="flex items-start gap-2">
@@ -248,15 +250,40 @@ export function SourcesWorkspace({
                       target="_blank"
                       rel="noreferrer noopener"
                       className="break-all text-sm text-primary hover:underline"
+                      aria-label={`Open source in a new tab: ${s.title ?? s.url}`}
                     >
                       {s.title ?? s.url}
                     </a>
                   </div>
-                  <div className="mt-1 pl-1 text-xs text-muted-foreground">
-                    {supports.length > 0
-                      ? `Supports ${supports.length} claim${supports.length === 1 ? '' : 's'}`
-                      : 'Not yet tied to a specific claim'}
+                  <div className="mt-1 pl-1 text-xs">
+                    {supports.length > 0 ? (
+                      <button
+                        type="button"
+                        aria-expanded={open}
+                        onClick={() => setExpandedSource(open ? null : s.sourceId)}
+                        className="text-primary hover:underline"
+                      >
+                        {open ? 'Hide' : 'Show'} {supports.length} supported claim
+                        {supports.length === 1 ? '' : 's'}
+                      </button>
+                    ) : (
+                      <span className="text-muted-foreground">
+                        Not yet tied to a specific claim
+                      </span>
+                    )}
                   </div>
+                  {open && supports.length > 0 && (
+                    <ul className="mt-2 space-y-1 border-t border-border/60 pt-2">
+                      {supports.map(c => (
+                        <li key={c.claimId} className="flex items-start gap-1.5 text-xs">
+                          <Badge variant="outline" className="mt-0.5 flex-shrink-0 text-[9px]">
+                            {c.classification.replace(/_/g, ' ')}
+                          </Badge>
+                          <span>{c.text}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </li>
               );
             })}
