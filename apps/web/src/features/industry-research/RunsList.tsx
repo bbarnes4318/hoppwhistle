@@ -90,7 +90,8 @@ export function RunsList() {
               </Link>
             </Button>
             <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Gauge className="h-3.5 w-3.5" /> Rapid scan in minutes · Full diligence in ~20–30
+              <Gauge className="h-3.5 w-3.5" /> Three independent research streams run in parallel ·
+              live progress · source-level evidence
             </span>
           </div>
         </div>

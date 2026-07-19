@@ -500,6 +500,179 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
     }
   );
 
+  // --- Cost audit: honest breakdown by cost basis ---
+  fastify.get<{ Params: { id: string } }>(
+    '/api/v1/industry-research/runs/:id/costs',
+    async (request, reply) => {
+      if (!featureEnabled()) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Feature not enabled' } };
+      }
+      const ctx = await requireAdmin(request, reply);
+      if (!ctx) return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
+
+      const run = await prisma.researchRun.findFirst({
+        where: { id: request.params.id, tenantId: ctx.tenantId },
+        select: { id: true, maxBudgetUsd: true, accruedCostUsd: true },
+      });
+      if (!run) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Run not found' } };
+      }
+      const stages = await prisma.researchStage.findMany({
+        where: { runId: request.params.id },
+        orderBy: { createdAt: 'asc' },
+      });
+      const r2 = (n: number) => Math.round(n * 100) / 100;
+      const lines = stages
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .map(s => ({ s, cd: (s.output as any)?.costDetails }))
+        .filter(x => x.cd)
+        .map(({ s, cd }) => ({
+          stage: s.stageKey,
+          provider: s.provider,
+          model: s.model,
+          costUsd: s.costUsd,
+          costBasis: cd.basis as string,
+          providerReportedCostUsd: cd.providerReportedCostUsd ?? null,
+          calculatedCostUsd: cd.calculatedCostUsd ?? null,
+          estimatedCostUsd: cd.estimatedCostUsd ?? null,
+          costLowUsd: cd.costLowUsd,
+          costHighUsd: cd.costHighUsd,
+          pricingAsOf: cd.pricingAsOf,
+        }));
+      let confirmed = 0,
+        calculated = 0,
+        estLow = 0,
+        estHigh = 0,
+        low = 0,
+        high = 0;
+      for (const c of lines) {
+        if (c.costBasis === 'provider_reported') confirmed += c.costUsd;
+        else if (String(c.costBasis).startsWith('calculated')) calculated += c.costUsd;
+        else {
+          estLow += c.costLowUsd;
+          estHigh += c.costHighUsd;
+        }
+        low += c.costLowUsd;
+        high += c.costHighUsd;
+      }
+      return {
+        data: {
+          runId: run.id,
+          confirmedCostUsd: r2(confirmed),
+          calculatedCostUsd: r2(calculated),
+          estimatedCostLowUsd: r2(estLow),
+          estimatedCostHighUsd: r2(estHigh),
+          totalLowUsd: r2(low),
+          totalHighUsd: r2(high),
+          maxBudgetUsd: run.maxBudgetUsd,
+          budgetRemainingUsd: r2(run.maxBudgetUsd - high),
+          stages: lines,
+        },
+      };
+    }
+  );
+
+  // --- Replay: reuse completed research artifacts from a source run (no new
+  //     research spend) to benchmark synthesis → verify → publish. ---
+  fastify.post<{ Params: { id: string } }>(
+    '/api/v1/industry-research/runs/:id/replay',
+    async (request, reply) => {
+      if (!featureEnabled()) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Feature not enabled' } };
+      }
+      const ctx = await requireAdmin(request, reply);
+      if (!ctx) return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
+
+      const src = await prisma.researchRun.findFirst({
+        where: { id: request.params.id, tenantId: ctx.tenantId },
+        include: { stages: true },
+      });
+      if (!src) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Source run not found' } };
+      }
+      const reuseKeys = ['primary', 'independent', 'social', 'evidence', 'validation', 'contradictions'];
+      const reused = src.stages.filter(
+        s => reuseKeys.includes(s.stageKey) && (s.status === 'completed' || s.status === 'fallback')
+      );
+      const reusedSources = reused
+        .filter(s => s.stageKey === 'evidence')
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .reduce((n, s) => n + ((s.output as any)?.sources?.length ?? 0), 0);
+
+      const replayBrief = {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ...(src.brief as any),
+        reusedFromRunId: src.id,
+        reusedResearchStages: true,
+        reusedSourceCount: reusedSources,
+      };
+
+      const newRun = await prisma.researchRun.create({
+        data: {
+          tenantId: ctx.tenantId,
+          userId: ctx.userId,
+          researchBriefId: src.researchBriefId,
+          industry: src.industry,
+          geography: src.geography,
+          mode: src.mode,
+          status: 'queued',
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          brief: replayBrief as any,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          providerAssignments: src.providerAssignments as any,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          costEstimate: src.costEstimate as any,
+          maxBudgetUsd: src.maxBudgetUsd,
+          estimatedCostUsd: 0,
+          accruedCostUsd: 0,
+          progress: [],
+          stages: {
+            create: planStages(src.mode as keyof typeof RESEARCH_MODES).map(s => ({
+              stageKey: s.stageKey,
+              label: s.label,
+              role: s.role,
+              status: s.status,
+            })),
+          },
+        },
+        select: { id: true },
+      });
+
+      // Copy the completed research outputs into the replay run at $0 (reused).
+      for (const s of reused) {
+        await prisma.researchStage.updateMany({
+          where: { runId: newRun.id, stageKey: s.stageKey },
+          data: {
+            status: s.status,
+            provider: s.provider,
+            model: s.model,
+            sourcesFound: s.sourcesFound,
+            costUsd: 0,
+            usedFallback: s.usedFallback,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            output: (s.output ?? undefined) as any,
+            finishedAt: new Date(),
+          },
+        });
+      }
+
+      await emitRunRequested(ctx.tenantId, newRun.id);
+      return {
+        data: {
+          id: newRun.id,
+          reusedFromRunId: src.id,
+          reusedResearchStages: reused.map(s => s.stageKey),
+          reusedSourceCount: reusedSources,
+          avoidedProviderCalls: reused.filter(s => ['primary', 'independent', 'social'].includes(s.stageKey)).length,
+        },
+      };
+    }
+  );
+
   // --- Team profiles ---
   fastify.get('/api/v1/industry-research/team-profiles', async (request, reply) => {
     if (!featureEnabled()) {

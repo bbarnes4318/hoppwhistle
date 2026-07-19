@@ -653,6 +653,14 @@ async function anthropicCall(
     opts
   );
   const j = json as any;
+  // Truncated output must not be parsed as a complete report — fail honestly so
+  // the caller retries synthesis (not the whole research pipeline).
+  if (j.stop_reason === 'max_tokens') {
+    throw new ProviderError(
+      'Anthropic synthesis stopped at max_tokens (truncated) — output not parseable',
+      'anthropic'
+    );
+  }
   const text = (j.content ?? [])
     .filter((b: any) => b.type === 'text' || b.text)
     .map((b: any) => b.text ?? '')
@@ -663,6 +671,7 @@ async function anthropicCall(
     usage: {
       inputTokens: j.usage?.input_tokens,
       outputTokens: j.usage?.output_tokens,
+      cachedInputTokens: j.usage?.cache_read_input_tokens,
       requests: 1,
     },
     requestId,

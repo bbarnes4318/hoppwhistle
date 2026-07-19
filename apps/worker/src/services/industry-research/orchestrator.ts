@@ -224,19 +224,18 @@ export class ResearchOrchestrator {
               );
             }
           }
-          const cost =
-            computeStageCost(report.provider, report.usage, roleEstimate.get(role!) ?? 0).usd;
+          const sc = computeStageCost(report.provider, report.usage, roleEstimate.get(role!) ?? 0);
           await this.markStage(stage.id, {
             status: usedFallback ? 'fallback' : 'completed',
             finishedAt: new Date(),
             provider: report.provider,
             model: report.model,
             sourcesFound: report.sources.length,
-            costUsd: cost,
+            costUsd: sc.usd,
             usedFallback,
-            output: report as unknown as Prisma.InputJsonValue,
+            output: { ...report, costDetails: sc } as unknown as Prisma.InputJsonValue,
           });
-          await this.addCost(runId, cost);
+          await this.addCost(runId, sc.usd);
           break;
         }
         case 'evidence': {
@@ -496,15 +495,14 @@ export class ResearchOrchestrator {
       ...result.structured,
       sources: mergeSources(evidence.sources, result.structured.sources),
     };
-    const cost =
-      computeStageCost(result.provider, result.usage, roleEstimate.get('synthesis') ?? 0).usd;
-    await this.addCost(runId, cost);
+    const sc = computeStageCost(result.provider, result.usage, roleEstimate.get('synthesis') ?? 0);
+    await this.addCost(runId, sc.usd);
     await this.markStage(stageId, {
       status: 'completed',
       finishedAt: new Date(),
       provider: result.provider,
       model: result.model,
-      costUsd: cost,
+      costUsd: sc.usd,
       output: {
         structured,
         markdown: result.markdown,
@@ -512,6 +510,7 @@ export class ResearchOrchestrator {
         model: result.model,
         usage: result.usage,
         requestId: result.requestId,
+        costDetails: sc,
       } as unknown as Prisma.InputJsonValue,
     });
   }
@@ -538,16 +537,15 @@ export class ResearchOrchestrator {
       `Factual verification submitted (${adapter.id}/${opts.model})`
     );
     const v = await adapter.runFactualVerification(brief, structured, opts);
-    const cost =
-      computeStageCost(v.provider, v.usage, roleEstimate.get('factual_verifier') ?? 0).usd;
-    await this.addCost(runId, cost);
+    const sc = computeStageCost(v.provider, v.usage, roleEstimate.get('factual_verifier') ?? 0);
+    await this.addCost(runId, sc.usd);
     await this.markStage(stageId, {
       status: 'completed',
       finishedAt: new Date(),
       provider: v.provider,
       model: v.model,
-      costUsd: cost,
-      output: v.result as unknown as Prisma.InputJsonValue,
+      costUsd: sc.usd,
+      output: { ...v.result, costDetails: sc } as unknown as Prisma.InputJsonValue,
     });
     await this.appendProgress(
       runId,
@@ -583,16 +581,15 @@ export class ResearchOrchestrator {
         v.provider
       );
     }
-    const cost =
-      computeStageCost(v.provider, v.usage, roleEstimate.get('adversarial_verifier') ?? 0).usd;
-    await this.addCost(runId, cost);
+    const sc = computeStageCost(v.provider, v.usage, roleEstimate.get('adversarial_verifier') ?? 0);
+    await this.addCost(runId, sc.usd);
     await this.markStage(stageId, {
       status: 'completed',
       finishedAt: new Date(),
       provider: v.provider,
       model: v.model,
-      costUsd: cost,
-      output: v.result as unknown as Prisma.InputJsonValue,
+      costUsd: sc.usd,
+      output: { ...v.result, costDetails: sc } as unknown as Prisma.InputJsonValue,
     });
     await this.appendProgress(
       runId,
@@ -655,15 +652,15 @@ export class ResearchOrchestrator {
       `Adjudication submitted (${adapter.id}/${opts.model})`
     );
     const a = await adapter.runAdjudication(brief, disputes, opts);
-    const cost = computeStageCost(a.provider, a.usage, roleEstimate.get('adjudicator') ?? 0).usd;
-    await this.addCost(runId, cost);
+    const sc = computeStageCost(a.provider, a.usage, roleEstimate.get('adjudicator') ?? 0);
+    await this.addCost(runId, sc.usd);
     await this.markStage(stageId, {
       status: 'completed',
       finishedAt: new Date(),
       provider: a.provider,
       model: a.model,
-      costUsd: cost,
-      output: a.result as unknown as Prisma.InputJsonValue,
+      costUsd: sc.usd,
+      output: { ...a.result, costDetails: sc } as unknown as Prisma.InputJsonValue,
     });
     await this.appendProgress(runId, 'adjudicate', `Adjudication verdict: ${a.result.verdict}`);
   }

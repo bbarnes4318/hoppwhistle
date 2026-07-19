@@ -121,6 +121,10 @@ export interface StageCost {
   providerReportedCostUsd?: number;
   calculatedCostUsd?: number;
   estimatedCostUsd?: number;
+  /** Honest range: equals `usd` when confirmed/calculated; a band when estimated. */
+  costLowUsd: number;
+  costHighUsd: number;
+  pricingAsOf: string;
 }
 
 /**
@@ -136,17 +140,36 @@ export function computeStageCost(
   estimateUsd: number
 ): StageCost {
   if (usage.providerReportedCostUsd != null && usage.providerReportedCostUsd >= 0) {
+    const v = round2(usage.providerReportedCostUsd);
     return {
-      usd: round2(usage.providerReportedCostUsd),
+      usd: v,
       basis: 'provider_reported',
-      providerReportedCostUsd: round2(usage.providerReportedCostUsd),
+      providerReportedCostUsd: v,
+      costLowUsd: v,
+      costHighUsd: v,
+      pricingAsOf: PRICING_AS_OF,
     };
   }
   const calc = computeActualCost(provider, usage);
   if (calc != null) {
-    return { usd: calc, basis: 'calculated_complete', calculatedCostUsd: calc };
+    return {
+      usd: calc,
+      basis: 'calculated_complete',
+      calculatedCostUsd: calc,
+      costLowUsd: calc,
+      costHighUsd: calc,
+      pricingAsOf: PRICING_AS_OF,
+    };
   }
-  return { usd: round2(estimateUsd), basis: 'estimated', estimatedCostUsd: round2(estimateUsd) };
+  const mid = round2(estimateUsd);
+  return {
+    usd: mid,
+    basis: 'estimated',
+    estimatedCostUsd: mid,
+    costLowUsd: round2(estimateUsd * 0.6),
+    costHighUsd: round2(estimateUsd * 1.4),
+    pricingAsOf: PRICING_AS_OF,
+  };
 }
 
 export interface ActualUsageLike {
