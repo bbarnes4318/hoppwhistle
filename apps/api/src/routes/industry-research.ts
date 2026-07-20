@@ -19,7 +19,6 @@ import {
   type StageInfo,
 } from '@hopwhistle/shared';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { AccessToken, AgentDispatchClient } from 'livekit-server-sdk';
 
 import { getPrismaClient } from '../lib/prisma.js';
 import { getRedisClient } from '../services/redis.js';
@@ -879,6 +878,8 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
       const httpUrl = lkUrl.replace(/^wss:\/\//, 'https://').replace(/^ws:\/\//, 'http://');
 
       try {
+        // Loaded lazily so the (large) SDK never affects server startup.
+        const { AccessToken, AgentDispatchClient } = await import('livekit-server-sdk');
         // Dispatch our avatar agent worker into the room with the briefing text;
         // the worker joins, attaches the Protoface avatar, and speaks the text.
         const dispatch = new AgentDispatchClient(httpUrl, lkKey, lkSecret);
