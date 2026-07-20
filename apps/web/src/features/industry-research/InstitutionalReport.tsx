@@ -65,10 +65,6 @@ const CATEGORY_DEFS: Array<{ key: string; label: string; re: RegExp }> = [
   { key: 'execution', label: '30/60/90-day plan', re: /90.day|execution|validation test|roadmap/i },
 ];
 
-function money(n?: number): string {
-  return n == null ? '—' : `$${n.toFixed(2)}`;
-}
-
 export function InstitutionalReport({
   runId,
   report,
@@ -98,6 +94,7 @@ export function InstitutionalReport({
 
   const sectionEls = useRef<Record<string, HTMLElement | null>>({});
   const reportRef = useRef<HTMLDivElement>(null);
+  const centerScrollRef = useRef<HTMLDivElement>(null);
   const drawerCloseRef = useRef<HTMLButtonElement>(null);
   const oppOpenerRef = useRef<HTMLElement | null>(null);
   const mobileOpenerRef = useRef<HTMLButtonElement>(null);
@@ -106,13 +103,56 @@ export function InstitutionalReport({
   const q = query.trim().toLowerCase();
   const mdComponents = useMemo(() => highlightMarkdownComponents(q), [q]);
 
+  const scrollToTarget = (target: HTMLElement) => {
+    if (centerScrollRef.current && window.innerWidth > 900) {
+      const container = centerScrollRef.current;
+      const containerRect = container.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      const relativeTop = targetRect.top - containerRect.top + container.scrollTop;
+      const targetScrollTop = relativeTop - 70;
+      container.scrollTo({ top: Math.max(0, targetScrollTop), behavior: 'smooth' });
+    } else {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  const scrollToMatch = (target: HTMLElement) => {
+    if (centerScrollRef.current && window.innerWidth > 900) {
+      const container = centerScrollRef.current;
+      const containerRect = container.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      const relativeTop = targetRect.top - containerRect.top + container.scrollTop;
+      const targetScrollTop = relativeTop - containerRect.height / 2 + targetRect.height / 2;
+      container.scrollTo({ top: Math.max(0, targetScrollTop), behavior: 'smooth' });
+    } else {
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
+
   useEffect(() => {
-    const onScroll = () => setShowTop(window.scrollY > 700);
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+    const handleScroll = (e: Event) => {
+      const target = e.target as HTMLElement;
+      if (target === centerScrollRef.current) {
+        setShowTop(target.scrollTop > 700);
+      } else if (e.currentTarget === window) {
+        setShowTop(window.scrollY > 700);
+      }
+    };
+    const scrollEl = centerScrollRef.current;
+    if (scrollEl) {
+      scrollEl.addEventListener('scroll', handleScroll, { passive: true });
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      if (scrollEl) {
+        scrollEl.removeEventListener('scroll', handleScroll);
+      }
+      window.removeEventListener('scroll', handleScroll);
+    };
   }, []);
 
   useEffect(() => {
+    const rootEl = window.innerWidth > 900 ? centerScrollRef.current : null;
     const obs = new IntersectionObserver(
       entries => {
         const vis = entries
@@ -121,7 +161,7 @@ export function InstitutionalReport({
         if (vis?.target instanceof HTMLElement && vis.target.dataset.anchor)
           setActive(vis.target.dataset.anchor);
       },
-      { rootMargin: '-64px 0px -70% 0px' }
+      { root: rootEl, rootMargin: '-20px 0px -70% 0px' }
     );
     Object.values(sectionEls.current).forEach(el => el && obs.observe(el));
     return () => obs.disconnect();
@@ -149,7 +189,7 @@ export function InstitutionalReport({
     marks.forEach(m => m.removeAttribute('data-ir-active'));
     if (matchIdx >= 0 && marks[matchIdx]) {
       marks[matchIdx].setAttribute('data-ir-active', '');
-      marks[matchIdx].scrollIntoView({ behavior: 'smooth', block: 'center' });
+      scrollToMatch(marks[matchIdx]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matchIdx, matchCount]);
@@ -218,12 +258,23 @@ export function InstitutionalReport({
     }
   };
   const goto = (id: string) => {
-    sectionEls.current[id]?.scrollIntoView({ behavior: 'smooth' });
+    const target = sectionEls.current[id];
+    if (target) {
+      scrollToTarget(target);
+    }
     closeMobile();
+  };
+
+  const backToTop = () => {
+    if (centerScrollRef.current && window.innerWidth > 900) {
+      centerScrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
   const dl = (fmt: 'markdown' | 'json') => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-    fetch(researchApi.reportDownloadUrl(runId, fmt), {
+    void fetch(researchApi.reportDownloadUrl(runId, fmt), {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
       .then(res => res.blob())
@@ -267,478 +318,534 @@ export function InstitutionalReport({
   ];
 
   return (
-    <div ref={reportRef}>
-      {/* Identity row */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          justifyContent: 'space-between',
-          gap: 16,
-          paddingBottom: 12,
-        }}
-      >
-        <div style={{ minWidth: 0 }}>
-          <div className="ir-eyebrow">Industry Research · {meta.mode.replace(/_/g, ' ')}</div>
-          <h1 className="ir-h1" style={{ marginTop: 3 }}>
-            <H text={meta.industry} />
-          </h1>
-          <div className="ir-muted" style={{ fontSize: 12, marginTop: 2 }}>
-            {meta.geography} ·{' '}
-            {new Date(report.createdAt).toLocaleDateString(undefined, {
-              month: 'long',
-              day: 'numeric',
-              year: 'numeric',
-            })}
-          </div>
-        </div>
-        <div className="ir-noprint" style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-          <button
-            className="ir-btn"
-            onClick={() => dl('markdown')}
-            aria-label="Export report as Markdown"
-          >
-            Export
-          </button>
-          <button
-            className="ir-btn"
-            onClick={() => window.print()}
-            aria-label="Print or save as PDF"
-          >
-            Print / Save PDF
-          </button>
-          <button
-            className="ir-btn"
-            onClick={() =>
-              copy('share', typeof window !== 'undefined' ? window.location.href : runId)
-            }
-            aria-label="Copy shareable link"
-          >
-            {copied === 'share' ? 'Link copied' : 'Share'}
-          </button>
-        </div>
-      </div>
-
-      {/* Decision strip */}
-      <div
-        className="ir-strip"
-        data-anchor="decision"
-        ref={el => {
-          sectionEls.current.decision = el;
-        }}
-        id="ir-decision"
-      >
-        <div className="ir-strip-cell">
-          <div className="ir-strip-label">Verdict</div>
-          <div className="ir-strip-value">
-            <span className={`ir-verdict ${verdictClass(v.verdict)}`}>
-              <H text={v.verdict.replace(/_/g, ' ')} />
-            </span>
-          </div>
-        </div>
-        <StripCell label="Score" value={`${v.overallScore} / 100`} q={q} />
-        <StripCell label="Confidence" value={`${Math.round(v.confidence * 100)}%`} q={q} />
-        <StripCell label="Time to revenue" value={v.timeToFirstRevenue} q={q} />
-        <StripCell label="Capital" value={v.initialCapital} q={q} />
-        <StripCell label="Max authorized" value={money(maxBudgetUsd)} q={q} />
-      </div>
-
-      {/* Recommendation */}
-      <div style={{ marginTop: 14, display: 'flex', alignItems: 'baseline', gap: 12 }}>
-        <div className="ir-eyebrow" style={{ flexShrink: 0, paddingTop: 2 }}>
-          Recommended entry
-        </div>
-        <p style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.5, margin: 0 }}>
-          <H text={recommendation} />
-        </p>
-        <button
-          className="ir-btn ir-btn-ghost ir-noprint"
-          style={{ flexShrink: 0, height: 26 }}
-          onClick={() => copy('rec', recommendation)}
-          aria-label="Copy recommendation"
-        >
-          {copied === 'rec' ? 'Copied' : 'Copy'}
-        </button>
-      </div>
-
-      {/* Reasons for / against */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-          gap: 24,
-          marginTop: 16,
-          paddingTop: 16,
-          borderTop: '1px solid var(--ir-border)',
-        }}
-      >
-        <ReasonCol title="Why this can work" cls="ir-pos" items={reasonsFor} q={q} />
-        <ReasonCol title="Why this can fail" cls="ir-neg" items={reasonsAgainst} q={q} />
-      </div>
-
-      {/* Report body grid */}
-      <div className="ir-report-grid" style={{ marginTop: 28 }}>
-        <nav className="ir-nav-col" aria-label="Report sections">
-          {navItems.map(it => (
-            <div key={it.id}>
-              {it.group && <div className="ir-nav-group">{it.group}</div>}
-              <a
-                className="ir-nav-link"
-                data-active={active === it.id}
-                href={`#ir-${it.id}`}
-                onClick={e => {
-                  e.preventDefault();
-                  goto(it.id);
-                }}
-              >
-                {it.label}
-              </a>
-            </div>
-          ))}
-        </nav>
-
-        <div className="ir-canvas">
-          {/* Search toolbar */}
+    <div
+      ref={reportRef}
+      style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}
+    >
+      <div className="ir-report-grid">
+        {/* Left Column: Summary + Table of Contents */}
+        <aside className="ir-left-col">
           <div
-            className="ir-noprint"
+            className="ir-left-summary"
             style={{
               display: 'flex',
-              gap: 8,
-              alignItems: 'center',
-              marginBottom: 8,
-              flexWrap: 'wrap',
+              flexDirection: 'column',
+              gap: 6,
+              padding: '12px',
+              background: 'var(--ir-surface)',
+              border: '1px solid var(--ir-border)',
+              borderRadius: 6,
             }}
           >
-            <input
-              className="ir-field"
-              style={{ height: 32, maxWidth: 240 }}
-              placeholder="Search the report…"
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              aria-label="Search report"
-            />
-            {q && (
-              <>
-                <span className="ir-muted ir-num" style={{ fontSize: 12 }} aria-live="polite">
-                  {matchCount ? `${matchIdx + 1} of ${matchCount}` : 'No matches'}
-                </span>
-                <button
-                  className="ir-btn"
-                  style={{ height: 32 }}
-                  onClick={() => stepMatch(-1)}
-                  disabled={!matchCount}
-                  aria-label="Previous match"
-                >
-                  ‹
-                </button>
-                <button
-                  className="ir-btn"
-                  style={{ height: 32 }}
-                  onClick={() => stepMatch(1)}
-                  disabled={!matchCount}
-                  aria-label="Next match"
-                >
-                  ›
-                </button>
-                <button
-                  className="ir-btn ir-btn-ghost"
-                  style={{ height: 32 }}
-                  onClick={() => setQuery('')}
-                  aria-label="Clear search"
-                >
-                  Clear
-                </button>
-              </>
-            )}
-            <button
-              className="ir-btn"
-              style={{ height: 32, marginLeft: 'auto' }}
-              onClick={() => setAll(collapsed.size === 0)}
-              aria-label={collapsed.size === 0 ? 'Collapse all sections' : 'Expand all sections'}
+            <div style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.2 }}>{meta.industry}</div>
+            <div className="ir-muted" style={{ fontSize: 11, lineHeight: 1.2 }}>
+              {meta.geography}
+            </div>
+
+            <div className="ir-divider" style={{ margin: '4px 0' }} />
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '80px 1fr',
+                gap: '6px 4px',
+                fontSize: 11,
+              }}
             >
-              {collapsed.size === 0 ? 'Collapse all' : 'Expand all'}
-            </button>
+              <div className="ir-muted">Verdict</div>
+              <div>
+                <span
+                  className={`ir-verdict ${verdictClass(v.verdict)}`}
+                  style={{ padding: '1px 5px', fontSize: 9, fontWeight: 700 }}
+                >
+                  {v.verdict.replace(/_/g, ' ')}
+                </span>
+              </div>
+
+              <div className="ir-muted">Score</div>
+              <div style={{ fontWeight: 600 }} className="ir-num">
+                {v.overallScore} / 100
+              </div>
+
+              <div className="ir-muted">Confidence</div>
+              <div style={{ fontWeight: 600 }} className="ir-num">
+                {Math.round(v.confidence * 100)}%
+              </div>
+
+              <div className="ir-muted">Time to revenue</div>
+              <div style={{ fontWeight: 600 }}>{v.timeToFirstRevenue}</div>
+
+              <div className="ir-muted">Capital</div>
+              <div style={{ fontWeight: 600 }}>{v.initialCapital}</div>
+            </div>
+
+            <div className="ir-divider" style={{ margin: '4px 0' }} />
+
+            <div>
+              <div
+                className="ir-muted"
+                style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  marginBottom: 2,
+                }}
+              >
+                Recommended Entry
+              </div>
+              <div
+                className="ir-clamp-2"
+                style={{ fontSize: 11, fontWeight: 500, lineHeight: 1.35 }}
+                title={recommendation}
+              >
+                <H text={recommendation} />
+              </div>
+            </div>
           </div>
 
-          {/* Core analysis */}
-          {categories.map(cat => {
-            const isCollapsed = collapsed.has(cat.key) && !q;
-            return (
+          <div className="ir-toc-label">Table of Contents</div>
+          <nav className="ir-toc-nav" aria-label="Report sections">
+            {navItems.map(it => (
+              <div key={it.id}>
+                {it.group && <div className="ir-nav-group">{it.group}</div>}
+                <a
+                  className="ir-nav-link"
+                  data-active={active === it.id}
+                  href={`#ir-${it.id}`}
+                  onClick={e => {
+                    e.preventDefault();
+                    goto(it.id);
+                  }}
+                >
+                  {it.label}
+                </a>
+              </div>
+            ))}
+          </nav>
+        </aside>
+
+        {/* Center Column: Report Canvas (the scrollable area) */}
+        <div className="ir-center-col" ref={centerScrollRef}>
+          {/* Mobile and Print Header Block */}
+          <div className="ir-mobile-header-block">
+            <div
+              style={{
+                padding: 12,
+                background: 'var(--ir-surface)',
+                border: '1px solid var(--ir-border)',
+                borderRadius: 6,
+                marginBottom: 16,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  color: 'var(--ir-text-3)',
+                }}
+              >
+                Industry Research · {meta.mode.replace(/_/g, ' ')}
+              </div>
+              <h1 className="ir-h1" style={{ marginTop: 2, marginBottom: 4 }}>
+                <H text={meta.industry} />
+              </h1>
+              <div className="ir-muted" style={{ fontSize: 12, marginBottom: 8 }}>
+                {meta.geography} ·{' '}
+                {new Date(report.createdAt).toLocaleDateString(undefined, {
+                  month: 'long',
+                  day: 'numeric',
+                  year: 'numeric',
+                })}
+              </div>
+              <div className="ir-divider" style={{ margin: '8px 0' }} />
+              <div
+                style={{ display: 'flex', flexWrap: 'wrap', gap: 16, fontSize: 12, marginTop: 8 }}
+              >
+                <div>
+                  <strong>Verdict:</strong>{' '}
+                  <span className={`ir-verdict ${verdictClass(v.verdict)}`}>
+                    {v.verdict.replace(/_/g, ' ')}
+                  </span>
+                </div>
+                <div>
+                  <strong>Score:</strong> {v.overallScore}/100
+                </div>
+                <div>
+                  <strong>Confidence:</strong> {Math.round(v.confidence * 100)}%
+                </div>
+                <div>
+                  <strong>Capital:</strong> {v.initialCapital}
+                </div>
+              </div>
+              <div style={{ marginTop: 8, fontSize: 12 }}>
+                <strong>Recommended Entry:</strong> {recommendation}
+              </div>
+            </div>
+          </div>
+
+          <div className="ir-canvas">
+            {/* Sticky Search Toolbar */}
+            <div
+              className="ir-search-toolbar ir-noprint"
+              style={{
+                display: 'flex',
+                gap: 8,
+                alignItems: 'center',
+                flexWrap: 'wrap',
+              }}
+            >
+              <input
+                className="ir-field"
+                style={{ height: 32, maxWidth: 240 }}
+                placeholder="Search the report…"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                aria-label="Search report"
+              />
+              {q && (
+                <>
+                  <span className="ir-muted ir-num" style={{ fontSize: 12 }} aria-live="polite">
+                    {matchCount ? `${matchIdx + 1} of ${matchCount}` : 'No matches'}
+                  </span>
+                  <button
+                    className="ir-btn"
+                    style={{ height: 32 }}
+                    onClick={() => stepMatch(-1)}
+                    disabled={!matchCount}
+                    aria-label="Previous match"
+                  >
+                    ‹
+                  </button>
+                  <button
+                    className="ir-btn"
+                    style={{ height: 32 }}
+                    onClick={() => stepMatch(1)}
+                    disabled={!matchCount}
+                    aria-label="Next match"
+                  >
+                    ›
+                  </button>
+                  <button
+                    className="ir-btn ir-btn-ghost"
+                    style={{ height: 32 }}
+                    onClick={() => setQuery('')}
+                    aria-label="Clear search"
+                  >
+                    Clear
+                  </button>
+                </>
+              )}
+              <button
+                className="ir-btn"
+                style={{ height: 32, marginLeft: 'auto' }}
+                onClick={() => setAll(collapsed.size === 0)}
+                aria-label={collapsed.size === 0 ? 'Collapse all sections' : 'Expand all sections'}
+              >
+                {collapsed.size === 0 ? 'Collapse all' : 'Expand all'}
+              </button>
+            </div>
+
+            {/* Reasons block */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                gap: 20,
+                marginBottom: 20,
+                paddingBottom: 20,
+                borderBottom: '1px solid var(--ir-border)',
+              }}
+            >
+              <ReasonCol title="Why this can work" cls="ir-pos" items={reasonsFor} q={q} />
+              <ReasonCol title="Why this can fail" cls="ir-neg" items={reasonsAgainst} q={q} />
+            </div>
+
+            {/* Core analysis */}
+            {categories.map(cat => {
+              const isCollapsed = collapsed.has(cat.key) && !q;
+              return (
+                <section
+                  key={cat.key}
+                  id={`ir-${cat.key}`}
+                  data-anchor={cat.key}
+                  ref={el => {
+                    sectionEls.current[cat.key] = el;
+                  }}
+                  className="ir-report-section"
+                >
+                  <SectionHead
+                    label={cat.label}
+                    query={q}
+                    collapsed={isCollapsed}
+                    onToggle={() => toggle(cat.key)}
+                    onCopy={() => {
+                      void copy(
+                        cat.key,
+                        cat.sections.map(s => `## ${s.title}\n\n${s.markdown}`).join('\n\n')
+                      );
+                    }}
+                    copied={copied === cat.key}
+                  />
+                  {!isCollapsed &&
+                    cat.sections.map(s => (
+                      <div key={s.key} style={{ marginTop: 14 }}>
+                        {cat.sections.length > 1 && (
+                          <div className="ir-h3">
+                            <H text={s.title} />
+                          </div>
+                        )}
+                        <div className="ir-body" style={{ marginTop: 6 }}>
+                          <ReactMarkdown components={mdComponents}>{s.markdown}</ReactMarkdown>
+                        </div>
+                      </div>
+                    ))}
+                </section>
+              );
+            })}
+
+            {/* Economics */}
+            <section
+              id="ir-economics"
+              data-anchor="economics"
+              ref={el => {
+                sectionEls.current.economics = el;
+              }}
+              className="ir-report-section"
+            >
+              <SectionHead label="Economics" query={q} />
+              <EconomicsTable report={r} verdict={econVerdict} q={q} />
+            </section>
+
+            {/* Opportunities */}
+            {r.rankedOpportunities.length > 0 && (
               <section
-                key={cat.key}
-                id={`ir-${cat.key}`}
-                data-anchor={cat.key}
+                id="ir-opportunities"
+                data-anchor="opportunities"
                 ref={el => {
-                  sectionEls.current[cat.key] = el;
+                  sectionEls.current.opportunities = el;
                 }}
                 className="ir-report-section"
               >
-                <SectionHead
-                  label={cat.label}
-                  query={q}
-                  collapsed={isCollapsed}
-                  onToggle={() => toggle(cat.key)}
-                  onCopy={() =>
-                    copy(
-                      cat.key,
-                      cat.sections.map(s => `## ${s.title}\n\n${s.markdown}`).join('\n\n')
-                    )
-                  }
-                  copied={copied === cat.key}
-                />
-                {!isCollapsed &&
-                  cat.sections.map(s => (
-                    <div key={s.key} style={{ marginTop: 14 }}>
-                      {cat.sections.length > 1 && (
-                        <div className="ir-h3">
-                          <H text={s.title} />
-                        </div>
-                      )}
-                      <div className="ir-body" style={{ marginTop: 6 }}>
-                        <ReactMarkdown components={mdComponents}>{s.markdown}</ReactMarkdown>
-                      </div>
-                    </div>
-                  ))}
-              </section>
-            );
-          })}
-
-          {/* Economics */}
-          <section
-            id="ir-economics"
-            data-anchor="economics"
-            ref={el => {
-              sectionEls.current.economics = el;
-            }}
-            className="ir-report-section"
-          >
-            <SectionHead label="Economics" query={q} />
-            <EconomicsTable report={r} verdict={econVerdict} q={q} />
-          </section>
-
-          {/* Opportunities */}
-          {r.rankedOpportunities.length > 0 && (
-            <section
-              id="ir-opportunities"
-              data-anchor="opportunities"
-              ref={el => {
-                sectionEls.current.opportunities = el;
-              }}
-              className="ir-report-section"
-            >
-              <SectionHead label="Ranked entry opportunities" query={q} />
-              <div style={{ overflowX: 'auto' }}>
-                <table className="ir-table">
-                  <thead>
-                    <tr>
-                      <th className="ir-num">Rank</th>
-                      <th>Opportunity</th>
-                      <th>Target customer</th>
-                      <th>Offer</th>
-                      <th>Revenue model</th>
-                      <th>Startup capital</th>
-                      <th>Time to revenue</th>
-                      <th>Difficulty</th>
-                      <th className="ir-num">Score</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {r.rankedOpportunities.map(o => (
-                      <tr
-                        key={o.rank}
-                        className="ir-clickable"
-                        role="button"
-                        tabIndex={0}
-                        aria-label={`Open details for opportunity ${o.rank}: ${o.opportunity}`}
-                        onClick={e => openOpp(o, e.currentTarget)}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            openOpp(o, e.currentTarget);
-                          }
-                        }}
-                      >
-                        <td className="ir-num">{o.rank}</td>
-                        <td style={{ fontWeight: 600 }}>
-                          <H text={o.opportunity} />
-                        </td>
-                        <td className="ir-muted">
-                          <H text={o.customer ?? '—'} />
-                        </td>
-                        <td className="ir-muted">
-                          <H text={o.offer ?? '—'} />
-                        </td>
-                        <td className="ir-muted">
-                          <H text={o.revenueModel ?? '—'} />
-                        </td>
-                        <td className="ir-muted">
-                          <H text={o.startupCost ?? '—'} />
-                        </td>
-                        <td className="ir-muted">
-                          <H text={o.timeToFirstRevenue ?? '—'} />
-                        </td>
-                        <td className="ir-muted">
-                          <H text={o.salesDifficulty ?? '—'} />
-                        </td>
-                        <td className="ir-num" style={{ fontWeight: 600 }}>
-                          <H text={String(o.opportunityScore)} />
-                        </td>
+                <SectionHead label="Ranked entry opportunities" query={q} />
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="ir-table">
+                    <thead>
+                      <tr>
+                        <th className="ir-num">Rank</th>
+                        <th>Opportunity</th>
+                        <th>Target customer</th>
+                        <th>Offer</th>
+                        <th>Revenue model</th>
+                        <th>Startup capital</th>
+                        <th>Time to revenue</th>
+                        <th>Difficulty</th>
+                        <th className="ir-num">Score</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <p className="ir-muted ir-noprint" style={{ marginTop: 8, fontSize: 12 }}>
-                Select a row for evidence, risks, and the first-customer approach.
-              </p>
-            </section>
-          )}
-
-          {/* Risk register */}
-          <section
-            id="ir-risks"
-            data-anchor="risks"
-            ref={el => {
-              sectionEls.current.risks = el;
-            }}
-            className="ir-report-section"
-          >
-            <SectionHead label="Risk register" query={q} />
-            {riskRows.length > 0 ? (
-              <div style={{ overflowX: 'auto' }}>
-                <table className="ir-table">
-                  <thead>
-                    <tr>
-                      <th>Risk</th>
-                      <th>Probability</th>
-                      <th>Impact</th>
-                      <th>Ability to overcome</th>
-                      <th>Mitigation</th>
-                      <th>Trigger</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {riskRows.map((rk, i) => (
-                      <tr key={i}>
-                        <td style={{ minWidth: 200 }}>
-                          <H text={rk.risk} />
-                        </td>
-                        <td>
-                          <Classified value={rk.probability} q={q} />
-                        </td>
-                        <td>
-                          <Classified value={rk.impact} q={q} />
-                        </td>
-                        <td>
-                          <Classified value={rk.ability} q={q} />
-                        </td>
-                        <td className="ir-muted" style={{ minWidth: 180 }}>
-                          <H text={rk.mitigation} />
-                        </td>
-                        <td className="ir-muted" style={{ minWidth: 160 }}>
-                          <H text={rk.trigger} />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <p className="ir-muted">No material risks were flagged by the adversarial review.</p>
-            )}
-            {r.killCriteria.length > 0 && (
-              <div style={{ marginTop: 18 }}>
-                <div className="ir-eyebrow ir-neg">Do not continue if</div>
-                <ul style={{ margin: '8px 0 0', paddingLeft: 0, listStyle: 'none' }}>
-                  {r.killCriteria.map((k, i) => (
-                    <li key={i} style={{ display: 'flex', gap: 8, padding: '3px 0', fontSize: 14 }}>
-                      <span className="ir-neg" aria-hidden>
-                        ✕
-                      </span>{' '}
-                      <H text={k} />
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </section>
-
-          {/* Independent review */}
-          {report.verification && (
-            <section
-              id="ir-review"
-              data-anchor="review"
-              ref={el => {
-                sectionEls.current.review = el;
-              }}
-              className="ir-report-section"
-            >
-              <SectionHead label="Independent review" query={q} />
-              <IndependentReview report={report} q={q} />
-            </section>
-          )}
-
-          {/* Evidence & sources */}
-          <section
-            id="ir-evidence"
-            data-anchor="evidence"
-            ref={el => {
-              sectionEls.current.evidence = el;
-            }}
-            className="ir-report-section"
-          >
-            <SectionHead label="Evidence & sources" query={q} />
-            <SourcesWorkspace sources={report.sources} evidence={report.evidence} highlight={q} />
-          </section>
-
-          {/* Methodology & audit trail */}
-          <section
-            id="ir-methodology"
-            data-anchor="methodology"
-            ref={el => {
-              sectionEls.current.methodology = el;
-            }}
-            className="ir-report-section"
-          >
-            <details>
-              <summary style={{ cursor: 'pointer' }}>
-                <span className="ir-h2">Methodology &amp; audit trail</span>
-              </summary>
-              <div style={{ marginTop: 14 }}>
-                {report.provenance && report.provenance.executionType !== 'fresh' && (
-                  <p className="ir-muted" style={{ fontSize: 13, marginBottom: 10 }}>
-                    Replay of an earlier investigation — research evidence was reused; synthesis and
-                    verification were re-run. No new research charges were incurred.
-                  </p>
-                )}
-                <p className="ir-muted" style={{ fontSize: 13, marginBottom: 12 }}>
-                  Independently researched, synthesized, and verified from real, cited sources.
-                  Synthesis engine: {report.synthesisProvider ?? '—'}
-                  {report.synthesisModel ? ` (${report.synthesisModel})` : ''}. Schema{' '}
-                  {meta.schemaVersion}.
-                </p>
-                <CostSummary
-                  runId={runId}
-                  status={status}
-                  accruedCostUsd={accruedCostUsd}
-                  maxBudgetUsd={maxBudgetUsd}
-                />
-                <div style={{ marginTop: 12, display: 'flex', gap: 6 }} className="ir-noprint">
-                  <button className="ir-btn" onClick={() => dl('markdown')}>
-                    Download Markdown
-                  </button>
-                  <button className="ir-btn" onClick={() => dl('json')}>
-                    Download JSON
-                  </button>
+                    </thead>
+                    <tbody>
+                      {r.rankedOpportunities.map(o => (
+                        <tr
+                          key={o.rank}
+                          className="ir-clickable"
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`Open details for opportunity ${o.rank}: ${o.opportunity}`}
+                          onClick={e => openOpp(o, e.currentTarget)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              openOpp(o, e.currentTarget);
+                            }
+                          }}
+                        >
+                          <td className="ir-num">{o.rank}</td>
+                          <td style={{ fontWeight: 600 }}>
+                            <H text={o.opportunity} />
+                          </td>
+                          <td className="ir-muted">
+                            <H text={o.customer ?? '—'} />
+                          </td>
+                          <td className="ir-muted">
+                            <H text={o.offer ?? '—'} />
+                          </td>
+                          <td className="ir-muted">
+                            <H text={o.revenueModel ?? '—'} />
+                          </td>
+                          <td className="ir-muted">
+                            <H text={o.startupCost ?? '—'} />
+                          </td>
+                          <td className="ir-muted">
+                            <H text={o.timeToFirstRevenue ?? '—'} />
+                          </td>
+                          <td className="ir-muted">
+                            <H text={o.salesDifficulty ?? '—'} />
+                          </td>
+                          <td className="ir-num" style={{ fontWeight: 600 }}>
+                            <H text={String(o.opportunityScore)} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              </div>
-            </details>
-          </section>
+                <p className="ir-muted ir-noprint" style={{ marginTop: 8, fontSize: 12 }}>
+                  Select a row for evidence, risks, and the first-customer approach.
+                </p>
+              </section>
+            )}
+
+            {/* Risk register */}
+            <section
+              id="ir-risks"
+              data-anchor="risks"
+              ref={el => {
+                sectionEls.current.risks = el;
+              }}
+              className="ir-report-section"
+            >
+              <SectionHead label="Risk register" query={q} />
+              {riskRows.length > 0 ? (
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="ir-table">
+                    <thead>
+                      <tr>
+                        <th>Risk</th>
+                        <th>Probability</th>
+                        <th>Impact</th>
+                        <th>Ability to overcome</th>
+                        <th>Mitigation</th>
+                        <th>Trigger</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {riskRows.map((rk, i) => (
+                        <tr key={i}>
+                          <td style={{ minWidth: 200 }}>
+                            <H text={rk.risk} />
+                          </td>
+                          <td>
+                            <Classified value={rk.probability} q={q} />
+                          </td>
+                          <td>
+                            <Classified value={rk.impact} q={q} />
+                          </td>
+                          <td>
+                            <Classified value={rk.ability} q={q} />
+                          </td>
+                          <td className="ir-muted" style={{ minWidth: 180 }}>
+                            <H text={rk.mitigation} />
+                          </td>
+                          <td className="ir-muted" style={{ minWidth: 160 }}>
+                            <H text={rk.trigger} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="ir-muted">
+                  No material risks were flagged by the adversarial review.
+                </p>
+              )}
+              {r.killCriteria.length > 0 && (
+                <div style={{ marginTop: 18 }}>
+                  <div className="ir-eyebrow ir-neg">Do not continue if</div>
+                  <ul style={{ margin: '8px 0 0', paddingLeft: 0, listStyle: 'none' }}>
+                    {r.killCriteria.map((k, i) => (
+                      <li
+                        key={i}
+                        style={{ display: 'flex', gap: 8, padding: '3px 0', fontSize: 14 }}
+                      >
+                        <span className="ir-neg" aria-hidden>
+                          ✕
+                        </span>{' '}
+                        <H text={k} />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </section>
+
+            {/* Independent review */}
+            {report.verification && (
+              <section
+                id="ir-review"
+                data-anchor="review"
+                ref={el => {
+                  sectionEls.current.review = el;
+                }}
+                className="ir-report-section"
+              >
+                <SectionHead label="Independent review" query={q} />
+                <IndependentReview report={report} q={q} />
+              </section>
+            )}
+
+            {/* Evidence & sources */}
+            <section
+              id="ir-evidence"
+              data-anchor="evidence"
+              ref={el => {
+                sectionEls.current.evidence = el;
+              }}
+              className="ir-report-section"
+            >
+              <SectionHead label="Evidence & sources" query={q} />
+              <SourcesWorkspace sources={report.sources} evidence={report.evidence} highlight={q} />
+            </section>
+
+            {/* Methodology & audit trail */}
+            <section
+              id="ir-methodology"
+              data-anchor="methodology"
+              ref={el => {
+                sectionEls.current.methodology = el;
+              }}
+              className="ir-report-section"
+            >
+              <details>
+                <summary style={{ cursor: 'pointer' }}>
+                  <span className="ir-h2">Methodology &amp; audit trail</span>
+                </summary>
+                <div style={{ marginTop: 14 }}>
+                  {report.provenance && report.provenance.executionType !== 'fresh' && (
+                    <p className="ir-muted" style={{ fontSize: 13, marginBottom: 10 }}>
+                      Replay of an earlier investigation — research evidence was reused; synthesis
+                      and verification were re-run. No new research charges were incurred.
+                    </p>
+                  )}
+                  <p className="ir-muted" style={{ fontSize: 13, marginBottom: 12 }}>
+                    Independently researched, synthesized, and verified from real, cited sources.
+                    Synthesis engine: {report.synthesisProvider ?? '—'}
+                    {report.synthesisModel ? ` (${report.synthesisModel})` : ''}. Schema{' '}
+                    {meta.schemaVersion}.
+                  </p>
+                  <CostSummary
+                    runId={runId}
+                    status={status}
+                    accruedCostUsd={accruedCostUsd}
+                    maxBudgetUsd={maxBudgetUsd}
+                  />
+                  <div style={{ marginTop: 12, display: 'flex', gap: 6 }} className="ir-noprint">
+                    <button className="ir-btn" onClick={() => dl('markdown')}>
+                      Download Markdown
+                    </button>
+                    <button className="ir-btn" onClick={() => dl('json')}>
+                      Download JSON
+                    </button>
+                  </div>
+                </div>
+              </details>
+            </section>
+          </div>
         </div>
 
-        {/* Right rail */}
-        <aside className="ir-rail">
-          <div className="ir-panel" style={{ padding: 14 }}>
+        {/* Right Column: Decision Support Panel */}
+        <aside className="ir-right-col">
+          <div className="ir-decision-support-panel">
             <div className="ir-eyebrow">Immediate next action</div>
             <p style={{ fontSize: 13, marginTop: 6, lineHeight: 1.5 }}>
               <H
@@ -885,7 +992,7 @@ export function InstitutionalReport({
         <button
           className="ir-noprint"
           aria-label="Back to top"
-          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          onClick={backToTop}
           style={{
             position: 'fixed',
             bottom: 20,
@@ -908,17 +1015,6 @@ export function InstitutionalReport({
 }
 
 // ---- sub-components -------------------------------------------------------
-
-function StripCell({ label, value, q }: { label: string; value: string; q: string }) {
-  return (
-    <div className="ir-strip-cell">
-      <div className="ir-strip-label">{label}</div>
-      <div className="ir-strip-value">
-        <SearchHighlight text={value} query={q} />
-      </div>
-    </div>
-  );
-}
 
 function ReasonCol({
   title,
@@ -1089,21 +1185,9 @@ function EconomicsTable({
             {rows.map(([label, key]) => (
               <tr key={label}>
                 <td>{label}</td>
-                {key ? (
-                  cell(cons?.[key] as string | undefined)
-                ) : (
-                  <td className="ir-num ir-muted">{NOT_ESTABLISHED}</td>
-                )}
-                {key ? (
-                  cell(base?.[key] as string | undefined)
-                ) : (
-                  <td className="ir-num ir-muted">{NOT_ESTABLISHED}</td>
-                )}
-                {key ? (
-                  cell(agg?.[key] as string | undefined)
-                ) : (
-                  <td className="ir-num ir-muted">{NOT_ESTABLISHED}</td>
-                )}
+                {key ? cell(cons?.[key]) : <td className="ir-num ir-muted">{NOT_ESTABLISHED}</td>}
+                {key ? cell(base?.[key]) : <td className="ir-num ir-muted">{NOT_ESTABLISHED}</td>}
+                {key ? cell(agg?.[key]) : <td className="ir-num ir-muted">{NOT_ESTABLISHED}</td>}
               </tr>
             ))}
           </tbody>

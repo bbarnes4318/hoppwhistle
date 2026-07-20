@@ -24,6 +24,9 @@ import {
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { researchApi, type ResearchConfig } from './api';
+import { CapabilityPicker } from './CapabilityPicker';
+
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -39,9 +42,6 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
-
-import { researchApi, type ResearchConfig } from './api';
-import { CapabilityPicker } from './CapabilityPicker';
 
 // Human labels for each research depth — provider/model names deliberately hidden.
 const MODE_COPY: Record<ResearchMode, { tagline: string; body: string; recommended?: boolean }> = {
@@ -276,11 +276,11 @@ export function ResearchConfigForm() {
     step === 0 ? brief.industry.trim().length >= 2 : step === 2 ? !forensicNeedsBudget : true;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="ir-form-workspace mx-auto max-w-3xl">
       <Stepper step={step} onJump={setStep} industryDone={brief.industry.trim().length >= 2} />
 
       {missingProviders.length > 0 && step >= 2 && (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-2 text-xs text-destructive flex-shrink-0">
           This depth can’t run yet — the research engines aren’t fully configured. An administrator
           needs to finish setup before you launch.
         </div>
@@ -292,49 +292,59 @@ export function ResearchConfigForm() {
           title="What market are you considering?"
           subtitle="Name the industry or business you’re thinking about entering."
         >
-          <div>
-            <Input
-              autoFocus
-              value={brief.industry}
-              onChange={e => set('industry', e.target.value)}
-              placeholder="e.g. Mobile car detailing"
-              className="h-14 text-lg"
-              aria-label="Market or industry"
-            />
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {INDUSTRY_EXAMPLES.map(ex => (
-                <Chip key={ex} onClick={() => set('industry', ex)}>
-                  {ex}
-                </Chip>
-              ))}
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="sm:col-span-2">
+              <Label className="mb-1 block text-sm font-medium">Market or Industry</Label>
+              <Input
+                autoFocus
+                value={brief.industry}
+                onChange={e => set('industry', e.target.value)}
+                placeholder="e.g. Mobile car detailing"
+                className="h-10 text-sm"
+                aria-label="Market or industry"
+              />
+              <div className="mt-1 flex flex-wrap gap-1">
+                {INDUSTRY_EXAMPLES.map(ex => (
+                  <Chip key={ex} onClick={() => set('industry', ex)}>
+                    {ex}
+                  </Chip>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <Label className="mb-1 block text-sm font-medium">
+                Where do you want to operate?
+              </Label>
+              <Input
+                value={brief.geography}
+                onChange={e => set('geography', e.target.value)}
+                placeholder="United States"
+                className="h-10 text-sm"
+              />
+              <div className="mt-1 flex flex-wrap gap-1">
+                {GEO_SUGGESTIONS.slice(0, 3).map(g => (
+                  <Chip key={g} onClick={() => set('geography', g)}>
+                    {g}
+                  </Chip>
+                ))}
+              </div>
+            </div>
+
+            <div className="sm:col-span-3">
+              <FieldBlock
+                label="Who is your target customer?"
+                hint="Optional — leave blank and we’ll identify likely customer segments."
+              >
+                <Input
+                  value={brief.customer}
+                  onChange={e => set('customer', e.target.value)}
+                  placeholder="e.g. Busy suburban homeowners"
+                  className="h-10 text-sm"
+                />
+              </FieldBlock>
             </div>
           </div>
-
-          <FieldBlock label="Where do you want to operate?" hint="Defaults to United States.">
-            <Input
-              value={brief.geography}
-              onChange={e => set('geography', e.target.value)}
-              placeholder="United States"
-            />
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {GEO_SUGGESTIONS.map(g => (
-                <Chip key={g} onClick={() => set('geography', g)}>
-                  {g}
-                </Chip>
-              ))}
-            </div>
-          </FieldBlock>
-
-          <FieldBlock
-            label="Who do you think the customer might be?"
-            hint="Optional — leave blank and we’ll analyze several."
-          >
-            <Input
-              value={brief.customer}
-              onChange={e => set('customer', e.target.value)}
-              placeholder="e.g. Busy suburban homeowners"
-            />
-          </FieldBlock>
         </StepCard>
       )}
 
@@ -379,11 +389,13 @@ export function ResearchConfigForm() {
             </FieldBlock>
           )}
 
-          <CapabilityPicker
-            categories={config?.capabilities}
-            selected={brief.capabilities}
-            onChange={next => set('capabilities', next)}
-          />
+          <div className="ir-capability-picker-wrapper">
+            <CapabilityPicker
+              categories={config?.capabilities}
+              selected={brief.capabilities}
+              onChange={next => set('capabilities', next)}
+            />
+          </div>
 
           <div className="flex items-center gap-2 border-t border-border pt-3">
             <Input
@@ -411,7 +423,7 @@ export function ResearchConfigForm() {
           title="How deep should we investigate?"
           subtitle="Deeper research takes longer and costs more. You can start with a quick scan and go deeper later."
         >
-          <div role="radiogroup" aria-label="Research depth" className="grid gap-3">
+          <div role="radiogroup" aria-label="Research depth" className="grid gap-3 sm:grid-cols-3">
             {config?.modes.map(m => {
               const copy = MODE_COPY[m.id as ResearchMode];
               const active = brief.mode === m.id;
@@ -423,33 +435,37 @@ export function ResearchConfigForm() {
                   aria-checked={active}
                   onClick={() => setMode(m.id as ResearchMode)}
                   className={cn(
-                    'rounded-xl border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                    'rounded-xl border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary flex flex-col h-full justify-between',
                     active ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'
                   )}
                 >
-                  <div className="flex items-center gap-2">
-                    <span
-                      aria-hidden
-                      className={cn(
-                        'flex h-4 w-4 items-center justify-center rounded-full border-2',
-                        active ? 'border-primary bg-primary' : 'border-muted-foreground/40'
+                  <div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span
+                        aria-hidden
+                        className={cn(
+                          'flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 flex-shrink-0',
+                          active ? 'border-primary bg-primary' : 'border-muted-foreground/40'
+                        )}
+                      >
+                        {active && <Check className="h-2 w-2 text-primary-foreground" />}
+                      </span>
+                      <span className="text-sm font-semibold leading-tight">{m.label}</span>
+                      {copy?.recommended && (
+                        <Badge className="text-[8px] px-1 py-0 uppercase tracking-wide">Rec</Badge>
                       )}
-                    >
-                      {active && <Check className="h-2.5 w-2.5 text-primary-foreground" />}
-                    </span>
-                    <span className="text-base font-semibold">{m.label}</span>
-                    {copy?.recommended && (
-                      <Badge className="text-[10px] uppercase tracking-wide">Recommended</Badge>
-                    )}
-                    <span className="ml-auto text-xs text-muted-foreground">
-                      ≈ {m.expectedRuntimeMin[0]}–{m.expectedRuntimeMin[1]} min
-                    </span>
+                    </div>
+                    <div className="mt-1.5">
+                      <div className="text-xs font-semibold leading-tight text-foreground">
+                        {copy?.tagline}
+                      </div>
+                      <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                        {copy?.body}
+                      </p>
+                    </div>
                   </div>
-                  <div className="mt-1 pl-6">
-                    <div className="text-sm font-medium">{copy?.tagline}</div>
-                    <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                      {copy?.body}
-                    </p>
+                  <div className="mt-2 pt-2 border-t border-border/40 text-[11px] text-muted-foreground">
+                    Est. runtime: {m.expectedRuntimeMin[0]}–{m.expectedRuntimeMin[1]} min
                   </div>
                 </button>
               );
@@ -486,92 +502,100 @@ export function ResearchConfigForm() {
           title="Review and launch"
           subtitle="Confirm the scope. You can leave this page — the investigation runs in the background."
         >
-          <div className="rounded-xl border border-border">
-            <ReviewRow label="Market" value={brief.industry || '—'} onEdit={() => setStep(0)} />
-            <ReviewRow
-              label="Where"
-              value={brief.geography || 'United States (assumed)'}
-              onEdit={() => setStep(0)}
-            />
-            <ReviewRow
-              label="Your advantages"
-              value={
-                brief.capabilities.length
-                  ? `${brief.capabilities.length} selected`
-                  : 'Generalist (assumed)'
-              }
-              onEdit={() => setStep(1)}
-            />
-            <ReviewRow
-              label="Depth"
-              value={modeDef?.label ?? brief.mode}
-              onEdit={() => setStep(2)}
-            />
-          </div>
-
-          {/* Cost — expected vs authorized, never one number for both */}
-          <div className="rounded-xl border border-border p-4">
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <Gauge className="h-4 w-4 text-primary" /> Cost
-            </div>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <div>
-                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Expected
-                </div>
-                <div className="text-lg font-semibold">
-                  {expected ? `$${expected.low.toFixed(2)}–$${expected.high.toFixed(2)}` : '—'}
-                </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-3">
+              <div className="rounded-xl border border-border">
+                <ReviewRow label="Market" value={brief.industry || '—'} onEdit={() => setStep(0)} />
+                <ReviewRow
+                  label="Where"
+                  value={brief.geography || 'United States (assumed)'}
+                  onEdit={() => setStep(0)}
+                />
+                <ReviewRow
+                  label="Your advantages"
+                  value={
+                    brief.capabilities.length
+                      ? `${brief.capabilities.length} selected`
+                      : 'Generalist (assumed)'
+                  }
+                  onEdit={() => setStep(1)}
+                />
+                <ReviewRow
+                  label="Depth"
+                  value={modeDef?.label ?? brief.mode}
+                  onEdit={() => setStep(2)}
+                />
               </div>
-              <div>
-                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Maximum authorized
-                </div>
-                <div className="flex items-center gap-1 text-lg font-semibold">
-                  <span className="text-muted-foreground">$</span>
-                  <input
-                    type="number"
-                    min={1}
-                    value={brief.maxBudgetUsd || ''}
-                    onChange={e => {
-                      setBudgetTouched(true);
-                      set('maxBudgetUsd', Number(e.target.value));
-                    }}
-                    className="w-20 rounded-md border border-border bg-background px-2 py-0.5"
-                    aria-label="Maximum authorized budget"
+
+              {/* Customize (advanced) — hidden by default */}
+              <div className="rounded-xl border border-border">
+                <button
+                  type="button"
+                  aria-expanded={customizeOpen}
+                  onClick={() => setCustomizeOpen(o => !o)}
+                  className="flex w-full items-center justify-between px-3 py-2 text-left text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  Customize research
+                  <ChevronDown
+                    className={cn(
+                      'h-3.5 w-3.5 transition-transform',
+                      customizeOpen && 'rotate-180'
+                    )}
                   />
-                </div>
+                </button>
+                {customizeOpen && <Advanced brief={brief} set={set} modeDef={modeDef} />}
               </div>
             </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              We stop before exceeding your maximum. If the report needs a repair pass that wouldn’t
-              fit, we pause and ask you to approve more — we never overspend.
-            </p>
-          </div>
 
-          <div className="rounded-xl border border-border bg-muted/30 p-4 text-sm">
-            <div className="mb-1 font-medium">Your report will include</div>
-            <p className="text-muted-foreground">
-              A clear GO / CONDITIONAL GO / DO NOT ENTER verdict, the best entry opportunity, real
-              economics, the strongest reasons for and against, competitors, risks, a first-customer
-              plan, and a 90-day execution plan — every claim traceable to a real source.
-            </p>
-          </div>
+            <div className="space-y-3">
+              {/* Cost — expected vs authorized, never one number for both */}
+              <div className="rounded-xl border border-border p-3">
+                <div className="flex items-center gap-1.5 text-xs font-semibold">
+                  <Gauge className="h-3.5 w-3.5 text-primary" /> Cost
+                </div>
+                <div className="mt-2 grid gap-2 grid-cols-2">
+                  <div>
+                    <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Expected
+                    </div>
+                    <div className="text-sm font-semibold">
+                      {expected ? `$${expected.low.toFixed(2)}–$${expected.high.toFixed(2)}` : '—'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Maximum authorized
+                    </div>
+                    <div className="flex items-center gap-1 text-sm font-semibold">
+                      <span className="text-muted-foreground">$</span>
+                      <input
+                        type="number"
+                        min={1}
+                        value={brief.maxBudgetUsd || ''}
+                        onChange={e => {
+                          setBudgetTouched(true);
+                          set('maxBudgetUsd', Number(e.target.value));
+                        }}
+                        className="w-16 rounded-md border border-border bg-background px-1.5 py-0.5 text-xs"
+                        aria-label="Maximum authorized budget"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <p className="mt-1.5 text-[10px] leading-normal text-muted-foreground">
+                  We stop before exceeding your maximum. If the report needs a repair pass, we pause
+                  to ask.
+                </p>
+              </div>
 
-          {/* Customize (advanced) — hidden by default */}
-          <div className="rounded-xl border border-border">
-            <button
-              type="button"
-              aria-expanded={customizeOpen}
-              onClick={() => setCustomizeOpen(o => !o)}
-              className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            >
-              Customize research
-              <ChevronDown
-                className={cn('h-4 w-4 transition-transform', customizeOpen && 'rotate-180')}
-              />
-            </button>
-            {customizeOpen && <Advanced brief={brief} set={set} modeDef={modeDef} />}
+              <div className="rounded-xl border border-border bg-muted/30 p-3 text-xs">
+                <div className="mb-1 font-semibold">Your report will include</div>
+                <p className="text-muted-foreground leading-normal">
+                  A clear GO/NO ENTER verdict, the best entry opportunity, real economics, key
+                  arguments, competitors, risks, first-customer plan, and a 90-day roadmap.
+                </p>
+              </div>
+            </div>
           </div>
         </StepCard>
       )}
@@ -669,10 +693,10 @@ function StepCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="space-y-5 rounded-2xl border border-border bg-card p-6 sm:p-8">
+    <div className="space-y-3 rounded-xl border border-border bg-card p-4 sm:p-5">
       <div>
-        <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
-        <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
+        <h2 className="text-lg font-semibold tracking-tight leading-tight">{title}</h2>
+        <p className="text-xs text-muted-foreground">{subtitle}</p>
       </div>
       {children}
     </div>
@@ -690,9 +714,9 @@ function FieldBlock({
 }) {
   return (
     <div>
-      <Label className="mb-1.5 block text-sm font-medium">{label}</Label>
+      <Label className="mb-1 block text-sm font-medium">{label}</Label>
       {children}
-      {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
+      {hint && <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>}
     </div>
   );
 }

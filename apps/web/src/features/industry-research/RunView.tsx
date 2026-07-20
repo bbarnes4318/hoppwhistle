@@ -4,11 +4,11 @@ import type { ProgressEvent, ResearchRunDetail, StageInfo } from '@hopwhistle/sh
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { useToast } from '@/components/ui/use-toast';
-
 import { researchApi, type ReportResponse } from './api';
 import { InstitutionalReport } from './InstitutionalReport';
 import { computePhases, FRIENDLY_STAGE, RESEARCH_STREAMS, type PhaseState } from './phases';
+
+import { useToast } from '@/components/ui/use-toast';
 
 const ACTIVE = new Set(['queued', 'planning', 'running', 'waiting']);
 type StageWithOutput = StageInfo & { output?: unknown };
@@ -21,6 +21,7 @@ export function RunView({ runId }: { runId: string }) {
   const [elapsed, setElapsed] = useState(0);
   const [tab, setTab] = useState<'report' | 'progress'>('report');
   const [tech, setTech] = useState(false);
+  const [copied, setCopied] = useState('');
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
@@ -43,7 +44,10 @@ export function RunView({ runId }: { runId: string }) {
     let stop = false;
     const tick = async () => {
       const status = await load();
-      if (!stop && status && ACTIVE.has(status)) timerRef.current = setTimeout(tick, 2500);
+      if (!stop && status && ACTIVE.has(status))
+        timerRef.current = setTimeout(() => {
+          void tick();
+        }, 2500);
     };
     void tick();
     return () => {
@@ -97,47 +101,133 @@ export function RunView({ runId }: { runId: string }) {
   const failedStage = stages.find(s => s.status === 'failed');
   const isActive = ACTIVE.has(run.status);
 
-  return (
-    <div>
-      <Link
-        href="/tools/industry-research"
-        style={{ fontSize: 13, color: 'var(--ir-text-2)', textDecoration: 'none' }}
-      >
-        ← All investigations
-      </Link>
+  const dl = (fmt: 'markdown' | 'json') => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    void fetch(researchApi.reportDownloadUrl(runId, fmt), {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then(res => res.blob())
+      .then(b => {
+        const url = URL.createObjectURL(b);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `industry-research-${runId}.${fmt === 'markdown' ? 'md' : 'json'}`;
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+  };
 
+  const copy = async (id: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(id);
+      setTimeout(() => setCopied(''), 1400);
+    } catch {
+      /* noop */
+    }
+  };
+
+  return (
+    <div className="ir-workspace-root">
+      {/* Compact report toolbar */}
       <div
+        className="ir-noprint"
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 20,
+          justifyContent: 'space-between',
           flexWrap: 'wrap',
-          padding: '12px 0',
+          gap: 12,
+          paddingBottom: 12,
           borderBottom: '1px solid var(--ir-border)',
-          marginTop: 6,
         }}
       >
-        <div style={{ minWidth: 0 }}>
-          <div className="ir-h2" style={{ lineHeight: 1.2 }}>
-            {run.industry}
-          </div>
-          <div className="ir-muted" style={{ fontSize: 12 }}>
-            {run.geography}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <Link
+            href="/tools/industry-research"
+            style={{ fontSize: 13, color: 'var(--ir-text-2)', textDecoration: 'none' }}
+          >
+            ← All investigations
+          </Link>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <TabBtn active={tab === 'report'} disabled={!report} onClick={() => setTab('report')}>
+              Report
+            </TabBtn>
+            <TabBtn active={tab === 'progress'} onClick={() => setTab('progress')}>
+              Progress
+            </TabBtn>
           </div>
         </div>
-        <Meta label="Status" value={statusLabel(run.status)} />
-        <Meta label="Elapsed" value={fmtDuration(elapsed)} />
-        <Meta label="Cost" value={`$${run.accruedCostUsd.toFixed(2)} / $${run.maxBudgetUsd}`} />
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-          {isActive && (
-            <button className="ir-btn" onClick={cancel}>
-              Cancel
+
+        {tab === 'report' && report && (
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button
+              className="ir-btn"
+              onClick={() => dl('markdown')}
+              aria-label="Export report as Markdown"
+            >
+              Export
             </button>
-          )}
-        </div>
+            <button
+              className="ir-btn"
+              onClick={() => window.print()}
+              aria-label="Print or save as PDF"
+            >
+              Print / Save PDF
+            </button>
+            <button
+              className="ir-btn"
+              onClick={() => {
+                void copy('share', typeof window !== 'undefined' ? window.location.href : runId);
+              }}
+              aria-label="Copy shareable link"
+            >
+              {copied === 'share' ? 'Link copied' : 'Share'}
+            </button>
+          </div>
+        )}
       </div>
 
-      {run.status === 'budget_exceeded' && (
+      {tab === 'progress' && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 20,
+            flexWrap: 'wrap',
+            padding: '12px 0',
+            borderBottom: '1px solid var(--ir-border)',
+            marginTop: 6,
+            marginBottom: 14,
+          }}
+        >
+          <div style={{ minWidth: 0 }}>
+            <div className="ir-h2" style={{ lineHeight: 1.2 }}>
+              {run.industry}
+            </div>
+            <div className="ir-muted" style={{ fontSize: 12 }}>
+              {run.geography}
+            </div>
+          </div>
+          <Meta label="Status" value={statusLabel(run.status)} />
+          <Meta label="Elapsed" value={fmtDuration(elapsed)} />
+          <Meta label="Cost" value={`$${run.accruedCostUsd.toFixed(2)} / $${run.maxBudgetUsd}`} />
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+            {isActive && (
+              <button
+                className="ir-btn"
+                onClick={() => {
+                  void cancel();
+                }}
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {tab === 'progress' && run.status === 'budget_exceeded' && (
         <BudgetPaused
           runId={runId}
           maxBudgetUsd={run.maxBudgetUsd}
@@ -149,21 +239,12 @@ export function RunView({ runId }: { runId: string }) {
         />
       )}
 
-      {run.status === 'failed' && (
+      {tab === 'progress' && run.status === 'failed' && (
         <RunFailedNote
           stage={failedStage}
           onRetry={failedStage ? () => doRerun(failedStage.key) : undefined}
         />
       )}
-
-      <div style={{ display: 'flex', gap: 8, margin: '16px 0' }}>
-        <TabBtn active={tab === 'report'} disabled={!report} onClick={() => setTab('report')}>
-          Report
-        </TabBtn>
-        <TabBtn active={tab === 'progress'} onClick={() => setTab('progress')}>
-          Progress
-        </TabBtn>
-      </div>
 
       {tab === 'report' && report ? (
         <InstitutionalReport
@@ -174,7 +255,10 @@ export function RunView({ runId }: { runId: string }) {
           maxBudgetUsd={run.maxBudgetUsd}
         />
       ) : (
-        <div className="ir-report-grid" style={{ gridTemplateColumns: 'minmax(0,1fr) 320px' }}>
+        <div
+          className="ir-report-grid"
+          style={{ gridTemplateColumns: 'minmax(0,1fr) 320px', marginTop: 14 }}
+        >
           <div>
             {phases.map(p => (
               <PhaseRow key={p.key} phase={p} />
@@ -388,21 +472,24 @@ function BudgetPaused({
         <button
           className="ir-btn ir-btn-primary"
           disabled={busy || amount <= accruedCostUsd}
-          onClick={async () => {
-            setBusy(true);
-            try {
-              await researchApi.raiseBudget(runId, amount);
-              toast({ title: 'Budget approved', description: 'Finishing your investigation.' });
-              onResumed();
-            } catch (e) {
-              toast({
-                title: 'Could not update budget',
-                description: String(e),
-                variant: 'destructive',
-              });
-            } finally {
-              setBusy(false);
-            }
+          onClick={() => {
+            const run = async () => {
+              setBusy(true);
+              try {
+                await researchApi.raiseBudget(runId, amount);
+                toast({ title: 'Budget approved', description: 'Finishing your investigation.' });
+                onResumed();
+              } catch (e) {
+                toast({
+                  title: 'Could not update budget',
+                  description: String(e),
+                  variant: 'destructive',
+                });
+              } finally {
+                setBusy(false);
+              }
+            };
+            void run();
           }}
         >
           Approve &amp; continue

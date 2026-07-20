@@ -44,9 +44,7 @@ export default function IndustryResearchLayout({ children }: { children: React.R
           </nav>
         </div>
       </header>
-      <main className="ir-container" style={{ paddingTop: 20, paddingBottom: 64 }}>
-        {children}
-      </main>
+      <main className="ir-container ir-main">{children}</main>
     </div>
   );
 }
