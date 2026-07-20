@@ -233,6 +233,26 @@ services:
       - hopwhistle-network
 
   # ============================================================================
+  # Industry Research — Protoface avatar briefing worker (optional; only starts
+  # when built/started explicitly). Registers with LiveKit and renders the
+  # talking-head avatar for AI Briefings using a free local Piper voice.
+  # ============================================================================
+  avatar-worker:
+    build:
+      context: ../../apps/avatar-worker
+      dockerfile: Dockerfile
+    container_name: hopwhistle-avatar-worker-dev
+    restart: unless-stopped
+    environment:
+      LIVEKIT_URL: ${LIVEKIT_URL:-}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
+      PROTOFACE_API_KEY: ${PROTOFACE_API_KEY:-}
+      PROTOFACE_AVATAR_ID: ${PROTOFACE_AVATAR_ID:-av_stock_280}
+    networks:
+      - hopwhistle-network
+
+  # ============================================================================
   # Telephony Infrastructure
   # ============================================================================
   freeswitch:
