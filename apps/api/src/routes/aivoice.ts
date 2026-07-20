@@ -40,7 +40,7 @@ function resolveWorkspace(user: HopwhistleUser): Promise<{ dograhUserId: string;
   });
 }
 
-export function registerAiVoiceRoutes(fastify: FastifyInstance) {
+export async function registerAiVoiceRoutes(fastify: FastifyInstance) {
   fastify.get('/api/v1/aivoice/session', async (request: FastifyRequest, reply) => {
     const user = (request.user || {}) as HopwhistleUser;
 
