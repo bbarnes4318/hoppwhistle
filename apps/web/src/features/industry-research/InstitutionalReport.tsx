@@ -973,22 +973,104 @@ export function InstitutionalReport({
             <h3 className="ir-h2" style={{ marginTop: 6 }}>
               {drawer.opportunity}
             </h3>
-            <table className="ir-table" style={{ marginTop: 12 }}>
-              <tbody>
-                <DrawerRow k="Target customer" val={drawer.customer} />
-                <DrawerRow k="Offer" val={drawer.offer} />
-                <DrawerRow k="Revenue model" val={drawer.revenueModel} />
-                <DrawerRow k="Price" val={drawer.price} />
-                <DrawerRow k="Startup capital" val={drawer.startupCost} />
-                <DrawerRow k="Time to MVP" val={drawer.timeToMvp} />
-                <DrawerRow k="Time to revenue" val={drawer.timeToFirstRevenue} />
-                <DrawerRow k="Gross margin" val={drawer.grossMarginRange} />
-                <DrawerRow k="Sales difficulty" val={drawer.salesDifficulty} />
-                <DrawerRow k="Regulatory risk" val={drawer.regulatoryRisk} />
-                <DrawerRow k="Defensibility" val={drawer.defensibility} />
-                <DrawerRow k="Score" val={String(drawer.opportunityScore)} />
-              </tbody>
-            </table>
+
+            {/* Score block */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'baseline',
+                gap: 8,
+                marginTop: 10,
+                padding: '6px 10px',
+                background: 'var(--ir-surface-2)',
+                border: '1px solid var(--ir-border)',
+                borderRadius: 6,
+                alignSelf: 'start',
+              }}
+            >
+              <span
+                className="ir-muted"
+                style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase' }}
+              >
+                Score
+              </span>
+              <span
+                style={{ fontSize: 18, fontWeight: 700, color: 'var(--ir-accent)' }}
+                className="ir-num"
+              >
+                {drawer.opportunityScore}
+              </span>
+              <span className="ir-muted" style={{ fontSize: 11 }}>
+                / 100
+              </span>
+            </div>
+
+            <div className="ir-details-grid">
+              {/* Group 1: Business model */}
+              <div className="ir-details-card">
+                <h4>Business Model</h4>
+                <div className="ir-details-row">
+                  <div className="ir-details-label">Target customer</div>
+                  <div className="ir-details-value">{drawer.customer ?? NOT_ESTABLISHED}</div>
+                </div>
+                <div className="ir-details-row">
+                  <div className="ir-details-label">Offer</div>
+                  <div className="ir-details-value">{drawer.offer ?? NOT_ESTABLISHED}</div>
+                </div>
+                <div className="ir-details-row">
+                  <div className="ir-details-label">Revenue model</div>
+                  <div className="ir-details-value">{drawer.revenueModel ?? NOT_ESTABLISHED}</div>
+                </div>
+                <div className="ir-details-row">
+                  <div className="ir-details-label">Price</div>
+                  <div className="ir-details-value">{drawer.price ?? NOT_ESTABLISHED}</div>
+                </div>
+              </div>
+
+              {/* Group 2: Launch requirements */}
+              <div className="ir-details-card">
+                <h4>Launch Requirements</h4>
+                <div className="ir-details-row">
+                  <div className="ir-details-label">Startup capital</div>
+                  <div className="ir-details-value">{drawer.startupCost ?? NOT_ESTABLISHED}</div>
+                </div>
+                <div className="ir-details-row">
+                  <div className="ir-details-label">Time to MVP</div>
+                  <div className="ir-details-value">{drawer.timeToMvp ?? NOT_ESTABLISHED}</div>
+                </div>
+                <div className="ir-details-row">
+                  <div className="ir-details-label">Time to revenue</div>
+                  <div className="ir-details-value">
+                    {drawer.timeToFirstRevenue ?? NOT_ESTABLISHED}
+                  </div>
+                </div>
+              </div>
+
+              {/* Group 3: Economics and difficulty */}
+              <div className="ir-details-card">
+                <h4>Economics and Difficulty</h4>
+                <div className="ir-details-row">
+                  <div className="ir-details-label">Gross margin</div>
+                  <div className="ir-details-value">
+                    {drawer.grossMarginRange ?? NOT_ESTABLISHED}
+                  </div>
+                </div>
+                <div className="ir-details-row">
+                  <div className="ir-details-label">Sales difficulty</div>
+                  <div className="ir-details-value">
+                    {drawer.salesDifficulty ?? NOT_ESTABLISHED}
+                  </div>
+                </div>
+                <div className="ir-details-row">
+                  <div className="ir-details-label">Regulatory risk</div>
+                  <div className="ir-details-value">{drawer.regulatoryRisk ?? NOT_ESTABLISHED}</div>
+                </div>
+                <div className="ir-details-row">
+                  <div className="ir-details-label">Defensibility</div>
+                  <div className="ir-details-value">{drawer.defensibility ?? NOT_ESTABLISHED}</div>
+                </div>
+              </div>
+            </div>
           </div>
         </>
       )}
@@ -1275,16 +1357,5 @@ function IndependentReview({ report, q }: { report: ReportResponse; q: string })
         </div>
       )}
     </div>
-  );
-}
-
-function DrawerRow({ k, val }: { k: string; val?: string }) {
-  return (
-    <tr>
-      <td className="ir-muted" style={{ width: 140 }}>
-        {k}
-      </td>
-      <td>{val ?? NOT_ESTABLISHED}</td>
-    </tr>
   );
 }
