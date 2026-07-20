@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { createHmac, randomUUID } from 'crypto';
 
 import {
   CAPABILITY_CATEGORIES,
@@ -162,6 +162,30 @@ async function emitRunRequested(tenantId: string, runId: string): Promise<void> 
     'payload',
     JSON.stringify({ event: RUN_REQUESTED_EVENT, tenantId, data: { runId } })
   );
+}
+
+// Mint a LiveKit access token (HMAC-SHA256 JWT) without pulling in the LiveKit
+// server SDK — keeps the api dependency tree unchanged.
+function livekitJwt(
+  apiKey: string,
+  apiSecret: string,
+  identity: string,
+  ttlSeconds: number,
+  video: Record<string, unknown>
+): string {
+  const b64 = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  const now = Math.floor(Date.now() / 1000);
+  const header = b64({ alg: 'HS256', typ: 'JWT' });
+  const payload = b64({
+    iss: apiKey,
+    sub: identity,
+    name: identity,
+    nbf: now,
+    exp: now + ttlSeconds,
+    video,
+  });
+  const sig = createHmac('sha256', apiSecret).update(`${header}.${payload}`).digest('base64url');
+  return `${header}.${payload}.${sig}`;
 }
 
 export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
@@ -878,22 +902,48 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
       const httpUrl = lkUrl.replace(/^wss:\/\//, 'https://').replace(/^ws:\/\//, 'http://');
 
       try {
-        // Loaded lazily so the (large) SDK never affects server startup.
-        const { AccessToken, AgentDispatchClient } = await import('livekit-server-sdk');
+        // Mint LiveKit tokens with a plain HMAC-SHA256 JWT (no SDK dependency).
+        // Admin token to create the agent dispatch; subscribe-only viewer token
+        // for the browser to watch the avatar.
+        const adminToken = livekitJwt(lkKey, lkSecret, `api-${run.id.slice(0, 8)}`, 120, {
+          roomAdmin: true,
+          room,
+        });
         // Dispatch our avatar agent worker into the room with the briefing text;
         // the worker joins, attaches the Protoface avatar, and speaks the text.
-        const dispatch = new AgentDispatchClient(httpUrl, lkKey, lkSecret);
-        await dispatch.createDispatch(room, 'ir-avatar', {
-          metadata: JSON.stringify({ text, avatarId, mode, runId: run.id }),
-        });
+        const dispatchResp = await fetch(
+          `${httpUrl.replace(/\/$/, '')}/twirp/livekit.AgentDispatchService/CreateDispatch`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${adminToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              agent_name: 'ir-avatar',
+              room,
+              metadata: JSON.stringify({ text, avatarId, mode, runId: run.id }),
+            }),
+          }
+        );
+        if (!dispatchResp.ok) {
+          const body = (await dispatchResp.text()).slice(0, 200);
+          void reply.code(502);
+          return {
+            data: {
+              enabled: false,
+              reason: `Avatar dispatch failed (${dispatchResp.status}): ${body}`,
+            },
+          };
+        }
 
-        // Mint a subscribe-only viewer token so the browser can watch the avatar.
-        const at = new AccessToken(lkKey, lkSecret, {
-          identity: `viewer-${ctx.userId.slice(0, 8)}-${Date.now().toString(36)}`,
-          ttl: '20m',
-        });
-        at.addGrant({ roomJoin: true, room, canPublish: false, canSubscribe: true });
-        const token = await at.toJwt();
+        const token = livekitJwt(
+          lkKey,
+          lkSecret,
+          `viewer-${ctx.userId.slice(0, 8)}-${Date.now().toString(36)}`,
+          20 * 60,
+          { roomJoin: true, room, canPublish: false, canSubscribe: true }
+        );
 
         return { data: { enabled: true, url: lkUrl, token, room } };
       } catch (e) {
