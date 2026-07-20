@@ -820,9 +820,13 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
   );
 
   // --- Protoface avatar briefing session (gated behind operator config) ---
-  //     Real integration: creates a realtime Protoface avatar session using the
-  //     operator's PROTOFACE_API_KEY + a configured LiveKit transport. When those
-  //     are absent it reports enabled:false honestly (no mock output).
+  //     The live talking-head avatar needs the operator's own accounts, set as
+  //     four plain env vars (no hand-authored JSON): PROTOFACE_API_KEY plus the
+  //     LiveKit trio (LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET), and a
+  //     running avatar agent worker reachable at PROTOFACE_AGENT_URL (the worker
+  //     is what actually drives the avatar's speech). Until every piece is
+  //     present this returns enabled:false with a precise, plain reason — never a
+  //     mock or a half-working session.
   fastify.post<{ Params: { id: string }; Body: { mode?: string } }>(
     '/api/v1/industry-research/runs/:id/avatar-session',
     async (request, reply) => {
@@ -833,25 +837,35 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
       const ctx = await requireAdmin(request, reply);
       if (!ctx) return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
 
-      const key = process.env.PROTOFACE_API_KEY;
-      const transportRaw = process.env.PROTOFACE_LIVEKIT_TRANSPORT;
-      const avatarId = process.env.PROTOFACE_AVATAR_ID || 'av_stock_003';
-      if (!key) {
+      // Plain, discrete settings — the operator pastes these, nothing else.
+      const missing: string[] = [];
+      if (!process.env.PROTOFACE_API_KEY) missing.push('PROTOFACE_API_KEY');
+      if (!process.env.LIVEKIT_URL) missing.push('LIVEKIT_URL');
+      if (!process.env.LIVEKIT_API_KEY) missing.push('LIVEKIT_API_KEY');
+      if (!process.env.LIVEKIT_API_SECRET) missing.push('LIVEKIT_API_SECRET');
+      if (missing.length) {
         return {
           data: {
             enabled: false,
-            reason: 'Protoface API key is not configured on this environment.',
+            reason: `The video avatar needs these settings added to the server first: ${missing.join(', ')}. The audio briefing and transcript above work without them.`,
+            missing,
           },
         };
       }
-      if (!transportRaw) {
+      // Speech is produced by a running avatar agent worker; without it the
+      // avatar would join silently and time out. Require its address explicitly.
+      const agentUrl = process.env.PROTOFACE_AGENT_URL;
+      if (!agentUrl) {
         return {
           data: {
             enabled: false,
-            reason: 'Realtime avatar transport (LiveKit) is not configured on this environment.',
+            reason:
+              'Provider keys are set, but the avatar agent worker (which makes the avatar speak) is not running yet. Deploy the worker and set PROTOFACE_AGENT_URL to turn on video.',
+            missing: ['PROTOFACE_AGENT_URL'],
           },
         };
       }
+
       const run = await prisma.researchRun.findFirst({
         where: { id: request.params.id, tenantId: ctx.tenantId },
         select: { id: true },
@@ -861,32 +875,32 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
         return { error: { code: 'NOT_FOUND', message: 'Run not found' } };
       }
       try {
-        const transport = JSON.parse(transportRaw);
-        const resp = await fetch('https://api.protoface.com/v1/sessions', {
+        // Ask the running agent worker to start an avatar session for this run/mode.
+        // The worker mints the LiveKit tokens, opens the Protoface session, joins
+        // the avatar to the room, and drives its speech from the briefing text.
+        const resp = await fetch(`${agentUrl.replace(/\/$/, '')}/avatar-session`, {
           method: 'POST',
-          headers: {
-            Authorization: `Bearer ${key}`,
-            'Content-Type': 'application/json',
-            'Idempotency-Key': `${run.id}:${(request.body?.mode ?? 'executive').slice(0, 32)}`,
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            avatar_id: avatarId,
-            quality: process.env.PROTOFACE_QUALITY || 'standard',
-            transport,
-            metadata: { runId: run.id, mode: request.body?.mode ?? 'executive' },
+            runId: run.id,
+            mode: request.body?.mode ?? 'executive',
+            avatarId: process.env.PROTOFACE_AVATAR_ID || 'av_stock_003',
           }),
         });
         if (!resp.ok) {
           void reply.code(502);
           return {
-            data: { enabled: false, reason: `Protoface session request failed (${resp.status}).` },
+            data: { enabled: false, reason: `Avatar worker request failed (${resp.status}).` },
           };
         }
+        // The worker returns the viewer connection info (LiveKit url + a viewer token).
         const session = await resp.json();
         return { data: { enabled: true, session } };
       } catch {
         void reply.code(502);
-        return { data: { enabled: false, reason: 'Could not reach the avatar service.' } };
+        return {
+          data: { enabled: false, reason: 'Could not reach the avatar worker.' },
+        };
       }
     }
   );
