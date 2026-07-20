@@ -4,9 +4,13 @@ import type { StructuredReport } from '@hopwhistle/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { researchApi } from './api';
+import { AvatarStage } from './AvatarStage';
 import { BRIEFING_MODES, buildBriefingScript, type BriefingMode } from './ui/report-story';
 
 type AudioState = 'idle' | 'preparing' | 'playing';
+type AvatarState =
+  | { state: 'idle' | 'loading' | 'disabled' | 'error'; reason?: string }
+  | { state: 'live'; url: string; token: string };
 
 /**
  * AI Briefings — turns the report into short, confident spoken briefings (four
@@ -19,10 +23,7 @@ export function AiBriefings({ report, runId }: { report: StructuredReport; runId
   const [mode, setMode] = useState<BriefingMode>('executive');
   const [audio, setAudio] = useState<AudioState>('idle');
   const [showTranscript, setShowTranscript] = useState(true);
-  const [avatar, setAvatar] = useState<{
-    state: 'idle' | 'loading' | 'disabled' | 'ready' | 'error';
-    reason?: string;
-  }>({ state: 'idle' });
+  const [avatar, setAvatar] = useState<AvatarState>({ state: 'idle' });
   const utterRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   const ttsSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
@@ -38,6 +39,7 @@ export function AiBriefings({ report, runId }: { report: StructuredReport; runId
   useEffect(() => {
     if (ttsSupported) window.speechSynthesis.cancel();
     setAudio('idle');
+    setAvatar({ state: 'idle' });
   }, [mode, ttsSupported]);
 
   const play = () => {
@@ -66,11 +68,16 @@ export function AiBriefings({ report, runId }: { report: StructuredReport; runId
   };
 
   const loadAvatar = async () => {
+    if (ttsSupported) window.speechSynthesis.cancel();
+    setAudio('idle');
     setAvatar({ state: 'loading' });
     try {
-      const res = await researchApi.avatarSession(runId, mode);
-      if (!res.enabled) setAvatar({ state: 'disabled', reason: res.reason });
-      else setAvatar({ state: 'ready' });
+      const res = await researchApi.avatarSession(runId, mode, script);
+      if (!res.enabled || !res.url || !res.token) {
+        setAvatar({ state: 'disabled', reason: res.reason });
+      } else {
+        setAvatar({ state: 'live', url: res.url, token: res.token });
+      }
     } catch (e) {
       setAvatar({ state: 'error', reason: String((e as Error)?.message ?? e) });
     }
@@ -193,17 +200,24 @@ export function AiBriefings({ report, runId }: { report: StructuredReport; runId
         )}
       </div>
 
-      {/* Live avatar video — gated behind operator configuration */}
+      {/* Live avatar video */}
       <div style={{ marginTop: 12 }}>
         {avatar.state === 'idle' && (
           <button className="ir-btn" onClick={loadAvatar}>
-            Play video avatar briefing
+            ◉ Play video avatar briefing
           </button>
         )}
         {avatar.state === 'loading' && (
           <span className="ir-muted" style={{ fontSize: 13 }}>
-            Checking avatar availability…
+            Starting the presenter…
           </span>
+        )}
+        {avatar.state === 'live' && (
+          <AvatarStage
+            url={avatar.url}
+            token={avatar.token}
+            onClose={() => setAvatar({ state: 'idle' })}
+          />
         )}
         {avatar.state === 'disabled' && (
           <div className="ir-panel" style={{ padding: 12, borderStyle: 'dashed' }}>
@@ -214,20 +228,16 @@ export function AiBriefings({ report, runId }: { report: StructuredReport; runId
             </p>
           </div>
         )}
-        {avatar.state === 'ready' && (
-          <div className="ir-panel" style={{ padding: 12 }}>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>Avatar session available</div>
-            <p className="ir-muted" style={{ fontSize: 12, marginTop: 3 }}>
-              A live Protoface avatar session can be started for this briefing. Realtime playback
-              connects through the configured LiveKit room.
-            </p>
-          </div>
-        )}
         {avatar.state === 'error' && (
           <div className="ir-panel" style={{ padding: 12, borderColor: 'var(--ir-negative)' }}>
             <div style={{ fontSize: 13, fontWeight: 600 }} className="ir-neg">
               Couldn’t start the video briefing
             </div>
+            {avatar.reason && (
+              <p className="ir-muted" style={{ fontSize: 12, marginTop: 3 }}>
+                {avatar.reason}
+              </p>
+            )}
             <button className="ir-btn ir-btn-ghost" style={{ marginTop: 6 }} onClick={loadAvatar}>
               Retry
             </button>

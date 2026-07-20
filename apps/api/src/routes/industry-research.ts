@@ -19,6 +19,7 @@ import {
   type StageInfo,
 } from '@hopwhistle/shared';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { AccessToken, AgentDispatchClient } from 'livekit-server-sdk';
 
 import { getPrismaClient } from '../lib/prisma.js';
 import { getRedisClient } from '../services/redis.js';
@@ -827,7 +828,7 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
   //     is what actually drives the avatar's speech). Until every piece is
   //     present this returns enabled:false with a precise, plain reason — never a
   //     mock or a half-working session.
-  fastify.post<{ Params: { id: string }; Body: { mode?: string } }>(
+  fastify.post<{ Params: { id: string }; Body: { mode?: string; text?: string } }>(
     '/api/v1/industry-research/runs/:id/avatar-session',
     async (request, reply) => {
       if (!featureEnabled()) {
@@ -838,30 +839,20 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
       if (!ctx) return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
 
       // Plain, discrete settings — the operator pastes these, nothing else.
+      const lkUrl = process.env.LIVEKIT_URL;
+      const lkKey = process.env.LIVEKIT_API_KEY;
+      const lkSecret = process.env.LIVEKIT_API_SECRET;
       const missing: string[] = [];
       if (!process.env.PROTOFACE_API_KEY) missing.push('PROTOFACE_API_KEY');
-      if (!process.env.LIVEKIT_URL) missing.push('LIVEKIT_URL');
-      if (!process.env.LIVEKIT_API_KEY) missing.push('LIVEKIT_API_KEY');
-      if (!process.env.LIVEKIT_API_SECRET) missing.push('LIVEKIT_API_SECRET');
-      if (missing.length) {
+      if (!lkUrl) missing.push('LIVEKIT_URL');
+      if (!lkKey) missing.push('LIVEKIT_API_KEY');
+      if (!lkSecret) missing.push('LIVEKIT_API_SECRET');
+      if (missing.length || !lkUrl || !lkKey || !lkSecret) {
         return {
           data: {
             enabled: false,
             reason: `The video avatar needs these settings added to the server first: ${missing.join(', ')}. The audio briefing and transcript above work without them.`,
             missing,
-          },
-        };
-      }
-      // Speech is produced by a running avatar agent worker; without it the
-      // avatar would join silently and time out. Require its address explicitly.
-      const agentUrl = process.env.PROTOFACE_AGENT_URL;
-      if (!agentUrl) {
-        return {
-          data: {
-            enabled: false,
-            reason:
-              'Provider keys are set, but the avatar agent worker (which makes the avatar speak) is not running yet. Deploy the worker and set PROTOFACE_AGENT_URL to turn on video.',
-            missing: ['PROTOFACE_AGENT_URL'],
           },
         };
       }
@@ -874,32 +865,43 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
         void reply.code(404);
         return { error: { code: 'NOT_FOUND', message: 'Run not found' } };
       }
+
+      // The briefing script comes from the client (already generated from the
+      // report). The avatar speaks exactly this text.
+      const text = (request.body?.text ?? '').toString().slice(0, 6000).trim();
+      if (!text) {
+        void reply.code(400);
+        return { error: { code: 'VALIDATION_ERROR', message: 'No briefing text provided.' } };
+      }
+      const mode = (request.body?.mode ?? 'executive').toString().slice(0, 24);
+      const avatarId = process.env.PROTOFACE_AVATAR_ID || 'av_stock_280';
+      const room = `ir-${run.id.slice(0, 8)}-${mode}-${Date.now().toString(36)}`;
+      const httpUrl = lkUrl.replace(/^wss:\/\//, 'https://').replace(/^ws:\/\//, 'http://');
+
       try {
-        // Ask the running agent worker to start an avatar session for this run/mode.
-        // The worker mints the LiveKit tokens, opens the Protoface session, joins
-        // the avatar to the room, and drives its speech from the briefing text.
-        const resp = await fetch(`${agentUrl.replace(/\/$/, '')}/avatar-session`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            runId: run.id,
-            mode: request.body?.mode ?? 'executive',
-            avatarId: process.env.PROTOFACE_AVATAR_ID || 'av_stock_003',
-          }),
+        // Dispatch our avatar agent worker into the room with the briefing text;
+        // the worker joins, attaches the Protoface avatar, and speaks the text.
+        const dispatch = new AgentDispatchClient(httpUrl, lkKey, lkSecret);
+        await dispatch.createDispatch(room, 'ir-avatar', {
+          metadata: JSON.stringify({ text, avatarId, mode, runId: run.id }),
         });
-        if (!resp.ok) {
-          void reply.code(502);
-          return {
-            data: { enabled: false, reason: `Avatar worker request failed (${resp.status}).` },
-          };
-        }
-        // The worker returns the viewer connection info (LiveKit url + a viewer token).
-        const session = await resp.json();
-        return { data: { enabled: true, session } };
-      } catch {
+
+        // Mint a subscribe-only viewer token so the browser can watch the avatar.
+        const at = new AccessToken(lkKey, lkSecret, {
+          identity: `viewer-${ctx.userId.slice(0, 8)}-${Date.now().toString(36)}`,
+          ttl: '20m',
+        });
+        at.addGrant({ roomJoin: true, room, canPublish: false, canSubscribe: true });
+        const token = await at.toJwt();
+
+        return { data: { enabled: true, url: lkUrl, token, room } };
+      } catch (e) {
         void reply.code(502);
         return {
-          data: { enabled: false, reason: 'Could not reach the avatar worker.' },
+          data: {
+            enabled: false,
+            reason: `Could not start the avatar session: ${e instanceof Error ? e.message : 'unknown error'}`,
+          },
         };
       }
     }

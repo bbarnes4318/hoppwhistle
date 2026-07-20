@@ -134,10 +134,14 @@ export const researchApi = {
       apiClient.post(`${BASE}/runs/${id}/budget`, { maxBudgetUsd })
     ),
 
-  avatarSession: (id: string, mode: string) =>
-    unwrap<{ enabled: boolean; reason?: string; session?: unknown }>(
-      apiClient.post(`${BASE}/runs/${id}/avatar-session`, { mode })
-    ),
+  avatarSession: (id: string, mode: string, text: string) =>
+    unwrap<{
+      enabled: boolean;
+      reason?: string;
+      url?: string;
+      token?: string;
+      room?: string;
+    }>(apiClient.post(`${BASE}/runs/${id}/avatar-session`, { mode, text })),
 
   rerunStage: (id: string, stageKey: string) =>
     unwrap<{ status: string }>(apiClient.post(`${BASE}/runs/${id}/rerun-stage`, { stageKey })),
