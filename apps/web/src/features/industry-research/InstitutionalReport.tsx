@@ -4,9 +4,12 @@ import type { RankedOpportunity, StructuredReport } from '@hopwhistle/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 
+import { AiBriefings } from './AiBriefings';
 import { researchApi, type ReportResponse } from './api';
 import { CostSummary } from './CostSummary';
+import { ExecutiveSnapshot } from './ExecutiveSnapshot';
 import { SourcesWorkspace } from './SourcesWorkspace';
+import { BarCompare, CapitalSpeedScatter, RiskMatrix, Timeline } from './ui/charts';
 import { SearchHighlight, highlightMarkdownComponents } from './ui/highlight';
 import {
   buildRiskRegister,
@@ -18,6 +21,7 @@ import {
   NOT_ESTABLISHED,
   type EconomicVerdict,
 } from './ui/report-helpers';
+import { capitalVsSpeed, opportunityBars, riskMatrixCells } from './ui/report-story';
 
 function verdictClass(v: string): string {
   return v === 'GO' ? 'ir-verdict-go' : v === 'DO_NOT_ENTER' ? 'ir-verdict-no' : 'ir-verdict-cond';
@@ -238,6 +242,18 @@ export function InstitutionalReport({
     firstSectionSentence(r, /90.day|execution|validation|first.customer/i) ??
     'Validate demand with paying customers before committing to fixed costs.';
 
+  const oppBars = useMemo(() => opportunityBars(r), [r]);
+  const capSpeed = useMemo(() => capitalVsSpeed(r), [r]);
+  const riskCells = useMemo(
+    () => riskMatrixCells(r, report.verification?.adversarial),
+    [r, report.verification]
+  );
+  const timeline = [
+    { label: 'Days 1–30', detail: 'Validate demand with real paying customers' },
+    { label: 'Days 31–60', detail: 'Turn what works into a repeatable sales motion' },
+    { label: 'Days 61–90', detail: 'Scale only what has proven out' },
+  ];
+
   const H = ({ text }: { text: string }) => <SearchHighlight text={text} query={q} />;
 
   const toggle = (k: string) =>
@@ -304,6 +320,7 @@ export function InstitutionalReport({
 
   const navItems: Array<{ id: string; label: string; group?: string }> = [
     { id: 'decision', label: 'Decision summary', group: 'Summary' },
+    { id: 'briefings', label: 'AI briefings' },
     ...categories.map((c, i) => ({
       id: c.key,
       label: c.label,
@@ -546,25 +563,47 @@ export function InstitutionalReport({
               </button>
             </div>
 
-            {/* Reasons block */}
-            <div
+            {/* Executive snapshot — the decision summary, visualized */}
+            <section
               id="ir-decision"
               data-anchor="decision"
               ref={el => {
                 sectionEls.current.decision = el;
               }}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-                gap: 20,
-                marginBottom: 20,
-                paddingBottom: 20,
-                borderBottom: '1px solid var(--ir-border)',
-              }}
+              style={{ marginBottom: 18 }}
             >
-              <ReasonCol title="Why this can work" cls="ir-pos" items={reasonsFor} q={q} />
-              <ReasonCol title="Why this can fail" cls="ir-neg" items={reasonsAgainst} q={q} />
-            </div>
+              <ExecutiveSnapshot report={r} maxBudgetUsd={maxBudgetUsd} query={q} />
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                  gap: 20,
+                  marginTop: 18,
+                  paddingTop: 18,
+                  borderTop: '1px solid var(--ir-border)',
+                }}
+              >
+                <ReasonCol title="Why this can work" cls="ir-pos" items={reasonsFor} q={q} />
+                <ReasonCol title="Why this can fail" cls="ir-neg" items={reasonsAgainst} q={q} />
+              </div>
+            </section>
+
+            {/* AI briefings */}
+            <section
+              id="ir-briefings"
+              data-anchor="briefings"
+              ref={el => {
+                sectionEls.current.briefings = el;
+              }}
+              className="ir-report-section ir-noprint"
+            >
+              <div className="ir-h2">AI briefings</div>
+              <p className="ir-muted" style={{ fontSize: 13, margin: '4px 0 12px' }}>
+                Short spoken briefings generated from this report — pick a focus, listen, or read
+                the transcript.
+              </p>
+              <AiBriefings report={r} runId={runId} />
+            </section>
 
             {/* Core analysis */}
             {categories.map(cat => {
@@ -633,6 +672,75 @@ export function InstitutionalReport({
                 className="ir-report-section"
               >
                 <SectionHead label="Ranked entry opportunities" query={q} />
+
+                {r.rankedOpportunities[0] && (
+                  <div
+                    className="ir-panel"
+                    style={{
+                      padding: 14,
+                      marginTop: 4,
+                      display: 'grid',
+                      gridTemplateColumns: 'minmax(0,1fr) auto',
+                      gap: 14,
+                      alignItems: 'center',
+                      background: 'color-mix(in srgb, var(--ir-accent) 6%, transparent)',
+                      borderColor: 'color-mix(in srgb, var(--ir-accent) 30%, var(--ir-border))',
+                    }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <div className="ir-eyebrow" style={{ color: 'var(--ir-accent)' }}>
+                        Top-ranked opportunity
+                      </div>
+                      <div style={{ fontSize: 16, fontWeight: 700, marginTop: 3 }}>
+                        <H text={r.rankedOpportunities[0].opportunity} />
+                      </div>
+                      <div className="ir-muted" style={{ fontSize: 12, marginTop: 3 }}>
+                        Best fit for {r.rankedOpportunities[0].customer ?? v.bestCustomer} ·{' '}
+                        {r.rankedOpportunities[0].revenueModel ?? v.bestBusinessModel} ·{' '}
+                        {r.rankedOpportunities[0].timeToFirstRevenue ?? v.timeToFirstRevenue} to
+                        revenue
+                      </div>
+                    </div>
+                    <button
+                      className="ir-btn ir-btn-primary ir-noprint"
+                      onClick={e => openOpp(r.rankedOpportunities[0], e.currentTarget)}
+                      style={{ flexShrink: 0 }}
+                    >
+                      {r.rankedOpportunities[0].opportunityScore} / 100 · Details
+                    </button>
+                  </div>
+                )}
+
+                {(oppBars.length > 0 || capSpeed.length > 0) && (
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: capSpeed.length
+                        ? 'repeat(auto-fit,minmax(240px,1fr))'
+                        : '1fr',
+                      gap: 20,
+                      margin: '16px 0',
+                    }}
+                  >
+                    {oppBars.length > 0 && (
+                      <div>
+                        <div className="ir-eyebrow" style={{ marginBottom: 8 }}>
+                          Opportunity scores
+                        </div>
+                        <BarCompare data={oppBars} />
+                      </div>
+                    )}
+                    {capSpeed.length > 0 && (
+                      <div>
+                        <div className="ir-eyebrow" style={{ marginBottom: 8 }}>
+                          Capital vs. time to revenue
+                        </div>
+                        <CapitalSpeedScatter data={capSpeed} />
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div style={{ overflowX: 'auto' }}>
                   <table className="ir-table">
                     <thead>
@@ -700,6 +808,14 @@ export function InstitutionalReport({
               </section>
             )}
 
+            {/* First 90 days */}
+            <section className="ir-report-section">
+              <SectionHead label="First 90 days" query={q} />
+              <div style={{ marginTop: 12 }}>
+                <Timeline phases={timeline} />
+              </div>
+            </section>
+
             {/* Risk register */}
             <section
               id="ir-risks"
@@ -710,6 +826,14 @@ export function InstitutionalReport({
               className="ir-report-section"
             >
               <SectionHead label="Risk register" query={q} />
+              {riskCells.length > 0 && (
+                <div style={{ margin: '10px 0 16px' }}>
+                  <div className="ir-eyebrow" style={{ marginBottom: 8 }}>
+                    Probability × impact
+                  </div>
+                  <RiskMatrix cells={riskCells} />
+                </div>
+              )}
               {riskRows.length > 0 ? (
                 <div style={{ overflowX: 'auto' }}>
                   <table className="ir-table">

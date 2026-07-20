@@ -742,6 +742,31 @@
 }
 
 /* Clean institutional print / Save-as-PDF document */
+@keyframes ir-indet {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
+/* Executive snapshot collapses to a single column on narrow screens */
+@media (max-width: 720px) {
+  [data-product='industry-research'] .ir-snap-grid {
+    grid-template-columns: 1fr !important;
+  }
+  [data-product='industry-research'] .ir-snap-score {
+    border-left: 0 !important;
+    border-top: 1px solid var(--ir-border);
+    flex-direction: row !important;
+    justify-content: space-around !important;
+  }
+  [data-product='industry-research'] .ir-snap-reasons {
+    grid-template-columns: 1fr !important;
+  }
+}
+
 @media print {
   [data-product='industry-research'] {
     background: #fff !important;

@@ -819,6 +819,78 @@ export async function registerIndustryResearchRoutes(fastify: FastifyInstance) {
     }
   );
 
+  // --- Protoface avatar briefing session (gated behind operator config) ---
+  //     Real integration: creates a realtime Protoface avatar session using the
+  //     operator's PROTOFACE_API_KEY + a configured LiveKit transport. When those
+  //     are absent it reports enabled:false honestly (no mock output).
+  fastify.post<{ Params: { id: string }; Body: { mode?: string } }>(
+    '/api/v1/industry-research/runs/:id/avatar-session',
+    async (request, reply) => {
+      if (!featureEnabled()) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Feature not enabled' } };
+      }
+      const ctx = await requireAdmin(request, reply);
+      if (!ctx) return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
+
+      const key = process.env.PROTOFACE_API_KEY;
+      const transportRaw = process.env.PROTOFACE_LIVEKIT_TRANSPORT;
+      const avatarId = process.env.PROTOFACE_AVATAR_ID || 'av_stock_003';
+      if (!key) {
+        return {
+          data: {
+            enabled: false,
+            reason: 'Protoface API key is not configured on this environment.',
+          },
+        };
+      }
+      if (!transportRaw) {
+        return {
+          data: {
+            enabled: false,
+            reason: 'Realtime avatar transport (LiveKit) is not configured on this environment.',
+          },
+        };
+      }
+      const run = await prisma.researchRun.findFirst({
+        where: { id: request.params.id, tenantId: ctx.tenantId },
+        select: { id: true },
+      });
+      if (!run) {
+        void reply.code(404);
+        return { error: { code: 'NOT_FOUND', message: 'Run not found' } };
+      }
+      try {
+        const transport = JSON.parse(transportRaw);
+        const resp = await fetch('https://api.protoface.com/v1/sessions', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${key}`,
+            'Content-Type': 'application/json',
+            'Idempotency-Key': `${run.id}:${(request.body?.mode ?? 'executive').slice(0, 32)}`,
+          },
+          body: JSON.stringify({
+            avatar_id: avatarId,
+            quality: process.env.PROTOFACE_QUALITY || 'standard',
+            transport,
+            metadata: { runId: run.id, mode: request.body?.mode ?? 'executive' },
+          }),
+        });
+        if (!resp.ok) {
+          void reply.code(502);
+          return {
+            data: { enabled: false, reason: `Protoface session request failed (${resp.status}).` },
+          };
+        }
+        const session = await resp.json();
+        return { data: { enabled: true, session } };
+      } catch {
+        void reply.code(502);
+        return { data: { enabled: false, reason: 'Could not reach the avatar service.' } };
+      }
+    }
+  );
+
   // --- Team profiles ---
   fastify.get('/api/v1/industry-research/team-profiles', async (request, reply) => {
     if (!featureEnabled()) {
