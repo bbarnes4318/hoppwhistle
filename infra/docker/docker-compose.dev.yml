@@ -144,6 +144,14 @@ services:
       ANTHROPIC_SYNTHESIS_MODEL: ${ANTHROPIC_SYNTHESIS_MODEL:-claude-opus-4-8}
       ANTHROPIC_SYNTHESIS_FALLBACK_MODEL: ${ANTHROPIC_SYNTHESIS_FALLBACK_MODEL:-claude-sonnet-5}
       ANTHROPIC_MAX_OUTPUT_TOKENS: ${ANTHROPIC_MAX_OUTPUT_TOKENS:-14000}
+      # Protoface avatar briefings (optional; gated). The avatar agent worker URL
+      # is only set once that worker is deployed.
+      PROTOFACE_API_KEY: ${PROTOFACE_API_KEY:-}
+      PROTOFACE_AVATAR_ID: ${PROTOFACE_AVATAR_ID:-av_stock_280}
+      PROTOFACE_AGENT_URL: ${PROTOFACE_AGENT_URL:-}
+      LIVEKIT_URL: ${LIVEKIT_URL:-}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
     depends_on:
       postgres:
         condition: service_healthy
