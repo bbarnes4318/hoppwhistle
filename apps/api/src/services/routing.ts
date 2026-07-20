@@ -268,51 +268,28 @@ export class RoutingService {
 
             const maxConcurrent = agentMaxConcurrent.get(userId) ?? DEFAULT_MAX_CONCURRENT;
 
-            // Availability gate: agent must be registered and 'available'.
-            let statusData: any = null;
+            // Concurrency gate ONLY. We deliberately do NOT exclude an agent merely for being
+            // offline or DND here — that would over-block transfers, and the availability flag is
+            // frequently stale. An agent endpoint is excluded only when the agent is actually AT
+            // their concurrency limit, measured from their live active-call count. The Redis
+            // "on a call" flag (currentCallId) is used as an additional floor so a just-started
+            // call that hasn't landed in the Call table yet still counts.
+            let onCallFloor = 0;
             try {
               const data = await redis.get(`agent:status:${userId}`);
-              if (data) statusData = JSON.parse(data);
+              if (data) {
+                const statusData = JSON.parse(data);
+                if (statusData?.currentCallId) onCallFloor = 1;
+              }
             } catch (redisErr) {
               logger.warn({
-                msg: 'Agent-status: Redis lookup error (fail-open)',
+                msg: 'Agent-status: Redis lookup error (ignored; using DB count)',
                 userId,
                 error: (redisErr as Error).message,
               });
-              return { ep, eligible: true }; // fail open on Redis error
             }
 
-            if (!statusData || statusData.status !== 'available') {
-              logger.info({
-                msg: 'Agent-status: Endpoint EXCLUDED (agent offline/unavailable)',
-                buyerId: ep.buyerId,
-                buyerName: ep.buyerName,
-                destination: dest,
-                userId,
-                agentStatus: statusData?.status ?? 'no-status',
-              });
-              return { ep, eligible: false };
-            }
-
-            // Concurrency gate.
-            if (maxConcurrent <= 1) {
-              // Fast, reliable path for the default: on a call at all => at capacity.
-              if (statusData.currentCallId) {
-                logger.info({
-                  msg: 'Agent-concurrency: Endpoint EXCLUDED (on a call, limit 1)',
-                  buyerId: ep.buyerId,
-                  buyerName: ep.buyerName,
-                  destination: dest,
-                  userId,
-                  currentCallId: statusData.currentCallId,
-                });
-                return { ep, eligible: false };
-              }
-              return { ep, eligible: true };
-            }
-
-            // maxConcurrent > 1: count active calls attributable to this agent (outbound via
-            // createdById, inbound via their assigned DIDs) and exclude only at the limit.
+            let activeCalls = 0;
             try {
               const dids = userToDids.get(userId) || [];
               const orConds: Array<Record<string, unknown>> = [{ createdById: userId }];
@@ -320,31 +297,34 @@ export class RoutingService {
                 orConds.push({ toNumber: { in: dids } });
                 orConds.push({ targetNumber: { in: dids } });
               }
-              const activeCalls = await this.prisma.call.count({
+              activeCalls = await this.prisma.call.count({
                 where: {
                   tenantId,
                   status: { in: ['INITIATED', 'RINGING', 'ANSWERED'] },
                   OR: orConds,
                 },
               });
-              if (activeCalls >= maxConcurrent) {
-                logger.info({
-                  msg: 'Agent-concurrency: Endpoint EXCLUDED (at limit)',
-                  buyerId: ep.buyerId,
-                  buyerName: ep.buyerName,
-                  destination: dest,
-                  userId,
-                  activeCalls,
-                  maxConcurrent,
-                });
-                return { ep, eligible: false };
-              }
             } catch (countErr) {
               logger.warn({
                 msg: 'Agent-concurrency: count error (fail-open)',
                 userId,
                 error: (countErr as Error).message,
               });
+              return { ep, eligible: true }; // fail open on count error
+            }
+
+            const effectiveActive = Math.max(activeCalls, onCallFloor);
+            if (effectiveActive >= maxConcurrent) {
+              logger.info({
+                msg: 'Agent-concurrency: Endpoint EXCLUDED (agent at call limit)',
+                buyerId: ep.buyerId,
+                buyerName: ep.buyerName,
+                destination: dest,
+                userId,
+                activeCalls: effectiveActive,
+                maxConcurrent,
+              });
+              return { ep, eligible: false };
             }
             return { ep, eligible: true };
           })
