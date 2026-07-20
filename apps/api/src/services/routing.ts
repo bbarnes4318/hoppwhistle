@@ -199,62 +199,151 @@ export class RoutingService {
       }
     }
 
-    // Step 5: Filter out local agent endpoints if agent is not available or on a call
+    // Step 5: Filter out local AGENT softphone endpoints when the agent is offline/away or
+    // has reached their call-concurrency limit.
+    //
+    // Agents can be addressed by their internal extension (users.metadata.extension) OR by an
+    // assigned DID (phone_numbers.userId). The previous implementation matched extensions ONLY,
+    // so calls routed to an agent's DID (the common live-transfer setup) bypassed this filter and
+    // rang agents who were already on a call. We now resolve BOTH.
+    //
+    // Concurrency limit is per-agent via users.metadata.maxConcurrentCalls (default 1; global
+    // default overridable via env AGENT_DEFAULT_MAX_CONCURRENT_CALLS). This only affects agent
+    // softphone endpoints — external buyer endpoints are untouched. Fails open on errors.
     try {
+      const DEFAULT_MAX_CONCURRENT = Math.max(
+        1,
+        parseInt(process.env.AGENT_DEFAULT_MAX_CONCURRENT_CALLS || '1', 10) || 1
+      );
+
       const users = await this.prisma.user.findMany({
         where: { tenantId, status: 'ACTIVE' },
         select: { id: true, metadata: true },
       });
-      
+
+      // Normalise to last-10-digits so E.164 / 1-prefixed / 10-digit forms all compare equal.
+      const norm = (s: string | null | undefined) => {
+        const d = (s || '').replace(/\D/g, '');
+        return d.length > 10 ? d.slice(-10) : d;
+      };
+
       const extensionToUserMap = new Map<string, string>();
+      const agentMaxConcurrent = new Map<string, number>();
       for (const u of users) {
-        const ext = (u.metadata as any)?.extension;
-        if (ext) {
-          extensionToUserMap.set(ext.toString().trim(), u.id);
-        }
+        const meta = (u.metadata as any) || {};
+        const ext = meta.extension;
+        if (ext) extensionToUserMap.set(ext.toString().trim(), u.id);
+        const rawMax = meta.maxConcurrentCalls;
+        const parsedMax = typeof rawMax === 'number' ? rawMax : parseInt(rawMax, 10);
+        agentMaxConcurrent.set(
+          u.id,
+          Number.isFinite(parsedMax) && parsedMax > 0 ? parsedMax : DEFAULT_MAX_CONCURRENT
+        );
       }
 
-      if (extensionToUserMap.size > 0) {
+      // Map agent-assigned DIDs -> userId, and userId -> its DIDs (for concurrency counting).
+      const didRows = await this.prisma.phoneNumber.findMany({
+        where: { tenantId, userId: { not: null } },
+        select: { number: true, userId: true },
+      });
+      const didToUserMap = new Map<string, string>();
+      const userToDids = new Map<string, string[]>();
+      for (const r of didRows) {
+        if (!r.number || !r.userId) continue;
+        didToUserMap.set(norm(r.number), r.userId);
+        const arr = userToDids.get(r.userId) || [];
+        arr.push(r.number);
+        userToDids.set(r.userId, arr);
+      }
+
+      if (extensionToUserMap.size > 0 || didToUserMap.size > 0) {
         const { getRedisClient } = await import('./redis.js');
         const redis = getRedisClient();
 
         const statuses = await Promise.all(
           eligibleEndpoints.map(async (ep) => {
             const dest = ep.destination.trim();
-            const userId = extensionToUserMap.get(dest);
-            if (!userId) return { ep, eligible: true };
+            const userId = extensionToUserMap.get(dest) || didToUserMap.get(norm(dest));
+            if (!userId) return { ep, eligible: true }; // not an agent softphone endpoint
 
-            const key = `agent:status:${userId}`;
+            const maxConcurrent = agentMaxConcurrent.get(userId) ?? DEFAULT_MAX_CONCURRENT;
+
+            // Availability gate: agent must be registered and 'available'.
+            let statusData: any = null;
             try {
-              const data = await redis.get(key);
-              if (data) {
-                const statusData = JSON.parse(data);
-                // Agent must be available and not have a call in progress
-                if (statusData.status !== 'available' || statusData.currentCallId) {
-                  logger.info({
-                    msg: 'Agent-status: Endpoint EXCLUDED (agent busy/offline)',
-                    buyerId: ep.buyerId,
-                    buyerName: ep.buyerName,
-                    destination: ep.destination,
-                    agentStatus: statusData.status,
-                    currentCallId: statusData.currentCallId,
-                  });
-                  return { ep, eligible: false };
-                }
-              } else {
-                logger.info({
-                  msg: 'Agent-status: Endpoint EXCLUDED (agent offline/no Redis status)',
-                  buyerId: ep.buyerId,
-                  buyerName: ep.buyerName,
-                  destination: ep.destination,
-                });
-                return { ep, eligible: false };
-              }
+              const data = await redis.get(`agent:status:${userId}`);
+              if (data) statusData = JSON.parse(data);
             } catch (redisErr) {
               logger.warn({
                 msg: 'Agent-status: Redis lookup error (fail-open)',
                 userId,
                 error: (redisErr as Error).message,
+              });
+              return { ep, eligible: true }; // fail open on Redis error
+            }
+
+            if (!statusData || statusData.status !== 'available') {
+              logger.info({
+                msg: 'Agent-status: Endpoint EXCLUDED (agent offline/unavailable)',
+                buyerId: ep.buyerId,
+                buyerName: ep.buyerName,
+                destination: dest,
+                userId,
+                agentStatus: statusData?.status ?? 'no-status',
+              });
+              return { ep, eligible: false };
+            }
+
+            // Concurrency gate.
+            if (maxConcurrent <= 1) {
+              // Fast, reliable path for the default: on a call at all => at capacity.
+              if (statusData.currentCallId) {
+                logger.info({
+                  msg: 'Agent-concurrency: Endpoint EXCLUDED (on a call, limit 1)',
+                  buyerId: ep.buyerId,
+                  buyerName: ep.buyerName,
+                  destination: dest,
+                  userId,
+                  currentCallId: statusData.currentCallId,
+                });
+                return { ep, eligible: false };
+              }
+              return { ep, eligible: true };
+            }
+
+            // maxConcurrent > 1: count active calls attributable to this agent (outbound via
+            // createdById, inbound via their assigned DIDs) and exclude only at the limit.
+            try {
+              const dids = userToDids.get(userId) || [];
+              const orConds: Array<Record<string, unknown>> = [{ createdById: userId }];
+              if (dids.length) {
+                orConds.push({ toNumber: { in: dids } });
+                orConds.push({ targetNumber: { in: dids } });
+              }
+              const activeCalls = await this.prisma.call.count({
+                where: {
+                  tenantId,
+                  status: { in: ['INITIATED', 'RINGING', 'ANSWERED'] },
+                  OR: orConds,
+                },
+              });
+              if (activeCalls >= maxConcurrent) {
+                logger.info({
+                  msg: 'Agent-concurrency: Endpoint EXCLUDED (at limit)',
+                  buyerId: ep.buyerId,
+                  buyerName: ep.buyerName,
+                  destination: dest,
+                  userId,
+                  activeCalls,
+                  maxConcurrent,
+                });
+                return { ep, eligible: false };
+              }
+            } catch (countErr) {
+              logger.warn({
+                msg: 'Agent-concurrency: count error (fail-open)',
+                userId,
+                error: (countErr as Error).message,
               });
             }
             return { ep, eligible: true };
@@ -264,7 +353,7 @@ export class RoutingService {
         eligibleEndpoints = statuses.filter(s => s.eligible).map(s => s.ep);
       }
     } catch (err) {
-      logger.error('Error applying agent status filter:', err);
+      logger.error('Error applying agent status/concurrency filter:', err);
     }
 
     logger.info({
