@@ -50,7 +50,8 @@ class PiperChunkedStream(tts.ChunkedStream):
             num_channels=1,
             mime_type="audio/pcm",
         )
-        # piper yields raw int16 PCM chunks for the requested text
-        for chunk in self._voice.synthesize_stream_raw(self._input_text):
-            output_emitter.push(bytes(chunk))
+        # piper-tts >= 1.3 yields AudioChunk objects (one per sentence); each
+        # exposes the raw int16 PCM for the requested text.
+        for chunk in self._voice.synthesize(self._input_text):
+            output_emitter.push(bytes(chunk.audio_int16_bytes))
         output_emitter.flush()
