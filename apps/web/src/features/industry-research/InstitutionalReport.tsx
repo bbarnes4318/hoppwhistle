@@ -330,8 +330,8 @@ export function InstitutionalReport({
             style={{
               display: 'flex',
               flexDirection: 'column',
-              gap: 6,
-              padding: '12px',
+              gap: 4,
+              padding: '8px 10px',
               background: 'var(--ir-surface)',
               border: '1px solid var(--ir-border)',
               borderRadius: 6,
@@ -342,13 +342,13 @@ export function InstitutionalReport({
               {meta.geography}
             </div>
 
-            <div className="ir-divider" style={{ margin: '4px 0' }} />
+            <div className="ir-divider" style={{ margin: '3px 0' }} />
 
             <div
               style={{
                 display: 'grid',
                 gridTemplateColumns: '80px 1fr',
-                gap: '6px 4px',
+                gap: '4px 4px',
                 fontSize: 11,
               }}
             >
@@ -379,7 +379,7 @@ export function InstitutionalReport({
               <div style={{ fontWeight: 600 }}>{v.initialCapital}</div>
             </div>
 
-            <div className="ir-divider" style={{ margin: '4px 0' }} />
+            <div className="ir-divider" style={{ margin: '3px 0' }} />
 
             <div>
               <div
@@ -548,6 +548,11 @@ export function InstitutionalReport({
 
             {/* Reasons block */}
             <div
+              id="ir-decision"
+              data-anchor="decision"
+              ref={el => {
+                sectionEls.current.decision = el;
+              }}
               style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
@@ -1066,7 +1071,7 @@ function SectionHead({
   copied?: boolean;
 }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+    <div className="ir-section-header-band">
       {onToggle ? (
         <button
           onClick={onToggle}

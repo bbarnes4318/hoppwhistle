@@ -483,7 +483,6 @@
     flex-direction: column;
     height: 100%;
     min-height: 0;
-    overflow: hidden;
   }
   [data-product='industry-research'] .ir-center-col {
     height: 100%;
@@ -517,26 +516,23 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--ir-text-3);
-  margin-top: 14px;
-  margin-bottom: 6px;
+  margin-top: 8px;
+  margin-bottom: 4px;
   padding-left: 10px;
 }
 [data-product='industry-research'] .ir-toc-nav {
   flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  scrollbar-width: thin;
 }
 
 [data-product='industry-research'] .ir-nav-link {
   display: block;
-  padding: 4px 10px;
+  padding: 2.5px 10px;
   font-size: 12px;
   color: var(--ir-text-2);
   border-left: 2px solid transparent;
   text-decoration: none;
   border-radius: 0 3px 3px 0;
-  line-height: 1.4;
+  line-height: 1.25;
 }
 [data-product='industry-research'] .ir-nav-link:hover {
   color: var(--ir-text);
@@ -554,7 +550,7 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ir-text-3);
-  padding: 8px 10px 2px;
+  padding: 4px 10px 2px;
 }
 
 /* Clamping Recommended entry */
