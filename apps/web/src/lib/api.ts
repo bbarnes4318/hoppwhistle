@@ -6,6 +6,8 @@ const API_URL =
     ? window.location.origin
     : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
+
+
 export interface ApiResponse<T> {
   data?: T;
   error?: {
@@ -77,10 +79,24 @@ class ApiClient {
       };
     }
     const url = `${this.baseUrl}${endpoint}`;
-    const headers: HeadersInit = {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...options.headers,
     };
+    if (options.headers) {
+      if (options.headers instanceof Headers) {
+        options.headers.forEach((value, key) => {
+          headers[key] = value;
+        });
+      } else if (Array.isArray(options.headers)) {
+        options.headers.forEach(([key, value]) => {
+          headers[key] = value;
+        });
+      } else {
+        Object.assign(headers, options.headers);
+      }
+    }
+
+
 
     // Get the current auth token (checks localStorage for freshest value)
     const authToken = this.getAuthToken();

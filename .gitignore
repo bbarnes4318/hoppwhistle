@@ -17,6 +17,9 @@ out
 .DS_Store
 *.pem
 *.log
+deep.md
+areacodes.csv
+
 
 # Debug
 npm-debug.log*
