@@ -237,9 +237,18 @@ for i, step in ipairs(failover_steps) do
                 log("WARNING", "Session no longer active, aborting failover loop")
                 break
             end
+            -- Carriers reject anonymous/"restricted" caller IDs on the outbound buyer
+            -- leg (NORMAL_TEMPORARY_FAILURE). If the A-leg caller ID isn't a real
+            -- number, stamp the dialed DID so the buyer leg is an acceptable call.
+            local cid = caller_number
+            if cid == nil or cid == "" or not string.match(tostring(cid), "%d%d%d%d%d%d%d") then
+                cid = session:getVariable("destination_number") or "4233398241"
+                cid = string.gsub(tostring(cid), "^%+", "")
+                log("INFO", "[INBOUND-ROUTE] anonymous/restricted caller ID; using DID " .. cid .. " for buyer leg")
+            end
             local bridge_vars = string.format(
                 "{origination_caller_id_number=%s,origination_caller_id_name=%s,effective_caller_id_number=%s,effective_caller_id_name=%s}",
-                caller_number, caller_number, caller_number, caller_number
+                cid, cid, cid, cid
             )
             local bridge_string = bridge_vars .. table.concat(bridge_components, ",")
             log("INFO", "Bridging to failover step " .. tostring(i) .. ": " .. bridge_string)

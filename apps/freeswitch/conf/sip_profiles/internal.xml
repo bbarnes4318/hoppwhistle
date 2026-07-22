@@ -43,6 +43,7 @@
       <param name="aggressive-nat-detection" value="true"/>
       <param name="local-network-acl" value="localnet.auto"/>
       <param name="apply-nat-acl" value="nat.auto"/>
+      <param name="NDLB-force-rport" value="true"/>
 
       <!-- Registration -->
       <param name="accept-blind-reg" value="true"/>
