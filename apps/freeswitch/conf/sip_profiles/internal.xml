@@ -49,6 +49,8 @@
       <param name="accept-blind-reg" value="true"/>
       <param name="accept-blind-auth" value="true"/>
       <param name="accept-exact-sip-uri" value="true"/>
+      <param name="inbound-reg-force-matching-username" value="false"/>
+      <param name="auth-all-packets" value="false"/>
 
       <!-- RTP Settings -->
       <param name="rtp-timeout-sec" value="300"/>
