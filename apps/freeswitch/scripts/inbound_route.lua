@@ -270,6 +270,15 @@ for i, step in ipairs(failover_steps) do
     end
 end
 
+-- If call was not answered by any buyer leg, answer cleanly and play fallback announcement
+if not session:answered() and session:ready() then
+    log("WARNING", "All buyer bridge attempts completed without answer — playing fallback prompt")
+    session:execute("answer")
+    session:sleep(500)
+    session:execute("playback", "ivr/ivr-no_user_response.wav")
+    session:hangup("NO_USER_RESPONSE")
+end
+
 -- ── Step 5: Call ended — collect CDR and report ─────────────────────────────
 local end_epoch = os.time()
 local hangup_cause = session:getVariable("hangup_cause") or "NORMAL_CLEARING"
