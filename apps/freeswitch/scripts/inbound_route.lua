@@ -201,6 +201,8 @@ for i, step in ipairs(failover_steps) do
                     if domain == "" then domain = "localhost" end
                     
                     local domains_to_try = {
+                        "hopwhistle.com",
+                        "aivoice.hopwhistle.com",
                         domain,
                         "178.156.223.97",
                         "freeswitch",
@@ -222,7 +224,8 @@ for i, step in ipairs(failover_steps) do
                         log("INFO", "Internal extension " .. p_dest .. " registered: " .. contact)
                         table.insert(bridge_components, contact)
                     else
-                        log("WARNING", "Internal extension " .. p_dest .. " NOT registered — skipping")
+                        log("WARNING", "Internal extension " .. p_dest .. " not found via sofia_contact — falling back to user/" .. p_dest)
+                        table.insert(bridge_components, "user/" .. p_dest)
                     end
                 else
                     -- Strip leading + for external dialing
