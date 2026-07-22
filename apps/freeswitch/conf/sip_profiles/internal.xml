@@ -37,7 +37,13 @@
       <!-- Authentication -->
       <param name="challenge-realm" value="auto_from"/>
       <param name="auth-calls" value="false"/>
-      <param name="apply-inbound-acl" value="domains"/>
+      <!--
+        Do NOT apply the vanilla "domains" ACL to the browser-facing WSS profile.
+        That ACL only contains directory users with explicit CIDR entries. Browser
+        agents connect from dynamic home/office IPs and have no CIDR on their user
+        records, so apply-inbound-acl=domains rejects their SIP REGISTER/INVITE
+        traffic before normal registration handling can occur.
+      -->
 
       <!-- NAT Traversal -->
       <param name="aggressive-nat-detection" value="true"/>
@@ -51,6 +57,9 @@
       <param name="accept-exact-sip-uri" value="true"/>
       <param name="inbound-reg-force-matching-username" value="false"/>
       <param name="auth-all-packets" value="false"/>
+      <!-- Keep every browser registration in one predictable AOR namespace. -->
+      <param name="force-register-domain" value="$${domain}"/>
+      <param name="force-register-db-domain" value="$${domain}"/>
 
       <!-- RTP Settings -->
       <param name="rtp-timeout-sec" value="300"/>
