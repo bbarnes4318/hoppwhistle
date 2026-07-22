@@ -48,6 +48,7 @@
       <!-- Registration -->
       <param name="accept-blind-reg" value="true"/>
       <param name="accept-blind-auth" value="true"/>
+      <param name="accept-exact-sip-uri" value="true"/>
 
       <!-- RTP Settings -->
       <param name="rtp-timeout-sec" value="300"/>
