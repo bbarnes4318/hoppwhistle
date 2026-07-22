@@ -308,8 +308,10 @@ export function PhoneProvider({
   const callDurationIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const ringtoneRef = useRef<HTMLAudioElement | null>(null);
   const userAgentRef = useRef<UserAgent | null>(null);
+  const registererRef = useRef<Registerer | null>(null);
   const sessionRef = useRef<Session | null>(null);
   const heldSessionRef = useRef<Session | null>(null);
+  const heldCallInfoRef = useRef<CallInfo | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   const [hasHeldCalls, setHasHeldCalls] = useState(false);
   const reportedAnsweredCallsRef = useRef<Set<string>>(new Set());
@@ -612,6 +614,11 @@ export function PhoneProvider({
         if (newState === SessionState.Terminated) {
           if (sessionRef.current === invitation) {
             handleCallEndedRef.current();
+          } else if (heldSessionRef.current === invitation) {
+            console.log('[Phone] Held inbound session terminated in background');
+            heldSessionRef.current = null;
+            heldCallInfoRef.current = null;
+            setHasHeldCalls(false);
           }
         } else if (newState === SessionState.Established) {
           handleCallAnsweredRef.current();
@@ -676,11 +683,56 @@ export function PhoneProvider({
       };
     });
     setAgentStatusState('on-call');
+    // Sync on-call status to Redis so routing service knows agent is busy
+    void fetch(`${normalizedApiUrl}/api/v1/agent/status`, {
+      method: 'PUT',
+      headers: getApiHeaders(),
+      body: JSON.stringify({ status: 'on-call' }),
+    }).catch(() => {});
     stopRingtone();
     startCallDurationTimer();
   }, [stopRingtone, startCallDurationTimer, normalizedApiUrl, getApiHeaders]);
 
   const handleCallEnded = useCallback(() => {
+    // If there is a held call stashed, restore it instead of ending the session entirely
+    if (heldSessionRef.current) {
+      console.log('[Phone] Active call ended, restoring stashed held session');
+      sessionRef.current = heldSessionRef.current;
+      heldSessionRef.current = null;
+      setHasHeldCalls(false);
+
+      const restoredCall = heldCallInfoRef.current;
+      heldCallInfoRef.current = null;
+
+      if (restoredCall) {
+        restoredCall.isOnHold = false;
+        restoredCall.state = 'active';
+        
+        // Unhold/unmute audio tracks in the browser RTCPeerConnection
+        try {
+          const sdh = sessionRef.current.sessionDescriptionHandler as any;
+          if (sdh && sdh.peerConnection) {
+            const pc = sdh.peerConnection as RTCPeerConnection;
+            const senders = pc.getSenders();
+            for (const sender of senders) {
+              if (sender.track && sender.track.kind === 'audio') {
+                sender.track.enabled = true; // unmute
+              }
+            }
+
+            // Re-bind the restored call's stream to the browser HTML audio element
+            wireRemoteAudio(pc);
+          }
+        } catch (e) {
+          console.warn('[Phone] Failed to unmute track on restore:', e);
+        }
+
+        setCurrentCall(restoredCall);
+      }
+      return;
+    }
+
+    // Otherwise, normal call ended
     setCurrentCall(prev => {
       if (prev) {
         const completedCall: CallInfo = {
@@ -736,11 +788,17 @@ export function PhoneProvider({
       return null;
     });
     setAgentStatusState('available');
+    // Sync available status to Redis so routing service knows agent is free
+    void fetch(`${normalizedApiUrl}/api/v1/agent/status`, {
+      method: 'PUT',
+      headers: getApiHeaders(),
+      body: JSON.stringify({ status: 'available' }),
+    }).catch(() => {});
     setIsConnecting(false);
     stopRingtone();
     stopCallDurationTimer();
     sessionRef.current = null;
-  }, [stopRingtone, stopCallDurationTimer, normalizedApiUrl, getApiHeaders]);
+  }, [stopRingtone, stopCallDurationTimer, normalizedApiUrl, getApiHeaders, wireRemoteAudio]);
 
   // Keep refs in sync so stateChange listeners always call latest versions
   useEffect(() => {
@@ -773,9 +831,14 @@ export function PhoneProvider({
 
   const makeCall = useCallback(
     async (phoneNumber: string, callerIdOverride?: string) => {
-      if (!userAgentRef.current || !isRegistered) {
+      if (!userAgentRef.current) {
         setError('Phone not connected');
-        return;
+        throw new Error('Phone not connected');
+      }
+
+      if (!isRegistered && !sessionRef.current && !heldSessionRef.current) {
+        setError('Phone not connected');
+        throw new Error('Phone not connected');
       }
 
       // Clean up any leftover session from a previous call to prevent
@@ -869,6 +932,11 @@ export function PhoneProvider({
           } else if (newState === SessionState.Terminated) {
             if (sessionRef.current === inviter) {
               handleCallEndedRef.current();
+            } else if (heldSessionRef.current === inviter) {
+              console.log('[Phone] Held outbound session terminated in background');
+              heldSessionRef.current = null;
+              heldCallInfoRef.current = null;
+              setHasHeldCalls(false);
             }
           }
         });
@@ -892,6 +960,7 @@ export function PhoneProvider({
         const message = err instanceof Error ? err.message : 'Failed to place call';
         setError(message);
         setIsConnecting(false);
+        throw err;
       }
     },
     [normalizedApiUrl, getApiHeaders, isRegistered, selectedCallerId]
@@ -1127,7 +1196,8 @@ export function PhoneProvider({
         // 1. Put the current call on hold (await so SIP processes)
         toggleHold();
 
-        // 2. Stash the current session
+        // 2. Stash the current session and call info
+        heldCallInfoRef.current = currentCall ? { ...currentCall, isOnHold: true, state: 'hold' } : null;
         heldSessionRef.current = sessionRef.current;
         setHasHeldCalls(true);
         sessionRef.current = null; // Clear so makeCall starts fresh
@@ -1146,6 +1216,7 @@ export function PhoneProvider({
         if (heldSessionRef.current) {
           sessionRef.current = heldSessionRef.current;
           heldSessionRef.current = null;
+          heldCallInfoRef.current = null;
           setHasHeldCalls(false);
           // Try to unhold the original call
           try {
@@ -1156,7 +1227,7 @@ export function PhoneProvider({
         }
       }
     },
-    [toggleHold, makeCall]
+    [toggleHold, makeCall, currentCall]
   );
 
   const mergeCalls = useCallback(async () => {
@@ -1198,6 +1269,7 @@ export function PhoneProvider({
           console.warn('[Phone] Failed to send BYE for held session:', e);
         }
         heldSessionRef.current = null;
+        heldCallInfoRef.current = null;
       }
       setHasHeldCalls(false);
 
@@ -1310,11 +1382,32 @@ export function PhoneProvider({
             onConnect: () => {
               console.log('[Phone] SIP Transport Connected');
               setError(null);
+              if (registererRef.current) {
+                console.log('[Phone] Re-registering on transport connect');
+                registererRef.current.register().then(() => {
+                  console.log('[Phone] Re-registration succeeded, syncing available to Redis');
+                  setIsRegistered(true);
+                  setAgentStatusState('available');
+                  void fetch(`${normalizedApiUrl}/api/v1/agent/status`, {
+                    method: 'PUT',
+                    headers: getApiHeaders(),
+                    body: JSON.stringify({ status: 'available' }),
+                  }).catch(() => {});
+                }).catch(err => {
+                  console.error('[Phone] Re-registration failed:', err);
+                });
+              }
             },
             onDisconnect: error => {
               console.log('[Phone] SIP Transport Disconnected', error);
               setIsRegistered(false);
               if (error) setError('SIP connection lost');
+              // Sync offline status to Redis so routing service excludes this agent
+              void fetch(`${normalizedApiUrl}/api/v1/agent/status`, {
+                method: 'PUT',
+                headers: getApiHeaders(),
+                body: JSON.stringify({ status: 'offline' }),
+              }).catch(() => {});
             },
             onInvite: (invitation: Invitation) => {
               console.log('[Phone] Incoming SIP Invite');
@@ -1329,10 +1422,17 @@ export function PhoneProvider({
         await ua.start();
         console.log('[Phone] SIP UA Started');
         const registerer = new Registerer(ua);
+        registererRef.current = registerer;
         await registerer.register();
         console.log('[Phone] SIP Registered');
         setIsRegistered(true);
         setAgentStatusState('available');
+        // Sync available status to Redis so routing service includes this agent
+        void fetch(`${normalizedApiUrl}/api/v1/agent/status`, {
+          method: 'PUT',
+          headers: getApiHeaders(),
+          body: JSON.stringify({ status: 'available' }),
+        }).catch(() => {});
       } catch (e) {
         console.error('[Phone] SIP UA Initialization/Start Failed', e);
         if (active) {
@@ -1346,6 +1446,16 @@ export function PhoneProvider({
 
     return () => {
       active = false;
+      // Sync offline status to Redis before tearing down SIP
+      void fetch(`${normalizedApiUrl}/api/v1/agent/status`, {
+        method: 'PUT',
+        headers: getApiHeaders(),
+        body: JSON.stringify({ status: 'offline' }),
+      }).catch(() => {});
+      if (registererRef.current) {
+        void registererRef.current.unregister();
+        registererRef.current = null;
+      }
       if (ua) {
         void ua.stop();
       }

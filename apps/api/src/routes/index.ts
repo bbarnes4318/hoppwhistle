@@ -243,7 +243,7 @@ function formatDuration(seconds?: number | null): string {
 function getPublicApiBaseUrl(request: FastifyRequest): string {
   const envUrl = process.env.PUBLIC_API_URL || process.env.API_PUBLIC_URL;
   if (envUrl) {
-    return envUrl;
+    return envUrl.replace(/\/api\/?$/, '');
   }
   const protocol = (request.headers['x-forwarded-proto'] as string) || 'http';
   const host = request.headers.host || 'localhost:3001';

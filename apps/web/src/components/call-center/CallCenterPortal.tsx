@@ -36,6 +36,7 @@ import { IncomingCallPanel } from './IncomingCallPanel';
 import IntegratedScriptPanel from './IntegratedScriptPanel';
 import { PreClosedStatsCard } from './PreClosedStatsCard';
 import RetentionScriptPanel from './RetentionScriptPanel';
+import HvacScriptPanel from './HvacScriptPanel';
 import { StatsStrip } from './StatsStrip';
 import type {
   ActiveCallView,
@@ -1725,7 +1726,16 @@ export function CallCenterPortal(): JSX.Element {
                 {activeCallView === 'script' && (
                   <div className="flex-1 overflow-hidden">
                     {activeCallData ? (
-                      selectedScript === 'retention' && canAccessRetentionScript ? (
+                      selectedScript === 'hvac' ? (
+                        <HvacScriptPanel
+                          prospectData={activeCallData}
+                          onDataUpdate={(data: Record<string, unknown>) =>
+                            setActiveCallData(prev =>
+                              prev ? ({ ...prev, ...data } as ProspectData) : null
+                            )
+                          }
+                        />
+                      ) : selectedScript === 'retention' && canAccessRetentionScript ? (
                         <RetentionScriptPanel
                           prospectData={activeCallData}
                           onDataUpdate={(data: Record<string, unknown>) =>

@@ -168,7 +168,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       const { userId, tenantId } = getUser(request);
       const { status } = request.body;
 
-      const validStatuses = ['available', 'away', 'dnd', 'offline'];
+      const validStatuses = ['available', 'away', 'dnd', 'offline', 'on-call'];
       if (!validStatuses.includes(status)) {
         void reply.code(400);
         return { error: { code: 'INVALID_STATUS', message: 'Invalid status value' } };

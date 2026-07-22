@@ -111,6 +111,24 @@
         <action application="set" data="effective_caller_id_name=Hopwhistle" inline="true"/>
         <action application="set" data="origination_caller_id_name=Hopwhistle" inline="true"/>
         <action application="set" data="hangup_after_bridge=true"/>
+        <!-- Default priority: Telnyx -> BulkVS -> SignalWire -->
+        <action application="set" data="gw1=telnyx" inline="true"/>
+        <action application="set" data="gw2=bulkvs" inline="true"/>
+        <action application="set" data="gw3=signalwire" inline="true"/>
+      </condition>
+
+      <!-- If req_caller_id is a BulkVS number, prioritize BulkVS -> Telnyx -> SignalWire -->
+      <condition field="${req_caller_id}" expression="^1?(7252713109|7252713114|8652676323|7252450961|7252713303)$" break="never">
+        <action application="set" data="gw1=bulkvs" inline="true"/>
+        <action application="set" data="gw2=telnyx" inline="true"/>
+        <action application="set" data="gw3=signalwire" inline="true"/>
+      </condition>
+
+      <!-- If req_caller_id is a SignalWire number, prioritize SignalWire -> Telnyx -> BulkVS -->
+      <condition field="${req_caller_id}" expression="^1?(8652679650|7253022220)$" break="never">
+        <action application="set" data="gw1=signalwire" inline="true"/>
+        <action application="set" data="gw2=telnyx" inline="true"/>
+        <action application="set" data="gw3=bulkvs" inline="true"/>
       </condition>
 
       <!-- If hopwhistle_call_id is NOT empty, apply details and start record_session before bridge -->
@@ -134,6 +152,12 @@
         <!-- Extract the destination extension if it's a 4-digit number -->
         <action application="set" data="local_ext=${regex(${lookup_response}|&quot;destination&quot;:&quot;(\d{4})&quot;|%1)}" inline="true"/>
         <action application="log" data="INFO [OUTBOUND-LOOKUP] response=${lookup_response} local_ext=${local_ext}"/>
+      </condition>
+
+      <!-- If local extension is matched but unregistered, clear local_ext to fall back to PSTN -->
+      <condition field="${local_ext}:${sofia_contact(internal/${local_ext}@$${domain})}" expression="^\d{4}:error" break="never">
+        <action application="log" data="WARNING [OUTBOUND-LOCAL] Extension ${local_ext} is offline. Routing call via PSTN carrier gateways."/>
+        <action application="set" data="local_ext=" inline="true"/>
       </condition>
 
       <!-- Route call locally to extension if matched, otherwise failover to PSTN gateways -->

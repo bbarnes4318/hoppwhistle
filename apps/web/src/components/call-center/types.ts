@@ -7,7 +7,8 @@ export type SelectedScript =
   | 'underwriting'
   | 'verification'
   | 'cold_call_transfer'
-  | 'better_plan_callback';
+  | 'better_plan_callback'
+  | 'hvac';
 
 export interface ProspectData {
   lead_token?: string;

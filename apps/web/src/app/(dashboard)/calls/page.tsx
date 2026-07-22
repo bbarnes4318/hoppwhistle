@@ -606,7 +606,7 @@ export default function OperationsCallLogsPage() {
     <audio
       ref={audioRef}
       src={audioUrl || undefined}
-      className={isAudioPlayerInDrawer ? 'h-8 flex-1 accent-cyan-400' : 'hidden'}
+      className={isAudioPlayerInDrawer ? 'h-8 flex-1 accent-cyan-400' : 'absolute w-0 h-0 opacity-0 pointer-events-none'}
       controls={isAudioPlayerInDrawer}
       onEnded={() => setPlayingId(null)}
     />
@@ -1225,7 +1225,7 @@ export default function OperationsCallLogsPage() {
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between p-4 border-t border-white/10">
+          <div className="flex items-center justify-between p-4 border-t border-white/10 pr-24">
             <span className="text-xs text-gray-400">
               Page {page} of {totalPages}
             </span>

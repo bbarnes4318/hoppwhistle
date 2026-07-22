@@ -70,6 +70,7 @@ export function CallCenterHeader({
             className="appearance-none bg-muted text-foreground text-xs uppercase tracking-widest pl-3 pr-8 py-1.5 rounded border border-border focus:border-primary focus:outline-none cursor-pointer"
             title="Select call script"
           >
+            <option value="hvac">HVAC</option>
             <option value="sales">Contractor</option>
             {canAccessRetentionScript && <option value="retention">Retention</option>}
             <option value="underwriting">Underwriting</option>

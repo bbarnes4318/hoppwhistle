@@ -245,7 +245,7 @@ function BuyerCallsPage() {
       </div>
 
       {/* Hidden audio element for stream playback */}
-      <audio ref={audioRef} className="hidden" />
+      <audio ref={audioRef} className="absolute w-0 h-0 opacity-0 pointer-events-none" />
 
       {/* Filters Card */}
       <Card className="bg-card border-border">
@@ -429,7 +429,7 @@ function BuyerCallsPage() {
 
           {/* Pagination */}
           {!loading && totalPages > 1 && (
-            <div className="flex items-center justify-between border-t p-4">
+            <div className="flex items-center justify-between border-t p-4 pr-24">
               <Button
                 variant="outline"
                 size="sm"
