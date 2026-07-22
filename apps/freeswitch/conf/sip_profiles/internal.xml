@@ -19,7 +19,7 @@
       <param name="wss-binding" value=":7443"/>
 
       <!-- TLS Settings for WSS (Let's Encrypt certs) -->
-      <param name="tls-cert-dir" value="/etc/freeswitch/letsencrypt"/>
+      <param name="tls-cert-dir" value="/etc/freeswitch/tls"/>
       <param name="tls-version" value="sslv23"/>
 
       <!-- SIP Settings -->
