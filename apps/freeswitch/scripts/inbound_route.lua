@@ -65,16 +65,49 @@ if caller_normalized ~= "unknown" and not string.match(caller_normalized, "^%+")
 end
 
 -- ── Step 1: Lookup route via API ────────────────────────────────────────────
-local api = freeswitch.API()
-local lookup_url = API_URL .. "/api/v1/freeswitch/lookup?did=" .. did_normalized
-if caller_normalized ~= "unknown" then
-  lookup_url = lookup_url .. "&caller=" .. caller_normalized
+local function url_encode_plus(val)
+    return string.gsub(val or "", "%+", "%%2B")
 end
+
+local encoded_did = url_encode_plus(did_normalized)
+local encoded_caller = url_encode_plus(caller_normalized)
+
+local lookup_url = API_URL .. "/api/v1/freeswitch/lookup?did=" .. encoded_did
+if encoded_caller ~= "" and encoded_caller ~= "unknown" then
+    lookup_url = lookup_url .. "&caller=" .. encoded_caller
+end
+
+session:setVariable("curl_connect_timeout", "3")
+session:setVariable("curl_timeout", "15")
+
 log("INFO", "Looking up route: " .. lookup_url)
 
-local response_body = api:execute("curl", lookup_url .. " timeout 15 get") or ""
+session:execute("curl", lookup_url)
 
-log("INFO", "Lookup response: " .. response_body)
+local response_code = session:getVariable("curl_response_code") or ""
+local response_body = session:getVariable("curl_response_data") or ""
+
+log("INFO", "Lookup HTTP status=" .. tostring(response_code) .. " body=" .. tostring(response_body))
+
+local numeric_code = tonumber(response_code) or 0
+
+if response_code == "" or response_code == "0" or numeric_code >= 500 then
+    log("ERR", "Route API failure: HTTP " .. tostring(response_code))
+    session:hangup("NORMAL_TEMPORARY_FAILURE")
+    return
+end
+
+if numeric_code == 404 then
+    log("WARNING", "No configured route for DID: " .. did_normalized)
+    session:hangup("UNALLOCATED_NUMBER")
+    return
+end
+
+if numeric_code < 200 or numeric_code >= 300 then
+    log("ERR", "Unexpected route API response: HTTP " .. tostring(response_code))
+    session:hangup("NORMAL_TEMPORARY_FAILURE")
+    return
+end
 
 -- Parse response
 local destination     = json_value(response_body, "destination")
@@ -96,8 +129,7 @@ end
 
 if not destination or destination == "" then
   log("WARNING", "No route found for DID: " .. did_normalized .. " — rejecting call")
-  session:execute("playback", "ivr/ivr-invalid_number.wav")
-  session:hangup("NO_ROUTE_DESTINATION")
+  session:hangup("UNALLOCATED_NUMBER")
   return
 end
 
