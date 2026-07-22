@@ -1,11 +1,12 @@
 <include>
-  <!--the domain or ip (the right hand side of the @ in the addr-->
+  <!-- Main SIP Domain -->
   <domain name="$${domain}">
     <alias name="178.156.223.97"/>
     <alias name="172.18.0.4"/>
     <alias name="172.18.0.1"/>
     <alias name="hopwhistle.com"/>
     <alias name="aivoice.hopwhistle.com"/>
+    <alias name="localhost"/>
 
     <params>
       <param name="dial-string" value="{^^:sip_invite_domain=${dialed_domain}:presence_id=${dialed_user}@${dialed_domain}}${sofia_contact(*/${dialed_user}@${dialed_domain})},${verto_contact(${dialed_user}@${dialed_domain})}"/>
@@ -58,5 +59,19 @@
       </group>
     </groups>
 
+  </domain>
+
+  <!-- Server IP Domain for direct SIP transfer URI matching -->
+  <domain name="178.156.223.97">
+    <params>
+      <param name="dial-string" value="{^^:sip_invite_domain=${dialed_domain}:presence_id=${dialed_user}@${dialed_domain}}${sofia_contact(*/${dialed_user}@${dialed_domain})},${verto_contact(${dialed_user}@${dialed_domain})}"/>
+    </params>
+    <groups>
+      <group name="default">
+	<users>
+	  <X-PRE-PROCESS cmd="include" data="default/*.xml"/>
+	</users>
+      </group>
+    </groups>
   </domain>
 </include>
