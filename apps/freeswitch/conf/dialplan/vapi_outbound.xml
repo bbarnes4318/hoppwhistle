@@ -1,6 +1,6 @@
 <include>
   <!--
-    Vapi Outbound Context — Per-Carrier Routing & Signing
+    Vapi Outbound Context — Per-Carrier Routing and Signing
     =====================================================
     Each carrier signs ONLY its own calls:
     - BulkVS:     bridge to sofia/gateway/bulkvs (no local signing — BulkVS handles STIR/SHAKEN)
@@ -9,11 +9,7 @@
     - SignalWire:  NO SIGNING — traffic goes Vapi → SignalWire direct (never hits FS)
 
     Carrier is determined by channel variable X-Carrier (set by Vapi/dialer).
-    If X-Carrier is not set, defaults to bulkvs.
-
-    IMPORTANT: In multi-condition extensions, $1 refers to the LAST condition's
-    capture group. We use the first condition to set ${vapi_dest} explicitly so
-    the phone number is available in bridge actions regardless of condition nesting.
+    If X-Carrier is not set, defaults to fractel.
   -->
   <context name="vapi_outbound">
 
@@ -27,8 +23,6 @@
     <!-- ================================================================ -->
     <!-- DEFAULT CARRIER: FracTEL -->
     <!-- Routes to the FracTEL gateways when X-Carrier is empty/not set. -->
-    <!-- Presents a FracTEL DID so calls sign A attestation. BulkVS and -->
-    <!-- SignalWire are disabled/unreliable; FracTEL is the live carrier. -->
     <!-- ================================================================ -->
     <extension name="vapi-outbound-default-fractel">
       <condition field="destination_number" expression="^\+?1?(\d{10})$">
@@ -49,18 +43,39 @@
         <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
         <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
 
-        <!-- Present a FracTEL DID so FracTEL signs A attestation -->
-        <action application="set" data="effective_caller_id_number=19138999080"/>
-        <action application="set" data="origination_caller_id_number=19138999080"/>
+        <!-- Validate caller ID via internal authenticated API -->
+        <action application="unset" data="curl_response_code"/>
+        <action application="unset" data="curl_response_data"/>
+        <action application="unset" data="resolved_cid"/>
+        <action application="curl" data="http://api:3001/api/v1/freeswitch/validate-caller-id?callId=${sip_h_X-Hopwhistle-Call-Id}&amp;signedContext=${sip_h_X-Hopwhistle-Signed-Context}&amp;destination=${destination_number}&amp;channelUuid=${uuid} append_headers X-Internal-API-Key:${env(INTERNAL_API_SECRET)} connect-timeout 3 timeout 5 get"/>
+        <action application="set" data="resolved_cid=${regex(${curl_response_data}|&quot;callerId&quot;:&quot;(\d{11})&quot;|%1)}" inline="true"/>
+      </condition>
+
+      <!-- Fail closed if HTTP code is not 200 or caller ID invalid -->
+      <condition field="${curl_response_code}" expression="^(?!200$).*$" break="never">
+        <action application="log" data="ERR [VAPI] Caller ID API validation failed with HTTP status ${curl_response_code}. Failing closed."/>
+        <action application="hangup" data="MANDATORY_CALLER_ID_MISSING"/>
+      </condition>
+
+      <!-- Valid caller ID: bridge across all 6 FracTEL gateways -->
+      <condition field="${resolved_cid}" expression="^(1\d{10})$">
+        <action application="set" data="effective_caller_id_number=${resolved_cid}" inline="true"/>
+        <action application="set" data="origination_caller_id_number=${resolved_cid}" inline="true"/>
+        <action application="set" data="sip_from_user=${resolved_cid}" inline="true"/>
 
         <!-- Bridge to FracTEL — load-balanced across all 6 SBCs -->
-        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC,origination_caller_id_number=19138999080,sip_from_user=19138999080}sofia/gateway/fractel1/1${vapi_dest}|sofia/gateway/fractel2/1${vapi_dest}|sofia/gateway/fractel3/1${vapi_dest}|sofia/gateway/fractel4/1${vapi_dest}|sofia/gateway/fractel5/1${vapi_dest}|sofia/gateway/fractel6/1${vapi_dest}"/>
+        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC,origination_caller_id_number=${resolved_cid},sip_from_user=${resolved_cid}}sofia/gateway/fractel1/1${vapi_dest}|sofia/gateway/fractel2/1${vapi_dest}|sofia/gateway/fractel3/1${vapi_dest}|sofia/gateway/fractel4/1${vapi_dest}|sofia/gateway/fractel5/1${vapi_dest}|sofia/gateway/fractel6/1${vapi_dest}"/>
+      </condition>
+
+      <!-- Fail closed if caller ID is missing or invalid -->
+      <condition field="${resolved_cid}" expression="^(?!1\d{10}$).*$">
+        <action application="log" data="ERR [VAPI] Missing/unauthorized caller ID. Failing closed."/>
+        <action application="hangup" data="MANDATORY_CALLER_ID_MISSING"/>
       </condition>
     </extension>
 
     <!-- ================================================================ -->
     <!-- CARRIER: BulkVS (explicit only) -->
-    <!-- Only used when X-Carrier header is explicitly set to "bulkvs" -->
     <!-- ================================================================ -->
     <extension name="vapi-outbound-bulkvs">
       <condition field="destination_number" expression="^\+?1?(\d{10})$">
@@ -87,8 +102,6 @@
 
     <!-- ================================================================ -->
     <!-- CARRIER: DIDCentral -->
-    <!-- Signs with local STIR/SHAKEN (ES256), routes to DIDCentral gateway -->
-    <!-- DIDCentral requires pre-tokenized calls with Identity header -->
     <!-- ================================================================ -->
     <extension name="vapi-outbound-didcentral">
       <condition field="destination_number" expression="^\+?1?(\d{10})$">
@@ -109,17 +122,12 @@
         <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
         <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
 
-        <!-- DIDCentral STIR/SHAKEN signing (local ES256 A-attestation) -->
-        <!-- <action application="lua" data="local_shaken.lua"/> -->
-
-        <!-- Bridge to DIDCentral ONLY -->
         <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC}sofia/gateway/didcentral/1${vapi_dest}"/>
       </condition>
     </extension>
 
     <!-- ================================================================ -->
-    <!-- CARRIER: FracTEL -->
-    <!-- Signs with local STIR/SHAKEN (ES256), load-balances across 6 SBCs -->
+    <!-- CARRIER: FracTEL (explicit X-Carrier=fractel) -->
     <!-- ================================================================ -->
     <extension name="vapi-outbound-fractel">
       <condition field="destination_number" expression="^\+?1?(\d{10})$">
@@ -140,19 +148,39 @@
         <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
         <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
 
-        <!-- FracTEL STIR/SHAKEN signing (local ES256 A-attestation) -->
-        <!-- <action application="lua" data="local_shaken.lua"/> -->
-        <!-- <action application="set" data="sip_h_X-Attestation-Level=A"/> -->
+        <!-- Validate caller ID via internal authenticated API -->
+        <action application="unset" data="curl_response_code"/>
+        <action application="unset" data="curl_response_data"/>
+        <action application="unset" data="resolved_cid"/>
+        <action application="curl" data="http://api:3001/api/v1/freeswitch/validate-caller-id?callId=${sip_h_X-Hopwhistle-Call-Id}&amp;signedContext=${sip_h_X-Hopwhistle-Signed-Context}&amp;destination=${destination_number}&amp;channelUuid=${uuid} append_headers X-Internal-API-Key:${env(INTERNAL_API_SECRET)} connect-timeout 3 timeout 5 get"/>
+        <action application="set" data="resolved_cid=${regex(${curl_response_data}|&quot;callerId&quot;:&quot;(\d{11})&quot;|%1)}" inline="true"/>
+      </condition>
+
+      <!-- Fail closed if HTTP code is not 200 or caller ID invalid -->
+      <condition field="${curl_response_code}" expression="^(?!200$).*$" break="never">
+        <action application="log" data="ERR [VAPI] Caller ID API validation failed with HTTP status ${curl_response_code}. Failing closed."/>
+        <action application="hangup" data="MANDATORY_CALLER_ID_MISSING"/>
+      </condition>
+
+      <!-- Valid caller ID: bridge across all 6 FracTEL gateways -->
+      <condition field="${resolved_cid}" expression="^(1\d{10})$">
+        <action application="set" data="effective_caller_id_number=${resolved_cid}" inline="true"/>
+        <action application="set" data="origination_caller_id_number=${resolved_cid}" inline="true"/>
+        <action application="set" data="sip_from_user=${resolved_cid}" inline="true"/>
 
         <!-- Bridge to FracTEL — load-balanced across all 6 SBCs -->
-        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC}sofia/gateway/fractel1/1${vapi_dest}|sofia/gateway/fractel2/1${vapi_dest}|sofia/gateway/fractel3/1${vapi_dest}|sofia/gateway/fractel4/1${vapi_dest}|sofia/gateway/fractel5/1${vapi_dest}|sofia/gateway/fractel6/1${vapi_dest}"/>
+        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC,origination_caller_id_number=${resolved_cid},sip_from_user=${resolved_cid}}sofia/gateway/fractel1/1${vapi_dest}|sofia/gateway/fractel2/1${vapi_dest}|sofia/gateway/fractel3/1${vapi_dest}|sofia/gateway/fractel4/1${vapi_dest}|sofia/gateway/fractel5/1${vapi_dest}|sofia/gateway/fractel6/1${vapi_dest}"/>
+      </condition>
+
+      <!-- Fail closed if caller ID is missing or invalid -->
+      <condition field="${resolved_cid}" expression="^(?!1\d{10}$).*$">
+        <action application="log" data="ERR [VAPI] Missing/unauthorized caller ID. Failing closed."/>
+        <action application="hangup" data="MANDATORY_CALLER_ID_MISSING"/>
       </condition>
     </extension>
 
     <!-- ================================================================ -->
     <!-- CARRIER: SignalWire -->
-    <!-- No STIR/SHAKEN signing — SignalWire handles attestation internally -->
-    <!-- Routes through the signalwire gateway defined in external/ -->
     <!-- ================================================================ -->
     <extension name="vapi-outbound-signalwire">
       <condition field="destination_number" expression="^\+?1?(\d{10})$">
@@ -170,16 +198,14 @@
         <action application="set" data="progress_timeout=30"/>
         <action application="set" data="originate_timeout=60"/>
 
-        <!-- Force G.711 for SignalWire PSTN termination -->
         <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
         <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
 
-        <!-- Bridge to SignalWire gateway — no signing needed -->
         <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC}sofia/gateway/signalwire/+1${vapi_dest}"/>
       </condition>
     </extension>
 
-    <!-- Vapi internal routing IDs (11+ digit strings) — route through default carrier -->
+    <!-- Vapi internal routing IDs (11+ digit strings) — route through FracTEL with caller ID validation -->
     <extension name="vapi-outbound-routing-id">
       <condition field="destination_number" expression="^(\d{11,})$">
         <action application="log" data="INFO [VAPI] Routing ID call to $1"/>
@@ -196,8 +222,34 @@
         <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
         <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
 
-        <!-- Route through FracTEL (BulkVS is retired); present a FracTEL DID for attestation -->
-        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC,origination_caller_id_number=19138999080,sip_from_user=19138999080}sofia/gateway/fractel1/$1|sofia/gateway/fractel2/$1|sofia/gateway/fractel3/$1|sofia/gateway/fractel4/$1|sofia/gateway/fractel5/$1|sofia/gateway/fractel6/$1"/>
+        <!-- Validate caller ID hierarchy for routing ID calls -->
+        <action application="unset" data="curl_response_code"/>
+        <action application="unset" data="curl_response_data"/>
+        <action application="unset" data="resolved_cid"/>
+        <action application="curl" data="http://api:3001/api/v1/freeswitch/validate-caller-id?callId=${sip_h_X-Hopwhistle-Call-Id}&amp;signedContext=${sip_h_X-Hopwhistle-Signed-Context}&amp;destination=${destination_number}&amp;channelUuid=${uuid} append_headers X-Internal-API-Key:${env(INTERNAL_API_SECRET)} connect-timeout 3 timeout 5 get"/>
+        <action application="set" data="resolved_cid=${regex(${curl_response_data}|&quot;callerId&quot;:&quot;(\d{11})&quot;|%1)}" inline="true"/>
+      </condition>
+
+      <!-- Fail closed if HTTP code is not 200 or caller ID invalid -->
+      <condition field="${curl_response_code}" expression="^(?!200$).*$" break="never">
+        <action application="log" data="ERR [VAPI] Caller ID API validation failed with HTTP status ${curl_response_code}. Failing closed."/>
+        <action application="hangup" data="MANDATORY_CALLER_ID_MISSING"/>
+      </condition>
+
+      <!-- Valid caller ID: bridge across all 6 FracTEL gateways -->
+      <condition field="${resolved_cid}" expression="^(1\d{10})$">
+        <action application="set" data="effective_caller_id_number=${resolved_cid}" inline="true"/>
+        <action application="set" data="origination_caller_id_number=${resolved_cid}" inline="true"/>
+        <action application="set" data="sip_from_user=${resolved_cid}" inline="true"/>
+
+        <!-- Route through FracTEL load-balanced across all 6 SBCs -->
+        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC,origination_caller_id_number=${resolved_cid},sip_from_user=${resolved_cid}}sofia/gateway/fractel1/$1|sofia/gateway/fractel2/$1|sofia/gateway/fractel3/$1|sofia/gateway/fractel4/$1|sofia/gateway/fractel5/$1|sofia/gateway/fractel6/$1"/>
+      </condition>
+
+      <!-- Fail closed if caller ID is missing or invalid -->
+      <condition field="${resolved_cid}" expression="^(?!1\d{10}$).*$">
+        <action application="log" data="ERR [VAPI] Missing/unauthorized caller ID for routing ID. Failing closed."/>
+        <action application="hangup" data="MANDATORY_CALLER_ID_MISSING"/>
       </condition>
     </extension>
 

@@ -286,6 +286,89 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
   // ════════════════════════════════════════════════════════════════════════════
 
   // ────────────────────────────────────────────────────────────────────────────
+  // POST /api/v1/freeswitch/directory — Dynamic FreeSWITCH User Directory lookup
+  // ────────────────────────────────────────────────────────────────────────────
+  server.post(
+    '/api/v1/freeswitch/directory',
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const body = (request.body as Record<string, string>) || {};
+      const query = (request.query as Record<string, string>) || {};
+
+      const user = body.user || query.user;
+      const domain = body.domain || query.domain || 'freeswitch';
+
+      const apiKey =
+        (request.headers['x-directory-internal-api-key'] as string | undefined) ||
+        (request.headers['x-internal-api-key'] as string | undefined);
+
+      const { renderDirectoryXmlForExtension } = await import('../services/caller-id-service.js');
+      const xml = await renderDirectoryXmlForExtension({
+        user,
+        domain,
+        apiKey,
+      });
+
+      return reply.type('application/xml').send(xml);
+    }
+  );
+
+  server.get(
+    '/api/v1/freeswitch/directory',
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const query = (request.query as Record<string, string>) || {};
+      const apiKey =
+        (request.headers['x-directory-internal-api-key'] as string | undefined) ||
+        (request.headers['x-internal-api-key'] as string | undefined);
+
+      const { renderDirectoryXmlForExtension } = await import('../services/caller-id-service.js');
+      const xml = await renderDirectoryXmlForExtension({
+        user: query.user,
+        domain: query.domain || 'freeswitch',
+        apiKey,
+      });
+
+      return reply.type('application/xml').send(xml);
+    }
+  );
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // GET /api/v1/freeswitch/validate-caller-id — Caller ID validation for outbound calls
+  // ────────────────────────────────────────────────────────────────────────────
+  server.get(
+    '/api/v1/freeswitch/validate-caller-id',
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const query = request.query as {
+        callId?: string;
+        signedContext?: string;
+        destination?: string;
+        sipUser?: string;
+        channelUuid?: string;
+      };
+
+      const internalApiKey =
+        (request.headers['x-internal-api-key'] as string | undefined) ||
+        (request.headers['x-api-key'] as string | undefined);
+
+      const { resolveCallerIdForInternalCall } = await import('../services/caller-id-service.js');
+      const result = await resolveCallerIdForInternalCall({
+        callId: query.callId,
+        destination: query.destination,
+        sipUser: query.sipUser,
+        channelUuid: query.channelUuid,
+        internalApiKey,
+        signedContext: query.signedContext,
+      });
+
+      if (!result.valid) {
+        const statusCode = result.reason === 'UNAUTHORIZED_INTERNAL_REQUEST' ? 401 : 403;
+        return reply.code(statusCode).send(result);
+      }
+
+      return reply.send(result);
+    }
+  );
+
+  // ────────────────────────────────────────────────────────────────────────────
   // GET /api/v1/freeswitch/lookup?did=+1XXXXXXXXXX — Dynamic route lookup
   //
   // Called by the FreeSWITCH Lua script on every inbound call.
@@ -596,7 +679,7 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
               buyer_id: wBid.buyerId,
               buyer_endpoint_id: wBid.buyerEndpointId,
               publisher_id: pingReq.publisherId,
-              campaign_id: campaign?.id || null,
+              campaign_id: (campaign?.id || null) as string | null,
               buyer_destination: wBid.buyerEndpoint.destination,
               transfer_number: body.did,
               caller_number: pingReq.callerNumber || body.callerNumber || null,
@@ -716,7 +799,7 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
             body.carrierCost !== undefined && body.carrierCost !== null
               ? new Prisma.Decimal(body.carrierCost)
               : null,
-          metadata: rtbMetadata ? { rtb: rtbMetadata } : undefined,
+          metadata: rtbMetadata ? ({ rtb: rtbMetadata } as unknown as Prisma.InputJsonValue) : undefined,
         },
       });
 

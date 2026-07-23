@@ -1,5 +1,5 @@
 <include>
-  <!-- Internal SIP Profile for WebRTC -->
+  <!-- Internal SIP Profile for WebRTC & Agent Softphones -->
   <profile name="internal">
     <settings>
       <!-- Basic Settings -->
@@ -34,18 +34,14 @@
       <param name="inbound-late-negotiation" value="true"/>
       <param name="inbound-zrtp-passthru" value="true"/>
 
-      <!-- Authentication: every INVITE must present valid credentials.
-           auth-calls=false left this profile as an open relay (toll fraud via
-           Kamailio-forwarded INVITEs to the default context's PSTN bridge). -->
+      <!-- Mandatory SIP Authentication Settings -->
       <param name="challenge-realm" value="auto_from"/>
-      <param name="auth-calls" value="false"/>
-      <!--
-        Do NOT apply the vanilla "domains" ACL to the browser-facing WSS profile.
-        That ACL only contains directory users with explicit CIDR entries. Browser
-        agents connect from dynamic home/office IPs and have no CIDR on their user
-        records, so apply-inbound-acl=domains rejects their SIP REGISTER/INVITE
-        traffic before normal registration handling can occur.
-      -->
+      <param name="auth-calls" value="true"/>
+      <param name="auth-all-packets" value="false"/>
+      <param name="auth-require-user" value="true"/>
+      <param name="accept-blind-reg" value="false"/>
+      <param name="accept-blind-auth" value="false"/>
+      <param name="inbound-reg-force-matching-username" value="true"/>
 
       <!-- NAT Traversal -->
       <param name="aggressive-nat-detection" value="true"/>
@@ -53,13 +49,8 @@
       <param name="apply-nat-acl" value="nat.auto"/>
       <param name="NDLB-force-rport" value="true"/>
 
-      <!-- Registration -->
-      <param name="accept-blind-reg" value="true"/>
-      <param name="accept-blind-auth" value="true"/>
+      <!-- Registration & Domain Binding -->
       <param name="accept-exact-sip-uri" value="true"/>
-      <param name="inbound-reg-force-matching-username" value="false"/>
-      <param name="auth-all-packets" value="false"/>
-      <!-- Keep every browser registration in one predictable AOR namespace. -->
       <param name="force-register-domain" value="$${domain}"/>
       <param name="force-register-db-domain" value="$${domain}"/>
 

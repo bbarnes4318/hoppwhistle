@@ -267,7 +267,7 @@ export async function registerRetentionRoutes(fastify: FastifyInstance): Promise
             state: body.state,
             zipCode: body.zipCode,
             leadSource: 'Retention Intake',
-            status: 'ACTIVE',
+            status: 'ACTIVE' as any,
           },
         });
       }

@@ -1,11 +1,10 @@
-import { createHash, randomBytes } from 'crypto';
+import { randomBytes } from 'crypto';
 
 import { FastifyInstance } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
 import { requirePermission } from '../middleware/rbac.js';
 import { auditCreate, auditUpdate } from '../services/audit.js';
-import { quotaService } from '../services/quota-service.js';
 
 /**
  * Quota Management Routes
@@ -14,7 +13,7 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
   // Get tenant quota
   fastify.get(
     '/admin/api/v1/tenants/:tenantId/quota',
-    { preHandler: [requirePermission('admin:full')] },
+    { preHandler: [requirePermission('admin:full' as any)] },
     async (request, reply) => {
       const prisma = getPrismaClient();
       const { tenantId } = request.params as { tenantId: string };
@@ -35,7 +34,7 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
   // Update tenant quota
   fastify.patch(
     '/admin/api/v1/tenants/:tenantId/quota',
-    { preHandler: [requirePermission('admin:full')] },
+    { preHandler: [requirePermission('admin:full' as any)] },
     async (request, reply) => {
       const prisma = getPrismaClient();
       const { tenantId } = request.params as { tenantId: string };
@@ -107,7 +106,7 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
   // Get tenant budget
   fastify.get(
     '/admin/api/v1/tenants/:tenantId/budget',
-    { preHandler: [requirePermission('admin:full')] },
+    { preHandler: [requirePermission('admin:full' as any)] },
     async (request, reply) => {
       const prisma = getPrismaClient();
       const { tenantId } = request.params as { tenantId: string };
@@ -134,7 +133,7 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
   // Update tenant budget
   fastify.patch(
     '/admin/api/v1/tenants/:tenantId/budget',
-    { preHandler: [requirePermission('admin:full')] },
+    { preHandler: [requirePermission('admin:full' as any)] },
     async (request, reply) => {
       const prisma = getPrismaClient();
       const { tenantId } = request.params as { tenantId: string };
@@ -207,7 +206,7 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
   // Generate override token
   fastify.post(
     '/admin/api/v1/tenants/:tenantId/budget/override-token',
-    { preHandler: [requirePermission('admin:full')] },
+    { preHandler: [requirePermission('admin:full' as any)] },
     async (request, reply) => {
       const prisma = getPrismaClient();
       const { tenantId } = request.params as { tenantId: string };
@@ -263,7 +262,7 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
   // Revoke override token
   fastify.delete(
     '/admin/api/v1/tenants/:tenantId/budget/override-token',
-    { preHandler: [requirePermission('admin:full')] },
+    { preHandler: [requirePermission('admin:full' as any)] },
     async (request, reply) => {
       const prisma = getPrismaClient();
       const { tenantId } = request.params as { tenantId: string };
@@ -298,7 +297,7 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
   // Get quota status (current usage)
   fastify.get(
     '/admin/api/v1/tenants/:tenantId/quota/status',
-    { preHandler: [requirePermission('admin:full')] },
+    { preHandler: [requirePermission('admin:full' as any)] },
     async (request, reply) => {
       const prisma = getPrismaClient();
       const { tenantId } = request.params as { tenantId: string };
@@ -403,7 +402,7 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
   // Create quota override
   fastify.post(
     '/admin/api/v1/tenants/:tenantId/quota/overrides',
-    { preHandler: [requirePermission('admin:full')] },
+    { preHandler: [requirePermission('admin:full' as any)] },
     async (request, reply) => {
       const prisma = getPrismaClient();
       const { tenantId } = request.params as { tenantId: string };
@@ -450,8 +449,9 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
   // List quota overrides
   fastify.get(
     '/admin/api/v1/tenants/:tenantId/quota/overrides',
-    { preHandler: [requirePermission('admin:full')] },
+    { preHandler: [requirePermission('admin:full' as any)] },
     async (request, reply) => {
+      void reply;
       const prisma = getPrismaClient();
       const { tenantId } = request.params as { tenantId: string };
 
@@ -473,8 +473,9 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
   // Delete quota override
   fastify.delete(
     '/admin/api/v1/tenants/:tenantId/quota/overrides/:overrideId',
-    { preHandler: [requirePermission('admin:full')] },
+    { preHandler: [requirePermission('admin:full' as any)] },
     async (request, reply) => {
+      void reply;
       const prisma = getPrismaClient();
       const { tenantId, overrideId } = request.params as { tenantId: string; overrideId: string };
       const user = (request as any).user;

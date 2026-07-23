@@ -1,54 +1,56 @@
 <include>
+  <!--
+    Default Outbound Dialplan Context — FracTEL Outbound Routing and Audio Recording
+    =============================================================================
+    Routing Hierarchy:
+      1. Local registration lookup via API / extension bridge
+      2. PSTN Routing via FracTEL 6-Gateway Load-Balanced Trunk (fractel1..6)
+
+    Caller ID Resolution Hierarchy:
+      1. Validated tenant-authorized selected FracTEL DID (via API validation)
+      2. Valid configured FRACTEL_DEFAULT_CALLER_ID
+      3. Otherwise fail closed (MANDATORY_CALLER_ID_MISSING) before carrier bridge.
+  -->
   <context name="default">
 
-    <!-- Local extension calls (agent-to-agent, 4 digits starting with 1) -->
-    <extension name="local-extension">
-      <condition field="destination_number" expression="^(1[0-9]{3})$">
-        <action application="log" data="INFO [DEFAULT] Local call to extension ${destination_number}"/>
-        <action application="set" data="hangup_after_bridge=true"/>
-        <action application="set" data="bypass_media=false"/>
-        <action application="set" data="inbound_codec_negotiation=generous"/>
-        <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA,OPUS,G722"/>
-        <action application="bridge" data="${sofia_contact(internal/${destination_number}@$${domain})}"/>
-        <action application="hangup" data="NORMAL_CLEARING"/>
+    <extension name="unallocated_extension">
+      <condition field="destination_number" expression="^5000$">
+        <action application="respond" data="404 Not Found"/>
       </condition>
     </extension>
 
-    <!-- Inbound from BulkVS DID (281-699-1120) arriving on port 5060 -->
-    <!-- Bridge DIRECTLY to registered agent 1000 via sofia_contact (no loopback) -->
-    <extension name="inbound-bulkvs-did">
-      <condition field="destination_number" expression="^(\+?1?2816991120)$">
-        <action application="log" data="INFO [DEFAULT] BulkVS inbound to DID 281-699-1120 from ${caller_id_number}"/>
-        <action application="ring_ready"/>
-        <action application="set" data="call_direction=inbound"/>
+    <extension name="Local_Extension">
+      <condition field="destination_number" expression="^(10[0-9][0-9])$">
+        <action application="set" data="dialed_extension=$1"/>
+        <action application="export" data="dialed_extension=$1"/>
+        <action application="set" data="bind_meta_key=1"/>
+        <action application="bridge" data="user/${dialed_extension}@$${domain}"/>
+      </condition>
+    </extension>
+
+    <!-- Ring Group 9000 — Softphone extension routing -->
+    <extension name="ring_group_9000">
+      <condition field="destination_number" expression="^9000$">
+        <action application="log" data="INFO Ringing softphone extension 1000 for ring group 9000"/>
+        <action application="set" data="ringback=$${us-ring}"/>
         <action application="set" data="hangup_after_bridge=true"/>
-        <action application="set" data="continue_on_fail=false"/>
-        <action application="set" data="bypass_media=false"/>
-        <action application="set" data="inbound_codec_negotiation=generous"/>
-        <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA,OPUS,G722"/>
-        <action application="set" data="ringback=%(2000,4000,440,480)"/>
+        <action application="bridge" data="user/1000@$${domain}"/>
+      </condition>
+    </extension>
+
+    <!-- Audible Ringback Test Extension 9999 -->
+    <extension name="ringback_test">
+      <condition field="destination_number" expression="^9999$">
+        <action application="set" data="ringback=$${us-ring}"/>
         <action application="set" data="instant_ringback=true"/>
-        <action application="set" data="call_timeout=120"/>
-        <action application="bridge" data="${sofia_contact(internal/1000@$${domain})}"/>
-        <action application="hangup" data="NORMAL_CLEARING"/>
-      </condition>
-    </extension>
-
-    <!-- Recording Smoke Test Extension -->
-    <extension name="recording-smoke-test">
-      <condition field="destination_number" expression="^(9999)$">
-        <action application="log" data="INFO HOPWHISTLE RECORDING SMOKE TEST HIT"/>
-        <action application="set" data="bypass_media=false" inline="true"/>
-        <action application="set" data="proxy_media=false" inline="true"/>
-        <action application="answer"/>
-        <action application="record_session" data="/recordings/test.wav"/>
+        <action application="ring_ready"/>
         <action application="playback" data="tone_stream://%(2000,4000,440,480);loops=3"/>
         <action application="hangup"/>
       </condition>
     </extension>
 
-    <!-- Outbound calls via BulkVS (NANP numbers only) -->
-    <extension name="outbound-to-bulkvs">
+    <!-- Outbound calls via FracTEL (NANP numbers only) -->
+    <extension name="outbound-to-fractel">
       <!-- Unavoidable top level logging + initialization. This must be the very first condition. -->
       <condition field="destination_number" expression="^\+?1?([2-9]\d{9})$">
         <!-- Force media through FreeSWITCH so RTP is captured -->
@@ -65,23 +67,43 @@
         <action application="set" data="domain_name=$${domain}" inline="true"/>
       </condition>
 
-      <!-- If req_caller_id is empty, fallback to lowercase -->
+      <!-- If req_caller_id is empty, fallback to lowercase header -->
       <condition field="${req_caller_id}" expression="^$" break="never">
         <action application="set" data="req_caller_id=${sip_h_x-caller-id}" inline="true"/>
       </condition>
-      <!-- If req_caller_id is still empty, set default -->
-      <condition field="${req_caller_id}" expression="^$" break="never">
-        <action application="set" data="req_caller_id=$${FRACTEL_DEFAULT_CALLER_ID}" inline="true"/>
+
+      <!-- Server-side caller ID validation and resolution hierarchy:
+           1. Authoritative DB Call record lookup by X-Hopwhistle-Call-Id, destination, and authenticated SIP identity
+           2. Fail closed (MANDATORY_CALLER_ID_MISSING) if API returns non-200 or invalid caller ID -->
+      <condition field="destination_number" expression="^\+?1?([2-9]\d{9})$" break="never">
+        <action application="unset" data="curl_response_code"/>
+        <action application="unset" data="curl_response_data"/>
+        <action application="unset" data="resolved_cid"/>
+        <action application="curl" data="http://api:3001/api/v1/freeswitch/validate-caller-id?callId=${hopwhistle_call_id}&amp;destination=${destination_number}&amp;sipUser=${sip_auth_username}&amp;channelUuid=${uuid} append_headers X-Internal-API-Key:${env(INTERNAL_API_SECRET)} connect-timeout 3 timeout 5 get"/>
+        <action application="set" data="resolved_cid=${regex(${curl_response_data}|&quot;callerId&quot;:&quot;(\d{11})&quot;|%1)}" inline="true"/>
       </condition>
 
-      <!-- If req_caller_id is a demo/fake 555 number, rewrite it to our verified outbound caller ID -->
-      <condition field="${req_caller_id}" expression="^1?555" break="never">
-        <action application="set" data="req_caller_id=$${outbound_caller_id}" inline="true"/>
+      <!-- Fail closed if curl HTTP code is not 200 or resolved_cid is not an 11-digit E.164 number -->
+      <condition field="${curl_response_code}" expression="^(?!200$).*$" break="never">
+        <action application="log" data="ERR HOPWHISTLE OUTBOUND ERROR: Caller ID API validation failed with HTTP status ${curl_response_code}. Failing closed."/>
+        <action application="hangup" data="MANDATORY_CALLER_ID_MISSING"/>
       </condition>
 
-      <!-- Clean req_caller_id to remove any leading + and ensure it starts with 1 -->
-      <condition field="${req_caller_id}" expression="^\+?1?([2-9]\d{9})$" break="never">
-        <action application="set" data="req_caller_id=1$1" inline="true"/>
+      <condition field="${resolved_cid}" expression="^(?!1\d{10}$).*$" break="never">
+        <action application="log" data="ERR HOPWHISTLE OUTBOUND ERROR: No valid tenant caller ID returned from API validation. Failing closed."/>
+        <action application="hangup" data="MANDATORY_CALLER_ID_MISSING"/>
+      </condition>
+
+      <!-- Set caller ID variables for ALL outbound calls -->
+      <condition field="${resolved_cid}" expression="^(1\d{10})$" break="never">
+        <action application="set" data="clean_caller_id=${resolved_cid}" inline="true"/>
+        <action application="set" data="effective_caller_id_number=${resolved_cid}" inline="true"/>
+        <action application="set" data="origination_caller_id_number=${resolved_cid}" inline="true"/>
+        <action application="set" data="sip_from_user=${resolved_cid}" inline="true"/>
+        <action application="set" data="sip_invite_from_uri=sip:${resolved_cid}@$${domain}" inline="true"/>
+        <action application="set" data="effective_caller_id_name=Hopwhistle" inline="true"/>
+        <action application="set" data="origination_caller_id_name=Hopwhistle" inline="true"/>
+        <action application="set" data="hangup_after_bridge=true"/>
       </condition>
 
       <!-- If hopwhistle_call_id is empty, fallback to lowercase -->
@@ -89,45 +111,23 @@
         <action application="set" data="hopwhistle_call_id=${sip_h_x-hopwhistle-call-id}" inline="true"/>
       </condition>
 
-      <!-- Now we log all details (including extracted variables) -->
+      <!-- Log outbound details -->
       <condition field="destination_number" expression="^\+?1?([2-9]\d{9})$" break="never">
         <action application="log" data="INFO HOPWHISTLE OUTBOUND HIT uuid=${uuid} dest=${destination_number} clean_dest=$1 sip_call_id=${sip_call_id} header=${sip_h_X-Hopwhistle-Call-Id} lowercase=${sip_h_x-hopwhistle-call-id} hopwhistle_call_id=${hopwhistle_call_id} hopwhistle_recording_path=/recordings/${hopwhistle_call_id}.wav caller_id_number=${caller_id_number} effective_caller_id_number=${effective_caller_id_number}" inline="true"/>
       </condition>
 
-      <!-- If hopwhistle_call_id is still empty: log a clear error and notify API recording-status failed -->
+      <!-- If hopwhistle_call_id is still empty: log error and notify API -->
       <condition field="${hopwhistle_call_id}" expression="^$" break="never">
         <action application="log" data="ERR HOPWHISTLE OUTBOUND ERROR: Missing X-Hopwhistle-Call-Id header! Cannot record call."/>
-        <!-- Notify API recording-status failed directly via bg_system / curl -->
         <action application="system" data="curl -s -X POST -H 'Content-Type: application/json' -H 'x-api-key: ${env(API_KEY)}' -d '{&quot;status&quot;: &quot;failed&quot;, &quot;error&quot;: &quot;Missing X-Hopwhistle-Call-Id header on FreeSWITCH channel&quot;}' http://api:3001/api/v1/calls/unknown/recording-status || true"/>
       </condition>
 
-      <!-- Set caller ID variables for ALL outbound calls -->
-      <condition field="destination_number" expression="^\+?1?([2-9]\d{9})$" break="never">
-        <action application="set" data="clean_caller_id=${req_caller_id}" inline="true"/>
-        <action application="set" data="effective_caller_id_number=${clean_caller_id}" inline="true"/>
-        <action application="set" data="origination_caller_id_number=${clean_caller_id}" inline="true"/>
-        <action application="set" data="sip_from_user=${clean_caller_id}" inline="true"/>
-        <action application="set" data="sip_invite_from_uri=sip:${clean_caller_id}@$${domain}" inline="true"/>
-        <action application="set" data="effective_caller_id_name=Hopwhistle" inline="true"/>
-        <action application="set" data="origination_caller_id_name=Hopwhistle" inline="true"/>
-        <action application="set" data="hangup_after_bridge=true"/>
-        <!-- Outbound carrier: FracTEL (STATIC/IP auth). The bridge below fails
-             over across all 6 FracTEL outbound IPs (fractel1-6 gateways). -->
-      </condition>
-
-      <!-- If hopwhistle_call_id is NOT empty, apply details and start record_session before bridge -->
+      <!-- If hopwhistle_call_id is NOT empty, start record_session before bridge -->
       <condition field="${hopwhistle_call_id}" expression="^(.+)$" break="never">
-        <!-- Agent (A-leg) may use wideband so recordings capture HD agent audio.
-             The PSTN (B-leg) stays G.711 for FracTEL — carrier leg is unchanged. -->
         <action application="set" data="absolute_codec_string=OPUS,G722,PCMU,PCMA"/>
         <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
-
-        <!-- Record both parties on separate stereo channels at 16 kHz (agent left,
-             caller right) instead of a muddy 8 kHz mono mix. -->
         <action application="set" data="RECORD_STEREO=true"/>
         <action application="set" data="RECORD_SAMPLE_RATE=16000"/>
-
-        <!-- Set recording variables and start record_session -->
         <action application="set" data="hopwhistle_recording_path=/recordings/${hopwhistle_call_id}.wav" inline="true"/>
         <action application="log" data="INFO HOPWHISTLE RECORD_SESSION START path=/recordings/${hopwhistle_call_id}.wav" inline="true"/>
         <action application="set" data="api_hangup_hook=bg_system /usr/share/freeswitch/scripts/upload-recording.sh /recordings/${hopwhistle_call_id}.wav ${hopwhistle_call_id}"/>
@@ -136,11 +136,8 @@
 
       <!-- Bridge outbound call -->
       <condition field="destination_number" expression="^\+?1?([2-9]\d{9})$">
-        <!-- Save the clean 10-digit number to clean_dest -->
         <action application="set" data="clean_dest=$1" inline="true"/>
-        <!-- Lookup via HTTP GET API using mod_curl -->
         <action application="set" data="lookup_response=${curl(http://api:3001/api/v1/freeswitch/lookup?did=%2b1$1)}" inline="true"/>
-        <!-- Extract the destination extension if it's a 4-digit number -->
         <action application="set" data="local_ext=${regex(${lookup_response}|&quot;destination&quot;:&quot;(\d{4})&quot;|%1)}" inline="true"/>
         <action application="log" data="INFO [OUTBOUND-LOOKUP] response=${lookup_response} local_ext=${local_ext}"/>
       </condition>

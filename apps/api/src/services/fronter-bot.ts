@@ -10,7 +10,8 @@
  */
 import * as net from 'net';
 import modesl from 'modesl';
-const { Connection: ESLConnection } = modesl;
+type ESLConnection = any;
+const ESLConnection = (modesl as any).Connection;
 
 import { logger } from '../lib/logger.js';
 import { getPrismaClient } from '../lib/prisma.js';
@@ -280,7 +281,7 @@ export class FronterBotService {
     try {
       await this.prisma.lead.update({
         where: { id: leadId },
-        data: { status },
+        data: { status: status as any },
       });
     } catch (error) {
       logger.error({ msg: 'Failed to update lead status', leadId, status, error });

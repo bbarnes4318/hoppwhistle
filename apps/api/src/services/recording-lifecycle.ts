@@ -1,5 +1,3 @@
-import { RecordingStorageTier } from '@prisma/client';
-
 import { getPrismaClient } from '../lib/prisma.js';
 
 import { getStorageService } from './storage.js';
@@ -117,6 +115,7 @@ export class RecordingLifecycleService {
     }
 
     const storage = getStorageService();
+    void storage;
     
     try {
       // In production, use S3 copy with storage class change

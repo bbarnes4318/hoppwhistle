@@ -88,10 +88,13 @@ interface UserInfo {
   apiKeyId?: string;
 }
 
-// Helper to get user from request
-function getUser(request: FastifyRequest): UserInfo {
+// Helper to get user from request - requires valid authentication
+function getUser(request: FastifyRequest): UserInfo | null {
   const user = (request as FastifyRequest & { user?: UserInfo }).user;
-  return user ?? { userId: 'demo-agent', tenantId: 'default-tenant-id' };
+  if (!user || !user.userId || user.userId === 'demo-agent') {
+    return null;
+  }
+  return user;
 }
 
 // Redis key prefixes for agent data
@@ -154,8 +157,13 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
    * GET /api/v1/agent/status
    * Get current agent status
    */
-  fastify.get('/api/v1/agent/status', async (request: FastifyRequest, _reply: FastifyReply) => {
-    const { userId } = getUser(request);
+  fastify.get('/api/v1/agent/status', async (request: FastifyRequest, reply: FastifyReply) => {
+    const user = getUser(request);
+    if (!user) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+    }
+    const { userId } = user;
     const status = await getAgentStatus(userId);
 
     return {
@@ -171,7 +179,12 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
   fastify.put<{ Body: AgentStatusBody }>(
     '/api/v1/agent/status',
     async (request, reply: FastifyReply) => {
-      const { userId, tenantId } = getUser(request);
+      const user = getUser(request);
+      if (!user) {
+        void reply.code(401);
+        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      }
+      const { userId, tenantId } = user;
       const { status } = request.body;
 
       const validStatuses = ['available', 'away', 'dnd', 'offline', 'on-call'];
@@ -211,19 +224,13 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
    * GET /api/v1/agent/my-numbers
    * Returns the authenticated user's assigned phone numbers for caller ID selection
    */
-  fastify.get('/api/v1/agent/my-numbers', async (request, _reply: FastifyReply) => {
-    const { userId, tenantId } = getUser(request);
-
-    if (userId === 'demo-agent') {
-      return {
-        numbers: [
-          { id: 'demo-1', number: '12816991120', provider: 'local' },
-          { id: 'demo-2', number: '12816991121', provider: 'local' },
-          { id: 'demo-3', number: '12816991122', provider: 'local' },
-        ],
-      };
+  fastify.get('/api/v1/agent/my-numbers', async (request, reply: FastifyReply) => {
+    const user = getUser(request);
+    if (!user) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
     }
-
+    const { userId, tenantId } = user;
     const prisma = getPrismaClient();
 
     // The softphone caller-ID picker should offer only the agent's OWN assigned
@@ -263,7 +270,12 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
   fastify.post<{ Body: OriginateCallBody }>(
     '/api/v1/agent/call/originate',
     async (request, reply: FastifyReply) => {
-      const { userId, tenantId } = getUser(request);
+      const user = getUser(request);
+      if (!user) {
+        void reply.code(401);
+        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      }
+      const { userId, tenantId } = user;
       const { phoneNumber, callerId, campaignId } = request.body;
 
       if (!phoneNumber) {
@@ -275,91 +287,58 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       const callSid = `call_${Date.now()}_${Math.random().toString(36).substring(7)}`;
       const prisma = getPrismaClient();
 
-      const isAuthenticatedUser = userId !== 'demo-agent';
-      let outboundCallerId = callerId || process.env.OUTBOUND_CALLER_ID || '12816991120';
+      // Server-side caller ID validation and resolution hierarchy:
+      // 1. Validated tenant-authorized selected FracTEL DID
+      // 2. Valid configured FRACTEL_DEFAULT_CALLER_ID
+      // 3. Fail closed if neither valid
+      const { resolveCallerIdForAuthenticatedOriginate } = await import('../services/caller-id-service.js');
 
-      // Rotate the tenant's FracTEL POOL (least-recently-used) and return the
-      // chosen number, or null if the pool is empty. Used by the call-center
-      // dialer (callerId === 'ROTATE') and as a fallback for unassigned agents.
-      const rotatePoolCallerId = async (): Promise<string | null> => {
+      let candidateCallerId = callerId;
+      const rotationRequested = callerId === 'ROTATE';
+      if (rotationRequested) {
         const pool = await prisma.phoneNumber.findMany({
           where: { tenantId, status: 'ACTIVE', userId: null, poolType: 'POOL' },
         });
-        if (pool.length === 0) return null;
-        const sortedPool = [...pool].sort((a, b) => {
-          const timeA = a.lastAssignedAt ? new Date(a.lastAssignedAt).getTime() : 0;
-          const timeB = b.lastAssignedAt ? new Date(b.lastAssignedAt).getTime() : 0;
-          return timeA - timeB;
-        });
-        const selectedRecord = sortedPool[0];
-        await prisma.phoneNumber.update({
-          where: { id: selectedRecord.id },
-          data: { lastAssignedAt: new Date() },
-        });
-        return selectedRecord.number;
-      };
-
-      if (isAuthenticatedUser) {
-        if (callerId === 'ROTATE') {
-          // Call-center auto-dialer: rotate across the tenant DID pool.
-          const rotated = await rotatePoolCallerId();
-          if (rotated) outboundCallerId = rotated;
-        } else {
-          // Manual softphone: the agent dials with their OWN assigned number.
-          const userNumbers = await prisma.phoneNumber.findMany({
-            where: {
-              tenantId,
-              status: 'ACTIVE',
-              userId,
-              NOT: {
-                number: {
-                  contains: '555',
-                },
-              },
-            },
+        if (pool.length > 0) {
+          const sortedPool = [...pool].sort((a, b) => {
+            const timeA = a.lastAssignedAt ? new Date(a.lastAssignedAt).getTime() : 0;
+            const timeB = b.lastAssignedAt ? new Date(b.lastAssignedAt).getTime() : 0;
+            return timeA - timeB;
           });
-
-          if (userNumbers.length > 0) {
-            if (callerId) {
-              const requested = userNumbers.find(
-                n =>
-                  n.number === callerId ||
-                  n.number.replace(/\D/g, '') === callerId.replace(/\D/g, '')
-              );
-              outboundCallerId = (requested ?? userNumbers[0]).number;
-            } else {
-              outboundCallerId = userNumbers[0].number;
-            }
-          } else {
-            // Agent has no assigned number — fall back to a pool DID so the call
-            // still presents a valid FracTEL number rather than a dead default.
-            const rotated = await rotatePoolCallerId();
-            if (rotated) outboundCallerId = rotated;
-          }
+          const selectedRecord = sortedPool[0];
+          await prisma.phoneNumber.update({
+            where: { id: selectedRecord.id },
+            data: { lastAssignedAt: new Date() },
+          });
+          candidateCallerId = selectedRecord.number;
         }
       }
 
-      // Normalize caller ID to exactly 11 digits (e.g. 12816991120)
-      const digitsOnly = outboundCallerId.replace(/\D/g, '');
-      const fsCallerId = digitsOnly.length === 10 ? '1' + digitsOnly : digitsOnly;
-
-      // Find the PhoneNumber record in the DB to associate with the call
-      const cleanFsCallerId = fsCallerId.replace(/\D/g, '');
-      const last10 = cleanFsCallerId.length >= 10 ? cleanFsCallerId.slice(-10) : cleanFsCallerId;
-      const dbNumber = await prisma.phoneNumber.findFirst({
-        where: {
-          tenantId,
-          number: {
-            endsWith: last10,
-          },
-        },
+      const validatedCid = await resolveCallerIdForAuthenticatedOriginate({
+        tenantId,
+        userId,
+        campaignId,
+        requestedCallerId: candidateCallerId !== 'ROTATE' ? candidateCallerId : undefined,
+        rotationRequested,
       });
+
+      if (!validatedCid.valid || !validatedCid.callerId || !validatedCid.fromNumberId) {
+        void reply.code(403);
+        return {
+          error: {
+            code: 'NO_VALID_CALLER_ID',
+            message: 'No valid tenant-authorized FracTEL caller ID available.',
+          },
+        };
+      }
+
+      const fsCallerId = validatedCid.callerId;
+      const fromNumberId = validatedCid.fromNumberId;
 
       // Determine recording intent from campaign settings
       const recordingEnabled = await shouldRecordCall(campaignId);
 
-      // Create call in PostgreSQL
-      // Skip createdById for demo/unauthenticated requests to avoid FK constraint issues
+      // Create call in PostgreSQL with exact fromNumberId
       const call = await prisma.call.create({
         data: {
           tenantId,
@@ -367,11 +346,10 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
           toNumber: phoneNumber,
           direction: 'OUTBOUND',
           status: 'INITIATED',
-          ...(isAuthenticatedUser ? { createdById: userId } : {}),
+          createdById: userId,
           campaignId: campaignId ?? null,
           callerId: fsCallerId,
-          fromNumberId: dbNumber?.id || null,
-          // Recording lifecycle: mark intent at call creation
+          fromNumberId,
           recordingStatus: recordingEnabled ? 'PENDING' : null,
           metadata: {
             callerId: fsCallerId,
@@ -976,100 +954,114 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
    */
   fastify.get(
     '/api/v1/agent/webrtc/credentials',
-    async (request: FastifyRequest, _reply: FastifyReply) => {
-      const { userId, tenantId } = getUser(request);
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const userObj = getUser(request);
+      if (!userObj) {
+        void reply.code(401);
+        return {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Authentication required to access WebRTC credentials',
+          },
+        };
+      }
 
+      const { userId, tenantId } = userObj;
       const prisma = getPrismaClient();
-      let user = userId && userId !== 'demo-agent' ? await prisma.user.findUnique({ where: { id: userId } }) : null;
-      let extension: string | null = null;
-      if (user?.metadata && typeof user.metadata === 'object' && !Array.isArray(user.metadata)) {
-        const meta = user.metadata as Record<string, unknown>;
-        if (typeof meta.extension === 'string' || typeof meta.extension === 'number') {
-          extension = String(meta.extension);
-        }
+
+      const identity = await prisma.sipIdentity.findUnique({
+        where: { userId },
+      });
+
+      if (!identity || identity.status !== 'ACTIVE') {
+        void reply.code(404);
+        return {
+          error: {
+            code: 'NO_SIP_EXTENSION_ASSIGNED',
+            message: 'Authenticated user has no assigned SIP extension.',
+          },
+        };
       }
 
-      // If user has no extension, dynamically assign a free one from 1000-1019
-      if (!extension && user && userId && userId !== 'demo-agent') {
-        const allUsers = await prisma.user.findMany({
-          select: { metadata: true },
+      const { deriveSipPassword } = await import('../services/caller-id-service.js');
+      let sipPassword: string;
+      try {
+        sipPassword = deriveSipPassword({
+          tenantId: identity.tenantId,
+          userId: identity.userId,
+          extension: identity.extension,
+          credentialVersion: identity.credentialVersion,
+          domain: identity.domain,
         });
-        const usedExtensions = new Set<string>();
-        for (const u of allUsers) {
-          if (u.metadata && typeof u.metadata === 'object' && !Array.isArray(u.metadata)) {
-            const meta = u.metadata as Record<string, unknown>;
-            if (typeof meta.extension === 'string' || typeof meta.extension === 'number') {
-              usedExtensions.add(String(meta.extension).trim());
-            }
-          }
-        }
-
-        let availableExtension: string | null = null;
-        for (let extNum = 1000; extNum <= 1019; extNum++) {
-          const extStr = extNum.toString();
-          if (!usedExtensions.has(extStr)) {
-            availableExtension = extStr;
-            break;
-          }
-        }
-
-        if (availableExtension) {
-          const currentMetadata = (user.metadata as Record<string, unknown>) || {};
-          const updatedMetadata = {
-            ...currentMetadata,
-            extension: availableExtension,
-          };
-
-          user = await prisma.user.update({
-            where: { id: userId },
-            data: { metadata: updatedMetadata },
-          });
-          extension = availableExtension;
-
-          request.log.info({
-            msg: 'webrtc/credentials: Automatically assigned free extension to user',
-            userId,
-            extension: extension || '',
-          });
-
-          // Sync DidRoute for any active phone numbers assigned to the user
-          try {
-            const { didRouteService } = await import('../services/did-route-service.js');
-            const phoneNumbers = await prisma.phoneNumber.findMany({
-              where: { userId, status: 'ACTIVE' },
-            });
-            for (const phoneNum of phoneNumbers) {
-              await didRouteService.syncDidRouteForNumber(phoneNum.id, tenantId);
-            }
-          } catch (syncErr) {
-            request.log.error({
-              msg: 'webrtc/credentials: Failed to sync DID routes during auto-extension assignment',
-              err: syncErr,
-            });
-          }
-        }
+      } catch (err) {
+        request.log.error({
+          msg: 'webrtc/credentials: Failed to derive SIP password',
+          err,
+        });
+        void reply.code(500);
+        return {
+          error: {
+            code: 'SIP_CONFIG_ERROR',
+            message: 'Server SIP secret is not configured correctly.',
+          },
+        };
       }
 
-      const activeExt = extension || '1000';
-      const username = activeExt;
-      const password = '1234';
-      const expiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
-
-      // Build Verto WebSocket URL
-      // Priority: VERTO_WS_URL env var > PUBLIC_IP:8082 > localhost fallback
+      const username = identity.extension;
       const publicIp = process.env.PUBLIC_IP;
       const vertoUrl =
         process.env.VERTO_WS_URL || (publicIp ? `wss://${publicIp}:8082` : 'wss://localhost:8082');
 
       return {
+        extension: username,
         username,
-        password,
+        password: sipPassword,
         realm: process.env.FREESWITCH_REALM ?? process.env.PUBLIC_IP ?? 'freeswitch',
         wsUrl: vertoUrl,
         stunServers: ['stun:stun.l.google.com:19302'],
         turnServers: [],
-        expiresAt: expiry.toISOString(),
       };
+    }
+  );
+
+  /**
+   * POST /api/v1/agent/webrtc/provision
+   * Explicit transactional SIP extension provisioning endpoint
+   */
+  fastify.post(
+    '/api/v1/agent/webrtc/provision',
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const userObj = getUser(request);
+      if (!userObj) {
+        void reply.code(401);
+        return {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Authentication required to provision WebRTC extension',
+          },
+        };
+      }
+
+      const { provisionExtensionForUser } = await import('../services/caller-id-service.js');
+      try {
+        const result = await provisionExtensionForUser({
+          tenantId: userObj.tenantId,
+          userId: userObj.userId,
+        });
+        return result;
+      } catch (err) {
+        request.log.error({
+          msg: 'webrtc/provision: Extension provisioning failed',
+          err,
+        });
+        void reply.code(500);
+        return {
+          error: {
+            code: 'PROVISIONING_FAILED',
+            message: (err as Error).message || 'Failed to provision SIP extension',
+          },
+        };
+      }
     }
   );
 

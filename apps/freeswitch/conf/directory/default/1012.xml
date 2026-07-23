@@ -1,7 +1,7 @@
 <include>
   <user id="1012">
     <params>
-      <param name="password" value="$${default_password}"/>
+      <param name="password" value="$${user_password_1012}"/>
       <param name="vm-password" value="1012"/>
       <!-- Verto specific permissions -->
       <param name="jsonrpc-allowed-methods" value="verto.invite,verto.answer,verto.attach,verto.info,verto.display,verto.bye,verto.modify,verto.media,verto.ping"/>
@@ -15,7 +15,6 @@
       <variable name="effective_caller_id_name" value="Extension 1012"/>
       <variable name="effective_caller_id_number" value="1012"/>
       <variable name="outbound_caller_id_name" value="Hopwhistle"/>
-      <variable name="outbound_caller_id_number" value="12816991120"/>
       <variable name="callgroup" value="techsupport"/>
     </variables>
   </user>
