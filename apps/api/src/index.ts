@@ -375,6 +375,9 @@ async function buildServer() {
   const { registerDidRouteRoutes } = await import('./routes/did-routes.js');
   await server.register(registerDidRouteRoutes);
 
+  const { registerCallerIdInventoryRoutes } = await import('./routes/caller-id-inventory.js');
+  await server.register(registerCallerIdInventoryRoutes);
+
   // Register Insurance Lead Pipeline routes (inbound ingestion, CRM, Ameriquote routing)
   const { registerInsuranceLeadRoutes } = await import('./routes/insurance-leads.js');
   await server.register(registerInsuranceLeadRoutes);

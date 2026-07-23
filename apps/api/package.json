@@ -28,6 +28,7 @@
     "recordings:backfill:one": "tsx src/cli/backfill-recordings.ts --recording-id",
     "dnc:import": "tsx src/cli/import-dnc.ts",
     "numbers:import": "tsx src/cli/numbers-import.ts",
+    "dograh:cid:import": "tsx src/cli/dograh-callerid-import.ts",
     "numbers:assign": "tsx src/cli/numbers-assign.ts",
     "numbers:audit": "tsx src/cli/numbers-audit.ts",
     "quota:test": "tsx src/cli/test-quota-overage.ts",

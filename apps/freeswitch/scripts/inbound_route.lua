@@ -117,6 +117,20 @@ local buyer_id        = json_value(response_body, "buyerId")
 local target_id       = json_value(response_body, "targetId")
 local campaign_id     = json_value(response_body, "campaignId")
 local recording_flag  = json_value(response_body, "recordingEnabled")
+local no_eligible     = json_value(response_body, "noEligibleDestination")
+
+-- External PSTN gateway chain for buyer/fallback legs. The API sends the
+-- current carrier chain (env INBOUND_EXTERNAL_GATEWAYS); default matches the
+-- outbound FracTEL trunk. BulkVS/SignalWire/Telnyx were retired for egress
+-- after the July 2026 incident — do not hardcode them here.
+local external_gateways_csv = json_value(response_body, "externalGateways") or "fractel1,fractel2,fractel3"
+local external_gateways = {}
+for gw in string.gmatch(external_gateways_csv, "[^,%s]+") do
+    table.insert(external_gateways, gw)
+end
+if #external_gateways == 0 then
+    external_gateways = { "fractel1" }
+end
 
 -- ── TCPA Litigator Check ──────────────────────────────────────────────────
 local reject_flag = json_value(response_body, "reject")
@@ -124,6 +138,18 @@ if reject_flag == "true" then
   local reject_reason = json_value(response_body, "reason") or "BLOCKED"
   log("WARNING", "TCPA BLOCK: caller " .. caller_number .. " on DID " .. did_normalized .. " — reason: " .. reject_reason)
   session:hangup("CALL_REJECTED")
+  return
+end
+
+-- A route exists but no destination is currently eligible (e.g. campaign with
+-- no ringable agents): controlled no-agent response, never a silent drop and
+-- never a bridge to a garbage destination.
+if no_eligible == "true" or ((not destination or destination == "") and route_id and route_id ~= "") then
+  log("WARNING", "Route " .. tostring(route_id) .. " has no eligible destination for DID " .. did_normalized .. " — playing no-agent prompt")
+  session:execute("answer")
+  session:sleep(500)
+  session:execute("playback", "ivr/ivr-no_user_response.wav")
+  session:hangup("NO_USER_RESPONSE")
   return
 end
 
@@ -260,9 +286,19 @@ for i, step in ipairs(failover_steps) do
                         table.insert(bridge_components, "user/" .. p_dest)
                     end
                 else
-                    -- Strip leading + for external dialing
-                    local dest_stripped = string.gsub(p_dest, "^%+", "")
-                    table.insert(bridge_components, "sofia/gateway/bulkvs/" .. dest_stripped)
+                    -- External PSTN leg. Validate it actually looks like a phone
+                    -- number — stale routes can carry sentinels like "Campaign"
+                    -- which previously produced sofia/gateway/<gw>/Campaign and a
+                    -- guaranteed dead bridge.
+                    local dest_digits = string.gsub(p_dest, "%D", "")
+                    if string.len(dest_digits) == 10 then
+                        dest_digits = "1" .. dest_digits
+                    end
+                    if string.len(dest_digits) >= 11 and string.len(dest_digits) <= 15 then
+                        table.insert(bridge_components, "sofia/gateway/" .. external_gateways[1] .. "/" .. dest_digits)
+                    else
+                        log("ERR", "Skipping non-routable destination token '" .. p_dest .. "' (not an extension, user ID, or phone number)")
+                    end
                 end
             end
         end
@@ -285,7 +321,25 @@ for i, step in ipairs(failover_steps) do
                 "{origination_caller_id_number=%s,origination_caller_id_name=%s,effective_caller_id_number=%s,effective_caller_id_name=%s}",
                 cid, cid, cid, cid
             )
-            local bridge_string = bridge_vars .. table.concat(bridge_components, ",")
+            -- Single external destination: retry the same number across the
+            -- whole carrier gateway chain (mirrors the outbound dialplan's
+            -- fractel1..6 failover) before moving to the next routing step.
+            local bridge_body
+            if #bridge_components == 1 then
+                local gw_dest = string.match(bridge_components[1], "^sofia/gateway/[^/]+/(.+)$")
+                if gw_dest and #external_gateways > 1 then
+                    local alts = {}
+                    for _, gw in ipairs(external_gateways) do
+                        table.insert(alts, "sofia/gateway/" .. gw .. "/" .. gw_dest)
+                    end
+                    bridge_body = table.concat(alts, "|")
+                else
+                    bridge_body = bridge_components[1]
+                end
+            else
+                bridge_body = table.concat(bridge_components, ",")
+            end
+            local bridge_string = bridge_vars .. bridge_body
             log("INFO", "Bridging to failover step " .. tostring(i) .. ": " .. bridge_string)
             session:execute("bridge", bridge_string)
             
