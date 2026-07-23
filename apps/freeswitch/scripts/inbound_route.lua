@@ -21,6 +21,11 @@ local RECORDING_DIR = os.getenv("RECORDING_DIR") or "/recordings"
 local UPLOAD_SCRIPT = "/usr/share/freeswitch/scripts/upload-recording.sh"
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
+-- FS API handle for sofia_contact registration checks and the CDR post.
+-- (Referenced as `api:execute` below — must be defined or the script dies
+-- with a nil-index error right before bridging.)
+local api = freeswitch.API()
+
 local function log(level, msg)
   freeswitch.consoleLog(level, "[INBOUND-ROUTE] " .. msg .. "\n")
 end
