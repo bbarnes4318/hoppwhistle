@@ -1,6 +1,6 @@
 <include>
   <!--
-    Vapi Outbound Context — Per-Carrier Routing & Signing
+    Vapi Outbound Context — Per-Carrier Routing and Signing
     =====================================================
     Each carrier signs ONLY its own calls:
     - BulkVS:     bridge to sofia/gateway/bulkvs (no local signing — BulkVS handles STIR/SHAKEN)
@@ -49,9 +49,9 @@
         <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
         <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
 
-        <!-- Extract candidate caller ID from headers -->
-        <action application="set" data="req_caller_id=${sip_h_X-Caller-ID}" inline="true"/>
-        <action application="set" data="cid_lookup_res=${curl(http://api:3001/api/v1/freeswitch/validate-caller-id?callerId=${req_caller_id})}" inline="true"/>
+        <!-- Validate caller ID via internal authenticated API -->
+        <action application="set" data="curl_headers=X-Internal-API-Key: ${env(INTERNAL_API_SECRET)}" inline="true"/>
+        <action application="set" data="cid_lookup_res=${curl(http://api:3001/api/v1/freeswitch/validate-caller-id?callId=${sip_h_X-Hopwhistle-Call-Id})}" inline="true"/>
         <action application="set" data="resolved_cid=${regex(${cid_lookup_res}|&quot;callerId&quot;:&quot;(\d{11})&quot;|%1)}" inline="true"/>
       </condition>
 
@@ -151,9 +151,9 @@
         <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
         <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
 
-        <!-- Extract candidate caller ID from headers -->
-        <action application="set" data="req_caller_id=${sip_h_X-Caller-ID}" inline="true"/>
-        <action application="set" data="cid_lookup_res=${curl(http://api:3001/api/v1/freeswitch/validate-caller-id?callerId=${req_caller_id})}" inline="true"/>
+        <!-- Validate caller ID via internal authenticated API -->
+        <action application="set" data="curl_headers=X-Internal-API-Key: ${env(INTERNAL_API_SECRET)}" inline="true"/>
+        <action application="set" data="cid_lookup_res=${curl(http://api:3001/api/v1/freeswitch/validate-caller-id?callId=${sip_h_X-Hopwhistle-Call-Id})}" inline="true"/>
         <action application="set" data="resolved_cid=${regex(${cid_lookup_res}|&quot;callerId&quot;:&quot;(\d{11})&quot;|%1)}" inline="true"/>
       </condition>
 
@@ -223,8 +223,8 @@
         <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
 
         <!-- Validate caller ID hierarchy for routing ID calls -->
-        <action application="set" data="req_caller_id=${sip_h_X-Caller-ID}" inline="true"/>
-        <action application="set" data="cid_lookup_res=${curl(http://api:3001/api/v1/freeswitch/validate-caller-id?callerId=${req_caller_id})}" inline="true"/>
+        <action application="set" data="curl_headers=X-Internal-API-Key: ${env(INTERNAL_API_SECRET)}" inline="true"/>
+        <action application="set" data="cid_lookup_res=${curl(http://api:3001/api/v1/freeswitch/validate-caller-id?callId=${sip_h_X-Hopwhistle-Call-Id})}" inline="true"/>
         <action application="set" data="resolved_cid=${regex(${cid_lookup_res}|&quot;callerId&quot;:&quot;(\d{11})&quot;|%1)}" inline="true"/>
       </condition>
 

@@ -1,6 +1,7 @@
 import type { Flow, ExecutionPlan } from '@hopwhistle/routing-dsl';
 import { parseFlow, createExecutionPlan } from '@hopwhistle/routing-dsl';
 
+import type { Prisma } from '@prisma/client';
 import { getPrismaClient } from '../lib/prisma.js';
 
 export interface FlowVersion {
@@ -113,8 +114,8 @@ class FlowStore {
           version: versionInt,
           isActive: false,
           metadata: {
-            flow: flow,
-            plan: plan,
+            flow: flow as unknown as Prisma.InputJsonValue,
+            plan: plan as unknown as Prisma.InputJsonValue,
             createdBy: createdBy,
           },
         },
@@ -164,7 +165,7 @@ class FlowStore {
           flowVersionId,
           type: this.mapNodeType(flowNode.type) as any,
           name: flowNode.type.charAt(0).toUpperCase() + flowNode.type.slice(1),
-          config: this.extractNodeConfig(flowNode) as any,
+          config: this.extractNodeConfig(flowNode) as unknown as Prisma.InputJsonValue,
           position: { x: 0, y: 0 }, // Will be updated by UI
         },
       });

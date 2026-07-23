@@ -1,4 +1,5 @@
 import { logger } from '../../../lib/logger.js';
+import type { Prisma } from '@prisma/client';
 import { getPrismaClient } from '../../../lib/prisma.js';
 import type {
   ProvisioningAdapter,
@@ -140,7 +141,7 @@ export class LocalAdapter implements ProvisioningAdapter {
     await prisma.phoneNumber.update({
       where: { id: providerId },
       data: {
-        capabilities: features as any,
+        capabilities: features as unknown as Prisma.InputJsonValue,
       },
     });
 

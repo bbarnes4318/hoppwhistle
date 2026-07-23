@@ -114,8 +114,6 @@ export class RecordingLifecycleService {
       return;
     }
 
-    const _storage = getStorageService();
-    
     try {
       // In production, use S3 copy with storage class change
       // For now, we'll just update the database

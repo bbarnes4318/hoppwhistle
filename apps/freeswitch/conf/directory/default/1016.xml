@@ -15,7 +15,7 @@
       <variable name="effective_caller_id_name" value="Extension 1016"/>
       <variable name="effective_caller_id_number" value="1016"/>
       <variable name="outbound_caller_id_name" value="Hopwhistle"/>
-      <variable name="outbound_caller_id_number" value="12816991120"/>
+      <variable name="outbound_caller_id_number" value="\$\"/>
       <variable name="callgroup" value="techsupport"/>
     </variables>
   </user>

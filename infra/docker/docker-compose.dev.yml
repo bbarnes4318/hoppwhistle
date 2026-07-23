@@ -110,8 +110,8 @@ services:
       RTPENGINE_URL: http://rtpengine:22222
       FREESWITCH_ESL_HOST: freeswitch
       FREESWITCH_ESL_PORT: 8021
-      FREESWITCH_ESL_PASSWORD: ${FREESWITCH_ESL_PASSWORD:-ClueCon}
-      SIP_AGENT_PASSWORD: ${SIP_AGENT_PASSWORD:-1234}
+      FREESWITCH_ESL_PASSWORD: ${FREESWITCH_ESL_PASSWORD}
+      SIP_AGENT_PASSWORD: ${SIP_AGENT_PASSWORD}
       FONESTORM_BASE_URL: ${FONESTORM_BASE_URL:-https://api.fonestorm.com/v2}
       FONESTORM_USERNAME: ${FONESTORM_USERNAME:-}
       FONESTORM_PASSWORD: ${FONESTORM_PASSWORD:-}
@@ -295,7 +295,7 @@ services:
       FRACTEL_DEFAULT_CALLER_ID: ${FRACTEL_DEFAULT_CALLER_ID}
       PUBLIC_IP: ${PUBLIC_IP}
       SIP_DOMAIN: ${SIP_DOMAIN:-freeswitch}
-      SIP_AGENT_PASSWORD: ${SIP_AGENT_PASSWORD:-1234}
+      SIP_AGENT_PASSWORD: ${SIP_AGENT_PASSWORD}
     volumes:
       - freeswitch_recordings:/recordings
       # Mount Let's Encrypt certs for WSS (on production servers only)

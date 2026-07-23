@@ -134,6 +134,7 @@ services:
       - OUTBOUND_CALLER_ID=${OUTBOUND_CALLER_ID}
       - FRACTEL_DEFAULT_CALLER_ID=${FRACTEL_DEFAULT_CALLER_ID}
       - SIP_DOMAIN=${SIP_DOMAIN:-freeswitch}
+      - SIP_AGENT_PASSWORD=${SIP_AGENT_PASSWORD}
     volumes:
       - freeswitch_recordings:/recordings
       # NOTE: Do NOT mount freeswitch_conf here - config is baked into the image via Dockerfile

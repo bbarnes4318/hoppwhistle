@@ -292,22 +292,24 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
     '/api/v1/freeswitch/validate-caller-id',
     async (request: FastifyRequest, reply: FastifyReply) => {
       const query = request.query as {
-        callerId?: string;
-        tenantId?: string;
-        userId?: string;
-        campaignId?: string;
+        callId?: string;
+        signedContext?: string;
       };
+
+      const internalApiKey =
+        (request.headers['x-internal-api-key'] as string | undefined) ||
+        (request.headers['x-api-key'] as string | undefined);
 
       const { validateAndResolveCallerId } = await import('../services/caller-id-service.js');
       const result = await validateAndResolveCallerId({
-        requestedCallerId: query.callerId,
-        tenantId: query.tenantId,
-        userId: query.userId,
-        campaignId: query.campaignId,
+        callId: query.callId,
+        internalApiKey,
+        signedContext: query.signedContext,
       });
 
       if (!result.valid) {
-        return reply.code(403).send(result);
+        const statusCode = result.reason === 'UNAUTHORIZED_INTERNAL_REQUEST' ? 401 : 403;
+        return reply.code(statusCode).send(result);
       }
 
       return reply.send(result);

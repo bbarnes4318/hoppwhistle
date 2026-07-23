@@ -156,9 +156,9 @@ export class QuotaService {
     }
 
     // Check override token
-    const tenantBudget = (tenant as any).budget;
-    if (overrideToken && tenantBudget?.overrideToken === overrideToken) {
-      if (tenantBudget.overrideTokenExpiresAt && tenantBudget.overrideTokenExpiresAt < new Date()) {
+    const b1 = (tenant as any).budget;
+    if (overrideToken && b1?.overrideToken === overrideToken) {
+      if (b1.overrideTokenExpiresAt && b1.overrideTokenExpiresAt < new Date()) {
         return { allowed: false, reason: 'Override token expired' };
       }
       return { allowed: true, reason: 'Override token used' };
@@ -256,9 +256,9 @@ export class QuotaService {
       return { allowed: false, reason: 'Tenant not found' };
     }
 
-    const tenantBudget = (tenant as any).budget;
-    if (overrideToken && tenantBudget?.overrideToken === overrideToken) {
-      if (tenantBudget.overrideTokenExpiresAt && tenantBudget.overrideTokenExpiresAt < new Date()) {
+    const b2 = (tenant as any).budget;
+    if (overrideToken && b2?.overrideToken === overrideToken) {
+      if (b2.overrideTokenExpiresAt && b2.overrideTokenExpiresAt < new Date()) {
         return { allowed: false, reason: 'Override token expired' };
       }
       return { allowed: true, reason: 'Override token used' };
@@ -419,7 +419,7 @@ export class QuotaService {
   async recordCallCost(
     tenantId: string,
     cost: number,
-    _callId: string
+    _callId?: string
   ): Promise<void> {
     const prisma = getPrismaClient();
 

@@ -1,6 +1,6 @@
 <include>
   <!--
-    Default Outbound Dialplan Context — FracTEL Outbound Routing & Audio Recording
+    Default Outbound Dialplan Context — FracTEL Outbound Routing and Audio Recording
     =============================================================================
     Routing Hierarchy:
       1. Local registration lookup via API / extension bridge
@@ -72,12 +72,14 @@
         <action application="set" data="req_caller_id=${sip_h_x-caller-id}" inline="true"/>
       </condition>
 
-      <!-- Server-side caller ID validation & resolution hierarchy:
-           1. Validated tenant-authorized selected FracTEL DID
-           2. Valid configured FRACTEL_DEFAULT_CALLER_ID
-           3. Otherwise fail closed (MANDATORY_CALLER_ID_MISSING) -->
+      <!-- Server-side caller ID validation and resolution hierarchy:
+           1. Authoritative DB Call record lookup by X-Hopwhistle-Call-Id
+           2. Validated tenant-authorized FracTEL DID
+           3. Valid DB-validated FRACTEL_DEFAULT_CALLER_ID
+           4. Otherwise fail closed (MANDATORY_CALLER_ID_MISSING) -->
       <condition field="destination_number" expression="^\+?1?([2-9]\d{9})$" break="never">
-        <action application="set" data="cid_lookup_res=${curl(http://api:3001/api/v1/freeswitch/validate-caller-id?callerId=${req_caller_id}&user=${user_name}&domain=${domain_name})}" inline="true"/>
+        <action application="set" data="curl_headers=X-Internal-API-Key: ${env(INTERNAL_API_SECRET)}" inline="true"/>
+        <action application="set" data="cid_lookup_res=${curl(http://api:3001/api/v1/freeswitch/validate-caller-id?callId=${hopwhistle_call_id})}" inline="true"/>
         <action application="set" data="resolved_cid=${regex(${cid_lookup_res}|&quot;callerId&quot;:&quot;(\d{11})&quot;|%1)}" inline="true"/>
       </condition>
 

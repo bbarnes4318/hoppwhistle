@@ -88,10 +88,13 @@ interface UserInfo {
   apiKeyId?: string;
 }
 
-// Helper to get user from request
-function getUser(request: FastifyRequest): UserInfo {
+// Helper to get user from request - requires valid authentication
+function getUser(request: FastifyRequest): UserInfo | null {
   const user = (request as FastifyRequest & { user?: UserInfo }).user;
-  return user ?? { userId: 'demo-agent', tenantId: 'default-tenant-id' };
+  if (!user || !user.userId || user.userId === 'demo-agent') {
+    return null;
+  }
+  return user;
 }
 
 // Redis key prefixes for agent data
@@ -154,8 +157,13 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
    * GET /api/v1/agent/status
    * Get current agent status
    */
-  fastify.get('/api/v1/agent/status', async (request: FastifyRequest, _reply: FastifyReply) => {
-    const { userId } = getUser(request);
+  fastify.get('/api/v1/agent/status', async (request: FastifyRequest, reply: FastifyReply) => {
+    const user = getUser(request);
+    if (!user) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+    }
+    const { userId } = user;
     const status = await getAgentStatus(userId);
 
     return {
@@ -171,7 +179,12 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
   fastify.put<{ Body: AgentStatusBody }>(
     '/api/v1/agent/status',
     async (request, reply: FastifyReply) => {
-      const { userId, tenantId } = getUser(request);
+      const user = getUser(request);
+      if (!user) {
+        void reply.code(401);
+        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      }
+      const { userId, tenantId } = user;
       const { status } = request.body;
 
       const validStatuses = ['available', 'away', 'dnd', 'offline', 'on-call'];
@@ -211,19 +224,13 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
    * GET /api/v1/agent/my-numbers
    * Returns the authenticated user's assigned phone numbers for caller ID selection
    */
-  fastify.get('/api/v1/agent/my-numbers', async (request, _reply: FastifyReply) => {
-    const { userId, tenantId } = getUser(request);
-
-    if (userId === 'demo-agent') {
-      return {
-        numbers: [
-          { id: 'demo-1', number: '12816991120', provider: 'local' },
-          { id: 'demo-2', number: '12816991121', provider: 'local' },
-          { id: 'demo-3', number: '12816991122', provider: 'local' },
-        ],
-      };
+  fastify.get('/api/v1/agent/my-numbers', async (request, reply: FastifyReply) => {
+    const user = getUser(request);
+    if (!user) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
     }
-
+    const { userId, tenantId } = user;
     const prisma = getPrismaClient();
 
     // The softphone caller-ID picker should offer only the agent's OWN assigned
@@ -263,7 +270,12 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
   fastify.post<{ Body: OriginateCallBody }>(
     '/api/v1/agent/call/originate',
     async (request, reply: FastifyReply) => {
-      const { userId, tenantId } = getUser(request);
+      const user = getUser(request);
+      if (!user) {
+        void reply.code(401);
+        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      }
+      const { userId, tenantId } = user;
       const { phoneNumber, callerId, campaignId } = request.body;
 
       if (!phoneNumber) {
@@ -956,21 +968,41 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
    */
   fastify.get(
     '/api/v1/agent/webrtc/credentials',
-    async (request: FastifyRequest, _reply: FastifyReply) => {
-      const { userId, tenantId } = getUser(request);
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const userObj = getUser(request);
+      if (!userObj) {
+        void reply.code(401);
+        return {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Authentication required to access WebRTC credentials',
+          },
+        };
+      }
 
+      const { userId, tenantId } = userObj;
       const prisma = getPrismaClient();
-      let user = userId && userId !== 'demo-agent' ? await prisma.user.findUnique({ where: { id: userId } }) : null;
+      let user = await prisma.user.findUnique({ where: { id: userId } });
+      if (!user) {
+        void reply.code(401);
+        return {
+          error: {
+            code: 'USER_NOT_FOUND',
+            message: 'Authenticated user not found in database',
+          },
+        };
+      }
+
       let extension: string | null = null;
-      if (user?.metadata && typeof user.metadata === 'object' && !Array.isArray(user.metadata)) {
+      if (user.metadata && typeof user.metadata === 'object' && !Array.isArray(user.metadata)) {
         const meta = user.metadata as Record<string, unknown>;
         if (typeof meta.extension === 'string' || typeof meta.extension === 'number') {
-          extension = String(meta.extension);
+          extension = String(meta.extension).trim();
         }
       }
 
-      // If user has no extension, dynamically assign a free one from 1000-1019
-      if (!extension && user && userId && userId !== 'demo-agent') {
+      // If user has no extension, dynamically assign a free one from 1000-1099
+      if (!extension) {
         const allUsers = await prisma.user.findMany({
           select: { metadata: true },
         });
@@ -985,7 +1017,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
         }
 
         let availableExtension: string | null = null;
-        for (let extNum = 1000; extNum <= 1019; extNum++) {
+        for (let extNum = 1000; extNum <= 1099; extNum++) {
           const extStr = extNum.toString();
           if (!usedExtensions.has(extStr)) {
             availableExtension = extStr;
@@ -1030,20 +1062,42 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
         }
       }
 
-      const activeExt = extension || '1000';
-      const username = activeExt;
-      const password = '1234';
+      if (!extension) {
+        void reply.code(404);
+        return {
+          error: {
+            code: 'NO_SIP_EXTENSION_ASSIGNED',
+            message: 'Authenticated user has no assigned SIP extension.',
+          },
+        };
+      }
+
+      const sipPassword = process.env.SIP_AGENT_PASSWORD;
+      if (!sipPassword || sipPassword === '1234') {
+        request.log.error({
+          msg: 'webrtc/credentials: Mandatory SIP_AGENT_PASSWORD environment variable is missing or insecure',
+        });
+        void reply.code(500);
+        return {
+          error: {
+            code: 'SIP_CONFIG_ERROR',
+            message: 'Server SIP secret is not configured correctly.',
+          },
+        };
+      }
+
+      const username = extension;
       const expiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
 
       // Build Verto WebSocket URL
-      // Priority: VERTO_WS_URL env var > PUBLIC_IP:8082 > localhost fallback
       const publicIp = process.env.PUBLIC_IP;
       const vertoUrl =
         process.env.VERTO_WS_URL || (publicIp ? `wss://${publicIp}:8082` : 'wss://localhost:8082');
 
+      // Never log the password!
       return {
         username,
-        password,
+        password: sipPassword,
         realm: process.env.FREESWITCH_REALM ?? process.env.PUBLIC_IP ?? 'freeswitch',
         wsUrl: vertoUrl,
         stunServers: ['stun:stun.l.google.com:19302'],
