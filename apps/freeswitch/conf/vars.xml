@@ -23,5 +23,6 @@
   <X-PRE-PROCESS cmd="set" data="telnyx_pass=${OUTBOUND_SIP_PASS}"/>
 
   <X-PRE-PROCESS cmd="set" data="outbound_caller_id=${OUTBOUND_CALLER_ID}"/>
+  <X-PRE-PROCESS cmd="set" data="FRACTEL_DEFAULT_CALLER_ID=${FRACTEL_DEFAULT_CALLER_ID}"/>
   <X-PRE-PROCESS cmd="set" data="esl_password=${FREESWITCH_ESL_PASSWORD}"/>
 </include>

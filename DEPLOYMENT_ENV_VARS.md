@@ -21,6 +21,7 @@
 - `FREESWITCH_ESL_HOST` - Your FreeSWITCH host
 - `FREESWITCH_ESL_PORT` - FreeSWITCH ESL port (default: `8021`)
 - `FREESWITCH_ESL_PASSWORD` - FreeSWITCH ESL password
+- `FRACTEL_DEFAULT_CALLER_ID` - Default fallback FracTEL caller ID DID (e.g. `12816991120`)
 
 #### Optional:
 - `CLICKHOUSE_URL` - ClickHouse analytics database URL

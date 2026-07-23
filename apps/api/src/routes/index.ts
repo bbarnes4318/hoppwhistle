@@ -1810,6 +1810,10 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
       }
     }
 
+    if (/^\d{4}$/.test(normalizedDestination)) {
+      isPstn = false;
+    }
+
     if (isPstn) {
       // E.164 normalization & validation
       const digits = normalizedDestination.replace(/\D/g, '');
@@ -1910,6 +1914,10 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
       if (ep.type === 'SIP' || ep.type === 'WEBRTC') {
         isPstn = false;
       }
+    }
+
+    if (/^\d{4}$/.test(normalizedDestination)) {
+      isPstn = false;
     }
 
     if (isPstn && destinationNumber !== undefined) {

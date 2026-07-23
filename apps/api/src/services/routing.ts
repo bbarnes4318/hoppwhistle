@@ -2,6 +2,14 @@ import { logger } from '../lib/logger.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { extractAreaCode, getStateFromAreaCode, isCallerStateAccepted } from '../lib/geo.js';
 
+const INTERNAL_EXTENSION_RE = /^\d{4}$/;
+const USER_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isInternalAgentDestination(destination: string): boolean {
+  const normalized = destination.trim();
+  return INTERNAL_EXTENSION_RE.test(normalized) || USER_ID_RE.test(normalized);
+}
+
 /**
  * Call data context for routing decisions.
  * Includes caller identification and geo data.
@@ -40,18 +48,15 @@ export class RoutingService {
    * Uses pre-resolved state if available, otherwise extracts from callerId.
    */
   resolveCallerState(callData: CallData): string | null {
-    // 1. Use pre-resolved state if available
     if (callData.callerState) {
       return callData.callerState.toUpperCase().trim();
     }
 
-    // 2. Use pre-resolved area code if available
     if (callData.callerAreaCode) {
       const state = getStateFromAreaCode(callData.callerAreaCode);
       if (state) return state;
     }
 
-    // 3. Extract from callerId phone number
     if (callData.callerId) {
       const areaCode = extractAreaCode(callData.callerId);
       if (areaCode) {
@@ -63,19 +68,14 @@ export class RoutingService {
   }
 
   /**
-   * Get all eligible buyer endpoints for a campaign, filtered by geo-routing and concurrency rules.
-   *
-   * @param tenantId - Tenant ID for the call
-   * @param campaignId - Campaign ID to route for
-   * @param callData - Caller data for geo-filtering
-   * @returns List of eligible endpoints after geo/concurrency filtering, or empty array if none match
+   * Get all eligible buyer endpoints for a campaign, filtered by geo-routing,
+   * concurrency, and agent availability rules.
    */
   async getEligibleEndpoints(
     tenantId: string,
     campaignId: string,
     callData: CallData
   ): Promise<EligibleEndpoint[]> {
-    // Step 1: Resolve caller's state from callData
     const callerState = this.resolveCallerState(callData);
 
     logger.info({
@@ -85,7 +85,6 @@ export class RoutingService {
       resolvedState: callerState,
     });
 
-    // Step 2: Fetch active campaign buyer assignments
     const campaignBuyers = await this.prisma.campaignBuyer.findMany({
       where: {
         campaignId,
@@ -116,19 +115,16 @@ export class RoutingService {
     const allEndpoints: EligibleEndpoint[] = [];
 
     for (const assignment of campaignBuyers) {
-      // Exclude if buyer is inactive
       if (assignment.buyer.status !== 'ACTIVE') {
         continue;
       }
 
-      // If buyerEndpoint is attached, verify it is active
       if (assignment.buyerEndpoint && assignment.buyerEndpoint.status !== 'ACTIVE') {
         continue;
       }
 
       const ep = assignment.buyerEndpoint;
       const acceptedStates = ep?.acceptedStates || [];
-      const weight = assignment.weight; // CampaignBuyer.weight is the primary weight
 
       allEndpoints.push({
         buyerId: assignment.buyerId,
@@ -136,14 +132,12 @@ export class RoutingService {
         endpointId: assignment.buyerEndpointId,
         destination: assignment.destinationNumber,
         priority: assignment.priority,
-        weight: weight,
-        acceptedStates: acceptedStates,
+        weight: assignment.weight,
+        acceptedStates,
         isNational: acceptedStates.length === 0,
       });
     }
 
-    // Step 3: Apply geo-routing filter
-    // Logic: IF acceptedStates IS NOT EMPTY AND callerState NOT IN acceptedStates THEN EXCLUDE
     let eligibleEndpoints = allEndpoints.filter(ep => {
       const isAccepted = isCallerStateAccepted(callerState, ep.acceptedStates);
 
@@ -161,7 +155,6 @@ export class RoutingService {
       return isAccepted;
     });
 
-    // Step 4: Apply concurrency routing filter
     const activeTargetIds = eligibleEndpoints
       .map(ep => ep.endpointId)
       .filter((id): id is string => id !== null);
@@ -172,12 +165,10 @@ export class RoutingService {
         const liveStatusMap = await liveStatusService.getTargetsLiveStatus(activeTargetIds);
 
         eligibleEndpoints = eligibleEndpoints.filter(ep => {
-          if (!ep.endpointId) return true; // Direct route with no endpoint, bypass capacity check
+          if (!ep.endpointId) return true;
 
-          // Get maxConcurrency from DB campaign buyer's endpoint
           const dbAssignment = campaignBuyers.find(cb => cb.buyerEndpointId === ep.endpointId);
           const maxConcurrency = dbAssignment?.buyerEndpoint?.maxConcurrency ?? 10;
-
           const liveCalls = liveStatusMap.get(ep.endpointId) || 0;
           const isFull = maxConcurrency > 0 && liveCalls >= maxConcurrency;
 
@@ -199,56 +190,92 @@ export class RoutingService {
       }
     }
 
-    // Step 5: Filter out local agent endpoints if agent is not available or on a call
+    // Internal softphones register with a four-digit extension. Older campaign
+    // assignments may still contain the user's UUID, so translate those legacy
+    // destinations before returning the route to FreeSWITCH.
     try {
       const users = await this.prisma.user.findMany({
         where: { tenantId, status: 'ACTIVE' },
         select: { id: true, metadata: true },
       });
-      
+
       const extensionToUserMap = new Map<string, string>();
-      for (const u of users) {
-        const ext = (u.metadata as any)?.extension;
-        if (ext) {
-          extensionToUserMap.set(ext.toString().trim(), u.id);
+      const userIdToExtensionMap = new Map<string, string>();
+
+      for (const user of users) {
+        if (!user.metadata || typeof user.metadata !== 'object' || Array.isArray(user.metadata)) {
+          continue;
         }
+
+        const extension = (user.metadata as Record<string, unknown>).extension;
+        if (typeof extension !== 'string' && typeof extension !== 'number') continue;
+
+        const normalizedExtension = extension.toString().trim();
+        if (!normalizedExtension) continue;
+
+        extensionToUserMap.set(normalizedExtension, user.id);
+        userIdToExtensionMap.set(user.id, normalizedExtension);
       }
 
-      if (extensionToUserMap.size > 0) {
+      if (extensionToUserMap.size > 0 || userIdToExtensionMap.size > 0) {
         const { getRedisClient } = await import('./redis.js');
         const redis = getRedisClient();
 
         const statuses = await Promise.all(
-          eligibleEndpoints.map(async (ep) => {
-            const dest = ep.destination.trim();
-            const userId = extensionToUserMap.get(dest);
-            if (!userId) return { ep, eligible: true };
+          eligibleEndpoints.map(async ep => {
+            const originalDestination = ep.destination.trim();
+            const legacyExtension = userIdToExtensionMap.get(originalDestination);
+            const normalizedEndpoint = legacyExtension
+              ? { ...ep, destination: legacyExtension }
+              : ep;
+            const userId = legacyExtension
+              ? originalDestination
+              : extensionToUserMap.get(originalDestination);
+
+            if (legacyExtension) {
+              logger.info({
+                msg: 'Agent-routing: Translated legacy user UUID to SIP extension',
+                userId: originalDestination,
+                extension: legacyExtension,
+                campaignId,
+              });
+            }
+
+            if (!userId) {
+              return { ep: normalizedEndpoint, eligible: true };
+            }
 
             const key = `agent:status:${userId}`;
             try {
               const data = await redis.get(key);
               if (data) {
-                const statusData = JSON.parse(data);
-                // Agent must be available and not have a call in progress
+                const statusData = JSON.parse(data) as {
+                  status?: string;
+                  currentCallId?: string | null;
+                };
+
                 if (statusData.status !== 'available' || statusData.currentCallId) {
                   logger.info({
                     msg: 'Agent-status: Endpoint EXCLUDED (agent busy/offline)',
-                    buyerId: ep.buyerId,
-                    buyerName: ep.buyerName,
-                    destination: ep.destination,
+                    buyerId: normalizedEndpoint.buyerId,
+                    buyerName: normalizedEndpoint.buyerName,
+                    destination: normalizedEndpoint.destination,
                     agentStatus: statusData.status,
                     currentCallId: statusData.currentCallId,
                   });
-                  return { ep, eligible: false };
+                  return { ep: normalizedEndpoint, eligible: false };
                 }
               } else {
-                logger.info({
-                  msg: 'Agent-status: Endpoint EXCLUDED (agent offline/no Redis status)',
-                  buyerId: ep.buyerId,
-                  buyerName: ep.buyerName,
-                  destination: ep.destination,
+                // Redis is advisory; FreeSWITCH registration is authoritative.
+                // Failing open prevents a missing/stale status key from turning a
+                // valid softphone ring group into an unroutable "Campaign" leg.
+                logger.warn({
+                  msg: 'Agent-status: No Redis status; leaving endpoint eligible for SIP registration check',
+                  buyerId: normalizedEndpoint.buyerId,
+                  buyerName: normalizedEndpoint.buyerName,
+                  destination: normalizedEndpoint.destination,
+                  userId,
                 });
-                return { ep, eligible: false };
               }
             } catch (redisErr) {
               logger.warn({
@@ -257,11 +284,12 @@ export class RoutingService {
                 error: (redisErr as Error).message,
               });
             }
-            return { ep, eligible: true };
+
+            return { ep: normalizedEndpoint, eligible: true };
           })
         );
 
-        eligibleEndpoints = statuses.filter(s => s.eligible).map(s => s.ep);
+        eligibleEndpoints = statuses.filter(status => status.eligible).map(status => status.ep);
       }
     } catch (err) {
       logger.error('Error applying agent status filter:', err);
@@ -280,20 +308,22 @@ export class RoutingService {
   }
 
   /**
-   * Select the best buyer for a campaign based on priority tiering, geo-routing, max concurrency, and weight settings.
-   *
-   * @param tenantId - Tenant ID
-   * @param campaignId - Campaign ID
-   * @param callData - Optional call data for geo-routing (defaults to no filter)
-   * @returns Best buyer endpoint or null if none available
+   * Select the best destination for a campaign. Internal softphone-only campaigns
+   * behave as ring groups: every available agent at the same priority rings in
+   * parallel, with lower-priority groups used as sequential failover steps.
+   * External buyer campaigns retain weighted selection behavior.
    */
   async selectBestBuyer(
     tenantId: string,
     campaignId: string,
     callData: CallData = {}
-  ): Promise<{ buyerId: string; endpoint: string; targetId?: string | null; callerState?: string | null } | null> {
+  ): Promise<{
+    buyerId: string;
+    endpoint: string;
+    targetId?: string | null;
+    callerState?: string | null;
+  } | null> {
     try {
-      // 1. Get geo and concurrency filtered eligible endpoints
       const eligibleEndpoints = await this.getEligibleEndpoints(tenantId, campaignId, callData);
 
       if (eligibleEndpoints.length === 0) {
@@ -307,36 +337,72 @@ export class RoutingService {
         return null;
       }
 
-      // 2. Group eligible endpoints by priority
       const priorityGroups = new Map<number, EligibleEndpoint[]>();
-      for (const ep of eligibleEndpoints) {
-        const p = ep.priority;
-        if (!priorityGroups.has(p)) {
-          priorityGroups.set(p, []);
+      for (const endpoint of eligibleEndpoints) {
+        const priority = endpoint.priority;
+        if (!priorityGroups.has(priority)) {
+          priorityGroups.set(priority, []);
         }
-        priorityGroups.get(p)!.push(ep);
+        priorityGroups.get(priority)!.push(endpoint);
       }
 
-      // Get sorted list of unique priorities ascending (lower number = higher priority)
       const sortedPriorities = [...priorityGroups.keys()].sort((a, b) => a - b);
+      const softphoneOnly = eligibleEndpoints.every(endpoint =>
+        isInternalAgentDestination(endpoint.destination)
+      );
 
-      // 3. Weighted Random Selection within each priority group to choose a representative
+      if (softphoneOnly) {
+        const ringSteps = sortedPriorities
+          .map(priority => {
+            const seen = new Set<string>();
+            return priorityGroups
+              .get(priority)!
+              .map(endpoint => endpoint.destination.trim())
+              .filter(destination => {
+                if (!destination || seen.has(destination)) return false;
+                seen.add(destination);
+                return true;
+              })
+              .join(',');
+          })
+          .filter(Boolean);
+
+        const primaryEndpoint = priorityGroups.get(sortedPriorities[0])![0];
+        const ringGroupDestination = ringSteps.join('|');
+
+        logger.info({
+          msg: 'Selected internal softphone ring group',
+          campaignId,
+          destination: ringGroupDestination,
+          agentCount: eligibleEndpoints.length,
+          prioritySteps: ringSteps.length,
+          callerState: this.resolveCallerState(callData),
+        });
+
+        return {
+          buyerId: primaryEndpoint.buyerId,
+          endpoint: ringGroupDestination,
+          targetId: primaryEndpoint.endpointId,
+          callerState: this.resolveCallerState(callData),
+        };
+      }
+
       const failoverEndpoints: EligibleEndpoint[] = [];
-      for (const p of sortedPriorities) {
-        const group = priorityGroups.get(p)!;
+      for (const priority of sortedPriorities) {
+        const group = priorityGroups.get(priority)!;
         let totalWeight = 0;
-        for (const ep of group) {
-          totalWeight += Math.max(1, ep.weight);
+        for (const endpoint of group) {
+          totalWeight += Math.max(1, endpoint.weight);
         }
 
         const randomValue = Math.random() * totalWeight;
         let currentSum = 0;
         let selectedEndpoint = group[0];
 
-        for (const ep of group) {
-          currentSum += Math.max(1, ep.weight);
+        for (const endpoint of group) {
+          currentSum += Math.max(1, endpoint.weight);
           if (randomValue <= currentSum) {
-            selectedEndpoint = ep;
+            selectedEndpoint = endpoint;
             break;
           }
         }
@@ -345,7 +411,7 @@ export class RoutingService {
 
       const primaryEndpoint = failoverEndpoints[0];
       const failoverDestinationString = failoverEndpoints
-        .map(ep => ep.destination)
+        .map(endpoint => endpoint.destination)
         .join('|');
 
       logger.info({
@@ -374,4 +440,3 @@ export class RoutingService {
 }
 
 export const routingService = new RoutingService();
-

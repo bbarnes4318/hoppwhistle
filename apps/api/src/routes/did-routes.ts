@@ -440,9 +440,23 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
             `[FS-LOOKUP] Dynamic route: campaign=${route.campaignId} caller=${caller} → buyer=${buyerId} endpoint=${destination} targetId=${targetId}`
           );
         } else {
-          console.log(
-            `[FS-LOOKUP] Dynamic route campaign=${route.campaignId} caller=${caller} returned no eligible buyers. Falling back to static route: ${destination}`
-          );
+          const allCampaignBuyers = await prisma.campaignBuyer.findMany({
+            where: { campaignId: route.campaignId, status: 'ACTIVE', tenantId: route.tenantId },
+            select: { destinationNumber: true, buyerId: true },
+          });
+
+          if (allCampaignBuyers.length > 0) {
+            const destList = allCampaignBuyers.map((b) => b.destinationNumber.trim()).filter(Boolean);
+            destination = destList.join(',');
+            buyerId = allCampaignBuyers[0]?.buyerId || null;
+            console.log(
+              `[FS-LOOKUP] Dynamic route campaign=${route.campaignId} caller=${caller} fallback → ringing all campaign extensions: ${destination}`
+            );
+          } else {
+            console.log(
+              `[FS-LOOKUP] Dynamic route campaign=${route.campaignId} caller=${caller} returned no active buyers. Falling back to static route: ${destination}`
+            );
+          }
         }
       } catch (routingErr) {
         console.error(
