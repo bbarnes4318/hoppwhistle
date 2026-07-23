@@ -250,7 +250,7 @@ export async function ingestLead(
           ...((existing.customFields as Record<string, unknown>) || {}),
           ...((contactData.customFields as Record<string, unknown>) || {}),
           ...extraFields,
-        },
+        } as any,
         // CRM fields
         notes: contactData.notes ? String(contactData.notes) : existing.notes,
         priority: contactData.priority ? String(contactData.priority) : existing.priority,
@@ -315,7 +315,7 @@ export async function ingestLead(
         customFields: {
           ...((contactData.customFields as Record<string, unknown>) || {}),
           ...extraFields,
-        },
+        } as any,
         // CRM fields
         notes: contactData.notes ? String(contactData.notes) : null,
         priority: contactData.priority ? String(contactData.priority) : null,
@@ -1091,12 +1091,13 @@ export async function bulkImportLeads(tenantId: string, leads: Array<Record<stri
           : null,
 
       // Store customFields as a JSON object
-      customFields:
+      customFields: (
         Object.keys(customFields).length > 0
-          ? (customFields as Prisma.InputJsonValue)
+          ? customFields
           : existing
             ? (existing.customFields as Prisma.InputJsonValue)
-            : null,
+            : {}
+      ) as any,
     };
 
     if (existing) {

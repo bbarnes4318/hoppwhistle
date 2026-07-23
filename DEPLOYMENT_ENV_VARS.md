@@ -5,6 +5,7 @@
 ### API Service
 
 #### Required (Must Set):
+
 - `JWT_SECRET` - Generate: `node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"`
 - `S3_ENDPOINT` - Your S3/DigitalOcean Spaces endpoint
 - `S3_BUCKET` - Your bucket name
@@ -12,11 +13,13 @@
 - `S3_SECRET_KEY` - Your S3 secret key
 
 #### SignalWire (Required for telephony):
+
 - `SIGNALWIRE_PROJECT_ID` - Your SignalWire project ID (UUID)
 - `SIGNALWIRE_API_TOKEN` - Your SignalWire API token (starts with PT)
 - `SIGNALWIRE_SPACE_URL` - Your SignalWire space domain (e.g., `yourspace.signalwire.com`)
 
 #### Telephony Services (If using external FreeSWITCH/RTPEngine):
+
 - `RTPENGINE_URL` - Your RTPEngine URL (e.g., `http://rtpengine.example.com:22222`)
 - `FREESWITCH_ESL_HOST` - Your FreeSWITCH host
 - `FREESWITCH_ESL_PORT` - FreeSWITCH ESL port (default: `8021`)
@@ -24,6 +27,7 @@
 - `FRACTEL_DEFAULT_CALLER_ID` - Default fallback FracTEL caller ID DID (e.g. `12816991120`)
 
 #### Optional:
+
 - `CLICKHOUSE_URL` - ClickHouse analytics database URL
 - `CLICKHOUSE_USER` - ClickHouse user (default: `default`)
 - `CLICKHOUSE_PASSWORD` - ClickHouse password
@@ -40,6 +44,7 @@
 - `SMTP_FROM` - Email from address (default: `noreply@hopwhistle.com`)
 
 #### BulkVS (Required for phone number provisioning):
+
 - `BULKVS_USERNAME` - BulkVS API Username (from BulkVS Portal → API → API Credentials)
 - `BULKVS_PASSWORD` - BulkVS API Password (from BulkVS Portal → API → API Credentials)
 - `BULKVS_TRUNK_GROUP` - BulkVS Trunk Group name for routing (from BulkVS Portal → Trunk Groups)
@@ -47,16 +52,19 @@
 ### Web Service
 
 #### Required:
+
 - `NEXT_PUBLIC_API_URL` - Your API URL (e.g., `https://api-xxxxx.ondigitalocean.app`)
 - `NEXT_PUBLIC_WS_URL` - Your WebSocket URL (e.g., `wss://api-xxxxx.ondigitalocean.app`)
 
 #### Optional:
+
 - `NEXT_PUBLIC_API_KEY` - API key for client-side requests
 - `NEXT_PUBLIC_APP_NAME` - App name (default: `Hopwhistle`)
 
 ### Worker Service
 
 #### Optional:
+
 - `CLICKHOUSE_URL` - ClickHouse analytics database URL
 - `CLICKHOUSE_USER` - ClickHouse user
 - `CLICKHOUSE_PASSWORD` - ClickHouse password
@@ -84,6 +92,7 @@
 ## S3/DigitalOcean Spaces Setup
 
 ### Option 1: DigitalOcean Spaces (Recommended)
+
 1. Create a Space in DigitalOcean
 2. Get endpoint: `https://your-region.digitaloceanspaces.com`
 3. Create access keys in Spaces settings
@@ -96,6 +105,7 @@
    - `S3_FORCE_PATH_STYLE` = `false`
 
 ### Option 2: AWS S3
+
 - Use your AWS S3 credentials
 - `S3_ENDPOINT` = Leave empty or use AWS endpoint
 - `S3_REGION` = Your AWS region (e.g., `us-east-1`)
@@ -108,9 +118,11 @@ mock fallback: a run that cannot reach its required real providers fails with a 
 publishes no report.
 
 Feature switch (API + worker):
+
 - `INDUSTRY_RESEARCH_ENABLED` — `true` (default) exposes the routes + starts the worker; `false` fully disables the feature.
 
 Behavior switches:
+
 - `INDUSTRY_RESEARCH_REAL_FALLBACK` — `true` (default). When a role's provider fails, an explicitly-configured **real** fallback provider may be tried. Never falls back to mock data.
 - `INDUSTRY_RESEARCH_ALLOW_MOCKS` / `INDUSTRY_RESEARCH_MOCK_FALLBACK` — accepted for clarity but have no effect: mock data does not exist in any runtime path.
 - `INDUSTRY_RESEARCH_FAIL_ON_PROVIDER_ERROR` — documents the always-on behavior: a failed required stage fails the run.
@@ -136,4 +148,3 @@ Requires: Postgres (migration `20260718000000_add_industry_research`) + Redis (e
 - [ ] `SIGNALWIRE_PROJECT_ID`, `SIGNALWIRE_API_TOKEN`, `SIGNALWIRE_SPACE_URL` set
 - [ ] `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_WS_URL` set (after first deploy)
 - [ ] Optional services configured (ClickHouse, Stripe, SMTP, etc.)
-
