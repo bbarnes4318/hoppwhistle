@@ -275,73 +275,53 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       const callSid = `call_${Date.now()}_${Math.random().toString(36).substring(7)}`;
       const prisma = getPrismaClient();
 
-      const isAuthenticatedUser = userId !== 'demo-agent';
-      let outboundCallerId = callerId || process.env.OUTBOUND_CALLER_ID || '12816991120';
+      // Server-side caller ID validation and resolution hierarchy:
+      // 1. Validated tenant-authorized selected FracTEL DID
+      // 2. Valid configured FRACTEL_DEFAULT_CALLER_ID
+      // 3. Fail closed if neither valid
+      const { validateAndResolveCallerId } = await import('../services/caller-id-service.js');
 
-      // Rotate the tenant's FracTEL POOL (least-recently-used) and return the
-      // chosen number, or null if the pool is empty. Used by the call-center
-      // dialer (callerId === 'ROTATE') and as a fallback for unassigned agents.
-      const rotatePoolCallerId = async (): Promise<string | null> => {
-        const pool = await prisma.phoneNumber.findMany({
-          where: { tenantId, status: 'ACTIVE', userId: null, poolType: 'POOL' },
-        });
-        if (pool.length === 0) return null;
-        const sortedPool = [...pool].sort((a, b) => {
-          const timeA = a.lastAssignedAt ? new Date(a.lastAssignedAt).getTime() : 0;
-          const timeB = b.lastAssignedAt ? new Date(b.lastAssignedAt).getTime() : 0;
-          return timeA - timeB;
-        });
-        const selectedRecord = sortedPool[0];
-        await prisma.phoneNumber.update({
-          where: { id: selectedRecord.id },
-          data: { lastAssignedAt: new Date() },
-        });
-        return selectedRecord.number;
-      };
-
-      if (isAuthenticatedUser) {
-        if (callerId === 'ROTATE') {
-          // Call-center auto-dialer: rotate across the tenant DID pool.
-          const rotated = await rotatePoolCallerId();
-          if (rotated) outboundCallerId = rotated;
-        } else {
-          // Manual softphone: the agent dials with their OWN assigned number.
-          const userNumbers = await prisma.phoneNumber.findMany({
-            where: {
-              tenantId,
-              status: 'ACTIVE',
-              userId,
-              NOT: {
-                number: {
-                  contains: '555',
-                },
-              },
-            },
+      let candidateCallerId = callerId;
+      if (callerId === 'ROTATE' && isAuthenticatedUser) {
+        const rotatePoolCallerId = async (): Promise<string | null> => {
+          const pool = await prisma.phoneNumber.findMany({
+            where: { tenantId, status: 'ACTIVE', userId: null, poolType: 'POOL' },
           });
-
-          if (userNumbers.length > 0) {
-            if (callerId) {
-              const requested = userNumbers.find(
-                n =>
-                  n.number === callerId ||
-                  n.number.replace(/\D/g, '') === callerId.replace(/\D/g, '')
-              );
-              outboundCallerId = (requested ?? userNumbers[0]).number;
-            } else {
-              outboundCallerId = userNumbers[0].number;
-            }
-          } else {
-            // Agent has no assigned number — fall back to a pool DID so the call
-            // still presents a valid FracTEL number rather than a dead default.
-            const rotated = await rotatePoolCallerId();
-            if (rotated) outboundCallerId = rotated;
-          }
-        }
+          if (pool.length === 0) return null;
+          const sortedPool = [...pool].sort((a, b) => {
+            const timeA = a.lastAssignedAt ? new Date(a.lastAssignedAt).getTime() : 0;
+            const timeB = b.lastAssignedAt ? new Date(b.lastAssignedAt).getTime() : 0;
+            return timeA - timeB;
+          });
+          const selectedRecord = sortedPool[0];
+          await prisma.phoneNumber.update({
+            where: { id: selectedRecord.id },
+            data: { lastAssignedAt: new Date() },
+          });
+          return selectedRecord.number;
+        };
+        const rotated = await rotatePoolCallerId();
+        if (rotated) candidateCallerId = rotated;
       }
 
-      // Normalize caller ID to exactly 11 digits (e.g. 12816991120)
-      const digitsOnly = outboundCallerId.replace(/\D/g, '');
-      const fsCallerId = digitsOnly.length === 10 ? '1' + digitsOnly : digitsOnly;
+      const validatedCid = await validateAndResolveCallerId({
+        requestedCallerId: candidateCallerId !== 'ROTATE' ? candidateCallerId : null,
+        tenantId,
+        userId: isAuthenticatedUser ? userId : null,
+        campaignId,
+      });
+
+      if (!validatedCid.valid || !validatedCid.callerId) {
+        void reply.code(403);
+        return {
+          error: {
+            code: 'NO_VALID_CALLER_ID',
+            message: 'No valid tenant-authorized FracTEL caller ID available.',
+          },
+        };
+      }
+
+      const fsCallerId = validatedCid.callerId;
 
       // Find the PhoneNumber record in the DB to associate with the call
       const cleanFsCallerId = fsCallerId.replace(/\D/g, '');

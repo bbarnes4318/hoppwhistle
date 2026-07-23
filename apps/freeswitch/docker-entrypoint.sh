@@ -42,6 +42,12 @@ if [ -f "$VANILLA_CONF/vars.xml" ]; then
     sed -i "s|\${OUTBOUND_SIP_USER}|${OUTBOUND_SIP_USER:-}|g" "$VANILLA_CONF/vars.xml"
     sed -i "s|\${OUTBOUND_SIP_PASS}|${OUTBOUND_SIP_PASS:-}|g" "$VANILLA_CONF/vars.xml"
     sed -i "s|\${OUTBOUND_CALLER_ID}|${OUTBOUND_CALLER_ID:-}|g" "$VANILLA_CONF/vars.xml"
+    RAW_FRACTEL_CID="${FRACTEL_DEFAULT_CALLER_ID:-}"
+    NORM_FRACTEL_CID=$(echo "$RAW_FRACTEL_CID" | sed 's/[^0-9]//g')
+    if [ ${#NORM_FRACTEL_CID} -eq 10 ]; then
+        NORM_FRACTEL_CID="1${NORM_FRACTEL_CID}"
+    fi
+    sed -i "s|\${FRACTEL_DEFAULT_CALLER_ID}|${NORM_FRACTEL_CID}|g" "$VANILLA_CONF/vars.xml"
     sed -i "s|\${FREESWITCH_ESL_PASSWORD}|${FREESWITCH_ESL_PASSWORD:-ClueCon}|g" "$VANILLA_CONF/vars.xml"
 fi
 

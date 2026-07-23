@@ -286,6 +286,35 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
   // ════════════════════════════════════════════════════════════════════════════
 
   // ────────────────────────────────────────────────────────────────────────────
+  // GET /api/v1/freeswitch/validate-caller-id — Caller ID validation for outbound calls
+  // ────────────────────────────────────────────────────────────────────────────
+  server.get(
+    '/api/v1/freeswitch/validate-caller-id',
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const query = request.query as {
+        callerId?: string;
+        tenantId?: string;
+        userId?: string;
+        campaignId?: string;
+      };
+
+      const { validateAndResolveCallerId } = await import('../services/caller-id-service.js');
+      const result = await validateAndResolveCallerId({
+        requestedCallerId: query.callerId,
+        tenantId: query.tenantId,
+        userId: query.userId,
+        campaignId: query.campaignId,
+      });
+
+      if (!result.valid) {
+        return reply.code(403).send(result);
+      }
+
+      return reply.send(result);
+    }
+  );
+
+  // ────────────────────────────────────────────────────────────────────────────
   // GET /api/v1/freeswitch/lookup?did=+1XXXXXXXXXX — Dynamic route lookup
   //
   // Called by the FreeSWITCH Lua script on every inbound call.
