@@ -76,6 +76,7 @@ if [ -n "$LATEST_FULLCHAIN" ] && [ -n "$LATEST_PRIVKEY" ]; then
     # Overwrite FreeSWITCH default self-signed certs
     mkdir -p "$FS_TLS_DIR"
     cp "/tmp/wss.pem" "$FS_TLS_DIR/wss.pem"
+    cp "/tmp/wss.pem" "$FS_TLS_DIR/agent.pem"
     cp "/tmp/wss.pem" "$FS_TLS_DIR/dtls-srtp.pem"
     echo "  Let's Encrypt wss.pem installed at $FS_TLS_DIR/wss.pem"
 else

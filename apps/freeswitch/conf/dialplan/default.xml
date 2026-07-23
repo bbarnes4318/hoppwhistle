@@ -71,7 +71,7 @@
       </condition>
       <!-- If req_caller_id is still empty, set default -->
       <condition field="${req_caller_id}" expression="^$" break="never">
-        <action application="set" data="req_caller_id=12816991120" inline="true"/>
+        <action application="set" data="req_caller_id=$${FRACTEL_DEFAULT_CALLER_ID}" inline="true"/>
       </condition>
 
       <!-- If req_caller_id is a demo/fake 555 number, rewrite it to our verified outbound caller ID -->
