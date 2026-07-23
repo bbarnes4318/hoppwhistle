@@ -7,6 +7,7 @@ const { prismaMock, redisGet } = vi.hoisted(() => ({
     user: { findMany: vi.fn() },
     phoneNumber: { findMany: vi.fn() },
     campaign: { findFirst: vi.fn() },
+    call: { count: vi.fn() },
   },
   redisGet: vi.fn(),
 }));
@@ -56,6 +57,7 @@ describe('RoutingService agent-DID → extension translation', () => {
       { number: '+18656000039', userId: 'user-a' },
     ]);
     prismaMock.campaign.findFirst.mockResolvedValue({ metadata: {} });
+    prismaMock.call.count.mockResolvedValue(0);
   });
 
   it('translates a campaign destination that is an agent-assigned DID to the softphone extension', async () => {
@@ -117,11 +119,39 @@ describe('RoutingService agent-DID → extension translation', () => {
     expect(result?.endpoint).toBe('1003|+18656000039');
   });
 
-  it('excludes an agent whose Redis status marks them busy', async () => {
+  it('excludes an agent at their concurrency limit (Redis currentCallId floor)', async () => {
     redisGet.mockResolvedValue(JSON.stringify({ status: 'busy', currentCallId: 'c1' }));
     prismaMock.campaignBuyer.findMany.mockResolvedValue([buyerRow('+18656000039')]);
 
     const endpoints = await service.getEligibleEndpoints(TENANT, CAMPAIGN, {});
     expect(endpoints).toHaveLength(0);
+  });
+
+  it('excludes an agent whose live call count reaches their limit', async () => {
+    prismaMock.call.count.mockResolvedValue(1); // default limit is 1
+    prismaMock.campaignBuyer.findMany.mockResolvedValue([buyerRow('+18656000039')]);
+
+    const endpoints = await service.getEligibleEndpoints(TENANT, CAMPAIGN, {});
+    expect(endpoints).toHaveLength(0);
+  });
+
+  it('does NOT exclude an agent for a stale offline/DND status with no live call', async () => {
+    redisGet.mockResolvedValue(JSON.stringify({ status: 'offline', currentCallId: null }));
+    prismaMock.campaignBuyer.findMany.mockResolvedValue([buyerRow('+18656000039')]);
+
+    const endpoints = await service.getEligibleEndpoints(TENANT, CAMPAIGN, {});
+    expect(endpoints).toHaveLength(1);
+    expect(endpoints[0].destination).toBe('1003');
+  });
+
+  it('respects a per-agent maxConcurrentCalls above the default', async () => {
+    prismaMock.user.findMany.mockResolvedValue([
+      { id: 'user-a', metadata: { extension: '1003', maxConcurrentCalls: 2 } },
+    ]);
+    prismaMock.call.count.mockResolvedValue(1); // below limit of 2
+    prismaMock.campaignBuyer.findMany.mockResolvedValue([buyerRow('+18656000039')]);
+
+    const endpoints = await service.getEligibleEndpoints(TENANT, CAMPAIGN, {});
+    expect(endpoints).toHaveLength(1);
   });
 });

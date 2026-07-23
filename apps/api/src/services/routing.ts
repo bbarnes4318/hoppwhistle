@@ -207,6 +207,16 @@ export class RoutingService {
     // assignments may still contain the user's UUID, so translate those legacy
     // destinations before returning the route to FreeSWITCH.
     try {
+      // Per-agent call-concurrency limit (users.metadata.maxConcurrentCalls,
+      // default 1, global default via env AGENT_DEFAULT_MAX_CONCURRENT_CALLS).
+      // Ported from the live-deployed concurrency fix (also in PR #3) — an agent
+      // endpoint is excluded only when the agent is actually AT their limit,
+      // never merely for a stale offline/DND availability flag.
+      const DEFAULT_MAX_CONCURRENT = Math.max(
+        1,
+        parseInt(process.env.AGENT_DEFAULT_MAX_CONCURRENT_CALLS || '1', 10) || 1
+      );
+
       const users = await this.prisma.user.findMany({
         where: { tenantId, status: 'ACTIVE' },
         select: { id: true, metadata: true },
@@ -214,13 +224,22 @@ export class RoutingService {
 
       const extensionToUserMap = new Map<string, string>();
       const userIdToExtensionMap = new Map<string, string>();
+      const agentMaxConcurrent = new Map<string, number>();
 
       for (const user of users) {
         if (!user.metadata || typeof user.metadata !== 'object' || Array.isArray(user.metadata)) {
           continue;
         }
 
-        const extension = (user.metadata as Record<string, unknown>).extension;
+        const meta = user.metadata as Record<string, unknown>;
+        const rawMax = meta.maxConcurrentCalls;
+        const parsedMax = typeof rawMax === 'number' ? rawMax : parseInt(String(rawMax), 10);
+        agentMaxConcurrent.set(
+          user.id,
+          Number.isFinite(parsedMax) && parsedMax > 0 ? parsedMax : DEFAULT_MAX_CONCURRENT
+        );
+
+        const extension = meta.extension;
         if (typeof extension !== 'string' && typeof extension !== 'number') continue;
 
         const normalizedExtension = extension.toString().trim();
@@ -234,15 +253,21 @@ export class RoutingService {
       // external DID (e.g. +18656000039) rather than their extension; dialing
       // that DID out via a PSTN gateway rings nothing when the number simply
       // forwards back to us — the agent's registered softphone is the real
-      // destination. Map DID → owning user so those legs ring the extension.
+      // destination. Map DID → owning user so those legs ring the extension,
+      // and userId → DIDs so live calls landing on a DID count toward the
+      // agent's concurrency limit.
       const didToUserMap = new Map<string, string>();
+      const userToDids = new Map<string, string[]>();
       const agentDids = await this.prisma.phoneNumber.findMany({
-        where: { tenantId, userId: { not: null }, status: 'ACTIVE' },
+        where: { tenantId, userId: { not: null } },
         select: { number: true, userId: true },
       });
       for (const row of agentDids) {
         if (!row.number || !row.userId) continue;
         didToUserMap.set(normalizeDidKey(row.number), row.userId);
+        const arr = userToDids.get(row.userId) || [];
+        arr.push(row.number);
+        userToDids.set(row.userId, arr);
       }
 
       if (extensionToUserMap.size > 0 || userIdToExtensionMap.size > 0 || didToUserMap.size > 0) {
@@ -292,44 +317,65 @@ export class RoutingService {
               return { ep: normalizedEndpoint, eligible: true };
             }
 
-            const key = `agent:status:${userId}`;
-            try {
-              const data = await redis.get(key);
-              if (data) {
-                const statusData = JSON.parse(data) as {
-                  status?: string;
-                  currentCallId?: string | null;
-                };
+            // Concurrency gate ONLY. We deliberately do NOT exclude an agent
+            // merely for being offline or DND — the availability flag is often
+            // stale and over-blocks transfers. The agent is excluded only when
+            // their live active-call count is at their limit. The Redis
+            // "on a call" flag (currentCallId) is a floor so a just-started call
+            // that hasn't landed in the Call table yet still counts.
+            const maxConcurrent = agentMaxConcurrent.get(userId) ?? DEFAULT_MAX_CONCURRENT;
 
-                if (statusData.status !== 'available' || statusData.currentCallId) {
-                  logger.info({
-                    msg: 'Agent-status: Endpoint EXCLUDED (agent busy/offline)',
-                    buyerId: normalizedEndpoint.buyerId,
-                    buyerName: normalizedEndpoint.buyerName,
-                    destination: normalizedEndpoint.destination,
-                    agentStatus: statusData.status,
-                    currentCallId: statusData.currentCallId,
-                  });
-                  return { ep: normalizedEndpoint, eligible: false };
-                }
-              } else {
-                // Redis is advisory; FreeSWITCH registration is authoritative.
-                // Failing open prevents a missing/stale status key from turning a
-                // valid softphone ring group into an unroutable "Campaign" leg.
-                logger.warn({
-                  msg: 'Agent-status: No Redis status; leaving endpoint eligible for SIP registration check',
-                  buyerId: normalizedEndpoint.buyerId,
-                  buyerName: normalizedEndpoint.buyerName,
-                  destination: normalizedEndpoint.destination,
-                  userId,
-                });
+            let onCallFloor = 0;
+            try {
+              const data = await redis.get(`agent:status:${userId}`);
+              if (data) {
+                const statusData = JSON.parse(data) as { currentCallId?: string | null };
+                if (statusData?.currentCallId) onCallFloor = 1;
               }
             } catch (redisErr) {
               logger.warn({
-                msg: 'Agent-status: Redis lookup error (fail-open)',
+                msg: 'Agent-status: Redis lookup error (ignored; using DB count)',
                 userId,
                 error: (redisErr as Error).message,
               });
+            }
+
+            let activeCalls = 0;
+            try {
+              const dids = userToDids.get(userId) || [];
+              const orConds: Array<Record<string, unknown>> = [{ createdById: userId }];
+              if (dids.length) {
+                orConds.push({ toNumber: { in: dids } });
+                orConds.push({ targetNumber: { in: dids } });
+              }
+              activeCalls = await this.prisma.call.count({
+                where: {
+                  tenantId,
+                  status: { in: ['INITIATED', 'RINGING', 'ANSWERED'] },
+                  OR: orConds,
+                },
+              });
+            } catch (countErr) {
+              logger.warn({
+                msg: 'Agent-concurrency: count error (fail-open)',
+                userId,
+                error: (countErr as Error).message,
+              });
+              return { ep: normalizedEndpoint, eligible: true };
+            }
+
+            const effectiveActive = Math.max(activeCalls, onCallFloor);
+            if (effectiveActive >= maxConcurrent) {
+              logger.info({
+                msg: 'Agent-concurrency: Endpoint EXCLUDED (agent at call limit)',
+                buyerId: normalizedEndpoint.buyerId,
+                buyerName: normalizedEndpoint.buyerName,
+                destination: normalizedEndpoint.destination,
+                userId,
+                activeCalls: effectiveActive,
+                maxConcurrent,
+              });
+              return { ep: normalizedEndpoint, eligible: false };
             }
 
             return { ep: normalizedEndpoint, eligible: true };
