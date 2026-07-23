@@ -1,6 +1,6 @@
+import { extractAreaCode, getStateFromAreaCode, isCallerStateAccepted } from '../lib/geo.js';
 import { logger } from '../lib/logger.js';
 import { getPrismaClient } from '../lib/prisma.js';
-import { extractAreaCode, getStateFromAreaCode, isCallerStateAccepted } from '../lib/geo.js';
 
 const INTERNAL_EXTENSION_RE = /^\d{4}$/;
 const USER_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -38,6 +38,19 @@ export interface EligibleEndpoint {
   acceptedStates: string[];
   /** Whether this is a "National" endpoint (no state restrictions) */
   isNational: boolean;
+  /**
+   * When a campaign destination was an agent-assigned DID that we translated to
+   * the agent's softphone extension, this preserves the original external DID.
+   * It is only dialed as a final failover step when the campaign explicitly
+   * enables external fallback (campaign.metadata.allowAgentDidExternalFallback).
+   */
+  externalFallbackDestination?: string | null;
+}
+
+/** Normalize phone-number-ish strings to their last 10 digits for comparison. */
+function normalizeDidKey(value: string | null | undefined): string {
+  const digits = (value || '').replace(/\D/g, '');
+  return digits.length > 10 ? digits.slice(-10) : digits;
 }
 
 export class RoutingService {
@@ -217,7 +230,22 @@ export class RoutingService {
         userIdToExtensionMap.set(user.id, normalizedExtension);
       }
 
-      if (extensionToUserMap.size > 0 || userIdToExtensionMap.size > 0) {
+      // Agent-assigned DIDs. Campaign buyer rows frequently store an agent's
+      // external DID (e.g. +18656000039) rather than their extension; dialing
+      // that DID out via a PSTN gateway rings nothing when the number simply
+      // forwards back to us — the agent's registered softphone is the real
+      // destination. Map DID → owning user so those legs ring the extension.
+      const didToUserMap = new Map<string, string>();
+      const agentDids = await this.prisma.phoneNumber.findMany({
+        where: { tenantId, userId: { not: null }, status: 'ACTIVE' },
+        select: { number: true, userId: true },
+      });
+      for (const row of agentDids) {
+        if (!row.number || !row.userId) continue;
+        didToUserMap.set(normalizeDidKey(row.number), row.userId);
+      }
+
+      if (extensionToUserMap.size > 0 || userIdToExtensionMap.size > 0 || didToUserMap.size > 0) {
         const { getRedisClient } = await import('./redis.js');
         const redis = getRedisClient();
 
@@ -225,10 +253,8 @@ export class RoutingService {
           eligibleEndpoints.map(async ep => {
             const originalDestination = ep.destination.trim();
             const legacyExtension = userIdToExtensionMap.get(originalDestination);
-            const normalizedEndpoint = legacyExtension
-              ? { ...ep, destination: legacyExtension }
-              : ep;
-            const userId = legacyExtension
+            let normalizedEndpoint = legacyExtension ? { ...ep, destination: legacyExtension } : ep;
+            let userId = legacyExtension
               ? originalDestination
               : extensionToUserMap.get(originalDestination);
 
@@ -239,6 +265,27 @@ export class RoutingService {
                 extension: legacyExtension,
                 campaignId,
               });
+            }
+
+            // Agent DID → softphone extension translation.
+            if (!userId) {
+              const didUserId = didToUserMap.get(normalizeDidKey(originalDestination));
+              const didExtension = didUserId ? userIdToExtensionMap.get(didUserId) : undefined;
+              if (didUserId && didExtension) {
+                normalizedEndpoint = {
+                  ...ep,
+                  destination: didExtension,
+                  externalFallbackDestination: originalDestination,
+                };
+                userId = didUserId;
+                logger.info({
+                  msg: 'Agent-routing: Translated agent-assigned DID to SIP extension',
+                  did: originalDestination,
+                  extension: didExtension,
+                  userId: didUserId,
+                  campaignId,
+                });
+              }
             }
 
             if (!userId) {
@@ -366,6 +413,41 @@ export class RoutingService {
               .join(',');
           })
           .filter(Boolean);
+
+        // Optional external fallback: when campaign metadata explicitly enables
+        // it, ring the agents' assigned external DIDs as a final failover step
+        // after every softphone step. Never enabled implicitly.
+        const externalFallbacks = eligibleEndpoints
+          .map(endpoint => endpoint.externalFallbackDestination?.trim())
+          .filter((d): d is string => !!d);
+        if (externalFallbacks.length > 0) {
+          try {
+            const campaign = await this.prisma.campaign.findFirst({
+              where: { id: campaignId, tenantId },
+              select: { metadata: true },
+            });
+            const meta =
+              campaign?.metadata &&
+              typeof campaign.metadata === 'object' &&
+              !Array.isArray(campaign.metadata)
+                ? (campaign.metadata as Record<string, unknown>)
+                : {};
+            if (meta.allowAgentDidExternalFallback === true) {
+              ringSteps.push([...new Set(externalFallbacks)].join(','));
+              logger.info({
+                msg: 'Agent-routing: External DID fallback step enabled by campaign metadata',
+                campaignId,
+                fallbackCount: new Set(externalFallbacks).size,
+              });
+            }
+          } catch (metaErr) {
+            logger.warn({
+              msg: 'Agent-routing: Could not evaluate external-fallback setting (skipping fallback)',
+              campaignId,
+              error: (metaErr as Error).message,
+            });
+          }
+        }
 
         const primaryEndpoint = priorityGroups.get(sortedPriorities[0])![0];
         const ringGroupDestination = ringSteps.join('|');

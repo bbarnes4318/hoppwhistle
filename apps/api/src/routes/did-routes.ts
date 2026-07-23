@@ -15,6 +15,7 @@ import { Prisma } from '@prisma/client';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
+import { getInboundExternalGateways, sanitizeDestinationString } from '../lib/route-destination.js';
 import { numberPoolService } from '../services/number-pool-service.js';
 import { getRedisClient } from '../services/redis.js';
 import { tcpaValidationService } from '../services/tcpa-validation-service.js';
@@ -383,6 +384,7 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
 
       return reply.send({
         destination: routeInfo.buyer_destination,
+        externalGateways: getInboundExternalGateways(),
         recordingEnabled: recordingEnabled,
         routeId: `rtb-${routeInfo.ping_id}`, // Format routeId so CDR can recognise it's an RTB route
         buyerId: routeInfo.buyer_id,
@@ -446,7 +448,7 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
           });
 
           if (allCampaignBuyers.length > 0) {
-            const destList = allCampaignBuyers.map((b) => b.destinationNumber.trim()).filter(Boolean);
+            const destList = allCampaignBuyers.map(b => b.destinationNumber.trim()).filter(Boolean);
             destination = destList.join(',');
             buyerId = allCampaignBuyers[0]?.buyerId || null;
             console.log(
@@ -470,8 +472,40 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
       );
     }
 
+    // Never hand FreeSWITCH a non-routable destination. DidRoute rows for
+    // campaign-driven DIDs carry the literal sentinel "Campaign"; if buyer
+    // selection produced nothing, that sentinel used to leak through and get
+    // bridged as sofia/gateway/<gw>/Campaign — a guaranteed dead call with
+    // ~60s of dead air for the caller.
+    const sanitized = sanitizeDestinationString(destination);
+    if (sanitized.dropped.length > 0) {
+      console.warn(
+        `[FS-LOOKUP] Dropped non-routable destination leg(s) for DID ${normalizedDid}: ${sanitized.dropped.join(
+          ' ; '
+        )}`
+      );
+    }
+    if (!sanitized.destination) {
+      console.warn(
+        `[FS-LOOKUP] Route ${route.id} (campaign=${route.campaignId || 'none'}) resolved to no eligible destination for DID ${normalizedDid}`
+      );
+      return reply.send({
+        destination: '',
+        noEligibleDestination: true,
+        recordingEnabled: route.recordingEnabled,
+        routeId: route.id,
+        buyerId: buyerId,
+        targetId: targetId,
+        campaignId: route.campaignId || null,
+        publisherId: route.publisherId || null,
+        tenantId: route.tenantId,
+        label: route.label || null,
+      });
+    }
+
     return reply.send({
-      destination: destination,
+      destination: sanitized.destination,
+      externalGateways: getInboundExternalGateways(),
       recordingEnabled: route.recordingEnabled,
       routeId: route.id,
       buyerId: buyerId,
