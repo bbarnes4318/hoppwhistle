@@ -348,11 +348,28 @@ export class RoutingService {
                 orConds.push({ toNumber: { in: dids } });
                 orConds.push({ targetNumber: { in: dids } });
               }
+              // Only count PLAUSIBLY-live calls. Call rows whose CDR never
+              // arrived (e.g. a FreeSWITCH restart mid-call) stay open forever
+              // and would permanently exclude the agent. A ring can't outlive
+              // ~15 minutes; an answered call is capped at 4 hours here.
+              const now = Date.now();
+              const ringingSince = new Date(now - 15 * 60 * 1000);
+              const answeredSince = new Date(now - 4 * 60 * 60 * 1000);
               activeCalls = await this.prisma.call.count({
                 where: {
                   tenantId,
-                  status: { in: ['INITIATED', 'RINGING', 'ANSWERED'] },
                   OR: orConds,
+                  AND: [
+                    {
+                      OR: [
+                        {
+                          status: { in: ['INITIATED', 'RINGING'] },
+                          createdAt: { gte: ringingSince },
+                        },
+                        { status: 'ANSWERED', createdAt: { gte: answeredSince } },
+                      ],
+                    },
+                  ],
                 },
               });
             } catch (countErr) {
