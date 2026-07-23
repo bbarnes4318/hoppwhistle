@@ -46,7 +46,7 @@ export class StirShakenService {
         passthru: options.headers?.passthru,
         verifiedAt: new Date(),
         verifiedBy: options.verifiedBy,
-        metadata: options.metadata || {},
+        metadata: (options.metadata || {}) as any,
       },
       update: {
         attestation,
@@ -55,7 +55,7 @@ export class StirShakenService {
         passthru: options.headers?.passthru,
         verifiedAt: new Date(),
         verifiedBy: options.verifiedBy,
-        metadata: options.metadata || {},
+        metadata: (options.metadata || {}) as any,
       },
     });
 

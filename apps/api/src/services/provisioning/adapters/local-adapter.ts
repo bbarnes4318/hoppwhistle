@@ -140,7 +140,7 @@ export class LocalAdapter implements ProvisioningAdapter {
     await prisma.phoneNumber.update({
       where: { id: providerId },
       data: {
-        capabilities: features,
+        capabilities: features as any,
       },
     });
 

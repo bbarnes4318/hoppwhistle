@@ -103,7 +103,7 @@ export class FronterBotService {
   /**
    * Main call handling logic - the "Fronter" flow.
    */
-  private async handleCall(conn: ESLConnection): Promise<void> {
+  private async handleCall(conn: any): Promise<void> {
     // Get channel variables set during originate
     const leadId = await this.getChannelVar(conn, 'hopwhistle_lead_id');
     const campaignId = await this.getChannelVar(conn, 'hopwhistle_campaign_id');
@@ -187,7 +187,7 @@ export class FronterBotService {
   /**
    * Execute a FreeSWITCH application.
    */
-  private execute(conn: ESLConnection, app: string, args = ''): Promise<void> {
+  private execute(conn: any, app: string, args = ''): Promise<void> {
     return new Promise((resolve, reject) => {
       conn.execute(app, args, (res: { body?: string }) => {
         if (res.body?.includes('-ERR')) {
@@ -202,7 +202,7 @@ export class FronterBotService {
   /**
    * Get a channel variable value.
    */
-  private getChannelVar(conn: ESLConnection, varName: string): Promise<string | null> {
+  private getChannelVar(conn: any, varName: string): Promise<string | null> {
     return new Promise(resolve => {
       conn.api(
         'uuid_getvar',
@@ -222,7 +222,7 @@ export class FronterBotService {
   /**
    * Wait for a DTMF digit with timeout.
    */
-  private waitForDTMF(conn: ESLConnection, timeoutMs: number): Promise<string | null> {
+  private waitForDTMF(conn: any, timeoutMs: number): Promise<string | null> {
     return new Promise(resolve => {
       let resolved = false;
 
@@ -280,7 +280,7 @@ export class FronterBotService {
     try {
       await this.prisma.lead.update({
         where: { id: leadId },
-        data: { status },
+        data: { status: status as any },
       });
     } catch (error) {
       logger.error({ msg: 'Failed to update lead status', leadId, status, error });

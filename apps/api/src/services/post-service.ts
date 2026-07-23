@@ -233,7 +233,7 @@ export class PostService {
 
       // 7. Wallet balance check (if UPFRONT)
       if (buyer.billingType === 'UPFRONT') {
-        if (Number(buyer.walletBalance) < bidAmount) {
+        if (Number(buyer.walletBalance) < (bidAmount ?? 0)) {
           return {
             status: 'error',
             accepted: false,

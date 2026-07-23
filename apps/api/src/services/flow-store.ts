@@ -162,9 +162,9 @@ class FlowStore {
       const dbNode = await prisma.node.create({
         data: {
           flowVersionId,
-          type: this.mapNodeType(flowNode.type),
+          type: this.mapNodeType(flowNode.type) as any,
           name: flowNode.type.charAt(0).toUpperCase() + flowNode.type.slice(1),
-          config: this.extractNodeConfig(flowNode),
+          config: this.extractNodeConfig(flowNode) as any,
           position: { x: 0, y: 0 }, // Will be updated by UI
         },
       });
