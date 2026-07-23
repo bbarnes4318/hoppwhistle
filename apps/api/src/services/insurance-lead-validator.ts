@@ -367,6 +367,15 @@ export const feInboundSchema = baseInboundSchema.extend({
   product: z.string().optional(),
 });
 
+// B2B specific inbound schema
+export const b2bInboundSchema = baseInboundSchema.extend({
+  company: optionalString,
+  repName: optionalString,
+  industry: optionalString,
+  revenue: optionalString,
+  yearEstablished: optionalString,
+});
+
 // ---------------------------------------------------------------------------
 // Validation entry point
 // ---------------------------------------------------------------------------
@@ -378,10 +387,17 @@ export interface ValidationResult {
 }
 
 export function validateAndNormalize(
-  vertical: 'ACA' | 'FE',
+  vertical: 'ACA' | 'FE' | 'B2B',
   payload: Record<string, unknown>
 ): ValidationResult {
-  const schema = vertical === 'ACA' ? acaInboundSchema : feInboundSchema;
+  let schema;
+  if (vertical === 'ACA') {
+    schema = acaInboundSchema;
+  } else if (vertical === 'FE') {
+    schema = feInboundSchema;
+  } else {
+    schema = b2bInboundSchema;
+  }
 
   const result = schema.safeParse(payload);
 

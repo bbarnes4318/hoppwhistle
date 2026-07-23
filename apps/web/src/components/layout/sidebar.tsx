@@ -17,6 +17,7 @@ import {
   Receipt,
   Settings,
   Shield,
+  Telescope,
   Users,
 } from 'lucide-react';
 import Image from 'next/image';
@@ -75,6 +76,12 @@ export function Sidebar() {
       { name: 'Flows', href: '/flows', icon: GitBranch },
       { name: 'Call Logs', href: '/calls', icon: AudioLines },
       { name: 'Reports', href: '/reports', icon: BarChart3 },
+      {
+        name: 'Industry Research',
+        href: '/tools/industry-research',
+        icon: Telescope,
+        title: 'Multi-provider forensic industry-entry research',
+      },
       { name: 'Billing', href: '/billing', icon: Receipt },
       { name: 'Settings', href: '/settings', icon: Settings },
     ];
@@ -153,6 +160,12 @@ export function Sidebar() {
           name: 'Campaign Map',
           href: '/tools/campaign-map',
           icon: Globe,
+        },
+        {
+          name: 'Industry Research',
+          href: '/tools/industry-research',
+          icon: Telescope,
+          title: 'Multi-provider forensic industry-entry research',
         },
       ]
     : [];

@@ -28,7 +28,7 @@ const log = createServiceLogger('insurance-lead-service');
 // Types
 // ---------------------------------------------------------------------------
 
-type Vertical = 'ACA' | 'FE';
+type Vertical = 'ACA' | 'FE' | 'B2B';
 
 export interface IngestResult {
   insuranceLeadId: string;
@@ -168,6 +168,11 @@ export async function ingestLead(
     'updatedAt',
     'customFields',
     'listId',
+    'company',
+    'repName',
+    'industry',
+    'revenue',
+    'yearEstablished',
   ]);
   const extraFields: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(contactData)) {
@@ -232,12 +237,20 @@ export async function ingestLead(
         recordingUrl: contactData.recordingUrl
           ? String(contactData.recordingUrl)
           : existing.recordingUrl,
+        // Update B2B specific fields
+        company: contactData.company ? String(contactData.company) : existing.company,
+        repName: contactData.repName ? String(contactData.repName) : existing.repName,
+        industry: contactData.industry ? String(contactData.industry) : existing.industry,
+        revenue: contactData.revenue ? String(contactData.revenue) : existing.revenue,
+        yearEstablished: contactData.yearEstablished
+          ? String(contactData.yearEstablished)
+          : existing.yearEstablished,
         // Shallow merge custom fields if they exist
         customFields: {
           ...((existing.customFields as Record<string, unknown>) || {}),
           ...((contactData.customFields as Record<string, unknown>) || {}),
           ...extraFields,
-        },
+        } as any,
         // CRM fields
         notes: contactData.notes ? String(contactData.notes) : existing.notes,
         priority: contactData.priority ? String(contactData.priority) : existing.priority,
@@ -293,10 +306,16 @@ export async function ingestLead(
         leadidToken: contactData.leadidToken ? String(contactData.leadidToken) : null,
         consentLanguage: contactData.consentLanguage ? String(contactData.consentLanguage) : null,
         recordingUrl: contactData.recordingUrl ? String(contactData.recordingUrl) : null,
+        // Optional B2B specific fields
+        company: contactData.company ? String(contactData.company) : null,
+        repName: contactData.repName ? String(contactData.repName) : null,
+        industry: contactData.industry ? String(contactData.industry) : null,
+        revenue: contactData.revenue ? String(contactData.revenue) : null,
+        yearEstablished: contactData.yearEstablished ? String(contactData.yearEstablished) : null,
         customFields: {
           ...((contactData.customFields as Record<string, unknown>) || {}),
           ...extraFields,
-        },
+        } as any,
         // CRM fields
         notes: contactData.notes ? String(contactData.notes) : null,
         priority: contactData.priority ? String(contactData.priority) : null,
@@ -427,7 +446,7 @@ export async function ingestLead(
 export async function getLeads(tenantId: string, filters: LeadFilters) {
   const prisma = getPrismaClient();
   const page = filters.page || 1;
-  const limit = Math.min(filters.limit || 25, 100);
+  const limit = Math.min(filters.limit || 25, 50000);
   const skip = (page - 1) * limit;
 
   const where: Prisma.InsuranceLeadWhereInput = { tenantId };
@@ -580,6 +599,18 @@ export async function getLeads(tenantId: string, filters: LeadFilters) {
   };
 }
 
+export interface ActivityReturn {
+  id: string;
+  tenantId: string;
+  insuranceLeadId: string;
+  type: string;
+  title: string;
+  description: string | null;
+  createdAt: string;
+  metadata?: any;
+  createdById?: string | null;
+}
+
 export async function getLeadById(tenantId: string, id: string) {
   const prisma = getPrismaClient();
 
@@ -599,18 +630,6 @@ export async function getLeadById(tenantId: string, id: string) {
   });
 
   if (!lead) return null;
-
-  interface ActivityReturn {
-    id: string;
-    tenantId: string;
-    insuranceLeadId: string;
-    type: string;
-    title: string;
-    description: string | null;
-    createdAt: string;
-    metadata?: any;
-    createdById?: string | null;
-  }
 
   const last10 = lead.phone.replace(/\D/g, '').slice(-10);
   const callActivities: ActivityReturn[] = [];
@@ -771,6 +790,11 @@ export async function updateLead(tenantId: string, id: string, updates: Record<s
     'consentLanguage',
     'recordingUrl',
     'customFields',
+    'company',
+    'repName',
+    'industry',
+    'revenue',
+    'yearEstablished',
   ];
 
   const data: InsuranceLeadCRMUpdates = {};
@@ -1067,12 +1091,13 @@ export async function bulkImportLeads(tenantId: string, leads: Array<Record<stri
           : null,
 
       // Store customFields as a JSON object
-      customFields:
+      customFields: (
         Object.keys(customFields).length > 0
-          ? (customFields as Prisma.InputJsonValue)
+          ? customFields
           : existing
             ? (existing.customFields as Prisma.InputJsonValue)
-            : null,
+            : {}
+      ) as any,
     };
 
     if (existing) {

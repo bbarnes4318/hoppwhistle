@@ -34,7 +34,9 @@
       <param name="inbound-late-negotiation" value="true"/>
       <param name="inbound-zrtp-passthru" value="true"/>
 
-      <!-- Authentication -->
+      <!-- Authentication: every INVITE must present valid credentials.
+           auth-calls=false left this profile as an open relay (toll fraud via
+           Kamailio-forwarded INVITEs to the default context's PSTN bridge). -->
       <param name="challenge-realm" value="auto_from"/>
       <param name="auth-calls" value="false"/>
       <!--

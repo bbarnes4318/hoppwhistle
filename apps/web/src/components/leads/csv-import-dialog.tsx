@@ -486,6 +486,11 @@ const TARGET_FIELDS: TargetField[] = [
     vertical: 'FE',
     description: 'Savings vs Current',
   },
+  { key: 'company', label: 'Company', required: false, vertical: 'B2B', description: 'Company name' },
+  { key: 'repName', label: 'Rep Name', required: false, vertical: 'B2B', description: 'Representative name' },
+  { key: 'industry', label: 'Industry', required: false, vertical: 'B2B', description: 'Industry type' },
+  { key: 'revenue', label: 'Revenue', required: false, vertical: 'B2B', description: 'Annual revenue' },
+  { key: 'yearEstablished', label: 'Year Established', required: false, vertical: 'B2B', description: 'Year established' },
 ];
 
 function parseCSV(text: string): string[][] {
@@ -554,7 +559,7 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
     void loadLists();
   }, []);
 
-  const [vertical, setVertical] = useState<'ACA' | 'FE'>('ACA');
+  const [vertical, setVertical] = useState<'ACA' | 'FE' | 'B2B'>('ACA');
   const [fileName, setFileName] = useState<string>('');
   const [parsedRows, setParsedRows] = useState<string[][]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
@@ -574,7 +579,14 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const activeTargetFields = TARGET_FIELDS.filter(f => !f.vertical || f.vertical === vertical);
+  const activeTargetFields = TARGET_FIELDS.filter(f => {
+    if (vertical === 'B2B') {
+      const b2bFields = ['company', 'repName', 'phone', 'email', 'city', 'state', 'industry', 'revenue', 'yearEstablished'];
+      return b2bFields.includes(f.key) && (f.vertical === 'B2B' || !f.vertical);
+    }
+    if (f.vertical === 'B2B') return false;
+    return !f.vertical || f.vertical === vertical;
+  });
 
   // Template Download
   const downloadTemplate = () => {
@@ -636,11 +648,29 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
       'doctorName',
     ];
 
+    const b2bHeaders = [
+      'company',
+      'repName',
+      'phone',
+      'email',
+      'city',
+      'state',
+      'industry',
+      'revenue',
+      'yearEstablished',
+    ];
+
     const hdrs =
-      vertical === 'ACA' ? [...commonHeaders, ...acaHeaders] : [...commonHeaders, ...feHeaders];
+      vertical === 'B2B'
+        ? b2bHeaders
+        : vertical === 'ACA'
+        ? [...commonHeaders, ...acaHeaders]
+        : [...commonHeaders, ...feHeaders];
 
     let templateData = '';
-    if (vertical === 'ACA') {
+    if (vertical === 'B2B') {
+      templateData = 'Acme Corp,John Smith,1234567890,john@acme.com,Austin,TX,Software,10000000,1995';
+    } else if (vertical === 'ACA') {
       templateData =
         'John,Doe,1234567890,john.doe@example.com,123 Main St,Austin,TX,78701,1980-05-15,Needs callback next week,HIGH,Facebook,NEW,2026-06-28T09:00:00Z,5,10,175,No,45000,2';
     } else {
@@ -897,7 +927,7 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">
                   Target Vertical
                 </label>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-4">
                   {[
                     {
                       value: 'ACA',
@@ -906,8 +936,13 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
                     },
                     {
                       value: 'FE',
-                      label: 'FE (Final Expense)',
+                      label: 'FE Customers',
                       desc: 'Requires gender validation',
+                    },
+                    {
+                      value: 'B2B',
+                      label: 'B2B',
+                      desc: 'Requires phone field only',
                     },
                   ].map(opt => (
                     <button

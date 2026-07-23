@@ -25,36 +25,36 @@
     </extension>
 
     <!-- ================================================================ -->
-    <!-- DEFAULT CARRIER: SignalWire -->
-    <!-- Routes to SignalWire gateway when X-Carrier is empty or not set -->
-    <!-- SignalWire handles STIR/SHAKEN internally — no local signing -->
+    <!-- DEFAULT CARRIER: FracTEL -->
+    <!-- Routes to the FracTEL gateways when X-Carrier is empty/not set. -->
+    <!-- Presents a FracTEL DID so calls sign A attestation. BulkVS and -->
+    <!-- SignalWire are disabled/unreliable; FracTEL is the live carrier. -->
     <!-- ================================================================ -->
-    <extension name="vapi-outbound-default-signalwire">
+    <extension name="vapi-outbound-default-fractel">
       <condition field="destination_number" expression="^\+?1?(\d{10})$">
         <action application="set" data="vapi_dest=$1" inline="true"/>
       </condition>
-      <condition field="${sip_h_X-Carrier}" expression="^(signalwire)?$" break="never">
-        <action application="log" data="INFO [VAPI] SignalWire (default) outbound to 1${vapi_dest}"/>
+      <condition field="${sip_h_X-Carrier}" expression="^$" break="never">
+        <action application="log" data="INFO [VAPI] FracTEL (default) outbound to 1${vapi_dest}"/>
 
         <action application="set" data="accountcode=vapi"/>
         <action application="set" data="sip_h_X-Provider=Vapi"/>
-        <action application="set" data="sip_h_X-Carrier=signalwire"/>
+        <action application="set" data="sip_h_X-Carrier=fractel"/>
 
         <action application="set" data="hangup_after_bridge=true"/>
         <action application="set" data="ignore_early_media=true"/>
         <action application="set" data="progress_timeout=30"/>
         <action application="set" data="originate_timeout=60"/>
 
-        <!-- Force G.711 for SignalWire PSTN -->
         <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
         <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
 
-        <!-- Force caller ID to SignalWire DID on B-leg -->
-        <action application="set" data="effective_caller_id_number=18652679650"/>
-        <action application="set" data="origination_caller_id_number=18652679650"/>
+        <!-- Present a FracTEL DID so FracTEL signs A attestation -->
+        <action application="set" data="effective_caller_id_number=19138999080"/>
+        <action application="set" data="origination_caller_id_number=19138999080"/>
 
-        <!-- Bridge to SignalWire — origination CID must be in {} for B-leg -->
-        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC,origination_caller_id_number=18652679650,sip_from_user=18652679650}sofia/gateway/signalwire/+1${vapi_dest}"/>
+        <!-- Bridge to FracTEL — load-balanced across all 6 SBCs -->
+        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC,origination_caller_id_number=19138999080,sip_from_user=19138999080}sofia/gateway/fractel1/1${vapi_dest}|sofia/gateway/fractel2/1${vapi_dest}|sofia/gateway/fractel3/1${vapi_dest}|sofia/gateway/fractel4/1${vapi_dest}|sofia/gateway/fractel5/1${vapi_dest}|sofia/gateway/fractel6/1${vapi_dest}"/>
       </condition>
     </extension>
 
@@ -196,7 +196,8 @@
         <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
         <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
 
-        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC}sofia/gateway/bulkvs/$1"/>
+        <!-- Route through FracTEL (BulkVS is retired); present a FracTEL DID for attestation -->
+        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC,origination_caller_id_number=19138999080,sip_from_user=19138999080}sofia/gateway/fractel1/$1|sofia/gateway/fractel2/$1|sofia/gateway/fractel3/$1|sofia/gateway/fractel4/$1|sofia/gateway/fractel5/$1|sofia/gateway/fractel6/$1"/>
       </condition>
     </extension>
 

@@ -71,7 +71,7 @@
       </condition>
       <!-- If req_caller_id is still empty, set default -->
       <condition field="${req_caller_id}" expression="^$" break="never">
-        <action application="set" data="req_caller_id=12816991120" inline="true"/>
+        <action application="set" data="req_caller_id=$${FRACTEL_DEFAULT_CALLER_ID}" inline="true"/>
       </condition>
 
       <!-- If req_caller_id is a demo/fake 555 number, rewrite it to our verified outbound caller ID -->
@@ -111,30 +111,21 @@
         <action application="set" data="effective_caller_id_name=Hopwhistle" inline="true"/>
         <action application="set" data="origination_caller_id_name=Hopwhistle" inline="true"/>
         <action application="set" data="hangup_after_bridge=true"/>
-        <!-- Default priority: Telnyx -> BulkVS -> SignalWire -->
-        <action application="set" data="gw1=telnyx" inline="true"/>
-        <action application="set" data="gw2=bulkvs" inline="true"/>
-        <action application="set" data="gw3=signalwire" inline="true"/>
-      </condition>
-
-      <!-- If req_caller_id is a BulkVS number, prioritize BulkVS -> Telnyx -> SignalWire -->
-      <condition field="${req_caller_id}" expression="^1?(7252713109|7252713114|8652676323|7252450961|7252713303)$" break="never">
-        <action application="set" data="gw1=bulkvs" inline="true"/>
-        <action application="set" data="gw2=telnyx" inline="true"/>
-        <action application="set" data="gw3=signalwire" inline="true"/>
-      </condition>
-
-      <!-- If req_caller_id is a SignalWire number, prioritize SignalWire -> Telnyx -> BulkVS -->
-      <condition field="${req_caller_id}" expression="^1?(8652679650|7253022220)$" break="never">
-        <action application="set" data="gw1=signalwire" inline="true"/>
-        <action application="set" data="gw2=telnyx" inline="true"/>
-        <action application="set" data="gw3=bulkvs" inline="true"/>
+        <!-- Outbound carrier: FracTEL (STATIC/IP auth). The bridge below fails
+             over across all 6 FracTEL outbound IPs (fractel1-6 gateways). -->
       </condition>
 
       <!-- If hopwhistle_call_id is NOT empty, apply details and start record_session before bridge -->
       <condition field="${hopwhistle_call_id}" expression="^(.+)$" break="never">
-        <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
+        <!-- Agent (A-leg) may use wideband so recordings capture HD agent audio.
+             The PSTN (B-leg) stays G.711 for FracTEL — carrier leg is unchanged. -->
+        <action application="set" data="absolute_codec_string=OPUS,G722,PCMU,PCMA"/>
         <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
+
+        <!-- Record both parties on separate stereo channels at 16 kHz (agent left,
+             caller right) instead of a muddy 8 kHz mono mix. -->
+        <action application="set" data="RECORD_STEREO=true"/>
+        <action application="set" data="RECORD_SAMPLE_RATE=16000"/>
 
         <!-- Set recording variables and start record_session -->
         <action application="set" data="hopwhistle_recording_path=/recordings/${hopwhistle_call_id}.wav" inline="true"/>
@@ -167,11 +158,11 @@
         <action application="bridge" data="${sofia_contact(internal/${local_ext}@$${domain})}"/>
         <action application="hangup" data="NORMAL_CLEARING"/>
         
-        <!-- PSTN Gateway routing (anti-action) — BulkVS first (primary for agent calls) -->
-        <anti-action application="log" data="INFO [OUTBOUND-PSTN] Routing to PSTN gateways for 1${clean_dest} with CID ${clean_caller_id}"/>
+        <!-- PSTN routing (anti-action) — FracTEL trunk, failover across all 6 outbound IPs -->
+        <anti-action application="log" data="INFO [OUTBOUND-PSTN] Routing to FracTEL for 1${clean_dest} with CID ${clean_caller_id}"/>
         <anti-action application="set" data="continue_on_fail=true"/>
         <anti-action application="set" data="fail_on_single_reject=false"/>
-        <anti-action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=Hopwhistle,origination_caller_id_number=${clean_caller_id},sip_from_user=${clean_caller_id}}sofia/gateway/bulkvs/1${clean_dest}|sofia/gateway/signalwire/1${clean_dest}|sofia/gateway/telnyx/1${clean_dest}"/>
+        <anti-action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=Hopwhistle,origination_caller_id_number=${clean_caller_id},sip_from_user=${clean_caller_id}}sofia/gateway/fractel1/1${clean_dest}|sofia/gateway/fractel2/1${clean_dest}|sofia/gateway/fractel3/1${clean_dest}|sofia/gateway/fractel4/1${clean_dest}|sofia/gateway/fractel5/1${clean_dest}|sofia/gateway/fractel6/1${clean_dest}"/>
         <anti-action application="hangup" data="NORMAL_CLEARING"/>
       </condition>
     </extension>

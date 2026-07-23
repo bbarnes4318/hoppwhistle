@@ -256,7 +256,7 @@ export default function InsuranceLeadsPage() {
         <div>
           <h1 className="text-xl font-semibold text-foreground">CRM</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            Manage inbound ACA and Final Expense leads
+            Manage inbound ACA, FE Customers, and B2B leads
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -298,7 +298,8 @@ export default function InsuranceLeadsPage() {
           {[
             { value: '', label: 'All' },
             { value: 'ACA', label: 'ACA' },
-            { value: 'FE', label: 'FE' },
+            { value: 'FE', label: 'FE Customers' },
+            { value: 'B2B', label: 'B2B' },
           ].map(tab => (
             <button
               key={tab.value}

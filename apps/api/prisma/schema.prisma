@@ -2353,6 +2353,7 @@ enum AICallStatus {
 enum InsuranceVertical {
   ACA
   FE
+  B2B
 }
 
 enum InsuranceValidationStatus {
@@ -2442,6 +2443,13 @@ model InsuranceLead {
   leadidToken     String?
   consentLanguage String?
   recordingUrl    String?
+
+  // B2B specific CRM fields
+  company         String?
+  repName         String?
+  industry        String?
+  revenue         String?
+  yearEstablished String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2815,4 +2823,141 @@ model InsuranceCarrierApplication {
   @@index([insuranceLeadId])
   @@index([callId])
   @@map("insurance_carrier_applications")
+}
+
+// ============================================================================
+// Industry Research (multi-provider forensic research pipeline)
+// Additive, tenant-isolated. Gated behind INDUSTRY_RESEARCH_ENABLED. Touches no
+// telephony/dialer/voice-AI zones.
+// ============================================================================
+
+model ResearchRun {
+  id       String @id @default(uuid())
+  tenantId String
+  userId   String
+
+  researchBriefId String
+
+  industry  String
+  geography String
+  mode      String // rapid_scan | full_due_diligence | forensic_max
+
+  status String @default("queued") // queued|planning|running|waiting|completed|failed|canceled|timed_out|budget_exceeded
+
+  // Canonical brief, resolved provider assignments and cost estimate (JSON)
+  brief               Json
+  providerAssignments Json
+  costEstimate        Json
+
+  // Live progress events + research plan (JSON)
+  plan     Json?
+  progress Json? // array of ProgressEvent
+
+  // Budget & cost tracking
+  maxBudgetUsd       Float @default(0)
+  estimatedCostUsd   Float @default(0)
+  accruedCostUsd     Float @default(0)
+
+  // Outcome mirror (denormalized for list/search)
+  verdict            String?
+  overallScore       Int?
+  insufficientEvidence Boolean @default(false)
+
+  error String?
+
+  startedAt  DateTime?
+  finishedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  stages  ResearchStage[]
+  reports ResearchReport[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, industry])
+  @@index([status])
+  @@map("research_runs")
+}
+
+model ResearchStage {
+  id    String @id @default(uuid())
+  runId String
+
+  stageKey String // normalize|plan|primary|independent|social|evidence|validation|contradictions|synthesis|verify|publish
+  label    String
+  role     String?
+  provider String?
+  model    String?
+
+  status String @default("pending") // pending|running|completed|failed|skipped|canceled|fallback
+
+  sourcesFound Int?
+  searches     Int?
+  costUsd      Float @default(0)
+  usedFallback Boolean @default(false)
+
+  // Raw provider output preserved for auditing (JSON)
+  output Json?
+  error  String?
+
+  startedAt  DateTime?
+  finishedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  run ResearchRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@index([runId, stageKey])
+  @@map("research_stages")
+}
+
+model ResearchReport {
+  id       String @id @default(uuid())
+  runId    String
+  tenantId String
+
+  version Int @default(1)
+
+  verdict      String?
+  overallScore Int?
+
+  // Rendered markdown + validated structured report + evidence (JSON)
+  markdown   String
+  structured Json
+  evidence   Json?
+  sources    Json?
+
+  // Adversarial verifier result (JSON)
+  verification Json?
+
+  synthesisProvider String?
+  synthesisModel    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  run ResearchRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@index([tenantId, createdAt])
+  @@index([runId, version])
+  @@map("research_reports")
+}
+
+model ResearchTeamProfile {
+  id       String @id @default(uuid())
+  tenantId String
+  userId   String
+
+  name         String
+  capabilities Json // array of capability ids / custom strings
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([tenantId, createdAt])
+  @@map("research_team_profiles")
 }

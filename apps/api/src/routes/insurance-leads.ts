@@ -104,12 +104,12 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     const { vertical: rawVertical } = request.params;
     const vertical = rawVertical.toUpperCase();
 
-    if (vertical !== 'ACA' && vertical !== 'FE') {
+    if (vertical !== 'ACA' && vertical !== 'FE' && vertical !== 'B2B') {
       void reply.code(400);
       return {
         error: {
           code: 'INVALID_VERTICAL',
-          message: `Invalid vertical "${rawVertical}". Must be "aca" or "fe".`,
+          message: `Invalid vertical "${rawVertical}". Must be "aca", "fe", or "b2b".`,
         },
       };
     }
@@ -122,7 +122,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
 
     try {
       const { ingestLead } = await import('../services/insurance-lead-service.js');
-      const result = await ingestLead(tenantId, vertical as 'ACA' | 'FE', body);
+      const result = await ingestLead(tenantId, vertical as 'ACA' | 'FE' | 'B2B', body);
 
       void reply.code(result.validationStatus === 'VALID' ? 200 : 422);
       return {
@@ -170,12 +170,12 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     }
 
     const vertical = rawVertical.toUpperCase();
-    if (vertical !== 'ACA' && vertical !== 'FE') {
+    if (vertical !== 'ACA' && vertical !== 'FE' && vertical !== 'B2B') {
       void reply.code(400);
       return {
         error: {
           code: 'INVALID_VERTICAL',
-          message: `Invalid vertical "${rawVertical}". Must be "aca" or "fe".`,
+          message: `Invalid vertical "${rawVertical}". Must be "aca", "fe", or "b2b".`,
         },
       };
     }
@@ -198,7 +198,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
             data: {
               tenantId,
               name: trimmedName,
-              vertical: vertical as 'ACA' | 'FE',
+              vertical: vertical as 'ACA' | 'FE' | 'B2B',
             },
           });
         }
@@ -247,7 +247,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
             customFields,
             ...(targetListId ? { listId: targetListId } : {}),
           };
-          const result = await ingestLead(tenantId, vertical as 'ACA' | 'FE', payload);
+          const result = await ingestLead(tenantId, vertical as 'ACA' | 'FE' | 'B2B', payload);
           results.push({
             success: result.validationStatus === 'VALID',
             phone: String(lead.phone || ''),
@@ -315,7 +315,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     const result = await getLeads(tenantId, {
       page: q.page ? parseInt(q.page) : undefined,
       limit: q.limit ? parseInt(q.limit) : undefined,
-      vertical: q.vertical?.toUpperCase() as 'ACA' | 'FE' | undefined,
+      vertical: q.vertical?.toUpperCase() as 'ACA' | 'FE' | 'B2B' | undefined,
       validationStatus: q.validationStatus?.toUpperCase() as 'VALID' | 'INVALID' | undefined,
       postStatus: q.postStatus?.toUpperCase(),
       postMode: q.postMode?.toUpperCase() as 'TEST' | 'LIVE' | undefined,

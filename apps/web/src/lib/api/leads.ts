@@ -10,7 +10,7 @@ import { apiClient } from '../api';
 
 export interface InsuranceLeadSummary {
   id: string;
-  vertical: 'ACA' | 'FE';
+  vertical: 'ACA' | 'FE' | 'B2B';
   firstName: string | null;
   lastName: string | null;
   fullName: string | null;
@@ -72,7 +72,7 @@ export interface InsuranceTask {
 export interface InsuranceLeadDetail {
   id: string;
   tenantId: string;
-  vertical: 'ACA' | 'FE';
+  vertical: 'ACA' | 'FE' | 'B2B';
   firstName: string | null;
   lastName: string | null;
   fullName: string | null;
@@ -105,6 +105,13 @@ export interface InsuranceLeadDetail {
   leadStage: string | null;
   doNotCall: boolean;
   duplicateOfId: string | null;
+
+  // B2B specific CRM fields
+  company: string | null;
+  repName: string | null;
+  industry: string | null;
+  revenue: string | null;
+  yearEstablished: string | null;
 
   // Final Expense specific CRM fields
   smoker: string | null;

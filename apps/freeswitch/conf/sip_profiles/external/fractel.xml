@@ -1,0 +1,44 @@
+<include>
+  <!--
+    FracTEL outbound trunk (device 576613142989).
+    STATIC / IP-authenticated: register MUST be false — FracTEL firewalls
+    STATIC devices that attempt to register. Auth is by our source IP
+    (178.156.223.97) which FracTEL has authorized.
+
+    Outbound port is 5060/UDP. We define one gateway per FracTEL outbound IP
+    (fractel1-6) and fail over across all of them in the dialplan bridge.
+
+    Caller ID: FracTEL signs STIR/SHAKEN A if the caller ID is a FracTEL DID,
+    otherwise B (both are accepted; C is blocked and never sent).
+  -->
+  <gateway name="fractel1">
+    <param name="proxy" value="137.220.61.54:5060"/>
+    <param name="register" value="false"/>
+    <param name="caller-id-in-from" value="true"/>
+  </gateway>
+  <gateway name="fractel2">
+    <param name="proxy" value="144.202.122.62:5060"/>
+    <param name="register" value="false"/>
+    <param name="caller-id-in-from" value="true"/>
+  </gateway>
+  <gateway name="fractel3">
+    <param name="proxy" value="74.201.72.61:5060"/>
+    <param name="register" value="false"/>
+    <param name="caller-id-in-from" value="true"/>
+  </gateway>
+  <gateway name="fractel4">
+    <param name="proxy" value="45.77.108.216:5060"/>
+    <param name="register" value="false"/>
+    <param name="caller-id-in-from" value="true"/>
+  </gateway>
+  <gateway name="fractel5">
+    <param name="proxy" value="14.1.29.149:5060"/>
+    <param name="register" value="false"/>
+    <param name="caller-id-in-from" value="true"/>
+  </gateway>
+  <gateway name="fractel6">
+    <param name="proxy" value="64.42.183.253:5060"/>
+    <param name="register" value="false"/>
+    <param name="caller-id-in-from" value="true"/>
+  </gateway>
+</include>

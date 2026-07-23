@@ -120,7 +120,10 @@ async function getAgentStatus(userId: string): Promise<AgentStatusData> {
       return JSON.parse(data) as AgentStatusData;
     }
   } catch (err) {
-    console.warn(`[AgentStatus] Redis read failed for ${userId}, returning default:`, (err as Error).message);
+    console.warn(
+      `[AgentStatus] Redis read failed for ${userId}, returning default:`,
+      (err as Error).message
+    );
   }
   return {
     status: 'offline',
@@ -134,7 +137,10 @@ async function setAgentStatus(userId: string, status: AgentStatusData): Promise<
     const key = `${AGENT_STATUS_PREFIX}${userId}`;
     await redis.setex(key, AGENT_STATUS_TTL, JSON.stringify(status));
   } catch (err) {
-    console.warn(`[AgentStatus] Redis write failed for ${userId}, skipping:`, (err as Error).message);
+    console.warn(
+      `[AgentStatus] Redis write failed for ${userId}, skipping:`,
+      (err as Error).message
+    );
   }
 }
 
@@ -205,51 +211,45 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
    * GET /api/v1/agent/my-numbers
    * Returns the authenticated user's assigned phone numbers for caller ID selection
    */
-  fastify.get(
-    '/api/v1/agent/my-numbers',
-    async (request, _reply: FastifyReply) => {
-      const { userId, tenantId } = getUser(request);
+  fastify.get('/api/v1/agent/my-numbers', async (request, _reply: FastifyReply) => {
+    const { userId, tenantId } = getUser(request);
 
-      if (userId === 'demo-agent') {
-        return {
-          numbers: [
-            { id: 'demo-1', number: '12816991120', provider: 'local' },
-            { id: 'demo-2', number: '12816991121', provider: 'local' },
-            { id: 'demo-3', number: '12816991122', provider: 'local' },
-          ],
-        };
-      }
-
-      const prisma = getPrismaClient();
-
-      // Fetch all active numbers that are either assigned directly to this user
-      // or are tenant-wide / unassigned (userId: null) so they can be selected.
-      const numbers = await prisma.phoneNumber.findMany({
-        where: {
-          tenantId,
-          status: 'ACTIVE',
-          NOT: {
-            number: {
-              contains: '555',
-            },
-          },
-          OR: [
-            { userId },
-            { userId: null },
-          ],
-        },
-        select: {
-          id: true,
-          number: true,
-          provider: true,
-          purchasedAt: true,
-        },
-        orderBy: { purchasedAt: 'asc' },
-      });
-
-      return { numbers };
+    if (userId === 'demo-agent') {
+      return {
+        numbers: [
+          { id: 'demo-1', number: '12816991120', provider: 'local' },
+          { id: 'demo-2', number: '12816991121', provider: 'local' },
+          { id: 'demo-3', number: '12816991122', provider: 'local' },
+        ],
+      };
     }
-  );
+
+    const prisma = getPrismaClient();
+
+    // The softphone caller-ID picker should offer only the agent's OWN assigned
+    // DIDs, not the tenant-wide rotation pool (that pool is for the auto-dialer).
+    const numbers = await prisma.phoneNumber.findMany({
+      where: {
+        tenantId,
+        status: 'ACTIVE',
+        userId,
+        NOT: {
+          number: {
+            contains: '555',
+          },
+        },
+      },
+      select: {
+        id: true,
+        number: true,
+        provider: true,
+        purchasedAt: true,
+      },
+      orderBy: { purchasedAt: 'asc' },
+    });
+
+    return { numbers };
+  });
 
   // ============================================================================
   // Call Control Endpoints
@@ -278,82 +278,63 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       const isAuthenticatedUser = userId !== 'demo-agent';
       let outboundCallerId = callerId || process.env.OUTBOUND_CALLER_ID || '12816991120';
 
+      // Rotate the tenant's FracTEL POOL (least-recently-used) and return the
+      // chosen number, or null if the pool is empty. Used by the call-center
+      // dialer (callerId === 'ROTATE') and as a fallback for unassigned agents.
+      const rotatePoolCallerId = async (): Promise<string | null> => {
+        const pool = await prisma.phoneNumber.findMany({
+          where: { tenantId, status: 'ACTIVE', userId: null, poolType: 'POOL' },
+        });
+        if (pool.length === 0) return null;
+        const sortedPool = [...pool].sort((a, b) => {
+          const timeA = a.lastAssignedAt ? new Date(a.lastAssignedAt).getTime() : 0;
+          const timeB = b.lastAssignedAt ? new Date(b.lastAssignedAt).getTime() : 0;
+          return timeA - timeB;
+        });
+        const selectedRecord = sortedPool[0];
+        await prisma.phoneNumber.update({
+          where: { id: selectedRecord.id },
+          data: { lastAssignedAt: new Date() },
+        });
+        return selectedRecord.number;
+      };
+
       if (isAuthenticatedUser) {
-        // Fetch all active numbers that are either assigned directly to this user
-        // or are tenant-wide / unassigned (userId: null) so they can be selected.
-        let userNumbers = await prisma.phoneNumber.findMany({
-          where: {
-            tenantId,
-            status: 'ACTIVE',
-            NOT: {
-              number: {
-                contains: '555',
+        if (callerId === 'ROTATE') {
+          // Call-center auto-dialer: rotate across the tenant DID pool.
+          const rotated = await rotatePoolCallerId();
+          if (rotated) outboundCallerId = rotated;
+        } else {
+          // Manual softphone: the agent dials with their OWN assigned number.
+          const userNumbers = await prisma.phoneNumber.findMany({
+            where: {
+              tenantId,
+              status: 'ACTIVE',
+              userId,
+              NOT: {
+                number: {
+                  contains: '555',
+                },
               },
             },
-            OR: [
-              { userId },
-              { userId: null },
-            ],
-          },
-        });
+          });
 
-        const userRecord = await prisma.user.findUnique({
-          where: { id: userId },
-          include: {
-            roles: {
-              include: {
-                role: true,
-              },
-            },
-          },
-        });
-        const userRoles = userRecord?.roles.map(ur => ur.role.name) || [];
-        const isAdminOrOwner = userRoles.some(role => role === 'ADMIN' || role === 'OWNER');
-
-        if (userNumbers.length === 0 && !isAdminOrOwner) {
-          void reply.code(400);
-          return {
-            error: {
-              code: 'NO_ASSIGNED_NUMBER',
-              message: 'You do not have any phone numbers assigned to your account. Please add a phone number on the Phone Numbers page first.',
-            },
-          };
-        }
-
-        if (userNumbers.length > 0) {
-          if (callerId === 'ROTATE' || !callerId) {
-            // Filter pool for BulkVS numbers if available
-            const bulkVsNumbers = userNumbers.filter(
-              n => n.provider && n.provider.toLowerCase() === 'bulkvs'
-            );
-            const pool = bulkVsNumbers.length > 0 ? bulkVsNumbers : userNumbers;
-
-            // Sort pool by lastAssignedAt ascending (nulls first)
-            const sortedPool = [...pool].sort((a, b) => {
-              if (!a.lastAssignedAt && b.lastAssignedAt) return -1;
-              if (a.lastAssignedAt && !b.lastAssignedAt) return 1;
-              if (!a.lastAssignedAt && !b.lastAssignedAt) return 0;
-              const timeA = new Date(a.lastAssignedAt!).getTime();
-              const timeB = new Date(b.lastAssignedAt!).getTime();
-              return timeA - timeB;
-            });
-
-            const selectedRecord = sortedPool[0];
-            outboundCallerId = selectedRecord.number;
-
-            // Update lastAssignedAt to current time in DB
-            await prisma.phoneNumber.update({
-              where: { id: selectedRecord.id },
-              data: { lastAssignedAt: new Date() },
-            });
-            console.log(`[CallerID Rotation] Rotated to ${outboundCallerId} (provider: ${selectedRecord.provider || 'unknown'})`);
-          } else {
-            const hasNumber = userNumbers.some(n => n.number === callerId || n.number.replace(/\D/g, '') === callerId?.replace(/\D/g, ''));
-            if (!hasNumber) {
-              outboundCallerId = userNumbers[0].number;
+          if (userNumbers.length > 0) {
+            if (callerId) {
+              const requested = userNumbers.find(
+                n =>
+                  n.number === callerId ||
+                  n.number.replace(/\D/g, '') === callerId.replace(/\D/g, '')
+              );
+              outboundCallerId = (requested ?? userNumbers[0]).number;
             } else {
-              outboundCallerId = callerId;
+              outboundCallerId = userNumbers[0].number;
             }
+          } else {
+            // Agent has no assigned number — fall back to a pool DID so the call
+            // still presents a valid FracTEL number rather than a dead default.
+            const rotated = await rotatePoolCallerId();
+            if (rotated) outboundCallerId = rotated;
           }
         }
       }
@@ -406,13 +387,16 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
         },
       });
 
-      request.log.info({
-        callId: call.id,
-        callSid: call.callSid,
-        fromNumber: fsCallerId,
-        toNumber: phoneNumber,
-        recordingEnabled,
-      }, 'HOPWHISTLE ORIGINATE DIAGNOSTIC LOG');
+      request.log.info(
+        {
+          callId: call.id,
+          callSid: call.callSid,
+          fromNumber: fsCallerId,
+          toNumber: phoneNumber,
+          recordingEnabled,
+        },
+        'HOPWHISTLE ORIGINATE DIAGNOSTIC LOG'
+      );
 
       // Update agent status to on-call
       await setAgentStatus(userId, {
@@ -437,7 +421,10 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
           updatedAt: new Date().toISOString(),
         });
       } catch (err) {
-        console.warn(`[Originate] Redis callState write failed, continuing:`, (err as Error).message);
+        console.warn(
+          `[Originate] Redis callState write failed, continuing:`,
+          (err as Error).message
+        );
       }
 
       // Emit call initiated event
@@ -545,13 +532,16 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       // Auto-start server-side recording via FreeSWITCH ESL
       // This is fire-and-forget - the call should proceed even if recording fails
       if (recordingEnabled) {
-        freeswitchService.startRecording(call.callSid, callId)
-          .then((started) => {
+        freeswitchService
+          .startRecording(call.callSid, callId)
+          .then(started => {
             if (!started) {
-              throw new Error('Recording start returned false (check FreeSWITCH connection or logs)');
+              throw new Error(
+                'Recording start returned false (check FreeSWITCH connection or logs)'
+              );
             }
           })
-          .catch((err) => {
+          .catch(err => {
             console.error(`[Recording] Failed to start recording for call ${callId}:`, err);
             // Mark recording as failed so UI shows correct state
             const prismaForError = getPrismaClient();
@@ -566,7 +556,11 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       }
 
       // Update Redis state
-      try { await callStateService.updateCallState(callId, { status: 'answered' }); } catch (err) { console.warn(`[Answer] Redis callState update failed, continuing:`, (err as Error).message); }
+      try {
+        await callStateService.updateCallState(callId, { status: 'answered' });
+      } catch (err) {
+        console.warn(`[Answer] Redis callState update failed, continuing:`, (err as Error).message);
+      }
 
       // Update agent status
       await setAgentStatus(userId, {
@@ -609,147 +603,160 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       endedAt?: string;
       endReason?: string;
     };
-  }>(
-    '/api/v1/agent/call/:callId/hangup',
-    async (request, reply: FastifyReply) => {
-      const { callId } = request.params;
-      const { duration: bodyDuration, startedAt: bodyStartedAt, answeredAt: bodyAnsweredAt, endedAt: bodyEndedAt, endReason } = request.body || {};
-      const { userId, tenantId } = getUser(request);
-      const prisma = getPrismaClient();
+  }>('/api/v1/agent/call/:callId/hangup', async (request, reply: FastifyReply) => {
+    const { callId } = request.params;
+    const {
+      duration: bodyDuration,
+      startedAt: bodyStartedAt,
+      answeredAt: bodyAnsweredAt,
+      endedAt: bodyEndedAt,
+      endReason,
+    } = request.body || {};
+    const { userId, tenantId } = getUser(request);
+    const prisma = getPrismaClient();
 
-      // Get call from PostgreSQL
-      const call = await prisma.call.findUnique({
-        where: { id: callId },
-      });
+    // Get call from PostgreSQL
+    const call = await prisma.call.findUnique({
+      where: { id: callId },
+    });
 
-      if (!call) {
-        void reply.code(404);
-        return { error: { code: 'CALL_NOT_FOUND', message: 'Call not found' } };
-      }
+    if (!call) {
+      void reply.code(404);
+      return { error: { code: 'CALL_NOT_FOUND', message: 'Call not found' } };
+    }
 
-      // If call is already COMPLETED, return the existing finalized values.
-      if (call.status === 'COMPLETED') {
-        if (
-          call.recordingStatus === 'PENDING' ||
-          call.recordingStatus === 'RECORDING' ||
-          call.recordingStatus === 'PROCESSING'
-        ) {
-          const { reconcileRecordingForCall } = await import('../services/recording-reconciler.js');
-          void reconcileRecordingForCall(callId).catch(err => {
-            console.error(`[Recording] Reconcile failed for already completed call ${callId}:`, err);
-          });
-        }
-
-        return {
-          callId,
-          status: 'completed',
-          duration: call.duration ?? 0,
-          endedAt: call.endedAt?.toISOString() || new Date().toISOString(),
-        };
-      }
-
-      const endedAt = bodyEndedAt ? new Date(bodyEndedAt) : new Date();
-      const answeredAt = call.answeredAt || (bodyAnsweredAt ? new Date(bodyAnsweredAt) : null);
-      const startedAt = call.startedAt || (bodyStartedAt ? new Date(bodyStartedAt) : null);
-
-      // Duration calculation logic
-      let duration = 0;
-      if (bodyDuration !== undefined && typeof bodyDuration === 'number' && Number.isFinite(bodyDuration) && bodyDuration >= 0) {
-        duration = bodyDuration;
-      } else if (answeredAt) {
-        duration = Math.floor((endedAt.getTime() - answeredAt.getTime()) / 1000);
-      } else if (startedAt) {
-        duration = Math.floor((endedAt.getTime() - startedAt.getTime()) / 1000);
-      }
-      if (duration < 0) duration = 0;
-
-      // Handle recordingStatus transitions:
-      const recordingUpdate: Record<string, unknown> = {};
-      if (call.recordingStatus === 'RECORDING') {
-        recordingUpdate.recordingStatus = 'PROCESSING';
-      } else if (call.recordingStatus === 'PENDING') {
-        if (!answeredAt) {
-          recordingUpdate.recordingStatus = 'FAILED';
-          recordingUpdate.recordingError = 'Call was not answered, no recording generated.';
-        } else {
-          recordingUpdate.recordingStatus = 'PROCESSING';
-        }
-      }
-
-      // Add metadata.endReason
-      const callMetadata = (call.metadata as Prisma.JsonObject) ?? {};
-      const existingRecordingDebug = (callMetadata.recordingDebug as Record<string, any>) || {};
-      const recordingDebug = {
-        ...existingRecordingDebug,
-        hangupNotifiedAt: endedAt.toISOString(),
-      };
-      const updatedMetadata = {
-        ...callMetadata,
-        ...(endReason ? { endReason } : {}),
-        recordingDebug,
-      };
-
-      // Update call in PostgreSQL
-      await prisma.call.update({
-        where: { id: callId },
-        data: {
-          status: 'COMPLETED',
-          endedAt,
-          answeredAt: answeredAt || undefined,
-          duration,
-          connectedDuration: answeredAt ? duration : 0,
-          metadata: updatedMetadata as Prisma.JsonObject,
-          ...recordingUpdate,
-        },
-      });
-
-      // Update Redis state
-      try { await callStateService.updateCallState(callId, { status: 'completed' }); } catch (err) { console.warn(`[Hangup] Redis callState update failed, continuing:`, (err as Error).message); }
-
-      // Update agent status
-      await setAgentStatus(userId, {
-        status: 'available',
-        lastUpdated: new Date().toISOString(),
-        currentCallId: undefined,
-      });
-
-      // Emit hangup event
-      void eventBus.publish('call.*', {
-        event: 'call.ended',
-        tenantId,
-        data: {
-          callId,
-          agentId: userId,
-          duration,
-          endReason: endReason || 'agent_hangup',
-          timestamp: endedAt.toISOString(),
-        },
-      });
-
-      // ======================================================================
-      // Recording finalization failsafe
-      // ======================================================================
-      const finalRecordingStatus =
-        String(recordingUpdate.recordingStatus || call.recordingStatus || '');
-
-      if (['PENDING', 'RECORDING', 'PROCESSING'].includes(finalRecordingStatus)) {
+    // If call is already COMPLETED, return the existing finalized values.
+    if (call.status === 'COMPLETED') {
+      if (
+        call.recordingStatus === 'PENDING' ||
+        call.recordingStatus === 'RECORDING' ||
+        call.recordingStatus === 'PROCESSING'
+      ) {
         const { reconcileRecordingForCall } = await import('../services/recording-reconciler.js');
-
-        setTimeout(() => {
-          void reconcileRecordingForCall(callId).catch(err => {
-            console.error(`[Recording] Delayed reconcile failed for call ${callId}:`, err);
-          });
-        }, 60_000);
+        void reconcileRecordingForCall(callId).catch(err => {
+          console.error(`[Recording] Reconcile failed for already completed call ${callId}:`, err);
+        });
       }
 
       return {
         callId,
         status: 'completed',
-        duration,
-        endedAt: endedAt.toISOString(),
+        duration: call.duration ?? 0,
+        endedAt: call.endedAt?.toISOString() || new Date().toISOString(),
       };
     }
-  );
+
+    const endedAt = bodyEndedAt ? new Date(bodyEndedAt) : new Date();
+    const answeredAt = call.answeredAt || (bodyAnsweredAt ? new Date(bodyAnsweredAt) : null);
+    const startedAt = call.startedAt || (bodyStartedAt ? new Date(bodyStartedAt) : null);
+
+    // Duration calculation logic
+    let duration = 0;
+    if (
+      bodyDuration !== undefined &&
+      typeof bodyDuration === 'number' &&
+      Number.isFinite(bodyDuration) &&
+      bodyDuration >= 0
+    ) {
+      duration = bodyDuration;
+    } else if (answeredAt) {
+      duration = Math.floor((endedAt.getTime() - answeredAt.getTime()) / 1000);
+    } else if (startedAt) {
+      duration = Math.floor((endedAt.getTime() - startedAt.getTime()) / 1000);
+    }
+    if (duration < 0) duration = 0;
+
+    // Handle recordingStatus transitions:
+    const recordingUpdate: Record<string, unknown> = {};
+    if (call.recordingStatus === 'RECORDING') {
+      recordingUpdate.recordingStatus = 'PROCESSING';
+    } else if (call.recordingStatus === 'PENDING') {
+      if (!answeredAt) {
+        recordingUpdate.recordingStatus = 'FAILED';
+        recordingUpdate.recordingError = 'Call was not answered, no recording generated.';
+      } else {
+        recordingUpdate.recordingStatus = 'PROCESSING';
+      }
+    }
+
+    // Add metadata.endReason
+    const callMetadata = (call.metadata as Prisma.JsonObject) ?? {};
+    const existingRecordingDebug = (callMetadata.recordingDebug as Record<string, any>) || {};
+    const recordingDebug = {
+      ...existingRecordingDebug,
+      hangupNotifiedAt: endedAt.toISOString(),
+    };
+    const updatedMetadata = {
+      ...callMetadata,
+      ...(endReason ? { endReason } : {}),
+      recordingDebug,
+    };
+
+    // Update call in PostgreSQL
+    await prisma.call.update({
+      where: { id: callId },
+      data: {
+        status: 'COMPLETED',
+        endedAt,
+        answeredAt: answeredAt || undefined,
+        duration,
+        connectedDuration: answeredAt ? duration : 0,
+        metadata: updatedMetadata as Prisma.JsonObject,
+        ...recordingUpdate,
+      },
+    });
+
+    // Update Redis state
+    try {
+      await callStateService.updateCallState(callId, { status: 'completed' });
+    } catch (err) {
+      console.warn(`[Hangup] Redis callState update failed, continuing:`, (err as Error).message);
+    }
+
+    // Update agent status
+    await setAgentStatus(userId, {
+      status: 'available',
+      lastUpdated: new Date().toISOString(),
+      currentCallId: undefined,
+    });
+
+    // Emit hangup event
+    void eventBus.publish('call.*', {
+      event: 'call.ended',
+      tenantId,
+      data: {
+        callId,
+        agentId: userId,
+        duration,
+        endReason: endReason || 'agent_hangup',
+        timestamp: endedAt.toISOString(),
+      },
+    });
+
+    // ======================================================================
+    // Recording finalization failsafe
+    // ======================================================================
+    const finalRecordingStatus = String(
+      recordingUpdate.recordingStatus || call.recordingStatus || ''
+    );
+
+    if (['PENDING', 'RECORDING', 'PROCESSING'].includes(finalRecordingStatus)) {
+      const { reconcileRecordingForCall } = await import('../services/recording-reconciler.js');
+
+      setTimeout(() => {
+        void reconcileRecordingForCall(callId).catch(err => {
+          console.error(`[Recording] Delayed reconcile failed for call ${callId}:`, err);
+        });
+      }, 60_000);
+    }
+
+    return {
+      callId,
+      status: 'completed',
+      duration,
+      endedAt: endedAt.toISOString(),
+    };
+  });
 
   /**
    * POST /api/v1/agent/call/:callId/hold
@@ -1133,7 +1140,9 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
         try {
           const tcpaResult = await tcpaValidationService.validateNumber(callerNumber);
           if (tcpaResult.isLitigator) {
-            console.log(`[TCPA-BLOCK] Blocking litigator ${callerNumber} (cached=${tcpaResult.cached})`);
+            console.log(
+              `[TCPA-BLOCK] Blocking litigator ${callerNumber} (cached=${tcpaResult.cached})`
+            );
 
             // Create a blocked call record for audit trail
             const prismaBlock = getPrismaClient();

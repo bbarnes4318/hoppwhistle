@@ -39,7 +39,8 @@ async function run() {
     // Allowed Admins: Jimmy Barnes and Yazzyl Vasquez
     const allowedAdminEmails = [
       'jimbosky35@gmail.com',
-      'admin@americanbeneficiary.com'
+      'admin@americanbeneficiary.com',
+      'hallken9@gmail.com'
     ];
 
     for (const ur of adminUserRoles) {

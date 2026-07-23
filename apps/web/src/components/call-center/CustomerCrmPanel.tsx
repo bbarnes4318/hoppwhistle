@@ -59,7 +59,80 @@ export function CustomerCrmPanel({
   const [newNote, setNewNote] = useState('');
   const [isSavingNote, setIsSavingNote] = useState(false);
 
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [edits, setEdits] = useState<Record<string, any>>({});
+
   const customer = data.customer;
+
+  const startEditing = () => {
+    setIsEditing(true);
+    setEdits({
+      firstName: customer?.firstName || '',
+      lastName: customer?.lastName || '',
+      email: customer?.email || '',
+      address: customer?.address || '',
+      city: customer?.city || '',
+      state: customer?.state || '',
+      zipCode: customer?.zipCode || '',
+      county: customer?.county || '',
+      gender: customer?.gender || '',
+      age: customer?.age || '',
+      birthDate: customer?.birthDate || '',
+      carrier: customer?.insurance?.carrier || '',
+      product: customer?.insurance?.product || '',
+      monthlyPremium: customer?.insurance?.monthlyPremium || '',
+      coverageAmount: customer?.insurance?.coverageAmount || customer?.insurance?.faceAmount || '',
+      lifeType: customer?.insurance?.lifeType || '',
+      riskType: customer?.insurance?.riskType || '',
+      smoker: customer?.insurance?.smoker || '',
+      company: customer?.company || '',
+      repName: customer?.repName || '',
+      industry: customer?.industry || '',
+      revenue: customer?.revenue || '',
+      yearEstablished: customer?.yearEstablished || '',
+    });
+  };
+
+  const handleSaveChanges = async () => {
+    if (!customer?.id) return;
+    try {
+      setIsSaving(true);
+      const payload: Record<string, any> = {
+        firstName: edits.firstName || null,
+        lastName: edits.lastName || null,
+        email: edits.email || null,
+        address: edits.address || null,
+        city: edits.city || null,
+        state: edits.state || null,
+        zipCode: edits.zipCode || null,
+        county: edits.county || null,
+        gender: edits.gender || null,
+        age: edits.age ? parseInt(edits.age) : null,
+        birthDate: edits.birthDate || null,
+        carrier: edits.carrier || null,
+        product: edits.product || null,
+        monthlyPremium: edits.monthlyPremium || null,
+        coverageAmount: edits.coverageAmount || null,
+        faceAmount: edits.coverageAmount || null,
+        lifeType: edits.lifeType || null,
+        riskType: edits.riskType || null,
+        smoker: edits.smoker || null,
+        company: edits.company || null,
+        repName: edits.repName || null,
+        industry: edits.industry || null,
+        revenue: edits.revenue || null,
+        yearEstablished: edits.yearEstablished || null,
+      };
+      await updateInsuranceLead(customer.id, payload);
+      setIsEditing(false);
+      onRefresh();
+    } catch (err) {
+      console.error('[CrmPanel] Failed to update customer profile:', err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   // Format phone number for display
   const formatPhone = (num: string) => {
@@ -167,14 +240,18 @@ export function CustomerCrmPanel({
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-xl font-bold text-white">
-                {String(customer.fullName || `${String(customer.firstName ?? '')} ${String(customer.lastName ?? '')}`.trim() || 'Unnamed Lead')}
+                {String(
+                  customer.vertical === 'B2B'
+                    ? `${customer.company || ''}${customer.repName ? ` (${customer.repName})` : ''}` || 'Unnamed B2B Lead'
+                    : customer.fullName || `${String(customer.firstName ?? '')} ${String(customer.lastName ?? '')}`.trim() || 'Unnamed Lead'
+                )}
               </h1>
               <span className="px-2 py-0.5 text-[10px] font-mono font-bold uppercase tracking-widest bg-cyan-400/20 text-cyan-400 rounded">
                 {String(customer.recordType)}
               </span>
               {customer.vertical && (
                 <span className="px-2 py-0.5 text-[10px] font-mono font-bold uppercase tracking-widest bg-purple-400/20 text-purple-400 rounded">
-                  {String(customer.vertical)}
+                  {String(customer.vertical === 'FE' ? 'FE Customers' : customer.vertical)}
                 </span>
               )}
             </div>
@@ -190,15 +267,43 @@ export function CustomerCrmPanel({
               <RefreshCw className="w-4 h-4" />
             </button>
             {isInsuranceLead && (
-              <a
-                href={`/insurance-leads?search=${customer.phone}`}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-mono uppercase tracking-widest text-cyan-400 bg-cyan-400/10 border border-cyan-400/20 rounded-lg hover:bg-cyan-400/20 transition-all"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                Open Full Lead Record
-              </a>
+              <>
+                {isEditing ? (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setIsEditing(false)}
+                      disabled={isSaving}
+                      className="px-3 py-2 text-xs font-mono uppercase tracking-widest text-muted-foreground hover:text-white bg-white/5 border border-white/10 rounded-lg transition-all"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSaveChanges}
+                      disabled={isSaving}
+                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-mono uppercase tracking-widest text-black bg-cyan-400 hover:bg-cyan-300 rounded-lg font-bold transition-all"
+                    >
+                      {isSaving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                      Save Profile
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={startEditing}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-mono uppercase tracking-widest text-cyan-400 bg-cyan-400/10 border border-cyan-400/20 rounded-lg hover:bg-cyan-400/20 transition-all"
+                  >
+                    Edit Profile
+                  </button>
+                )}
+                <a
+                  href={`/insurance-leads?search=${customer.phone}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-mono uppercase tracking-widest text-cyan-400 bg-cyan-400/10 border border-cyan-400/20 rounded-lg hover:bg-cyan-400/20 transition-all"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  Open Full Lead Record
+                </a>
+              </>
             )}
           </div>
         </div>
@@ -272,124 +377,401 @@ export function CustomerCrmPanel({
             <h2 className="text-sm font-bold text-white uppercase tracking-wider">Contact Information</h2>
           </div>
           <div className="grid grid-cols-2 gap-4 text-xs">
-            <div className="col-span-2">
-              <span className="text-muted-foreground block">Street Address</span>
-              <span className="text-white mt-0.5 block font-medium flex items-start gap-1">
-                <MapPin className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
-                {String(customer.address || 'N/A')}
-              </span>
-            </div>
-            <div>
-              <span className="text-muted-foreground block">City</span>
-              <span className="text-white mt-0.5 block font-medium">{String(customer.city || 'N/A')}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground block">State</span>
-              <span className="text-white mt-0.5 block font-medium font-mono">{String(customer.state || 'N/A')}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground block">ZIP Code</span>
-              <span className="text-white mt-0.5 block font-medium font-mono">{String(customer.zipCode || 'N/A')}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground block">County</span>
-              <span className="text-white mt-0.5 block font-medium">{String(customer.county || 'N/A')}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground block">Email Address</span>
-              <span className="text-white mt-0.5 block font-medium truncate flex items-center gap-1">
-                <Mail className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                {customer.email ? (
-                  <a href={`mailto:${customer.email}`} className="text-cyan-400 hover:underline">
-                    {customer.email}
-                  </a>
-                ) : (
-                  'N/A'
+            {isEditing ? (
+              <>
+                {customer.vertical !== 'B2B' && (
+                  <>
+                    <div>
+                      <label className="text-muted-foreground block mb-1">First Name</label>
+                      <input
+                        type="text"
+                        value={edits.firstName}
+                        onChange={e => setEdits(prev => ({ ...prev, firstName: e.target.value }))}
+                        className="w-full bg-slate-900 border border-white/10 rounded p-1.5 text-white text-xs focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-muted-foreground block mb-1">Last Name</label>
+                      <input
+                        type="text"
+                        value={edits.lastName}
+                        onChange={e => setEdits(prev => ({ ...prev, lastName: e.target.value }))}
+                        className="w-full bg-slate-900 border border-white/10 rounded p-1.5 text-white text-xs focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+                  </>
                 )}
-              </span>
-            </div>
-            <div>
-              <span className="text-muted-foreground block">Demographics</span>
-              <span className="text-white mt-0.5 block font-medium">
-                {customer.gender || 'N/A'} • {customer.age ? `${String(customer.age)} yrs` : 'N/A'}
-              </span>
-            </div>
-            {customer.birthDate && (
-              <div>
-                <span className="text-muted-foreground block">Date of Birth</span>
-                <span className="text-white mt-0.5 block font-medium font-mono flex items-center gap-1">
-                  <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
-                  {customer.birthDate}
-                </span>
-              </div>
+                <div className="col-span-2">
+                  <label className="text-muted-foreground block mb-1">Street Address</label>
+                  <input
+                    type="text"
+                    value={edits.address}
+                    onChange={e => setEdits(prev => ({ ...prev, address: e.target.value }))}
+                    className="w-full bg-slate-900 border border-white/10 rounded p-1.5 text-white text-xs focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-muted-foreground block mb-1">City</label>
+                  <input
+                    type="text"
+                    value={edits.city}
+                    onChange={e => setEdits(prev => ({ ...prev, city: e.target.value }))}
+                    className="w-full bg-slate-900 border border-white/10 rounded p-1.5 text-white text-xs focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-muted-foreground block mb-1">State</label>
+                  <input
+                    type="text"
+                    value={edits.state}
+                    onChange={e => setEdits(prev => ({ ...prev, state: e.target.value }))}
+                    className="w-full bg-slate-900 border border-white/10 rounded p-1.5 text-white text-xs focus:outline-none focus:border-cyan-500 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-muted-foreground block mb-1">ZIP Code</label>
+                  <input
+                    type="text"
+                    value={edits.zipCode}
+                    onChange={e => setEdits(prev => ({ ...prev, zipCode: e.target.value }))}
+                    className="w-full bg-slate-900 border border-white/10 rounded p-1.5 text-white text-xs focus:outline-none focus:border-cyan-500 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-muted-foreground block mb-1">County</label>
+                  <input
+                    type="text"
+                    value={edits.county}
+                    onChange={e => setEdits(prev => ({ ...prev, county: e.target.value }))}
+                    className="w-full bg-slate-900 border border-white/10 rounded p-1.5 text-white text-xs focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="text-muted-foreground block mb-1">Email Address</label>
+                  <input
+                    type="email"
+                    value={edits.email}
+                    onChange={e => setEdits(prev => ({ ...prev, email: e.target.value }))}
+                    className="w-full bg-slate-900 border border-white/10 rounded p-1.5 text-white text-xs focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+                {customer.vertical !== 'B2B' && (
+                  <>
+                    <div>
+                      <label className="text-muted-foreground block mb-1">Gender</label>
+                      <input
+                        type="text"
+                        value={edits.gender}
+                        onChange={e => setEdits(prev => ({ ...prev, gender: e.target.value }))}
+                        className="w-full bg-slate-900 border border-white/10 rounded p-1.5 text-white text-xs focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-muted-foreground block mb-1">Age</label>
+                      <input
+                        type="number"
+                        value={edits.age}
+                        onChange={e => setEdits(prev => ({ ...prev, age: e.target.value }))}
+                        className="w-full bg-slate-900 border border-white/10 rounded p-1.5 text-white text-xs focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-muted-foreground block mb-1">Date of Birth</label>
+                      <input
+                        type="text"
+                        placeholder="YYYY-MM-DD"
+                        value={edits.birthDate}
+                        onChange={e => setEdits(prev => ({ ...prev, birthDate: e.target.value }))}
+                        className="w-full bg-slate-900 border border-white/10 rounded p-1.5 text-white text-xs focus:outline-none focus:border-cyan-500 font-mono"
+                      />
+                    </div>
+                  </>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="col-span-2">
+                  <span className="text-muted-foreground block">Street Address</span>
+                  <span className="text-white mt-0.5 block font-medium flex items-start gap-1">
+                    <MapPin className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
+                    {String(customer.address || 'N/A')}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">City</span>
+                  <span className="text-white mt-0.5 block font-medium">{String(customer.city || 'N/A')}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">State</span>
+                  <span className="text-white mt-0.5 block font-medium font-mono">{String(customer.state || 'N/A')}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">ZIP Code</span>
+                  <span className="text-white mt-0.5 block font-medium font-mono">{String(customer.zipCode || 'N/A')}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">County</span>
+                  <span className="text-white mt-0.5 block font-medium">{String(customer.county || 'N/A')}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">Email Address</span>
+                  <span className="text-white mt-0.5 block font-medium truncate flex items-center gap-1">
+                    <Mail className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                    {customer.email ? (
+                      <a href={`mailto:${customer.email}`} className="text-cyan-400 hover:underline">
+                        {customer.email}
+                      </a>
+                    ) : (
+                      'N/A'
+                    )}
+                  </span>
+                </div>
+                {customer.vertical !== 'B2B' && (
+                  <>
+                    <div>
+                      <span className="text-muted-foreground block">Demographics</span>
+                      <span className="text-white mt-0.5 block font-medium">
+                        {customer.gender || 'N/A'} • {customer.age ? `${String(customer.age)} yrs` : 'N/A'}
+                      </span>
+                    </div>
+                    {customer.birthDate && (
+                      <div>
+                        <span className="text-muted-foreground block">Date of Birth</span>
+                        <span className="text-white mt-0.5 block font-medium font-mono flex items-center gap-1">
+                          <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
+                          {customer.birthDate}
+                        </span>
+                      </div>
+                    )}
+                  </>
+                )}
+              </>
             )}
           </div>
         </div>
 
-        {/* Insurance Details Card */}
-        {customer.insurance && (
+        {/* Insurance or B2B Details Card */}
+        {customer.vertical === 'B2B' ? (
           <div className="p-4 bg-white/5 border border-white/10 rounded-xl space-y-4">
             <div className="flex items-center gap-2 border-b border-white/10 pb-2.5">
               <Shield className="w-4 h-4 text-cyan-400" />
-              <h2 className="text-sm font-bold text-white uppercase tracking-wider">Insurance & Policy Details</h2>
+              <h2 className="text-sm font-bold text-white uppercase tracking-wider">B2B Details</h2>
             </div>
             <div className="grid grid-cols-2 gap-4 text-xs">
-              <div>
-                <span className="text-muted-foreground block">Carrier</span>
-                <span className="text-white mt-0.5 block font-medium">{String(customer.insurance.carrier || 'N/A')}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground block">Product</span>
-                <span className="text-white mt-0.5 block font-medium">{String(customer.insurance.product || 'N/A')}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground block">Monthly Premium</span>
-                <span className="text-white mt-0.5 block font-medium font-mono text-green-400">
-                  {customer.insurance.monthlyPremium ? `$${String(customer.insurance.monthlyPremium)}` : 'N/A'}
-                </span>
-              </div>
-              <div>
-                <span className="text-muted-foreground block">Face / Coverage Amount</span>
-                <span className="text-white mt-0.5 block font-medium font-mono">
-                  {customer.insurance.coverageAmount || customer.insurance.faceAmount
-                    ? `$${String(customer.insurance.coverageAmount || customer.insurance.faceAmount)}`
-                    : 'N/A'}
-                </span>
-              </div>
-              <div>
-                <span className="text-muted-foreground block">Life Type / Risk Type</span>
-                <span className="text-white mt-0.5 block font-medium">
-                  {[customer.insurance.lifeType, customer.insurance.riskType].filter(Boolean).join(' • ') || 'N/A'}
-                </span>
-              </div>
-              <div>
-                <span className="text-muted-foreground block">Smoker Status</span>
-                <span className="text-white mt-0.5 block font-medium capitalize">
-                  {customer.insurance.smoker === null ? 'N/A' : String(customer.insurance.smoker)}
-                </span>
-              </div>
-              {customer.compliance?.trustedFormUrl && (
-                <div className="col-span-2 border-t border-white/5 pt-2.5">
-                  <span className="text-muted-foreground block mb-1">TrustedForm URL</span>
-                  <a
-                    href={customer.compliance.trustedFormUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-xs font-mono text-cyan-400 hover:underline flex items-center gap-1 truncate"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    {customer.compliance.trustedFormUrl}
-                  </a>
-                </div>
-              )}
-              {customer.compliance?.leadidToken && (
-                <div>
-                  <span className="text-muted-foreground block">Jornaya / LeadID Token</span>
-                  <span className="text-white mt-0.5 block font-mono font-medium truncate">{String(customer.compliance.leadidToken)}</span>
-                </div>
+              {isEditing ? (
+                <>
+                  <div>
+                    <label className="text-muted-foreground block mb-1">Company</label>
+                    <input
+                      type="text"
+                      value={edits.company}
+                      onChange={e => setEdits(prev => ({ ...prev, company: e.target.value }))}
+                      className="w-full bg-slate-900 border border-white/10 rounded p-1.5 text-white text-xs focus:outline-none focus:border-cyan-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-muted-foreground block mb-1">Rep Name</label>
+                    <input
+                      type="text"
+                      value={edits.repName}
+                      onChange={e => setEdits(prev => ({ ...prev, repName: e.target.value }))}
+                      className="w-full bg-slate-900 border border-white/10 rounded p-1.5 text-white text-xs focus:outline-none focus:border-cyan-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-muted-foreground block mb-1">Industry</label>
+                    <input
+                      type="text"
+                      value={edits.industry}
+                      onChange={e => setEdits(prev => ({ ...prev, industry: e.target.value }))}
+                      className="w-full bg-slate-900 border border-white/10 rounded p-1.5 text-white text-xs focus:outline-none focus:border-cyan-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-muted-foreground block mb-1">Revenue</label>
+                    <input
+                      type="text"
+                      value={edits.revenue}
+                      onChange={e => setEdits(prev => ({ ...prev, revenue: e.target.value }))}
+                      className="w-full bg-slate-900 border border-white/10 rounded p-1.5 text-white text-xs focus:outline-none focus:border-cyan-500 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-muted-foreground block mb-1">Year Established</label>
+                    <input
+                      type="text"
+                      value={edits.yearEstablished}
+                      onChange={e => setEdits(prev => ({ ...prev, yearEstablished: e.target.value }))}
+                      className="w-full bg-slate-900 border border-white/10 rounded p-1.5 text-white text-xs focus:outline-none focus:border-cyan-500 font-mono"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <span className="text-muted-foreground block">Company</span>
+                    <span className="text-white mt-0.5 block font-medium">{String(customer.company || 'N/A')}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block">Rep Name</span>
+                    <span className="text-white mt-0.5 block font-medium">{String(customer.repName || 'N/A')}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block">Industry</span>
+                    <span className="text-white mt-0.5 block font-medium">{String(customer.industry || 'N/A')}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block">Revenue</span>
+                    <span className="text-white mt-0.5 block font-medium font-mono">
+                      {customer.revenue ? `$${String(customer.revenue)}` : 'N/A'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block">Year Established</span>
+                    <span className="text-white mt-0.5 block font-medium font-mono">{String(customer.yearEstablished || 'N/A')}</span>
+                  </div>
+                </>
               )}
             </div>
           </div>
+        ) : (
+          customer.insurance && (
+            <div className="p-4 bg-white/5 border border-white/10 rounded-xl space-y-4">
+              <div className="flex items-center gap-2 border-b border-white/10 pb-2.5">
+                <Shield className="w-4 h-4 text-cyan-400" />
+                <h2 className="text-sm font-bold text-white uppercase tracking-wider">Insurance & Policy Details</h2>
+              </div>
+              <div className="grid grid-cols-2 gap-4 text-xs">
+                {isEditing ? (
+                  <>
+                    <div>
+                      <label className="text-muted-foreground block mb-1">Carrier</label>
+                      <input
+                        type="text"
+                        value={edits.carrier}
+                        onChange={e => setEdits(prev => ({ ...prev, carrier: e.target.value }))}
+                        className="w-full bg-slate-900 border border-white/10 rounded p-1.5 text-white text-xs focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-muted-foreground block mb-1">Product</label>
+                      <input
+                        type="text"
+                        value={edits.product}
+                        onChange={e => setEdits(prev => ({ ...prev, product: e.target.value }))}
+                        className="w-full bg-slate-900 border border-white/10 rounded p-1.5 text-white text-xs focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-muted-foreground block mb-1">Monthly Premium</label>
+                      <input
+                        type="text"
+                        value={edits.monthlyPremium}
+                        onChange={e => setEdits(prev => ({ ...prev, monthlyPremium: e.target.value }))}
+                        className="w-full bg-slate-900 border border-white/10 rounded p-1.5 text-white text-xs focus:outline-none focus:border-cyan-500 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-muted-foreground block mb-1">Face / Coverage Amount</label>
+                      <input
+                        type="text"
+                        value={edits.coverageAmount}
+                        onChange={e => setEdits(prev => ({ ...prev, coverageAmount: e.target.value }))}
+                        className="w-full bg-slate-900 border border-white/10 rounded p-1.5 text-white text-xs focus:outline-none focus:border-cyan-500 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-muted-foreground block mb-1">Life Type</label>
+                      <input
+                        type="text"
+                        value={edits.lifeType}
+                        onChange={e => setEdits(prev => ({ ...prev, lifeType: e.target.value }))}
+                        className="w-full bg-slate-900 border border-white/10 rounded p-1.5 text-white text-xs focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-muted-foreground block mb-1">Risk Type</label>
+                      <input
+                        type="text"
+                        value={edits.riskType}
+                        onChange={e => setEdits(prev => ({ ...prev, riskType: e.target.value }))}
+                        className="w-full bg-slate-900 border border-white/10 rounded p-1.5 text-white text-xs focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-muted-foreground block mb-1">Smoker Status</label>
+                      <select
+                        value={edits.smoker}
+                        onChange={e => setEdits(prev => ({ ...prev, smoker: e.target.value }))}
+                        className="w-full bg-slate-900 border border-white/10 rounded p-1.5 text-white text-xs focus:outline-none focus:border-cyan-500"
+                      >
+                        <option value="">N/A</option>
+                        <option value="Yes">Yes</option>
+                        <option value="No">No</option>
+                      </select>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <span className="text-muted-foreground block">Carrier</span>
+                      <span className="text-white mt-0.5 block font-medium">{String(customer.insurance.carrier || 'N/A')}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground block">Product</span>
+                      <span className="text-white mt-0.5 block font-medium">{String(customer.insurance.product || 'N/A')}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground block">Monthly Premium</span>
+                      <span className="text-white mt-0.5 block font-medium font-mono text-green-400">
+                        {customer.insurance.monthlyPremium ? `$${String(customer.insurance.monthlyPremium)}` : 'N/A'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground block">Face / Coverage Amount</span>
+                      <span className="text-white mt-0.5 block font-medium font-mono">
+                        {customer.insurance.coverageAmount || customer.insurance.faceAmount
+                          ? `$${String(customer.insurance.coverageAmount || customer.insurance.faceAmount)}`
+                          : 'N/A'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground block">Life Type / Risk Type</span>
+                      <span className="text-white mt-0.5 block font-medium">
+                        {[customer.insurance.lifeType, customer.insurance.riskType].filter(Boolean).join(' • ') || 'N/A'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground block">Smoker Status</span>
+                      <span className="text-white mt-0.5 block font-medium capitalize font-mono">
+                        {customer.insurance.smoker === null ? 'N/A' : String(customer.insurance.smoker)}
+                      </span>
+                    </div>
+                    {customer.compliance?.trustedFormUrl && (
+                      <div className="col-span-2 border-t border-white/5 pt-2.5">
+                        <span className="text-muted-foreground block mb-1">TrustedForm URL</span>
+                        <a
+                          href={customer.compliance.trustedFormUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs font-mono text-cyan-400 hover:underline flex items-center gap-1 truncate"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          {customer.compliance.trustedFormUrl}
+                        </a>
+                      </div>
+                    )}
+                    {customer.compliance?.leadidToken && (
+                      <div className="col-span-2">
+                        <span className="text-muted-foreground block">Jornaya / LeadID Token</span>
+                        <span className="text-white mt-0.5 block font-mono font-medium truncate">{String(customer.compliance.leadidToken)}</span>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          )
         )}
       </div>
 

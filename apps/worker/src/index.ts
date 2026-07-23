@@ -8,11 +8,13 @@ import { Autodialer } from './services/autodialer.js';
 import { BillingWorker } from './services/billing-worker.js';
 import { ClickHouseETL } from './services/clickhouse-etl.js';
 import { DialerWorker } from './services/dialer-worker.js';
+import { IndustryResearchWorker } from './services/industry-research-worker.js';
 
 const billingWorker = new BillingWorker();
 const clickhouseETL = new ClickHouseETL();
 const dialerWorker = new DialerWorker();
 const dialer = new Autodialer();
+const industryResearchWorker = new IndustryResearchWorker();
 
 async function main() {
   try {
@@ -23,7 +25,8 @@ async function main() {
     const metricsServer = http.createServer((req, res) => {
       if (req.url === '/metrics') {
         res.setHeader('Content-Type', 'text/plain');
-        register.metrics()
+        register
+          .metrics()
           .then(metrics => {
             res.end(metrics);
           })
@@ -56,13 +59,19 @@ async function main() {
     await clickhouseETL.start();
     logger.info({ msg: 'ClickHouse ETL worker started' });
 
-    // Start Dialer Worker (The Hopper)
+    // Start Dialer Worker (The Hopper) — the single active outbound dialer.
     await dialerWorker.start();
     logger.info({ msg: 'Dialer worker started' });
 
-    // Start Autodialer
-    await dialer.start();
-    logger.info({ msg: 'Autodialer started' });
+    // Start Industry Research Worker (additive; gated by INDUSTRY_RESEARCH_ENABLED)
+    if (process.env.INDUSTRY_RESEARCH_ENABLED !== 'false') {
+      await industryResearchWorker.start();
+      logger.info({ msg: 'Industry research worker started' });
+    }
+
+    // Legacy Autodialer is disabled: it double-dialed alongside The Hopper and
+    // targeted the retired `didcentral` gateway. Kept for reference only.
+    // await dialer.start();
   } catch (error) {
     logger.error({ msg: 'Failed to start workers', err: error });
     process.exit(1);
@@ -77,6 +86,7 @@ async function main() {
       clickhouseETL.stop(),
       dialerWorker.stop(),
       dialer.stop(),
+      industryResearchWorker.stop(),
     ]);
     process.exit(0);
   };

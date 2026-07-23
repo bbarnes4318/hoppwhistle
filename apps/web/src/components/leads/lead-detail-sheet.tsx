@@ -363,9 +363,11 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
             {lead && <VerticalBadge vertical={lead.vertical} />}
             <h2 className="text-sm font-semibold text-slate-200">
               {lead
-                ? lead.fullName ||
-                  `${lead.firstName || ''} ${lead.lastName || ''}`.trim() ||
-                  'Unnamed Lead'
+                ? lead.vertical === 'B2B'
+                  ? `${lead.company || ''}${lead.repName ? ` (${lead.repName})` : ''}` || 'Unnamed B2B Lead'
+                  : lead.fullName ||
+                    `${lead.firstName || ''} ${lead.lastName || ''}`.trim() ||
+                    'Unnamed Lead'
                 : '…'}
             </h2>
           </div>
@@ -409,20 +411,24 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
               {/* Contact Information */}
               <Section title="Contact Information" defaultOpen={true}>
                 <div className="grid grid-cols-2 gap-3">
-                  <EditField
-                    label="First Name"
-                    value={lead.firstName}
-                    fieldKey="firstName"
-                    edits={edits}
-                    onEdit={handleEdit}
-                  />
-                  <EditField
-                    label="Last Name"
-                    value={lead.lastName}
-                    fieldKey="lastName"
-                    edits={edits}
-                    onEdit={handleEdit}
-                  />
+                  {lead.vertical !== 'B2B' && (
+                    <>
+                      <EditField
+                        label="First Name"
+                        value={lead.firstName}
+                        fieldKey="firstName"
+                        edits={edits}
+                        onEdit={handleEdit}
+                      />
+                      <EditField
+                        label="Last Name"
+                        value={lead.lastName}
+                        fieldKey="lastName"
+                        edits={edits}
+                        onEdit={handleEdit}
+                      />
+                    </>
+                  )}
                   <div className="space-y-1">
                     <label className="block text-[10px] font-medium uppercase tracking-wider text-slate-500">
                       Phone
@@ -580,32 +586,77 @@ export function LeadDetailSheet({ lead, loading, onClose, onRefresh }: LeadDetai
               </Section>
 
               {/* Demographics */}
-              <Section title="Demographics" defaultOpen={true}>
-                <div className="grid grid-cols-2 gap-3">
-                  <EditField
-                    label="Date of Birth"
-                    value={lead.birthDate}
-                    fieldKey="birthDate"
-                    edits={edits}
-                    onEdit={handleEdit}
-                  />
-                  <EditField
-                    label="Age"
-                    value={lead.age}
-                    fieldKey="age"
-                    edits={edits}
-                    onEdit={handleEdit}
-                    type="number"
-                  />
-                  <EditField
-                    label="Gender"
-                    value={lead.gender}
-                    fieldKey="gender"
-                    edits={edits}
-                    onEdit={handleEdit}
-                  />
-                </div>
-              </Section>
+              {lead.vertical !== 'B2B' && (
+                <Section title="Demographics" defaultOpen={true}>
+                  <div className="grid grid-cols-2 gap-3">
+                    <EditField
+                      label="Date of Birth"
+                      value={lead.birthDate}
+                      fieldKey="birthDate"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <EditField
+                      label="Age"
+                      value={lead.age}
+                      fieldKey="age"
+                      edits={edits}
+                      onEdit={handleEdit}
+                      type="number"
+                    />
+                    <EditField
+                      label="Gender"
+                      value={lead.gender}
+                      fieldKey="gender"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                  </div>
+                </Section>
+              )}
+
+              {/* B2B Specific (B2B vertical only) */}
+              {lead.vertical === 'B2B' && (
+                <Section title="B2B Details" defaultOpen={true}>
+                  <div className="grid grid-cols-2 gap-3">
+                    <EditField
+                      label="Company"
+                      value={lead.company}
+                      fieldKey="company"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <EditField
+                      label="Rep Name"
+                      value={lead.repName}
+                      fieldKey="repName"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <EditField
+                      label="Industry"
+                      value={lead.industry}
+                      fieldKey="industry"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <EditField
+                      label="Revenue"
+                      value={lead.revenue}
+                      fieldKey="revenue"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                    <EditField
+                      label="Year Established"
+                      value={lead.yearEstablished}
+                      fieldKey="yearEstablished"
+                      edits={edits}
+                      onEdit={handleEdit}
+                    />
+                  </div>
+                </Section>
+              )}
 
               {/* Final Expense Specific (FE vertical only) */}
               {lead.vertical === 'FE' && (

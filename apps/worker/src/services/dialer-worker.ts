@@ -15,7 +15,8 @@ const { Connection: ESLConnection } = modesl;
 import { logger } from '../lib/logger.js';
 
 /** Configuration from environment */
-const FREESWITCH_HOST = process.env.FREESWITCH_HOST || 'localhost';
+const FREESWITCH_HOST =
+  process.env.FREESWITCH_ESL_HOST || process.env.FREESWITCH_HOST || 'freeswitch';
 const FREESWITCH_ESL_PORT = parseInt(process.env.FREESWITCH_ESL_PORT || '8021', 10);
 const FREESWITCH_ESL_PASSWORD = process.env.FREESWITCH_ESL_PASSWORD || 'ClueCon';
 const MAX_CONCURRENT_CALLS = parseInt(process.env.MAX_CONCURRENT_CALLS || '10', 10);
@@ -25,30 +26,18 @@ const DIALER_BATCH_SIZE = parseInt(process.env.DIALER_BATCH_SIZE || '50', 10);
 const SOCKET_LISTENER_HOST = process.env.SOCKET_LISTENER_HOST || '127.0.0.1';
 const SOCKET_LISTENER_PORT = process.env.SOCKET_LISTENER_PORT || '8021';
 
-/** DID rotation pool - FracTEL numbers for outbound caller ID */
-const DID_POOL = [
-  '+12294222208',
-  '+12232331171',
-  '+12232331172',
-  '+12393999953',
-  '+12166678360',
-  '+14233398241',
-  '+14233434219',
-  '+18656000126',
-  '+18656000038',
-  '+18656000039',
-  '+18656000064',
-  '+18656000065',
-  '+18656000124',
-  '+18656000125',
-];
-let didRotationIndex = 0;
+/** FracTEL outbound gateways — round-robined so calls load-balance across all 6 IPs. */
+const FRACTEL_GATEWAYS = ['fractel1', 'fractel2', 'fractel3', 'fractel4', 'fractel5', 'fractel6'];
+let gatewayRotationIndex = 0;
 
-function getNextCallerId(): string {
-  const did = DID_POOL[didRotationIndex % DID_POOL.length];
-  didRotationIndex++;
-  return did;
+function getNextGateway(): string {
+  const gw = FRACTEL_GATEWAYS[gatewayRotationIndex % FRACTEL_GATEWAYS.length];
+  gatewayRotationIndex++;
+  return gw;
 }
+
+/** Fallback caller ID if the tenant's rotation pool is empty. */
+const FALLBACK_CALLER_ID = process.env.OUTBOUND_CALLER_ID || '+18656000124';
 
 interface LeadToDial {
   id: string;
@@ -81,6 +70,36 @@ export class DialerWorker {
   private eslConnection: FreeSwitchESLConnection | null = null;
   private currentActiveCalls = 0;
   private redisEnabled = false;
+
+  // Per-tenant FracTEL DID rotation pool, cached from the DB with a short TTL so
+  // caller-ID rotation always reflects the current active pool numbers.
+  private didPoolCache = new Map<string, { numbers: string[]; fetchedAt: number }>();
+  private didRotationIndex = new Map<string, number>();
+  private static readonly DID_POOL_TTL_MS = 60_000;
+
+  /**
+   * Return the next rotation caller ID for a tenant, sourced from the active
+   * FracTEL POOL numbers in the DB (refreshed every DID_POOL_TTL_MS).
+   */
+  private async getNextCallerId(tenantId: string): Promise<string> {
+    const now = Date.now();
+    let entry = this.didPoolCache.get(tenantId);
+    if (!entry || now - entry.fetchedAt > DialerWorker.DID_POOL_TTL_MS) {
+      const rows = await this.prisma.phoneNumber.findMany({
+        where: { tenantId, provider: 'fractel', status: 'ACTIVE', poolType: 'POOL' },
+        select: { number: true },
+        orderBy: { number: 'asc' },
+      });
+      entry = { numbers: rows.map(r => r.number).filter(Boolean), fetchedAt: now };
+      this.didPoolCache.set(tenantId, entry);
+    }
+    if (entry.numbers.length === 0) {
+      return FALLBACK_CALLER_ID;
+    }
+    const idx = (this.didRotationIndex.get(tenantId) ?? 0) % entry.numbers.length;
+    this.didRotationIndex.set(tenantId, idx + 1);
+    return entry.numbers[idx];
+  }
 
   constructor() {
     this.prisma = new PrismaClient();
@@ -339,7 +358,7 @@ export class DialerWorker {
 
     // Build originate command with &socket() to hand off to FlowEngine
     // Format: originate {vars}sofia/gateway/external/+1XXXXXXXXXX &socket(host:port async full)
-    const callerId = getNextCallerId();
+    const callerId = await this.getNextCallerId(lead.tenantId);
     const originateVars = [
       `ignore_early_media=true`,
       `origination_caller_id_number=${callerId}`,
@@ -349,7 +368,7 @@ export class DialerWorker {
       `hopwhistle_tenant_id=${lead.tenantId}`,
     ].join(',');
 
-    const dialString = `sofia/gateway/didcentral/${phoneNumber}`;
+    const dialString = `sofia/gateway/${getNextGateway()}/${phoneNumber}`;
     const application = `&socket(${SOCKET_LISTENER_HOST}:${SOCKET_LISTENER_PORT} async full)`;
 
     const originateCmd = `originate {${originateVars}}${dialString} ${application}`;

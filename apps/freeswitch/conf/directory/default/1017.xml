@@ -1,7 +1,7 @@
 <include>
   <user id="1017">
     <params>
-      <param name="password" value="1234"/>
+      <param name="password" value="$${default_password}"/>
       <param name="vm-password" value="1017"/>
       <!-- Verto specific permissions -->
       <param name="jsonrpc-allowed-methods" value="verto.invite,verto.answer,verto.attach,verto.info,verto.display,verto.bye,verto.modify,verto.media,verto.ping"/>
@@ -9,8 +9,8 @@
     <variables>
       <variable name="toll_allow" value="domestic,international,local"/>
       <variable name="accountcode" value="1017"/>
-      <variable name="user_context" value="internal"/>
-      <variable name="verto_context" value="internal"/>
+      <variable name="user_context" value="default"/>
+      <variable name="verto_context" value="default"/>
       <variable name="verto_dialplan" value="XML"/>
       <variable name="effective_caller_id_name" value="Extension 1017"/>
       <variable name="effective_caller_id_number" value="1017"/>
