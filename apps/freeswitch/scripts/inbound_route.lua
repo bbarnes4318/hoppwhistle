@@ -65,16 +65,49 @@ if caller_normalized ~= "unknown" and not string.match(caller_normalized, "^%+")
 end
 
 -- ── Step 1: Lookup route via API ────────────────────────────────────────────
-local api = freeswitch.API()
-local lookup_url = API_URL .. "/api/v1/freeswitch/lookup?did=" .. did_normalized
-if caller_normalized ~= "unknown" then
-  lookup_url = lookup_url .. "&caller=" .. caller_normalized
+local function url_encode_plus(val)
+    return string.gsub(val or "", "%+", "%%2B")
 end
+
+local encoded_did = url_encode_plus(did_normalized)
+local encoded_caller = url_encode_plus(caller_normalized)
+
+local lookup_url = API_URL .. "/api/v1/freeswitch/lookup?did=" .. encoded_did
+if encoded_caller ~= "" and encoded_caller ~= "unknown" then
+    lookup_url = lookup_url .. "&caller=" .. encoded_caller
+end
+
+session:setVariable("curl_connect_timeout", "3")
+session:setVariable("curl_timeout", "15")
+
 log("INFO", "Looking up route: " .. lookup_url)
 
-local response_body = api:execute("curl", lookup_url .. " timeout 15 get") or ""
+session:execute("curl", lookup_url)
 
-log("INFO", "Lookup response: " .. response_body)
+local response_code = session:getVariable("curl_response_code") or ""
+local response_body = session:getVariable("curl_response_data") or ""
+
+log("INFO", "Lookup HTTP status=" .. tostring(response_code) .. " body=" .. tostring(response_body))
+
+local numeric_code = tonumber(response_code) or 0
+
+if response_code == "" or response_code == "0" or numeric_code >= 500 then
+    log("ERR", "Route API failure: HTTP " .. tostring(response_code))
+    session:hangup("NORMAL_TEMPORARY_FAILURE")
+    return
+end
+
+if numeric_code == 404 then
+    log("WARNING", "No configured route for DID: " .. did_normalized)
+    session:hangup("UNALLOCATED_NUMBER")
+    return
+end
+
+if numeric_code < 200 or numeric_code >= 300 then
+    log("ERR", "Unexpected route API response: HTTP " .. tostring(response_code))
+    session:hangup("NORMAL_TEMPORARY_FAILURE")
+    return
+end
 
 -- Parse response
 local destination     = json_value(response_body, "destination")
@@ -96,8 +129,7 @@ end
 
 if not destination or destination == "" then
   log("WARNING", "No route found for DID: " .. did_normalized .. " — rejecting call")
-  session:execute("playback", "ivr/ivr-invalid_number.wav")
-  session:hangup("NO_ROUTE_DESTINATION")
+  session:hangup("UNALLOCATED_NUMBER")
   return
 end
 
@@ -201,6 +233,8 @@ for i, step in ipairs(failover_steps) do
                     if domain == "" then domain = "localhost" end
                     
                     local domains_to_try = {
+                        "hopwhistle.com",
+                        "aivoice.hopwhistle.com",
                         domain,
                         "178.156.223.97",
                         "freeswitch",
@@ -222,7 +256,8 @@ for i, step in ipairs(failover_steps) do
                         log("INFO", "Internal extension " .. p_dest .. " registered: " .. contact)
                         table.insert(bridge_components, contact)
                     else
-                        log("WARNING", "Internal extension " .. p_dest .. " NOT registered — skipping")
+                        log("WARNING", "Internal extension " .. p_dest .. " not found via sofia_contact — falling back to user/" .. p_dest)
+                        table.insert(bridge_components, "user/" .. p_dest)
                     end
                 else
                     -- Strip leading + for external dialing
@@ -237,9 +272,18 @@ for i, step in ipairs(failover_steps) do
                 log("WARNING", "Session no longer active, aborting failover loop")
                 break
             end
+            -- Carriers reject anonymous/"restricted" caller IDs on the outbound buyer
+            -- leg (NORMAL_TEMPORARY_FAILURE). If the A-leg caller ID isn't a real
+            -- number, stamp the dialed DID so the buyer leg is an acceptable call.
+            local cid = caller_number
+            if cid == nil or cid == "" or not string.match(tostring(cid), "%d%d%d%d%d%d%d") then
+                cid = session:getVariable("destination_number") or "4233398241"
+                cid = string.gsub(tostring(cid), "^%+", "")
+                log("INFO", "[INBOUND-ROUTE] anonymous/restricted caller ID; using DID " .. cid .. " for buyer leg")
+            end
             local bridge_vars = string.format(
                 "{origination_caller_id_number=%s,origination_caller_id_name=%s,effective_caller_id_number=%s,effective_caller_id_name=%s}",
-                caller_number, caller_number, caller_number, caller_number
+                cid, cid, cid, cid
             )
             local bridge_string = bridge_vars .. table.concat(bridge_components, ",")
             log("INFO", "Bridging to failover step " .. tostring(i) .. ": " .. bridge_string)
@@ -256,6 +300,15 @@ for i, step in ipairs(failover_steps) do
             log("WARNING", "Step " .. tostring(i) .. " has no reachable destinations — skipping to next")
         end
     end
+end
+
+-- If call was not answered by any buyer leg, answer cleanly and play fallback announcement
+if not session:answered() and session:ready() then
+    log("WARNING", "All buyer bridge attempts completed without answer — playing fallback prompt")
+    session:execute("answer")
+    session:sleep(500)
+    session:execute("playback", "ivr/ivr-no_user_response.wav")
+    session:hangup("NO_USER_RESPONSE")
 end
 
 -- ── Step 5: Call ended — collect CDR and report ─────────────────────────────

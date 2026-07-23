@@ -722,6 +722,12 @@ export function PhoneProvider({ children, apiUrl }: PhoneProviderProps): JSX.Ele
       };
     });
     setAgentStatusState('on-call');
+    // Sync on-call status to Redis so routing service knows agent is busy
+    void fetch(`${normalizedApiUrl}/api/v1/agent/status`, {
+      method: 'PUT',
+      headers: getApiHeaders(),
+      body: JSON.stringify({ status: 'on-call' }),
+    }).catch(() => {});
     stopRingtone();
     startCallDurationTimer();
   }, [stopRingtone, startCallDurationTimer, normalizedApiUrl, getApiHeaders]);
@@ -821,6 +827,12 @@ export function PhoneProvider({ children, apiUrl }: PhoneProviderProps): JSX.Ele
       return null;
     });
     setAgentStatusState('available');
+    // Sync available status to Redis so routing service knows agent is free
+    void fetch(`${normalizedApiUrl}/api/v1/agent/status`, {
+      method: 'PUT',
+      headers: getApiHeaders(),
+      body: JSON.stringify({ status: 'available' }),
+    }).catch(() => {});
     setIsConnecting(false);
     stopRingtone();
     stopCallDurationTimer();
@@ -1431,7 +1443,16 @@ export function PhoneProvider({ children, apiUrl }: PhoneProviderProps): JSX.Ele
               setError(null);
               if (registererRef.current) {
                 console.log('[Phone] Re-registering on transport connect');
-                registererRef.current.register().catch(err => {
+                registererRef.current.register().then(() => {
+                  console.log('[Phone] Re-registration succeeded, syncing available to Redis');
+                  setIsRegistered(true);
+                  setAgentStatusState('available');
+                  void fetch(`${normalizedApiUrl}/api/v1/agent/status`, {
+                    method: 'PUT',
+                    headers: getApiHeaders(),
+                    body: JSON.stringify({ status: 'available' }),
+                  }).catch(() => {});
+                }).catch(err => {
                   console.error('[Phone] Re-registration failed:', err);
                 });
               }
@@ -1440,6 +1461,12 @@ export function PhoneProvider({ children, apiUrl }: PhoneProviderProps): JSX.Ele
               console.log('[Phone] SIP Transport Disconnected', error);
               setIsRegistered(false);
               if (error) setError('SIP connection lost');
+              // Sync offline status to Redis so routing service excludes this agent
+              void fetch(`${normalizedApiUrl}/api/v1/agent/status`, {
+                method: 'PUT',
+                headers: getApiHeaders(),
+                body: JSON.stringify({ status: 'offline' }),
+              }).catch(() => {});
             },
             onInvite: (invitation: Invitation) => {
               console.log('[Phone] Incoming SIP Invite');
@@ -1459,6 +1486,12 @@ export function PhoneProvider({ children, apiUrl }: PhoneProviderProps): JSX.Ele
         console.log('[Phone] SIP Registered');
         setIsRegistered(true);
         setAgentStatusState('available');
+        // Sync available status to Redis so routing service includes this agent
+        void fetch(`${normalizedApiUrl}/api/v1/agent/status`, {
+          method: 'PUT',
+          headers: getApiHeaders(),
+          body: JSON.stringify({ status: 'available' }),
+        }).catch(() => {});
       } catch (e) {
         console.error('[Phone] SIP UA Initialization/Start Failed', e);
         if (active) {
@@ -1472,6 +1505,12 @@ export function PhoneProvider({ children, apiUrl }: PhoneProviderProps): JSX.Ele
 
     return () => {
       active = false;
+      // Sync offline status to Redis before tearing down SIP
+      void fetch(`${normalizedApiUrl}/api/v1/agent/status`, {
+        method: 'PUT',
+        headers: getApiHeaders(),
+        body: JSON.stringify({ status: 'offline' }),
+      }).catch(() => {});
       if (registererRef.current) {
         void registererRef.current.unregister();
         registererRef.current = null;

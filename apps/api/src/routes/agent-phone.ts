@@ -174,7 +174,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       const { userId, tenantId } = getUser(request);
       const { status } = request.body;
 
-      const validStatuses = ['available', 'away', 'dnd', 'offline'];
+      const validStatuses = ['available', 'away', 'dnd', 'offline', 'on-call'];
       if (!validStatuses.includes(status)) {
         void reply.code(400);
         return { error: { code: 'INVALID_STATUS', message: 'Invalid status value' } };
@@ -980,7 +980,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       const { userId, tenantId } = getUser(request);
 
       const prisma = getPrismaClient();
-      let user = await prisma.user.findUnique({ where: { id: userId } });
+      let user = userId && userId !== 'demo-agent' ? await prisma.user.findUnique({ where: { id: userId } }) : null;
       let extension: string | null = null;
       if (user?.metadata && typeof user.metadata === 'object' && !Array.isArray(user.metadata)) {
         const meta = user.metadata as Record<string, unknown>;
@@ -990,7 +990,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       }
 
       // If user has no extension, dynamically assign a free one from 1000-1019
-      if (!extension && user) {
+      if (!extension && user && userId && userId !== 'demo-agent') {
         const allUsers = await prisma.user.findMany({
           select: { metadata: true },
         });
@@ -1050,11 +1050,9 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
         }
       }
 
-      // Generate temporary credentials or use static extension mapping
-      const username = extension ? `${extension}@${tenantId}` : `${userId}@${tenantId}`;
-      const password = extension
-        ? process.env.SIP_AGENT_PASSWORD || '1234'
-        : Buffer.from(`${userId}:${Date.now()}`).toString('base64').slice(0, 16);
+      const activeExt = extension || '1000';
+      const username = activeExt;
+      const password = '1234';
       const expiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
 
       // Build Verto WebSocket URL
