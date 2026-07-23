@@ -1,6 +1,6 @@
 import { getPrismaClient } from '../lib/prisma.js';
 
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { logger } from './logger.js';
 
 export interface StirShakenHeaders {

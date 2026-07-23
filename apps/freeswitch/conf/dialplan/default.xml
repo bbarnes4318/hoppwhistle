@@ -73,24 +73,24 @@
       </condition>
 
       <!-- Server-side caller ID validation and resolution hierarchy:
-           1. Authoritative DB Call record lookup by X-Hopwhistle-Call-Id
-           2. Validated tenant-authorized FracTEL DID
-           3. Valid DB-validated FRACTEL_DEFAULT_CALLER_ID
-           4. Otherwise fail closed (MANDATORY_CALLER_ID_MISSING) -->
+           1. Authoritative DB Call record lookup by X-Hopwhistle-Call-Id, destination, and authenticated SIP identity
+           2. Fail closed (MANDATORY_CALLER_ID_MISSING) if API returns non-200 or invalid caller ID -->
       <condition field="destination_number" expression="^\+?1?([2-9]\d{9})$" break="never">
-        <action application="set" data="curl_headers=X-Internal-API-Key: ${env(INTERNAL_API_SECRET)}" inline="true"/>
-        <action application="set" data="cid_lookup_res=${curl(http://api:3001/api/v1/freeswitch/validate-caller-id?callId=${hopwhistle_call_id})}" inline="true"/>
-        <action application="set" data="resolved_cid=${regex(${cid_lookup_res}|&quot;callerId&quot;:&quot;(\d{11})&quot;|%1)}" inline="true"/>
+        <action application="unset" data="curl_response_code"/>
+        <action application="unset" data="curl_response_data"/>
+        <action application="unset" data="resolved_cid"/>
+        <action application="curl" data="http://api:3001/api/v1/freeswitch/validate-caller-id?callId=${hopwhistle_call_id}&amp;destination=${destination_number}&amp;sipUser=${sip_auth_username}&amp;channelUuid=${uuid} append_headers X-Internal-API-Key:${env(INTERNAL_API_SECRET)} connect-timeout 3 timeout 5 get"/>
+        <action application="set" data="resolved_cid=${regex(${curl_response_data}|&quot;callerId&quot;:&quot;(\d{11})&quot;|%1)}" inline="true"/>
       </condition>
 
-      <!-- If resolved_cid is empty, fallback to global FRACTEL_DEFAULT_CALLER_ID -->
-      <condition field="${resolved_cid}" expression="^$" break="never">
-        <action application="set" data="resolved_cid=$${FRACTEL_DEFAULT_CALLER_ID}" inline="true"/>
+      <!-- Fail closed if curl HTTP code is not 200 or resolved_cid is not an 11-digit E.164 number -->
+      <condition field="${curl_response_code}" expression="^(?!200$).*$" break="never">
+        <action application="log" data="ERR HOPWHISTLE OUTBOUND ERROR: Caller ID API validation failed with HTTP status ${curl_response_code}. Failing closed."/>
+        <action application="hangup" data="MANDATORY_CALLER_ID_MISSING"/>
       </condition>
 
-      <!-- Fail closed if resolved_cid is empty or not an 11-digit E.164 number -->
       <condition field="${resolved_cid}" expression="^(?!1\d{10}$).*$" break="never">
-        <action application="log" data="ERR HOPWHISTLE OUTBOUND ERROR: No valid tenant caller ID or FRACTEL_DEFAULT_CALLER_ID available. Failing closed."/>
+        <action application="log" data="ERR HOPWHISTLE OUTBOUND ERROR: No valid tenant caller ID returned from API validation. Failing closed."/>
         <action application="hangup" data="MANDATORY_CALLER_ID_MISSING"/>
       </condition>
 

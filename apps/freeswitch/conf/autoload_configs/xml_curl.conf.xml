@@ -1,0 +1,11 @@
+<configuration name="xml_curl.conf" description="Dynamic XML Configuration">
+  <bindings>
+    <binding name="directory">
+      <param name="gateway-url" value="http://api:3001/api/v1/freeswitch/directory" data="directory"/>
+      <param name="method" value="POST"/>
+      <param name="extra-headers" value="X-Directory-Internal-API-Key: ${env(DIRECTORY_INTERNAL_API_SECRET)}"/>
+      <param name="timeout" value="5"/>
+      <param name="connect-timeout" value="3"/>
+    </binding>
+  </bindings>
+</configuration>

@@ -8,19 +8,9 @@
   <X-PRE-PROCESS cmd="set" data="sip_public_ip=${SIP_PUBLIC_IP}"/>
   <!-- Domain MUST match what SIP clients register against -->
   <X-PRE-PROCESS cmd="set" data="domain=${SIP_DOMAIN}"/>
-  <!-- Default password for SIP users (sourced from env; never hardcode) -->
-  <X-PRE-PROCESS cmd="set" data="default_password=${SIP_AGENT_PASSWORD}"/>
-  <X-PRE-PROCESS cmd="set" data="api_url=${API_URL}"/>
-  <X-PRE-PROCESS cmd="set" data="api_key=${API_KEY}"/>
-
-  <X-PRE-PROCESS cmd="set" data="signalwire_domain=${SIGNALWIRE_SIP_DOMAIN}"/>
-  <X-PRE-PROCESS cmd="set" data="signalwire_proxy=${SIGNALWIRE_OUTBOUND_PROXY}"/>
-  <X-PRE-PROCESS cmd="set" data="signalwire_user=${SIGNALWIRE_SIP_USERNAME}"/>
-  <X-PRE-PROCESS cmd="set" data="signalwire_pass=${SIGNALWIRE_SIP_PASSWORD}"/>
-
-  <X-PRE-PROCESS cmd="set" data="telnyx_proxy=${OUTBOUND_SIP_PROXY}"/>
-  <X-PRE-PROCESS cmd="set" data="telnyx_user=${OUTBOUND_SIP_USER}"/>
-  <X-PRE-PROCESS cmd="set" data="telnyx_pass=${OUTBOUND_SIP_PASS}"/>
+  <!-- Secrets & Master Keys (sourced from env; never hardcoded) -->
+  <X-PRE-PROCESS cmd="set" data="master_credential_secret=${SIP_CREDENTIAL_MASTER_SECRET}"/>
+  <X-PRE-PROCESS cmd="set" data="internal_api_secret=${INTERNAL_API_SECRET}"/>
 
   <X-PRE-PROCESS cmd="set" data="outbound_caller_id=${OUTBOUND_CALLER_ID}"/>
   <X-PRE-PROCESS cmd="set" data="FRACTEL_DEFAULT_CALLER_ID=${FRACTEL_DEFAULT_CALLER_ID}"/>

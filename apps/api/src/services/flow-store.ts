@@ -1,7 +1,7 @@
 import type { Flow, ExecutionPlan } from '@hopwhistle/routing-dsl';
 import { parseFlow, createExecutionPlan } from '@hopwhistle/routing-dsl';
 
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { getPrismaClient } from '../lib/prisma.js';
 
 export interface FlowVersion {
@@ -77,7 +77,7 @@ class FlowStore {
             flow: flow,
             plan: plan,
             createdBy: createdBy,
-          },
+          } as unknown as Prisma.InputJsonValue,
           updatedAt: new Date(),
         },
       });
@@ -114,10 +114,10 @@ class FlowStore {
           version: versionInt,
           isActive: false,
           metadata: {
-            flow: flow as unknown as Prisma.InputJsonValue,
-            plan: plan as unknown as Prisma.InputJsonValue,
+            flow: flow,
+            plan: plan,
             createdBy: createdBy,
-          },
+          } as unknown as Prisma.InputJsonValue,
         },
       });
 
@@ -150,8 +150,8 @@ class FlowStore {
         name: 'Entry',
         config: {
           target: flow.entry.target,
-        },
-        position: { x: 250, y: 100 },
+        } as unknown as Prisma.InputJsonValue,
+        position: { x: 250, y: 100 } as unknown as Prisma.InputJsonValue,
       },
     });
 
@@ -166,7 +166,7 @@ class FlowStore {
           type: this.mapNodeType(flowNode.type) as any,
           name: flowNode.type.charAt(0).toUpperCase() + flowNode.type.slice(1),
           config: this.extractNodeConfig(flowNode) as unknown as Prisma.InputJsonValue,
-          position: { x: 0, y: 0 }, // Will be updated by UI
+          position: { x: 0, y: 0 } as unknown as Prisma.InputJsonValue, // Will be updated by UI
         },
       });
       nodeMap.set(flowNode.id, dbNode.id);

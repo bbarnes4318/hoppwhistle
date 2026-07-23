@@ -10,8 +10,8 @@
  */
 import * as net from 'net';
 import modesl from 'modesl';
-const { Connection: ESLConnectionClass } = modesl;
 type ESLConnection = any;
+const ESLConnection = (modesl as any).Connection;
 
 import { logger } from '../lib/logger.js';
 import { getPrismaClient } from '../lib/prisma.js';
@@ -79,7 +79,7 @@ export class FronterBotService {
   private handleConnection(socket: net.Socket): void {
     logger.info({ msg: 'Incoming FreeSWITCH socket connection' });
 
-    const conn = new ESLConnectionClass(socket);
+    const conn = new ESLConnection(socket);
 
     conn.on('esl::ready', () => {
       this.handleCall(conn).catch(err => {
@@ -281,7 +281,7 @@ export class FronterBotService {
     try {
       await this.prisma.lead.update({
         where: { id: leadId },
-        data: { status },
+        data: { status: status as any },
       });
     } catch (error) {
       logger.error({ msg: 'Failed to update lead status', leadId, status, error });

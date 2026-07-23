@@ -65,6 +65,7 @@ model Tenant {
   campaignPublishers       CampaignPublisher[]
   campaignBuyers           CampaignBuyer[]
   voiceAgents              VoiceAgent[]
+  sipIdentities            SipIdentity[]
 
   @@index([slug])
   @@index([status])
@@ -196,6 +197,7 @@ model User {
   assignedLeads       Lead[]
   buyerTransactions   BuyerTransaction[] @relation("BuyerTransactionCreator")
   phoneNumbers        PhoneNumber[]
+  sipIdentity         SipIdentity?
   assignedInsuranceLeads      InsuranceLead[]     @relation("InsuranceLeadAssignedTo")
   createdInsuranceActivities  InsuranceActivity[] @relation("InsuranceActivityCreatedBy")
   assignedInsuranceTasks      InsuranceTask[]     @relation("InsuranceTaskAssignedTo")
@@ -2960,4 +2962,29 @@ model ResearchTeamProfile {
   @@index([tenantId])
   @@index([tenantId, createdAt])
   @@map("research_team_profiles")
+}
+
+model SipIdentity {
+  id                String            @id @default(uuid())
+  tenantId          String
+  userId            String            @unique
+  domain            String            @default("freeswitch")
+  extension         String
+  credentialVersion Int               @default(1)
+  status            SipIdentityStatus @default(ACTIVE)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([domain, extension])
+  @@index([tenantId])
+  @@map("sip_identities")
+}
+
+enum SipIdentityStatus {
+  ACTIVE
+  DISABLED
+  REVOKED
 }

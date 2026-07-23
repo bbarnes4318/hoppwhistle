@@ -1,5 +1,5 @@
+import { Prisma } from '@prisma/client';
 import { logger } from '../../../lib/logger.js';
-import type { Prisma } from '@prisma/client';
 import { getPrismaClient } from '../../../lib/prisma.js';
 import type {
   ProvisioningAdapter,

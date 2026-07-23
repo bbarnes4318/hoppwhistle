@@ -160,19 +160,13 @@ export class ComplianceService {
       where: {
         tenantId,
         phoneNumber: normalized,
-        AND: [
-          {
-            OR: [
-              { callId: callId || null },
-              { callId: null }, // Global override
-            ],
-          },
-          {
-            OR: [
-              { expiresAt: null },
-              { expiresAt: { gt: new Date() } },
-            ],
-          },
+        OR: [
+          { callId: callId || null },
+          { callId: null }, // Global override
+        ],
+        OR: [
+          { expiresAt: null },
+          { expiresAt: { gt: new Date() } },
         ],
       },
       orderBy: {
