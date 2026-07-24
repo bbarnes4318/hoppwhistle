@@ -12,6 +12,7 @@ import {
 import {
   UserAgent,
   Registerer,
+  RegistererState,
   Inviter,
   Session,
   SessionState,
@@ -1443,18 +1444,21 @@ export function PhoneProvider({ children, apiUrl }: PhoneProviderProps): JSX.Ele
               setError(null);
               if (registererRef.current) {
                 console.log('[Phone] Re-registering on transport connect');
-                registererRef.current.register().then(() => {
-                  console.log('[Phone] Re-registration succeeded, syncing available to Redis');
-                  setIsRegistered(true);
-                  setAgentStatusState('available');
-                  void fetch(`${normalizedApiUrl}/api/v1/agent/status`, {
-                    method: 'PUT',
-                    headers: getApiHeaders(),
-                    body: JSON.stringify({ status: 'available' }),
-                  }).catch(() => {});
-                }).catch(err => {
-                  console.error('[Phone] Re-registration failed:', err);
-                });
+                registererRef.current
+                  .register()
+                  .then(() => {
+                    console.log('[Phone] Re-registration succeeded, syncing available to Redis');
+                    setIsRegistered(true);
+                    setAgentStatusState('available');
+                    void fetch(`${normalizedApiUrl}/api/v1/agent/status`, {
+                      method: 'PUT',
+                      headers: getApiHeaders(),
+                      body: JSON.stringify({ status: 'available' }),
+                    }).catch(() => {});
+                  })
+                  .catch(err => {
+                    console.error('[Phone] Re-registration failed:', err);
+                  });
               }
             },
             onDisconnect: error => {
@@ -1503,8 +1507,114 @@ export function PhoneProvider({ children, apiUrl }: PhoneProviderProps): JSX.Ele
     let persistentMicStream: MediaStream | null = null;
     void initSip();
 
+    // ── Registration watchdog ─────────────────────────────────────────────
+    // A logged-in page MUST stay registered. SIP.js's own re-REGISTER timers
+    // silently die when the laptop sleeps or the browser throttles background
+    // tabs, leaving the page looking alive while FreeSWITCH has expired the
+    // registration — inbound calls then hit a dead extension. This watchdog
+    // detects transport loss, registration expiry, and sleep/wake gaps, and
+    // repairs each one automatically (escalating to a full re-init when the
+    // user agent is unrecoverable). It never tears down an active call.
+    let lastTick = Date.now();
+    let repairing = false;
+
+    const fullReinit = async () => {
+      if (!active) return;
+      console.warn('[Phone] Watchdog: full SIP re-initialization');
+      try {
+        if (registererRef.current) {
+          registererRef.current = null;
+        }
+        if (userAgentRef.current) {
+          const old = userAgentRef.current;
+          userAgentRef.current = null;
+          await old.stop().catch(() => {});
+        }
+      } catch {
+        // ignore teardown errors — we are rebuilding regardless
+      }
+      if (active) await initSip();
+    };
+
+    const healthCheck = async () => {
+      if (!active || repairing) return;
+      repairing = true;
+      try {
+        const now = Date.now();
+        const slept = now - lastTick > 90_000; // timers froze → sleep/heavy throttle
+        lastTick = now;
+
+        const uaCur = userAgentRef.current;
+        const reg = registererRef.current;
+        const inCall = !!sessionRef.current || !!heldSessionRef.current;
+
+        if (!uaCur || !reg) {
+          // Initial init failed or was torn down — keep retrying forever.
+          if (!inCall) await fullReinit();
+          return;
+        }
+
+        if (!uaCur.isConnected()) {
+          console.warn('[Phone] Watchdog: transport down — reconnecting');
+          try {
+            await uaCur.reconnect();
+            // onConnect delegate re-registers and restores status.
+          } catch (err) {
+            console.error('[Phone] Watchdog: reconnect failed', err);
+            if (!inCall) await fullReinit();
+          }
+          return;
+        }
+
+        if (reg.state !== RegistererState.Registered) {
+          console.warn('[Phone] Watchdog: not registered — re-registering');
+          try {
+            await reg.register();
+            setIsRegistered(true);
+          } catch (err) {
+            console.error('[Phone] Watchdog: re-register failed', err);
+            if (!inCall) await fullReinit();
+          }
+          return;
+        }
+
+        if (slept) {
+          // Woke from sleep: the socket may be half-open (looks connected,
+          // carries nothing). A REGISTER doubles as a liveness probe.
+          console.warn('[Phone] Watchdog: wake-from-sleep detected — probing with re-REGISTER');
+          try {
+            await reg.register();
+            setIsRegistered(true);
+          } catch {
+            try {
+              await uaCur.reconnect();
+            } catch {
+              if (!inCall) await fullReinit();
+            }
+          }
+        }
+      } finally {
+        repairing = false;
+      }
+    };
+
+    const watchdog = setInterval(() => void healthCheck(), 20_000);
+    const onWake = () => void healthCheck();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void healthCheck();
+    };
+    window.addEventListener('online', onWake);
+    window.addEventListener('focus', onWake);
+    window.addEventListener('pageshow', onWake);
+    document.addEventListener('visibilitychange', onVisible);
+
     return () => {
       active = false;
+      clearInterval(watchdog);
+      window.removeEventListener('online', onWake);
+      window.removeEventListener('focus', onWake);
+      window.removeEventListener('pageshow', onWake);
+      document.removeEventListener('visibilitychange', onVisible);
       // Sync offline status to Redis before tearing down SIP
       void fetch(`${normalizedApiUrl}/api/v1/agent/status`, {
         method: 'PUT',
@@ -1517,6 +1627,10 @@ export function PhoneProvider({ children, apiUrl }: PhoneProviderProps): JSX.Ele
       }
       if (ua) {
         void ua.stop();
+      }
+      if (userAgentRef.current && userAgentRef.current !== ua) {
+        // Watchdog may have replaced the original UA via fullReinit.
+        void userAgentRef.current.stop();
       }
       if (persistentMicStream) {
         console.log('[Phone] Stopping persistent mic stream tracks...');
