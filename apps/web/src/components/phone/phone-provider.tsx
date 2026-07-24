@@ -1199,20 +1199,45 @@ export function PhoneProvider({ children, apiUrl }: PhoneProviderProps): JSX.Ele
     (digit: string) => {
       playDTMFTone(digit);
 
-      if (sessionRef.current && sessionRef.current.state === SessionState.Established) {
-        const sdh = sessionRef.current.sessionDescriptionHandler;
+      const session = sessionRef.current;
+      if (!session || session.state !== SessionState.Established) {
+        console.warn('[Phone] DTMF ignored — no established call');
+        return;
+      }
+
+      // Primary path: SIP INFO (application/dtmf-relay). FreeSWITCH relays this
+      // across the bridge to the IVR reliably. The previous RTP-only path
+      // (RTCPeerConnection sendDtmf / RFC2833) silently drops every digit when
+      // the telephone-event codec isn't negotiated over WebRTC — which is why
+      // menus never responded. INFO does not depend on that negotiation.
+      let sentViaInfo = false;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (session as any).info({
+          requestOptions: {
+            body: {
+              contentDisposition: 'render',
+              contentType: 'application/dtmf-relay',
+              content: `Signal=${digit}\r\nDuration=250`,
+            },
+          },
+        });
+        sentViaInfo = true;
+        console.log('[Phone] Sent DTMF via SIP INFO:', digit);
+      } catch (e) {
+        console.error('[Phone] DTMF via SIP INFO failed, falling back to RTP:', e);
+      }
+
+      // Fallback: RTP/RFC2833 via the SessionDescriptionHandler, only if INFO
+      // could not be sent (avoids the far end receiving the digit twice).
+      if (!sentViaInfo) {
+        const sdh = session.sessionDescriptionHandler;
         if (sdh && typeof (sdh as any).sendDtmf === 'function') {
-          console.log('[Phone] Sending DTMF via SessionDescriptionHandler:', digit);
-          (sdh as any).sendDtmf(digit);
-        } else {
-          console.warn(
-            '[Phone] SessionDescriptionHandler does not support sendDtmf, trying legacy .dtmf'
-          );
           try {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (sessionRef.current as any).dtmf(digit);
+            (sdh as any).sendDtmf(digit);
+            console.log('[Phone] Sent DTMF via RTP (fallback):', digit);
           } catch (e) {
-            console.error('[Phone] Failed to send DTMF via legacy method:', e);
+            console.error('[Phone] DTMF RTP fallback failed:', e);
           }
         }
       }
