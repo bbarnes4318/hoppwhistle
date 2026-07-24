@@ -246,8 +246,14 @@ export function InstitutionalReportV2({
               </>
             )}
           </div>
-          <button className="rv-btn" onClick={() => dl('markdown')}>Markdown</button>
-          <button className="rv-btn" onClick={() => window.print()}>Print / PDF</button>
+          {/* The app shell already offers Export / Print / Share above the
+              report, so only the standalone view needs these. */}
+          {!embedded && (
+            <>
+              <button className="rv-btn" onClick={() => dl('markdown')}>Markdown</button>
+              <button className="rv-btn" onClick={() => window.print()}>Print / PDF</button>
+            </>
+          )}
         </div>
       </div>
 
