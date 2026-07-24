@@ -30,6 +30,9 @@ export function ReportOpportunitySection({
   // Strip synthesis cross-reference placeholders (e.g. "See rankedOpportunities object.").
   const narrativeText = narrative?.markdown.replace(/\bSee\s+\w+\s+object\.?\s*/gi, '').trim();
   const bars = opps.map(o => ({ rank: o.rank, label: o.opportunity, score: o.opportunityScore }));
+  // Reports synthesized before the structured-output contract carry only a name
+  // and a score, so the comparison cards render only where detail exists.
+  const detailed = opps.filter(o => o.customer || o.offer || o.startupCost || o.grossMarginRange);
 
   return (
     <div>
@@ -49,6 +52,56 @@ export function ReportOpportunitySection({
           >
             {top.opportunityScore} / 100 · Detail
           </button>
+        </div>
+      )}
+
+      {/* Side-by-side comparison — only when the synthesis filled the detail
+          fields. Cards (not a wide table) so it stays readable and never
+          scrolls sideways. */}
+      {detailed.length > 0 && (
+        <div className="rv-opp-grid" style={{ marginBottom: 'var(--rv-5)' }}>
+          {detailed.map(o => (
+            <button
+              key={o.rank}
+              type="button"
+              className="rv-card rv-opp-card"
+              onClick={() => onOpen(o)}
+              aria-label={`Open detail for ${o.opportunity}`}
+            >
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <span className="rv-num rv-accent" style={{ fontSize: 11, fontWeight: 700 }}>
+                  #{o.rank}
+                </span>
+                <span className="rv-h3" style={{ flex: 1, minWidth: 0 }}>
+                  <HL text={o.opportunity} query={query} />
+                </span>
+                <span className="rv-num" style={{ fontWeight: 700 }}>
+                  {o.opportunityScore}
+                </span>
+              </div>
+              <dl className="rv-opp-facts">
+                {[
+                  ['Customer', o.customer],
+                  ['Offer', o.offer],
+                  ['Price', o.price],
+                  ['Capital', o.startupCost],
+                  ['To revenue', o.timeToFirstRevenue],
+                  ['Margin', o.grossMarginRange],
+                  ['Difficulty', o.salesDifficulty],
+                  ['Defensibility', o.defensibility],
+                ].map(([label, val]) =>
+                  val ? (
+                    <div key={label as string}>
+                      <dt>{label}</dt>
+                      <dd>
+                        <HL text={String(val)} query={query} />
+                      </dd>
+                    </div>
+                  ) : null
+                )}
+              </dl>
+            </button>
+          ))}
         </div>
       )}
 

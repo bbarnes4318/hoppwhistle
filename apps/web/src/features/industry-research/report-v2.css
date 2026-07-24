@@ -493,6 +493,69 @@
   grid-template-columns: 1fr 1fr;
   gap: var(--rv-4);
 }
+.rv-three-col {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--rv-3);
+}
+@media (max-width: 820px) {
+  .rv-three-col {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Opportunity comparison cards — a readable alternative to a very wide table */
+.rv-opp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--rv-3);
+}
+.rv-opp-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: var(--rv-4);
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition:
+    border-color 0.12s,
+    box-shadow 0.12s;
+}
+.rv-opp-card:hover {
+  border-color: var(--rv-accent);
+  box-shadow: var(--rv-shadow-lg);
+}
+.rv-opp-card:focus-visible {
+  outline: 2px solid var(--rv-accent);
+  outline-offset: 1px;
+}
+.rv-opp-facts {
+  margin: var(--rv-3) 0 0;
+  display: grid;
+  gap: 3px;
+}
+.rv-opp-facts > div {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: var(--rv-2);
+  align-items: baseline;
+  padding: 2px 0;
+  border-top: 1px solid var(--rv-line);
+}
+.rv-opp-facts dt {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--rv-ink-3);
+}
+.rv-opp-facts dd {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  word-break: break-word;
+}
 @media (max-width: 760px) {
   .rv-evidence-grid {
     grid-template-columns: 1fr;

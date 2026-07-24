@@ -190,13 +190,7 @@ export function InstitutionalReportV2({
       label: 'Competition',
       body: (
         <div>
-          {r.competitors.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 'var(--rv-4)' }}>
-              {r.competitors.map((c, i) => (
-                <span className="rv-chip" key={i}><HL text={c.name} query={q} /></span>
-              ))}
-            </div>
-          )}
+          <CompetitorField competitors={r.competitors} query={q} />
           <ReportMarkdown markdown={compSection.markdown} query={q} onCite={onCite} />
         </div>
       ),
@@ -351,6 +345,64 @@ export function InstitutionalReportV2({
           ↑
         </button>
       )}
+    </div>
+  );
+}
+
+/** Named competitors. Once the synthesis fills their positioning we can show a
+ *  real comparison (with the opening a new entrant can attack); older reports
+ *  carry names only and degrade to chips. */
+function CompetitorField({
+  competitors,
+  query,
+}: {
+  competitors: ReportResponse['structured']['competitors'];
+  query: string;
+}) {
+  if (!competitors.length) return null;
+  const detailed = competitors.filter(c => c.targetCustomer || c.offer || c.pricing || c.vulnerability);
+  if (!detailed.length)
+    return (
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 'var(--rv-4)' }}>
+        {competitors.map((c, i) => (
+          <span className="rv-chip" key={i}>
+            <HL text={c.name} query={query} />
+          </span>
+        ))}
+      </div>
+    );
+  return (
+    <div className="rv-opp-grid" style={{ marginBottom: 'var(--rv-5)' }}>
+      {detailed.map((c, i) => (
+        <div className="rv-card" style={{ padding: 'var(--rv-4)' }} key={i}>
+          <div className="rv-h3">
+            <HL text={c.name} query={query} />
+          </div>
+          <dl className="rv-opp-facts">
+            {[
+              ['Serves', c.targetCustomer],
+              ['Offer', c.offer],
+              ['Pricing', c.pricing],
+              ['Strengths', c.strengths],
+              ['Weaknesses', c.weaknesses],
+            ].map(([label, val]) =>
+              val ? (
+                <div key={label as string}>
+                  <dt>{label}</dt>
+                  <dd>
+                    <HL text={String(val)} query={query} />
+                  </dd>
+                </div>
+              ) : null
+            )}
+          </dl>
+          {c.vulnerability && (
+            <p className="rv-micro" style={{ marginTop: 'var(--rv-3)', color: 'var(--rv-accent)' }}>
+              <strong>Opening:</strong> <HL text={c.vulnerability} query={query} />
+            </p>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

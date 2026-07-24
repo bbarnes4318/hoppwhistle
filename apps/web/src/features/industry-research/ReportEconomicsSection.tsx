@@ -13,12 +13,21 @@ const VERDICT_TONE: Record<string, string> = {
   'Not established': 'muted',
 };
 
+const SCENARIOS = ['conservative', 'base', 'aggressive'] as const;
+const ECON_ROWS: Array<{ key: 'asp' | 'grossMargin' | 'cac' | 'paybackPeriod' | 'ltv'; label: string }> = [
+  { key: 'asp', label: 'Average ticket' },
+  { key: 'grossMargin', label: 'Gross margin' },
+  { key: 'cac', label: 'Customer acquisition cost' },
+  { key: 'paybackPeriod', label: 'CAC payback' },
+  { key: 'ltv', label: 'Lifetime value' },
+];
+
 /**
- * Economics. The structured unit-economics scenarios are name-only in real
- * reports, so this presents the capital figure, the economics narrative (which
- * carries the actual per-job and scenario figures as text), the stated
- * assumptions, and an honest label when unit economics were not quantified —
- * never a fabricated scenario table.
+ * Economics. Leads with the downside/base/upside comparison when the synthesis
+ * quantified it, then the capital figure, the economics narrative and the
+ * stated assumptions. Reports produced before the structured-output contract
+ * carry no scenario figures at all — those fall back to the narrative and are
+ * labelled honestly rather than shown as an empty grid.
  */
 export function ReportEconomicsSection({
   report,
@@ -63,6 +72,68 @@ export function ReportEconomicsSection({
           </p>
         </div>
       </div>
+
+      {/* Downside / base / upside comparison, when the synthesis quantified it */}
+      {quantified && (
+        <div style={{ marginBottom: 'var(--rv-5)' }}>
+          <div className="rv-eyebrow" style={{ marginBottom: 'var(--rv-3)' }}>
+            Downside · base · upside
+          </div>
+          <div className="rv-card" style={{ overflow: 'hidden' }}>
+            <div className="rv-mdtable-wrap" style={{ border: 0, borderRadius: 0, margin: 0 }}>
+              <table className="rv-table rv-mdtable">
+                <thead>
+                  <tr>
+                    <th style={{ width: '30%' }}>Metric</th>
+                    {SCENARIOS.map(n => (
+                      <th key={n} className="rv-num" style={{ textTransform: 'capitalize' }}>
+                        {n}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {ECON_ROWS.map(row => (
+                    <tr key={row.key}>
+                      <td data-label="Metric">{row.label}</td>
+                      {SCENARIOS.map(n => {
+                        const s = report.unitEconomicsScenarios.find(x => x.name === n);
+                        const val = s?.[row.key];
+                        return (
+                          <td key={n} data-label={n} className="rv-num">
+                            {val ? (
+                              <HL text={val} query={query} />
+                            ) : (
+                              <span className="rv-muted">{NOT_ESTABLISHED}</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          {/* Assumption + what breaks each case */}
+          <div className="rv-three-col" style={{ marginTop: 'var(--rv-3)' }}>
+            {SCENARIOS.map(n => {
+              const s = report.unitEconomicsScenarios.find(x => x.name === n);
+              if (!s?.notes) return null;
+              return (
+                <div className="rv-panel" style={{ padding: 'var(--rv-3)' }} key={n}>
+                  <div className="rv-eyebrow" style={{ textTransform: 'capitalize' }}>
+                    {n}
+                  </div>
+                  <p className="rv-micro rv-dim" style={{ marginTop: 4, lineHeight: 1.5 }}>
+                    <HL text={s.notes} query={query} />
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Real figures live in the economics narrative */}
       {prose && (
