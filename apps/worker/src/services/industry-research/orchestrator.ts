@@ -588,10 +588,22 @@ export class ResearchOrchestrator {
       'verify_adversarial',
       `Adversarial verification submitted (${adapter.id}/${opts.model})`
     );
-    const v = await adapter.runAdversarialVerification(brief, structured, opts);
+    // Grok is instructed to run both a web and an X search, but tool use is a
+    // model choice and it occasionally skips x_search and answers from the
+    // report text. That must not throw away an entire synthesized, paid-for run
+    // on a single coin-flip, so give it one more attempt before the gate fails.
+    let v = await adapter.runAdversarialVerification(brief, structured, opts);
+    if (!v.result.webSearchUsed || !v.result.xSearchUsed) {
+      await this.appendProgress(
+        runId,
+        'verify_adversarial',
+        `Independent search incomplete (web=${v.toolUsage.webSearchCalls}, x=${v.toolUsage.xSearchCalls}); retrying once`
+      );
+      v = await adapter.runAdversarialVerification(brief, structured, opts);
+    }
     if (!v.result.webSearchUsed || !v.result.xSearchUsed) {
       throw new ProviderError(
-        `Adversarial verification quality gate failed (web=${v.toolUsage.webSearchCalls}, x=${v.toolUsage.xSearchCalls}). Web AND X search required.`,
+        `Adversarial verification quality gate failed after retry (web=${v.toolUsage.webSearchCalls}, x=${v.toolUsage.xSearchCalls}). Web AND X search required.`,
         v.provider
       );
     }

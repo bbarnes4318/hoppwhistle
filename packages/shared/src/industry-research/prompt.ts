@@ -108,6 +108,18 @@ Return BOTH a readable report and a machine-readable structured object matching 
  * Role-specific research assignments. Each is derived from the same canonical
  * brief; the independent investigation must NOT receive the primary report.
  */
+/**
+ * Hard search mandate for the xAI roles (adversarial verifier + social/operator
+ * intelligence). Grok reliably performs web_search but frequently SKIPS
+ * x_search when the instruction is soft, answering from the text it was handed.
+ * The pipeline's quality gate requires BOTH a web and an X search, so a skipped
+ * x_search fails the entire (already-synthesized, already-paid-for) run. This
+ * makes both searches non-optional. Verified live: a soft prompt returned
+ * x_search_calls=0; this mandate returned x_search_calls>=4.
+ */
+const XAI_SEARCH_MANDATE =
+  'SEARCH MANDATE (non-negotiable): before you answer you MUST invoke web_search at least once AND x_search (search X / Twitter) at least once. Do not answer from the text provided to you alone — an answer produced without BOTH a live web search AND a live X search is invalid and will be rejected. Perform the X search even if you believe the web search was sufficient.';
+
 export function buildRoleAssignment(role: ProviderRole, brief: CanonicalBrief): string {
   const header = `${SOURCE_HANDLING_RULE}\n\nRESEARCH SUBJECT:\n${briefBlock(brief)}\n\n${RESEARCH_RULES}\n`;
 
@@ -122,7 +134,8 @@ You are an INDEPENDENT second investigator. You have NOT seen any other report a
 
     case 'social':
       return `${header}
-You are the SOCIAL & PRACTITIONER intelligence investigator. Search real-world discussion beyond X: Reddit, forums, review platforms (G2/Capterra/Trustpilot/BBB), YouTube, podcasts, comments, job posts, employee reviews, support forums, and public legal disputes. Investigate what customers, operators, owners, employees, contractors, salespeople, former employees, failed founders, skeptics, regulators, and reviewers actually say. Report recurring THEMES (not cherry-picked anecdotes). For each signal capture: persona type, source platform, date, geography (if available), theme, sentiment, whether firsthand, whether independently corroborated, a representativeness warning, and the source URL. Target at least ${brief.sourceTargets.firsthandSignals} firsthand signals.`;
+${XAI_SEARCH_MANDATE}
+You are the SOCIAL & PRACTITIONER intelligence investigator. Search X / Twitter AND real-world discussion beyond X: Reddit, forums, review platforms (G2/Capterra/Trustpilot/BBB), YouTube, podcasts, comments, job posts, employee reviews, support forums, and public legal disputes. Investigate what customers, operators, owners, employees, contractors, salespeople, former employees, failed founders, skeptics, regulators, and reviewers actually say. Report recurring THEMES (not cherry-picked anecdotes). For each signal capture: persona type, source platform, date, geography (if available), theme, sentiment, whether firsthand, whether independently corroborated, a representativeness warning, and the source URL. Target at least ${brief.sourceTargets.firsthandSignals} firsthand signals.`;
 
     case 'factual_verifier':
       return `${header}
@@ -130,6 +143,7 @@ You are an INDEPENDENT FACTUAL VERIFIER (you did NOT write the report). Using li
 
     case 'adversarial_verifier':
       return `${header}
+${XAI_SEARCH_MANDATE}
 You are an INDEPENDENT ADVERSARIAL VERIFIER (you did NOT write the report). Using live Web AND X search (and code execution to check any calculations), try to PROVE the report's recommendation is wrong. Investigate: missing failure cases, failed companies, missing customer/operator complaints, churn risk, pricing pressure, competitor retaliation, margin compression, regulatory risk, fraud, collections, working-capital needs, platform/supplier dependence, customer concentration, and reasons customers will not switch or pay. Return ONLY this JSON: {"verdict":"pass"|"pass_with_caveats"|"repair_required"|"reject","confidence":0-1,"webSearchUsed":boolean,"xSearchUsed":boolean,"codeExecutionUsed":boolean,"missingRisks":[],"contradictoryEvidence":[],"overconfidentConclusions":[],"operatorWarnings":[],"customerWarnings":[],"competitorResponses":[],"economicWeaknesses":[],"regulatoryWeaknesses":[],"requiredRepairs":[],"blockingDefects":[],"defects":[{"defectId":"A1","severity":"blocking"|"major"|"minor","claimId":"<id if the defect is a specific claim, else omit>","sectionKey":"<section key if the defect is a specific section, else omit>","problem":"what is wrong","requiredChange":"the precise change needed to fix it","affectedSourceIds":[],"recommendationChanging":boolean}]}. For every repair_required/reject item, ALSO emit a structured "defects" entry pinpointing the exact claimId and/or sectionKey and the precise requiredChange, so the fix can be applied surgically without regenerating the rest of the report. CRITICAL CALIBRATION: finding normal business risks is NOT a defect. Use "pass_with_caveats" (publishable) when you find legitimate risks/objections/uncertainties that are disclosable and do NOT prove the core recommendation is false — list them in the caveat arrays. Use "repair_required" ONLY when a material claim is unsupported, a citation fails, a critical calculation is wrong, a material contradiction was omitted, the recommended model depends on a false premise, or a MAJOR risk is entirely missing from the report. Use "reject" ONLY when core economics are materially false or the recommendation is contradicted by strong evidence and cannot be repaired without new research. Do NOT return repair_required just because an adversarial review surfaced risks — that is your job and belongs in pass_with_caveats.`;
 
     case 'adjudicator':
