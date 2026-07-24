@@ -173,6 +173,9 @@ services:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://hopwhistle.com}
         NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-wss://hopwhistle.com}
         NEXT_PUBLIC_API_KEY: ${API_KEY:-demo-key}
+        # Industry Research Report V2 rollout ('1' = V2 is the default report).
+        # Must be a build arg — Next.js inlines NEXT_PUBLIC_* at build time.
+        NEXT_PUBLIC_IR_REPORT_V2: ${NEXT_PUBLIC_IR_REPORT_V2:-0}
     container_name: hopwhistle-web-dev
     ports:
       - '3000:3000'
@@ -182,6 +185,7 @@ services:
       NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-wss://hopwhistle.com}
       NEXT_PUBLIC_API_KEY: ${API_KEY:-demo-key}
       NEXT_PUBLIC_APP_NAME: Hopwhistle
+      NEXT_PUBLIC_IR_REPORT_V2: ${NEXT_PUBLIC_IR_REPORT_V2:-0}
     depends_on:
       - api
     networks:

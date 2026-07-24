@@ -49,9 +49,13 @@ RUN rm -rf e2e
 ARG NEXT_PUBLIC_API_URL=http://localhost:3001
 ARG NEXT_PUBLIC_WS_URL=ws://localhost:3001
 ARG NEXT_PUBLIC_API_KEY=demo-key
+# Industry Research Report V2 rollout flag ('1' = V2 is the default report).
+# Next.js inlines NEXT_PUBLIC_* at build time, so this must be a build arg.
+ARG NEXT_PUBLIC_IR_REPORT_V2=0
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ENV NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
 ENV NEXT_PUBLIC_API_KEY=${NEXT_PUBLIC_API_KEY}
+ENV NEXT_PUBLIC_IR_REPORT_V2=${NEXT_PUBLIC_IR_REPORT_V2}
 
 # Run build
 RUN pnpm exec next build
