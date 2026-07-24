@@ -263,7 +263,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
   fastify.post<{ Body: OriginateCallBody }>(
     '/api/v1/agent/call/originate',
     async (request, reply: FastifyReply) => {
-      const { userId, tenantId } = getUser(request);
+      let { userId, tenantId } = getUser(request);
       const { phoneNumber, callerId, campaignId } = request.body;
 
       if (!phoneNumber) {
@@ -275,7 +275,47 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       const callSid = `call_${Date.now()}_${Math.random().toString(36).substring(7)}`;
       const prisma = getPrismaClient();
 
-      const isAuthenticatedUser = userId !== 'demo-agent';
+      let isAuthenticatedUser = userId !== 'demo-agent';
+
+      // Resilience for an expired/missing browser token. The softphone still
+      // sends the agent's assigned caller-ID DID, so recover the authoritative
+      // tenant + user from that number's owner (server-side, never trusting a
+      // client-supplied tenant). Without this, getUser falls back to a
+      // non-existent 'default-tenant-id' and call.create dies with a raw
+      // `calls_tenantId_fkey` foreign-key violation surfaced to the agent.
+      if (!isAuthenticatedUser && callerId && callerId !== 'ROTATE') {
+        const cidLast10 = callerId.replace(/\D/g, '').slice(-10);
+        if (cidLast10.length === 10) {
+          const owner = await prisma.phoneNumber.findFirst({
+            where: { number: { endsWith: cidLast10 }, userId: { not: null }, status: 'ACTIVE' },
+            select: { userId: true, tenantId: true },
+          });
+          if (owner?.userId) {
+            userId = owner.userId;
+            tenantId = owner.tenantId;
+            isAuthenticatedUser = true;
+            request.log.warn({
+              msg: 'Originate: recovered tenant/user from caller-ID DID (missing/expired agent token)',
+              callerId,
+              userId,
+              tenantId,
+            });
+          }
+        }
+      }
+
+      // If the tenant still cannot be resolved, fail cleanly with a clear,
+      // actionable message instead of a database FK crash.
+      if (!tenantId || tenantId === 'default-tenant-id') {
+        void reply.code(401);
+        return {
+          error: {
+            code: 'SESSION_EXPIRED',
+            message: 'Your session has expired. Please log out and log back in to place calls.',
+          },
+        };
+      }
+
       let outboundCallerId = callerId || process.env.OUTBOUND_CALLER_ID || '12816991120';
 
       // Rotate the tenant's FracTEL POOL (least-recently-used) and return the
@@ -980,7 +1020,10 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       const { userId, tenantId } = getUser(request);
 
       const prisma = getPrismaClient();
-      let user = userId && userId !== 'demo-agent' ? await prisma.user.findUnique({ where: { id: userId } }) : null;
+      let user =
+        userId && userId !== 'demo-agent'
+          ? await prisma.user.findUnique({ where: { id: userId } })
+          : null;
       let extension: string | null = null;
       if (user?.metadata && typeof user.metadata === 'object' && !Array.isArray(user.metadata)) {
         const meta = user.metadata as Record<string, unknown>;
