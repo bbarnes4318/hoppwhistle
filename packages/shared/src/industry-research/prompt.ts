@@ -46,6 +46,40 @@ const RESEARCH_RULES = `NONNEGOTIABLE RESEARCH RULES:
 5. Actively look for contradictory evidence: failed companies, complaints, lawsuits, churn, margin compression, commoditization, channel conflict, fraud, customer concentration, working-capital needs, platform/supplier dependence. Do not suppress it.
 Do not fabricate numbers, sources, quotations, customer opinions, or competitor pricing. State "unknown" whenever a fact cannot be verified.`;
 
+/**
+ * The structured-object contract.
+ *
+ * The narrative sections were always specified, but the structured arrays were
+ * not — and every one of their detail fields is optional in the schema. The
+ * model therefore wrote the numbers into prose (price, margin, CAC, competitor
+ * positioning) and left `rankedOpportunities`, `unitEconomicsScenarios` and
+ * `competitors` as little more than names, which validated cleanly. This block
+ * names every field that must come back so the analysis that was already paid
+ * for is actually captured in a usable form.
+ *
+ * It asks for structure, never for new facts: the values must come from the
+ * evidence and the prose the model just wrote, and an unknown must be written
+ * as an explicit "unknown — reason" rather than silently dropped.
+ */
+export const STRUCTURED_OUTPUT_CONTRACT = `STRUCTURED OUTPUT CONTRACT (mandatory — the structured object is a first-class deliverable, not an afterthought):
+The narrative and the structured object must agree. Every figure you state in the prose (price, margin, CAC, payback, capital, timing, competitor positioning) MUST also appear in the corresponding structured field. Populate EVERY field listed below for EVERY item. Never omit a key. If a value genuinely cannot be established from the evidence, set it to the string "unknown - " followed by a short reason; do NOT invent it, and do NOT leave it blank or absent. Keep each value short and scannable (a figure, a range, or a brief phrase) because these render in comparison tables.
+
+1. rankedOpportunities — one entry per entry path you ranked (aim for 4-6, ordered best first). Required on EVERY entry:
+   rank, opportunity, customer (who specifically buys), offer (what you sell them), revenueModel (how it bills), price (typical ticket or rate), startupCost (capital to launch THIS path), timeToMvp, timeToFirstRevenue, grossMarginRange, salesDifficulty (Low/Moderate/High + why in a few words), regulatoryRisk (Low/Moderate/High + the specific rule if any), defensibility (what stops a copycat), opportunityScore (0-100 via the weighted formula).
+
+2. unitEconomicsScenarios — EXACTLY three entries, name = "conservative", "base", "aggressive". Required on EVERY entry:
+   asp (average selling price / ticket), grossMargin (percent or range), cac (customer acquisition cost), paybackPeriod (how long to recover CAC), ltv (lifetime value), notes (the driving assumption and what would break it).
+   These must be the same numbers you show in the Economics section math.
+
+3. competitors — the real named operators you found (aim for 5-10). Required on EVERY entry:
+   name, targetCustomer, offer, pricing, strengths, weaknesses, vulnerability (the specific opening a new entrant can attack).
+
+4. killCriteria — objective, measurable stop conditions (a number and a deadline where possible).
+5. assumptions — every material assumption with field, value, and rationale.
+6. unknowns — each with topic, whyItMatters, and howToObtain.
+
+Before returning, re-read your own Economics, Competitive Intelligence and Ranked Entry Opportunities sections and confirm each figure there is present in the structured object. A structured object whose detail fields are empty while the prose contains the figures is a FAILED report.`;
+
 /** Build the master forensic prompt used by the synthesis provider. */
 export function buildForensicSynthesisPrompt(brief: CanonicalBrief): string {
   return `${SOURCE_HANDLING_RULE}
@@ -64,6 +98,8 @@ You are the SYNTHESIS/ADJUDICATION model. You will be given: the canonical brief
 Produce the required forensic report with these sections: Executive Verdict (GO / CONDITIONAL GO / DO NOT ENTER, overall 0-100 score, best segment/customer/model, time to first revenue, initial capital, biggest opportunity, biggest risk, one-sentence conclusion); What Outsiders Get Wrong; Industry Structure; Market Evidence (bottom-up + published, reconciled); Customer Truth; Operator Truth ("What a Typical Day Actually Looks Like"); Competitive Intelligence (matrix); Economics (conservative/base/aggressive, show the math, most sensitive assumption); Sales & Distribution (fastest route to first customer / $10k / $100k / $1M); Regulation & Risk; Ranked Entry Opportunities (score each out of 100 using the weighted formula); Recommended Entry Thesis; First-Customer Plan (first 10 customers); 90-Day Execution Plan (Days 1-7, 8-30, 31-60, 61-90 with weekly targets); Validation Tests (hypothesis/method/cost/duration/success+failure thresholds); Kill Criteria (objective); and end with the Evidence Ledger.
 
 Opportunity score (100 pts): pain/urgency 15, budget/willingness 10, speed to first revenue 15, gross margin 10, ease of reaching decision-makers 10, competitive whitespace 10, fit with our capabilities 10, scalability 5, defensibility 5, regulatory/legal risk 5, operational complexity 5. A high score must not be based solely on market size.
+
+${STRUCTURED_OUTPUT_CONTRACT}
 
 Return BOTH a readable report and a machine-readable structured object matching the required schema. Base the final report on evidence, not on majority vote among models.`;
 }

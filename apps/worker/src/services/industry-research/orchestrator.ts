@@ -12,8 +12,10 @@ import {
   isValidHttpUrl,
   perplexityResearchConfig,
   perplexityVerifierModel,
+  formatCompleteness,
   preflightRun,
   roleFallbacks,
+  scoreStructuredCompleteness,
   xaiVerifierModel,
   type AdjudicationResult,
   type AdversarialVerification,
@@ -768,6 +770,19 @@ export class ResearchOrchestrator {
     // where a claim cites a sourceId that was deduped/dropped from the ledger).
     // Removing an invalid citation is strictly safer than failing the whole run.
     structured = sanitizeSourceRefs(structured);
+
+    // How much of the structured detail (opportunity/economics/competitor
+    // fields) actually came back. These are all optional in the schema, so a
+    // names-only object validates cleanly while the figures stay stuck in the
+    // prose — recording this makes that gap visible per run instead of only
+    // showing up as "Not established" in the UI.
+    const completeness = scoreStructuredCompleteness(structured);
+    logger.info({
+      msg: formatCompleteness(completeness),
+      runId,
+      completenessScore: completeness.score,
+      missingFields: completeness.missing.length,
+    });
 
     // Deterministic validation gate.
     const deterministic = deterministicValidation(structured, brief);
