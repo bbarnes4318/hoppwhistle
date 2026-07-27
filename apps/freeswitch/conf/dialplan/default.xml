@@ -117,9 +117,8 @@
 
       <!-- If hopwhistle_call_id is NOT empty, apply details and start record_session before bridge -->
       <condition field="${hopwhistle_call_id}" expression="^(.+)$" break="never">
-        <!-- Agent (A-leg) may use wideband so recordings capture HD agent audio.
-             The PSTN (B-leg) stays G.711 for FracTEL — carrier leg is unchanged. -->
-        <action application="set" data="absolute_codec_string=OPUS,G722,PCMU,PCMA"/>
+        <!-- Let the browser A-leg negotiate against the internal profile and its SDP.
+             Keep the FracTEL PSTN B-leg pinned to G.711. -->
         <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
 
         <!-- Record both parties on separate stereo channels at 16 kHz (agent left,
