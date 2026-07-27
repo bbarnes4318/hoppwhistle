@@ -1,5 +1,9 @@
 # Dograh state-matched outbound caller-ID — deploy kit
 
+> Sibling kit: [`fish/`](fish/README.md) — Fish Audio S2 Pro as the primary TTS
+> provider (config, service factory, fallback, migration, rollback, tests).
+> Same box, same mount mechanism; start with [`fish/AUDIT.md`](fish/AUDIT.md).
+
 Everything in this directory targets the **self-hosted Dograh ("AI Voice") stack**
 on the Hetzner box (`/opt/dograh`, containers `dograh-api-1` etc.), which places
 Dograh AI outbound calls via Asterisk/ARI → FracTEL. It implements:
