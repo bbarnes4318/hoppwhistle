@@ -1,5 +1,11 @@
 # Dograh state-matched outbound caller-ID — deploy kit
 
+> **See also:** [`fork/README.md`](fork/README.md) — source-level Fish Audio
+> TTS integration (free `s2.1-pro-free` model) delivered as a `git am` patch
+> against pinned upstream `dograh-hq/dograh@c436bf69`, with build-from-fork
+> deploy steps. Unlike the bind-mount patches below, that change adds a
+> Python dependency and therefore requires an image rebuild.
+
 Everything in this directory targets the **self-hosted Dograh ("AI Voice") stack**
 on the Hetzner box (`/opt/dograh`, containers `dograh-api-1` etc.), which places
 Dograh AI outbound calls via Asterisk/ARI → FracTEL. It implements:
