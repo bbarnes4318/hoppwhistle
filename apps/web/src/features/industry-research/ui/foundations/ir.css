@@ -185,6 +185,24 @@
   font-size: 12px;
 }
 
+/* On narrow screens the product nav used to run past the viewport and give the
+   whole page a horizontal scrollbar. Let the header wrap instead. */
+@media (max-width: 640px) {
+  [data-product='industry-research'] .ir-header {
+    height: auto;
+    padding: 6px 0;
+  }
+  [data-product='industry-research'] .ir-header .ir-container {
+    flex-wrap: wrap;
+    gap: 4px 14px;
+  }
+  [data-product='industry-research'] .ir-nav {
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    margin-left: 0;
+  }
+}
+
 /* ---- Typography helpers ---- */
 [data-product='industry-research'] .ir-eyebrow {
   font-size: 11px;

@@ -4,6 +4,7 @@
 
 export * from './types';
 export * from './capabilities';
+export * from './completeness';
 export * from './constants';
 export * from './cost';
 export * from './registry';

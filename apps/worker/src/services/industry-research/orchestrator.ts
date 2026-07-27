@@ -12,8 +12,10 @@ import {
   isValidHttpUrl,
   perplexityResearchConfig,
   perplexityVerifierModel,
+  formatCompleteness,
   preflightRun,
   roleFallbacks,
+  scoreStructuredCompleteness,
   xaiVerifierModel,
   type AdjudicationResult,
   type AdversarialVerification,
@@ -586,10 +588,22 @@ export class ResearchOrchestrator {
       'verify_adversarial',
       `Adversarial verification submitted (${adapter.id}/${opts.model})`
     );
-    const v = await adapter.runAdversarialVerification(brief, structured, opts);
+    // Grok is instructed to run both a web and an X search, but tool use is a
+    // model choice and it occasionally skips x_search and answers from the
+    // report text. That must not throw away an entire synthesized, paid-for run
+    // on a single coin-flip, so give it one more attempt before the gate fails.
+    let v = await adapter.runAdversarialVerification(brief, structured, opts);
+    if (!v.result.webSearchUsed || !v.result.xSearchUsed) {
+      await this.appendProgress(
+        runId,
+        'verify_adversarial',
+        `Independent search incomplete (web=${v.toolUsage.webSearchCalls}, x=${v.toolUsage.xSearchCalls}); retrying once`
+      );
+      v = await adapter.runAdversarialVerification(brief, structured, opts);
+    }
     if (!v.result.webSearchUsed || !v.result.xSearchUsed) {
       throw new ProviderError(
-        `Adversarial verification quality gate failed (web=${v.toolUsage.webSearchCalls}, x=${v.toolUsage.xSearchCalls}). Web AND X search required.`,
+        `Adversarial verification quality gate failed after retry (web=${v.toolUsage.webSearchCalls}, x=${v.toolUsage.xSearchCalls}). Web AND X search required.`,
         v.provider
       );
     }
@@ -768,6 +782,19 @@ export class ResearchOrchestrator {
     // where a claim cites a sourceId that was deduped/dropped from the ledger).
     // Removing an invalid citation is strictly safer than failing the whole run.
     structured = sanitizeSourceRefs(structured);
+
+    // How much of the structured detail (opportunity/economics/competitor
+    // fields) actually came back. These are all optional in the schema, so a
+    // names-only object validates cleanly while the figures stay stuck in the
+    // prose — recording this makes that gap visible per run instead of only
+    // showing up as "Not established" in the UI.
+    const completeness = scoreStructuredCompleteness(structured);
+    logger.info({
+      msg: formatCompleteness(completeness),
+      runId,
+      completenessScore: completeness.score,
+      missingFields: completeness.missing.length,
+    });
 
     // Deterministic validation gate.
     const deterministic = deterministicValidation(structured, brief);

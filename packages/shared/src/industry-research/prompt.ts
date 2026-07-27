@@ -46,6 +46,40 @@ const RESEARCH_RULES = `NONNEGOTIABLE RESEARCH RULES:
 5. Actively look for contradictory evidence: failed companies, complaints, lawsuits, churn, margin compression, commoditization, channel conflict, fraud, customer concentration, working-capital needs, platform/supplier dependence. Do not suppress it.
 Do not fabricate numbers, sources, quotations, customer opinions, or competitor pricing. State "unknown" whenever a fact cannot be verified.`;
 
+/**
+ * The structured-object contract.
+ *
+ * The narrative sections were always specified, but the structured arrays were
+ * not — and every one of their detail fields is optional in the schema. The
+ * model therefore wrote the numbers into prose (price, margin, CAC, competitor
+ * positioning) and left `rankedOpportunities`, `unitEconomicsScenarios` and
+ * `competitors` as little more than names, which validated cleanly. This block
+ * names every field that must come back so the analysis that was already paid
+ * for is actually captured in a usable form.
+ *
+ * It asks for structure, never for new facts: the values must come from the
+ * evidence and the prose the model just wrote, and an unknown must be written
+ * as an explicit "unknown — reason" rather than silently dropped.
+ */
+export const STRUCTURED_OUTPUT_CONTRACT = `STRUCTURED OUTPUT CONTRACT (mandatory — the structured object is a first-class deliverable, not an afterthought):
+The narrative and the structured object must agree. Every figure you state in the prose (price, margin, CAC, payback, capital, timing, competitor positioning) MUST also appear in the corresponding structured field. Populate EVERY field listed below for EVERY item. Never omit a key. If a value genuinely cannot be established from the evidence, set it to the string "unknown - " followed by a short reason; do NOT invent it, and do NOT leave it blank or absent. Keep each value short and scannable (a figure, a range, or a brief phrase) because these render in comparison tables.
+
+1. rankedOpportunities — one entry per entry path you ranked (aim for 4-6, ordered best first). Required on EVERY entry:
+   rank, opportunity, customer (who specifically buys), offer (what you sell them), revenueModel (how it bills), price (typical ticket or rate), startupCost (capital to launch THIS path), timeToMvp, timeToFirstRevenue, grossMarginRange, salesDifficulty (Low/Moderate/High + why in a few words), regulatoryRisk (Low/Moderate/High + the specific rule if any), defensibility (what stops a copycat), opportunityScore (0-100 via the weighted formula).
+
+2. unitEconomicsScenarios — EXACTLY three entries, name = "conservative", "base", "aggressive". Required on EVERY entry:
+   asp (average selling price / ticket), grossMargin (percent or range), cac (customer acquisition cost), paybackPeriod (how long to recover CAC), ltv (lifetime value), notes (the driving assumption and what would break it).
+   These must be the same numbers you show in the Economics section math.
+
+3. competitors — the real named operators you found (aim for 5-10). Required on EVERY entry:
+   name, targetCustomer, offer, pricing, strengths, weaknesses, vulnerability (the specific opening a new entrant can attack).
+
+4. killCriteria — objective, measurable stop conditions (a number and a deadline where possible).
+5. assumptions — every material assumption with field, value, and rationale.
+6. unknowns — each with topic, whyItMatters, and howToObtain.
+
+Before returning, re-read your own Economics, Competitive Intelligence and Ranked Entry Opportunities sections and confirm each figure there is present in the structured object. A structured object whose detail fields are empty while the prose contains the figures is a FAILED report.`;
+
 /** Build the master forensic prompt used by the synthesis provider. */
 export function buildForensicSynthesisPrompt(brief: CanonicalBrief): string {
   return `${SOURCE_HANDLING_RULE}
@@ -65,6 +99,8 @@ Produce the required forensic report with these sections: Executive Verdict (GO 
 
 Opportunity score (100 pts): pain/urgency 15, budget/willingness 10, speed to first revenue 15, gross margin 10, ease of reaching decision-makers 10, competitive whitespace 10, fit with our capabilities 10, scalability 5, defensibility 5, regulatory/legal risk 5, operational complexity 5. A high score must not be based solely on market size.
 
+${STRUCTURED_OUTPUT_CONTRACT}
+
 Return BOTH a readable report and a machine-readable structured object matching the required schema. Base the final report on evidence, not on majority vote among models.`;
 }
 
@@ -72,6 +108,18 @@ Return BOTH a readable report and a machine-readable structured object matching 
  * Role-specific research assignments. Each is derived from the same canonical
  * brief; the independent investigation must NOT receive the primary report.
  */
+/**
+ * Hard search mandate for the xAI roles (adversarial verifier + social/operator
+ * intelligence). Grok reliably performs web_search but frequently SKIPS
+ * x_search when the instruction is soft, answering from the text it was handed.
+ * The pipeline's quality gate requires BOTH a web and an X search, so a skipped
+ * x_search fails the entire (already-synthesized, already-paid-for) run. This
+ * makes both searches non-optional. Verified live: a soft prompt returned
+ * x_search_calls=0; this mandate returned x_search_calls>=4.
+ */
+const XAI_SEARCH_MANDATE =
+  'SEARCH MANDATE (non-negotiable): before you answer you MUST invoke web_search at least once AND x_search (search X / Twitter) at least once. Do not answer from the text provided to you alone — an answer produced without BOTH a live web search AND a live X search is invalid and will be rejected. Perform the X search even if you believe the web search was sufficient.';
+
 export function buildRoleAssignment(role: ProviderRole, brief: CanonicalBrief): string {
   const header = `${SOURCE_HANDLING_RULE}\n\nRESEARCH SUBJECT:\n${briefBlock(brief)}\n\n${RESEARCH_RULES}\n`;
 
@@ -86,7 +134,8 @@ You are an INDEPENDENT second investigator. You have NOT seen any other report a
 
     case 'social':
       return `${header}
-You are the SOCIAL & PRACTITIONER intelligence investigator. Search real-world discussion beyond X: Reddit, forums, review platforms (G2/Capterra/Trustpilot/BBB), YouTube, podcasts, comments, job posts, employee reviews, support forums, and public legal disputes. Investigate what customers, operators, owners, employees, contractors, salespeople, former employees, failed founders, skeptics, regulators, and reviewers actually say. Report recurring THEMES (not cherry-picked anecdotes). For each signal capture: persona type, source platform, date, geography (if available), theme, sentiment, whether firsthand, whether independently corroborated, a representativeness warning, and the source URL. Target at least ${brief.sourceTargets.firsthandSignals} firsthand signals.`;
+${XAI_SEARCH_MANDATE}
+You are the SOCIAL & PRACTITIONER intelligence investigator. Search X / Twitter AND real-world discussion beyond X: Reddit, forums, review platforms (G2/Capterra/Trustpilot/BBB), YouTube, podcasts, comments, job posts, employee reviews, support forums, and public legal disputes. Investigate what customers, operators, owners, employees, contractors, salespeople, former employees, failed founders, skeptics, regulators, and reviewers actually say. Report recurring THEMES (not cherry-picked anecdotes). For each signal capture: persona type, source platform, date, geography (if available), theme, sentiment, whether firsthand, whether independently corroborated, a representativeness warning, and the source URL. Target at least ${brief.sourceTargets.firsthandSignals} firsthand signals.`;
 
     case 'factual_verifier':
       return `${header}
@@ -94,6 +143,7 @@ You are an INDEPENDENT FACTUAL VERIFIER (you did NOT write the report). Using li
 
     case 'adversarial_verifier':
       return `${header}
+${XAI_SEARCH_MANDATE}
 You are an INDEPENDENT ADVERSARIAL VERIFIER (you did NOT write the report). Using live Web AND X search (and code execution to check any calculations), try to PROVE the report's recommendation is wrong. Investigate: missing failure cases, failed companies, missing customer/operator complaints, churn risk, pricing pressure, competitor retaliation, margin compression, regulatory risk, fraud, collections, working-capital needs, platform/supplier dependence, customer concentration, and reasons customers will not switch or pay. Return ONLY this JSON: {"verdict":"pass"|"pass_with_caveats"|"repair_required"|"reject","confidence":0-1,"webSearchUsed":boolean,"xSearchUsed":boolean,"codeExecutionUsed":boolean,"missingRisks":[],"contradictoryEvidence":[],"overconfidentConclusions":[],"operatorWarnings":[],"customerWarnings":[],"competitorResponses":[],"economicWeaknesses":[],"regulatoryWeaknesses":[],"requiredRepairs":[],"blockingDefects":[],"defects":[{"defectId":"A1","severity":"blocking"|"major"|"minor","claimId":"<id if the defect is a specific claim, else omit>","sectionKey":"<section key if the defect is a specific section, else omit>","problem":"what is wrong","requiredChange":"the precise change needed to fix it","affectedSourceIds":[],"recommendationChanging":boolean}]}. For every repair_required/reject item, ALSO emit a structured "defects" entry pinpointing the exact claimId and/or sectionKey and the precise requiredChange, so the fix can be applied surgically without regenerating the rest of the report. CRITICAL CALIBRATION: finding normal business risks is NOT a defect. Use "pass_with_caveats" (publishable) when you find legitimate risks/objections/uncertainties that are disclosable and do NOT prove the core recommendation is false — list them in the caveat arrays. Use "repair_required" ONLY when a material claim is unsupported, a citation fails, a critical calculation is wrong, a material contradiction was omitted, the recommended model depends on a false premise, or a MAJOR risk is entirely missing from the report. Use "reject" ONLY when core economics are materially false or the recommendation is contradicted by strong evidence and cannot be repaired without new research. Do NOT return repair_required just because an adversarial review surfaced risks — that is your job and belongs in pass_with_caveats.`;
 
     case 'adjudicator':

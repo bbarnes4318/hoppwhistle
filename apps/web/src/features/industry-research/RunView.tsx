@@ -6,12 +6,31 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { researchApi, type ReportResponse } from './api';
 import { InstitutionalReport } from './InstitutionalReport';
+import { InstitutionalReportV2 } from './InstitutionalReportV2';
 import { computePhases, FRIENDLY_STAGE, RESEARCH_STREAMS, type PhaseState } from './phases';
 
 import { useToast } from '@/components/ui/use-toast';
 
 const ACTIVE = new Set(['queued', 'planning', 'running', 'waiting']);
 type StageWithOutput = StageInfo & { output?: unknown };
+
+/**
+ * Report V2 rollout flag. Default comes from NEXT_PUBLIC_IR_REPORT_V2 ('1' =
+ * V2), and `?v2=1` / `?v2=0` overrides it per-view so either report can always
+ * be opened without a redeploy. Resolved after mount so SSR and the first
+ * client render agree (no hydration mismatch).
+ */
+function useReportV2(): boolean {
+  const envDefault = process.env.NEXT_PUBLIC_IR_REPORT_V2 === '1';
+  const [v2, setV2] = useState(envDefault);
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search).get('v2');
+    if (p === '1') setV2(true);
+    else if (p === '0') setV2(false);
+    else setV2(envDefault);
+  }, [envDefault]);
+  return v2;
+}
 
 export function RunView({ runId }: { runId: string }) {
   const { toast } = useToast();
@@ -22,6 +41,7 @@ export function RunView({ runId }: { runId: string }) {
   const [tab, setTab] = useState<'report' | 'progress'>('report');
   const [tech, setTech] = useState(false);
   const [copied, setCopied] = useState('');
+  const useV2 = useReportV2();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
@@ -247,13 +267,17 @@ export function RunView({ runId }: { runId: string }) {
       )}
 
       {tab === 'report' && report ? (
-        <InstitutionalReport
-          runId={runId}
-          report={report}
-          status={run.status}
-          accruedCostUsd={run.accruedCostUsd}
-          maxBudgetUsd={run.maxBudgetUsd}
-        />
+        useV2 ? (
+          <InstitutionalReportV2 runId={runId} report={report} embedded />
+        ) : (
+          <InstitutionalReport
+            runId={runId}
+            report={report}
+            status={run.status}
+            accruedCostUsd={run.accruedCostUsd}
+            maxBudgetUsd={run.maxBudgetUsd}
+          />
+        )
       ) : (
         <div
           className="ir-report-grid"

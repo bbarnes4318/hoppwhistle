@@ -501,6 +501,11 @@ async function xaiResponses(
 
 const XAI_TOOLS = [{ type: 'web_search' }, { type: 'x_search' }, { type: 'code_interpreter' }];
 
+/** Leads the adversarial verifier's USER message so the search mandate sits next
+ *  to the task rather than buried behind the report in the system prompt. */
+const XAI_VERIFY_SEARCH_MANDATE =
+  'MANDATORY FIRST STEP: before writing anything, run at least one web_search AND at least one x_search (search X / Twitter) to independently check this report against live, current sources. Do NOT audit from the report text alone — an adversarial review that performed no live web AND X search is invalid and will be rejected.';
+
 // JSON schema mirroring adversarialVerificationSchema, for xAI native structured
 // output. Kept permissive (only `verdict` required) so a partially-populated but
 // valid response still parses; the custom extractor remains a defensive fallback.
@@ -1162,7 +1167,12 @@ export class RealAdapter {
     if (this.id !== 'xai')
       throw new ProviderError('Adversarial verification is an xAI role', this.id, undefined, true);
     const system = buildRoleAssignment('adversarial_verifier', brief);
-    const user = verificationUserMessage(structured, scope);
+    // The mandate to actually search must lead the USER turn, not just the
+    // system prompt: grok is handed the entire report to audit here, and a
+    // system-only mandate gets buried behind it so the model critiques from the
+    // text and calls no tools at all (web=0, x=0). Verified live: with this
+    // mandate leading the user message grok runs both searches; without it, zero.
+    const user = `${XAI_VERIFY_SEARCH_MANDATE}\n\n${verificationUserMessage(structured, scope)}`;
     let t: TransportResult;
     try {
       t = await xaiResponses(this.apiKey, opts.model, system, user, opts, XAI_TOOLS, {
@@ -1309,7 +1319,7 @@ function verificationUserMessage(r: StructuredReport, scope?: VerificationScope)
 }
 
 function SYNTH_SHAPE_SPEC(v: string): string {
-  return `Return ONLY one JSON object (no fences/prose) with EXACTLY these keys: reportMetadata{researchRunId,researchBriefId,industry,geography,mode,generatedAt,synthesisProvider,synthesisModel,schemaVersion:"${v}"}, executiveVerdict{verdict:"GO"|"CONDITIONAL_GO"|"DO_NOT_ENTER"(REQUIRED),overallScore:0-100,confidence:0-1,bestSegment,bestCustomer,bestBusinessModel,timeToFirstRevenue,initialCapital,biggestOpportunity,biggestRisk,oneSentenceConclusion}, assumptions[], sections[{key,title,markdown}], competitors[{name}], unitEconomicsScenarios[{name:"conservative"|"base"|"aggressive"}], rankedOpportunities[{rank,opportunity,opportunityScore:0-100}], killCriteria[string], contradictions[{topic,positionA,positionB,cause:"definition"|"date"|"geography"|"segment"|"methodology"|"vendor_bias"|"sample_bias"|"genuine_uncertainty"}], unknowns[{topic,whyItMatters,howToObtain}], evidenceLedger[{claimId,text,category,classification:"verified_fact"|"reported_experience"|"estimate"|"inference"|"hypothesis"|"unverified_industry_claim",supportingSourceIds:[],contradictingSourceIds:[],provider:"google"|"perplexity"|"xai"|"anthropic",confidence:0-1,materiality:0-1}], sources[{sourceId,url,normalizedUrl,validated,provider}], confidenceAssessment. Base claims only on provided evidence.`;
+  return `Return ONLY one JSON object (no fences/prose) with EXACTLY these keys: reportMetadata{researchRunId,researchBriefId,industry,geography,mode,generatedAt,synthesisProvider,synthesisModel,schemaVersion:"${v}"}, executiveVerdict{verdict:"GO"|"CONDITIONAL_GO"|"DO_NOT_ENTER"(REQUIRED),overallScore:0-100,confidence:0-1,bestSegment,bestCustomer,bestBusinessModel,timeToFirstRevenue,initialCapital,biggestOpportunity,biggestRisk,oneSentenceConclusion}, assumptions[], sections[{key,title,markdown}], competitors[{name,targetCustomer,offer,pricing,strengths,weaknesses,vulnerability}](fill EVERY field for EVERY competitor from your Competitive Intelligence section — never name-only), unitEconomicsScenarios[{name:"conservative"|"base"|"aggressive",asp,grossMargin,cac,paybackPeriod,ltv,notes}](all three scenarios, every field, matching your Economics section math), rankedOpportunities[{rank,opportunity,customer,offer,revenueModel,price,startupCost,timeToMvp,timeToFirstRevenue,grossMarginRange,salesDifficulty,regulatoryRisk,defensibility,opportunityScore:0-100}](fill EVERY field for EVERY opportunity), killCriteria[string], contradictions[{topic,positionA,positionB,cause:"definition"|"date"|"geography"|"segment"|"methodology"|"vendor_bias"|"sample_bias"|"genuine_uncertainty"}], unknowns[{topic,whyItMatters,howToObtain}], evidenceLedger[{claimId,text,category,classification:"verified_fact"|"reported_experience"|"estimate"|"inference"|"hypothesis"|"unverified_industry_claim",supportingSourceIds:[],contradictingSourceIds:[],provider:"google"|"perplexity"|"xai"|"anthropic",confidence:0-1,materiality:0-1}], sources[{sourceId,url,normalizedUrl,validated,provider}], confidenceAssessment. Base claims only on provided evidence.`;
 }
 
 function coerceStructured(raw: unknown, input: SynthesisInput, model: string): unknown {
