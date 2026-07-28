@@ -1,0 +1,9 @@
+services:
+  api:
+    environment:
+      # TEST is the safe default and adds Test_Lead=1 to Ameriquote payloads.
+      INSURANCE_LEAD_MODE: ${INSURANCE_LEAD_MODE:-test}
+      # Required. Kept in /opt/hopwhistle/.env and never committed.
+      AMERIQUOTE_API_KEY: ${AMERIQUOTE_API_KEY:?AMERIQUOTE_API_KEY must be set in the Hopwhistle env file}
+      AMERIQUOTE_ACA_SRC: ${AMERIQUOTE_ACA_SRC:-PVNACA_aged}
+      AMERIQUOTE_FE_SRC: ${AMERIQUOTE_FE_SRC:-PVNFE_aged}
