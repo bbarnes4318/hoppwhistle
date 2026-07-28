@@ -58,6 +58,22 @@ if [ -f "$SWITCH_CONF" ]; then
     echo "  RTP ports configured: 16384-16484"
 fi
 
+# Permanently enforce RFC2833/telephone-event on the PSTN B-leg. This patch is
+# idempotent and is applied on every container start, so rebuilds and server
+# replacements cannot silently restore broken IVR dialpad behavior.
+OUTBOUND_DIALPLAN="$VANILLA_CONF/dialplan/default.xml"
+if [ -f "$OUTBOUND_DIALPLAN" ]; then
+    if ! grep -q 'nolocal:dtmf_type=rfc2833' "$OUTBOUND_DIALPLAN"; then
+        echo "Enabling RFC2833 DTMF on outbound PSTN calls..."
+        sed -i '/nolocal:absolute_codec_string=PCMU,PCMA"\/>/a\        <action application="export" data="nolocal:dtmf_type=rfc2833"/>' "$OUTBOUND_DIALPLAN"
+    fi
+
+    if ! grep -q 'nolocal:dtmf_type=rfc2833' "$OUTBOUND_DIALPLAN"; then
+        echo "ERROR: Failed to enforce RFC2833 DTMF in outbound dialplan" >&2
+        exit 1
+    fi
+fi
+
 # Generate combined wss.pem for FreeSWITCH WSS binding
 # Let's Encrypt live/ dir uses relative symlinks (../../archive/...) that break when
 # mounted at /etc/freeswitch/letsencrypt. Read directly from archive instead.
