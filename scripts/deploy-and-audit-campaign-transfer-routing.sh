@@ -115,7 +115,7 @@ else
 fi
 
 echo
-echo "=== 6. LIVE FREEESWITCH LOOKUP FOR EVERY CAMPAIGN DID ==="
+echo "=== 6. LIVE FREESWITCH LOOKUP FOR EVERY CAMPAIGN DID ==="
 LOOKUP_FAILURE=0
 MIXED_ROUTE_COUNT=0
 if [ -n "$ROUTES" ]; then
@@ -175,39 +175,85 @@ docker exec dograh-asterisk asterisk -rx 'pjsip show endpoint fractel' 2>&1 | \
   grep -E 'Endpoint:|Contact:|Match:|context|dtmf_mode|Objects found' || true
 
 FIRST_DID="$(printf '%s\n' "$ROUTES" | awk -F'|' 'NF && $1 != "" {print $1; exit}')"
+TRANSFER_TARGET=""
 if [ -n "$FIRST_DID" ]; then
   DID_DIGITS="$(printf '%s' "$FIRST_DID" | tr -cd '0-9')"
+  TRANSFER_TARGET="PJSIP/+${DID_DIGITS}@fractel"
   echo
   echo "DOGRAH CALL TRANSFER DESTINATION FOR THE FIRST ACTIVE CAMPAIGN DID:"
-  echo "PJSIP/+${DID_DIGITS}@fractel"
-  echo "Configure that exact value in Dograh's Call Transfer tool for the workflow that should hand calls to this Hopwhistle campaign."
+  echo "$TRANSFER_TARGET"
+  echo "Dograh's Asterisk ARI Call Transfer tool must use that exact SIP destination, not a bare phone number."
 fi
 
 echo
 echo "=== 9. DOGRAH WORKFLOW TRANSFER CONFIG DISCOVERY ==="
-# Report whether Dograh's database contains transfer-tool configuration without
-# printing workflow JSON, prompts, tokens, passwords, or other secrets.
-TRANSFER_MATCHES=0
-while IFS='|' read -r schema table column; do
-  [ -n "$schema" ] || continue
-  count="$(docker exec dograh-postgres-1 sh -lc \
-    'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -v schema="$1" -v table="$2" -v column="$3" -c "SELECT count(*) FROM :\"schema\".:\"table\" WHERE :\"column\"::text ILIKE '\''%transfer%'''"' \
-    sh "$schema" "$table" "$column" 2>/dev/null || echo 0)"
-  if [ "${count:-0}" -gt 0 ] 2>/dev/null; then
-    echo "$schema.$table.$column contains transfer configuration rows: $count"
-    TRANSFER_MATCHES=$((TRANSFER_MATCHES + count))
-  fi
-done < <(
-  docker exec dograh-postgres-1 sh -lc \
-    'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -AtF "|" -c "SELECT table_schema, table_name, column_name FROM information_schema.columns WHERE table_schema NOT IN ('\''pg_catalog'\'', '\''information_schema'\'') AND data_type IN ('\''json'\'', '\''jsonb'\'', '\''text'\') ORDER BY table_schema, table_name, ordinal_position"' \
-    2>/dev/null || true
-)
+# Search only workflow/node/tool/agent tables and print counts—not stored JSON,
+# prompts, credentials, headers, tokens, or tool definitions.
+DOGRAH_HITS="$(docker exec -i dograh-postgres-1 sh -lc \
+  'exec psql -v ON_ERROR_STOP=1 -qAtF "|" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v target="$1"' \
+  sh "$TRANSFER_TARGET" <<'SQL' 2>/dev/null || true
+CREATE TEMP TABLE transfer_audit_hits (
+  table_name text,
+  column_name text,
+  transfer_rows bigint,
+  exact_target_rows bigint
+);
+CREATE TEMP TABLE transfer_audit_input (target text);
+INSERT INTO transfer_audit_input VALUES (:'target');
+DO $$
+DECLARE
+  r record;
+  transfer_count bigint;
+  target_count bigint;
+  target_value text := (SELECT target FROM transfer_audit_input LIMIT 1);
+BEGIN
+  FOR r IN
+    SELECT table_schema, table_name, column_name
+    FROM information_schema.columns
+    WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
+      AND data_type IN ('json', 'jsonb', 'text', 'character varying')
+      AND table_name ~* '(workflow|node|tool|agent)'
+  LOOP
+    BEGIN
+      EXECUTE format(
+        'SELECT count(*) FROM %I.%I WHERE %I::text ILIKE %L',
+        r.table_schema, r.table_name, r.column_name, '%transfer%'
+      ) INTO transfer_count;
+      IF target_value <> '' THEN
+        EXECUTE format(
+          'SELECT count(*) FROM %I.%I WHERE %I::text ILIKE %L',
+          r.table_schema, r.table_name, r.column_name, '%' || target_value || '%'
+        ) INTO target_count;
+      ELSE
+        target_count := 0;
+      END IF;
+      IF transfer_count > 0 OR target_count > 0 THEN
+        INSERT INTO transfer_audit_hits VALUES (
+          r.table_schema || '.' || r.table_name,
+          r.column_name,
+          transfer_count,
+          target_count
+        );
+      END IF;
+    EXCEPTION WHEN OTHERS THEN
+      NULL;
+    END;
+  END LOOP;
+END $$;
+SELECT table_name, column_name, transfer_rows, exact_target_rows
+FROM transfer_audit_hits
+ORDER BY table_name, column_name;
+SQL
+)"
 
-if [ "$TRANSFER_MATCHES" -eq 0 ]; then
-  echo "No transfer-tool configuration was detected in Dograh's stored workflow data."
+if [ -n "$DOGRAH_HITS" ]; then
+  printf '%s\n' "$DOGRAH_HITS"
 else
-  echo "Dograh stored transfer configuration detected."
+  echo "No stored Dograh transfer-tool configuration was detected in workflow/tool tables."
 fi
+
+TRANSFER_MATCHES="$(printf '%s\n' "$DOGRAH_HITS" | awk -F'|' 'NF>=3 {s+=$3} END {print s+0}')"
+EXACT_TARGET_MATCHES="$(printf '%s\n' "$DOGRAH_HITS" | awk -F'|' 'NF>=4 {s+=$4} END {print s+0}')"
 
 echo
 echo "=== FINAL RESULT ==="
@@ -216,7 +262,8 @@ echo "Hopwhistle mixed bridge parser: VERIFIED"
 echo "Dograh Asterisk + FracTEL endpoint: VERIFIED"
 echo "Active campaign DID routes: $(printf '%s\n' "$ROUTES" | sed '/^$/d' | wc -l)"
 echo "Live mixed cell+extension routes: $MIXED_ROUTE_COUNT"
-echo "Dograh transfer-config matches: $TRANSFER_MATCHES"
+echo "Dograh transfer-config rows: $TRANSFER_MATCHES"
+echo "Dograh exact campaign-target rows: $EXACT_TARGET_MATCHES"
 
 if [ "$LOOKUP_FAILURE" -ne 0 ]; then
   echo "ERROR: At least one active campaign DID returned an invalid live route" >&2
