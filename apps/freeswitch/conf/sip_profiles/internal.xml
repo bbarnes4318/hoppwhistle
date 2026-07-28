@@ -34,11 +34,11 @@
       <param name="inbound-late-negotiation" value="true"/>
       <param name="inbound-zrtp-passthru" value="true"/>
 
-      <!-- Authentication: every INVITE must present valid credentials.
-           auth-calls=false left this profile as an open relay (toll fraud via
-           Kamailio-forwarded INVITEs to the default context's PSTN bridge). -->
+      <!-- Authentication: every browser registration and outbound INVITE must
+           authenticate with the assigned extension credentials. These settings
+           prevent unauthenticated SIP traffic from reaching the PSTN dialplan. -->
       <param name="challenge-realm" value="auto_from"/>
-      <param name="auth-calls" value="false"/>
+      <param name="auth-calls" value="true"/>
       <!--
         Do NOT apply the vanilla "domains" ACL to the browser-facing WSS profile.
         That ACL only contains directory users with explicit CIDR entries. Browser
@@ -54,10 +54,10 @@
       <param name="NDLB-force-rport" value="true"/>
 
       <!-- Registration -->
-      <param name="accept-blind-reg" value="true"/>
-      <param name="accept-blind-auth" value="true"/>
+      <param name="accept-blind-reg" value="false"/>
+      <param name="accept-blind-auth" value="false"/>
       <param name="accept-exact-sip-uri" value="true"/>
-      <param name="inbound-reg-force-matching-username" value="false"/>
+      <param name="inbound-reg-force-matching-username" value="true"/>
       <param name="auth-all-packets" value="false"/>
       <!-- Keep every browser registration in one predictable AOR namespace. -->
       <param name="force-register-domain" value="$${domain}"/>
