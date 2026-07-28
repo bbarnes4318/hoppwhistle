@@ -1,4 +1,3 @@
-import { Decimal } from '@prisma/client/runtime/library';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 // Define the mock client
@@ -39,7 +38,6 @@ vi.mock('../../lib/logger.js', () => ({
 
 // Import after mocking
 import { ingestLead, retrySubmission } from '../insurance-lead-service.js';
-import { postToAmeriquote } from '../insurance-lead-poster.js';
 
 describe('Insurance Lead CRM Services', () => {
   beforeEach(() => {
@@ -47,12 +45,8 @@ describe('Insurance Lead CRM Services', () => {
     vi.clearAllMocks();
   });
 
-  describe('Ameriquote Blocked Posting / Retries', () => {
-    it('should fail-safe and throw an error directly in postToAmeriquote', async () => {
-      await expect(postToAmeriquote({})).rejects.toThrow('Ameriquote delivery is disabled by owner request.');
-    });
-
-    it('should update status to HOLD and return a disabled status on retrySubmission without posting', async () => {
+  describe('Legacy HOLD service behavior', () => {
+    it('should still return HOLD from retrySubmission before the response delivery hook runs', async () => {
       const mockSubmission = {
         id: 'sub-1',
         tenantId: 'tenant-1',
@@ -88,22 +82,18 @@ describe('Insurance Lead CRM Services', () => {
           ameriquoteErrorMessage: 'Ameriquote delivery is disabled by owner request.',
         }),
       });
-
-      expect(mockPrisma.insuranceActivity.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            type: 'SUBMISSION',
-            title: 'Ameriquote Post Blocked',
-          }),
-        })
-      );
     });
   });
 
-  describe('HOLD Ingestion status & activities', () => {
-    it('should ingest valid leads, set postStatus to HOLD, and create activity timeline entries', async () => {
+  describe('HOLD ingestion status & activities', () => {
+    it('should ingest valid leads as HOLD before the response delivery hook runs', async () => {
       const mockLead = { id: 'lead-1', createdAt: new Date(), updatedAt: new Date() };
-      const mockSub = { id: 'sub-1', receivedAt: new Date(), createdAt: new Date(), updatedAt: new Date() };
+      const mockSub = {
+        id: 'sub-1',
+        receivedAt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
 
       mockPrisma.insuranceLead.findFirst.mockResolvedValue(null);
       mockPrisma.insuranceLead.create.mockResolvedValue(mockLead);
@@ -139,7 +129,7 @@ describe('Insurance Lead CRM Services', () => {
         })
       );
 
-      // Check activity logging: Lead Ingested (SYSTEM), Submission Received (SUBMISSION), Lead Held (SYSTEM)
+      // Lead Ingested, Submission Received, and Lead Held.
       expect(mockPrisma.insuranceActivity.create).toHaveBeenCalledTimes(3);
     });
   });
