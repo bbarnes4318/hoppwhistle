@@ -31,6 +31,13 @@ RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
 # Copy ALL source code
 COPY . .
 
+# Permanently enforce campaign routing that supports Hopwhistle extensions and
+# external buyer/cell destinations in the same priority ring step. The script
+# is idempotent and fails the image build if the expected source drifts.
+RUN node /app/scripts/apply-campaign-mixed-destination-routing.mjs \
+  /app/apps/api/src/services/routing.ts \
+  /app/apps/api/src/routes/did-routes.ts
+
 RUN pnpm install --no-frozen-lockfile
 
 # Build workspace dependencies
@@ -68,6 +75,13 @@ RUN sed -i "s|from '../../lib/|from '../../../lib/|g" src/services/provisioning/
 
 # Generate Prisma Client
 RUN pnpm exec prisma generate
+
+# Campaign routing is a production-critical call path. Refuse to build an API
+# image unless pure-extension, pure-PSTN, mixed, priority, weight, DID-to-agent,
+# and concurrency behavior all pass.
+RUN pnpm exec vitest run \
+  src/services/__tests__/routing-softphone-ring-group.test.ts \
+  src/services/__tests__/routing-agent-did-translation.test.ts
 
 # Install build tools
 
