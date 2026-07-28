@@ -6,7 +6,7 @@ import Script from 'next/script';
 import { useEffect, useState } from 'react';
 
 import { CustomerIntakeForm } from '@/components/call-center/CustomerIntakeForm';
-import { ManualLeadEntryForm } from '@/components/leads/manual-lead-entry-form';
+import { ManualLeadEntryFormV2 } from '@/components/leads/manual-lead-entry-form-v2';
 
 declare global {
   interface Window {
@@ -120,7 +120,7 @@ export default function IntakePage(): JSX.Element {
 
       <main className="mx-auto max-w-7xl px-6 py-8">
         {mode === 'lead' ? (
-          <ManualLeadEntryForm />
+          <ManualLeadEntryFormV2 />
         ) : (
           <div className="space-y-4">
             <div className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-3">
