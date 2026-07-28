@@ -71,18 +71,22 @@ replaceOnce(
   'Starting local outbound ringback'
 );
 
-replaceOnce(
-  `          .then(() => {
-            console.log('[Phone] INVITE sent with caller ID:', chosenCallerId);
-          })`,
-  `          .then(() => {
-            console.log('[Phone] INVITE sent with caller ID:', chosenCallerId);
-            // Wire immediately so SIP 183 early media is audible before answer.
-            setupRemoteAudio(inviter);
-          })`,
-  'outbound early-media wiring',
-  'Wire immediately so SIP 183 early media is audible before answer.'
-);
+// Behavior-idempotent early-media wiring. Some live source versions already call
+// setupRemoteAudio(inviter) after INVITE succeeds but do not contain the original
+// explanatory comment. Detect the actual call rather than relying on that comment.
+const inviteEarlyMediaBehavior =
+  /console\.log\('\[Phone\] INVITE sent with caller ID:', chosenCallerId\);[\s\S]{0,240}?setupRemoteAudio\(inviter\);/;
+
+if (!inviteEarlyMediaBehavior.test(source)) {
+  const inviteThenPattern = /(\.then\(\(\) => \{\s*console\.log\('\[Phone\] INVITE sent with caller ID:', chosenCallerId\);)(\s*\}\))/;
+  if (!inviteThenPattern.test(source)) {
+    throw new Error('Unable to apply outbound early-media wiring: INVITE success block was not found');
+  }
+  source = source.replace(
+    inviteThenPattern,
+    `$1\n            // Wire immediately so SIP 183 early media is audible before answer.\n            setupRemoteAudio(inviter);$2`
+  );
+}
 
 replaceOnce(
   `    [normalizedApiUrl, getApiHeaders, isRegistered, selectedCallerId]
@@ -158,13 +162,19 @@ if (!source.includes('Sent DTMF via WebRTC RTP')) {
   source = source.replace(dtmfPattern, replacement);
 }
 
-for (const marker of [
-  'Starting local outbound ringback',
-  'Sent DTMF via WebRTC RTP',
-  'Real early media or answered-call audio takes precedence',
-]) {
-  if (!source.includes(marker)) {
-    throw new Error(`Softphone source verification failed: ${marker}`);
+const requiredChecks = [
+  ['outbound ringback', source.includes('Starting local outbound ringback')],
+  ['WebRTC RTP DTMF', source.includes('Sent DTMF via WebRTC RTP')],
+  [
+    'real-media ringback handoff',
+    source.includes('Real early media or answered-call audio takes precedence'),
+  ],
+  ['INVITE early-media wiring', inviteEarlyMediaBehavior.test(source)],
+];
+
+for (const [label, present] of requiredChecks) {
+  if (!present) {
+    throw new Error(`Softphone source verification failed: ${label}`);
   }
 }
 
