@@ -1,6 +1,20 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
-import { isRoutableLeg, sanitizeDestinationString } from '../route-destination.js';
+import {
+  getInboundExternalGateways,
+  isRoutableLeg,
+  sanitizeDestinationString,
+} from '../route-destination.js';
+
+const originalInboundExternalGateways = process.env.INBOUND_EXTERNAL_GATEWAYS;
+
+afterEach(() => {
+  if (originalInboundExternalGateways === undefined) {
+    delete process.env.INBOUND_EXTERNAL_GATEWAYS;
+  } else {
+    process.env.INBOUND_EXTERNAL_GATEWAYS = originalInboundExternalGateways;
+  }
+});
 
 describe('sanitizeDestinationString', () => {
   it('keeps extensions, UUIDs, and phone numbers', () => {
@@ -40,5 +54,21 @@ describe('sanitizeDestinationString', () => {
   it('rejects short digit strings that are not extensions', () => {
     expect(isRoutableLeg('12345')).toBe(false);
     expect(isRoutableLeg('555')).toBe(false);
+  });
+});
+
+describe('getInboundExternalGateways', () => {
+  it('defaults to the full six-gateway FracTEL failover chain', () => {
+    delete process.env.INBOUND_EXTERNAL_GATEWAYS;
+
+    expect(getInboundExternalGateways()).toBe(
+      'fractel1,fractel2,fractel3,fractel4,fractel5,fractel6'
+    );
+  });
+
+  it('honors an explicit gateway chain override', () => {
+    process.env.INBOUND_EXTERNAL_GATEWAYS = 'fractel6,fractel5';
+
+    expect(getInboundExternalGateways()).toBe('fractel6,fractel5');
   });
 });
