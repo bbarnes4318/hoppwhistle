@@ -14,7 +14,7 @@ const replacements = [
   ],
   [
     'Configure buyer target numbers and destination routing rules. Priority controls routing order (lower = higher priority).',
-    'Route one campaign DID to external buyer cell phones and internal Hopwhistle extensions. Destinations at the same priority ring together; lower priorities are sequential failover steps.',
+    'Route one campaign DID to external buyer cell phones and internal Hopwhistle extensions. At each priority, all eligible internal extensions ring together with one external buyer selected by weight; lower priorities are sequential failover steps.',
   ],
   [
     '<Label htmlFor="buyer-dest">Destination Phone Number (E.164 Format) *</Label>',
@@ -44,7 +44,7 @@ for (const [before, after] of replacements) {
 
 for (const marker of [
   'Cell / Hopwhistle Extension',
-  'Destinations at the same priority ring together',
+  'one external buyer selected by weight',
   '+18652637582 or 1008',
 ]) {
   if (!source.includes(marker)) {
