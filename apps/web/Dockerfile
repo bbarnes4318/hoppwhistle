@@ -32,6 +32,11 @@ COPY --from=deps /app/node_modules ./node_modules
 # Copy ALL source code
 COPY . .
 
+# Permanently apply the shared browser-phone ringback and RFC2833 DTMF repair.
+# The script is idempotent and fails the image build if expected source blocks drift.
+RUN node /app/scripts/apply-softphone-ringback-dtmf-source.mjs \
+  /app/apps/web/src/components/phone/phone-provider.tsx
+
 WORKDIR /app/apps/web
 
 ENV NEXT_TELEMETRY_DISABLED=1
