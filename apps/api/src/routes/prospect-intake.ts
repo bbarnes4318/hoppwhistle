@@ -2,7 +2,8 @@
  * Prospect Intake Routes
  *
  * Endpoints for submitting and retrieving customer intake form data.
- * This data is used for screen pop when incoming calls match a stored phone number.
+ * Manual CRM entries can also create an insurance-lead submission and
+ * explicitly choose whether to send that submission to the buyer.
  */
 
 import { PrismaClient } from '@prisma/client';
@@ -10,15 +11,20 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 
 const prisma = new PrismaClient();
 
-// Types
+type InsuranceVertical = 'FE' | 'ACA';
+
 interface ProspectIntakePayload {
+  // Manual CRM delivery controls
+  vertical?: InsuranceVertical;
+  sendToBuyer?: boolean;
+
   // Client Info
   firstName?: string;
   lastName?: string;
-  phone: string; // Required
+  phone: string;
   email?: string;
-  dob?: string; // ISO date string
-  age?: number; // Age in years
+  dob?: string;
+  age?: number;
   gender?: string;
 
   // Address
@@ -26,6 +32,16 @@ interface ProspectIntakePayload {
   city?: string;
   state?: string;
   zip?: string;
+
+  // Buyer fields
+  smoker?: string;
+  heightFeet?: number;
+  heightInches?: number;
+  weight?: number;
+  landingPage?: string;
+  leadidToken?: string;
+  consentLanguage?: string;
+  recordingUrl?: string;
 
   // Policy Details
   carrier?: string;
@@ -66,6 +82,19 @@ interface AuthenticatedUser {
   scopes?: string[];
 }
 
+interface ManualCrmSyncResult {
+  insuranceLeadId: string;
+  submissionId: string;
+  validationStatus: 'VALID' | 'INVALID';
+  validationErrors?: Array<{ path: string; message: string }>;
+  postStatus: string;
+  postMode: string;
+  sentToBuyer: boolean;
+  buyerStatus: string | null;
+  buyerError: string | null;
+  message: string;
+}
+
 type AuthRequest = FastifyRequest & { user?: AuthenticatedUser };
 
 function getTenantId(request: FastifyRequest): string | null {
@@ -74,16 +103,10 @@ function getTenantId(request: FastifyRequest): string | null {
   return demoTenantId || user?.tenantId || null;
 }
 
-/**
- * Normalize phone number to digits only for consistent lookup
- */
 function normalizePhone(phone: string): string {
   return phone.replace(/\D/g, '');
 }
 
-/**
- * Mask routing or account number to last 4 digits (e.g. ****1234)
- */
 function maskBankingField(val?: string): string | null {
   if (!val) return null;
   const cleaned = val.trim();
@@ -91,12 +114,136 @@ function maskBankingField(val?: string): string | null {
   return `****${cleaned.slice(-4)}`;
 }
 
+function shouldCreateInsuranceCrmLead(body: ProspectIntakePayload): boolean {
+  return body.source === 'manual_crm_entry' || typeof body.sendToBuyer === 'boolean';
+}
+
+async function syncManualLeadToInsuranceCrm(
+  tenantId: string,
+  normalizedPhone: string,
+  body: ProspectIntakePayload,
+  clientIp: string
+): Promise<ManualCrmSyncResult> {
+  const vertical: InsuranceVertical = body.vertical === 'ACA' ? 'ACA' : 'FE';
+  const sendToBuyer = body.sendToBuyer === true;
+  const { ingestLead } = await import('../services/insurance-lead-service.js');
+
+  const result = await ingestLead(tenantId, vertical, {
+    firstName: body.firstName,
+    lastName: body.lastName,
+    phone: normalizedPhone,
+    email: body.email,
+    birthDate: body.dob,
+    age: body.age,
+    gender: body.gender,
+    address: body.street,
+    city: body.city,
+    state: body.state,
+    zipCode: body.zip,
+    smoker: body.smoker,
+    heightFeet: body.heightFeet,
+    heightInches: body.heightInches,
+    weight: body.weight,
+    carrier: body.carrier,
+    coverageAmount: body.coverageAmount,
+    monthlyPremium: body.monthlyPremium,
+    trustedFormUrl: body.trustedFormCertUrl,
+    leadidToken: body.leadidToken,
+    consentLanguage: body.consentLanguage,
+    recordingUrl: body.recordingUrl,
+    landingPage: body.landingPage || 'https://hopwhistle.com/intake',
+    ipAddress: clientIp,
+    source: body.source || 'manual_crm_entry',
+    notes: body.notes,
+  });
+
+  await prisma.insuranceActivity.updateMany({
+    where: {
+      tenantId,
+      insuranceLeadId: result.insuranceLeadId,
+      title: 'Lead Held',
+    },
+    data: {
+      title: sendToBuyer ? 'Buyer Delivery Requested' : 'Saved to CRM Only',
+      description: sendToBuyer
+        ? 'The user selected Save & Send to Buyer for this manually entered lead.'
+        : 'The user selected Save to CRM Only. This lead was not sent to the buyer.',
+    },
+  });
+
+  if (!sendToBuyer) {
+    return {
+      insuranceLeadId: result.insuranceLeadId,
+      submissionId: result.submissionId,
+      validationStatus: result.validationStatus,
+      validationErrors: result.errors,
+      postStatus: result.postStatus,
+      postMode: result.postMode,
+      sentToBuyer: false,
+      buyerStatus: null,
+      buyerError: null,
+      message: 'Lead saved to CRM. It was not sent to the buyer.',
+    };
+  }
+
+  if (result.validationStatus !== 'VALID') {
+    return {
+      insuranceLeadId: result.insuranceLeadId,
+      submissionId: result.submissionId,
+      validationStatus: result.validationStatus,
+      validationErrors: result.errors,
+      postStatus: result.postStatus,
+      postMode: result.postMode,
+      sentToBuyer: false,
+      buyerStatus: null,
+      buyerError: 'The lead did not pass validation, so buyer delivery was not attempted.',
+      message: 'Lead saved to CRM, but it was not sent because required data was invalid.',
+    };
+  }
+
+  const { deliverInsuranceLeadSubmission } = await import(
+    '../services/insurance-lead-delivery.js'
+  );
+  const delivery = await deliverInsuranceLeadSubmission(
+    tenantId,
+    result.insuranceLeadId,
+    result.submissionId,
+    { trigger: 'AUTO' }
+  );
+
+  if ('error' in delivery) {
+    return {
+      insuranceLeadId: result.insuranceLeadId,
+      submissionId: result.submissionId,
+      validationStatus: result.validationStatus,
+      validationErrors: result.errors,
+      postStatus: 'ERROR',
+      postMode: result.postMode,
+      sentToBuyer: true,
+      buyerStatus: 'Error',
+      buyerError: delivery.error,
+      message: 'Lead saved to CRM, but buyer delivery failed.',
+    };
+  }
+
+  return {
+    insuranceLeadId: result.insuranceLeadId,
+    submissionId: result.submissionId,
+    validationStatus: result.validationStatus,
+    validationErrors: result.errors,
+    postStatus: delivery.postStatus,
+    postMode: delivery.postMode,
+    sentToBuyer: true,
+    buyerStatus: delivery.ameriquoteStatus,
+    buyerError: delivery.errorMessage || null,
+    message:
+      delivery.postStatus === 'ERROR'
+        ? 'Lead saved to CRM, but the buyer returned an error.'
+        : `Lead saved and sent to the buyer with status ${delivery.ameriquoteStatus}.`,
+  };
+}
+
 export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
-  /**
-   * POST /api/v1/prospects/intake
-   *
-   * Submit a new customer intake form. Upserts by phone number.
-   */
   fastify.post<{ Body: ProspectIntakePayload }>(
     '/api/v1/prospects/intake',
     async (request: FastifyRequest<{ Body: ProspectIntakePayload }>, reply: FastifyReply) => {
@@ -111,14 +258,9 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
       }
 
       const body = request.body;
-
-      // Validate required phone
       if (!body.phone) {
         return reply.code(400).send({
-          error: {
-            code: 'VALIDATION_ERROR',
-            message: 'Phone number is required',
-          },
+          error: { code: 'VALIDATION_ERROR', message: 'Phone number is required' },
         });
       }
 
@@ -134,14 +276,14 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
       const normalizedPhone = rawPhone.slice(-10);
 
       try {
-        // Get client IP address
-        const clientIp = request.ip || request.headers['x-forwarded-for'] || 'unknown';
-
-        // Securely mask banking fields before DB upsert
+        const forwardedFor = request.headers['x-forwarded-for'];
+        const clientIp =
+          request.ip ||
+          (typeof forwardedFor === 'string' ? forwardedFor : forwardedFor?.[0]) ||
+          'unknown';
         const maskedRouting = maskBankingField(body.routingNumber);
         const maskedAccount = maskBankingField(body.accountNumber);
 
-        // Upsert - update if exists, create if not (scoped by tenantId)
         const prospect = await prisma.prospectIntake.upsert({
           where: {
             tenantId_phone: {
@@ -173,7 +315,7 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
             routingNumber: maskedRouting,
             accountNumber: maskedAccount,
             trustedFormCertUrl: body.trustedFormCertUrl,
-            ipAddress: typeof clientIp === 'string' ? clientIp : clientIp[0],
+            ipAddress: clientIp,
             source: body.source || 'intake_form',
             notes: body.notes,
             updatedAt: new Date(),
@@ -204,7 +346,7 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
             routingNumber: maskedRouting,
             accountNumber: maskedAccount,
             trustedFormCertUrl: body.trustedFormCertUrl,
-            ipAddress: typeof clientIp === 'string' ? clientIp : clientIp[0],
+            ipAddress: clientIp,
             source: body.source || 'intake_form',
             notes: body.notes,
           },
@@ -214,7 +356,24 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
           event: 'prospect_intake_saved',
           prospectId: prospect.id,
           phone: `***${normalizedPhone.slice(-4)}`,
+          manualCrmEntry: shouldCreateInsuranceCrmLead(body),
+          sendToBuyer: body.sendToBuyer === true,
         });
+
+        if (shouldCreateInsuranceCrmLead(body)) {
+          const crmResult = await syncManualLeadToInsuranceCrm(
+            tenantId,
+            normalizedPhone,
+            body,
+            clientIp
+          );
+
+          return reply.code(200).send({
+            success: true,
+            prospectId: prospect.id,
+            ...crmResult,
+          });
+        }
 
         return reply.code(200).send({
           success: true,
@@ -233,11 +392,6 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
     }
   );
 
-  /**
-   * GET /api/v1/prospects/by-phone/:phoneNumber
-   *
-   * Look up a prospect by phone number (for screen pop on incoming calls).
-   */
   fastify.get<{ Params: { phoneNumber: string } }>(
     '/api/v1/prospects/by-phone/:phoneNumber',
     async (request, reply) => {
@@ -251,9 +405,7 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const { phoneNumber } = request.params;
-      const rawPhone = normalizePhone(phoneNumber);
-
+      const rawPhone = normalizePhone(request.params.phoneNumber);
       if (rawPhone.length < 10) {
         return reply.code(400).send({
           error: {
@@ -265,7 +417,6 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
       const normalizedPhone = rawPhone.slice(-10);
 
       try {
-        // Scoped exactly to tenantId
         const prospect = await prisma.prospectIntake.findFirst({
           where: {
             tenantId,
@@ -281,7 +432,6 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
           });
         }
 
-        // Return prospect data (bank routing/account are already masked in DB)
         return reply.code(200).send({
           found: true,
           prospect: {
@@ -315,20 +465,12 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
       } catch (error) {
         fastify.log.error({ event: 'prospect_lookup_error', error });
         return reply.code(500).send({
-          error: {
-            code: 'DATABASE_ERROR',
-            message: 'Failed to look up prospect',
-          },
+          error: { code: 'DATABASE_ERROR', message: 'Failed to look up prospect' },
         });
       }
     }
   );
 
-  /**
-   * GET /api/v1/prospects/intake
-   *
-   * List recent prospect intakes (for admin/debugging).
-   */
   fastify.get('/api/v1/prospects/intake', async (request, reply) => {
     const tenantId = getTenantId(request);
     if (!tenantId) {
@@ -342,13 +484,8 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
 
     try {
       const prospects = await prisma.prospectIntake.findMany({
-        where: {
-          tenantId,
-          status: 'ACTIVE',
-        },
-        orderBy: {
-          createdAt: 'desc',
-        },
+        where: { tenantId, status: 'ACTIVE' },
+        orderBy: { createdAt: 'desc' },
         take: 50,
         select: {
           id: true,
@@ -364,27 +501,19 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
 
       return reply.code(200).send({
         count: prospects.length,
-        prospects: prospects.map(p => ({
-          ...p,
-          phone: `***-***-${p.phone.slice(-4)}`, // Mask phone for list view
+        prospects: prospects.map(prospect => ({
+          ...prospect,
+          phone: `***-***-${prospect.phone.slice(-4)}`,
         })),
       });
     } catch (error) {
       fastify.log.error({ event: 'prospect_list_error', error });
       return reply.code(500).send({
-        error: {
-          code: 'DATABASE_ERROR',
-          message: 'Failed to list prospects',
-        },
+        error: { code: 'DATABASE_ERROR', message: 'Failed to list prospects' },
       });
     }
   });
 
-  /**
-   * DELETE /api/v1/prospects/intake/:id
-   *
-   * Archive a prospect intake (soft delete).
-   */
   fastify.delete<{ Params: { id: string } }>(
     '/api/v1/prospects/intake/:id',
     async (request, reply) => {
@@ -398,11 +527,9 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const { id } = request.params;
-
       try {
         const existing = await prisma.prospectIntake.findFirst({
-          where: { id, tenantId },
+          where: { id: request.params.id, tenantId },
         });
 
         if (!existing) {
@@ -415,21 +542,15 @@ export async function registerProspectIntakeRoutes(fastify: FastifyInstance) {
         }
 
         await prisma.prospectIntake.update({
-          where: { id },
+          where: { id: request.params.id },
           data: { status: 'ARCHIVED' },
         });
 
-        return reply.code(200).send({
-          success: true,
-          message: 'Prospect intake archived',
-        });
+        return reply.code(200).send({ success: true, message: 'Prospect archived' });
       } catch (error) {
         fastify.log.error({ event: 'prospect_delete_error', error });
         return reply.code(500).send({
-          error: {
-            code: 'DATABASE_ERROR',
-            message: 'Failed to archive prospect',
-          },
+          error: { code: 'DATABASE_ERROR', message: 'Failed to archive prospect' },
         });
       }
     }
