@@ -59,5 +59,8 @@ export function sanitizeDestinationString(raw: string | null | undefined): Sanit
 
 /** Carrier gateway chain used for external (PSTN) inbound-forwarding legs. */
 export function getInboundExternalGateways(): string {
-  return process.env.INBOUND_EXTERNAL_GATEWAYS || 'fractel1,fractel2,fractel3';
+  return (
+    process.env.INBOUND_EXTERNAL_GATEWAYS ||
+    'fractel1,fractel2,fractel3,fractel4,fractel5,fractel6'
+  );
 }
