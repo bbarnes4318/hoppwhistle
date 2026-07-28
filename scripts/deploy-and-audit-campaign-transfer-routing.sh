@@ -19,6 +19,7 @@ fi
 # This preserves unrelated local emergency/security changes while ensuring the
 # Docker build uses the exact committed release from origin/main.
 release_files=(
+  scripts/apply-softphone-ringback-dtmf-source.mjs
   scripts/apply-campaign-mixed-destination-routing.mjs
   scripts/apply-campaign-routing-ui-source.mjs
   apps/api/src/services/__tests__/routing-softphone-ring-group.test.ts
@@ -33,7 +34,8 @@ for path in "${release_files[@]}"; do
   install -m 0644 "$tmp" "$REPO/$path"
   rm -f "$tmp"
 done
-chmod 0755 "$REPO/scripts/apply-campaign-mixed-destination-routing.mjs" \
+chmod 0755 "$REPO/scripts/apply-softphone-ringback-dtmf-source.mjs" \
+  "$REPO/scripts/apply-campaign-mixed-destination-routing.mjs" \
   "$REPO/scripts/apply-campaign-routing-ui-source.mjs"
 
 echo "Release files installed from origin/main."
