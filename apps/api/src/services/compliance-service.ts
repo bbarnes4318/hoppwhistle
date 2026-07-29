@@ -1,4 +1,5 @@
 import { createHash } from 'crypto';
+import type { Prisma } from '@prisma/client';
 
 import { getPrismaClient } from '../lib/prisma.js';
 
@@ -28,13 +29,15 @@ export class ComplianceService {
   async checkDnc(
     tenantId: string,
     phoneNumber: string,
-    campaignId?: string
+    campaignId?: string,
+    txClient?: Prisma.TransactionClient
   ): Promise<{ blocked: boolean; match?: { listId: string; listName: string } }> {
+    const client = txClient || this.prisma;
     // Normalize phone number (E.164 format)
     const normalized = this.normalizePhoneNumber(phoneNumber);
 
     // Check global DNC lists
-    const globalDnc = await this.prisma.dncListEntry.findFirst({
+    const globalDnc = await client.dncListEntry.findFirst({
       where: {
         phoneNumber: normalized,
         dncList: {
@@ -60,7 +63,7 @@ export class ComplianceService {
 
     // Check campaign-specific DNC if campaignId provided
     if (campaignId) {
-      const campaignDnc = await this.prisma.dncListEntry.findFirst({
+      const campaignDnc = await client.dncListEntry.findFirst({
         where: {
           phoneNumber: normalized,
           dncList: {
@@ -90,6 +93,7 @@ export class ComplianceService {
     }
 
     return { blocked: false };
+
   }
 
   /**

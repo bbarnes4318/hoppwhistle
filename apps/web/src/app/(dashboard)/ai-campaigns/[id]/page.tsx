@@ -29,8 +29,9 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { apiClient } from '@/lib/api';
 
-const API_URL = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_API_URL || '');
 
 interface Campaign {
   id: string;
@@ -117,14 +118,17 @@ export default function CampaignDetailPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [uploadLoading, setUploadLoading] = useState(false);
 
+  // Restart Unreached modal state
+  const [isRestartModalOpen, setIsRestartModalOpen] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [restartLoading, setRestartLoading] = useState(false);
+  const [previewData, setPreviewData] = useState<any | null>(null);
+
   const fetchCampaign = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/api/v1/ai-campaigns/${campaignId}`, {
-        credentials: 'include',
-      });
-      if (!res.ok) throw new Error('Campaign not found');
-      const data = await res.json();
-      setCampaign(data);
+      const res = await apiClient.get<Campaign>(`/api/v1/ai-campaigns/${campaignId}`);
+      if (res.error) throw new Error(res.error.message);
+      setCampaign(res.data || null);
     } catch (error) {
       console.error('Error fetching campaign:', error);
       toast({
@@ -137,12 +141,9 @@ export default function CampaignDetailPage() {
 
   const fetchStats = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/api/v1/ai-campaigns/${campaignId}/stats`, {
-        credentials: 'include',
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      setStats(data);
+      const res = await apiClient.get<CampaignStats>(`/api/v1/ai-campaigns/${campaignId}/stats`);
+      if (res.error) return;
+      setStats(res.data || null);
     } catch (error) {
       console.error('Error fetching stats:', error);
     }
@@ -150,12 +151,9 @@ export default function CampaignDetailPage() {
 
   const fetchContacts = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/api/v1/ai-campaigns/${campaignId}/contacts`, {
-        credentials: 'include',
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      setContacts(data.data || []);
+      const res = await apiClient.get<{ data: Contact[] }>(`/api/v1/ai-campaigns/${campaignId}/contacts`);
+      if (res.error) return;
+      setContacts(res.data?.data || []);
     } catch (error) {
       console.error('Error fetching contacts:', error);
     }
@@ -163,12 +161,9 @@ export default function CampaignDetailPage() {
 
   const fetchCalls = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/api/v1/ai-campaigns/${campaignId}/calls`, {
-        credentials: 'include',
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      setCalls(data.data || []);
+      const res = await apiClient.get<{ data: CallRecord[] }>(`/api/v1/ai-campaigns/${campaignId}/calls`);
+      if (res.error) return;
+      setCalls(res.data?.data || []);
     } catch (error) {
       console.error('Error fetching calls:', error);
     }
@@ -199,14 +194,8 @@ export default function CampaignDetailPage() {
   const handleStart = async () => {
     setActionLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/v1/ai-campaigns/${campaignId}/start`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || 'Failed to start');
-      }
+      const res = await apiClient.post<Campaign>(`/api/v1/ai-campaigns/${campaignId}/start`);
+      if (res.error) throw new Error(res.error.message || 'Failed to start');
       toast({ title: 'Campaign Started', description: 'AI calling is now active' });
       void fetchCampaign();
     } catch (error) {
@@ -223,23 +212,68 @@ export default function CampaignDetailPage() {
   const handlePause = async () => {
     setActionLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/v1/ai-campaigns/${campaignId}/pause`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      if (!res.ok) throw new Error('Failed to pause');
+      const res = await apiClient.post<Campaign>(`/api/v1/ai-campaigns/${campaignId}/pause`);
+      if (res.error) throw new Error(res.error.message || 'Failed to pause');
       toast({ title: 'Campaign Paused' });
       void fetchCampaign();
     } catch (error) {
       toast({
         title: 'Error',
-        description: 'Failed to pause campaign',
+        description: error instanceof Error ? error.message : 'Failed to pause campaign',
         variant: 'destructive',
       });
     } finally {
       setActionLoading(false);
     }
   };
+
+  const fetchRestartPreview = async () => {
+    setPreviewLoading(true);
+    try {
+      const res = await apiClient.get<any>(`/api/v1/ai-campaigns/${campaignId}/restart-unreached/preview`);
+      if (res.error) throw new Error(res.error.message);
+      setPreviewData(res.data);
+    } catch (error) {
+      console.error('Error fetching restart preview:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load restart preview data',
+        variant: 'destructive',
+      });
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleOpenRestartModal = async () => {
+    setIsRestartModalOpen(true);
+    await fetchRestartPreview();
+  };
+
+  const handleExecuteRestart = async () => {
+    setRestartLoading(true);
+    try {
+      const res = await apiClient.post<any>(`/api/v1/ai-campaigns/${campaignId}/restart-unreached`);
+      if (res.error) throw new Error(res.error.message);
+      toast({
+        title: 'Campaign Restarted',
+        description: `Successfully reset ${res.data?.totalEligible || 0} unreached contacts.`,
+      });
+      setIsRestartModalOpen(false);
+      await fetchCampaign();
+      await Promise.all([fetchStats(), fetchContacts(), fetchCalls()]);
+    } catch (error) {
+      console.error('Error executing restart:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to restart unreached contacts',
+        variant: 'destructive',
+      });
+    } finally {
+      setRestartLoading(false);
+    }
+  };
+
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -275,20 +309,17 @@ export default function CampaignDetailPage() {
         })
         .filter(c => c.phoneNumber);
 
-      const res = await fetch(`${API_URL}/api/v1/ai-campaigns/${campaignId}/contacts`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contacts: parsedContacts }),
+      const res = await apiClient.post<any>(`/api/v1/ai-campaigns/${campaignId}/contacts`, {
+        contacts: parsedContacts,
       });
 
-      if (!res.ok) throw new Error('Upload failed');
+      if (res.error) throw new Error(res.error.message || 'Upload failed');
 
-      const result = await res.json();
       toast({
         title: 'Contacts Uploaded',
-        description: `Imported ${result.imported} contacts (${result.skipped} skipped)`,
+        description: `Imported ${res.data?.imported || 0} contacts (${res.data?.skipped || 0} skipped)`,
       });
+
 
       void fetchStats();
       void fetchContacts();
@@ -367,6 +398,17 @@ export default function CampaignDetailPage() {
           <Button variant="outline" size="icon" onClick={handleRefresh}>
             <RefreshCw className="h-4 w-4" />
           </Button>
+          {(campaign.status === 'PAUSED' || campaign.status === 'COMPLETED') && (
+            <Button
+              onClick={() => void handleOpenRestartModal()}
+              variant="outline"
+              className="border-primary/30 hover:border-primary/60 text-primary"
+              disabled={actionLoading}
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Restart Unreached
+            </Button>
+          )}
           {campaign.status === 'RUNNING' ? (
             <Button
               onClick={() => void handlePause()}
@@ -393,6 +435,7 @@ export default function CampaignDetailPage() {
               Start
             </Button>
           ) : null}
+
         </div>
       </div>
 
@@ -703,6 +746,100 @@ export default function CampaignDetailPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Restart Unreached Preview & Confirmation Modal */}
+      <Dialog open={isRestartModalOpen} onOpenChange={setIsRestartModalOpen}>
+        <DialogContent className="max-w-md bg-card border border-border">
+          <DialogHeader>
+            <DialogTitle>Restart Unreached Contacts</DialogTitle>
+            <DialogDescription>
+              This will reset unreached contacts back to PENDING status so they can be dialed again.
+            </DialogDescription>
+          </DialogHeader>
+
+          {previewLoading ? (
+            <div className="flex flex-col items-center justify-center py-6 space-y-2">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <span className="text-sm text-muted-foreground">Calculating eligibility...</span>
+            </div>
+          ) : previewData ? (
+            <div className="space-y-4 my-2">
+              <div className="grid grid-cols-2 gap-2 text-sm border border-border p-3 rounded-md bg-muted/20">
+                <span className="text-muted-foreground">Total Contacts:</span>
+                <span className="font-semibold text-right">{previewData.totalContacts}</span>
+                
+                <span className="text-muted-foreground">Customer Reached (Excluded):</span>
+                <span className="font-semibold text-destructive text-right">-{previewData.humanReachedExcluded}</span>
+                
+                <span className="text-muted-foreground">Assistant Ended (Excluded):</span>
+                <span className="font-semibold text-destructive text-right">-{previewData.assistantEndedExcluded || 0}</span>
+
+                <span className="text-muted-foreground">Ambiguous / Unknown (Excluded):</span>
+                <span className="font-semibold text-destructive text-right">-{previewData.unknownExcluded || 0}</span>
+                
+                <span className="text-muted-foreground">DNC (Excluded):</span>
+                <span className="font-semibold text-destructive text-right">-{previewData.dncExcluded}</span>
+                
+                <span className="text-muted-foreground">Wrong Number (Excluded):</span>
+                <span className="font-semibold text-destructive text-right">-{previewData.wrongNumberExcluded}</span>
+                
+                <span className="text-muted-foreground">Active Call (Excluded):</span>
+                <span className="font-semibold text-destructive text-right">-{previewData.activeCallExcluded}</span>
+                
+                <div className="col-span-2 border-t border-border my-1" />
+
+                <span className="text-muted-foreground">Never Attempted (Eligible):</span>
+                <span className="font-semibold text-green-500 text-right">+{previewData.neverAttemptedEligible}</span>
+
+                <span className="text-muted-foreground">No Answer (Eligible):</span>
+                <span className="font-semibold text-green-500 text-right">+{previewData.noAnswerEligible}</span>
+
+                <span className="text-muted-foreground">Busy (Eligible):</span>
+                <span className="font-semibold text-green-500 text-right">+{previewData.busyEligible}</span>
+
+                <span className="text-muted-foreground font-medium">Voicemail (Eligible):</span>
+                <span className="font-semibold text-green-500 text-right">+{previewData.voicemailEligible}</span>
+
+                <span className="text-muted-foreground">Failed/Silence (Eligible):</span>
+                <span className="font-semibold text-green-500 text-right">+{previewData.failedOrSilenceEligible}</span>
+                
+                <div className="col-span-2 border-t border-border my-1" />
+
+                <span className="font-semibold text-primary">Total to Restart:</span>
+                <span className="font-bold text-primary text-right">{previewData.totalEligible}</span>
+              </div>
+
+              <div className="bg-yellow-500/10 border border-yellow-500/20 rounded p-3 text-xs text-yellow-500 space-y-1">
+                <p className="font-medium">⚠️ Important Compliance Note:</p>
+                <p>Contacts previously reached by a customer, assistant-ended calls, ambiguous completions, wrong numbers, or numbers placed on the Do Not Call list are strictly excluded because human contact cannot be verified. The campaign status will reset to READY; calling will not begin automatically.</p>
+              </div>
+
+            </div>
+          ) : (
+            <div className="text-center py-4 text-sm text-destructive">
+              Failed to load preview data.
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setIsRestartModalOpen(false)}
+              disabled={restartLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void handleExecuteRestart()}
+              disabled={previewLoading || !previewData || previewData.totalEligible === 0 || restartLoading}
+            >
+              {restartLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Restart Contacts
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+
