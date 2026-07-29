@@ -726,6 +726,9 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       const user = await prisma.user.findUnique({
         where: { id: userId },
         include: {
+          tenant: {
+            select: { id: true, name: true, slug: true },
+          },
           roles: {
             include: {
               role: true,
@@ -772,6 +775,9 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         lastName: user.lastName,
         roles: user.roles.map((ur: UserRole) => ur.role.name),
         tenantId: user.tenantId,
+        // Surfaced so the UI can show which workspace's data is on screen
+        tenantName: user.tenant?.name ?? null,
+        tenantSlug: user.tenant?.slug ?? null,
         buyerId: user.buyerId,
         publisherId: user.publisherId || (userMetadata?.publisherId as string | null) || null,
         publisherAccessToRecordings,

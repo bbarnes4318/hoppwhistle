@@ -243,57 +243,52 @@ export default function AuthPage() {
 
       <div className="min-h-screen flex">
         {/* Left Panel - Brand */}
-        <div className="hidden lg:flex lg:w-1/2 bg-zinc-950 border-r border-border relative overflow-hidden flex-col justify-between p-12">
-          {/* System Grid Overlay */}
-          <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]"></div>
+        <div className="relative hidden flex-col justify-between overflow-hidden border-r border-border bg-background p-12 lg:flex lg:w-1/2">
+          {/* Engineering grid, fading out toward the bottom so it never competes */}
+          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,#ffffff08_1px,transparent_1px),linear-gradient(to_bottom,#ffffff08_1px,transparent_1px)] bg-[size:28px_28px] [mask-image:linear-gradient(to_bottom,black,transparent_85%)]" />
+          {/* Jade aurora anchoring the top-left corner */}
+          <div className="pointer-events-none absolute -left-32 -top-32 h-[420px] w-[420px] rounded-full bg-primary/12 blur-[120px]" />
+          <div className="pointer-events-none absolute -bottom-40 left-1/3 h-[380px] w-[380px] rounded-full bg-sky-500/[0.07] blur-[130px]" />
 
           {/* Top Logotype */}
           <div className="relative z-10 flex items-center justify-start">
-            <Image src="/hopwhistle.png" alt="Hopwhistle" width={200} height={66} priority />
+            <Image src="/hopwhistle-mark.svg" alt="Hopwhistle" width={200} height={66} priority />
           </div>
 
           {/* Center Content / Core Value */}
-          <div className="relative z-10 space-y-6">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-sm">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span className="text-[10px] font-mono text-zinc-400 font-semibold tracking-widest uppercase">
+          <div className="relative z-10 max-w-lg space-y-6">
+            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-surface/70 py-1.5 pl-2.5 pr-3.5 backdrop-blur-sm">
+              <span className="pulse-dot" aria-hidden />
+              <span className="text-[10px] font-semibold uppercase tracking-eyebrow text-muted-foreground">
                 System Operational
               </span>
             </div>
-            <h1 className="text-4xl font-semibold tracking-tight text-zinc-50">
-              Secure Authentication Gateway
+            <h1 className="text-[42px] font-semibold leading-[1.08] tracking-[-0.03em] text-foreground">
+              The telephony
+              <br />
+              command center.
             </h1>
-            <p className="text-lg text-zinc-400 max-w-md leading-relaxed">
-              Access the institutional telephony command center. Real-time media routing,
-              deterministic node orchestration, and multi-tenant ledger management.
+            <p className="max-w-md text-[15px] leading-relaxed text-muted-foreground">
+              Real-time media routing, deterministic node orchestration, and a private workspace
+              where your numbers, leads and revenue stay strictly your own.
             </p>
           </div>
 
           {/* Bottom System Stats */}
-          <div className="relative z-10 border-t border-zinc-800/50 pt-8 mt-12 grid grid-cols-2 gap-6 w-full max-w-md">
-            <div className="space-y-1.5">
-              <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-semibold">
-                Network Status
-              </p>
-              <p className="text-sm font-medium text-zinc-300">Optimal (0ms jitter)</p>
-            </div>
-            <div className="space-y-1.5">
-              <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-semibold">
-                Authentication
-              </p>
-              <p className="text-sm font-medium text-zinc-300">Zero-Trust Enforced</p>
-            </div>
-            <div className="space-y-1.5">
-              <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-semibold">
-                Active Nodes
-              </p>
-              <p className="text-sm font-medium text-zinc-300">14 (us-east-1)</p>
-            </div>
-            <div className="space-y-1.5">
-              <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-semibold">
-                Protocol
-              </p>
-              <p className="text-sm font-medium text-zinc-300">SIP/TLS Active</p>
+          <div className="relative z-10 mt-12 w-full max-w-md">
+            <div className="rule-fade mb-7" />
+            <div className="grid grid-cols-2 gap-x-6 gap-y-5">
+              {[
+                { label: 'Network Status', value: 'Optimal (0ms jitter)' },
+                { label: 'Authentication', value: 'Zero-Trust Enforced' },
+                { label: 'Isolation', value: 'Per-Tenant Enforced' },
+                { label: 'Protocol', value: 'SIP/TLS Active' },
+              ].map(stat => (
+                <div key={stat.label} className="space-y-1.5">
+                  <p className="eyebrow">{stat.label}</p>
+                  <p className="text-[13px] font-medium text-foreground/85">{stat.value}</p>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -303,7 +298,7 @@ export default function AuthPage() {
           <div className="mx-auto w-full max-w-sm">
             {/* Mobile logo */}
             <div className="lg:hidden flex justify-center mb-10">
-              <Image src="/hopwhistle.png" alt="Hopwhistle" width={180} height={60} priority />
+              <Image src="/hopwhistle-mark.svg" alt="Hopwhistle" width={180} height={60} priority />
             </div>
 
             <div className="space-y-8">
@@ -314,7 +309,7 @@ export default function AuthPage() {
                 <p className="text-sm text-muted-foreground">
                   {activeTab === 'signin'
                     ? 'Enter your operational credentials to access the secure command center.'
-                    : 'Register a new institutional identity to access the network.'}
+                    : 'Create an account and we will provision a private workspace for your data.'}
                 </p>
               </div>
 
@@ -351,18 +346,24 @@ export default function AuthPage() {
 
                 {/* Sign In Form */}
                 <TabsContent value="signin" className="space-y-6 outline-none">
-                  {/* Google Sign In Button */}
-                  <div id="google-signin-button" className="w-full flex justify-center" />
+                  {/*
+                    The button host must stay mounted for Google to render into
+                    it, so collapse the whole block rather than unmounting it —
+                    otherwise an unconfigured Google leaves a blank gap above a
+                    divider that separates nothing.
+                  */}
+                  <div className={googleLoaded ? undefined : 'hidden'}>
+                    <div id="google-signin-button" className="w-full flex justify-center" />
 
-                  {/* Divider */}
-                  <div className="relative my-8">
-                    <div className="absolute inset-0 flex items-center">
-                      <span className="w-full border-t border-border" />
-                    </div>
-                    <div className="relative flex justify-center">
-                      <span className="bg-background px-3 text-[10px] uppercase tracking-widest font-mono text-muted-foreground font-semibold">
-                        Or authenticate via email
-                      </span>
+                    <div className="relative my-8">
+                      <div className="absolute inset-0 flex items-center">
+                        <span className="w-full border-t border-border" />
+                      </div>
+                      <div className="relative flex justify-center">
+                        <span className="bg-background px-3 text-[10px] uppercase tracking-widest font-mono text-muted-foreground font-semibold">
+                          Or authenticate via email
+                        </span>
+                      </div>
                     </div>
                   </div>
 
@@ -432,18 +433,18 @@ export default function AuthPage() {
 
                 {/* Sign Up Form */}
                 <TabsContent value="signup" className="space-y-6 outline-none">
-                  {/* Google Sign Up Button */}
-                  <div id="google-signup-button" className="w-full flex justify-center" />
+                  <div className={googleLoaded ? undefined : 'hidden'}>
+                    <div id="google-signup-button" className="w-full flex justify-center" />
 
-                  {/* Divider */}
-                  <div className="relative my-8">
-                    <div className="absolute inset-0 flex items-center">
-                      <span className="w-full border-t border-border" />
-                    </div>
-                    <div className="relative flex justify-center">
-                      <span className="bg-background px-3 text-[10px] uppercase tracking-widest font-mono text-muted-foreground font-semibold">
-                        Or register via email
-                      </span>
+                    <div className="relative my-8">
+                      <div className="absolute inset-0 flex items-center">
+                        <span className="w-full border-t border-border" />
+                      </div>
+                      <div className="relative flex justify-center">
+                        <span className="bg-background px-3 text-[10px] uppercase tracking-widest font-mono text-muted-foreground font-semibold">
+                          Or register via email
+                        </span>
+                      </div>
                     </div>
                   </div>
 

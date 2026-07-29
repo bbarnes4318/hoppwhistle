@@ -1,11 +1,12 @@
 'use client';
 
 import React from 'react';
-import { cn } from '@/lib/utils';
+
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 
 // ============================================================================
-// Layout Helpers for Denser, Viewport-Aligned SaaS Console UI
+// Layout Helpers for a Dense, Viewport-Aligned SaaS Console UI
 // ============================================================================
 
 interface CompactPageShellProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -14,8 +15,8 @@ interface CompactPageShellProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 /**
- * A container page shell that locks the viewport height, uses compact padding,
- * and organizes child components vertically.
+ * Page container. Locks to the viewport, keeps padding consistent across every
+ * screen, and fades content in so navigation never feels like a hard cut.
  */
 export function CompactPageShell({
   children,
@@ -26,7 +27,8 @@ export function CompactPageShell({
   return (
     <div
       className={cn(
-        'w-full p-3 md:p-4 gap-3 bg-background text-foreground flex flex-col min-h-0',
+        'flex w-full min-h-0 flex-col gap-4 bg-transparent p-4 text-foreground md:p-6',
+        'animate-in-up',
         fullHeight ? 'h-full overflow-hidden' : 'h-auto overflow-y-auto',
         className
       )}
@@ -45,7 +47,8 @@ interface CompactPageHeaderProps {
 }
 
 /**
- * A standardized compact header (40-48px height) for dashboard pages.
+ * Standard page header. The icon sits in a tinted, softly glowing tile so each
+ * page has a clear anchor point without shouting.
  */
 export function CompactPageHeader({
   title,
@@ -54,21 +57,25 @@ export function CompactPageHeader({
   children,
 }: CompactPageHeaderProps) {
   return (
-    <div className="flex flex-row items-center justify-between border-b border-border/40 pb-2.5 flex-shrink-0">
-      <div className="flex items-center gap-2.5">
+    <div className="flex flex-shrink-0 flex-row items-center justify-between gap-4 border-b border-border pb-4">
+      <div className="flex min-w-0 items-center gap-3">
         {Icon && (
-          <div className="w-8 h-8 rounded border border-border bg-card flex items-center justify-center flex-shrink-0">
-            <Icon className="w-4 h-4 text-muted-foreground" />
+          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 shadow-inset">
+            <Icon className="h-[18px] w-[18px] text-primary" />
           </div>
         )}
-        <div>
-          <h1 className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+        <div className="min-w-0">
+          <h1 className="truncate text-[19px] font-semibold leading-tight tracking-[-0.02em] text-foreground">
             {title}
           </h1>
-          {subtitle && <p className="text-[11px] text-muted-foreground mt-0.5 leading-none">{subtitle}</p>}
+          {subtitle && (
+            <p className="mt-0.5 truncate text-xs leading-tight text-muted-foreground">
+              {subtitle}
+            </p>
+          )}
         </div>
       </div>
-      {children && <div className="flex items-center gap-2">{children}</div>}
+      {children && <div className="flex flex-shrink-0 items-center gap-2">{children}</div>}
     </div>
   );
 }
@@ -80,7 +87,7 @@ interface DenseCardProps extends React.ComponentProps<typeof Card> {
 }
 
 /**
- * Card component with tightened padding and rigid vertical flex layout.
+ * Panel with a tightened header and an internally scrolling body.
  */
 export function DenseCard({
   title,
@@ -91,23 +98,19 @@ export function DenseCard({
   ...props
 }: DenseCardProps) {
   return (
-    <Card
-      className={cn(
-        'bg-card border-border/40 shadow-sm flex flex-col min-h-0 overflow-hidden',
-        className
-      )}
-      {...props}
-    >
+    <Card className={cn('flex min-h-0 flex-col overflow-hidden', className)} {...props}>
       {(title || Icon || headerActions) && (
-        <CardHeader className="p-3 pb-2 flex flex-row items-center justify-between border-b border-border/10 space-y-0 flex-shrink-0">
-          <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-            {Icon && <Icon className="w-3.5 h-3.5" />}
+        <CardHeader className="flex flex-shrink-0 flex-row items-center justify-between space-y-0 border-b border-border px-4 py-3">
+          <CardTitle className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-eyebrow text-muted-foreground">
+            {Icon && <Icon className="h-3.5 w-3.5 text-muted-foreground/80" />}
             {title}
           </CardTitle>
-          {headerActions && <div>{headerActions}</div>}
+          {headerActions && <div className="flex items-center gap-1.5">{headerActions}</div>}
         </CardHeader>
       )}
-      <CardContent className="p-3 flex-1 min-h-0 overflow-auto">{children}</CardContent>
+      <CardContent className="custom-scrollbar min-h-0 flex-1 overflow-auto p-4">
+        {children}
+      </CardContent>
     </Card>
   );
 }
@@ -115,11 +118,15 @@ export function DenseCard({
 /**
  * Metrics grid container, cleanly lining up KPI components.
  */
-export function MetricStrip({ children, className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+export function MetricStrip({
+  children,
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       className={cn(
-        'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 flex-shrink-0',
+        'grid flex-shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6',
         className
       )}
       {...props}
@@ -136,12 +143,51 @@ export function DataPanel({ children, className, ...props }: React.HTMLAttribute
   return (
     <div
       className={cn(
-        'flex-1 min-h-0 overflow-auto border border-border/30 bg-card/20 rounded-lg p-2.5',
+        'surface-flush custom-scrollbar min-h-0 flex-1 overflow-auto p-3',
         className
       )}
       {...props}
     >
       {children}
+    </div>
+  );
+}
+
+/**
+ * Empty state. A quiet, well-composed nothing beats a bare "No data" string.
+ */
+export function EmptyState({
+  icon: Icon,
+  title,
+  description,
+  action,
+  className,
+}: {
+  icon?: React.ComponentType<{ className?: string }>;
+  title: string;
+  description?: string;
+  action?: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        'flex flex-col items-center justify-center px-6 py-14 text-center',
+        className
+      )}
+    >
+      {Icon && (
+        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full border border-border bg-surface-raised">
+          <Icon className="h-5 w-5 text-muted-foreground/70" />
+        </div>
+      )}
+      <p className="text-sm font-semibold text-foreground">{title}</p>
+      {description && (
+        <p className="mt-1.5 max-w-sm text-[13px] leading-relaxed text-muted-foreground">
+          {description}
+        </p>
+      )}
+      {action && <div className="mt-5">{action}</div>}
     </div>
   );
 }

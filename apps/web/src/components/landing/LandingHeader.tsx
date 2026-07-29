@@ -18,7 +18,7 @@ export function LandingHeader() {
           <Link href="/" className="flex items-center gap-2.5 group">
             <div className="relative h-8 w-8 overflow-hidden rounded-lg bg-slate-900 border border-slate-800 p-1 transition-all duration-300 group-hover:scale-105 group-hover:border-emerald-500/30">
               <Image
-                src="/hopwhistle.png"
+                src="/hopwhistle-mark.svg"
                 alt="Hopwhistle Logo"
                 fill
                 className="object-contain p-1"

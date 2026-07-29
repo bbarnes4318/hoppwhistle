@@ -4,64 +4,106 @@
 
 @layer base {
   /*
-   * INSTITUTIONAL DESIGN SYSTEM — Phase 1
-   * Bloomberg-terminal aesthetic: permanent deep-slate dark mode.
-   * Both :root and .dark carry identical tokens so the app is dark
-   * regardless of the ThemeProvider class.
+   * ─────────────────────────────────────────────────────────────────────────
+   * HOPWHISTLE DESIGN SYSTEM
+   * ─────────────────────────────────────────────────────────────────────────
+   * A permanent dark, institutional console theme: layered midnight surfaces,
+   * hairline borders, a single confident jade accent and a warm gold micro
+   * accent. Both :root and .dark carry identical tokens so the app renders
+   * correctly regardless of the ThemeProvider class.
    */
   :root {
-    --background: 224 35% 8%;
-    --foreground: 215 20% 90%;
-    --card: 224 35% 11%;
-    --card-foreground: 215 20% 92%;
-    --popover: 224 35% 11%;
-    --popover-foreground: 215 20% 92%;
-    --primary: 156 72% 40%;
-    --primary-foreground: 224 35% 8%;
-    --secondary: 224 30% 16%;
-    --secondary-foreground: 215 20% 90%;
-    --muted: 224 30% 15%;
-    --muted-foreground: 215 20% 65%;
-    --accent: 156 72% 40%;
-    --accent-foreground: 224 35% 8%;
-    --destructive: 0 70% 50%;
+    /* Base surfaces — four distinct elevation levels, not one flat colour */
+    --background: 222 40% 5%;
+    --surface: 222 34% 8%;
+    --surface-raised: 222 30% 11%;
+    --foreground: 213 28% 93%;
+
+    --card: 222 34% 8.5%;
+    --card-foreground: 213 28% 94%;
+    --popover: 222 32% 10%;
+    --popover-foreground: 213 28% 94%;
+
+    /* Jade — the primary brand accent */
+    --primary: 158 70% 44%;
+    --primary-foreground: 222 45% 5%;
+    --primary-muted: 158 60% 20%;
+
+    /* Gold — reserved for premium / value moments, used sparingly */
+    --gold: 42 84% 60%;
+    --gold-foreground: 222 45% 5%;
+
+    --secondary: 222 26% 15%;
+    --secondary-foreground: 213 25% 90%;
+    --muted: 222 26% 14%;
+    --muted-foreground: 215 16% 62%;
+    --accent: 158 70% 44%;
+    --accent-foreground: 222 45% 5%;
+
+    --destructive: 358 68% 54%;
     --destructive-foreground: 0 0% 100%;
-    --border: 224 30% 20%;
-    --input: 224 30% 20%;
-    --ring: 156 72% 40%;
-    --radius: 0.25rem;
-    --chart-1: 156 72% 40%;
-    --chart-2: 199 89% 48%;
-    --chart-3: 14 100% 60%;
-    --chart-4: 262 83% 58%;
-    --chart-5: 47 96% 53%;
+    --success: 158 70% 44%;
+    --warning: 38 92% 55%;
+    --info: 205 88% 56%;
+
+    /* Hairlines — deliberately low contrast; structure comes from elevation */
+    --border: 218 24% 18%;
+    --border-strong: 218 22% 26%;
+    --input: 218 24% 18%;
+    --ring: 158 70% 44%;
+
+    --radius: 0.625rem;
+
+    /* Charts — distinguishable at small sizes */
+    --chart-1: 158 70% 46%;
+    --chart-2: 205 88% 58%;
+    --chart-3: 42 84% 60%;
+    --chart-4: 265 70% 66%;
+    --chart-5: 12 82% 62%;
+    --chart-6: 186 72% 50%;
+
+    /* Elevation — soft, deep, never harsh */
+    --shadow-sm: 0 1px 2px 0 hsl(222 60% 2% / 0.5);
+    --shadow-md: 0 4px 12px -2px hsl(222 60% 2% / 0.55), 0 2px 4px -2px hsl(222 60% 2% / 0.4);
+    --shadow-lg: 0 16px 40px -8px hsl(222 60% 2% / 0.7), 0 4px 12px -4px hsl(222 60% 2% / 0.5);
+    --shadow-glow: 0 0 0 1px hsl(var(--primary) / 0.28), 0 0 24px -6px hsl(var(--primary) / 0.35);
   }
 
   .dark {
-    --background: 224 35% 8%;
-    --foreground: 215 20% 90%;
-    --card: 224 35% 11%;
-    --card-foreground: 215 20% 92%;
-    --popover: 224 35% 11%;
-    --popover-foreground: 215 20% 92%;
-    --primary: 156 72% 40%;
-    --primary-foreground: 224 35% 8%;
-    --secondary: 224 30% 16%;
-    --secondary-foreground: 215 20% 90%;
-    --muted: 224 30% 15%;
-    --muted-foreground: 215 20% 65%;
-    --accent: 156 72% 40%;
-    --accent-foreground: 224 35% 8%;
-    --destructive: 0 70% 50%;
+    --background: 222 40% 5%;
+    --surface: 222 34% 8%;
+    --surface-raised: 222 30% 11%;
+    --foreground: 213 28% 93%;
+    --card: 222 34% 8.5%;
+    --card-foreground: 213 28% 94%;
+    --popover: 222 32% 10%;
+    --popover-foreground: 213 28% 94%;
+    --primary: 158 70% 44%;
+    --primary-foreground: 222 45% 5%;
+    --primary-muted: 158 60% 20%;
+    --gold: 42 84% 60%;
+    --gold-foreground: 222 45% 5%;
+    --secondary: 222 26% 15%;
+    --secondary-foreground: 213 25% 90%;
+    --muted: 222 26% 14%;
+    --muted-foreground: 215 16% 62%;
+    --accent: 158 70% 44%;
+    --accent-foreground: 222 45% 5%;
+    --destructive: 358 68% 54%;
     --destructive-foreground: 0 0% 100%;
-    --border: 224 30% 20%;
-    --input: 224 30% 20%;
-    --ring: 156 72% 40%;
-    --chart-1: 156 72% 40%;
-    --chart-2: 199 89% 48%;
-    --chart-3: 14 100% 60%;
-    --chart-4: 262 83% 58%;
-    --chart-5: 47 96% 53%;
+    --success: 158 70% 44%;
+    --warning: 38 92% 55%;
+    --info: 205 88% 56%;
+    --border: 218 24% 18%;
+    --border-strong: 218 22% 26%;
+    --input: 218 24% 18%;
+    --ring: 158 70% 44%;
+    --chart-1: 158 70% 46%;
+    --chart-2: 205 88% 58%;
+    --chart-3: 42 84% 60%;
+    --chart-4: 265 70% 66%;
+    --chart-5: 12 82% 62%;
+    --chart-6: 186 72% 50%;
   }
 }
 
@@ -69,40 +111,226 @@
   * {
     @apply border-border;
   }
+
   html {
     @apply h-full;
+    -webkit-tap-highlight-color: transparent;
   }
+
   body {
     @apply bg-background text-foreground h-full;
+    /* Crisper glyphs on dark backgrounds */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    /* A barely-there vertical wash so the page never reads as flat black */
+    background-image: radial-gradient(
+      120% 80% at 50% 0%,
+      hsl(222 38% 9% / 0.9) 0%,
+      hsl(var(--background)) 62%
+    );
+    background-attachment: fixed;
   }
+
   #__next {
     @apply h-full;
+  }
+
+  /* Numeric data must never jitter between renders */
+  table,
+  .tabular,
+  [data-numeric] {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.28);
+    color: hsl(var(--foreground));
+  }
+
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring) / 0.75);
+    outline-offset: 2px;
+  }
+
+  /* Default scrollbars, themed */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border-strong)) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: hsl(var(--border-strong));
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: hsl(215 16% 40%);
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+
+@layer components {
+  /*
+   * Surface — the workhorse panel. A hairline border plus a 1px inner top
+   * highlight is what separates "expensive" from "a div with a border".
+   */
+  .surface {
+    background-color: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    box-shadow:
+      inset 0 1px 0 0 hsl(0 0% 100% / 0.04),
+      var(--shadow-md);
+  }
+
+  .surface-flush {
+    background-color: hsl(var(--surface));
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    box-shadow: inset 0 1px 0 0 hsl(0 0% 100% / 0.03);
+  }
+
+  /* Frosted overlay chrome for headers and sticky bars */
+  .glass {
+    background-color: hsl(var(--surface) / 0.72);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+  }
+
+  /* Section eyebrow used above panel groups */
+  .eyebrow {
+    @apply text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/70;
+  }
+
+  /* Understated key metric treatment */
+  .metric-value {
+    @apply text-3xl font-semibold tracking-tight text-foreground;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* A hairline rule that fades at both ends rather than stopping abruptly */
+  .rule-fade {
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      hsl(var(--border-strong)) 18%,
+      hsl(var(--border-strong)) 82%,
+      transparent
+    );
+  }
+
+  /* Live indicator dot with a soft breathing halo */
+  .pulse-dot {
+    position: relative;
+    display: inline-block;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 999px;
+    background: hsl(var(--primary));
+  }
+  .pulse-dot::after {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: 999px;
+    background: hsl(var(--primary) / 0.35);
+    animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
 }
 
 @layer utilities {
   /* High row density for data ledgers */
   .table-dense th {
-    @apply py-1.5 px-2 text-xs font-semibold text-muted-foreground uppercase tracking-widest border-b border-border/10;
+    @apply py-2 px-3 text-[10px] font-semibold text-muted-foreground uppercase tracking-[0.14em] border-b border-border;
   }
   .table-dense td {
-    @apply py-1.5 px-2 text-xs text-foreground border-b border-border/10;
+    @apply py-2 px-3 text-xs text-foreground border-b border-border/40;
   }
-  
-  /* Compact custom scrollbar styling */
+
   .custom-scrollbar::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 8px;
+    height: 8px;
   }
   .custom-scrollbar::-webkit-scrollbar-track {
     background: transparent;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: hsl(var(--border));
-    border-radius: 3px;
+    background: hsl(var(--border-strong));
+    border-radius: 999px;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--muted-foreground));
+    background: hsl(215 16% 42%);
+  }
+
+  .shadow-elevate {
+    box-shadow: var(--shadow-md);
+  }
+  .shadow-float {
+    box-shadow: var(--shadow-lg);
+  }
+  .shadow-ring-primary {
+    box-shadow: var(--shadow-glow);
+  }
+
+  /* Subtle top-lit gradient for hero panels */
+  .bg-lift {
+    background-image: linear-gradient(180deg, hsl(0 0% 100% / 0.045) 0%, hsl(0 0% 100% / 0) 45%);
+  }
+
+  .text-gradient-primary {
+    background-image: linear-gradient(135deg, hsl(var(--foreground)) 0%, hsl(var(--primary)) 130%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .animate-in-up {
+    animation: in-up 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 }
 
+@keyframes pulse-ring {
+  0%,
+  100% {
+    opacity: 0.75;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0;
+    transform: scale(1.7);
+  }
+}
+
+@keyframes in-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

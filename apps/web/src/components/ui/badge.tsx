@@ -4,33 +4,47 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 
 const badgeVariants = cva(
- 'inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
- {
- variants: {
- variant: {
- default: 'border-transparent bg-primary text-primary-foreground hover:bg-primary/80',
- secondary: 'border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80',
- destructive:
- 'border-transparent bg-destructive/10 text-destructive hover:bg-destructive/20',
- outline: 'text-foreground',
- success: 'border-transparent bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20',
- warning: 'border-transparent bg-amber-500/10 text-amber-500 hover:bg-amber-500/20',
- },
- },
- defaultVariants: {
- variant: 'default',
- },
- }
+  [
+    'inline-flex items-center gap-1.5 rounded-full border',
+    'px-2.5 py-0.5 text-[11px] font-semibold leading-5 tracking-[-0.005em]',
+    'transition-colors focus:outline-none focus:ring-2 focus:ring-ring/60 focus:ring-offset-1 focus:ring-offset-background',
+  ].join(' '),
+  {
+    variants: {
+      variant: {
+        // Tinted-fill status pills read better on dark than solid blocks
+        default: 'border-primary/25 bg-primary/12 text-primary',
+        solid: 'border-transparent bg-primary text-primary-foreground',
+        secondary: 'border-border bg-secondary text-secondary-foreground',
+        destructive: 'border-destructive/25 bg-destructive/12 text-destructive',
+        outline: 'border-border-strong bg-transparent text-muted-foreground',
+        success: 'border-emerald-500/25 bg-emerald-500/12 text-emerald-400',
+        warning: 'border-amber-500/25 bg-amber-500/12 text-amber-400',
+        info: 'border-sky-500/25 bg-sky-500/12 text-sky-400',
+        gold: 'border-gold/30 bg-gold/12 text-gold',
+        muted: 'border-border bg-muted/60 text-muted-foreground',
+      },
+    },
+    defaultVariants: {
+      variant: 'default',
+    },
+  }
 );
 
 export interface BadgeProps
- extends React.HTMLAttributes<HTMLDivElement>,
- VariantProps<typeof badgeVariants> {}
+  extends React.HTMLAttributes<HTMLDivElement>,
+    VariantProps<typeof badgeVariants> {
+  /** Render a leading status dot in the badge's own colour. */
+  dot?: boolean;
+}
 
-function Badge({ className, variant, ...props }: BadgeProps) {
- return <div className={cn(badgeVariants({ variant }), className)} {...props} />;
+function Badge({ className, variant, dot = false, children, ...props }: BadgeProps) {
+  return (
+    <div className={cn(badgeVariants({ variant }), className)} {...props}>
+      {dot && <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />}
+      {children}
+    </div>
+  );
 }
 
 export { Badge, badgeVariants };
-
-

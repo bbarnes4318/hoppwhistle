@@ -11,6 +11,8 @@ interface UserData {
   buyerId?: string;
   publisherId?: string;
   tenantId: string;
+  tenantName?: string | null;
+  tenantSlug?: string | null;
   publisherAccessToRecordings?: boolean;
   buyerAccessToRecordings?: boolean;
   position?: string | null;
@@ -37,6 +39,7 @@ interface UseAuthReturn {
   buyerId: string | null;
   publisherId: string | null;
   tenantId: string | null;
+  tenantName: string | null;
   permissions: string[];
   canViewRecordings: boolean;
   canViewReports: boolean;
@@ -95,6 +98,8 @@ export function useAuth(): UseAuthReturn {
         buyerId: rawUser.buyerId,
         publisherId: rawUser.publisherId,
         tenantId: rawUser.tenantId,
+        tenantName: rawUser.tenantName ?? null,
+        tenantSlug: rawUser.tenantSlug ?? null,
         publisherAccessToRecordings: rawUser.publisherAccessToRecordings,
         buyerAccessToRecordings: rawUser.buyerAccessToRecordings,
         position: rawUser.position,
@@ -137,6 +142,7 @@ export function useAuth(): UseAuthReturn {
   const buyerId = user?.buyerId || null;
   const publisherId = user?.publisherId || null;
   const tenantId = user?.tenantId || null;
+  const tenantName = user?.tenantName || null;
 
   // Deriving permissions client-side
   const getPermissions = (roles: string[]): string[] => {
@@ -235,6 +241,7 @@ export function useAuth(): UseAuthReturn {
     buyerId,
     publisherId,
     tenantId,
+    tenantName,
     permissions,
     canViewRecordings,
     canViewReports,

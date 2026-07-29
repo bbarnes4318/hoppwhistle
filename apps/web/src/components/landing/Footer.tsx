@@ -22,7 +22,7 @@ export function Footer() {
             <Link href="/" className="flex items-center gap-2 group">
               <div className="relative h-7 w-7 overflow-hidden rounded bg-slate-900 border border-slate-800 p-0.5">
                 <Image
-                  src="/hopwhistle.png"
+                  src="/hopwhistle-mark.svg"
                   alt="Hopwhistle Logo"
                   fill
                   className="object-contain p-0.5"
