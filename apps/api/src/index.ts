@@ -10,6 +10,7 @@ import { logger } from './lib/logger.js';
 import { register } from './lib/metrics.js';
 import { closePrismaClient } from './lib/prisma.js';
 import { initTracing, shutdownTracing } from './lib/tracing.js';
+import { isDemoTenantHeaderAllowed } from './lib/tenant.js';
 import { registerAuth } from './middleware/auth.js';
 import { registerLoggingMiddleware } from './middleware/logging.js';
 import { registerAdminBillingRoutes } from './routes/admin-billing.js';
@@ -103,17 +104,38 @@ async function buildServer() {
       }
     }
 
-    // Fallback to Demo Tenant ID if present and JWT failed/absent
+    // Fallback to Demo Tenant ID if present and JWT failed/absent.
+    //
+    // This is a client-supplied tenant id, so it may never be trusted on its
+    // own: it is only accepted when the deployment explicitly opts into demo
+    // mode AND the referenced tenant is actually a demo tenant. Otherwise any
+    // caller could mint an ADMIN/OWNER session for an arbitrary tenant.
     const demoTenantId =
       (request.headers['x-demo-tenant-id'] as string | undefined) ||
       (request.query as { demoTenantId?: string } | undefined)?.demoTenantId;
 
-    if (demoTenantId) {
-      request.user = {
-        tenantId: demoTenantId,
-        roles: ['ADMIN', 'OWNER'],
-      };
-      return;
+    if (demoTenantId && isDemoTenantHeaderAllowed()) {
+      const prisma = getPrismaClient();
+      const tenant = await prisma.tenant
+        .findUnique({
+          where: { id: demoTenantId },
+          select: { id: true, slug: true, status: true, metadata: true },
+        })
+        .catch(() => null);
+
+      const isDemoTenant =
+        tenant !== null &&
+        tenant.status === 'ACTIVE' &&
+        (tenant.slug.startsWith('demo') ||
+          (tenant.metadata as { isDemo?: boolean } | null)?.isDemo === true);
+
+      if (isDemoTenant) {
+        request.user = {
+          tenantId: tenant.id,
+          roles: ['ADMIN', 'OWNER'],
+        };
+        return;
+      }
     }
 
     const apiKey = request.headers['x-api-key'] as string;

@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 
 import { logger } from '../lib/logger.js';
+import { resolveTenantId } from '../lib/tenant.js';
 
 import { clickhouseService } from './clickhouse.js';
 
@@ -52,8 +53,10 @@ export class AnalyticsService {
   }
 
   async getMetrics(filters: AnalyticsFilters): Promise<MetricsResult> {
-    // Use demo tenant if provided
-    const tenantId = filters.demoTenantId || filters.tenantId;
+    // The caller's own tenant always wins; the demo tenant is only a fallback
+    // for anonymous demo sessions (see lib/tenant.ts).
+    const tenantId =
+      resolveTenantId({ tenantId: filters.tenantId }, filters.demoTenantId) ?? filters.tenantId;
     const effectiveFilters = { ...filters, tenantId };
 
     if (clickhouseService.isEnabled()) {

@@ -4,6 +4,7 @@ import { getPrismaClient } from '../lib/prisma.js';
 import { compliancePolicyService } from '../services/compliance-policy-service.js';
 import { complianceService } from '../services/compliance-service.js';
 import { consentProviderService } from '../services/consent-provider-service.js';
+import { resolveTenantId } from '../lib/tenant.js';
 
 const prisma = getPrismaClient();
 
@@ -165,7 +166,7 @@ export async function registerComplianceRoutes(fastify: FastifyInstance) {
   fastify.get('/api/v1/compliance/dnc-lists', async (request, reply) => {
     const user = (request as any).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = resolveTenantId(user, demoTenantId);
     
     if (!tenantId) {
       reply.code(401);
@@ -215,7 +216,7 @@ export async function registerComplianceRoutes(fastify: FastifyInstance) {
     try {
       const user = (request as any).user;
       const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-      const tenantId = demoTenantId || user?.tenantId;
+      const tenantId = resolveTenantId(user, demoTenantId);
       
       if (!tenantId) {
         reply.code(401);
@@ -303,7 +304,7 @@ export async function registerComplianceRoutes(fastify: FastifyInstance) {
   fastify.delete('/api/v1/compliance/dnc-lists/:listId', async (request, reply) => {
     const user = (request as any).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = resolveTenantId(user, demoTenantId);
     
     if (!tenantId) {
       reply.code(401);
@@ -348,7 +349,11 @@ export async function registerComplianceRoutes(fastify: FastifyInstance) {
 
   // Get compliance audit log
   fastify.get('/api/v1/compliance/audit', async (request, reply) => {
-    const tenantId = (request as any).user?.tenantId || 'default';
+    const tenantId = (request as any).user?.tenantId as string | undefined;
+    if (!tenantId) {
+      reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+    }
     const { callId, phoneNumber, limit = 100 } = request.query as {
       callId?: string;
       phoneNumber?: string;

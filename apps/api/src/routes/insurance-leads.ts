@@ -10,6 +10,7 @@
 import { spawn } from 'child_process';
 
 import { FastifyInstance, FastifyRequest } from 'fastify';
+import { resolveTenantIdOrNull } from '../lib/tenant.js';
 
 interface AuthenticatedUser {
   tenantId?: string;
@@ -23,7 +24,7 @@ type AuthRequest = FastifyRequest & { user?: AuthenticatedUser };
 function getTenantId(request: FastifyRequest): string | null {
   const user = (request as AuthRequest).user;
   const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-  return demoTenantId || user?.tenantId || null;
+  return resolveTenantIdOrNull(user, demoTenantId);
 }
 
 function runPreClosedPython(leads: any[]): Promise<any[]> {

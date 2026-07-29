@@ -4,6 +4,7 @@ import { FastifyInstance, FastifyRequest } from 'fastify';
 import { Prisma } from '@prisma/client';
 
 import { AuthenticatedUser } from '../middleware/auth.js';
+import { resolveTenantId } from '../lib/tenant.js';
 
 type AuthRequest = FastifyRequest & { user?: AuthenticatedUser };
 
@@ -524,7 +525,7 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const user = (request as AuthRequest).user;
       const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-      const tenantId = demoTenantId || user?.tenantId;
+      const tenantId = resolveTenantId(user, demoTenantId);
 
       if (!tenantId) {
         void reply.code(401);
@@ -626,7 +627,7 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
     try {
       const user = (request as AuthRequest).user;
       const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-      const tenantId = demoTenantId || user?.tenantId;
+      const tenantId = resolveTenantId(user, demoTenantId);
 
       if (!tenantId) {
         void reply.code(401);
@@ -745,7 +746,7 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
     try {
       const user = (request as AuthRequest).user;
       const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-      const tenantId = demoTenantId || user?.tenantId;
+      const tenantId = resolveTenantId(user, demoTenantId);
 
       if (!tenantId) {
         void reply.code(401);
@@ -885,7 +886,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const user = (request as AuthRequest).user;
       const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-      const tenantId = demoTenantId || user?.tenantId;
+      const tenantId = resolveTenantId(user, demoTenantId);
 
       if (!tenantId) {
         void reply.code(401);
@@ -979,7 +980,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
     try {
       const user = (request as AuthRequest).user;
       const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-      const tenantId = demoTenantId || user?.tenantId;
+      const tenantId = resolveTenantId(user, demoTenantId);
 
       if (!tenantId) {
         void reply.code(401);
@@ -1157,7 +1158,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
   fastify.get('/api/v1/campaigns/stats', async (request, reply) => {
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = resolveTenantId(user, demoTenantId);
 
     if (!tenantId) {
       void reply.code(401);
@@ -1258,7 +1259,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const user = (request as AuthRequest).user;
       const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-      const tenantId = demoTenantId || user?.tenantId;
+      const tenantId = resolveTenantId(user, demoTenantId);
 
       if (!tenantId) {
         void reply.code(401);
@@ -1325,7 +1326,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
     try {
       const user = (request as AuthRequest).user;
       const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-      const tenantId = demoTenantId || user?.tenantId;
+      const tenantId = resolveTenantId(user, demoTenantId);
 
       if (!tenantId) {
         void reply.code(401);
@@ -1437,7 +1438,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
       try {
         const user = (request as AuthRequest).user;
         const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-        const tenantId = demoTenantId || user?.tenantId;
+        const tenantId = resolveTenantId(user, demoTenantId);
 
         if (!tenantId) {
           void reply.code(401);
@@ -1527,7 +1528,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
       try {
         const user = (request as AuthRequest).user;
         const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-        const tenantId = demoTenantId || user?.tenantId;
+        const tenantId = resolveTenantId(user, demoTenantId);
 
         if (!tenantId) {
           void reply.code(401);
@@ -1578,7 +1579,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const user = (request as AuthRequest).user;
       const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-      const tenantId = demoTenantId || user?.tenantId;
+      const tenantId = resolveTenantId(user, demoTenantId);
       if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
 
       const { campaignId } = request.params;
@@ -1612,7 +1613,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
   }>('/api/v1/campaigns/:campaignId/publishers', async (request, reply) => {
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = resolveTenantId(user, demoTenantId);
     if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
 
     const { campaignId } = request.params;
@@ -1673,7 +1674,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
   }>('/api/v1/campaigns/:campaignId/publishers/:assignmentId', async (request, reply) => {
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = resolveTenantId(user, demoTenantId);
     if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
 
     const { campaignId, assignmentId } = request.params;
@@ -1710,7 +1711,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const user = (request as AuthRequest).user;
       const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-      const tenantId = demoTenantId || user?.tenantId;
+      const tenantId = resolveTenantId(user, demoTenantId);
       if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
 
       const { campaignId, assignmentId } = request.params;
@@ -1732,7 +1733,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const user = (request as AuthRequest).user;
       const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-      const tenantId = demoTenantId || user?.tenantId;
+      const tenantId = resolveTenantId(user, demoTenantId);
       if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
 
       const { campaignId } = request.params;
@@ -1771,7 +1772,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
   }>('/api/v1/campaigns/:campaignId/buyers', async (request, reply) => {
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = resolveTenantId(user, demoTenantId);
     if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
 
     const { campaignId } = request.params;
@@ -1888,7 +1889,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
   }>('/api/v1/campaigns/:campaignId/buyers/:assignmentId', async (request, reply) => {
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = resolveTenantId(user, demoTenantId);
     if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
 
     const { campaignId, assignmentId } = request.params;
@@ -1980,7 +1981,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const user = (request as AuthRequest).user;
       const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-      const tenantId = demoTenantId || user?.tenantId;
+      const tenantId = resolveTenantId(user, demoTenantId);
       if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
 
       const { campaignId, assignmentId } = request.params;
@@ -2003,7 +2004,7 @@ export async function registerFlowRoutes(fastify: FastifyInstance) {
   fastify.get('/api/v1/flows', async (request, reply) => {
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = resolveTenantId(user, demoTenantId);
 
     if (!tenantId) {
       void reply.code(401);
@@ -2088,7 +2089,7 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const user = (request as AuthRequest).user;
       const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-      const tenantId = demoTenantId || user?.tenantId;
+      const tenantId = resolveTenantId(user, demoTenantId);
 
       if (!tenantId) {
         void reply.code(401);
@@ -2151,7 +2152,7 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
   fastify.get('/api/v1/publishers/stats', async (request, reply) => {
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = resolveTenantId(user, demoTenantId);
 
     if (!tenantId) {
       void reply.code(401);
@@ -2223,7 +2224,7 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
     try {
       const user = (request as AuthRequest).user;
       const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-      const tenantId = demoTenantId || user?.tenantId;
+      const tenantId = resolveTenantId(user, demoTenantId);
 
       if (!tenantId) {
         void reply.code(401);
@@ -2323,7 +2324,7 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
     try {
       const user = (request as AuthRequest).user;
       const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-      const tenantId = demoTenantId || user?.tenantId;
+      const tenantId = resolveTenantId(user, demoTenantId);
 
       if (!tenantId) {
         void reply.code(401);
@@ -2401,7 +2402,7 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
       try {
         const user = (request as AuthRequest).user;
         const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-        const tenantId = demoTenantId || user?.tenantId;
+        const tenantId = resolveTenantId(user, demoTenantId);
 
         if (!tenantId) {
           void reply.code(401);
@@ -2455,7 +2456,7 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
       try {
         const user = (request as AuthRequest).user;
         const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-        const tenantId = demoTenantId || user?.tenantId;
+        const tenantId = resolveTenantId(user, demoTenantId);
 
         if (!tenantId) {
           void reply.code(401);
@@ -2513,7 +2514,7 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
       try {
         const user = (request as AuthRequest).user;
         const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-        const tenantId = demoTenantId || user?.tenantId;
+        const tenantId = resolveTenantId(user, demoTenantId);
 
         if (!tenantId) {
           void reply.code(401);
@@ -2650,7 +2651,7 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
       try {
         const user = (request as AuthRequest).user;
         const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-        const tenantId = demoTenantId || user?.tenantId;
+        const tenantId = resolveTenantId(user, demoTenantId);
 
         if (!tenantId) {
           void reply.code(401);
@@ -2708,7 +2709,7 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
       try {
         const user = (request as AuthRequest).user;
         const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-        const tenantId = demoTenantId || user?.tenantId;
+        const tenantId = resolveTenantId(user, demoTenantId);
 
         if (!tenantId) {
           void reply.code(401);
@@ -2783,7 +2784,7 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
       try {
         const user = (request as AuthRequest).user;
         const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-        const tenantId = demoTenantId || user?.tenantId;
+        const tenantId = resolveTenantId(user, demoTenantId);
 
         if (!tenantId) {
           void reply.code(401);
@@ -2833,7 +2834,7 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
       try {
         const user = (request as AuthRequest).user;
         const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-        const tenantId = demoTenantId || user?.tenantId;
+        const tenantId = resolveTenantId(user, demoTenantId);
 
         if (!tenantId) {
           void reply.code(401);
@@ -2907,7 +2908,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
   }>('/api/v1/calls', async (request, reply) => {
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = resolveTenantId(user, demoTenantId);
 
     if (!tenantId) {
       void reply.code(401);
@@ -3054,7 +3055,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
   }>('/api/v1/calls/export.csv', async (request, reply) => {
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = resolveTenantId(user, demoTenantId);
 
     if (!tenantId) {
       void reply.code(401);
@@ -3357,7 +3358,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
   fastify.get<{ Params: { callId: string } }>('/api/v1/calls/:callId', async (request, reply) => {
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = resolveTenantId(user, demoTenantId);
 
     if (!tenantId) {
       void reply.code(401);
@@ -3778,7 +3779,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
   }>('/api/v1/calls/disposition', async (request, reply) => {
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = resolveTenantId(user, demoTenantId);
 
     if (!tenantId) {
       void reply.code(401);
@@ -3947,7 +3948,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
   }>('/api/v1/calls/:callId/disposition', async (request, reply) => {
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = resolveTenantId(user, demoTenantId);
 
     if (!tenantId) {
       void reply.code(401);
@@ -4020,7 +4021,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
   }>('/api/v1/calls/:callId/dispute', async (request, reply) => {
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = resolveTenantId(user, demoTenantId);
 
     if (!tenantId) {
       void reply.code(401);
@@ -4117,7 +4118,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
   }>('/api/v1/publishers/:publisherId/payouts', async (request, reply) => {
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = resolveTenantId(user, demoTenantId);
 
     if (!tenantId) {
       void reply.code(401);
@@ -4181,7 +4182,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
   }>('/api/v1/calls/follow-ups', async (request, reply) => {
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = resolveTenantId(user, demoTenantId);
 
     if (!tenantId) {
       void reply.code(401);
@@ -4268,7 +4269,7 @@ export async function registerWebhookRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const user = (request as AuthRequest).user;
       const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-      const tenantId = demoTenantId || user?.tenantId;
+      const tenantId = resolveTenantId(user, demoTenantId);
 
       if (!tenantId) {
         void reply.code(401);
@@ -4319,7 +4320,7 @@ export async function registerWebhookRoutes(fastify: FastifyInstance) {
   }>('/api/v1/webhooks', async (request, reply) => {
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = resolveTenantId(user, demoTenantId);
 
     if (!tenantId) {
       void reply.code(401);
@@ -4397,7 +4398,7 @@ export async function registerWebhookRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const user = (request as AuthRequest).user;
       const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-      const tenantId = demoTenantId || user?.tenantId;
+      const tenantId = resolveTenantId(user, demoTenantId);
 
       if (!tenantId) {
         void reply.code(401);
@@ -4442,7 +4443,7 @@ export async function registerWebhookRoutes(fastify: FastifyInstance) {
   }>('/api/v1/webhooks/:webhookId', async (request, reply) => {
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = resolveTenantId(user, demoTenantId);
 
     if (!tenantId) {
       void reply.code(401);
@@ -4516,7 +4517,7 @@ export async function registerWebhookRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const user = (request as AuthRequest).user;
       const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-      const tenantId = demoTenantId || user?.tenantId;
+      const tenantId = resolveTenantId(user, demoTenantId);
 
       if (!tenantId) {
         void reply.code(401);
@@ -4569,7 +4570,7 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const user = (request as AuthRequest).user;
       const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-      const tenantId = demoTenantId || user?.tenantId;
+      const tenantId = resolveTenantId(user, demoTenantId);
 
       if (!tenantId) {
         void reply.code(401);
@@ -4656,7 +4657,7 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
   }>('/api/v1/users/invite', async (request, reply) => {
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = resolveTenantId(user, demoTenantId);
 
     if (!tenantId) {
       void reply.code(401);
@@ -4876,7 +4877,7 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
     try {
       const user = (request as AuthRequest).user;
       const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-      const tenantId = demoTenantId || user?.tenantId;
+      const tenantId = resolveTenantId(user, demoTenantId);
 
       if (!tenantId) {
         void reply.code(401);
@@ -5118,7 +5119,11 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
   }>('/api/v1/reporting/metrics', async (request, reply) => {
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId || 'default';
+    const tenantId = resolveTenantId(user, demoTenantId);
+    if (!tenantId) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+    }
     const startDate = request.query.startDate
       ? new Date(request.query.startDate)
       : new Date(Date.now() - 24 * 60 * 60 * 1000); // Default: last 24 hours
@@ -5423,7 +5428,7 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
 
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = resolveTenantId(user, demoTenantId);
     if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
 
     const startDate = request.query.startDate
@@ -5578,7 +5583,7 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
 
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = resolveTenantId(user, demoTenantId);
     if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
 
     const startDate = request.query.startDate
@@ -5744,7 +5749,7 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
 
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = resolveTenantId(user, demoTenantId);
     if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
 
     const startDate = request.query.startDate
@@ -5951,7 +5956,7 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
 
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = resolveTenantId(user, demoTenantId);
     if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
 
     const startDate = request.query.startDate
@@ -6156,7 +6161,7 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
 
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = resolveTenantId(user, demoTenantId);
     if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
 
     const startDate = request.query.startDate
@@ -6376,7 +6381,7 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
 
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = resolveTenantId(user, demoTenantId);
     if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
 
     const startDate = request.query.startDate
@@ -6602,7 +6607,7 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
 
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = resolveTenantId(user, demoTenantId);
     if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
 
     // 1. High-level aggregates
@@ -6827,7 +6832,7 @@ export async function registerBillingRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const user = (request as AuthRequest).user;
       const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-      const tenantId = demoTenantId || user?.tenantId;
+      const tenantId = resolveTenantId(user, demoTenantId);
 
       if (!tenantId) {
         void reply.code(401);
@@ -6916,7 +6921,7 @@ export async function registerBillingRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const user = (request as AuthRequest).user;
       const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-      const tenantId = demoTenantId || user?.tenantId;
+      const tenantId = resolveTenantId(user, demoTenantId);
 
       if (!tenantId) {
         void reply.code(401);
@@ -6979,7 +6984,7 @@ export async function registerBillingRoutes(fastify: FastifyInstance) {
   fastify.get('/api/v1/billing/balance', async (request, reply) => {
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = resolveTenantId(user, demoTenantId);
 
     if (!tenantId) {
       void reply.code(401);

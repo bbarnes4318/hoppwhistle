@@ -6,6 +6,7 @@
 import { FastifyInstance, FastifyRequest } from 'fastify';
 import { PrismaClient, PolicyStatus, PolicyType, RelationshipType } from '@prisma/client';
 import { z } from 'zod';
+import { resolveTenantIdOrNull } from '../lib/tenant.js';
 
 const prisma = new PrismaClient();
 
@@ -89,7 +90,7 @@ type AuthRequest = FastifyRequest & { user?: AuthenticatedUser };
 function getTenantId(request: FastifyRequest): string | null {
   const user = (request as AuthRequest).user;
   const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-  return demoTenantId || user?.tenantId || null;
+  return resolveTenantIdOrNull(user, demoTenantId);
 }
 
 // ============================================================================

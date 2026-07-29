@@ -8,6 +8,7 @@
 
 import { PrismaClient } from '@prisma/client';
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { resolveTenantIdOrNull } from '../lib/tenant.js';
 
 const prisma = new PrismaClient();
 
@@ -100,7 +101,7 @@ type AuthRequest = FastifyRequest & { user?: AuthenticatedUser };
 function getTenantId(request: FastifyRequest): string | null {
   const user = (request as AuthRequest).user;
   const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-  return demoTenantId || user?.tenantId || null;
+  return resolveTenantIdOrNull(user, demoTenantId);
 }
 
 function normalizePhone(phone: string): string {

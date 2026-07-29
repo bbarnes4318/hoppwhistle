@@ -832,18 +832,20 @@ class FlowStore {
   }
 
   /**
-   * List all flows
+   * List the flows belonging to a tenant.
+   *
+   * A tenant is required: without one this used to return every flow in the
+   * database, across all tenants.
    */
   async listFlows(tenantId?: string): Promise<string[]> {
-    const prisma = getPrismaClient();
-    
-    const where: any = {};
-    if (tenantId) {
-      where.tenantId = tenantId;
+    if (!tenantId) {
+      return [];
     }
 
+    const prisma = getPrismaClient();
+
     const flows = await prisma.flow.findMany({
-      where,
+      where: { tenantId },
       select: { id: true },
     });
 

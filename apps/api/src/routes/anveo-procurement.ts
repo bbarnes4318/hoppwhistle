@@ -13,6 +13,7 @@ import { logger } from '../lib/logger.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { AuthenticatedUser } from '../middleware/auth.js';
 import { getAnveoDIDService } from '../services/provisioning/anveo-did-service.js';
+import { resolveTenantId } from '../lib/tenant.js';
 
 type AuthRequest = FastifyRequest & { user?: AuthenticatedUser };
 
@@ -31,7 +32,7 @@ export async function registerAnveoProcurementRoutes(fastify: FastifyInstance): 
   }>('/api/v1/anveo/countries', async (request, reply) => {
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = resolveTenantId(user, demoTenantId);
 
     if (!tenantId) {
       void reply.code(401);
@@ -71,7 +72,7 @@ export async function registerAnveoProcurementRoutes(fastify: FastifyInstance): 
   }>('/api/v1/anveo/countries/:countryId/states', async (request, reply) => {
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = resolveTenantId(user, demoTenantId);
 
     if (!tenantId) {
       void reply.code(401);
@@ -116,7 +117,7 @@ export async function registerAnveoProcurementRoutes(fastify: FastifyInstance): 
   }>('/api/v1/anveo/areas', async (request, reply) => {
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = resolveTenantId(user, demoTenantId);
 
     if (!tenantId) {
       void reply.code(401);
@@ -173,7 +174,7 @@ export async function registerAnveoProcurementRoutes(fastify: FastifyInstance): 
   }>('/api/v1/anveo/purchase', async (request, reply) => {
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = resolveTenantId(user, demoTenantId);
 
     if (!tenantId) {
       void reply.code(401);
@@ -404,7 +405,7 @@ export async function registerAnveoProcurementRoutes(fastify: FastifyInstance): 
   }>('/api/v1/anveo/my-numbers', async (request, reply) => {
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = resolveTenantId(user, demoTenantId);
 
     if (!tenantId) {
       void reply.code(401);
@@ -480,7 +481,7 @@ export async function registerAnveoProcurementRoutes(fastify: FastifyInstance): 
   }>('/api/v1/anveo/numbers/:numberId', async (request, reply) => {
     const user = (request as AuthRequest).user;
     const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = resolveTenantId(user, demoTenantId);
 
     if (!tenantId) {
       void reply.code(401);

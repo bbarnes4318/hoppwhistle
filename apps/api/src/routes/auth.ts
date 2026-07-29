@@ -25,8 +25,9 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
   const prisma = getPrismaClient();
   await Promise.resolve(); // satisfy eslint require-await
 
-  // Helper to get or create a default tenant ID dynamically, optionally resolving from request host/domain/slug
-  async function getDefaultTenantId(request?: FastifyRequest): Promise<string> {
+  // Resolve a tenant from the request host (custom domain or tenant subdomain).
+  // Returns null when the host does not map to a tenant.
+  async function getDefaultTenantId(request?: FastifyRequest): Promise<string | null> {
     if (request) {
       let host = request.hostname || '';
       if (!host && request.headers.host) {
@@ -79,49 +80,73 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       }
     }
 
-    // 3. Try to find the primary seeded tenant ('test-org')
-    let defaultTenant = await prisma.tenant.findUnique({
-      where: { slug: 'test-org' },
+    // No host mapping. Signups are NOT folded into a shared tenant — see
+    // provisionTenantForSignup.
+    return null;
+  }
+
+  /**
+   * Turn an arbitrary string into a slug fragment safe for a tenant slug.
+   */
+  function slugify(value: string): string {
+    return value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 32);
+  }
+
+  /**
+   * Allocate a tenant slug that is not already taken.
+   */
+  async function allocateTenantSlug(base: string): Promise<string> {
+    const root = slugify(base) || 'workspace';
+    let candidate = root;
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const clash = await prisma.tenant.findUnique({ where: { slug: candidate } });
+      if (!clash) return candidate;
+      candidate = `${root}-${Math.random().toString(36).slice(2, 8)}`;
+    }
+    return `${root}-${Date.now().toString(36)}`;
+  }
+
+  /**
+   * Resolve the tenant a brand new account belongs to.
+   *
+   * Every self-serve signup gets its OWN tenant. Previously all registrations
+   * were dropped into whichever tenant happened to be first in the database,
+   * which meant unrelated customers shared one pool of leads, calls, phone
+   * numbers and reporting.
+   *
+   * A signup only joins an existing tenant when the request host explicitly
+   * maps to one (custom domain or tenant subdomain), which is a deliberate
+   * "this person belongs to that org" signal.
+   */
+  async function provisionTenantForSignup(
+    request: FastifyRequest,
+    account: { email: string; firstName?: string | null; lastName?: string | null }
+  ): Promise<string> {
+    const hostTenantId = await getDefaultTenantId(request);
+    if (hostTenantId) return hostTenantId;
+
+    const localPart = account.email.split('@')[0] || 'workspace';
+    const displayName =
+      [account.firstName, account.lastName].filter(Boolean).join(' ').trim() || localPart;
+
+    const tenant = await prisma.tenant.create({
+      data: {
+        name: `${displayName}'s Workspace`,
+        slug: await allocateTenantSlug(localPart),
+        status: 'ACTIVE',
+        metadata: {
+          plan: 'starter',
+          createdVia: 'self-serve-signup',
+          ownerEmail: account.email,
+        },
+      },
     });
 
-    // 4. Try to find 'default' slug
-    if (!defaultTenant) {
-      defaultTenant = await prisma.tenant.findUnique({
-        where: { slug: 'default' },
-      });
-    }
-
-    // 5. Fallback to any active tenant that is not a test-generated one
-    if (!defaultTenant) {
-      const activeTenants = await prisma.tenant.findMany({
-        where: { status: 'ACTIVE' },
-        orderBy: { createdAt: 'asc' },
-      });
-      // Filter out test tenants like test-123456789
-      defaultTenant = activeTenants.find(t => !/^test-\d+$/.test(t.slug)) || activeTenants[0];
-    }
-
-    // 6. Fallback to the absolute first tenant
-    if (!defaultTenant) {
-      defaultTenant = await prisma.tenant.findFirst({
-        orderBy: { createdAt: 'asc' },
-      });
-    }
-
-    // 7. Create default organization if none exists
-    if (!defaultTenant) {
-      defaultTenant = await prisma.tenant.create({
-        data: {
-          name: 'Default Organization',
-          slug: 'default',
-          status: 'ACTIVE',
-          metadata: {
-            plan: 'enterprise',
-          },
-        },
-      });
-    }
-    return defaultTenant.id;
+    return tenant.id;
   }
 
   // Helper to automatically assign the ADMIN role to newly registered users
@@ -362,10 +387,14 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     const userPosition = position || 'Licensed Agent';
     const defaultScript = userPosition === 'Retention' ? 'retention' : 'sales';
 
-    // Create user with default tenant
+    // Create the user in their own tenant (or the tenant this host maps to)
     const user = await prisma.user.create({
       data: {
-        tenantId: await getDefaultTenantId(request),
+        tenantId: await provisionTenantForSignup(request, {
+          email: normalizedEmail,
+          firstName: firstName?.trim() || null,
+          lastName: lastName?.trim() || null,
+        }),
         email: normalizedEmail,
         passwordHash,
         authMethod: 'EMAIL',
@@ -529,10 +558,14 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
           success: true,
         });
       } else {
-        // Create new user with Google and default tenant
+        // Create new Google user in their own tenant (or the host's tenant)
         user = await prisma.user.create({
           data: {
-            tenantId: await getDefaultTenantId(request),
+            tenantId: await provisionTenantForSignup(request, {
+              email: normalizedEmail,
+              firstName: googleUser.firstName,
+              lastName: googleUser.lastName,
+            }),
             email: normalizedEmail,
             googleId: googleUser.googleId,
             authMethod: 'GOOGLE',

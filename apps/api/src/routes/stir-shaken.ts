@@ -193,7 +193,11 @@ export async function registerStirShakenRoutes(fastify: FastifyInstance) {
       limit?: number;
     };
 
-    const tenantId = (request as any).user?.tenantId || 'default';
+    const tenantId = (request as any).user?.tenantId as string | undefined;
+    if (!tenantId) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+    }
 
     const where: any = { tenantId };
     if (phoneNumber) {
