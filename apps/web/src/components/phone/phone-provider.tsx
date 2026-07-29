@@ -148,6 +148,9 @@ export interface PhoneContextType {
   addThirdParty: (phoneNumber: string) => Promise<void>;
   mergeCalls: () => Promise<void>;
   hasHeldCalls: boolean;
+  /** True only once BOTH legs are answered — merging before that kills the call. */
+  canMerge: boolean;
+  isMerging: boolean;
   setAudioInput: (deviceId: string) => void;
   setAudioOutput: (deviceId: string) => void;
   updateScreenPopFields: (fields: ScreenPopField[]) => void;
@@ -314,6 +317,7 @@ export function PhoneProvider({ children, apiUrl }: PhoneProviderProps): JSX.Ele
   const heldCallInfoRef = useRef<CallInfo | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   const [hasHeldCalls, setHasHeldCalls] = useState(false);
+  const [isMerging, setIsMerging] = useState(false);
   const reportedAnsweredCallsRef = useRef<Set<string>>(new Set());
   const reportedEndedCallsRef = useRef<Set<string>>(new Set());
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -1312,6 +1316,18 @@ export function PhoneProvider({ children, apiUrl }: PhoneProviderProps): JSX.Ele
       return;
     }
 
+    // Both legs must be answered. Merging a leg that is still ringing makes
+    // FreeSWITCH transfer an unanswered channel, which tears down BOTH calls.
+    // The button is gated on this too; this is the last line of defence.
+    if (sessionRef.current.state !== SessionState.Established) {
+      setError('Wait for the second call to be answered before merging');
+      return;
+    }
+    if (heldSessionRef.current.state !== SessionState.Established) {
+      setError('The held call is no longer connected');
+      return;
+    }
+
     // Get call IDs using the exact SIP Call-ID header to match FreeSWITCH's sip_call_id
     const activeCallId = getSipCallId(sessionRef.current);
     const heldCallId = getSipCallId(heldSessionRef.current);
@@ -1321,6 +1337,7 @@ export function PhoneProvider({ children, apiUrl }: PhoneProviderProps): JSX.Ele
       held: heldCallId,
     });
 
+    setIsMerging(true);
     try {
       // Call backend API to merge
       const response = await fetch(`${normalizedApiUrl}/api/v1/agent/call/merge`, {
@@ -1333,27 +1350,47 @@ export function PhoneProvider({ children, apiUrl }: PhoneProviderProps): JSX.Ele
       });
 
       if (!response.ok) {
-        throw new Error('Merge failed');
+        // Surface the real reason (e.g. a leg was not answered yet) instead
+        // of a generic failure the agent can do nothing with.
+        let message = 'Failed to merge calls';
+        try {
+          const body = (await response.json()) as { error?: { message?: string } };
+          if (body?.error?.message) message = body.error.message;
+        } catch {
+          /* non-JSON error body — keep the generic message */
+        }
+        throw new Error(message);
       }
 
-      // On success, the held session is effectively consumed/merged.
-      // Hang up the held session locally to clean up WebRTC state in the browser
-      if (heldSessionRef.current) {
-        try {
-          void heldSessionRef.current.bye();
-        } catch (e) {
-          console.warn('[Phone] Failed to send BYE for held session:', e);
-        }
-        heldSessionRef.current = null;
-        heldCallInfoRef.current = null;
-      }
+      // The server drops the held A-leg itself once the conference is up, and
+      // the resulting BYE clears heldSessionRef via the stateChange listener.
+      // Only clean up here if that hasn't happened shortly after.
+      const heldSession = heldSessionRef.current;
+      heldCallInfoRef.current = null;
       setHasHeldCalls(false);
+      setTimeout(() => {
+        if (heldSession && heldSession.state === SessionState.Established) {
+          try {
+            void heldSession.bye();
+          } catch (e) {
+            console.warn('[Phone] Failed to send BYE for held session:', e);
+          }
+        }
+        if (heldSessionRef.current === heldSession) {
+          heldSessionRef.current = null;
+        }
+      }, 2000);
 
       // The active session remains as the "Conference" session
       console.log('[Phone] Merge command sent successfully');
     } catch (err) {
       console.error('[Phone] Merge failed:', err);
-      setError('Failed to merge calls');
+      // Both calls are still up — the server refuses to merge unless it can do
+      // so without destroying them. Leave the held call held so the agent can
+      // retry rather than stranding them in a half-merged state.
+      setError(err instanceof Error ? err.message : 'Failed to merge calls');
+    } finally {
+      setIsMerging(false);
     }
   }, [normalizedApiUrl, getApiHeaders]);
 
@@ -1695,6 +1732,10 @@ export function PhoneProvider({ children, apiUrl }: PhoneProviderProps): JSX.Ele
     addThirdParty,
     mergeCalls,
     hasHeldCalls,
+    // Merging before the added call is answered tears down both calls, so the
+    // control stays disabled until the second leg is actually up.
+    canMerge: hasHeldCalls && currentCall?.state === 'active' && !isMerging,
+    isMerging,
     setAudioInput,
     setAudioOutput,
     updateScreenPopFields,

@@ -4,7 +4,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { getPrismaClient } from '../lib/prisma.js';
 import { callStateService } from '../services/call-state.js';
 import { eventBus } from '../services/event-bus.js';
-import { freeswitchService } from '../services/freeswitch-service.js';
+import { freeswitchService, MergeError } from '../services/freeswitch-service.js';
 import { leadService } from '../services/lead-service.js';
 import { getRedisClient } from '../services/redis.js';
 import { tcpaValidationService } from '../services/tcpa-validation-service.js';
@@ -900,7 +900,16 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
           message: 'Calls merged into conference',
         };
       } catch (err) {
-        request.log.error({ msg: 'Merge failed', err });
+        request.log.error({ msg: 'Merge failed', activeCallId, heldCallId, err });
+
+        // A merge attempted before both legs are answered is a retryable
+        // client-side timing problem, not a server fault — say so, and say
+        // why, so the softphone can tell the agent what to do.
+        if (err instanceof MergeError) {
+          void reply.code(err.code === 'MERGE_NOT_ANSWERED' ? 409 : 400);
+          return { error: { code: err.code, message: err.message } };
+        }
+
         void reply.code(500);
         return { error: { code: 'MERGE_FAILED', message: 'Failed to merge calls' } };
       }

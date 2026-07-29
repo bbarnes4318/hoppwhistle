@@ -1,5 +1,16 @@
-import { Circle, Merge, Mic, MicOff, Pause, PhoneForwarded, PhoneOff, Play, UserPlus } from 'lucide-react';
+import {
+  Circle,
+  Merge,
+  Mic,
+  MicOff,
+  Pause,
+  PhoneForwarded,
+  PhoneOff,
+  Play,
+  UserPlus,
+} from 'lucide-react';
 import React, { useState } from 'react';
+
 import type { ProspectData } from './types';
 
 interface ActiveCallControlsProps {
@@ -16,6 +27,9 @@ interface ActiveCallControlsProps {
   callNotes: string;
   setCallNotes: (notes: string) => void;
   hasHeldCalls: boolean;
+  /** False until BOTH legs are answered — merging early tears down the call. */
+  canMerge: boolean;
+  isMerging: boolean;
   mergeCalls: () => Promise<void>;
 }
 
@@ -33,6 +47,8 @@ export function ActiveCallControls({
   callNotes,
   setCallNotes,
   hasHeldCalls,
+  canMerge,
+  isMerging,
   mergeCalls,
 }: ActiveCallControlsProps) {
   const [showTransferPanel, setShowTransferPanel] = useState(false);
@@ -52,7 +68,9 @@ export function ActiveCallControls({
           </p>
           <div className="flex items-center justify-center space-x-2 mt-2">
             <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-            <span className="text-green-500 font-mono text-xs uppercase tracking-widest">Connected</span>
+            <span className="text-green-500 font-mono text-xs uppercase tracking-widest">
+              Connected
+            </span>
           </div>
         </div>
 
@@ -72,7 +90,9 @@ export function ActiveCallControls({
             ) : (
               <Mic className="w-4 h-4 text-muted-foreground" />
             )}
-            <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mt-2">Mute</span>
+            <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mt-2">
+              Mute
+            </span>
           </button>
           <button
             onClick={toggleHold}
@@ -88,14 +108,18 @@ export function ActiveCallControls({
             ) : (
               <Pause className="w-4 h-4 text-muted-foreground" />
             )}
-            <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mt-2">Hold</span>
+            <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mt-2">
+              Hold
+            </span>
           </button>
           <div
             className="px-2 py-3 rounded flex flex-col items-center border border-border bg-card cursor-default"
             title="Recording is handled automatically"
           >
             <Circle className="w-4 h-4 text-red-500 fill-red-500 animate-pulse" />
-            <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mt-2">Rec</span>
+            <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mt-2">
+              Rec
+            </span>
           </div>
         </div>
 
@@ -104,10 +128,22 @@ export function ActiveCallControls({
           <div className="mb-4">
             <button
               onClick={() => void mergeCalls()}
-              className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white font-mono uppercase tracking-widest text-sm rounded flex items-center justify-center space-x-2 transition-colors shadow-lg shadow-purple-600/20"
+              disabled={!canMerge}
+              title={
+                canMerge
+                  ? 'Merge both calls into a 3-way conference'
+                  : 'Waiting for the added call to be answered'
+              }
+              className={
+                canMerge
+                  ? 'w-full py-3 bg-purple-600 hover:bg-purple-700 text-white font-mono uppercase tracking-widest text-sm rounded flex items-center justify-center space-x-2 transition-colors shadow-lg shadow-purple-600/20'
+                  : 'w-full py-3 bg-muted text-muted-foreground font-mono uppercase tracking-widest text-sm rounded flex items-center justify-center space-x-2 cursor-not-allowed'
+              }
             >
-              <Merge className="w-4.5 h-4.5" />
-              <span>Merge Calls</span>
+              <Merge className={`w-4.5 h-4.5 ${isMerging ? 'animate-pulse' : ''}`} />
+              <span>
+                {isMerging ? 'Merging…' : canMerge ? 'Merge Calls' : 'Waiting for Answer…'}
+              </span>
             </button>
           </div>
         )}
@@ -120,14 +156,18 @@ export function ActiveCallControls({
               className="p-2 rounded bg-card border border-border hover:bg-muted flex flex-col items-center transition-all"
             >
               <UserPlus className="w-4 h-4 text-muted-foreground" />
-              <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mt-1">Add 3rd Party</span>
+              <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mt-1">
+                Add 3rd Party
+              </span>
             </button>
             <button
               onClick={() => setShowTransferPanel(!showTransferPanel)}
               className="p-2 rounded bg-card border border-border hover:bg-muted flex flex-col items-center transition-all"
             >
               <PhoneForwarded className="w-4 h-4 text-muted-foreground" />
-              <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mt-1">Transfer</span>
+              <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mt-1">
+                Transfer
+              </span>
             </button>
           </div>
         )}
@@ -135,11 +175,13 @@ export function ActiveCallControls({
         {/* Warm Transfer Panel */}
         {showTransferPanel && (
           <div className="bg-muted border border-border rounded p-3 mb-4">
-            <h4 className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-2">Transfer Destination</h4>
+            <h4 className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-2">
+              Transfer Destination
+            </h4>
             <input
               type="tel"
               value={transferNumber}
-              onChange={(e) => setTransferNumber(e.target.value.replace(/\D/g, ''))}
+              onChange={e => setTransferNumber(e.target.value.replace(/\D/g, ''))}
               placeholder="Phone number..."
               className="w-full bg-card border border-border rounded px-2 py-1.5 text-foreground font-mono text-sm mb-3 focus:outline-none focus:border-primary"
             />
@@ -168,7 +210,9 @@ export function ActiveCallControls({
 
         {/* Agent & Agency Info Card */}
         <div className="bg-muted/40 border border-border/60 rounded p-3 mb-4 flex-shrink-0">
-          <h4 className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-2">Agent & Agency Info</h4>
+          <h4 className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-2">
+            Agent & Agency Info
+          </h4>
           <div className="text-xs space-y-1">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Agency:</span>
@@ -187,10 +231,12 @@ export function ActiveCallControls({
 
         {/* Live Call Notes Section */}
         <div className="flex flex-col min-h-[140px] mb-4 flex-shrink-0">
-          <h4 className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-2">Live Call Notes</h4>
+          <h4 className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-2">
+            Live Call Notes
+          </h4>
           <textarea
             value={callNotes}
-            onChange={(e) => setCallNotes(e.target.value)}
+            onChange={e => setCallNotes(e.target.value)}
             placeholder="Type call notes here..."
             className="flex-1 w-full bg-card border border-border rounded p-2 text-sm text-white placeholder:text-muted-foreground/30 resize-none focus:outline-none focus:border-primary min-h-[120px]"
           />

@@ -1,6 +1,14 @@
+import type { Prisma } from '@prisma/client';
 import modesl from 'modesl';
 
 import { logger } from '../lib/logger.js';
+
+/** Narrow a Prisma Json column to a plain object so it can be safely spread. */
+function asJsonObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
 
 const ESL_HOST = process.env.FREESWITCH_HOST || 'freeswitch';
 const ESL_PORT = parseInt(process.env.FREESWITCH_ESL_PORT || '8021', 10);
@@ -63,18 +71,17 @@ export class FreeSwitchService {
 
       // Iterate through active channels to find the one matching the SIP Call-ID
       const uuids: string[] = rows
-          .map((r: { uuid?: string }) => r.uuid)
-          .filter((u): u is string => typeof u === 'string');
+        .map((r: { uuid?: string }) => r.uuid)
+        .filter((u): u is string => typeof u === 'string');
 
       for (const uuid of uuids) {
         try {
           const chanCallId = await this.executeApi('uuid_getvar', `${uuid} sip_call_id`);
           if (
-            chanCallId && (
-              chanCallId === sipCallId ||
+            chanCallId &&
+            (chanCallId === sipCallId ||
               (chanCallId.length >= 10 && sipCallId.startsWith(chanCallId)) ||
-              (sipCallId.length >= 10 && chanCallId.startsWith(sipCallId))
-            )
+              (sipCallId.length >= 10 && chanCallId.startsWith(sipCallId)))
           ) {
             return uuid;
           }
@@ -82,7 +89,7 @@ export class FreeSwitchService {
           logger.warn({
             msg: 'Failed to check sip_call_id on active channel',
             uuid,
-            error: err instanceof Error ? err.stack : String(err)
+            error: err instanceof Error ? err.stack : String(err),
           });
         }
       }
@@ -91,7 +98,7 @@ export class FreeSwitchService {
     } catch (err) {
       logger.error({
         msg: 'Error resolving UUID',
-        error: err instanceof Error ? err.stack : String(err)
+        error: err instanceof Error ? err.stack : String(err),
       });
       return null;
     }
@@ -117,7 +124,7 @@ export class FreeSwitchService {
           logger.warn({
             msg: 'Failed to check hopwhistle_call_id on active channel',
             uuid,
-            error: err instanceof Error ? err.stack : String(err)
+            error: err instanceof Error ? err.stack : String(err),
           });
         }
       }
@@ -125,7 +132,7 @@ export class FreeSwitchService {
     } catch (err) {
       logger.error({
         msg: 'Error resolving UUID by Call ID',
-        error: err instanceof Error ? err.stack : String(err)
+        error: err instanceof Error ? err.stack : String(err),
       });
       return null;
     }
@@ -176,20 +183,27 @@ export class FreeSwitchService {
       await this.executeApi('uuid_record', `${realUuid} start ${recordingPath}`);
 
       await this.executeApi('uuid_setvar', `${realUuid} hopwhistle_call_id ${callId}`);
-      await this.executeApi('uuid_setvar', `${realUuid} hopwhistle_recording_path ${recordingPath}`);
+      await this.executeApi(
+        'uuid_setvar',
+        `${realUuid} hopwhistle_recording_path ${recordingPath}`
+      );
 
       const uploadCmd = `bg_system /usr/share/freeswitch/scripts/upload-recording.sh ${recordingPath} ${callId}`;
       await this.executeApi('uuid_setvar', `${realUuid} api_hangup_hook "${uploadCmd}"`);
 
-      logger.info({ msg: 'Recording started successfully with hangup hook', uuid: realUuid, callId });
+      logger.info({
+        msg: 'Recording started successfully with hangup hook',
+        uuid: realUuid,
+        callId,
+      });
 
       try {
         const { getPrismaClient } = await import('../lib/prisma.js');
         const prisma = getPrismaClient();
         const call = await prisma.call.findUnique({ where: { id: callId } });
         if (call) {
-          const callMetadata = (call.metadata as any) || {};
-          const existingRecordingDebug = callMetadata.recordingDebug || {};
+          const callMetadata = asJsonObject(call.metadata);
+          const existingRecordingDebug = asJsonObject(callMetadata.recordingDebug);
           await prisma.call.update({
             where: { id: callId },
             data: {
@@ -199,9 +213,9 @@ export class FreeSwitchService {
                   ...existingRecordingDebug,
                   freeswitchRecordingStartedAt: new Date().toISOString(),
                   freeswitchRecordingPath: recordingPath,
-                }
-              } as any
-            }
+                },
+              } as Prisma.InputJsonObject,
+            },
           });
         }
       } catch (err) {
@@ -235,7 +249,12 @@ export class FreeSwitchService {
       logger.info({ msg: 'Recording stopped', callUuid, callId });
     } catch (err) {
       // Non-fatal: recording may have already stopped (e.g., call ended)
-      logger.warn({ msg: 'Could not stop recording (may already be stopped)', callUuid, callId, error: err });
+      logger.warn({
+        msg: 'Could not stop recording (may already be stopped)',
+        callUuid,
+        callId,
+        error: err,
+      });
     }
   }
 
@@ -276,7 +295,18 @@ export class FreeSwitchService {
       const jsonOutput = await this.executeApi('show', 'channels as json');
       const parsed = JSON.parse(jsonOutput) as { rows?: Array<Record<string, string>> };
       channels = parsed.rows || [];
-      logger.info({ msg: 'Active FreeSWITCH channels for merge', count: channels.length, channels: channels.map(c => ({ uuid: c.uuid, name: c.name, cid_num: c.cid_num, dest: c.dest, call_uuid: c.call_uuid, callstate: c.callstate })) });
+      logger.info({
+        msg: 'Active FreeSWITCH channels for merge',
+        count: channels.length,
+        channels: channels.map(c => ({
+          uuid: c.uuid,
+          name: c.name,
+          cid_num: c.cid_num,
+          dest: c.dest,
+          call_uuid: c.call_uuid,
+          callstate: c.callstate,
+        })),
+      });
     } catch (err) {
       logger.error({ msg: 'Failed to list channels for merge', error: (err as Error).message });
     }
@@ -310,7 +340,11 @@ export class FreeSwitchService {
       // Strategy 4: match by call_uuid field (bridged partner UUID)
       const byCallUuid = channels.find(c => c.call_uuid === id);
       if (byCallUuid?.uuid) {
-        logger.info({ msg: `${label}: resolved via call_uuid bridge partner`, id, uuid: byCallUuid.uuid });
+        logger.info({
+          msg: `${label}: resolved via call_uuid bridge partner`,
+          id,
+          uuid: byCallUuid.uuid,
+        });
         return byCallUuid.uuid;
       }
 
@@ -321,7 +355,11 @@ export class FreeSwitchService {
         return byName.uuid;
       }
 
-      logger.error({ msg: `${label}: could not resolve UUID`, id, availableUuids: channels.map(c => c.uuid) });
+      logger.error({
+        msg: `${label}: could not resolve UUID`,
+        id,
+        availableUuids: channels.map(c => c.uuid),
+      });
       return null;
     };
 
@@ -329,8 +367,14 @@ export class FreeSwitchService {
     const heldUuid = await resolveMulti(heldSipCallId, 'HELD');
 
     if (!activeUuid || !heldUuid) {
-      logger.error({ msg: 'Could not resolve UUIDs for merge', activeUuid, heldUuid, activeSipCallId, heldSipCallId });
-      throw new Error('Could not find active calls in FreeSWITCH');
+      logger.error({
+        msg: 'Could not resolve UUIDs for merge',
+        activeUuid,
+        heldUuid,
+        activeSipCallId,
+        heldSipCallId,
+      });
+      throw new MergeError('MERGE_CALL_NOT_FOUND', 'Could not find both calls in FreeSWITCH.');
     }
 
     // Use the held UUID as the base for the conference name (held call is guaranteed ACTIVE)
@@ -346,7 +390,12 @@ export class FreeSwitchService {
         if (chan.dest && chan.dest.startsWith('conference:')) {
           const confPeer = channels.find(c => c.dest === chan.dest && c.uuid !== uuid);
           if (confPeer) {
-            logger.info({ msg: 'findPeerLeg: resolved via shared conference destination', uuid, peer: confPeer.uuid, conference: chan.dest });
+            logger.info({
+              msg: 'findPeerLeg: resolved via shared conference destination',
+              uuid,
+              peer: confPeer.uuid,
+              conference: chan.dest,
+            });
             return confPeer.uuid;
           }
         }
@@ -356,12 +405,12 @@ export class FreeSwitchService {
           const parentExists = channels.some(c => c.uuid === chan.call_uuid);
           if (parentExists) return chan.call_uuid;
         }
-        
+
         // Strategy 3: If this channel is the parent leg, its peer is the child leg
         const child = channels.find(c => c.call_uuid === uuid && c.uuid !== uuid);
         if (child) return child.uuid;
       }
-      
+
       // Fallback: search for child leg by call_uuid
       const child = channels.find(c => c.call_uuid === uuid && c.uuid !== uuid);
       return child?.uuid || null;
@@ -381,66 +430,143 @@ export class FreeSwitchService {
 
     if (!heldBleg) {
       logger.error({ msg: 'Could not find B-leg for held call', heldUuid });
-      throw new Error('Could not find remote party for held call');
+      throw new MergeError(
+        'MERGE_NO_REMOTE_PARTY',
+        'Could not find the remote party for the held call.'
+      );
     }
 
-    // Prevent A-legs from hanging up when their bridges break
-    for (const uuid of [activeUuid, heldUuid]) {
+    if (!activeBleg) {
+      logger.error({ msg: 'Could not find B-leg for active call', activeUuid });
+      throw new MergeError(
+        'MERGE_NO_REMOTE_PARTY',
+        'Could not find the remote party for the active call.'
+      );
+    }
+
+    // ------------------------------------------------------------------
+    // Precondition: every leg must actually be answered.
+    //
+    // Merging a leg that is still in EARLY (ringing) state tears the call
+    // down — uuid_transfer on an unanswered outbound leg hangs it up. Bail
+    // out here, BEFORE we touch any channel, so a premature merge is a
+    // no-op the caller can retry rather than a destroyed call.
+    // ------------------------------------------------------------------
+    const ANSWERED_STATES = new Set(['ACTIVE', 'HELD']);
+    const legs: Array<{ uuid: string; label: string }> = [
+      { uuid: activeUuid, label: 'active A-leg' },
+      { uuid: activeBleg, label: 'active B-leg' },
+      { uuid: heldUuid, label: 'held A-leg' },
+      { uuid: heldBleg, label: 'held B-leg' },
+    ];
+
+    const unanswered = legs.filter(leg => {
+      const chan = channels.find(c => c.uuid === leg.uuid);
+      // If the channel is missing from the snapshot we let it through —
+      // resolution already proved it exists, and the snapshot may be stale.
+      return chan?.callstate ? !ANSWERED_STATES.has(chan.callstate) : false;
+    });
+
+    if (unanswered.length > 0) {
+      logger.warn({
+        msg: 'Merge rejected: not all legs are answered',
+        unanswered: unanswered.map(l => ({
+          ...l,
+          callstate: channels.find(c => c.uuid === l.uuid)?.callstate,
+        })),
+      });
+      throw new MergeError(
+        'MERGE_NOT_ANSWERED',
+        'Both calls must be answered before they can be merged.'
+      );
+    }
+
+    // ------------------------------------------------------------------
+    // Detach every leg from its bridge WITHOUT hanging it up.
+    //
+    // This must be applied to all four legs, not just the agent A-legs.
+    // Transferring a B-leg into the conference breaks its bridge, and any
+    // leg left with the default post-bridge behaviour hangs up on the spot
+    // — which is what killed both calls previously.
+    // ------------------------------------------------------------------
+    for (const leg of legs) {
       try {
-        await this.executeApi('uuid_setvar', `${uuid} hangup_after_bridge false`);
-        await this.executeApi('uuid_setvar', `${uuid} park_after_bridge true`);
+        await this.executeApi('uuid_setvar', `${leg.uuid} hangup_after_bridge false`);
+        await this.executeApi('uuid_setvar', `${leg.uuid} park_after_bridge true`);
       } catch (err) {
-        logger.warn({ msg: 'Failed to set bridge variables', uuid, error: err });
+        logger.warn({
+          msg: 'Failed to set post-bridge variables',
+          uuid: leg.uuid,
+          label: leg.label,
+          error: (err as Error).message,
+        });
       }
     }
 
-    // Ensure all channels are answered before transferring to conference
-    for (const uuid of [heldBleg, activeBleg, activeUuid].filter(Boolean) as string[]) {
-      try {
-        await this.executeApi('uuid_answer', uuid);
-      } catch (err) {
-        logger.warn({ msg: 'Failed to answer channel before merge', uuid, error: err });
-      }
-    }
+    // Transfer order matters: populate the conference with both remote
+    // parties and the surviving agent leg first, and only tear down the
+    // redundant agent leg once the conference is known to be up.
+    const transferToConference = async (uuid: string, label: string): Promise<void> => {
+      await this.executeApi('uuid_transfer', `${uuid} conference:${conferenceName} inline`);
+      logger.info({ msg: 'Transferred leg to conference', uuid, label, conferenceName });
+    };
 
-    // 1. Transfer the HELD B-leg (remote party) directly into the conference
     try {
-      await this.executeApi('uuid_transfer', `${heldBleg} conference:${conferenceName} inline`);
-      logger.info({ msg: 'Transferred held B-leg to conference', heldBleg });
+      // 1. Both remote parties join the conference.
+      await transferToConference(heldBleg, 'held B-leg');
+      await transferToConference(activeBleg, 'active B-leg');
+
+      // 2. The agent joins on the active A-leg (the session the browser
+      //    keeps open and renders as the conference).
+      await transferToConference(activeUuid, 'active A-leg');
     } catch (err) {
-      logger.error({ msg: 'Failed to transfer held B-leg to conference', error: err });
-      throw new Error('Failed to merge held call');
+      logger.error({
+        msg: 'Failed to build conference',
+        conferenceName,
+        error: (err as Error).message,
+      });
+      throw new MergeError('MERGE_FAILED', 'Failed to build the conference.');
     }
 
-    // 2. Kill the HELD A-leg (agent's first WebRTC session)
-    //    We don't need it because the agent will communicate via the active A-leg.
+    // 3. Only now drop the held A-leg — the agent's first WebRTC session.
+    //    Its remote party is already in the conference, and the agent is
+    //    present via the active A-leg, so this leg is pure duplicate audio.
     try {
       await this.executeApi('uuid_kill', heldUuid);
-      logger.info({ msg: 'Killed held A-leg to prevent duplicate agent audio', heldUuid });
+      logger.info({ msg: 'Killed redundant held A-leg', heldUuid });
     } catch (err) {
-      logger.warn({ msg: 'Failed to kill held A-leg', error: err });
+      logger.warn({ msg: 'Failed to kill held A-leg', error: (err as Error).message });
     }
 
-    // 3. If the active call has a B-leg (it's answered), transfer it into the conference too
-    if (activeBleg) {
-      try {
-        await this.executeApi('uuid_transfer', `${activeBleg} conference:${conferenceName} inline`);
-        logger.info({ msg: 'Transferred active B-leg to conference', activeBleg });
-      } catch (err) {
-        logger.warn({ msg: 'Failed to transfer active B-leg to conference', error: err });
-      }
-    }
-
-    // 4. Transfer the ACTIVE A-leg (agent's second WebRTC session) into the conference
+    // Confirm the conference actually came up rather than reporting success
+    // on a sequence of commands that silently did nothing.
     try {
-      await this.executeApi('uuid_transfer', `${activeUuid} conference:${conferenceName} inline`);
-      logger.info({ msg: 'Transferred active A-leg to conference', activeUuid });
+      const members = await this.executeApi('conference', `${conferenceName} list`);
+      logger.info({ msg: 'Conference membership after merge', conferenceName, members });
     } catch (err) {
-      logger.error({ msg: 'Failed to transfer active A-leg to conference', error: err });
-      throw new Error('Failed to join conference');
+      logger.warn({
+        msg: 'Could not read conference membership after merge',
+        conferenceName,
+        error: (err as Error).message,
+      });
     }
 
-    logger.info({ msg: 'Merge command sequence completed', conferenceName });
+    logger.info({ msg: 'Merge completed', conferenceName });
+  }
+}
+
+/**
+ * Merge failure with a machine-readable code so the API layer can tell the
+ * softphone whether the merge is retryable (e.g. the call was still ringing)
+ * or genuinely broken.
+ */
+export class MergeError extends Error {
+  constructor(
+    public readonly code: string,
+    message: string
+  ) {
+    super(message);
+    this.name = 'MergeError';
   }
 }
 

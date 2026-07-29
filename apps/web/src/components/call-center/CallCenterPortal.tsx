@@ -142,6 +142,8 @@ export function CallCenterPortal(): JSX.Element {
     toggleMute,
     toggleHold,
     hasHeldCalls,
+    canMerge,
+    isMerging,
     mergeCalls,
   } = usePhone();
 
@@ -1627,6 +1629,8 @@ export function CallCenterPortal(): JSX.Element {
               callNotes={callNotes}
               setCallNotes={setCallNotes}
               hasHeldCalls={hasHeldCalls}
+              canMerge={canMerge}
+              isMerging={isMerging}
               mergeCalls={mergeCalls}
             />
           )}
