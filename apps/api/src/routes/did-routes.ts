@@ -425,40 +425,60 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
 
     let destination = route.destination;
     let buyerId = route.buyerId || null;
-    let targetId: string | null = null;
+    const targetId: string | null = null;
 
     if (route.campaignId) {
       try {
-        const { routingService } = await import('../services/routing.js');
-        const bestBuyer = await routingService.selectBestBuyer(route.tenantId, route.campaignId, {
-          callerId: caller,
+        // Live transfers ring EVERY active buyer on the campaign simultaneously
+        // and whoever picks up first takes the call.
+        //
+        // This used to select a single "best" buyer and only ring everyone as a
+        // fallback. That made a live transfer depend on per-buyer eligibility
+        // (caps, hours, concurrency) — so one stale ANSWERED row or an
+        // unregistered endpoint silently produced "no eligible destination" and
+        // the caller was hung up on while other agents sat idle watching it
+        // happen. For a live transfer, reaching a human beats picking the
+        // theoretically optimal one.
+        const allCampaignBuyers = await prisma.campaignBuyer.findMany({
+          where: { campaignId: route.campaignId, status: 'ACTIVE', tenantId: route.tenantId },
+          select: { destinationNumber: true, buyerId: true },
         });
 
-        if (bestBuyer) {
-          destination = bestBuyer.endpoint;
-          buyerId = bestBuyer.buyerId;
-          targetId = bestBuyer.targetId || null;
+        // A buyer configured as one of our own agent DIDs must ring that
+        // agent's extension. Dialling the DID instead sends the leg out to the
+        // carrier and hairpins it back in, which is slow and usually just fails.
+        const agentNumbers = await prisma.phoneNumber.findMany({
+          where: { tenantId: route.tenantId, userId: { not: null } },
+          select: { number: true, user: { select: { metadata: true } } },
+        });
+        const didToExtension = new Map<string, string>();
+        for (const agentNumber of agentNumbers) {
+          const ext = (agentNumber.user?.metadata as Record<string, unknown> | null)?.extension;
+          const key = agentNumber.number.replace(/\D/g, '').slice(-10);
+          if (ext && key.length === 10) {
+            didToExtension.set(key, String(ext).trim());
+          }
+        }
+
+        const destList: string[] = [];
+        for (const buyer of allCampaignBuyers) {
+          const raw = buyer.destinationNumber?.trim();
+          if (!raw) continue;
+          const mapped = didToExtension.get(raw.replace(/\D/g, '').slice(-10));
+          const leg = mapped || raw;
+          if (!destList.includes(leg)) destList.push(leg);
+        }
+
+        if (destList.length > 0) {
+          destination = destList.join(',');
+          buyerId = allCampaignBuyers[0]?.buyerId || null;
           console.log(
-            `[FS-LOOKUP] Dynamic route: campaign=${route.campaignId} caller=${caller} → buyer=${buyerId} endpoint=${destination} targetId=${targetId}`
+            `[FS-LOOKUP] Dynamic route campaign=${route.campaignId} caller=${caller} → ring-all across ${destList.length} active buyer(s): ${destination}`
           );
         } else {
-          const allCampaignBuyers = await prisma.campaignBuyer.findMany({
-            where: { campaignId: route.campaignId, status: 'ACTIVE', tenantId: route.tenantId },
-            select: { destinationNumber: true, buyerId: true },
-          });
-
-          if (allCampaignBuyers.length > 0) {
-            const destList = allCampaignBuyers.map(b => b.destinationNumber.trim()).filter(Boolean);
-            destination = destList.join(',');
-            buyerId = allCampaignBuyers[0]?.buyerId || null;
-            console.log(
-              `[FS-LOOKUP] Dynamic route campaign=${route.campaignId} caller=${caller} fallback → ringing all campaign extensions: ${destination}`
-            );
-          } else {
-            console.log(
-              `[FS-LOOKUP] Dynamic route campaign=${route.campaignId} caller=${caller} returned no active buyers. Falling back to static route: ${destination}`
-            );
-          }
+          console.warn(
+            `[FS-LOOKUP] Campaign ${route.campaignId} has no ACTIVE buyers — falling back to static route: ${destination}`
+          );
         }
       } catch (routingErr) {
         console.error(
