@@ -660,6 +660,9 @@ export function PhoneProvider({ children, apiUrl }: PhoneProviderProps): JSX.Ele
             handleCallEndedRef.current();
           } else if (heldSessionRef.current === invitation) {
             console.log('[Phone] Held inbound session terminated in background');
+            // Close the held call out server-side — otherwise its row stays
+            // ANSWERED and the agent is counted busy for the next 4 hours.
+            reportCallEndedRef.current(heldCallInfoRef.current, 'held_session_terminated');
             heldSessionRef.current = null;
             heldCallInfoRef.current = null;
             setHasHeldCalls(false);
@@ -844,6 +847,60 @@ export function PhoneProvider({ children, apiUrl }: PhoneProviderProps): JSX.Ele
     sessionRef.current = null;
   }, [stopRingtone, stopCallDurationTimer, normalizedApiUrl, getApiHeaders, wireRemoteAudio]);
 
+  /**
+   * Report a call as ended to the backend.
+   *
+   * A held call terminates without ever going through handleCallEnded, so its
+   * `calls` row was being left at ANSWERED forever. That matters well beyond
+   * bad reporting: the routing concurrency gate counts ANSWERED rows for four
+   * hours, and maxConcurrentCalls defaults to 1 — so a single unreported held
+   * call makes that agent look permanently busy and silently drops them out of
+   * inbound routing. Enough of them and every transfer hits "no eligible
+   * destination" and hangs up on the caller.
+   *
+   * Only outbound calls are reported here; inbound calls are closed out by the
+   * FreeSWITCH CDR instead.
+   */
+  const reportCallEnded = useCallback(
+    (call: CallInfo | null, endReason: string) => {
+      if (!call || call.direction !== 'outbound') return;
+
+      const callId = call.callId;
+      if (!callId || reportedEndedCallsRef.current.has(callId)) return;
+      reportedEndedCallsRef.current.add(callId);
+
+      const duration = call.answerTime
+        ? Math.floor((Date.now() - call.answerTime.getTime()) / 1000)
+        : 0;
+
+      fetch(`${normalizedApiUrl}/api/v1/agent/call/${callId}/hangup`, {
+        method: 'POST',
+        headers: getApiHeaders(),
+        body: JSON.stringify({
+          duration,
+          startedAt: call.startTime?.toISOString(),
+          answeredAt: call.answerTime?.toISOString(),
+          endedAt: new Date().toISOString(),
+          endReason,
+        }),
+      })
+        .then(res => {
+          if (!res.ok) {
+            console.error(`[Phone] Failed to report ${endReason} for call ${callId}`);
+          } else {
+            console.log(`[Phone] Reported ${endReason} for call ${callId}`);
+          }
+        })
+        .catch(err => console.error('[Phone] Failed to report call end:', err));
+    },
+    [normalizedApiUrl, getApiHeaders]
+  );
+
+  const reportCallEndedRef = useRef(reportCallEnded);
+  useEffect(() => {
+    reportCallEndedRef.current = reportCallEnded;
+  }, [reportCallEnded]);
+
   // Keep refs in sync so stateChange listeners always call latest versions
   useEffect(() => {
     handleCallAnsweredRef.current = handleCallAnswered;
@@ -987,6 +1044,9 @@ export function PhoneProvider({ children, apiUrl }: PhoneProviderProps): JSX.Ele
               handleCallEndedRef.current();
             } else if (heldSessionRef.current === inviter) {
               console.log('[Phone] Held outbound session terminated in background');
+              // Close the held call out server-side — otherwise its row stays
+              // ANSWERED and the agent is counted busy for the next 4 hours.
+              reportCallEndedRef.current(heldCallInfoRef.current, 'held_session_terminated');
               heldSessionRef.current = null;
               heldCallInfoRef.current = null;
               setHasHeldCalls(false);
@@ -1366,6 +1426,11 @@ export function PhoneProvider({ children, apiUrl }: PhoneProviderProps): JSX.Ele
       // the resulting BYE clears heldSessionRef via the stateChange listener.
       // Only clean up here if that hasn't happened shortly after.
       const heldSession = heldSessionRef.current;
+      // Report before clearing: the held A-leg is absorbed into the conference
+      // and killed server-side, and the agent now occupies the active call. If
+      // this row is left ANSWERED it double-counts against their concurrency
+      // limit and quietly removes them from inbound routing for 4 hours.
+      reportCallEndedRef.current(heldCallInfoRef.current, 'merged_into_conference');
       heldCallInfoRef.current = null;
       setHasHeldCalls(false);
       setTimeout(() => {
