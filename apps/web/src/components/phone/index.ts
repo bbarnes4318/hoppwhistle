@@ -20,3 +20,5 @@ export {
 } from './phone-provider';
 export { ScreenPop } from './screen-pop';
 export { ScreenPopSettings } from './screen-pop-settings';
+export { AddCallDialog } from './add-call-dialog';
+

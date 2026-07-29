@@ -34,9 +34,12 @@ export interface MapResult {
 // ---------------------------------------------------------------------------
 
 export function mapToAmeriquote(
-  vertical: 'ACA' | 'FE',
+  vertical: 'ACA' | 'FE' | 'B2B',
   normalized: Record<string, unknown>,
 ): MapResult {
+  if (vertical === 'B2B') {
+    return { fullPayload: {}, redactedPayload: {} };
+  }
   const mode = getInsuranceLeadMode();
   const apiKey = getAmeriquoteApiKey();
   const src = getAmeriquoteSrc(vertical);

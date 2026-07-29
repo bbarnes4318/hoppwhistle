@@ -17,11 +17,11 @@ import {
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
-import { fans } from '../data/demo-music-data';
-import type { FanProfile } from '../types';
-
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
+
+import { fans } from '../data/demo-music-data';
+import type { FanProfile } from '../types';
 
 // Helper text formatting functions
 function formatSegment(seg: string) {

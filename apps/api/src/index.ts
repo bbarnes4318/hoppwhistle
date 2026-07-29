@@ -63,7 +63,12 @@ async function buildServer() {
   await registerAuth(server);
 
   // Register multipart for file uploads (must be before routes)
-  await server.register(multipart);
+  // Set default file size limit to 100MB to allow long call recordings
+  await server.register(multipart, {
+    limits: {
+      fileSize: 104857600, // 100MB
+    },
+  });
 
   // Global API key authentication for /api/v1/* routes
   const { createHash } = await import('crypto');
@@ -76,7 +81,7 @@ async function buildServer() {
     }
 
     const authHeader = request.headers.authorization;
-    const queryToken = (request.query as any)?.token;
+    const queryToken = (request.query as { token?: string } | undefined)?.token;
 
     // Try JWT first
     if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -101,7 +106,7 @@ async function buildServer() {
     // Fallback to Demo Tenant ID if present and JWT failed/absent
     const demoTenantId =
       (request.headers['x-demo-tenant-id'] as string | undefined) ||
-      (request.query as any)?.demoTenantId;
+      (request.query as { demoTenantId?: string } | undefined)?.demoTenantId;
 
     if (demoTenantId) {
       request.user = {
@@ -289,6 +294,10 @@ async function buildServer() {
   );
   await server.register(registerRecordingAnalysisUploadRoutes);
 
+  // Register Industry Research routes (multi-provider forensic research pipeline)
+  const { registerIndustryResearchRoutes } = await import('./routes/industry-research.js');
+  await server.register(registerIndustryResearchRoutes);
+
   // Register Agent Phone routes (VOIP softphone for agents)
   const { registerAgentPhoneRoutes } = await import('./routes/agent-phone.js');
   await server.register(registerAgentPhoneRoutes);
@@ -310,8 +319,8 @@ async function buildServer() {
   await server.register(registerBuyerBillingRoutes);
 
   // Register Automation routes (carrier application RPA)
-  const automationRoutes = await import('./routes/automation.js');
-  await server.register(automationRoutes.default, { prefix: '/api/automation' });
+  const { registerAutomationRoutes } = await import('./routes/automation.js');
+  await server.register(registerAutomationRoutes);
 
   // Register Lead Injection routes (pre-call data webhook)
   const { registerLeadInjectRoutes } = await import('./routes/lead-inject.js');
@@ -340,12 +349,23 @@ async function buildServer() {
   const { registerBulkvsProcurementRoutes } = await import('./routes/bulkvs-procurement.js');
   await server.register(registerBulkvsProcurementRoutes);
 
+  const { registerFractelProcurementRoutes } = await import('./routes/fractel-procurement.js');
+  await server.register(registerFractelProcurementRoutes);
+
+  // Register AI Voice SSO routes (mints the embedded AI Voice session cookie)
+  const { registerAiVoiceRoutes } = await import('./routes/aivoice.js');
+  await server.register(registerAiVoiceRoutes);
+
   // Register AI Campaign routes (AI outbound calling - Vapi integration hidden from UI)
   const { registerAICampaignRoutes, registerVapiWebhookRoutes } = await import(
     './routes/ai-campaigns.js'
   );
   await server.register(registerAICampaignRoutes);
   await server.register(registerVapiWebhookRoutes);
+
+  // Register Music Console Voice routes
+  const { registerMusicVoiceRoutes } = await import('./routes/music-console-voice.js');
+  await server.register(registerMusicVoiceRoutes);
 
   // Register SignalWire webhook routes (voice, SMS, status callbacks, RELAY events)
   const { registerSignalWireWebhookRoutes } = await import('./routes/signalwire-webhooks.js');
@@ -354,6 +374,9 @@ async function buildServer() {
   // Register DID routing routes (inbound call forwarding, FreeSWITCH lookup, CDR)
   const { registerDidRouteRoutes } = await import('./routes/did-routes.js');
   await server.register(registerDidRouteRoutes);
+
+  const { registerCallerIdInventoryRoutes } = await import('./routes/caller-id-inventory.js');
+  await server.register(registerCallerIdInventoryRoutes);
 
   // Register Insurance Lead Pipeline routes (inbound ingestion, CRM, Ameriquote routing)
   const { registerInsuranceLeadRoutes } = await import('./routes/insurance-leads.js');

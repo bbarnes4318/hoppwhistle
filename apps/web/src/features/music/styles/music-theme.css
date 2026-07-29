@@ -1492,6 +1492,13 @@
   transform-origin: bottom;
 }
 
+/* ── Radix Dialog Backdrop Overlay Scopes ── */
+.fixed.inset-0.z-50.bg-background\/80 {
+  background-color: rgba(2, 8, 23, 0.75) !important;
+  backdrop-filter: blur(4px) !important;
+}
+
+
 
 
 

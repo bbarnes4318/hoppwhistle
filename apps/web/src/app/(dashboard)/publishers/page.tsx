@@ -38,6 +38,7 @@ import {
 import { toast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { CompactPageShell, CompactPageHeader } from '@/components/layout/compact-layout';
 
 interface Publisher {
  id: string;
@@ -70,7 +71,7 @@ interface StatsResponse {
  data: PublisherStats[];
 }
 
-export default function PublishersPage() {
+function PublishersPage() {
  const [publishers, setPublishers] = useState<Publisher[]>([]);
  const [stats, setStats] = useState<Map<string, PublisherStats>>(new Map());
  const [loading, setLoading] = useState(true);
@@ -245,59 +246,55 @@ export default function PublishersPage() {
  (pub.email && pub.email.toLowerCase().includes(search.toLowerCase()))
  );
 
- return (
- <div className="h-full flex flex-col overflow-hidden">
- {/* Header */}
- <div className="flex items-center justify-between flex-shrink-0 mb-4">
- <div>
- <h1 className="text-2xl font-semibold">Manage Publishers</h1>
- <p className="text-sm text-muted-foreground">
- Configure publisher accounts and track performance
- </p>
- </div>
- <Button onClick={() => setCreateDialogOpen(true)} size="sm">
- <Plus className="mr-2 h-4 w-4" />
- Add Publisher
- </Button>
- </div>
+  return (
+    <CompactPageShell>
+      <CompactPageHeader
+        title="Manage Publishers"
+        subtitle="Configure publisher accounts and track performance"
+      >
+        <Button onClick={() => setCreateDialogOpen(true)} size="sm">
+          <Plus className="mr-2 h-4 w-4" />
+          Add Publisher
+        </Button>
+      </CompactPageHeader>
 
- {/* Content */}
- <Card className="flex-1 flex flex-col overflow-hidden min-h-0">
- <CardHeader className="flex-shrink-0 py-3 px-4 border-b border-white/10">
- <div className="flex items-center justify-between">
- <div>
- <CardTitle className="text-base font-medium">Publishers</CardTitle>
- <CardDescription className="text-xs">
- View and manage all publisher accounts
- </CardDescription>
- </div>
- <div className="flex items-center gap-2">
- <div className="relative">
- <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
- <Input
- placeholder="Search publishers..."
- value={search}
- onChange={e => setSearch(e.target.value)}
- className="pl-9 w-64 h-8 text-sm"
- />
- </div>
- <Button
- variant="outline"
- size="icon"
- className="h-8 w-8"
- onClick={() => {
- void fetchPublishers();
- void fetchStats();
- }}
- disabled={loading}
- >
- <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
- </Button>
- </div>
- </div>
- </CardHeader>
- <CardContent className="flex-1 overflow-y-auto min-h-0 p-0">
- <Table>
+      {/* Content */}
+      <Card className="flex-1 flex flex-col overflow-hidden min-h-0 bg-card border-border/40 shadow-sm">
+        <CardHeader className="flex-shrink-0 py-2.5 px-3 border-b border-border/10">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Publishers</CardTitle>
+              <CardDescription className="text-[10px]">
+                View and manage all publisher accounts
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search publishers..."
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="pl-8 w-48 h-7 text-xs bg-background border-border/50 text-foreground"
+                />
+              </div>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-7 w-7 border-border/50 text-muted-foreground"
+                onClick={() => {
+                  void fetchPublishers();
+                  void fetchStats();
+                }}
+                disabled={loading}
+              >
+                <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="flex-grow min-h-0 overflow-auto p-0">
+          <Table className="table-dense">
  <TableHeader className="sticky top-0 bg-slate-950 z-10">
  <TableRow className="border-b border-white/10">
  <TableHead className="font-semibold text-xs uppercase tracking-widest text-muted-foreground py-2 px-3">
@@ -633,7 +630,16 @@ export default function PublishersPage() {
  </DialogFooter>
  </DialogContent>
  </Dialog>
- </div>
+ </CompactPageShell>
  );
 }
 
+import { RoleGuard } from '@/components/auth/role-guard';
+
+export default function GuardedPublishersPage() {
+  return (
+    <RoleGuard allowedRoles={['ADMIN', 'OWNER']}>
+      <PublishersPage />
+    </RoleGuard>
+  );
+}

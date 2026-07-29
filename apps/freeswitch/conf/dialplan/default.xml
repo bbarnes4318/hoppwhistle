@@ -56,9 +56,13 @@
         <action application="set" data="proxy_media=false" inline="true"/>
         <action application="set" data="bypass_media_after_bridge=false" inline="true"/>
 
+        <!-- Send caller ID via P-Asserted-Identity header to the carrier -->
+        <action application="export" data="nolocal:sip_cid_type=pid" inline="true"/>
+
         <!-- Extract X-Caller-ID (mixed or lowercase) -->
         <action application="set" data="req_caller_id=${sip_h_X-Caller-ID}" inline="true"/>
         <action application="set" data="hopwhistle_call_id=${sip_h_X-Hopwhistle-Call-Id}" inline="true"/>
+        <action application="set" data="domain_name=$${domain}" inline="true"/>
       </condition>
 
       <!-- If req_caller_id is empty, fallback to lowercase -->
@@ -67,7 +71,17 @@
       </condition>
       <!-- If req_caller_id is still empty, set default -->
       <condition field="${req_caller_id}" expression="^$" break="never">
-        <action application="set" data="req_caller_id=12816991120" inline="true"/>
+        <action application="set" data="req_caller_id=$${FRACTEL_DEFAULT_CALLER_ID}" inline="true"/>
+      </condition>
+
+      <!-- If req_caller_id is a demo/fake 555 number, rewrite it to our verified outbound caller ID -->
+      <condition field="${req_caller_id}" expression="^1?555" break="never">
+        <action application="set" data="req_caller_id=$${outbound_caller_id}" inline="true"/>
+      </condition>
+
+      <!-- Clean req_caller_id to remove any leading + and ensure it starts with 1 -->
+      <condition field="${req_caller_id}" expression="^\+?1?([2-9]\d{9})$" break="never">
+        <action application="set" data="req_caller_id=1$1" inline="true"/>
       </condition>
 
       <!-- If hopwhistle_call_id is empty, fallback to lowercase -->
@@ -84,18 +98,34 @@
       <condition field="${hopwhistle_call_id}" expression="^$" break="never">
         <action application="log" data="ERR HOPWHISTLE OUTBOUND ERROR: Missing X-Hopwhistle-Call-Id header! Cannot record call."/>
         <!-- Notify API recording-status failed directly via bg_system / curl -->
-        <action application="bg_system" data="curl -s -X POST -H 'Content-Type: application/json' -H 'x-api-key: ${env(API_KEY)}' -d '{&quot;status&quot;: &quot;failed&quot;, &quot;error&quot;: &quot;Missing X-Hopwhistle-Call-Id header on FreeSWITCH channel&quot;}' http://api:3001/api/v1/calls/unknown/recording-status || true"/>
+        <action application="system" data="curl -s -X POST -H 'Content-Type: application/json' -H 'x-api-key: ${env(API_KEY)}' -d '{&quot;status&quot;: &quot;failed&quot;, &quot;error&quot;: &quot;Missing X-Hopwhistle-Call-Id header on FreeSWITCH channel&quot;}' http://api:3001/api/v1/calls/unknown/recording-status || true"/>
+      </condition>
+
+      <!-- Set caller ID variables for ALL outbound calls -->
+      <condition field="destination_number" expression="^\+?1?([2-9]\d{9})$" break="never">
+        <action application="set" data="clean_caller_id=${req_caller_id}" inline="true"/>
+        <action application="set" data="effective_caller_id_number=${clean_caller_id}" inline="true"/>
+        <action application="set" data="origination_caller_id_number=${clean_caller_id}" inline="true"/>
+        <action application="set" data="sip_from_user=${clean_caller_id}" inline="true"/>
+        <action application="set" data="sip_invite_from_uri=sip:${clean_caller_id}@$${domain}" inline="true"/>
+        <action application="set" data="effective_caller_id_name=Hopwhistle" inline="true"/>
+        <action application="set" data="origination_caller_id_name=Hopwhistle" inline="true"/>
+        <action application="set" data="hangup_after_bridge=true"/>
+        <!-- Outbound carrier: FracTEL (STATIC/IP auth). The bridge below fails
+             over across all 6 FracTEL outbound IPs (fractel1-6 gateways). -->
       </condition>
 
       <!-- If hopwhistle_call_id is NOT empty, apply details and start record_session before bridge -->
       <condition field="${hopwhistle_call_id}" expression="^(.+)$" break="never">
-        <action application="set" data="clean_caller_id=${req_caller_id}" inline="true"/>
-        <action application="set" data="effective_caller_id_number=+${clean_caller_id}" inline="true"/>
-        <action application="set" data="origination_caller_id_number=+${clean_caller_id}" inline="true"/>
-        <action application="set" data="effective_caller_id_name=Hopwhistle" inline="true"/>
-        <action application="set" data="hangup_after_bridge=true"/>
-        <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
+        <!-- Agent (A-leg) may use wideband so recordings capture HD agent audio.
+             The PSTN (B-leg) stays G.711 for FracTEL — carrier leg is unchanged. -->
+        <action application="set" data="absolute_codec_string=OPUS,G722,PCMU,PCMA"/>
         <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
+
+        <!-- Record both parties on separate stereo channels at 16 kHz (agent left,
+             caller right) instead of a muddy 8 kHz mono mix. -->
+        <action application="set" data="RECORD_STEREO=true"/>
+        <action application="set" data="RECORD_SAMPLE_RATE=16000"/>
 
         <!-- Set recording variables and start record_session -->
         <action application="set" data="hopwhistle_recording_path=/recordings/${hopwhistle_call_id}.wav" inline="true"/>
@@ -106,8 +136,34 @@
 
       <!-- Bridge outbound call -->
       <condition field="destination_number" expression="^\+?1?([2-9]\d{9})$">
-        <action application="bridge" data="sofia/gateway/bulkvs/1$1"/>
+        <!-- Save the clean 10-digit number to clean_dest -->
+        <action application="set" data="clean_dest=$1" inline="true"/>
+        <!-- Lookup via HTTP GET API using mod_curl -->
+        <action application="set" data="lookup_response=${curl(http://api:3001/api/v1/freeswitch/lookup?did=%2b1$1)}" inline="true"/>
+        <!-- Extract the destination extension if it's a 4-digit number -->
+        <action application="set" data="local_ext=${regex(${lookup_response}|&quot;destination&quot;:&quot;(\d{4})&quot;|%1)}" inline="true"/>
+        <action application="log" data="INFO [OUTBOUND-LOOKUP] response=${lookup_response} local_ext=${local_ext}"/>
+      </condition>
+
+      <!-- If local extension is matched but unregistered, clear local_ext to fall back to PSTN -->
+      <condition field="${local_ext}:${sofia_contact(internal/${local_ext}@$${domain})}" expression="^\d{4}:error" break="never">
+        <action application="log" data="WARNING [OUTBOUND-LOCAL] Extension ${local_ext} is offline. Routing call via PSTN carrier gateways."/>
+        <action application="set" data="local_ext=" inline="true"/>
+      </condition>
+
+      <!-- Route call locally to extension if matched, otherwise failover to PSTN gateways -->
+      <condition field="${local_ext}" expression="^\d{4}$">
+        <!-- Local routing -->
+        <action application="log" data="INFO [OUTBOUND-LOCAL] Routing locally to extension ${local_ext}"/>
+        <action application="bridge" data="${sofia_contact(internal/${local_ext}@$${domain})}"/>
         <action application="hangup" data="NORMAL_CLEARING"/>
+        
+        <!-- PSTN routing (anti-action) — FracTEL trunk, failover across all 6 outbound IPs -->
+        <anti-action application="log" data="INFO [OUTBOUND-PSTN] Routing to FracTEL for 1${clean_dest} with CID ${clean_caller_id}"/>
+        <anti-action application="set" data="continue_on_fail=true"/>
+        <anti-action application="set" data="fail_on_single_reject=false"/>
+        <anti-action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=Hopwhistle,origination_caller_id_number=${clean_caller_id},sip_from_user=${clean_caller_id}}sofia/gateway/fractel1/1${clean_dest}|sofia/gateway/fractel2/1${clean_dest}|sofia/gateway/fractel3/1${clean_dest}|sofia/gateway/fractel4/1${clean_dest}|sofia/gateway/fractel5/1${clean_dest}|sofia/gateway/fractel6/1${clean_dest}"/>
+        <anti-action application="hangup" data="NORMAL_CLEARING"/>
       </condition>
     </extension>
 

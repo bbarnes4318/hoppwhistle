@@ -18,6 +18,7 @@ export interface BillingResult {
   reason?: string;
   buyerId?: string;
   leadsRemaining?: number;
+  walletBalance?: number;
   autoPaused?: boolean;
 }
 
@@ -27,6 +28,7 @@ export interface UpfrontBuyerBalance {
   code: string;
   publisherName: string;
   leadsRemaining: number;
+  walletBalance: number;
   status: string;
   isLowBalance: boolean;
 }
@@ -38,12 +40,14 @@ export class BuyerBillingService {
    *
    * Logic:
    * 1. Check if buyer.billingType === 'UPFRONT'
-   * 2. Check if call.connectedDuration >= buyer.billableDuration
-   * 3. If YES:
-   *    - Decrement buyer.leadsRemaining by 1
-   *    - Create BuyerTransaction (DEBIT, -1)
-   *    - Set call.paidOut = true
-   *    - SAFETY: If leadsRemaining < 1, auto-pause the buyer
+   * 2. Check if call.buyerChargeStatus is already 'CHARGED' or if a DEBIT transaction exists.
+   * 3. Check if call.billable is true.
+   * 4. If YES:
+   *    - Deduct call.buyerBillableAmount from buyer.walletBalance
+   *    - Update buyer.leadsRemaining to Math.floor(newBalance) for legacy UI compatibility
+   *    - Create BuyerTransaction (DEBIT, -chargeAmount)
+   *    - Set call.buyerChargeStatus = 'CHARGED' and call.buyerChargedAt = now()
+   *    - SAFETY: If newBalance <= 0, auto-pause the buyer
    */
   async processCallBilling(callId: string): Promise<BillingResult> {
     const prisma = getPrismaClient();
@@ -79,45 +83,136 @@ export class BuyerBillingService {
           };
         }
 
-        // Check 2: Is connected duration >= billable duration threshold?
-        const connectedDuration = call.connectedDuration ?? 0;
-        if (connectedDuration < buyer.billableDuration) {
+        // Check 1.2: Check if a DEBIT transaction already exists for this call and buyer to ensure database-level idempotency
+        const existingTx = await tx.buyerTransaction.findFirst({
+          where: {
+            buyerId: buyer.id,
+            callId: callId,
+            type: 'DEBIT',
+          },
+        });
+
+        if (existingTx) {
+          // If transaction exists but the call wasn't marked as CHARGED, update call state to keep it consistent
+          if (call.buyerChargeStatus !== 'CHARGED') {
+            await tx.call.update({
+              where: { id: callId },
+              data: {
+                buyerChargeStatus: 'CHARGED',
+                buyerChargedAt: existingTx.createdAt,
+              },
+            });
+          }
           return {
             success: true,
             deducted: false,
-            reason: `Connected duration (${connectedDuration}s) below threshold (${buyer.billableDuration}s)`,
+            reason: 'Call already charged (transaction exists)',
             buyerId: buyer.id,
             leadsRemaining: buyer.leadsRemaining,
+            walletBalance: Number(buyer.walletBalance),
           };
         }
 
-        // Check 3: Does buyer have leads remaining?
-        if (buyer.leadsRemaining < 1) {
-          logger.warn({
-            msg: 'Buyer has no leads remaining',
-            buyerId: buyer.id,
-            callId,
-          });
+        // Check 1.5: Has this call already been billed?
+        if (call.buyerChargeStatus === 'CHARGED') {
           return {
             success: true,
             deducted: false,
-            reason: 'Buyer has no leads remaining',
+            reason: 'Call already charged',
             buyerId: buyer.id,
-            leadsRemaining: 0,
+            leadsRemaining: buyer.leadsRemaining,
+            walletBalance: Number(buyer.walletBalance),
           };
         }
 
-        // All checks passed - deduct 1 lead
-        const newBalance = buyer.leadsRemaining - 1;
+        // Check 2: Is call billable?
+        if (!call.billable) {
+          if (call.buyerChargeStatus !== 'NOT_BILLABLE') {
+            await tx.call.update({
+              where: { id: callId },
+              data: {
+                buyerChargeStatus: 'NOT_BILLABLE',
+              },
+            });
+          }
+          return {
+            success: true,
+            deducted: false,
+            reason: 'Call is not billable',
+            buyerId: buyer.id,
+            leadsRemaining: buyer.leadsRemaining,
+            walletBalance: Number(buyer.walletBalance),
+          };
+        }
 
-        // Determine if buyer should be auto-paused
-        const shouldPause = newBalance < 1;
+        const chargeAmount = call.buyerBillableAmount || new Prisma.Decimal(0);
+        if (chargeAmount.isZero()) {
+          return {
+            success: true,
+            deducted: false,
+            reason: 'Charge amount is 0',
+            buyerId: buyer.id,
+            leadsRemaining: buyer.leadsRemaining,
+            walletBalance: Number(buyer.walletBalance),
+          };
+        }
 
-        // Update buyer (with row-level lock via transaction)
+        // Check 3: Does buyer have sufficient wallet balance?
+        if (buyer.walletBalance.lessThan(chargeAmount)) {
+          logger.warn({
+            msg: 'Buyer has insufficient wallet balance',
+            buyerId: buyer.id,
+            walletBalance: buyer.walletBalance.toString(),
+            chargeAmount: chargeAmount.toString(),
+            callId,
+          });
+
+          // Auto-pause if not already paused
+          if (buyer.status !== 'PAUSED') {
+            await tx.buyer.update({
+              where: { id: buyer.id },
+              data: { status: 'PAUSED' },
+            });
+
+            await auditLog({
+              tenantId: call.tenantId,
+              action: 'buyer.status.autopaused',
+              entityType: 'Buyer',
+              entityId: buyer.id,
+              resource: 'status',
+              changes: {
+                previous: buyer.status,
+                new: 'PAUSED',
+                reason: 'Insufficient wallet balance',
+              },
+              ipAddress: 'system',
+              success: true,
+            });
+          }
+
+          return {
+            success: true,
+            deducted: false,
+            reason: 'Insufficient wallet balance',
+            buyerId: buyer.id,
+            leadsRemaining: buyer.leadsRemaining,
+            walletBalance: Number(buyer.walletBalance),
+          };
+        }
+
+        // All checks passed - deduct chargeAmount
+        const newBalance = buyer.walletBalance.minus(chargeAmount);
+        const newLeadsRemaining = Math.floor(Number(newBalance));
+
+        // Determine if buyer should be auto-paused after deduction
+        const shouldPause = newBalance.lessThanOrEqualTo(0);
+
+        // Update buyer
         await tx.buyer.update({
           where: { id: buyer.id },
           data: {
-            leadsRemaining: newBalance,
+            walletBalance: newBalance,
+            leadsRemaining: newLeadsRemaining,
             status: shouldPause ? 'PAUSED' : buyer.status,
           },
         });
@@ -126,18 +221,19 @@ export class BuyerBillingService {
         await tx.buyerTransaction.create({
           data: {
             buyerId: buyer.id,
-            amount: -1,
+            amount: chargeAmount.negated(),
             type: 'DEBIT',
             description: `Call ID #${callId.substring(0, 8)}`,
             callId: callId,
           },
         });
 
-        // Mark call as paid out
+        // Update call status
         await tx.call.update({
           where: { id: callId },
           data: {
-            paidOut: true,
+            buyerChargeStatus: 'CHARGED',
+            buyerChargedAt: new Date(),
           },
         });
 
@@ -147,10 +243,10 @@ export class BuyerBillingService {
           action: 'buyer.billing.debit',
           entityType: 'Buyer',
           entityId: buyer.id,
-          resource: 'leadsRemaining',
+          resource: 'walletBalance',
           changes: {
-            previous: buyer.leadsRemaining,
-            new: newBalance,
+            previous: buyer.walletBalance.toString(),
+            new: newBalance.toString(),
             callId,
             autoPaused: shouldPause,
           },
@@ -160,7 +256,7 @@ export class BuyerBillingService {
 
         if (shouldPause) {
           logger.warn({
-            msg: 'Buyer auto-paused due to zero balance',
+            msg: 'Buyer auto-paused due to zero/negative balance',
             buyerId: buyer.id,
             buyerName: buyer.name,
           });
@@ -174,7 +270,7 @@ export class BuyerBillingService {
             changes: {
               previous: buyer.status,
               new: 'PAUSED',
-              reason: 'Zero lead balance',
+              reason: 'Zero/negative wallet balance',
             },
             ipAddress: 'system',
             success: true,
@@ -185,7 +281,8 @@ export class BuyerBillingService {
           success: true,
           deducted: true,
           buyerId: buyer.id,
-          leadsRemaining: newBalance,
+          leadsRemaining: newLeadsRemaining,
+          walletBalance: Number(newBalance),
           autoPaused: shouldPause,
         };
       });
@@ -222,8 +319,8 @@ export class BuyerBillingService {
   ): Promise<{ success: boolean; newBalance: number; error?: string }> {
     const prisma = getPrismaClient();
 
-    if (amount < 1) {
-      return { success: false, newBalance: 0, error: 'Amount must be at least 1' };
+    if (amount <= 0) {
+      return { success: false, newBalance: 0, error: 'Amount must be greater than 0' };
     }
 
     try {
@@ -237,14 +334,16 @@ export class BuyerBillingService {
           throw new Error('Buyer not found');
         }
 
-        const previousBalance = buyer.leadsRemaining;
-        const newBalance = previousBalance + amount;
+        const previousBalance = buyer.walletBalance;
+        const newBalance = previousBalance.plus(amount);
+        const newLeads = Math.floor(Number(newBalance));
 
         // Update buyer balance
         await tx.buyer.update({
           where: { id: buyerId },
           data: {
-            leadsRemaining: newBalance,
+            walletBalance: newBalance,
+            leadsRemaining: newLeads,
             // Reactivate if was paused due to zero balance
             status: buyer.status === 'PAUSED' ? 'ACTIVE' : buyer.status,
           },
@@ -254,9 +353,9 @@ export class BuyerBillingService {
         await tx.buyerTransaction.create({
           data: {
             buyerId: buyerId,
-            amount: amount,
+            amount: new Prisma.Decimal(amount),
             type: 'CREDIT',
-            description: description ?? `Admin added ${amount} leads`,
+            description: description ?? `Admin added $${Number(amount).toFixed(2)}`,
             createdById: adminId,
           },
         });
@@ -268,11 +367,11 @@ export class BuyerBillingService {
           action: 'buyer.billing.credit',
           entityType: 'Buyer',
           entityId: buyerId,
-          resource: 'leadsRemaining',
+          resource: 'walletBalance',
           changes: {
-            previous: previousBalance,
-            new: newBalance,
-            amount,
+            previous: previousBalance.toString(),
+            new: newBalance.toString(),
+            amount: amount.toString(),
           },
           ipAddress: 'admin',
           success: true,
@@ -280,20 +379,20 @@ export class BuyerBillingService {
 
         if (buyer.status === 'PAUSED') {
           logger.info({
-            msg: 'Buyer reactivated after credit',
+            msg: 'Buyer reactivated after deposit',
             buyerId,
             buyerName: buyer.name,
-            newBalance,
+            newBalance: newBalance.toString(),
           });
         }
 
-        return newBalance;
+        return Number(newBalance);
       });
 
       return { success: true, newBalance: result };
     } catch (error) {
       logger.error({
-        msg: 'Error adding credits to buyer',
+        msg: 'Error adding funds to buyer',
         buyerId,
         amount,
         error: error instanceof Error ? error.message : String(error),
@@ -336,10 +435,11 @@ export class BuyerBillingService {
       id: buyer.id,
       name: buyer.name,
       code: buyer.code,
-      publisherName: buyer.publisher.name,
+      publisherName: buyer.publisher?.name || 'none',
       leadsRemaining: buyer.leadsRemaining,
+      walletBalance: Number(buyer.walletBalance),
       status: buyer.status,
-      isLowBalance: buyer.leadsRemaining < lowBalanceThreshold,
+      isLowBalance: Number(buyer.walletBalance) < lowBalanceThreshold,
     }));
   }
 
@@ -399,7 +499,7 @@ export class BuyerBillingService {
     return {
       transactions: transactions.map(tx => ({
         id: tx.id,
-        amount: tx.amount,
+        amount: Number(tx.amount),
         type: tx.type,
         description: tx.description,
         callId: tx.callId,

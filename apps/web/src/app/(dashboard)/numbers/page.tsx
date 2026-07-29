@@ -3,10 +3,13 @@
 import { ArrowRightLeft, Download, Edit2, Loader2, Plus, Search } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
+import { RoleGuard } from '@/components/auth/role-guard';
+import { CompactPageShell, CompactPageHeader } from '@/components/layout/compact-layout';
 import { BulkvsPurchaseDialog } from '@/components/numbers/bulkvs-purchase-dialog';
 import { CreateRouteDialog } from '@/components/numbers/create-route-dialog';
 import { EditNumberDialog } from '@/components/numbers/edit-number-dialog';
 import { EditRouteDialog } from '@/components/numbers/edit-route-dialog';
+import { FractelPurchaseDialog } from '@/components/numbers/fractel-purchase-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -53,9 +56,10 @@ interface DidRoute {
   createdAt: string;
 }
 
-export default function NumbersPage() {
+function NumbersPage() {
   const [search, setSearch] = useState('');
   const [bulkvsPurchaseDialogOpen, setBulkvsPurchaseDialogOpen] = useState(false);
+  const [fractelPurchaseDialogOpen, setFractelPurchaseDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [createRouteOpen, setCreateRouteOpen] = useState(false);
   const [editRouteOpen, setEditRouteOpen] = useState(false);
@@ -100,18 +104,18 @@ export default function NumbersPage() {
   };
 
   const filteredNumbers = numbers.filter(
-    n => n.number.includes(search) || n.campaign?.name.toLowerCase().includes(search.toLowerCase())
+    n =>
+      n.number.includes(search) ||
+      (n.campaign?.name || '').toLowerCase().includes(search.toLowerCase())
   );
 
   const handleImport = () => {
-    // Create a file input element
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.csv,.xlsx,.xls';
     input.onchange = e => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) {
-        // TODO: Implement actual import logic
         toast({
           title: 'Feature Coming Soon',
           description: `Import functionality coming soon. Selected file: ${file.name}`,
@@ -119,6 +123,10 @@ export default function NumbersPage() {
       }
     };
     input.click();
+  };
+
+  const handleBuyFractelNumber = () => {
+    setFractelPurchaseDialogOpen(true);
   };
 
   const handleBuyBulkvsNumber = () => {
@@ -147,98 +155,117 @@ export default function NumbersPage() {
     r =>
       r.did.includes(search) ||
       r.destination.includes(search) ||
-      r.label?.toLowerCase().includes(search.toLowerCase())
+      (r.label || '').toLowerCase().includes(search.toLowerCase())
   );
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h1 className="text-3xl font-bold">Numbers & Routing</h1>
-          <p className="text-muted-foreground">Manage your phone numbers and inbound call routes</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={handleImport}>
-            <Download className="mr-2 h-4 w-4" />
-            Import
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                Buy Number
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Select Provider</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleBuyBulkvsNumber}>
-                Buy from Hopwhistle
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
+    <CompactPageShell>
+      <CompactPageHeader
+        title="Numbers & Routing"
+        subtitle="Manage your phone numbers and inbound call routes"
+      >
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleImport}
+          className="h-8 text-xs border-border/50 text-muted-foreground"
+        >
+          <Download className="mr-2 h-3.5 w-3.5" />
+          Import
+        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm" className="h-8 text-xs">
+              <Plus className="mr-2 h-3.5 w-3.5" />
+              Buy Number
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="bg-slate-900 border-white/10 text-white">
+            <DropdownMenuLabel className="text-xs text-gray-400">Select Provider</DropdownMenuLabel>
+            <DropdownMenuSeparator className="bg-white/10" />
+            <DropdownMenuItem
+              onClick={handleBuyFractelNumber}
+              className="focus:bg-cyan-600 focus:text-white text-xs"
+            >
+              Buy from FracTEL (local &amp; toll-free)
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={handleBuyBulkvsNumber}
+              className="focus:bg-cyan-600 focus:text-white text-xs"
+            >
+              Buy from Hopwhistle
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </CompactPageHeader>
 
-      <Tabs defaultValue="numbers" className="w-full">
-        <TabsList className="mb-4">
-          <TabsTrigger value="numbers">Phone Numbers</TabsTrigger>
-          <TabsTrigger value="routing">Inbound Routes</TabsTrigger>
+      <Tabs defaultValue="numbers" className="w-full flex-1 min-h-0 flex flex-col gap-3">
+        <TabsList className="mb-0 self-start">
+          <TabsTrigger value="numbers" className="text-xs h-8">
+            Phone Numbers
+          </TabsTrigger>
+          <TabsTrigger value="routing" className="text-xs h-8">
+            Inbound Routes
+          </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="numbers" className="m-0">
-          <Card>
-            <CardHeader>
+        <TabsContent value="numbers" className="m-0 flex-1 min-h-0 overflow-hidden">
+          <Card className="h-full flex flex-col overflow-hidden min-h-0 bg-card border-border/40 shadow-sm">
+            <CardHeader className="flex-shrink-0 py-2 px-3 border-b border-border/10">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Phone Numbers</CardTitle>
-                  <CardDescription>Search and manage your numbers</CardDescription>
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Phone Numbers
+                  </CardTitle>
+                  <CardDescription className="text-[10px]">
+                    Search and manage your numbers
+                  </CardDescription>
                 </div>
-                <div className="relative w-64">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <div className="relative w-48">
+                  <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     id="numbers-search"
                     name="numbers-search"
                     placeholder="Search numbers..."
                     value={search}
                     onChange={e => setSearch(e.target.value)}
-                    className="pl-10"
+                    className="pl-8 h-7 text-xs bg-background border-border/50 text-foreground"
                   />
                 </div>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-grow min-h-0 overflow-auto p-3">
               {loading ? (
                 <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
               ) : filteredNumbers.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground">
+                <div className="text-center py-12 text-muted-foreground text-xs">
                   No phone numbers found
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                   {filteredNumbers.map(number => (
                     <div
                       key={number.id}
-                      className="flex flex-col rounded-xl border border-border bg-card p-5 transition-all hover:border-primary/50 hover:shadow-sm"
+                      className="flex flex-col rounded border border-border bg-card p-3 transition-all hover:border-primary/50 hover:shadow-sm"
                     >
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="space-y-1">
-                          <div className="font-mono text-lg font-semibold tracking-tight">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="space-y-0.5">
+                          <div className="font-mono text-sm font-semibold tracking-tight text-white">
                             {formatPhoneNumber(number.number)}
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5">
                             <Badge
                               variant={number.status === 'ACTIVE' ? 'success' : 'secondary'}
-                              className="text-[10px] px-1.5 py-0"
+                              className="text-[8px] px-1 py-0"
                             >
                               {number.status}
                             </Badge>
                             {number.poolType === 'POOL' && (
                               <Badge
                                 variant={number.poolStatus === 'AVAILABLE' ? 'success' : 'warning'}
-                                className="text-[10px] px-1.5 py-0"
+                                className="text-[8px] px-1 py-0"
                               >
                                 RTB: {number.poolStatus === 'AVAILABLE' ? 'AVAIL' : 'ASSIGNED'}
                               </Badge>
@@ -248,31 +275,31 @@ export default function NumbersPage() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8 rounded-full"
+                          className="h-6 w-6 rounded-full"
                           onClick={() => handleEdit(number)}
                         >
-                          <Edit2 className="h-4 w-4" />
+                          <Edit2 className="h-3.5 w-3.5" />
                         </Button>
                       </div>
 
-                      <div className="mt-auto border-t border-border/50 pt-4 space-y-2 text-sm">
-                        <div className="grid grid-cols-2 gap-4">
+                      <div className="mt-2 border-t border-border/10 pt-2 space-y-1.5 text-[11px]">
+                        <div className="grid grid-cols-2 gap-2">
                           <div>
-                            <div className="text-muted-foreground text-xs uppercase tracking-wider mb-1">
+                            <div className="text-muted-foreground text-[9px] uppercase tracking-wider">
                               Campaign
                             </div>
                             <div
-                              className="font-medium truncate"
+                              className="font-medium truncate text-white"
                               title={number.campaign?.name || 'Unassigned'}
                             >
                               {number.campaign?.name || 'Unassigned'}
                             </div>
                           </div>
                           <div>
-                            <div className="text-muted-foreground text-xs uppercase tracking-wider mb-1">
+                            <div className="text-muted-foreground text-[9px] uppercase tracking-wider">
                               Purchased
                             </div>
-                            <div className="font-medium">
+                            <div className="font-medium text-white">
                               {number.purchasedAt
                                 ? new Date(number.purchasedAt).toLocaleDateString()
                                 : 'N/A'}
@@ -280,10 +307,13 @@ export default function NumbersPage() {
                           </div>
                         </div>
                         <div>
-                          <div className="text-muted-foreground text-xs uppercase tracking-wider mb-1">
+                          <div className="text-muted-foreground text-[9px] uppercase tracking-wider">
                             Assigned Agent
                           </div>
-                          <div className="font-medium truncate" title={number.user?.name || 'Unassigned'}>
+                          <div
+                            className="font-medium truncate text-white"
+                            title={number.user?.name || 'Unassigned'}
+                          >
                             {number.user?.name || 'Unassigned'}
                           </div>
                         </div>
@@ -296,67 +326,73 @@ export default function NumbersPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="routing" className="m-0">
-          <Card>
-            <CardHeader>
+        <TabsContent value="routing" className="m-0 flex-1 min-h-0 overflow-hidden">
+          <Card className="h-full flex flex-col overflow-hidden min-h-0 bg-card border-border/40 shadow-sm">
+            <CardHeader className="flex-shrink-0 py-2 px-3 border-b border-border/10">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Inbound Routes</CardTitle>
-                  <CardDescription>
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Inbound Routes
+                  </CardTitle>
+                  <CardDescription className="text-[10px]">
                     Map your DIDs to buyer destinations for inbound calls
                   </CardDescription>
                 </div>
-                <div className="flex items-center gap-4">
-                  <div className="relative w-64">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <div className="flex items-center gap-2">
+                  <div className="relative w-48">
+                    <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                     <Input
                       id="routes-search"
                       name="routes-search"
                       placeholder="Search routes..."
                       value={search}
                       onChange={e => setSearch(e.target.value)}
-                      className="pl-10"
+                      className="pl-8 h-7 text-xs bg-background border-border/50 text-foreground"
                     />
                   </div>
-                  <Button onClick={() => setCreateRouteOpen(true)}>
-                    <ArrowRightLeft className="mr-2 h-4 w-4" />
+                  <Button
+                    onClick={() => setCreateRouteOpen(true)}
+                    size="sm"
+                    className="h-7 text-xs"
+                  >
+                    <ArrowRightLeft className="mr-2 h-3.5 w-3.5" />
                     Create Route
                   </Button>
                 </div>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-grow min-h-0 overflow-auto p-3">
               {loadingRoutes ? (
                 <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
               ) : filteredRoutes.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground">
+                <div className="text-center py-12 text-muted-foreground text-xs">
                   No routing rules found
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                   {filteredRoutes.map(route => (
                     <div
                       key={route.id}
-                      className="flex flex-col rounded-xl border border-border bg-card p-5 transition-all hover:border-primary/50 hover:shadow-sm"
+                      className="flex flex-col rounded border border-border bg-card p-3 transition-all hover:border-primary/50 hover:shadow-sm"
                     >
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="space-y-1">
-                          <div className="font-mono text-lg font-semibold tracking-tight text-primary">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="space-y-0.5">
+                          <div className="font-mono text-sm font-semibold tracking-tight text-cyan-400">
                             {formatPhoneNumber(route.did)}
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5">
                             <Badge
                               variant={route.status === 'ACTIVE' ? 'success' : 'secondary'}
-                              className="text-[10px] px-1.5 py-0"
+                              className="text-[8px] px-1 py-0"
                             >
                               {route.status}
                             </Badge>
                             {route.recordingEnabled && (
                               <Badge
                                 variant="outline"
-                                className="text-[10px] px-1.5 py-0 border-blue-500/30 text-blue-400 bg-blue-500/10"
+                                className="text-[8px] px-1 py-0 border-blue-500/30 text-blue-400 bg-blue-500/10 animate-none"
                               >
                                 REC
                               </Badge>
@@ -366,40 +402,40 @@ export default function NumbersPage() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8 rounded-full"
+                          className="h-6 w-6 rounded-full"
                           onClick={() => handleEditRoute(route)}
                         >
-                          <Edit2 className="h-4 w-4" />
+                          <Edit2 className="h-3.5 w-3.5" />
                         </Button>
                       </div>
 
-                      <div className="space-y-4 border-t border-border/50 pt-4 text-sm mt-auto">
+                      <div className="space-y-2 border-t border-border/10 pt-2 text-[11px] mt-2">
                         <div>
-                          <div className="text-muted-foreground text-xs uppercase tracking-wider mb-1 flex items-center gap-1">
+                          <div className="text-muted-foreground text-[9px] uppercase tracking-wider flex items-center gap-1">
                             <ArrowRightLeft className="h-3 w-3" /> Destination
                           </div>
-                          <div className="font-mono text-base">
+                          <div className="font-mono text-xs text-white">
                             {formatPhoneNumber(route.destination)}
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-2 gap-2">
                           <div>
-                            <div className="text-muted-foreground text-xs uppercase tracking-wider mb-1">
+                            <div className="text-muted-foreground text-[9px] uppercase tracking-wider">
                               Label / Buyer
                             </div>
                             <div
-                              className="font-medium truncate"
+                              className="font-medium truncate text-white"
                               title={route.label || route.buyer?.name || 'Unassigned'}
                             >
                               {route.label || route.buyer?.name || 'Unassigned'}
                             </div>
                           </div>
                           <div>
-                            <div className="text-muted-foreground text-xs uppercase tracking-wider mb-1">
+                            <div className="text-muted-foreground text-[9px] uppercase tracking-wider">
                               Created
                             </div>
-                            <div className="font-medium">
+                            <div className="font-medium text-white">
                               {route.createdAt
                                 ? new Date(route.createdAt).toLocaleDateString()
                                 : 'N/A'}
@@ -415,6 +451,12 @@ export default function NumbersPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <FractelPurchaseDialog
+        open={fractelPurchaseDialogOpen}
+        onOpenChange={setFractelPurchaseDialogOpen}
+        onSuccess={handlePurchaseSuccess}
+      />
 
       <BulkvsPurchaseDialog
         open={bulkvsPurchaseDialogOpen}
@@ -453,6 +495,14 @@ export default function NumbersPage() {
           onSuccess={loadRoutes}
         />
       )}
-    </div>
+    </CompactPageShell>
+  );
+}
+
+export default function GuardedNumbersPage() {
+  return (
+    <RoleGuard allowedRoles={['ADMIN', 'OWNER']}>
+      <NumbersPage />
+    </RoleGuard>
   );
 }

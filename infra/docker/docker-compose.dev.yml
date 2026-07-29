@@ -73,6 +73,7 @@ services:
     volumes:
       - clickhouse_data:/var/lib/clickhouse
       - clickhouse_logs:/var/log/clickhouse-server
+      - ./clickhouse-config/default-user.xml:/etc/clickhouse-server/users.d/default-user.xml
     environment:
       CLICKHOUSE_DB: ${CLICKHOUSE_DB:-hopwhistle}
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
@@ -110,6 +111,10 @@ services:
       FREESWITCH_ESL_HOST: freeswitch
       FREESWITCH_ESL_PORT: 8021
       FREESWITCH_ESL_PASSWORD: ${FREESWITCH_ESL_PASSWORD:-ClueCon}
+      SIP_AGENT_PASSWORD: ${SIP_AGENT_PASSWORD:-1234}
+      FONESTORM_BASE_URL: ${FONESTORM_BASE_URL:-https://api.fonestorm.com/v2}
+      FONESTORM_USERNAME: ${FONESTORM_USERNAME:-}
+      FONESTORM_PASSWORD: ${FONESTORM_PASSWORD:-}
       S3_ENDPOINT: http://minio:9000
       S3_BUCKET: ${S3_BUCKET:-recordings}
       S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
@@ -118,6 +123,35 @@ services:
       S3_FORCE_PATH_STYLE: 'true'
       CLICKHOUSE_URL: http://clickhouse:8123
       CLICKHOUSE_DATABASE: ${CLICKHOUSE_DB:-hopwhistle}
+      BULKVS_USERNAME: ${BULKVS_USERNAME:-jimmy@getlifeassurance.com}
+      BULKVS_PASSWORD: ${BULKVS_PASSWORD:-50e77367256f3bd823f44d13dc1e8d17}
+      BULKVS_TRUNK_GROUP: ${BULKVS_TRUNK_GROUP:-pvn}
+      # Industry Research — real four-provider forensic research (Google/Perplexity/xAI/Anthropic; no OpenAI)
+      INDUSTRY_RESEARCH_ENABLED: ${INDUSTRY_RESEARCH_ENABLED:-true}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}
+      XAI_API_KEY: ${XAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GOOGLE_RAPID_RESEARCH_MODEL: ${GOOGLE_RAPID_RESEARCH_MODEL:-gemini-flash-latest}
+      GOOGLE_DEEP_RESEARCH_MODEL: ${GOOGLE_DEEP_RESEARCH_MODEL:-deep-research-preview-04-2026}
+      GOOGLE_DEEP_RESEARCH_MAX_MODEL: ${GOOGLE_DEEP_RESEARCH_MAX_MODEL:-deep-research-max-preview-04-2026}
+      GOOGLE_ADJUDICATOR_MODEL: ${GOOGLE_ADJUDICATOR_MODEL:-gemini-flash-latest}
+      PERPLEXITY_RESEARCH_MODEL: ${PERPLEXITY_RESEARCH_MODEL:-sonar-deep-research}
+      PERPLEXITY_VERIFIER_MODEL: ${PERPLEXITY_VERIFIER_MODEL:-sonar-pro}
+      PERPLEXITY_MAX_VERIFIER_MODEL: ${PERPLEXITY_MAX_VERIFIER_MODEL:-sonar-deep-research}
+      XAI_RESEARCH_MODEL: ${XAI_RESEARCH_MODEL:-grok-4.5}
+      XAI_VERIFIER_MODEL: ${XAI_VERIFIER_MODEL:-grok-4.5}
+      ANTHROPIC_SYNTHESIS_MODEL: ${ANTHROPIC_SYNTHESIS_MODEL:-claude-opus-4-8}
+      ANTHROPIC_SYNTHESIS_FALLBACK_MODEL: ${ANTHROPIC_SYNTHESIS_FALLBACK_MODEL:-claude-sonnet-5}
+      ANTHROPIC_MAX_OUTPUT_TOKENS: ${ANTHROPIC_MAX_OUTPUT_TOKENS:-14000}
+      # Protoface avatar briefings (optional; gated). The avatar agent worker URL
+      # is only set once that worker is deployed.
+      PROTOFACE_API_KEY: ${PROTOFACE_API_KEY:-}
+      PROTOFACE_AVATAR_ID: ${PROTOFACE_AVATAR_ID:-av_stock_280}
+      PROTOFACE_AGENT_URL: ${PROTOFACE_AGENT_URL:-}
+      LIVEKIT_URL: ${LIVEKIT_URL:-}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -129,7 +163,7 @@ services:
       - hopwhistle-network
     volumes:
       - freeswitch_recordings:/recordings:ro
-
+      - ../../rating (9) (1).xlsx:/app/rating (9) (1).xlsx
 
   web:
     build:
@@ -169,11 +203,52 @@ services:
       FREESWITCH_ESL_PORT: 8021
       FREESWITCH_ESL_PASSWORD: ${FREESWITCH_ESL_PASSWORD:-ClueCon}
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-5}
+      # Industry Research — real four-provider forensic research (Google/Perplexity/xAI/Anthropic; no OpenAI)
+      INDUSTRY_RESEARCH_ENABLED: ${INDUSTRY_RESEARCH_ENABLED:-true}
+      INDUSTRY_RESEARCH_REAL_FALLBACK: ${INDUSTRY_RESEARCH_REAL_FALLBACK:-true}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}
+      XAI_API_KEY: ${XAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GOOGLE_RAPID_RESEARCH_MODEL: ${GOOGLE_RAPID_RESEARCH_MODEL:-gemini-flash-latest}
+      GOOGLE_DEEP_RESEARCH_MODEL: ${GOOGLE_DEEP_RESEARCH_MODEL:-deep-research-preview-04-2026}
+      GOOGLE_DEEP_RESEARCH_MAX_MODEL: ${GOOGLE_DEEP_RESEARCH_MAX_MODEL:-deep-research-max-preview-04-2026}
+      GOOGLE_ADJUDICATOR_MODEL: ${GOOGLE_ADJUDICATOR_MODEL:-gemini-flash-latest}
+      PERPLEXITY_RESEARCH_MODEL: ${PERPLEXITY_RESEARCH_MODEL:-sonar-deep-research}
+      PERPLEXITY_VERIFIER_MODEL: ${PERPLEXITY_VERIFIER_MODEL:-sonar-pro}
+      PERPLEXITY_MAX_VERIFIER_MODEL: ${PERPLEXITY_MAX_VERIFIER_MODEL:-sonar-deep-research}
+      XAI_RESEARCH_MODEL: ${XAI_RESEARCH_MODEL:-grok-4.5}
+      XAI_VERIFIER_MODEL: ${XAI_VERIFIER_MODEL:-grok-4.5}
+      ANTHROPIC_SYNTHESIS_MODEL: ${ANTHROPIC_SYNTHESIS_MODEL:-claude-opus-4-8}
+      ANTHROPIC_SYNTHESIS_FALLBACK_MODEL: ${ANTHROPIC_SYNTHESIS_FALLBACK_MODEL:-claude-sonnet-5}
+      ANTHROPIC_MAX_OUTPUT_TOKENS: ${ANTHROPIC_MAX_OUTPUT_TOKENS:-14000}
+      ANTHROPIC_TIMEOUT_MS: ${ANTHROPIC_TIMEOUT_MS:-540000}
+      ANTHROPIC_MAX_RETRIES: ${ANTHROPIC_MAX_RETRIES:-0}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - hopwhistle-network
+
+  # ============================================================================
+  # Industry Research — Protoface avatar briefing worker (optional; only starts
+  # when built/started explicitly). Registers with LiveKit and renders the
+  # talking-head avatar for AI Briefings using a free local Piper voice.
+  # ============================================================================
+  avatar-worker:
+    build:
+      context: ../../apps/avatar-worker
+      dockerfile: Dockerfile
+    container_name: hopwhistle-avatar-worker-dev
+    restart: unless-stopped
+    environment:
+      LIVEKIT_URL: ${LIVEKIT_URL:-}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
+      PROTOFACE_API_KEY: ${PROTOFACE_API_KEY:-}
+      PROTOFACE_AVATAR_ID: ${PROTOFACE_AVATAR_ID:-av_stock_280}
     networks:
       - hopwhistle-network
 
@@ -189,6 +264,9 @@ services:
       # SIP ports (internal - use Kamailio for external SIP)
       - '5080:5080/udp'
       - '5080:5080/tcp'
+      # Vapi SIP profile (isolated from agent phones on 5060/5080)
+      - '5070:5070/udp'
+      - '5070:5070/tcp'
       # ESL - Event Socket Layer for API communication
       - '8021:8021/tcp'
       # Verto WebSocket for WebRTC browser calling
@@ -196,6 +274,8 @@ services:
       - '8083:8083/tcp'
       - '5066:5066/tcp'
       - '7443:7443/tcp'
+      # RTP media ports (audio) - MUST be exposed for call audio to work
+      - '16384-16484:16384-16484/udp'
     environment:
       FREESWITCH_ESL_PASSWORD: ${FREESWITCH_ESL_PASSWORD:-ClueCon}
       API_URL: http://api:3001
@@ -212,10 +292,14 @@ services:
       OUTBOUND_SIP_USER: ${OUTBOUND_SIP_USER}
       OUTBOUND_SIP_PASS: ${OUTBOUND_SIP_PASS}
       OUTBOUND_CALLER_ID: ${OUTBOUND_CALLER_ID}
+      FRACTEL_DEFAULT_CALLER_ID: ${FRACTEL_DEFAULT_CALLER_ID:-${OUTBOUND_CALLER_ID:-12816991120}}
       PUBLIC_IP: ${PUBLIC_IP}
+      SIP_DOMAIN: ${SIP_DOMAIN:-freeswitch}
+      SIP_AGENT_PASSWORD: ${SIP_AGENT_PASSWORD:-1234}
     volumes:
       - freeswitch_recordings:/recordings
       # Mount Let's Encrypt certs for WSS (on production servers only)
+      - /etc/letsencrypt:/etc/letsencrypt:ro
       - /etc/letsencrypt/live/hopwhistle.com:/etc/freeswitch/letsencrypt:ro
       # NOTE: Do NOT mount freeswitch_conf here - config is baked into the image via Dockerfile
     healthcheck:
@@ -253,10 +337,11 @@ services:
       FREESWITCH_NODES: ${FREESWITCH_NODES:-freeswitch:5080}
       RTPENGINE_SOCK: ${RTPENGINE_SOCK:-udp:rtpengine:22222}
       DB_URL: ${DB_URL:-}
+      PUBLIC_IP: ${PUBLIC_IP}
     volumes:
       - kamailio_data:/var/run/kamailio
     healthcheck:
-      test: ['CMD', 'kamctl', 'ping']
+      test: ['CMD', 'kamcmd', 'core.ps']
       interval: 30s
       timeout: 10s
       retries: 3
@@ -277,9 +362,10 @@ services:
     ports:
       - '22222:22222/udp'
       - '22222:22222/tcp'
-      - '10000-20000:10000-20000/udp'
+      - '10000-10100:10000-10100/udp'
     environment:
       RTPENGINE_INTERFACE: ${RTPENGINE_INTERFACE:-auto}
+      PUBLIC_IP: ${PUBLIC_IP}
     volumes:
       - rtpengine_recordings:/recordings
     cap_add:
@@ -289,7 +375,7 @@ services:
     stop_grace_period: 5s
     stop_signal: SIGKILL
     healthcheck:
-      test: ['CMD', 'rtpengine-ctl', '-t', '127.0.0.1:9900', 'ping']
+      test: ['CMD', 'rtpengine-ctl', '-ip', '127.0.0.1:9900', 'list', 'numsessions']
       interval: 30s
       timeout: 10s
       retries: 3

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument */
 /**
  * Insurance Lead Pipeline — API Routes
  *
@@ -5,6 +6,8 @@
  * Uses the existing Fastify API-key auth pattern (x-api-key header)
  * so tenantId resolves from the global auth hook.
  */
+
+import { spawn } from 'child_process';
 
 import { FastifyInstance, FastifyRequest } from 'fastify';
 
@@ -21,6 +24,66 @@ function getTenantId(request: FastifyRequest): string | null {
   const user = (request as AuthRequest).user;
   const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
   return demoTenantId || user?.tenantId || null;
+}
+
+function runPreClosedPython(leads: any[]): Promise<any[]> {
+  return new Promise((resolve, reject) => {
+    const scriptPath = 'scripts/process-preclosed.py';
+    const pyProcess = spawn('python3', [scriptPath]);
+
+    let stdoutData = '';
+    let stderrData = '';
+
+    pyProcess.stdout.on('data', data => {
+      stdoutData += data.toString();
+    });
+
+    pyProcess.stderr.on('data', data => {
+      stderrData += data.toString();
+    });
+
+    pyProcess.on('close', code => {
+      if (code !== 0) {
+        const fallbackProcess = spawn('python', [scriptPath]);
+        let fStdout = '';
+        let fStderr = '';
+
+        fallbackProcess.stdout.on('data', d => {
+          fStdout += d.toString();
+        });
+        fallbackProcess.stderr.on('data', d => {
+          fStderr += d.toString();
+        });
+        fallbackProcess.on('close', fCode => {
+          if (fCode !== 0) {
+            reject(
+              new Error(
+                `Python process exited with code ${fCode}. Stderr: ${fStderr || stderrData}`
+              )
+            );
+          } else {
+            try {
+              resolve(JSON.parse(fStdout));
+            } catch (err) {
+              reject(err);
+            }
+          }
+        });
+
+        fallbackProcess.stdin.write(JSON.stringify(leads));
+        fallbackProcess.stdin.end();
+      } else {
+        try {
+          resolve(JSON.parse(stdoutData));
+        } catch (err) {
+          reject(err);
+        }
+      }
+    });
+
+    pyProcess.stdin.write(JSON.stringify(leads));
+    pyProcess.stdin.end();
+  });
 }
 
 // eslint-disable-next-line @typescript-eslint/require-await
@@ -41,12 +104,12 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     const { vertical: rawVertical } = request.params;
     const vertical = rawVertical.toUpperCase();
 
-    if (vertical !== 'ACA' && vertical !== 'FE') {
+    if (vertical !== 'ACA' && vertical !== 'FE' && vertical !== 'B2B') {
       void reply.code(400);
       return {
         error: {
           code: 'INVALID_VERTICAL',
-          message: `Invalid vertical "${rawVertical}". Must be "aca" or "fe".`,
+          message: `Invalid vertical "${rawVertical}". Must be "aca", "fe", or "b2b".`,
         },
       };
     }
@@ -59,7 +122,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
 
     try {
       const { ingestLead } = await import('../services/insurance-lead-service.js');
-      const result = await ingestLead(tenantId, vertical as 'ACA' | 'FE', body);
+      const result = await ingestLead(tenantId, vertical as 'ACA' | 'FE' | 'B2B', body);
 
       void reply.code(result.validationStatus === 'VALID' ? 200 : 422);
       return {
@@ -84,6 +147,143 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
   });
 
   // -----------------------------------------------------------------------
+  // POST /api/v1/insurance-leads/import — Bulk import
+  // -----------------------------------------------------------------------
+  fastify.post<{
+    Body: {
+      vertical: string;
+      leads: Array<Record<string, unknown>>;
+      listName?: string;
+      listId?: string;
+    };
+  }>('/api/v1/insurance-leads/import', async (request, reply) => {
+    const tenantId = getTenantId(request);
+    if (!tenantId) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Valid API key required' } };
+    }
+
+    const { vertical: rawVertical, leads, listName, listId: reqListId } = request.body;
+    if (!rawVertical || !Array.isArray(leads)) {
+      void reply.code(400);
+      return { error: { code: 'INVALID_BODY', message: 'Must provide vertical and leads array' } };
+    }
+
+    const vertical = rawVertical.toUpperCase();
+    if (vertical !== 'ACA' && vertical !== 'FE' && vertical !== 'B2B') {
+      void reply.code(400);
+      return {
+        error: {
+          code: 'INVALID_VERTICAL',
+          message: `Invalid vertical "${rawVertical}". Must be "aca", "fe", or "b2b".`,
+        },
+      };
+    }
+
+    try {
+      const { ingestLead } = await import('../services/insurance-lead-service.js');
+      const { getPrismaClient } = await import('../lib/prisma.js');
+      const prisma = getPrismaClient();
+
+      let targetListId = reqListId || null;
+      let listRecord = null;
+
+      if (!targetListId && listName && listName.trim()) {
+        const trimmedName = listName.trim();
+        listRecord = await prisma.leadList.findFirst({
+          where: { tenantId, name: { equals: trimmedName, mode: 'insensitive' } },
+        });
+        if (!listRecord) {
+          listRecord = await prisma.leadList.create({
+            data: {
+              tenantId,
+              name: trimmedName,
+              vertical: vertical as 'ACA' | 'FE' | 'B2B',
+            },
+          });
+        }
+        targetListId = listRecord.id;
+      } else if (targetListId) {
+        listRecord = await prisma.leadList.findUnique({ where: { id: targetListId } });
+      }
+
+      const isPreClosed = listRecord && listRecord.name.toLowerCase() === 'preclosed';
+      let processedLeads = leads;
+
+      if (isPreClosed) {
+        try {
+          processedLeads = await runPreClosedPython(leads);
+        } catch (pyErr) {
+          request.log.error(pyErr, 'Failed to process PreClosed leads in Python');
+        }
+      }
+
+      const results = [];
+
+      for (const lead of processedLeads) {
+        try {
+          let customFields =
+            lead.customFields && typeof lead.customFields === 'object'
+              ? { ...lead.customFields }
+              : {};
+          if (isPreClosed) {
+            customFields = {
+              ...customFields,
+              primaryBeneficiaryName: lead.primaryBeneficiaryName || '',
+              primaryBeneficiaryRelationship: lead.primaryBeneficiaryRelationship || '',
+              amamQuote: lead.amamQuote || null,
+              amamLessThanCurrent: lead.amamLessThanCurrent || null,
+              gtlQuote: lead.gtlQuote || null,
+              gtlLessThanCurrent: lead.gtlLessThanCurrent || null,
+              cheapestCarrierUnderCurrent: lead.cheapestCarrierUnderCurrent || '',
+              savingsVsCurrent: lead.savingsVsCurrent || null,
+              dob: lead.dob || null,
+              firstPremiumDate: lead.firstPremiumDate || null,
+            };
+          }
+
+          const payload = {
+            ...lead,
+            customFields,
+            ...(targetListId ? { listId: targetListId } : {}),
+          };
+          const result = await ingestLead(tenantId, vertical as 'ACA' | 'FE' | 'B2B', payload);
+          results.push({
+            success: result.validationStatus === 'VALID',
+            phone: String(lead.phone || ''),
+            name: `${String(lead.firstName || '')} ${String(lead.lastName || '')}`.trim(),
+            errors: result.errors || null,
+          });
+        } catch (err: unknown) {
+          results.push({
+            success: false,
+            phone: String(lead.phone || ''),
+            name: `${String(lead.firstName || '')} ${String(lead.lastName || '')}`.trim(),
+            errors: [
+              { path: 'system', message: (err as Error).message || 'System ingestion failure' },
+            ],
+          });
+        }
+      }
+
+      return {
+        total: leads.length,
+        successCount: results.filter(r => r.success).length,
+        failCount: results.filter(r => !r.success).length,
+        details: results,
+      };
+    } catch (error: unknown) {
+      void reply.code(500);
+      return {
+        error: {
+          code: 'IMPORT_FAILED',
+          message: (error as Error).message || 'Failed to complete import process',
+        },
+      };
+    }
+  });
+
+  // -----------------------------------------------------------------------
   // GET /api/v1/insurance-leads — List leads with filtering
   // -----------------------------------------------------------------------
   fastify.get<{
@@ -97,6 +297,10 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
       search?: string;
       startDate?: string;
       endDate?: string;
+      status?: string;
+      leadStage?: string;
+      followUp?: string;
+      listId?: string;
     };
   }>('/api/v1/insurance-leads', async (request, reply) => {
     const tenantId = getTenantId(request);
@@ -111,17 +315,88 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     const result = await getLeads(tenantId, {
       page: q.page ? parseInt(q.page) : undefined,
       limit: q.limit ? parseInt(q.limit) : undefined,
-      vertical: q.vertical?.toUpperCase() as 'ACA' | 'FE' | undefined,
+      vertical: q.vertical?.toUpperCase() as 'ACA' | 'FE' | 'B2B' | undefined,
       validationStatus: q.validationStatus?.toUpperCase() as 'VALID' | 'INVALID' | undefined,
       postStatus: q.postStatus?.toUpperCase(),
       postMode: q.postMode?.toUpperCase() as 'TEST' | 'LIVE' | undefined,
       search: q.search,
       startDate: q.startDate,
       endDate: q.endDate,
+      status: q.status,
+      leadStage: q.leadStage,
+      followUp: q.followUp,
+      listId: q.listId,
     });
 
     return result;
   });
+
+  // -----------------------------------------------------------------------
+  // GET /api/v1/lead-lists — List all lead lists for tenant
+  // -----------------------------------------------------------------------
+  fastify.get('/api/v1/lead-lists', async (request, reply) => {
+    const tenantId = getTenantId(request);
+    if (!tenantId) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+    }
+
+    const { getPrismaClient } = await import('../lib/prisma.js');
+    const prisma = getPrismaClient();
+
+    const lists = await prisma.leadList.findMany({
+      where: { tenantId },
+      include: {
+        _count: {
+          select: { leads: true },
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    return lists;
+  });
+
+  // -----------------------------------------------------------------------
+  // DELETE /api/v1/lead-lists/:id — Delete a lead list and its leads
+  // -----------------------------------------------------------------------
+  fastify.delete<{ Params: { id: string } }>('/api/v1/lead-lists/:id', async (request, reply) => {
+    const tenantId = getTenantId(request);
+    if (!tenantId) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+    }
+
+    const { id } = request.params;
+    const { getPrismaClient } = await import('../lib/prisma.js');
+    const prisma = getPrismaClient();
+
+    // Verify list exists and belongs to the tenant
+    const list = await prisma.leadList.findFirst({
+      where: { id, tenantId },
+    });
+
+    if (!list) {
+      void reply.code(404);
+      return { error: { code: 'NOT_FOUND', message: 'Lead list not found' } };
+    }
+
+    // Delete all leads in this list first
+    await prisma.insuranceLead.deleteMany({
+      where: {
+        tenantId,
+        listId: id,
+      },
+    });
+
+    // Delete the list itself
+    await prisma.leadList.delete({
+      where: { id },
+    });
+
+    return { success: true };
+  });
+
 
   // -----------------------------------------------------------------------
   // GET /api/v1/insurance-leads/stats — Aggregate stats
@@ -140,27 +415,24 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
   // -----------------------------------------------------------------------
   // GET /api/v1/insurance-leads/:id — Single lead detail
   // -----------------------------------------------------------------------
-  fastify.get<{ Params: { id: string } }>(
-    '/api/v1/insurance-leads/:id',
-    async (request, reply) => {
-      const tenantId = getTenantId(request);
-      if (!tenantId) {
-        void reply.code(401);
-        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
-      }
-
-      const { getLeadById } = await import('../services/insurance-lead-service.js');
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      const lead = await getLeadById(tenantId, request.params.id);
-
-      if (!lead) {
-        void reply.code(404);
-        return { error: { code: 'NOT_FOUND', message: 'Lead not found' } };
-      }
-
-      return lead;
+  fastify.get<{ Params: { id: string } }>('/api/v1/insurance-leads/:id', async (request, reply) => {
+    const tenantId = getTenantId(request);
+    if (!tenantId) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
     }
-  );
+
+    const { getLeadById } = await import('../services/insurance-lead-service.js');
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const lead = await getLeadById(tenantId, request.params.id);
+
+    if (!lead) {
+      void reply.code(404);
+      return { error: { code: 'NOT_FOUND', message: 'Lead not found' } };
+    }
+
+    return lead;
+  });
 
   // -----------------------------------------------------------------------
   // PATCH /api/v1/insurance-leads/:id — Edit CRM lead fields
@@ -202,11 +474,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
 
     const { retrySubmission } = await import('../services/insurance-lead-service.js');
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const result = await retrySubmission(
-      tenantId,
-      request.params.id,
-      request.params.submissionId,
-    );
+    const result = await retrySubmission(tenantId, request.params.id, request.params.submissionId);
 
     if ('error' in result) {
       void reply.code(400);
@@ -253,7 +521,12 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
   // POST /api/v1/insurance-leads/:id/tasks — Create a new task
   fastify.post<{
     Params: { id: string };
-    Body: { title: string; description?: string; priority?: 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT'; dueAt?: string };
+    Body: {
+      title: string;
+      description?: string;
+      priority?: 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
+      dueAt?: string;
+    };
   }>('/api/v1/insurance-leads/:id/tasks', async (request, reply) => {
     const tenantId = getTenantId(request);
     if (!tenantId) {
@@ -407,6 +680,37 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     }
 
     return { success: true, task: updated };
+  });
+
+  // -----------------------------------------------------------------------
+  // DELETE /api/v1/insurance-leads — Bulk delete leads
+  // -----------------------------------------------------------------------
+  fastify.delete<{
+    Body: { ids: string[] };
+  }>('/api/v1/insurance-leads', async (request, reply) => {
+    const tenantId = getTenantId(request);
+    if (!tenantId) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+    }
+
+    const { ids } = request.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      void reply.code(400);
+      return { error: { code: 'INVALID_BODY', message: 'Must provide an array of ids' } };
+    }
+
+    const { getPrismaClient } = await import('../lib/prisma.js');
+    const prisma = getPrismaClient();
+
+    const result = await prisma.insuranceLead.deleteMany({
+      where: {
+        tenantId,
+        id: { in: ids },
+      },
+    });
+
+    return { success: true, count: result.count };
   });
 
   // -----------------------------------------------------------------------

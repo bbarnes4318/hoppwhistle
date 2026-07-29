@@ -7,7 +7,8 @@
 
 import { logger } from '../lib/logger.js';
 import { getPrismaClient } from '../lib/prisma.js';
-import { auctionService } from './auction-service.js';
+
+import { auctionService, type HoursOfOperation } from './auction-service.js';
 import { numberPoolService } from './number-pool-service.js';
 
 // ============================================================================
@@ -79,10 +80,15 @@ export class PostService {
       const pingRequest = await prisma.pingRequest.findUnique({
         where: { id: pingId },
         include: {
+          publisher: true,
           bids: {
             where: { status: 'WON' },
             include: {
-              buyerEndpoint: true,
+              buyerEndpoint: {
+                include: {
+                  buyer: true,
+                },
+              },
             },
           },
         },
@@ -142,6 +148,124 @@ export class PostService {
         };
       }
 
+      const buyer = winningBid.buyerEndpoint?.buyer;
+      if (!buyer) {
+        return {
+          status: 'error',
+          accepted: false,
+          error_code: 'BUYER_NOT_FOUND',
+          message: 'Buyer not found for winning bid',
+        };
+      }
+
+      // 1. Buyer is ACTIVE
+      if (buyer.status !== 'ACTIVE') {
+        return {
+          status: 'error',
+          accepted: false,
+          error_code: 'BUYER_INACTIVE',
+          message: 'Buyer is not active',
+        };
+      }
+
+      // 2. Buyer endpoint is ACTIVE
+      if (winningBid.buyerEndpoint.status !== 'ACTIVE') {
+        return {
+          status: 'error',
+          accepted: false,
+          error_code: 'ENDPOINT_INACTIVE',
+          message: 'Buyer endpoint is not active',
+        };
+      }
+
+      // 3. Endpoint destination exists
+      if (!winningBid.buyerEndpoint.destination) {
+        return {
+          status: 'error',
+          accepted: false,
+          error_code: 'NO_DESTINATION',
+          message: 'Buyer endpoint destination does not exist',
+        };
+      }
+
+      // 4. Buyer is currently open based on hoursOfOperation/timezone
+      const hoursCheck = auctionService.checkHours(
+        winningBid.buyerEndpoint.hoursOfOperation as HoursOfOperation | null,
+        winningBid.buyerEndpoint.timezone
+      );
+      if (!hoursCheck.pass) {
+        return {
+          status: 'error',
+          accepted: false,
+          error_code: 'BUYER_CLOSED',
+          message: hoursCheck.reason || 'Buyer is closed',
+        };
+      }
+
+      // 5. Cap check
+      const capCheck = await auctionService.checkCap(
+        winningBid.buyerEndpointId,
+        winningBid.buyerEndpoint.maxCap,
+        winningBid.buyerEndpoint.capPeriod
+      );
+      if (!capCheck.pass) {
+        return {
+          status: 'error',
+          accepted: false,
+          error_code: 'CAP_EXCEEDED',
+          message: capCheck.reason || 'Buyer endpoint cap exceeded',
+        };
+      }
+
+      // 6. Concurrency check
+      if (winningBid.buyerEndpoint.maxConcurrency > 0) {
+        const { liveStatusService } = await import('./buyer-live-status-service.js');
+        const liveCalls = await liveStatusService.getTargetConcurrency(winningBid.buyerEndpointId);
+        if (liveCalls >= winningBid.buyerEndpoint.maxConcurrency) {
+          return {
+            status: 'error',
+            accepted: false,
+            error_code: 'CONCURRENCY_EXCEEDED',
+            message: 'Buyer endpoint concurrency limit exceeded',
+          };
+        }
+      }
+
+      // 7. Wallet balance check (if UPFRONT)
+      if (buyer.billingType === 'UPFRONT') {
+        if (Number(buyer.walletBalance) < bidAmount) {
+          return {
+            status: 'error',
+            accepted: false,
+            error_code: 'INSUFFICIENT_FUNDS',
+            message: 'Buyer has insufficient wallet balance',
+          };
+        }
+      }
+
+      // 8. Campaign/buyer relationship is active
+      const campaign = await prisma.campaign.findFirst({
+        where: {
+          publisherId: pingRequest.publisherId,
+          status: 'ACTIVE',
+          buyers: {
+            some: {
+              buyerId: buyerId,
+              status: 'ACTIVE',
+            },
+          },
+        },
+      });
+
+      if (!campaign) {
+        return {
+          status: 'error',
+          accepted: false,
+          error_code: 'CAMPAIGN_BUYER_INACTIVE',
+          message: 'Campaign-buyer relationship is not active',
+        };
+      }
+
       const buyerDestination = winningBid.buyerEndpoint.destination;
       const buyerEndpointId = winningBid.buyerEndpointId;
 
@@ -150,7 +274,20 @@ export class PostService {
         buyerDestination,
         pingId,
         buyerId,
-        buyerEndpointId
+        buyerEndpointId,
+        undefined, // TTL
+        {
+          tenant_id: pingRequest.publisher.tenantId,
+          publisher_id: pingRequest.publisherId,
+          campaign_id: campaign.id,
+          caller_number: callerNumber || null,
+          rtb_bid_amount: bidAmount,
+          buyer_bid_id: winningBid.id,
+          post_accepted_at: new Date().toISOString(),
+          publisher_request_id: pingRequest.requestId || null,
+          vertical: pingRequest.vertical || null,
+          expires_at: pingRequest.expiresAt ? pingRequest.expiresAt.toISOString() : null,
+        }
       );
 
       if (!leaseResult.success) {

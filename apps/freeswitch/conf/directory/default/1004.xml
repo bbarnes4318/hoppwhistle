@@ -1,0 +1,22 @@
+<include>
+  <user id="1004">
+    <params>
+      <param name="password" value="$${default_password}"/>
+      <param name="vm-password" value="1004"/>
+      <!-- Verto specific permissions -->
+      <param name="jsonrpc-allowed-methods" value="verto.invite,verto.answer,verto.attach,verto.info,verto.display,verto.bye,verto.modify,verto.media,verto.ping"/>
+    </params>
+    <variables>
+      <variable name="toll_allow" value="domestic,international,local"/>
+      <variable name="accountcode" value="1004"/>
+      <variable name="user_context" value="default"/>
+      <variable name="verto_context" value="default"/>
+      <variable name="verto_dialplan" value="XML"/>
+      <variable name="effective_caller_id_name" value="Extension 1004"/>
+      <variable name="effective_caller_id_number" value="1004"/>
+      <variable name="outbound_caller_id_name" value="Hopwhistle"/>
+      <variable name="outbound_caller_id_number" value="12816991120"/>
+      <variable name="callgroup" value="techsupport"/>
+    </variables>
+  </user>
+</include>

@@ -337,16 +337,27 @@ export class FreeSwitchService {
     const conferenceName = `conf_${heldUuid}`;
 
     // Find B-leg (peer) UUIDs from the channel list.
-    // Handles both inbound (agent is child leg) and outbound (agent is parent leg) calls.
+    // Handles both inbound (agent is child leg) and outbound (agent is parent leg) calls,
+    // as well as conference-bridged legs.
     const findPeerLeg = (uuid: string): string | null => {
       const chan = channels.find(c => c.uuid === uuid);
       if (chan) {
+        // Strategy 1: If in a conference, find the other member of the conference
+        if (chan.dest && chan.dest.startsWith('conference:')) {
+          const confPeer = channels.find(c => c.dest === chan.dest && c.uuid !== uuid);
+          if (confPeer) {
+            logger.info({ msg: 'findPeerLeg: resolved via shared conference destination', uuid, peer: confPeer.uuid, conference: chan.dest });
+            return confPeer.uuid;
+          }
+        }
+
+        // Strategy 2: If this channel is the child leg, its peer is the parent leg (whose uuid matches call_uuid)
         if (chan.call_uuid && chan.uuid !== chan.call_uuid) {
-          // If this channel is the child leg, its peer is the parent leg (whose uuid matches call_uuid)
           const parentExists = channels.some(c => c.uuid === chan.call_uuid);
           if (parentExists) return chan.call_uuid;
         }
-        // Otherwise, if this channel is the parent leg, its peer is the child leg
+        
+        // Strategy 3: If this channel is the parent leg, its peer is the child leg
         const child = channels.find(c => c.call_uuid === uuid && c.uuid !== uuid);
         if (child) return child.uuid;
       }

@@ -60,9 +60,11 @@ model Tenant {
   insuranceLeadSubmissions InsuranceLeadSubmission[]
   insuranceActivities      InsuranceActivity[]
   insuranceTasks           InsuranceTask[]
+  leadLists                LeadList[]
   didRoutes                DidRoute[]
   campaignPublishers       CampaignPublisher[]
   campaignBuyers           CampaignBuyer[]
+  voiceAgents              VoiceAgent[]
 
   @@index([slug])
   @@index([status])
@@ -180,29 +182,35 @@ model User {
   // Buyer Portal: Link user to a Buyer entity for BUYER role
   buyerId String?
 
+  // Publisher Portal: Link user to a Publisher entity for PUBLISHER role
+  publisherId String?
+
   // Relations
-  tenant                     Tenant?             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  buyer                      Buyer?              @relation(fields: [buyerId], references: [id])
-  roles                      UserRole[]
-  auditLogs                  AuditLog[]
-  createdCalls               Call[]              @relation("CallCreator")
-  stirShakenOverrides        StirShakenStatus[]  @relation("StirShakenOverrideUser")
-  assignedLeads              Lead[]
-  buyerTransactions          BuyerTransaction[]  @relation("BuyerTransactionCreator")
-  phoneNumbers               PhoneNumber[]
-  assignedInsuranceLeads     InsuranceLead[]     @relation("InsuranceLeadAssignedTo")
-  createdInsuranceActivities InsuranceActivity[] @relation("InsuranceActivityCreatedBy")
-  assignedInsuranceTasks     InsuranceTask[]     @relation("InsuranceTaskAssignedTo")
+  tenant              Tenant?            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  buyer               Buyer?             @relation(fields: [buyerId], references: [id])
+  publisher           Publisher?         @relation(fields: [publisherId], references: [id])
+  roles               UserRole[]
+  auditLogs           AuditLog[]
+  createdCalls        Call[]             @relation("CallCreator")
+  stirShakenOverrides StirShakenStatus[] @relation("StirShakenOverrideUser")
+  assignedLeads       Lead[]
+  buyerTransactions   BuyerTransaction[] @relation("BuyerTransactionCreator")
+  phoneNumbers        PhoneNumber[]
+  assignedInsuranceLeads      InsuranceLead[]     @relation("InsuranceLeadAssignedTo")
+  createdInsuranceActivities  InsuranceActivity[] @relation("InsuranceActivityCreatedBy")
+  assignedInsuranceTasks      InsuranceTask[]     @relation("InsuranceTaskAssignedTo")
 
   // Payroll relations
   timeEntries    TimeEntry[]
   financials     UserFinancials?
   payrollPayouts PayrollPayout[]
+  voiceAgents    VoiceAgent[]
 
   @@index([tenantId, email])
   @@index([tenantId, status])
   @@index([googleId])
   @@index([buyerId])
+  @@index([publisherId])
   @@map("users")
 }
 
@@ -276,10 +284,13 @@ model ApiKey {
   tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   rateLimitEntries RateLimitEntry[]
   auditLogs        AuditLog[]
+  publisherId      String?
+  publisher        Publisher?       @relation(fields: [publisherId], references: [id])
 
   @@index([tenantId])
   @@index([keyHash])
   @@index([status])
+  @@index([publisherId])
   @@map("api_keys")
 }
 
@@ -584,6 +595,8 @@ model Publisher {
   pingRequests       PingRequest[]
   campaignPublishers CampaignPublisher[]
   didRoutes          DidRoute[]
+  users              User[]
+  apiKeys            ApiKey[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -606,6 +619,7 @@ model Buyer {
   status           BuyerStatus      @default(ACTIVE)
   billingType      BuyerBillingType @default(TERMS)
   leadsRemaining   Int              @default(0)
+  walletBalance    Decimal          @default(0.00) @db.Decimal(10, 2)
   billableDuration Int              @default(60) // Seconds threshold for billable call
 
   // Permission toggles
@@ -655,7 +669,7 @@ enum BuyerTransactionType {
 model BuyerTransaction {
   id          String               @id @default(uuid())
   buyerId     String
-  amount      Int // +N for credit, -1 for debit
+  amount      Decimal              @db.Decimal(10, 2) // +N for credit, -N for debit
   type        BuyerTransactionType
   description String // e.g., "Call ID #abc123" or "Admin added 100 leads"
   callId      String? // Reference if DEBIT
@@ -666,6 +680,7 @@ model BuyerTransaction {
   call      Call? @relation(fields: [callId], references: [id])
   createdBy User? @relation("BuyerTransactionCreator", fields: [createdById], references: [id])
 
+  @@unique([buyerId, callId, type])
   @@index([buyerId])
   @@index([createdAt])
   @@index([type])
@@ -946,6 +961,14 @@ model Call {
   buyerBillableAmount       Decimal?  @db.Decimal(10, 4)
   billingCalculatedAt       DateTime?
   billingRuleSnapshot       Json?
+
+  // Semantic Status Tracking Fields
+  buyerChargeStatus          String?
+  buyerChargedAt             DateTime?
+  publisherPayoutStatus      String?
+  publisherPayableAt         DateTime?
+  publisherPaidAt            DateTime?
+  disputeStatus              String?
 
   // Boolean/Status Fields
   isDuplicate         Boolean @default(false) // If caller is duplicate
@@ -1372,6 +1395,7 @@ model AccrualLedger {
   closedAt         DateTime?
   invoiceId        String?
   metadata         Json?
+  idempotencyKey   String      @unique
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
 
@@ -1398,6 +1422,12 @@ enum AccrualType {
   CPA_CONVERSION
   TAX
   ADJUSTMENT
+  BUYER_REVENUE
+  PUBLISHER_PAYOUT
+  CARRIER_COST
+  PLATFORM_PROFIT
+  DISPUTE_HOLD
+  DISPUTE_REVERSAL
 }
 
 // ============================================================================
@@ -2326,6 +2356,7 @@ enum AICallStatus {
 enum InsuranceVertical {
   ACA
   FE
+  B2B
 }
 
 enum InsuranceValidationStatus {
@@ -2416,8 +2447,19 @@ model InsuranceLead {
   consentLanguage String?
   recordingUrl    String?
 
+  // B2B specific CRM fields
+  company         String?
+  repName         String?
+  industry        String?
+  revenue         String?
+  yearEstablished String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // Lead List Relation
+  listId String?
+  list   LeadList? @relation(fields: [listId], references: [id], onDelete: SetNull)
 
   // Relations
   tenant      Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -2432,6 +2474,22 @@ model InsuranceLead {
   @@index([tenantId, status])
   @@index([createdAt])
   @@map("insurance_leads")
+}
+
+model LeadList {
+  id        String            @id @default(uuid())
+  tenantId  String
+  name      String
+  vertical  InsuranceVertical
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  tenant    Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  leads     InsuranceLead[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("lead_lists")
 }
 
 /// Audit record for each inbound lead submission + delivery attempt.
@@ -2618,4 +2676,291 @@ model InsuranceTask {
   @@index([assignedToId])
   @@index([dueAt])
   @@map("insurance_tasks")
+}
+
+model VoiceAgent {
+  id              String   @id @default(uuid())
+  tenantId        String
+  userId          String?
+  vapiAssistantId String   @unique
+  displayName     String
+  status          String   @default("active")
+  source          String   @default("music-console")
+  metadata        Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([tenantId, source])
+  @@index([userId])
+  @@map("voice_agents")
+}
+
+// ============================================================================
+// Carrier Application RPA (American Amicable final expense submission)
+// ============================================================================
+
+enum CarrierAutomationStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+model InsuranceCarrierApplication {
+  id       String @id @default(uuid())
+  tenantId String
+
+  // Optional linkage to other records (plain ID columns, no FK relations,
+  // so no phone/lead models are modified by this feature)
+  insuranceLeadId  String?
+  prospectIntakeId String?
+  callId           String?
+
+  // Product
+  carrier        String   @default("American Amicable")
+  product        String   @default("Senior Choice")
+  planType       String? // Level | Graded | ROP
+  monthlyPremium Decimal? @db.Decimal(10, 2)
+  faceAmount     Int?
+  status         String   @default("PENDING")
+
+  // Applicant
+  firstName    String
+  middleName   String?
+  lastName     String
+  address      String?
+  city         String?
+  state        String? // Full state name as required by the carrier portal
+  zip          String?
+  phone        String? // digits only
+  email        String?
+  dob          String? // MM/DD/YYYY
+  age          Int?
+  gender       String?
+  tobacco      Boolean @default(false)
+  stateOfBirth String? // 2-letter code
+  heightFeet   Int?
+  heightInches Int?
+  weight       Int?
+
+  // Sensitive (AES-256-GCM encrypted at rest; only last-4 exposed via API)
+  ssnEncrypted           String?
+  ssnLast4               String?
+  routingNumberEncrypted String?
+  routingNumberLast4     String?
+  accountNumberEncrypted String?
+  accountNumberLast4     String?
+  accountHolder          String?
+  accountType            String? // Checking | Saving
+  bankName               String?
+  bankCityState          String?
+  draftSchedule          String? // ss_payment | day_of_month
+  draftDay               String?
+
+  // Beneficiaries
+  beneficiaryName              String?
+  beneficiaryRelation          String?
+  contingentBeneficiaryName    String?
+  contingentBeneficiaryRelation String?
+
+  // Owner / Payor
+  ownerIsInsured Boolean @default(true)
+  payorIsInsured Boolean @default(true)
+  ownerName      String?
+  ownerRelation  String?
+  ownerAddress   String?
+
+  // Existing insurance
+  hasExistingInsurance   Boolean @default(false)
+  willReplaceExisting    Boolean @default(false)
+  existingCompanyName    String?
+  existingPolicyNumber   String?
+  existingCoverageAmount String?
+
+  // Doctor
+  doctorName    String?
+  doctorAddress String?
+  doctorPhone   String?
+
+  // Health questions
+  healthQ1    Boolean @default(false)
+  healthQ2    Boolean @default(false)
+  healthQ3    Boolean @default(false)
+  healthQ4    Boolean @default(false)
+  healthQ5    Boolean @default(false)
+  healthQ6    Boolean @default(false)
+  healthQ7a   Boolean @default(false)
+  healthQ7b   Boolean @default(false)
+  healthQ7c   Boolean @default(false)
+  healthQ7d   Boolean @default(false)
+  healthQ8a   Boolean @default(false)
+  healthQ8b   Boolean @default(false)
+  healthQ8c   Boolean @default(false)
+  healthCovid Boolean @default(false)
+
+  // Illinois-specific
+  ilDesigneeChoice String?
+
+  // Automation tracking
+  carrierApplicationNumber String?
+  automationJobId          String?                 @unique
+  automationStatus         CarrierAutomationStatus @default(PENDING)
+  automationError          String?
+  automationStartedAt      DateTime?
+  automationCompletedAt    DateTime?
+  lastDebugSnapshotPath    String?
+
+  // Audit
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?
+
+  @@index([tenantId])
+  @@index([tenantId, phone])
+  @@index([tenantId, createdAt])
+  @@index([prospectIntakeId])
+  @@index([insuranceLeadId])
+  @@index([callId])
+  @@map("insurance_carrier_applications")
+}
+
+// ============================================================================
+// Industry Research (multi-provider forensic research pipeline)
+// Additive, tenant-isolated. Gated behind INDUSTRY_RESEARCH_ENABLED. Touches no
+// telephony/dialer/voice-AI zones.
+// ============================================================================
+
+model ResearchRun {
+  id       String @id @default(uuid())
+  tenantId String
+  userId   String
+
+  researchBriefId String
+
+  industry  String
+  geography String
+  mode      String // rapid_scan | full_due_diligence | forensic_max
+
+  status String @default("queued") // queued|planning|running|waiting|completed|failed|canceled|timed_out|budget_exceeded
+
+  // Canonical brief, resolved provider assignments and cost estimate (JSON)
+  brief               Json
+  providerAssignments Json
+  costEstimate        Json
+
+  // Live progress events + research plan (JSON)
+  plan     Json?
+  progress Json? // array of ProgressEvent
+
+  // Budget & cost tracking
+  maxBudgetUsd       Float @default(0)
+  estimatedCostUsd   Float @default(0)
+  accruedCostUsd     Float @default(0)
+
+  // Outcome mirror (denormalized for list/search)
+  verdict            String?
+  overallScore       Int?
+  insufficientEvidence Boolean @default(false)
+
+  error String?
+
+  startedAt  DateTime?
+  finishedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  stages  ResearchStage[]
+  reports ResearchReport[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, industry])
+  @@index([status])
+  @@map("research_runs")
+}
+
+model ResearchStage {
+  id    String @id @default(uuid())
+  runId String
+
+  stageKey String // normalize|plan|primary|independent|social|evidence|validation|contradictions|synthesis|verify|publish
+  label    String
+  role     String?
+  provider String?
+  model    String?
+
+  status String @default("pending") // pending|running|completed|failed|skipped|canceled|fallback
+
+  sourcesFound Int?
+  searches     Int?
+  costUsd      Float @default(0)
+  usedFallback Boolean @default(false)
+
+  // Raw provider output preserved for auditing (JSON)
+  output Json?
+  error  String?
+
+  startedAt  DateTime?
+  finishedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  run ResearchRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@index([runId, stageKey])
+  @@map("research_stages")
+}
+
+model ResearchReport {
+  id       String @id @default(uuid())
+  runId    String
+  tenantId String
+
+  version Int @default(1)
+
+  verdict      String?
+  overallScore Int?
+
+  // Rendered markdown + validated structured report + evidence (JSON)
+  markdown   String
+  structured Json
+  evidence   Json?
+  sources    Json?
+
+  // Adversarial verifier result (JSON)
+  verification Json?
+
+  synthesisProvider String?
+  synthesisModel    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  run ResearchRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@index([tenantId, createdAt])
+  @@index([runId, version])
+  @@map("research_reports")
+}
+
+model ResearchTeamProfile {
+  id       String @id @default(uuid())
+  tenantId String
+  userId   String
+
+  name         String
+  capabilities Json // array of capability ids / custom strings
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([tenantId, createdAt])
+  @@map("research_team_profiles")
 }

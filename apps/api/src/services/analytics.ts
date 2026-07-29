@@ -207,10 +207,17 @@ export class AnalyticsService {
       },
     };
 
-    if (filters.campaignId) {
-      where.call = {
-        campaignId: filters.campaignId,
-      };
+    if (filters.campaignId || filters.publisherId || filters.buyerId) {
+      where.call = {};
+      if (filters.campaignId) {
+        where.call.campaignId = filters.campaignId;
+      }
+      if (filters.publisherId) {
+        where.call.publisherId = filters.publisherId;
+      }
+      if (filters.buyerId) {
+        where.call.buyerId = filters.buyerId;
+      }
     }
 
     const cdrs = await this.prisma.cdr.findMany({

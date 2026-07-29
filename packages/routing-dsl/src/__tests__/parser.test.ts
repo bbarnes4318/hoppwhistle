@@ -68,8 +68,8 @@ describe('Flow Parser', () => {
       const invalidFlow = {
         ...simpleDirectRouteFlow,
         nodes: [
-          { id: 'tag-1', type: 'tag', tags: {} },
-          { id: 'tag-1', type: 'tag', tags: {} }, // Duplicate
+          { id: 'tag-1', type: 'tag' as const, tags: {} },
+          { id: 'tag-1', type: 'tag' as const, tags: {} }, // Duplicate
         ],
       };
 

@@ -21,6 +21,11 @@ local RECORDING_DIR = os.getenv("RECORDING_DIR") or "/recordings"
 local UPLOAD_SCRIPT = "/usr/share/freeswitch/scripts/upload-recording.sh"
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
+-- FS API handle for sofia_contact registration checks and the CDR post.
+-- (Referenced as `api:execute` below — must be defined or the script dies
+-- with a nil-index error right before bridging.)
+local api = freeswitch.API()
+
 local function log(level, msg)
   freeswitch.consoleLog(level, "[INBOUND-ROUTE] " .. msg .. "\n")
 end
@@ -65,16 +70,49 @@ if caller_normalized ~= "unknown" and not string.match(caller_normalized, "^%+")
 end
 
 -- ── Step 1: Lookup route via API ────────────────────────────────────────────
-local api = freeswitch.API()
-local lookup_url = API_URL .. "/api/v1/freeswitch/lookup?did=" .. did_normalized
-if caller_normalized ~= "unknown" then
-  lookup_url = lookup_url .. "&caller=" .. caller_normalized
+local function url_encode_plus(val)
+    return string.gsub(val or "", "%+", "%%2B")
 end
+
+local encoded_did = url_encode_plus(did_normalized)
+local encoded_caller = url_encode_plus(caller_normalized)
+
+local lookup_url = API_URL .. "/api/v1/freeswitch/lookup?did=" .. encoded_did
+if encoded_caller ~= "" and encoded_caller ~= "unknown" then
+    lookup_url = lookup_url .. "&caller=" .. encoded_caller
+end
+
+session:setVariable("curl_connect_timeout", "3")
+session:setVariable("curl_timeout", "15")
+
 log("INFO", "Looking up route: " .. lookup_url)
 
-local response_body = api:execute("curl", lookup_url .. " timeout 15 get") or ""
+session:execute("curl", lookup_url)
 
-log("INFO", "Lookup response: " .. response_body)
+local response_code = session:getVariable("curl_response_code") or ""
+local response_body = session:getVariable("curl_response_data") or ""
+
+log("INFO", "Lookup HTTP status=" .. tostring(response_code) .. " body=" .. tostring(response_body))
+
+local numeric_code = tonumber(response_code) or 0
+
+if response_code == "" or response_code == "0" or numeric_code >= 500 then
+    log("ERR", "Route API failure: HTTP " .. tostring(response_code))
+    session:hangup("NORMAL_TEMPORARY_FAILURE")
+    return
+end
+
+if numeric_code == 404 then
+    log("WARNING", "No configured route for DID: " .. did_normalized)
+    session:hangup("UNALLOCATED_NUMBER")
+    return
+end
+
+if numeric_code < 200 or numeric_code >= 300 then
+    log("ERR", "Unexpected route API response: HTTP " .. tostring(response_code))
+    session:hangup("NORMAL_TEMPORARY_FAILURE")
+    return
+end
 
 -- Parse response
 local destination     = json_value(response_body, "destination")
@@ -84,6 +122,20 @@ local buyer_id        = json_value(response_body, "buyerId")
 local target_id       = json_value(response_body, "targetId")
 local campaign_id     = json_value(response_body, "campaignId")
 local recording_flag  = json_value(response_body, "recordingEnabled")
+local no_eligible     = json_value(response_body, "noEligibleDestination")
+
+-- External PSTN gateway chain for buyer/fallback legs. The API sends the
+-- current carrier chain (env INBOUND_EXTERNAL_GATEWAYS); default matches the
+-- outbound FracTEL trunk. BulkVS/SignalWire/Telnyx were retired for egress
+-- after the July 2026 incident — do not hardcode them here.
+local external_gateways_csv = json_value(response_body, "externalGateways") or "fractel1,fractel2,fractel3"
+local external_gateways = {}
+for gw in string.gmatch(external_gateways_csv, "[^,%s]+") do
+    table.insert(external_gateways, gw)
+end
+if #external_gateways == 0 then
+    external_gateways = { "fractel1" }
+end
 
 -- ── TCPA Litigator Check ──────────────────────────────────────────────────
 local reject_flag = json_value(response_body, "reject")
@@ -94,10 +146,21 @@ if reject_flag == "true" then
   return
 end
 
+-- A route exists but no destination is currently eligible (e.g. campaign with
+-- no ringable agents): controlled no-agent response, never a silent drop and
+-- never a bridge to a garbage destination.
+if no_eligible == "true" or ((not destination or destination == "") and route_id and route_id ~= "") then
+  log("WARNING", "Route " .. tostring(route_id) .. " has no eligible destination for DID " .. did_normalized .. " — playing no-agent prompt")
+  session:execute("answer")
+  session:sleep(500)
+  session:execute("playback", "ivr/ivr-no_user_response.wav")
+  session:hangup("NO_USER_RESPONSE")
+  return
+end
+
 if not destination or destination == "" then
   log("WARNING", "No route found for DID: " .. did_normalized .. " — rejecting call")
-  session:execute("playback", "ivr/ivr-invalid_number.wav")
-  session:hangup("NO_ROUTE_DESTINATION")
+  session:hangup("UNALLOCATED_NUMBER")
   return
 end
 
@@ -196,20 +259,51 @@ for i, step in ipairs(failover_steps) do
                 end
 
                 if is_internal then
-                    -- Pre-resolve the contact to check if registered
+                    -- Pre-resolve the contact to check if registered, searching multiple fallback domains
                     local domain = session:getVariable("domain_name") or "localhost"
                     if domain == "" then domain = "localhost" end
-                    local contact = api:execute("sofia_contact", "internal/" .. p_dest .. "@" .. domain) or ""
-                    if contact ~= "" and not string.match(contact, "^error") then
+                    
+                    local domains_to_try = {
+                        "hopwhistle.com",
+                        "aivoice.hopwhistle.com",
+                        domain,
+                        "178.156.223.97",
+                        "freeswitch",
+                        "localhost"
+                    }
+                    local contact = ""
+                    for _, dom in ipairs(domains_to_try) do
+                        if dom and dom ~= "" then
+                            local res = api:execute("sofia_contact", "internal/" .. p_dest .. "@" .. dom) or ""
+                            if res ~= "" and not string.match(res, "^error") then
+                                contact = res
+                                log("INFO", "Internal extension " .. p_dest .. " found registered on domain " .. dom .. ": " .. contact)
+                                break
+                            end
+                        end
+                    end
+
+                    if contact ~= "" then
                         log("INFO", "Internal extension " .. p_dest .. " registered: " .. contact)
                         table.insert(bridge_components, contact)
                     else
-                        log("WARNING", "Internal extension " .. p_dest .. " NOT registered — skipping")
+                        log("WARNING", "Internal extension " .. p_dest .. " not found via sofia_contact — falling back to user/" .. p_dest)
+                        table.insert(bridge_components, "user/" .. p_dest)
                     end
                 else
-                    -- Strip leading + for external dialing
-                    local dest_stripped = string.gsub(p_dest, "^%+", "")
-                    table.insert(bridge_components, "sofia/gateway/bulkvs/" .. dest_stripped)
+                    -- External PSTN leg. Validate it actually looks like a phone
+                    -- number — stale routes can carry sentinels like "Campaign"
+                    -- which previously produced sofia/gateway/<gw>/Campaign and a
+                    -- guaranteed dead bridge.
+                    local dest_digits = string.gsub(p_dest, "%D", "")
+                    if string.len(dest_digits) == 10 then
+                        dest_digits = "1" .. dest_digits
+                    end
+                    if string.len(dest_digits) >= 11 and string.len(dest_digits) <= 15 then
+                        table.insert(bridge_components, "sofia/gateway/" .. external_gateways[1] .. "/" .. dest_digits)
+                    else
+                        log("ERR", "Skipping non-routable destination token '" .. p_dest .. "' (not an extension, user ID, or phone number)")
+                    end
                 end
             end
         end
@@ -219,11 +313,38 @@ for i, step in ipairs(failover_steps) do
                 log("WARNING", "Session no longer active, aborting failover loop")
                 break
             end
+            -- Carriers reject anonymous/"restricted" caller IDs on the outbound buyer
+            -- leg (NORMAL_TEMPORARY_FAILURE). If the A-leg caller ID isn't a real
+            -- number, stamp the dialed DID so the buyer leg is an acceptable call.
+            local cid = caller_number
+            if cid == nil or cid == "" or not string.match(tostring(cid), "%d%d%d%d%d%d%d") then
+                cid = session:getVariable("destination_number") or "4233398241"
+                cid = string.gsub(tostring(cid), "^%+", "")
+                log("INFO", "[INBOUND-ROUTE] anonymous/restricted caller ID; using DID " .. cid .. " for buyer leg")
+            end
             local bridge_vars = string.format(
                 "{origination_caller_id_number=%s,origination_caller_id_name=%s,effective_caller_id_number=%s,effective_caller_id_name=%s}",
-                caller_number, caller_number, caller_number, caller_number
+                cid, cid, cid, cid
             )
-            local bridge_string = bridge_vars .. table.concat(bridge_components, ",")
+            -- Single external destination: retry the same number across the
+            -- whole carrier gateway chain (mirrors the outbound dialplan's
+            -- fractel1..6 failover) before moving to the next routing step.
+            local bridge_body
+            if #bridge_components == 1 then
+                local gw_dest = string.match(bridge_components[1], "^sofia/gateway/[^/]+/(.+)$")
+                if gw_dest and #external_gateways > 1 then
+                    local alts = {}
+                    for _, gw in ipairs(external_gateways) do
+                        table.insert(alts, "sofia/gateway/" .. gw .. "/" .. gw_dest)
+                    end
+                    bridge_body = table.concat(alts, "|")
+                else
+                    bridge_body = bridge_components[1]
+                end
+            else
+                bridge_body = table.concat(bridge_components, ",")
+            end
+            local bridge_string = bridge_vars .. bridge_body
             log("INFO", "Bridging to failover step " .. tostring(i) .. ": " .. bridge_string)
             session:execute("bridge", bridge_string)
             
@@ -238,6 +359,15 @@ for i, step in ipairs(failover_steps) do
             log("WARNING", "Step " .. tostring(i) .. " has no reachable destinations — skipping to next")
         end
     end
+end
+
+-- If call was not answered by any buyer leg, answer cleanly and play fallback announcement
+if not session:answered() and session:ready() then
+    log("WARNING", "All buyer bridge attempts completed without answer — playing fallback prompt")
+    session:execute("answer")
+    session:sleep(500)
+    session:execute("playback", "ivr/ivr-no_user_response.wav")
+    session:hangup("NO_USER_RESPONSE")
 end
 
 -- ── Step 5: Call ended — collect CDR and report ─────────────────────────────

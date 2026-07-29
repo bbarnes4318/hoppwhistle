@@ -36,11 +36,13 @@ if [ -f "$VANILLA_CONF/vars.xml" ]; then
     sed -i "s|\${PUBLIC_IP}|${PUBLIC_IP:-auto}|g" "$VANILLA_CONF/vars.xml"
     sed -i "s|\${SIP_PUBLIC_IP}|${SIP_PUBLIC_IP:-${PUBLIC_IP:-auto}}|g" "$VANILLA_CONF/vars.xml"
     sed -i "s|\${SIP_DOMAIN}|${SIP_DOMAIN:-${PUBLIC_IP:-auto}}|g" "$VANILLA_CONF/vars.xml"
+    sed -i "s|\${SIP_AGENT_PASSWORD}|${SIP_AGENT_PASSWORD:-1234}|g" "$VANILLA_CONF/vars.xml"
     sed -i "s|\${MEDIA_DOMAIN}|${MEDIA_DOMAIN:-}|g" "$VANILLA_CONF/vars.xml"
     sed -i "s|\${OUTBOUND_SIP_PROXY}|${OUTBOUND_SIP_PROXY:-sip.telnyx.com}|g" "$VANILLA_CONF/vars.xml"
     sed -i "s|\${OUTBOUND_SIP_USER}|${OUTBOUND_SIP_USER:-}|g" "$VANILLA_CONF/vars.xml"
     sed -i "s|\${OUTBOUND_SIP_PASS}|${OUTBOUND_SIP_PASS:-}|g" "$VANILLA_CONF/vars.xml"
     sed -i "s|\${OUTBOUND_CALLER_ID}|${OUTBOUND_CALLER_ID:-}|g" "$VANILLA_CONF/vars.xml"
+    sed -i "s|\${FRACTEL_DEFAULT_CALLER_ID}|${FRACTEL_DEFAULT_CALLER_ID:-${OUTBOUND_CALLER_ID:-12816991120}}|g" "$VANILLA_CONF/vars.xml"
     sed -i "s|\${FREESWITCH_ESL_PASSWORD}|${FREESWITCH_ESL_PASSWORD:-ClueCon}|g" "$VANILLA_CONF/vars.xml"
 fi
 
@@ -54,6 +56,22 @@ if [ -f "$SWITCH_CONF" ]; then
     # Uncomment rtp-end-port and set to 16484
     sed -i 's|<!-- *<param name="rtp-end-port" value="[0-9]*"/> *-->|<param name="rtp-end-port" value="16484"/>|g' "$SWITCH_CONF"
     echo "  RTP ports configured: 16384-16484"
+fi
+
+# Permanently enforce RFC2833/telephone-event on the PSTN B-leg. This patch is
+# idempotent and is applied on every container start, so rebuilds and server
+# replacements cannot silently restore broken IVR dialpad behavior.
+OUTBOUND_DIALPLAN="$VANILLA_CONF/dialplan/default.xml"
+if [ -f "$OUTBOUND_DIALPLAN" ]; then
+    if ! grep -q 'nolocal:dtmf_type=rfc2833' "$OUTBOUND_DIALPLAN"; then
+        echo "Enabling RFC2833 DTMF on outbound PSTN calls..."
+        sed -i '/nolocal:absolute_codec_string=PCMU,PCMA"\/>/a\        <action application="export" data="nolocal:dtmf_type=rfc2833"/>' "$OUTBOUND_DIALPLAN"
+    fi
+
+    if ! grep -q 'nolocal:dtmf_type=rfc2833' "$OUTBOUND_DIALPLAN"; then
+        echo "ERROR: Failed to enforce RFC2833 DTMF in outbound dialplan" >&2
+        exit 1
+    fi
 fi
 
 # Generate combined wss.pem for FreeSWITCH WSS binding
@@ -71,11 +89,12 @@ LATEST_PRIVKEY=$(ls -v "$LE_ARCHIVE"/privkey*.pem 2>/dev/null | tail -1)
 if [ -n "$LATEST_FULLCHAIN" ] && [ -n "$LATEST_PRIVKEY" ]; then
     echo "Generating combined wss.pem from Let's Encrypt archive certs..."
     echo "  Using: $(basename $LATEST_FULLCHAIN) + $(basename $LATEST_PRIVKEY)"
-    cat "$LATEST_FULLCHAIN" "$LATEST_PRIVKEY" > "$FS_LE_DIR/wss.pem"
+    cat "$LATEST_FULLCHAIN" "$LATEST_PRIVKEY" > "/tmp/wss.pem"
     # Overwrite FreeSWITCH default self-signed certs
     mkdir -p "$FS_TLS_DIR"
-    cp "$FS_LE_DIR/wss.pem" "$FS_TLS_DIR/wss.pem"
-    cp "$FS_LE_DIR/wss.pem" "$FS_TLS_DIR/dtls-srtp.pem"
+    cp "/tmp/wss.pem" "$FS_TLS_DIR/wss.pem"
+    cp "/tmp/wss.pem" "$FS_TLS_DIR/agent.pem"
+    cp "/tmp/wss.pem" "$FS_TLS_DIR/dtls-srtp.pem"
     echo "  Let's Encrypt wss.pem installed at $FS_TLS_DIR/wss.pem"
 else
     echo "WARNING: Let's Encrypt certs not found at $LE_ARCHIVE — WSS will use self-signed cert!"

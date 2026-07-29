@@ -1,7 +1,14 @@
 export type CurrentView = 'roleSelect' | 'agentDashboard' | 'publisherSetup' | 'crmDashboard';
 export type AgentStatus = 'available' | 'away' | 'on_call';
-export type ActiveCallView = 'script' | 'data';
-export type SelectedScript = 'sales' | 'retention' | 'underwriting';
+export type ActiveCallView = 'script' | 'data' | 'captured_data';
+export type SelectedScript =
+  | 'sales'
+  | 'retention'
+  | 'underwriting'
+  | 'verification'
+  | 'cold_call_transfer'
+  | 'better_plan_callback'
+  | 'hvac';
 
 export interface ProspectData {
   lead_token?: string;

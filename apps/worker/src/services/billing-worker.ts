@@ -1,3 +1,4 @@
+/* eslint-disable */
 import { Decimal } from 'decimal.js';
 import { Redis } from 'ioredis';
 import { Pool } from 'pg';
@@ -51,18 +52,18 @@ export class BillingWorker {
         retryStrategy: () => null, // Don't retry on connection failure
         lazyConnect: true, // Don't connect immediately
       });
-      
+
       // Handle Redis errors gracefully
-      this.redis.on('error', (err) => {
+      this.redis.on('error', err => {
         console.warn('[BillingWorker] Redis connection error (non-fatal):', err.message);
         this.redisEnabled = false;
       });
-      
+
       this.redis.on('connect', () => {
         this.redisEnabled = true;
         console.log('[BillingWorker] Redis connected');
       });
-      
+
       // Try to connect, but don't fail if it doesn't
       this.redis.connect().catch(() => {
         console.warn('[BillingWorker] Redis not available, worker will run without Redis');
@@ -87,6 +88,20 @@ export class BillingWorker {
   }
 
   async start(): Promise<void> {
+    if (this.redis && !this.redisEnabled) {
+      try {
+        await this.redis.connect();
+      } catch {
+        // Ignore if already connected or connecting
+      }
+
+      // Wait up to 2 seconds for connect/error handlers to resolve redisEnabled
+      for (let i = 0; i < 40; i++) {
+        if (this.redisEnabled) break;
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+    }
+
     if (!this.redis || !this.redisEnabled) {
       console.warn('[BillingWorker] Redis not available, billing worker will not start');
       return;
@@ -165,7 +180,11 @@ export class BillingWorker {
                   callId: eventData.callId,
                   direction: eventData.direction || 'OUTBOUND',
                   duration: eventData.duration || 0,
-                  answered: eventData.answered !== undefined ? eventData.answered : (eventData.callState?.status === 'completed' || eventData.callState?.status === 'answered'),
+                  answered:
+                    eventData.answered !== undefined
+                      ? eventData.answered
+                      : eventData.callState?.status === 'completed' ||
+                        eventData.callState?.status === 'answered',
                   publisherId: eventData.publisherId,
                   buyerId: eventData.buyerId,
                   campaignId: eventData.campaignId,
@@ -190,20 +209,20 @@ export class BillingWorker {
       } catch (error: any) {
         logger.error('Error consuming events:', error);
         // If Redis connection is lost, disable Redis and exit loop
-        if (error.message?.includes('ECONNREFUSED') || error.message?.includes('Connection is closed')) {
+        if (
+          error.message?.includes('ECONNREFUSED') ||
+          error.message?.includes('Connection is closed')
+        ) {
           console.warn('[BillingWorker] Redis connection lost, stopping consumer');
           this.redisEnabled = false;
           break;
         }
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
   }
 
-  private async processCallCompleted(
-    event: CallCompletedEvent,
-    messageId: string
-  ): Promise<void> {
+  private async processCallCompleted(event: CallCompletedEvent, messageId: string): Promise<void> {
     try {
       logger.info(`Processing billing for call ${event.data.callId}`);
 
@@ -215,7 +234,7 @@ export class BillingWorker {
 
       if (accountResult.rows.length === 0) {
         logger.warn(`No billing account found for tenant ${event.tenantId}`);
-        await this.redis.xack('events:stream', 'billing-group', messageId);
+        await this.redis!.xack('events:stream', 'billing-group', messageId);
         return;
       }
 
@@ -235,7 +254,7 @@ export class BillingWorker {
 
       if (rateCardResult.rows.length === 0) {
         logger.warn(`No active rate card found for billing account ${billingAccountId}`);
-        await this.redis.xack('events:stream', 'billing-group', messageId);
+        await this.redis!.xack('events:stream', 'billing-group', messageId);
         return;
       }
 
@@ -316,8 +335,20 @@ export class BillingWorker {
 
       logger.info(`Created accruals for call ${event.data.callId}: $${rating.total.toFixed(4)}`);
 
+      // Update Call record's cost and profit (total cost of carrier connection, minute rates, and recordings)
+      await this.pool.query(
+        `UPDATE calls
+         SET cost = $1,
+             profit = COALESCE(revenue, 0) - COALESCE(payout, 0) - $1,
+             updated_at = NOW()
+         WHERE id = $2`,
+        [rating.total.toFixed(4), event.data.callId]
+      );
+
+      logger.info(`Updated call cost/profit in database for call ${event.data.callId}`);
+
       // Acknowledge message
-      await this.redis.xack('events:stream', 'billing-group', messageId);
+      await this.redis!.xack('events:stream', 'billing-group', messageId);
     } catch (error) {
       logger.error(`Error processing call completed for ${event.data.callId}:`, error);
       // Don't acknowledge on error - will retry
@@ -339,7 +370,7 @@ export class BillingWorker {
 
       if (accountResult.rows.length === 0) {
         logger.warn(`No billing account found for tenant ${event.tenantId}`);
-        await this.redis.xack('events:stream', 'billing-group', messageId);
+        await this.redis!.xack('events:stream', 'billing-group', messageId);
         return;
       }
 
@@ -359,7 +390,7 @@ export class BillingWorker {
 
       if (rateCardResult.rows.length === 0) {
         logger.warn(`No active rate card found`);
-        await this.redis.xack('events:stream', 'billing-group', messageId);
+        await this.redis!.xack('events:stream', 'billing-group', messageId);
         return;
       }
 
@@ -391,10 +422,9 @@ export class BillingWorker {
         logger.info(`Created CPA accrual for call ${event.data.callId}: $${cpaAmount.toFixed(4)}`);
       }
 
-      await this.redis.xack('events:stream', 'billing-group', messageId);
+      await this.redis!.xack('events:stream', 'billing-group', messageId);
     } catch (error) {
       logger.error(`Error processing conversion confirmed for ${event.data.callId}:`, error);
     }
   }
 }
-

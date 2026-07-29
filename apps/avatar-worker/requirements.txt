@@ -1,0 +1,9 @@
+# Industry Research avatar briefing worker.
+# A LiveKit Agents worker that joins a room, attaches the Protoface avatar, and
+# speaks the briefing text with a free, local (CPU) Piper voice.
+livekit-agents~=1.0
+livekit-plugins-protoface
+livekit-plugins-silero
+piper-tts~=1.2
+fastapi~=0.111
+uvicorn~=0.30

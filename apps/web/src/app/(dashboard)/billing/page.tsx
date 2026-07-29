@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/table';
 import { apiClient } from '@/lib/api';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
+import { CompactPageShell, CompactPageHeader } from '@/components/layout/compact-layout';
 
 interface Invoice {
  id: string;
@@ -87,7 +88,7 @@ interface BuyersResponse {
  data: BuyerOption[];
 }
 
-export default function BillingPage() {
+function BillingPage() {
  const [invoices, setInvoices] = useState<Invoice[]>([]);
  const [balance, setBalance] = useState<Balance | null>(null);
  const [loading, setLoading] = useState(true);
@@ -185,12 +186,12 @@ export default function BillingPage() {
  );
  }
 
- return (
- <div className="space-y-6">
- <div>
- <h1 className="text-3xl font-bold">Billing</h1>
- <p className="text-muted-foreground">Manage invoices, balances, and payouts</p>
- </div>
+  return (
+    <CompactPageShell fullHeight={false}>
+      <CompactPageHeader
+        title="Billing"
+        subtitle="Manage invoices, balances, and payouts"
+      />
 
  {error && (
  <Card>
@@ -338,7 +339,7 @@ export default function BillingPage() {
  <div className="text-center py-8 text-muted-foreground">No transactions found</div>
  ) : (
  <>
- <Table>
+ <Table className="table-dense">
  <TableHeader>
  <TableRow>
  <TableHead>Date</TableHead>
@@ -430,7 +431,7 @@ export default function BillingPage() {
  {invoices.length === 0 ? (
  <div className="text-center py-8 text-muted-foreground">No invoices found</div>
  ) : (
- <Table>
+ <Table className="table-dense">
  <TableHeader>
  <TableRow>
  <TableHead>Invoice Number</TableHead>
@@ -467,7 +468,16 @@ export default function BillingPage() {
  )}
  </CardContent>
  </Card>
- </div>
- );
+    </CompactPageShell>
+  );
 }
 
+import { RoleGuard } from '@/components/auth/role-guard';
+
+export default function GuardedBillingPage() {
+  return (
+    <RoleGuard allowedRoles={['ADMIN', 'OWNER']}>
+      <BillingPage />
+    </RoleGuard>
+  );
+}

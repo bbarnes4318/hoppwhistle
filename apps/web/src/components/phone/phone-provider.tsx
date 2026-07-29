@@ -12,6 +12,7 @@ import {
 import {
   UserAgent,
   Registerer,
+  RegistererState,
   Inviter,
   Session,
   SessionState,
@@ -22,18 +23,18 @@ import {
 // Helper to extract the actual SIP Call-ID header from a SIP.js Session object
 function getSipCallId(session: any): string {
   if (!session) return '';
-  
+
   // Strategy 1: Check request headers (standard SIP header)
   if (session.request && typeof session.request.getHeader === 'function') {
     const headerVal = session.request.getHeader('Call-ID');
     if (headerVal) return headerVal.trim();
   }
-  
+
   // Strategy 2: Check request.callId
   if (session.request && session.request.callId) {
     return session.request.callId.trim();
   }
-  
+
   // Strategy 3: Check incomingMessage or outgoingRequest
   if (session.incomingMessage && session.incomingMessage.callId) {
     return session.incomingMessage.callId.trim();
@@ -41,7 +42,7 @@ function getSipCallId(session: any): string {
   if (session.outgoingRequestMessage && session.outgoingRequestMessage.callId) {
     return session.outgoingRequestMessage.callId.trim();
   }
-  
+
   // Fallback to session.id
   return (session.id || '').trim();
 }
@@ -137,7 +138,7 @@ export interface PhoneContextType {
   closePhonePanel: () => void;
   togglePhonePanel: () => void;
   setDialerNumber: (number: string) => void; // Pre-fill dialer
-  makeCall: (phoneNumber: string) => Promise<void>;
+  makeCall: (phoneNumber: string, callerIdOverride?: string) => Promise<void>;
   answerCall: () => void;
   hangupCall: () => void;
   toggleMute: () => void;
@@ -224,10 +225,7 @@ interface PhoneProviderProps {
   apiUrl?: string;
 }
 
-export function PhoneProvider({
-  children,
-  apiUrl,
-}: PhoneProviderProps): JSX.Element {
+export function PhoneProvider({ children, apiUrl }: PhoneProviderProps): JSX.Element {
   // In the browser, always derive the API base from the current origin so
   // requests use the same protocol/domain (avoids Mixed Content when the
   // build-time NEXT_PUBLIC_API_URL was baked with an http:// address).
@@ -295,7 +293,9 @@ export function PhoneProvider({
   const [pendingDispositionCall, setPendingDispositionCall] =
     useState<PendingDispositionCall | null>(null);
   const [dialerNumber, setDialerNumber] = useState<string>('');
-  const [userNumbers, setUserNumbers] = useState<Array<{ id: string; number: string; provider?: string | null }>>([]);
+  const [userNumbers, setUserNumbers] = useState<
+    Array<{ id: string; number: string; provider?: string | null }>
+  >([]);
   const [selectedCallerId, setSelectedCallerId] = useState<string | null>(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('selectedCallerId');
@@ -308,49 +308,58 @@ export function PhoneProvider({
   const callDurationIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const ringtoneRef = useRef<HTMLAudioElement | null>(null);
   const userAgentRef = useRef<UserAgent | null>(null);
+  const registererRef = useRef<Registerer | null>(null);
   const sessionRef = useRef<Session | null>(null);
   const heldSessionRef = useRef<Session | null>(null);
+  const heldCallInfoRef = useRef<CallInfo | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   const [hasHeldCalls, setHasHeldCalls] = useState(false);
   const reportedAnsweredCallsRef = useRef<Set<string>>(new Set());
   const reportedEndedCallsRef = useRef<Set<string>>(new Set());
   const audioContextRef = useRef<AudioContext | null>(null);
+  const ringOscRef = useRef<{ interval: ReturnType<typeof setInterval> } | null>(null);
 
   // ============================================================================
   // Audio Utilities
   // ============================================================================
 
-  // Pre-create and unlock ringtone on first user interaction to bypass autoplay restrictions
+  // Unlock audio (ringtone + AudioContext) on user interaction to bypass autoplay.
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      if (!ringtoneRef.current) {
-        ringtoneRef.current = new Audio('/sounds/ringtone.mp3');
-        ringtoneRef.current.loop = true;
-      }
-
-      const unlock = () => {
-        if (ringtoneRef.current) {
-          ringtoneRef.current.play()
-            .then(() => {
-              ringtoneRef.current?.pause();
-              ringtoneRef.current!.currentTime = 0;
-            })
-            .catch((err) => {
-              console.log('[Phone] Ringtone unlock failed, will retry on next interaction:', err);
-            });
-        }
-        window.removeEventListener('click', unlock);
-        window.removeEventListener('keydown', unlock);
-      };
-
-      window.addEventListener('click', unlock);
-      window.addEventListener('keydown', unlock);
-
-      return () => {
-        window.removeEventListener('click', unlock);
-        window.removeEventListener('keydown', unlock);
-      };
+    if (typeof window === 'undefined') return;
+    if (!ringtoneRef.current) {
+      ringtoneRef.current = new Audio('/sounds/ringtone.mp3');
+      ringtoneRef.current.loop = true;
     }
+    const unlock = () => {
+      try {
+        const AC =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        if (AC) {
+          if (!audioContextRef.current) audioContextRef.current = new AC();
+          if (audioContextRef.current.state === 'suspended') void audioContextRef.current.resume();
+        }
+      } catch {
+        /* ignore */
+      }
+      if (ringtoneRef.current) {
+        ringtoneRef.current
+          .play()
+          .then(() => {
+            ringtoneRef.current?.pause();
+            if (ringtoneRef.current) ringtoneRef.current.currentTime = 0;
+          })
+          .catch(() => {});
+      }
+    };
+    window.addEventListener('click', unlock);
+    window.addEventListener('keydown', unlock);
+    window.addEventListener('pointerdown', unlock);
+    return () => {
+      window.removeEventListener('click', unlock);
+      window.removeEventListener('keydown', unlock);
+      window.removeEventListener('pointerdown', unlock);
+    };
   }, []);
 
   // Fetch user's assigned phone numbers for caller ID selection
@@ -372,7 +381,7 @@ export function PhoneProvider({
   }, [normalizedApiUrl, getApiHeaders, selectedCallerId]);
 
   useEffect(() => {
-    refreshUserNumbers();
+    void refreshUserNumbers();
   }, [refreshUserNumbers]);
 
   // Persist selected caller ID to localStorage
@@ -383,18 +392,49 @@ export function PhoneProvider({
   }, [selectedCallerId]);
 
   const playRingtone = useCallback(() => {
-    if (typeof window !== 'undefined') {
-      if (!ringtoneRef.current) {
-        ringtoneRef.current = new Audio('/sounds/ringtone.mp3');
-        ringtoneRef.current.loop = true;
-      }
-      ringtoneRef.current.play().catch((err) => {
-        console.warn('[Phone] Ringtone play blocked or failed:', err);
-      });
+    if (typeof window === 'undefined') return;
+    try {
+      const AC =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!audioContextRef.current) audioContextRef.current = new AC();
+      const ctx = audioContextRef.current;
+      if (ctx.state === 'suspended') void ctx.resume();
+      const ringOnce = () => {
+        const gain = ctx.createGain();
+        gain.gain.value = 0;
+        gain.connect(ctx.destination);
+        const o1 = ctx.createOscillator();
+        o1.type = 'sine';
+        o1.frequency.value = 440;
+        o1.connect(gain);
+        const o2 = ctx.createOscillator();
+        o2.type = 'sine';
+        o2.frequency.value = 480;
+        o2.connect(gain);
+        const t = ctx.currentTime;
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(0.35, t + 0.03);
+        gain.gain.setValueAtTime(0.35, t + 1.8);
+        gain.gain.linearRampToValueAtTime(0, t + 1.9);
+        o1.start(t);
+        o2.start(t);
+        o1.stop(t + 1.95);
+        o2.stop(t + 1.95);
+      };
+      if (ringOscRef.current?.interval) clearInterval(ringOscRef.current.interval);
+      ringOnce();
+      ringOscRef.current = { interval: setInterval(ringOnce, 4000) };
+    } catch (err) {
+      console.warn('[Phone] Ring failed:', err);
     }
   }, []);
 
   const stopRingtone = useCallback(() => {
+    if (ringOscRef.current?.interval) {
+      clearInterval(ringOscRef.current.interval);
+      ringOscRef.current = null;
+    }
     if (ringtoneRef.current) {
       ringtoneRef.current.pause();
       ringtoneRef.current.currentTime = 0;
@@ -535,7 +575,9 @@ export function PhoneProvider({
           if (retryStream.getAudioTracks().length > 0) {
             attachAndPlay(retryStream);
           }
-        } catch { /* PC may be closed */ }
+        } catch {
+          /* PC may be closed */
+        }
       }, 500);
     }
   }, []);
@@ -612,6 +654,11 @@ export function PhoneProvider({
         if (newState === SessionState.Terminated) {
           if (sessionRef.current === invitation) {
             handleCallEndedRef.current();
+          } else if (heldSessionRef.current === invitation) {
+            console.log('[Phone] Held inbound session terminated in background');
+            heldSessionRef.current = null;
+            heldCallInfoRef.current = null;
+            setHasHeldCalls(false);
           }
         } else if (newState === SessionState.Established) {
           handleCallAnsweredRef.current();
@@ -676,11 +723,56 @@ export function PhoneProvider({
       };
     });
     setAgentStatusState('on-call');
+    // Sync on-call status to Redis so routing service knows agent is busy
+    void fetch(`${normalizedApiUrl}/api/v1/agent/status`, {
+      method: 'PUT',
+      headers: getApiHeaders(),
+      body: JSON.stringify({ status: 'on-call' }),
+    }).catch(() => {});
     stopRingtone();
     startCallDurationTimer();
   }, [stopRingtone, startCallDurationTimer, normalizedApiUrl, getApiHeaders]);
 
   const handleCallEnded = useCallback(() => {
+    // If there is a held call stashed, restore it instead of ending the session entirely
+    if (heldSessionRef.current) {
+      console.log('[Phone] Active call ended, restoring stashed held session');
+      sessionRef.current = heldSessionRef.current;
+      heldSessionRef.current = null;
+      setHasHeldCalls(false);
+
+      const restoredCall = heldCallInfoRef.current;
+      heldCallInfoRef.current = null;
+
+      if (restoredCall) {
+        restoredCall.isOnHold = false;
+        restoredCall.state = 'active';
+
+        // Unhold/unmute audio tracks in the browser RTCPeerConnection
+        try {
+          const sdh = sessionRef.current.sessionDescriptionHandler as any;
+          if (sdh && sdh.peerConnection) {
+            const pc = sdh.peerConnection as RTCPeerConnection;
+            const senders = pc.getSenders();
+            for (const sender of senders) {
+              if (sender.track && sender.track.kind === 'audio') {
+                sender.track.enabled = true; // unmute
+              }
+            }
+
+            // Re-bind the restored call's stream to the browser HTML audio element
+            wireRemoteAudio(pc);
+          }
+        } catch (e) {
+          console.warn('[Phone] Failed to unmute track on restore:', e);
+        }
+
+        setCurrentCall(restoredCall);
+      }
+      return;
+    }
+
+    // Otherwise, normal call ended
     setCurrentCall(prev => {
       if (prev) {
         const completedCall: CallInfo = {
@@ -736,11 +828,17 @@ export function PhoneProvider({
       return null;
     });
     setAgentStatusState('available');
+    // Sync available status to Redis so routing service knows agent is free
+    void fetch(`${normalizedApiUrl}/api/v1/agent/status`, {
+      method: 'PUT',
+      headers: getApiHeaders(),
+      body: JSON.stringify({ status: 'available' }),
+    }).catch(() => {});
     setIsConnecting(false);
     stopRingtone();
     stopCallDurationTimer();
     sessionRef.current = null;
-  }, [stopRingtone, stopCallDurationTimer, normalizedApiUrl, getApiHeaders]);
+  }, [stopRingtone, stopCallDurationTimer, normalizedApiUrl, getApiHeaders, wireRemoteAudio]);
 
   // Keep refs in sync so stateChange listeners always call latest versions
   useEffect(() => {
@@ -772,10 +870,15 @@ export function PhoneProvider({
   const togglePhonePanel = useCallback(() => setIsPhonePanelOpen(prev => !prev), []);
 
   const makeCall = useCallback(
-    async (phoneNumber: string) => {
-      if (!userAgentRef.current || !isRegistered) {
+    async (phoneNumber: string, callerIdOverride?: string) => {
+      if (!userAgentRef.current) {
         setError('Phone not connected');
-        return;
+        throw new Error('Phone not connected');
+      }
+
+      if (!isRegistered && !sessionRef.current && !heldSessionRef.current) {
+        setError('Phone not connected');
+        throw new Error('Phone not connected');
       }
 
       // Clean up any leftover session from a previous call to prevent
@@ -784,9 +887,11 @@ export function PhoneProvider({
         try {
           if (sessionRef.current.state !== SessionState.Terminated) {
             console.log('[Phone] Cleaning up stale session before new call');
-            sessionRef.current.dispose();
+            void sessionRef.current.dispose();
           }
-        } catch { /* ignore disposal errors */ }
+        } catch {
+          /* ignore disposal errors */
+        }
         sessionRef.current = null;
       }
 
@@ -800,7 +905,10 @@ export function PhoneProvider({
         const response = await fetch(url, {
           method: 'POST',
           headers: getApiHeaders(),
-          body: JSON.stringify({ phoneNumber, callerId: selectedCallerId || undefined }),
+          body: JSON.stringify({
+            phoneNumber,
+            callerId: callerIdOverride || selectedCallerId || undefined,
+          }),
         });
 
         if (!response.ok) {
@@ -814,7 +922,11 @@ export function PhoneProvider({
         const chosenCallerId = data.callerId || '';
 
         // SIP INVITE - use registered server host for the target domain (must match FreeSWITCH)
-        const sipTargetDomain = userAgentRef.current?.configuration.uri.host || process.env.NEXT_PUBLIC_SIP_DOMAIN || process.env.NEXT_PUBLIC_IP || (typeof window !== 'undefined' ? window.location.hostname : 'localhost');
+        const sipTargetDomain =
+          userAgentRef.current?.configuration.uri.host ||
+          process.env.NEXT_PUBLIC_SIP_DOMAIN ||
+          process.env.NEXT_PUBLIC_IP ||
+          (typeof window !== 'undefined' ? window.location.hostname : 'localhost');
         const target = UserAgent.makeURI(`sip:${phoneNumber}@${sipTargetDomain}`);
         if (!target) throw new Error('Invalid target URI');
 
@@ -838,10 +950,10 @@ export function PhoneProvider({
                 { urls: 'stun:stun1.l.google.com:19302' },
                 { urls: 'stun:stun2.l.google.com:19302' },
                 { urls: 'stun:stun3.l.google.com:19302' },
-                { urls: 'stun:stun4.l.google.com:19302' }
-              ]
-            }
-          }
+                { urls: 'stun:stun4.l.google.com:19302' },
+              ],
+            },
+          },
         });
         sessionRef.current = inviter;
 
@@ -869,6 +981,11 @@ export function PhoneProvider({
           } else if (newState === SessionState.Terminated) {
             if (sessionRef.current === inviter) {
               handleCallEndedRef.current();
+            } else if (heldSessionRef.current === inviter) {
+              console.log('[Phone] Held outbound session terminated in background');
+              heldSessionRef.current = null;
+              heldCallInfoRef.current = null;
+              setHasHeldCalls(false);
             }
           }
         });
@@ -892,6 +1009,7 @@ export function PhoneProvider({
         const message = err instanceof Error ? err.message : 'Failed to place call';
         setError(message);
         setIsConnecting(false);
+        throw err;
       }
     },
     [normalizedApiUrl, getApiHeaders, isRegistered, selectedCallerId]
@@ -927,9 +1045,9 @@ export function PhoneProvider({
                 { urls: 'stun:stun1.l.google.com:19302' },
                 { urls: 'stun:stun2.l.google.com:19302' },
                 { urls: 'stun:stun3.l.google.com:19302' },
-                { urls: 'stun:stun4.l.google.com:19302' }
-              ]
-            }
+                { urls: 'stun:stun4.l.google.com:19302' },
+              ],
+            },
           },
         })
         .then(() => {
@@ -1081,20 +1199,45 @@ export function PhoneProvider({
     (digit: string) => {
       playDTMFTone(digit);
 
-      if (sessionRef.current && sessionRef.current.state === SessionState.Established) {
-        const sdh = sessionRef.current.sessionDescriptionHandler;
+      const session = sessionRef.current;
+      if (!session || session.state !== SessionState.Established) {
+        console.warn('[Phone] DTMF ignored — no established call');
+        return;
+      }
+
+      // Primary path: SIP INFO (application/dtmf-relay). FreeSWITCH relays this
+      // across the bridge to the IVR reliably. The previous RTP-only path
+      // (RTCPeerConnection sendDtmf / RFC2833) silently drops every digit when
+      // the telephone-event codec isn't negotiated over WebRTC — which is why
+      // menus never responded. INFO does not depend on that negotiation.
+      let sentViaInfo = false;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (session as any).info({
+          requestOptions: {
+            body: {
+              contentDisposition: 'render',
+              contentType: 'application/dtmf-relay',
+              content: `Signal=${digit}\r\nDuration=250`,
+            },
+          },
+        });
+        sentViaInfo = true;
+        console.log('[Phone] Sent DTMF via SIP INFO:', digit);
+      } catch (e) {
+        console.error('[Phone] DTMF via SIP INFO failed, falling back to RTP:', e);
+      }
+
+      // Fallback: RTP/RFC2833 via the SessionDescriptionHandler, only if INFO
+      // could not be sent (avoids the far end receiving the digit twice).
+      if (!sentViaInfo) {
+        const sdh = session.sessionDescriptionHandler;
         if (sdh && typeof (sdh as any).sendDtmf === 'function') {
-          console.log('[Phone] Sending DTMF via SessionDescriptionHandler:', digit);
-          (sdh as any).sendDtmf(digit);
-        } else {
-          console.warn(
-            '[Phone] SessionDescriptionHandler does not support sendDtmf, trying legacy .dtmf'
-          );
           try {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (sessionRef.current as any).dtmf(digit);
+            (sdh as any).sendDtmf(digit);
+            console.log('[Phone] Sent DTMF via RTP (fallback):', digit);
           } catch (e) {
-            console.error('[Phone] Failed to send DTMF via legacy method:', e);
+            console.error('[Phone] DTMF RTP fallback failed:', e);
           }
         }
       }
@@ -1127,7 +1270,10 @@ export function PhoneProvider({
         // 1. Put the current call on hold (await so SIP processes)
         toggleHold();
 
-        // 2. Stash the current session
+        // 2. Stash the current session and call info
+        heldCallInfoRef.current = currentCall
+          ? { ...currentCall, isOnHold: true, state: 'hold' }
+          : null;
         heldSessionRef.current = sessionRef.current;
         setHasHeldCalls(true);
         sessionRef.current = null; // Clear so makeCall starts fresh
@@ -1146,6 +1292,7 @@ export function PhoneProvider({
         if (heldSessionRef.current) {
           sessionRef.current = heldSessionRef.current;
           heldSessionRef.current = null;
+          heldCallInfoRef.current = null;
           setHasHeldCalls(false);
           // Try to unhold the original call
           try {
@@ -1156,7 +1303,7 @@ export function PhoneProvider({
         }
       }
     },
-    [toggleHold, makeCall]
+    [toggleHold, makeCall, currentCall]
   );
 
   const mergeCalls = useCallback(async () => {
@@ -1193,11 +1340,12 @@ export function PhoneProvider({
       // Hang up the held session locally to clean up WebRTC state in the browser
       if (heldSessionRef.current) {
         try {
-          heldSessionRef.current.bye();
+          void heldSessionRef.current.bye();
         } catch (e) {
           console.warn('[Phone] Failed to send BYE for held session:', e);
         }
         heldSessionRef.current = null;
+        heldCallInfoRef.current = null;
       }
       setHasHeldCalls(false);
 
@@ -1255,13 +1403,19 @@ export function PhoneProvider({
         const sipPass = creds.password;
 
         // SIP realm must match FreeSWITCH's configured domain
-        const sipDomain = creds.realm || process.env.NEXT_PUBLIC_SIP_DOMAIN || process.env.NEXT_PUBLIC_IP || (typeof window !== 'undefined' ? window.location.hostname : 'localhost');
+        const sipDomain =
+          creds.realm ||
+          process.env.NEXT_PUBLIC_SIP_DOMAIN ||
+          process.env.NEXT_PUBLIC_IP ||
+          (typeof window !== 'undefined' ? window.location.hostname : 'localhost');
         // WebSocket host uses window hostname for SSL cert validation
         const wsHost = window.location.hostname;
         const isSecure = window.location.protocol === 'https:';
-        // Use returned wsUrl or build fallback
-        // Port 7443: FreeSWITCH native WSS (requires valid SSL certs)
-        // Port 8083: Direct WS for local/dev
+        // Connect directly to FreeSWITCH's native WSS (7443) / WS (8083) binding.
+        // Direct connection preserves the WSS transport label so FreeSWITCH can
+        // route call responses back over the same socket. (A TLS-terminating
+        // reverse proxy hands FreeSWITCH a plain-WS connection while the client
+        // still advertises Via WSS, which breaks INVITE response routing.)
         let sipWsUrl = creds.wsUrl;
         if (isSecure) {
           sipWsUrl = `wss://${wsHost}:7443`;
@@ -1283,7 +1437,10 @@ export function PhoneProvider({
           persistentMicStream = await navigator.mediaDevices.getUserMedia({ audio: true });
           console.log('[Phone] Persistent mic stream acquired successfully');
         } catch (err) {
-          console.warn('[Phone] Failed to acquire persistent mic stream (will continue initializing):', err);
+          console.warn(
+            '[Phone] Failed to acquire persistent mic stream (will continue initializing):',
+            err
+          );
         }
 
         const options: UserAgentOptions = {
@@ -1302,19 +1459,43 @@ export function PhoneProvider({
                 { urls: 'stun:stun1.l.google.com:19302' },
                 { urls: 'stun:stun2.l.google.com:19302' },
                 { urls: 'stun:stun3.l.google.com:19302' },
-                { urls: 'stun:stun4.l.google.com:19302' }
-              ]
-            }
+                { urls: 'stun:stun4.l.google.com:19302' },
+              ],
+            },
           },
           delegate: {
             onConnect: () => {
               console.log('[Phone] SIP Transport Connected');
               setError(null);
+              if (registererRef.current) {
+                console.log('[Phone] Re-registering on transport connect');
+                registererRef.current
+                  .register()
+                  .then(() => {
+                    console.log('[Phone] Re-registration succeeded, syncing available to Redis');
+                    setIsRegistered(true);
+                    setAgentStatusState('available');
+                    void fetch(`${normalizedApiUrl}/api/v1/agent/status`, {
+                      method: 'PUT',
+                      headers: getApiHeaders(),
+                      body: JSON.stringify({ status: 'available' }),
+                    }).catch(() => {});
+                  })
+                  .catch(err => {
+                    console.error('[Phone] Re-registration failed:', err);
+                  });
+              }
             },
             onDisconnect: error => {
               console.log('[Phone] SIP Transport Disconnected', error);
               setIsRegistered(false);
               if (error) setError('SIP connection lost');
+              // Sync offline status to Redis so routing service excludes this agent
+              void fetch(`${normalizedApiUrl}/api/v1/agent/status`, {
+                method: 'PUT',
+                headers: getApiHeaders(),
+                body: JSON.stringify({ status: 'offline' }),
+              }).catch(() => {});
             },
             onInvite: (invitation: Invitation) => {
               console.log('[Phone] Incoming SIP Invite');
@@ -1329,10 +1510,17 @@ export function PhoneProvider({
         await ua.start();
         console.log('[Phone] SIP UA Started');
         const registerer = new Registerer(ua);
+        registererRef.current = registerer;
         await registerer.register();
         console.log('[Phone] SIP Registered');
         setIsRegistered(true);
         setAgentStatusState('available');
+        // Sync available status to Redis so routing service includes this agent
+        void fetch(`${normalizedApiUrl}/api/v1/agent/status`, {
+          method: 'PUT',
+          headers: getApiHeaders(),
+          body: JSON.stringify({ status: 'available' }),
+        }).catch(() => {});
       } catch (e) {
         console.error('[Phone] SIP UA Initialization/Start Failed', e);
         if (active) {
@@ -1344,10 +1532,130 @@ export function PhoneProvider({
     let persistentMicStream: MediaStream | null = null;
     void initSip();
 
+    // ── Registration watchdog ─────────────────────────────────────────────
+    // A logged-in page MUST stay registered. SIP.js's own re-REGISTER timers
+    // silently die when the laptop sleeps or the browser throttles background
+    // tabs, leaving the page looking alive while FreeSWITCH has expired the
+    // registration — inbound calls then hit a dead extension. This watchdog
+    // detects transport loss, registration expiry, and sleep/wake gaps, and
+    // repairs each one automatically (escalating to a full re-init when the
+    // user agent is unrecoverable). It never tears down an active call.
+    let lastTick = Date.now();
+    let repairing = false;
+
+    const fullReinit = async () => {
+      if (!active) return;
+      console.warn('[Phone] Watchdog: full SIP re-initialization');
+      try {
+        if (registererRef.current) {
+          registererRef.current = null;
+        }
+        if (userAgentRef.current) {
+          const old = userAgentRef.current;
+          userAgentRef.current = null;
+          await old.stop().catch(() => {});
+        }
+      } catch {
+        // ignore teardown errors — we are rebuilding regardless
+      }
+      if (active) await initSip();
+    };
+
+    const healthCheck = async () => {
+      if (!active || repairing) return;
+      repairing = true;
+      try {
+        const now = Date.now();
+        const slept = now - lastTick > 90_000; // timers froze → sleep/heavy throttle
+        lastTick = now;
+
+        const uaCur = userAgentRef.current;
+        const reg = registererRef.current;
+        const inCall = !!sessionRef.current || !!heldSessionRef.current;
+
+        if (!uaCur || !reg) {
+          // Initial init failed or was torn down — keep retrying forever.
+          if (!inCall) await fullReinit();
+          return;
+        }
+
+        if (!uaCur.isConnected()) {
+          console.warn('[Phone] Watchdog: transport down — reconnecting');
+          try {
+            await uaCur.reconnect();
+            // onConnect delegate re-registers and restores status.
+          } catch (err) {
+            console.error('[Phone] Watchdog: reconnect failed', err);
+            if (!inCall) await fullReinit();
+          }
+          return;
+        }
+
+        if (reg.state !== RegistererState.Registered) {
+          console.warn('[Phone] Watchdog: not registered — re-registering');
+          try {
+            await reg.register();
+            setIsRegistered(true);
+          } catch (err) {
+            console.error('[Phone] Watchdog: re-register failed', err);
+            if (!inCall) await fullReinit();
+          }
+          return;
+        }
+
+        if (slept) {
+          // Woke from sleep: the socket may be half-open (looks connected,
+          // carries nothing). A REGISTER doubles as a liveness probe.
+          console.warn('[Phone] Watchdog: wake-from-sleep detected — probing with re-REGISTER');
+          try {
+            await reg.register();
+            setIsRegistered(true);
+          } catch {
+            try {
+              await uaCur.reconnect();
+            } catch {
+              if (!inCall) await fullReinit();
+            }
+          }
+        }
+      } finally {
+        repairing = false;
+      }
+    };
+
+    const watchdog = setInterval(() => void healthCheck(), 20_000);
+    const onWake = () => void healthCheck();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void healthCheck();
+    };
+    window.addEventListener('online', onWake);
+    window.addEventListener('focus', onWake);
+    window.addEventListener('pageshow', onWake);
+    document.addEventListener('visibilitychange', onVisible);
+
     return () => {
       active = false;
+      clearInterval(watchdog);
+      window.removeEventListener('online', onWake);
+      window.removeEventListener('focus', onWake);
+      window.removeEventListener('pageshow', onWake);
+      document.removeEventListener('visibilitychange', onVisible);
+      // Sync offline status to Redis before tearing down SIP
+      void fetch(`${normalizedApiUrl}/api/v1/agent/status`, {
+        method: 'PUT',
+        headers: getApiHeaders(),
+        body: JSON.stringify({ status: 'offline' }),
+      }).catch(() => {});
+      if (registererRef.current) {
+        void registererRef.current.unregister();
+        registererRef.current = null;
+      }
       if (ua) {
         void ua.stop();
+      }
+      if (userAgentRef.current && userAgentRef.current !== ua) {
+        // Watchdog may have replaced the original UA via fullReinit.
+        void userAgentRef.current.stop();
       }
       if (persistentMicStream) {
         console.log('[Phone] Stopping persistent mic stream tracks...');

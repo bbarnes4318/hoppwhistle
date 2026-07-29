@@ -1,13 +1,36 @@
 'use client';
 
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 
 import { Header } from '@/components/layout/header';
 import { Sidebar } from '@/components/layout/sidebar';
 import { AgentPhonePanel, GlobalDispositionModal, PhoneProvider } from '@/components/phone';
+import { useAuth } from '@/hooks/use-auth';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }): JSX.Element {
- const pathname = usePathname();
+  const pathname = usePathname();
+  const router = useRouter();
+  const { user, isPublisherOnly, isBuyerOnly, isAgentOnly, loading: authLoading } = useAuth();
+
+  useEffect(() => {
+    if (authLoading) return;
+
+    if (!user) {
+      router.replace('/login');
+      return;
+    }
+
+    const path = pathname || '';
+
+    if (isPublisherOnly && !path.startsWith('/publisher')) {
+      router.replace('/publisher/dashboard');
+    } else if (isBuyerOnly && !path.startsWith('/buyer')) {
+      router.replace('/buyer/dashboard');
+    } else if (isAgentOnly && (path.startsWith('/music-console') || path.startsWith('/voice-agents') || path.startsWith('/flows') || path.startsWith('/buyer') || path.startsWith('/publisher'))) {
+      router.replace('/dashboard');
+    }
+  }, [user, isPublisherOnly, isBuyerOnly, isAgentOnly, authLoading, pathname, router]);
 
  // Check if we're on the call center page (fullscreen mode)
  const isCallCenterPage = pathname?.startsWith('/call-center');
@@ -36,7 +59,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
  <Sidebar />
  <div className="flex flex-1 flex-col h-screen overflow-hidden">
  <Header />
- <main className={`flex-1 bg-background ${isCampaignMapPage ? 'p-0 overflow-hidden' : 'p-6 pb-20 overflow-y-auto'}`}>
+ <main className="flex-1 bg-background flex flex-col min-h-0 overflow-y-auto">
  {children}
  </main>
  {/* Footer removed - legal links accessible via Settings page */}

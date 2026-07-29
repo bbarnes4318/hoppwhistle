@@ -5,17 +5,37 @@
 // Exact 1:1 port with zero UI/functionality differences
 // ============================================================================
 
-import { Phone, FileText, Headphones, LogIn, X, Play, Pause, Upload, RotateCcw, User } from 'lucide-react';
+import {
+  Phone,
+  FileText,
+  Headphones,
+  LogIn,
+  X,
+  Play,
+  Pause,
+  Upload,
+  RotateCcw,
+  User,
+  Database,
+  Trash2,
+} from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 
+import { SCRIPT_NODES } from '../../lib/call-center/scriptData';
+
 import { ActiveCallControls } from './ActiveCallControls';
 import { ApplicationQueue } from './ApplicationQueue';
+import { BetterPlanCallbackScriptPanel } from './BetterPlanCallbackScriptPanel';
 import { CallCenterHeader } from './CallCenterHeader';
-import { DialerPanel } from './DialerPanel';
+import { CapturedScriptDataPanel } from './CapturedScriptDataPanel';
+import { ColdCallTransferScriptPanel } from './ColdCallTransferScriptPanel';
+import { CustomerCrmPanel } from './CustomerCrmPanel';
 import { DispositionPanel } from './DispositionPanel';
+import HvacScriptPanel from './HvacScriptPanel';
 import { IncomingCallPanel } from './IncomingCallPanel';
 import IntegratedScriptPanel from './IntegratedScriptPanel';
+import { PreClosedStatsCard } from './PreClosedStatsCard';
 import RetentionScriptPanel from './RetentionScriptPanel';
 import { StatsStrip } from './StatsStrip';
 import type {
@@ -28,23 +48,102 @@ import type {
   SelectedScript,
 } from './types';
 import UnderwritingScriptPanel from './UnderwritingScriptPanel';
+import { VerificationScriptPanel } from './VerificationScriptPanel';
 import { WorkspaceTabs } from './WorkspaceTabs';
 
-import { usePhone } from '@/components/phone/phone-provider';
+import { CsvImportDialog } from '@/components/leads/csv-import-dialog';
+import { usePhone, DialPad, AddCallDialog } from '@/components/phone';
 import { useLeadInjection } from '@/hooks/useLeadInjection';
 import { useScriptAccess } from '@/hooks/useUserRoles';
 import { apiClient } from '@/lib/api';
-import { CustomerCrmPanel } from './CustomerCrmPanel';
 import type { CustomerLookupResponse } from '@/lib/api/leads';
-import { fetchCustomerLookup, updateInsuranceLead } from '@/lib/api/leads';
-import { LeadUploadModal } from './LeadUploadModal';
+import {
+  fetchCustomerLookup,
+  updateInsuranceLead,
+  deleteLeadList,
+  deleteInsuranceLeads,
+} from '@/lib/api/leads';
+
+// ============================================================================
+// DEFAULT SCRIPT CONTENT FOR EDITOR
+// ============================================================================
+const DEFAULT_RETENTION_SCRIPT = {
+  retention_step1: `Hello {customerName}, this is [Your Name] from the retention team. I understand you're considering some changes to your policy...`,
+  retention_step2: `Listen actively to the customer's concerns. Validate their feelings and show empathy.`,
+  retention_step3: `Based on their concerns, present available retention offers, discounts, or plan adjustments.`,
+  retention_step4: `Record the call outcome, any offers made, and next steps in the CRM.`,
+};
+
+const DEFAULT_UNDERWRITING_SCRIPT = {
+  step1: `Please place a call to TransAmerica Underwriting & Policy Servicing.
+
+• Phone Number: 1-877-234-4848
+• Select Option 1 (Underwriting / Policy Servicing)
+
+Once a representative answers, introduce yourself:
+"Hello, I am the underwriting assistant for Yazzyl Vasquez and American Beneficiary LLC. I need to check the status of a policy."
+
+If requested, verify Yazzyl's Agent Credentials:
+• Agent Number: MLSR181715`,
+  step2: `Confirm status of application/policy and update CRM notes.`,
+  wrapup: `Wrap up call with TransAmerica representative, thank them for their time, and update status.`,
+};
+
+const EDITABLE_NODES = {
+  sales: [
+    { id: 'greeting_start', label: '👋 Trust Anchor / Greeting' },
+    { id: 'verify_state', label: '📍 State Verification' },
+    { id: 'verify_age', label: '🔞 Age Verification' },
+    { id: 'emotional_anchor', label: '⚓ Emotional Excavation' },
+    { id: 'health_q_intro', label: '📋 Eligibility Pivot / Health Questions' },
+    { id: 'pricing_options', label: '💰 Option Selection' },
+    { id: 'application_opener', label: '✍️ Commitment Seal / Application Opener' },
+    { id: 'ssn_collection', label: '🔒 Identity Lock / SSN Collection' },
+    { id: 'payment_disarm', label: '💳 Financial Disarm / Banking' },
+    { id: 'victory_lap', label: '🏆 Victory Lap / Welcome' },
+  ],
+  retention: [
+    { id: 'retention_step1', label: '👋 Greet the Customer' },
+    { id: 'retention_step2', label: '🤝 Acknowledge Concerns' },
+    { id: 'retention_step3', label: '🎁 Present Retention Offers' },
+    { id: 'retention_step4', label: '📝 Document Outcome' },
+  ],
+  underwriting: [
+    { id: 'step1', label: '📞 Call Underwriting / Agent Credentials' },
+    { id: 'step2', label: '🔎 Retrieve Policy Status' },
+    { id: 'wrapup', label: '🏁 Wrap-up & Status Update' },
+  ],
+};
+
+const getDefaultScriptText = (
+  scriptType: 'sales' | 'retention' | 'underwriting',
+  nodeId: string
+): string => {
+  if (scriptType === 'sales') {
+    return SCRIPT_NODES[nodeId]?.script || '';
+  } else if (scriptType === 'retention') {
+    return DEFAULT_RETENTION_SCRIPT[nodeId as keyof typeof DEFAULT_RETENTION_SCRIPT] || '';
+  } else if (scriptType === 'underwriting') {
+    return DEFAULT_UNDERWRITING_SCRIPT[nodeId as keyof typeof DEFAULT_UNDERWRITING_SCRIPT] || '';
+  }
+  return '';
+};
 
 // ============================================================================
 // MAIN COMPONENT
 // ============================================================================
 export function CallCenterPortal(): JSX.Element {
   const router = useRouter();
-  const { currentCall, makeCall, hangupCall, answerCall, toggleMute, toggleHold } = usePhone();
+  const {
+    currentCall,
+    makeCall,
+    hangupCall,
+    answerCall,
+    toggleMute,
+    toggleHold,
+    hasHeldCalls,
+    mergeCalls,
+  } = usePhone();
 
   // Lead Injection - Pre-call data from webhooks
   const { leadData, lookupLead, clearLead } = useLeadInjection();
@@ -53,10 +152,15 @@ export function CallCenterPortal(): JSX.Element {
   // Auto-Dialer & Lead Upload State
   const [isAutoDialing, setIsAutoDialing] = useState(false);
   const [autoDialIndex, setAutoDialIndex] = useState(0);
-  const [autoDialStatus, setAutoDialStatus] = useState<'idle' | 'calling' | 'disposition' | 'wrapup' | 'paused'>('idle');
+  const [autoDialStatus, setAutoDialStatus] = useState<
+    'idle' | 'calling' | 'disposition' | 'wrapup' | 'paused'
+  >('idle');
   const [wrapUpCountdown, setWrapUpCountdown] = useState(5);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const wrapUpTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // Leads already dialed this session — the fetched list is never refreshed
+  // mid-run, so lastContactedAt alone can't prevent repeats
+  const dialedLeadIdsRef = useRef<Set<string>>(new Set());
 
   // State - Default directly to agentDashboard (skip role selection menu)
   const [currentView, setCurrentView] = useState<CurrentView>('agentDashboard');
@@ -73,10 +177,12 @@ export function CallCenterPortal(): JSX.Element {
 
   const [isMuted, setIsMuted] = useState(false);
   const [isOnHold, setIsOnHold] = useState(false);
-  const [thirdPartyConnected, setThirdPartyConnected] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [thirdPartyConnected, _setThirdPartyConnected] = useState(false);
   const [isAddingThirdParty, setIsAddingThirdParty] = useState(false);
 
   // CRM Customer Panel State
+  // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
   const [crmData, setCrmData] = useState<CustomerLookupResponse | null>(null);
   const [loadingCrm, setLoadingCrm] = useState(false);
   const [crmPhone, setCrmPhone] = useState('');
@@ -115,6 +221,21 @@ export function CallCenterPortal(): JSX.Element {
   const callSessionIdRef = useRef<string | null>(null);
   const callEndedTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Refs to avoid stale closures in setTimeout/useEffect
+  const callTimerValRef = useRef(0);
+  const activeCallDataRef = useRef<ProspectData | null>(null);
+  const handleSaveDispositionRef = useRef<any>(null);
+  const wasAnsweredRef = useRef<boolean>(false);
+  const hasHadActiveSessionRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    callTimerValRef.current = callTimer;
+  }, [callTimer]);
+
+  useEffect(() => {
+    activeCallDataRef.current = activeCallData;
+  }, [activeCallData]);
+
   // Disposition
   const [selectedDisposition, setSelectedDisposition] = useState('');
   const [followUpDate, setFollowUpDate] = useState('');
@@ -127,12 +248,38 @@ export function CallCenterPortal(): JSX.Element {
 
   // User Settings & Stats
   const [showSettings, setShowSettings] = useState(false);
-  const [appointmentsCount, setAppointmentsCount] = useState(0);
-  const [totalCallsCount, setTotalCallsCount] = useState(0);
-  const [followUpCount, setFollowUpCount] = useState(0);
+  const [appointmentsCount, setAppointmentsCount] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const v = localStorage.getItem('cc_appointments_count');
+      return v ? parseInt(v, 10) : 0;
+    }
+    return 0;
+  });
+  const [totalCallsCount, setTotalCallsCount] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const v = localStorage.getItem('cc_total_calls_count');
+      return v ? parseInt(v, 10) : 0;
+    }
+    return 0;
+  });
+  const [followUpCount, setFollowUpCount] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const v = localStorage.getItem('cc_follow_up_count');
+      return v ? parseInt(v, 10) : 0;
+    }
+    return 0;
+  });
+  const [salesCount, setSalesCount] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const v = localStorage.getItem('cc_sales_count');
+      return v ? parseInt(v, 10) : 0;
+    }
+    return 0;
+  });
 
-  // Script Selection - Default to Contractor Sales Script
   const [selectedScript, setSelectedScript] = useState<SelectedScript>('sales');
+  const [leadLists, setLeadLists] = useState<any[]>([]);
+  const [selectedListId, setSelectedListId] = useState<string>('');
 
   // Database-driven role and script access
   const {
@@ -140,11 +287,59 @@ export function CallCenterPortal(): JSX.Element {
     derivedJobTitle,
     loading: rolesLoading,
     isAdminOrOwner,
+    defaultScript,
+    position,
+    customScripts,
+    refetch: refetchUser,
   } = useScriptAccess();
+
+  // Settings Tab and Editor State
+  const [settingsTab, setSettingsTab] = useState<'general' | 'scripts'>('general');
+  const [editingScriptType, setEditingScriptType] = useState<
+    'sales' | 'retention' | 'underwriting'
+  >('sales');
+  const [editingNodeId, setEditingNodeId] = useState('greeting_start');
+  const [editedText, setEditedText] = useState('');
+  const [savingScript, setSavingScript] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Initialize selectedScript when defaults are loaded
+  useEffect(() => {
+    if (!rolesLoading && defaultScript) {
+      setSelectedScript(defaultScript as SelectedScript);
+    }
+  }, [rolesLoading, defaultScript]);
+
+  // Load script node text when user edits
+  useEffect(() => {
+    if (customScripts && customScripts[editingNodeId] !== undefined) {
+      setEditedText(customScripts[editingNodeId]);
+    } else {
+      setEditedText(getDefaultScriptText(editingScriptType, editingNodeId));
+    }
+  }, [editingNodeId, editingScriptType, customScripts]);
+
+  const handleScriptTypeChange = (type: 'sales' | 'retention' | 'underwriting') => {
+    setEditingScriptType(type);
+    setEditingNodeId(EDITABLE_NODES[type][0].id);
+  };
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('cc_appointments_count', String(appointmentsCount));
+      localStorage.setItem('cc_total_calls_count', String(totalCallsCount));
+      localStorage.setItem('cc_follow_up_count', String(followUpCount));
+      localStorage.setItem('cc_sales_count', String(salesCount));
+    }
+  }, [appointmentsCount, totalCallsCount, followUpCount, salesCount]);
 
   // Calculate appointment rate: (Appointments / Total Calls) * 100
   const appointmentRate =
     totalCallsCount > 0 ? ((appointmentsCount / totalCallsCount) * 100).toFixed(1) : '0.0';
+
+  // Calculate conversion rate: (Sales / Total Calls) * 100
+  const conversionRate =
+    totalCallsCount > 0 ? ((salesCount / totalCallsCount) * 100).toFixed(1) : '0.0';
 
   // ─────────────────────────────────────────────────────────────────────────
   // SYNC WITH PHONE HOOK - React to incoming/active calls from sip.js
@@ -160,23 +355,50 @@ export function CallCenterPortal(): JSX.Element {
 
     // Case 1: No active call from the SIP hook
     if (!currentCall) {
-      // Only trigger disposition if we HAD an active call and haven't already handled it
-      // Use a debounce to avoid false triggers from SIP state flickers
-      if (isCallActive && !dispositionHandledRef.current && callSessionIdRef.current) {
-        // Wait 2 seconds to confirm the call is truly ended (not a flicker)
-        if (!callEndedTimerRef.current) {
-          callEndedTimerRef.current = setTimeout(() => {
-            // Re-check conditions after debounce
-            if (!dispositionHandledRef.current && callSessionIdRef.current) {
-              console.log('[CallCenter] Call ended - triggering disposition modal');
-              if (callTimerRef.current) clearInterval(callTimerRef.current);
-              dispositionHandledRef.current = true;
-              setIsCallActive(false);
-              setShowDisposition(true);
-              setAgentStatus('available');
+      // Only trigger disposition if we HAD an active call, had a live session, and haven't already handled it
+      if (
+        isCallActive &&
+        !dispositionHandledRef.current &&
+        callSessionIdRef.current &&
+        hasHadActiveSessionRef.current
+      ) {
+        console.log('[CallCenter] Call ended - checking for auto-disposition');
+        if (callTimerRef.current) clearInterval(callTimerRef.current);
+        dispositionHandledRef.current = true;
+        setIsCallActive(false);
+        hasHadActiveSessionRef.current = false;
+
+        // Auto-disposition checks:
+        // Only auto-disposition if the call was NEVER answered/connected (e.g. no answer or disconnected number)
+        if (!wasAnsweredRef.current) {
+          const callStartTime = callSessionIdRef.current
+            ? parseInt(callSessionIdRef.current.split('-')[1])
+            : 0;
+          const elapsedSeconds = callStartTime
+            ? Math.floor((Date.now() - callStartTime) / 1000)
+            : 0;
+
+          if (elapsedSeconds < 5) {
+            console.log('[CallCenter] Auto-dispositioning: Disconnected (elapsed < 5s)');
+            if (handleSaveDispositionRef.current) {
+              void handleSaveDispositionRef.current(
+                'DISCONNECTED',
+                'Auto-dispositioned: Number Disconnected / Immediately Terminated'
+              );
             }
-            callEndedTimerRef.current = null;
-          }, 2000);
+          } else {
+            console.log('[CallCenter] Auto-dispositioning: No Answer');
+            if (handleSaveDispositionRef.current) {
+              void handleSaveDispositionRef.current(
+                'NO_ANSWER',
+                'Auto-dispositioned: No Answer / Ringing Timeout'
+              );
+            }
+          }
+        } else {
+          console.log('[CallCenter] Triggering manual disposition modal');
+          setShowDisposition(true);
+          setAgentStatus('available');
         }
       }
       setIsIncomingCall(false);
@@ -200,6 +422,7 @@ export function CallCenterPortal(): JSX.Element {
         ...currentCall.prospectData,
       } as ProspectData);
       setAgentStatus('on_call');
+      hasHadActiveSessionRef.current = false; // Reset for incoming call
     }
 
     // Case 3: Call is active (connected)
@@ -208,7 +431,16 @@ export function CallCenterPortal(): JSX.Element {
       if (!callSessionIdRef.current || callSessionIdRef.current !== currentCall.callId) {
         callSessionIdRef.current = currentCall.callId || `call-${Date.now()}`;
         dispositionHandledRef.current = false;
+        wasAnsweredRef.current = false;
+        hasHadActiveSessionRef.current = false; // Reset for new session
+        setTotalCallsCount(prev => prev + 1);
         console.log('[CallCenter] New call session started:', callSessionIdRef.current);
+      }
+
+      hasHadActiveSessionRef.current = true; // Mark as having a live session
+
+      if (currentCall.state === 'active') {
+        wasAnsweredRef.current = true;
       }
 
       setIsIncomingCall(false);
@@ -352,6 +584,7 @@ export function CallCenterPortal(): JSX.Element {
     return mins.toString().padStart(2, '0') + ':' + secs.toString().padStart(2, '0');
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleKeypadPress = (key: string) => {
     if (phoneNumber.replace(/\D/g, '').length < 10) {
       setPhoneNumber(prev => formatPhoneNumber(prev.replace(/\D/g, '') + key));
@@ -369,7 +602,8 @@ export function CallCenterPortal(): JSX.Element {
 
       const unlock = () => {
         if (ringtoneRef.current) {
-          ringtoneRef.current.play()
+          ringtoneRef.current
+            .play()
             .then(() => {
               ringtoneRef.current?.pause();
               ringtoneRef.current!.currentTime = 0;
@@ -464,6 +698,10 @@ export function CallCenterPortal(): JSX.Element {
     } catch (e) {
       console.error('Failed to answer call:', e);
     }
+    // Set first script based on defaultScript preference
+    const initialScript = defaultScript || (position === 'Retention' ? 'retention' : 'sales');
+    setSelectedScript(initialScript as SelectedScript);
+
     // State updates happen via useEffect watching currentCall
     setIsIncomingCall(false);
     setIsCallActive(true);
@@ -498,53 +736,163 @@ export function CallCenterPortal(): JSX.Element {
     } catch (e) {
       console.error(e);
     }
-
-    // Only show disposition once per call session
-    if (!dispositionHandledRef.current && callSessionIdRef.current) {
-      dispositionHandledRef.current = true;
-      setShowDisposition(true);
-    }
-
-    setIsCallActive(false);
-    setAgentStatus('available');
-    setIsMuted(false);
-    setIsOnHold(false);
-    setThirdPartyConnected(false);
-    setIsAddingThirdParty(false);
   };
 
-  const handleSaveDisposition = async () => {
-    if (!selectedDisposition) return;
+  const handleSaveDisposition = async (autoDisp?: string, autoNotes?: string) => {
+    const disp = autoDisp || selectedDisposition;
+    if (!disp) return;
+
     let followUpAt: string | undefined;
-    if (followUpDate && followUpTime) {
-      followUpAt = new Date(`${followUpDate}T${followUpTime}`).toISOString();
-    } else if (followUpDate) {
-      followUpAt = new Date(`${followUpDate}T09:00:00`).toISOString();
+    if (!autoDisp) {
+      if (followUpDate && followUpTime) {
+        followUpAt = new Date(`${followUpDate}T${followUpTime}`).toISOString();
+      } else if (followUpDate) {
+        followUpAt = new Date(`${followUpDate}T09:00:00`).toISOString();
+      }
     }
+
+    const notes = autoNotes || callNotes;
+
     const callRecord: CallRecord = {
       id: 'record-' + Date.now(),
       notificationId: 'pop-' + Date.now(),
       prospect: activeCallData || {},
       timestamp: new Date().toISOString(),
-      disposition: selectedDisposition,
-      dispositionNotes: callNotes,
+      disposition: disp,
+      dispositionNotes: notes,
       callDuration: callTimer,
       callEndTime: new Date().toISOString(),
       callSource: 'CALL_CENTER',
       followUpAt,
     };
     setCallRecords(prev => [...prev, callRecord]);
-    if (selectedDisposition === 'SET_APPOINTMENT') {
-      setAppointmentsCount(prev => prev + 1);
-    }
-    if (selectedDisposition === 'SET_CALLBACK' || selectedDisposition === 'FOLLOW_UP') {
+    if (disp === 'APPLICATION_SUBMITTED') {
+      setSalesCount(prev => prev + 1);
+    } else {
       setFollowUpCount(prev => prev + 1);
+      if (disp === 'SET_APPOINTMENT') {
+        setAppointmentsCount(prev => prev + 1);
+      }
     }
+
+    // Start/update customer profile in CRM
+    if (activeCallData) {
+      const rawPhone =
+        (activeCallData.phone || activeCallData.caller_id || crmPhone || '').replace(/\D/g, '') ||
+        '0000000000';
+      const finalPhone = rawPhone.length > 10 ? rawPhone.slice(-10) : rawPhone.padStart(10, '0');
+
+      const crmPayload = {
+        firstName: activeCallData.firstName || activeCallData.first_name || 'Prospect',
+        lastName: activeCallData.lastName || activeCallData.last_name || 'Record',
+        phone: finalPhone,
+        email:
+          activeCallData.email ||
+          `${(activeCallData.firstName || 'prospect').toLowerCase()}@placeholder.com`,
+        address: activeCallData.address || '123 Main St',
+        city: activeCallData.city || 'Anytown',
+        state: activeCallData.state || 'TX',
+        zipCode: activeCallData.zip || activeCallData.zipCode || '12345',
+        birthDate: activeCallData.dob || '01/01/1980',
+        gender: activeCallData.gender || 'Female',
+        age: activeCallData.age ? Number(activeCallData.age) : undefined,
+        smoker: activeCallData.tobacco ? 'Yes' : 'No',
+        carrier: activeCallData.selectedCarrier || undefined,
+        monthlyPremium: activeCallData.selectedPremium
+          ? String(activeCallData.selectedPremium)
+          : undefined,
+        coverageAmount: activeCallData.selectedCoverage
+          ? String(activeCallData.selectedCoverage)
+          : undefined,
+        source: 'CALL_CENTER',
+        customFields: {
+          middleName: activeCallData.middleName || '',
+          ssn: activeCallData.ssn || '',
+          birthState: activeCallData.birthState || '',
+          citizenship: activeCallData.citizenship || '',
+          beneficiaryName: activeCallData.beneficiaryName || '',
+          beneficiaryRelation: activeCallData.beneficiaryRelation || '',
+          ssPaymentDay: activeCallData.ssPaymentDay || '',
+          accountHolder: activeCallData.accountHolder || '',
+          bankName: activeCallData.bankName || '',
+          bankCityState: activeCallData.bankCityState || '',
+          ssPaymentSchedule: activeCallData.ssPaymentSchedule || null,
+          draftDay: activeCallData.draftDay || '',
+          routingNumber: activeCallData.routingNumber || '',
+          accountNumber: activeCallData.accountNumber || '',
+          accountType: activeCallData.accountType || '',
+          doctorName: activeCallData.doctorName || '',
+          doctorAddress: activeCallData.doctorAddress || '',
+          doctorPhone: activeCallData.doctorPhone || '',
+          hospitalizationReason: activeCallData.hospitalizationReason || '',
+          callbackDate: activeCallData.callbackDate || '',
+          callbackTime: activeCallData.callbackTime || '',
+          ownerIsInsured: activeCallData.ownerIsInsured ?? true,
+          payorIsInsured: activeCallData.payorIsInsured ?? true,
+          hasExistingInsurance: activeCallData.hasExistingInsurance ?? null,
+          existingCompanyName: activeCallData.existingCompanyName || '',
+          existingPolicyNumber: activeCallData.existingPolicyNumber || '',
+          existingCoverageAmount: activeCallData.existingCoverageAmount || '',
+          // Health questions
+          healthQ1: activeCallData.healthQ1,
+          healthQ2: activeCallData.healthQ2,
+          healthQ3: activeCallData.healthQ3,
+          healthQ4: activeCallData.healthQ4,
+          healthQ5: activeCallData.healthQ5,
+          healthQ6: activeCallData.healthQ6,
+          healthQ7a: activeCallData.healthQ7a,
+          healthQ7b: activeCallData.healthQ7b,
+          healthQ7c: activeCallData.healthQ7c,
+          healthQ7d: activeCallData.healthQ7d,
+          healthQ8a: activeCallData.healthQ8a,
+          healthQ8b: activeCallData.healthQ8b,
+          healthQ8c: activeCallData.healthQ8c,
+          healthCovid: activeCallData.healthCovid,
+          // Script transfer fields
+          ageRange: activeCallData.ageRange || '',
+          hasFinalExpenseCoverage: activeCallData.hasFinalExpenseCoverage || '',
+          coverageType: activeCallData.coverageType || '',
+          responsiblePerson: activeCallData.responsiblePerson || '',
+          financialBurden: activeCallData.financialBurden || '',
+          correctState: activeCallData.correctState || '',
+          tobaccoStatus: activeCallData.tobaccoStatus || '',
+          tobaccoType: activeCallData.tobaccoType || '',
+          majorHealthHistory: activeCallData.majorHealthHistory || '',
+          majorHealthDetails: activeCallData.majorHealthDetails || '',
+          hasBankAccount: activeCallData.hasBankAccount || '',
+        },
+      };
+
+      try {
+        const res = await apiClient.post<{ insuranceLeadId?: string }>(
+          '/api/v1/insurance-leads/inbound/FE',
+          crmPayload
+        );
+        if (res.data?.insuranceLeadId) {
+          const leadId = res.data.insuranceLeadId;
+          const status =
+            disp === 'APPLICATION_SUBMITTED' || disp === 'LIVE_TRANSFER'
+              ? 'CONVERTED'
+              : disp === 'NO_ANSWER'
+                ? 'NEW'
+                : ['DISCONNECTED', 'NOT_INTERESTED', 'NOT_QUALIFIED'].includes(disp)
+                  ? 'LOST'
+                  : 'CONTACTED';
+          await apiClient.patch(`/api/v1/insurance-leads/${leadId}`, {
+            status,
+            lastContactedAt: new Date().toISOString(),
+          });
+        }
+      } catch (err) {
+        console.error('[CallCenter] CRM ingestion failed:', err);
+      }
+    }
+
     try {
       const response = await apiClient.post('/api/v1/calls/disposition', {
         callId: callSessionIdRef.current,
-        disposition: selectedDisposition,
-        notes: callNotes,
+        disposition: disp,
+        notes,
         duration: callTimer,
         callerNumber: activeCallData?.caller_id || activeCallData?.phone,
         direction: 'OUTBOUND',
@@ -564,28 +912,80 @@ export function CallCenterPortal(): JSX.Element {
       try {
         // Collect custom fields (any fields not in standard CRM fields list)
         const standardKeys = [
-          'id', 'tenantId', 'vertical', 'firstName', 'first_name', 'lastName', 'last_name',
-          'fullName', 'name', 'email', 'phone', 'caller_id', 'address', 'address2', 'city',
-          'county', 'state', 'zipCode', 'zip', 'birthDate', 'age', 'gender', 'source',
-          'status', 'customFields', 'notes', 'tags', 'assignedToId', 'assignedAt',
-          'lastContactedAt', 'nextFollowUpAt', 'priority', 'leadStage', 'doNotCall',
-          'duplicateOfId', 'smoker', 'faceAmount', 'lifeType', 'riskType', 'carrier',
-          'product', 'monthlyPremium', 'coverageAmount', 'trustedFormUrl', 'leadidToken',
-          'consentLanguage', 'recordingUrl', 'createdAt', 'updatedAt', 'submissions',
-          'activities', 'tasks'
+          'id',
+          'tenantId',
+          'vertical',
+          'firstName',
+          'first_name',
+          'lastName',
+          'last_name',
+          'fullName',
+          'name',
+          'email',
+          'phone',
+          'caller_id',
+          'address',
+          'address2',
+          'city',
+          'county',
+          'state',
+          'zipCode',
+          'zip',
+          'birthDate',
+          'age',
+          'gender',
+          'source',
+          'status',
+          'customFields',
+          'notes',
+          'tags',
+          'assignedToId',
+          'assignedAt',
+          'lastContactedAt',
+          'nextFollowUpAt',
+          'priority',
+          'leadStage',
+          'doNotCall',
+          'duplicateOfId',
+          'smoker',
+          'faceAmount',
+          'lifeType',
+          'riskType',
+          'carrier',
+          'product',
+          'monthlyPremium',
+          'coverageAmount',
+          'trustedFormUrl',
+          'leadidToken',
+          'consentLanguage',
+          'recordingUrl',
+          'createdAt',
+          'updatedAt',
+          'submissions',
+          'activities',
+          'tasks',
         ];
-        
+
         const customFields: Record<string, unknown> = {};
         if (activeCallData.customFields && typeof activeCallData.customFields === 'object') {
           Object.assign(customFields, activeCallData.customFields);
         }
-        
+
         // Extract any keys directly on activeCallData that are not standard keys
-        Object.keys(activeCallData).forEach((key) => {
+        Object.keys(activeCallData).forEach(key => {
           if (!standardKeys.includes(key) && activeCallData[key] !== undefined) {
             customFields[key] = activeCallData[key];
           }
         });
+
+        const status =
+          disp === 'APPLICATION_SUBMITTED' || disp === 'LIVE_TRANSFER'
+            ? 'CONVERTED'
+            : disp === 'NO_ANSWER'
+              ? 'NEW'
+              : ['DISCONNECTED', 'NOT_INTERESTED', 'NOT_QUALIFIED'].includes(disp)
+                ? 'LOST'
+                : 'CONTACTED';
 
         await updateInsuranceLead(resolvedLeadId, {
           firstName: activeCallData.firstName || activeCallData.first_name,
@@ -603,6 +1003,8 @@ export function CallCenterPortal(): JSX.Element {
           monthlyPremium: activeCallData.monthlyPremium,
           carrier: activeCallData.carrier,
           customFields: customFields,
+          status,
+          lastContactedAt: new Date().toISOString(),
         });
         console.log('[CallCenter] CRM record updated successfully');
       } catch (err) {
@@ -610,9 +1012,7 @@ export function CallCenterPortal(): JSX.Element {
       }
     }
 
-    setDispositionSaved(true);
-    setTimeout(() => {
-      setDispositionSaved(false);
+    const resetStates = () => {
       setShowDisposition(false);
       setSelectedDisposition('');
       setFollowUpDate('');
@@ -627,17 +1027,35 @@ export function CallCenterPortal(): JSX.Element {
       setCrmData(null);
       setCrmPhone('');
 
-      if (isAutoDialing && autoDialIndex + 1 < applications.length) {
+      const nextIdx = getNextDialIndex();
+      if (isAutoDialing && nextIdx !== -1) {
         setAutoDialStatus('wrapup');
         setWrapUpCountdown(5);
       } else {
         setIsAutoDialing(false);
         setAutoDialStatus('idle');
       }
-    }, 2000);
+    };
+
+    if (autoDisp) {
+      resetStates();
+    } else {
+      setDispositionSaved(true);
+      setTimeout(() => {
+        setDispositionSaved(false);
+        resetStates();
+      }, 2000);
+    }
   };
 
+  useEffect(() => {
+    handleSaveDispositionRef.current = handleSaveDisposition;
+  }, [handleSaveDisposition]);
+
   const startCallWithApplication = async (app: ApplicationData) => {
+    if (app.id) {
+      dialedLeadIdsRef.current.add(app.id);
+    }
     const idx = applications.findIndex(a => a.id === app.id);
     if (idx !== -1) {
       setAutoDialIndex(idx);
@@ -646,6 +1064,10 @@ export function CallCenterPortal(): JSX.Element {
     setIsCallActive(true);
     setAgentStatus('on_call');
     setCallTimer(0);
+    dispositionHandledRef.current = false;
+    wasAnsweredRef.current = false;
+    hasHadActiveSessionRef.current = false;
+    callSessionIdRef.current = `call-${Date.now()}`;
     setTotalCallsCount(prev => prev + 1); // Count outbound application calls
     callTimerRef.current = setInterval(() => {
       setCallTimer(prev => prev + 1);
@@ -656,25 +1078,39 @@ export function CallCenterPortal(): JSX.Element {
       const cleanPhone = phoneNum.replace(/\D/g, '');
       void fetchCrmData(cleanPhone);
       try {
-        await makeCall(cleanPhone);
+        await makeCall(cleanPhone, 'ROTATE');
       } catch (error) {
         console.error('Failed to dial:', error);
       }
     }
   };
 
-  // Fetch Applications
+  // Fetch Applications & Lists
   const fetchApplications = useCallback(async () => {
     setLoadingApplications(true);
     try {
-      const res = await fetch('/api/v1/insurance-leads?limit=100');
-      if (res.ok) {
-        const result = await res.json();
+      // 1. Fetch Lead Lists in parallel to keep dropdown updated
+      const listsRes = await apiClient.get<any[]>('/api/v1/lead-lists');
+      if (!listsRes.error && listsRes.data) {
+        setLeadLists(listsRes.data);
+      }
+
+      // 2. Fetch leads in queue (filtered by list if selected, showing only NEW status leads)
+      const url = selectedListId
+        ? `/api/v1/insurance-leads?limit=50000&listId=${selectedListId}&status=NEW`
+        : '/api/v1/insurance-leads?limit=50000&status=NEW';
+
+      const res = await apiClient.get<any>(url);
+      if (!res.error && res.data) {
+        const result = res.data;
         const apps = (result.data || []).map((lead: any) => ({
           ...lead,
           firstName: lead.firstName || '',
           lastName: lead.lastName || '',
-          name: lead.fullName || `${lead.firstName || ''} ${lead.lastName || ''}`.trim() || 'Unnamed Lead',
+          name:
+            lead.fullName ||
+            `${lead.firstName || ''} ${lead.lastName || ''}`.trim() ||
+            'Unnamed Lead',
         }));
         setApplications(apps);
       }
@@ -684,7 +1120,62 @@ export function CallCenterPortal(): JSX.Element {
     } finally {
       setLoadingApplications(false);
     }
-  }, []);
+  }, [selectedListId]);
+
+  const getNextDialIndex = useCallback((): number => {
+    if (applications.length === 0) return -1;
+
+    const notDialedThisSession = (app: ApplicationData) =>
+      !app.id || !dialedLeadIdsRef.current.has(app.id);
+
+    // Prefer leads never contacted at all
+    const uncalledIdx = applications.findIndex(
+      app => notDialedThisSession(app) && !app.lastContactedAt
+    );
+    if (uncalledIdx !== -1) {
+      return uncalledIdx;
+    }
+
+    // Fallback for redial lists (everyone has prior contact history):
+    // still never repeat a lead within this session
+    return applications.findIndex(notDialedThisSession);
+  }, [applications]);
+
+  const handleDeleteList = async () => {
+    if (!selectedListId) return;
+    const selectedList = leadLists.find(l => l.id === selectedListId);
+    if (!selectedList) return;
+
+    const confirmMsg = `Are you sure you want to delete the lead list "${selectedList.name}" and all leads in it? This action cannot be undone.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      await deleteLeadList(selectedListId);
+      setSelectedListId('');
+      setIsAutoDialing(false);
+      setAutoDialIndex(0);
+      setAutoDialStatus('idle');
+      dialedLeadIdsRef.current.clear();
+      void fetchApplications();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete lead list');
+    }
+  };
+
+  const handleDeleteLead = async (id: string) => {
+    const confirmMsg = `Are you sure you want to delete this lead? This action cannot be undone.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      await deleteInsuranceLeads([id]);
+      void fetchApplications();
+      if (autoDialIndex >= applications.length - 1) {
+        setAutoDialIndex(Math.max(0, applications.length - 2));
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete lead');
+    }
+  };
 
   useEffect(() => {
     if (currentView === 'agentDashboard') {
@@ -701,8 +1192,8 @@ export function CallCenterPortal(): JSX.Element {
         }, 1000);
       } else {
         // Countdown hit 0! Start next call
-        const nextIndex = autoDialIndex + 1;
-        if (nextIndex < applications.length) {
+        const nextIndex = getNextDialIndex();
+        if (nextIndex !== -1) {
           setAutoDialIndex(nextIndex);
           setAutoDialStatus('calling');
           const nextApp = applications[nextIndex];
@@ -714,6 +1205,7 @@ export function CallCenterPortal(): JSX.Element {
           setIsAutoDialing(false);
           setAutoDialStatus('idle');
           setAutoDialIndex(0);
+          dialedLeadIdsRef.current.clear();
           alert('Auto-dialer complete. All leads in the queue have been dialed.');
         }
       }
@@ -724,7 +1216,15 @@ export function CallCenterPortal(): JSX.Element {
         wrapUpTimerRef.current = null;
       }
     };
-  }, [isAutoDialing, autoDialStatus, wrapUpCountdown, autoDialIndex, applications, startCallWithApplication]);
+  }, [
+    isAutoDialing,
+    autoDialStatus,
+    wrapUpCountdown,
+    autoDialIndex,
+    applications,
+    startCallWithApplication,
+    getNextDialIndex,
+  ]);
 
   // =========================================================================
   // ROLE SELECTION VIEW
@@ -840,6 +1340,15 @@ export function CallCenterPortal(): JSX.Element {
     );
   }
 
+  // Check if we are dealing with a PreClosed list lead
+  const selectedList = leadLists.find(l => l.id === selectedListId);
+  const isPreClosedListSelected = selectedList?.name?.toLowerCase() === 'preclosed';
+
+  const activeLeadListName = crmData?.customer?.list?.name || activeCallData?.list?.name || '';
+  const isPreClosedLead = activeLeadListName.toLowerCase() === 'preclosed';
+
+  const isPreClosed = isPreClosedListSelected || isPreClosedLead;
+
   // =========================================================================
   // AGENT DASHBOARD VIEW
   // =========================================================================
@@ -865,9 +1374,24 @@ export function CallCenterPortal(): JSX.Element {
       {/* Settings Modal */}
       {showSettings && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-card rounded-xl border border-border w-full max-w-md shadow-sm">
+          <div
+            className={`bg-card rounded-xl border border-border w-full ${settingsTab === 'scripts' ? 'max-w-2xl' : 'max-w-md'} shadow-sm transition-all duration-200`}
+          >
             <div className="p-4 border-b border-border flex items-center justify-between">
-              <h2 className="text-lg font-bold text-white">User Settings</h2>
+              <div className="flex gap-4">
+                <button
+                  onClick={() => setSettingsTab('general')}
+                  className={`text-sm font-bold pb-2 border-b-2 ${settingsTab === 'general' ? 'border-primary text-white' : 'border-transparent text-muted-foreground'}`}
+                >
+                  General Settings
+                </button>
+                <button
+                  onClick={() => setSettingsTab('scripts')}
+                  className={`text-sm font-bold pb-2 border-b-2 ${settingsTab === 'scripts' ? 'border-primary text-white' : 'border-transparent text-muted-foreground'}`}
+                >
+                  Script Customizer
+                </button>
+              </div>
               <button
                 onClick={() => setShowSettings(false)}
                 className="p-1 hover:bg-muted rounded-lg transition-colors"
@@ -875,69 +1399,194 @@ export function CallCenterPortal(): JSX.Element {
                 <X className="w-5 h-5 text-muted-foreground" />
               </button>
             </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm text-muted-foreground mb-2">Your Role</label>
-                <div className="w-full bg-muted text-white text-sm p-3 rounded-lg border border-border">
-                  {rolesLoading ? (
-                    <span className="text-muted-foreground">Loading...</span>
-                  ) : (
-                    <span className={isAdminOrOwner ? 'text-purple-400' : 'text-slate-300'}>
-                      {derivedJobTitle}
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Your role is assigned by your organization administrator.
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm text-muted-foreground mb-2">Script Access</label>
-                <div className="p-3 bg-muted rounded-lg border border-border">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-white">📋 Contractor Sales Script</span>
-                    <span
-                      className={`text-xs ${selectedScript === 'sales' ? 'text-green-400' : 'text-muted-foreground'}`}
-                    >
-                      {selectedScript === 'sales' ? '✓ Selected' : 'Available'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-white">🎯 Retention Script</span>
-                    <span
-                      className={`text-xs ${
-                        !canAccessRetentionScript
-                          ? 'text-muted-foreground'
-                          : selectedScript === 'retention'
-                            ? 'text-green-400'
-                            : 'text-muted-foreground'
-                      }`}
-                    >
-                      {!canAccessRetentionScript
-                        ? '✗ Restricted'
-                        : selectedScript === 'retention'
-                          ? '✓ Selected'
-                          : 'Available'}
-                    </span>
+
+            {settingsTab === 'general' ? (
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm text-muted-foreground mb-2">
+                    Your Position / Role
+                  </label>
+                  <div className="w-full bg-muted text-white text-sm p-3 rounded-lg border border-border">
+                    {rolesLoading ? (
+                      <span className="text-muted-foreground">Loading...</span>
+                    ) : (
+                      <span className="text-slate-300 font-medium">{derivedJobTitle}</span>
+                    )}
                   </div>
                 </div>
-                {canAccessRetentionScript ? (
+
+                <div>
+                  <label className="block text-sm text-muted-foreground mb-2">
+                    Default Script Preference
+                  </label>
+                  <select
+                    value={defaultScript || (position === 'Retention' ? 'retention' : 'sales')}
+                    onChange={e => {
+                      const val = e.target.value;
+                      void (async () => {
+                        try {
+                          await apiClient.patch('/api/auth/me/settings', {
+                            defaultScript: val,
+                          });
+                          await refetchUser();
+                        } catch (err) {
+                          console.error('Failed to save default script:', err);
+                        }
+                      })();
+                    }}
+                    className="flex h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  >
+                    <option value="sales">Contractor Script</option>
+                    <option value="retention">Retention Script</option>
+                    <option value="underwriting">Underwriting Script</option>
+                  </select>
                   <p className="text-xs text-muted-foreground mt-2">
-                    Use the dropdown in the header to switch scripts during calls.
+                    This script will automatically display first when you answer incoming calls.
                   </p>
-                ) : (
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Retention Script requires ADMIN or OWNER role.
-                  </p>
-                )}
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="p-6 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1.5 uppercase font-semibold">
+                      Select Script
+                    </label>
+                    <select
+                      value={editingScriptType}
+                      onChange={e => handleScriptTypeChange(e.target.value as any)}
+                      className="flex h-9 w-full rounded-md border border-input bg-muted px-3 py-1.5 text-xs text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    >
+                      <option value="sales">Contractor Script</option>
+                      <option value="retention">Retention Script</option>
+                      <option value="underwriting">Underwriting Script</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1.5 uppercase font-semibold">
+                      Select Step / Node
+                    </label>
+                    <select
+                      value={editingNodeId}
+                      onChange={e => setEditingNodeId(e.target.value)}
+                      className="flex h-9 w-full rounded-md border border-input bg-muted px-3 py-1.5 text-xs text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    >
+                      {EDITABLE_NODES[editingScriptType].map(nodeOpt => (
+                        <option key={nodeOpt.id} value={nodeOpt.id}>
+                          {nodeOpt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label className="block text-xs text-muted-foreground uppercase font-semibold">
+                      Script Text Template
+                    </label>
+                    {customScripts && customScripts[editingNodeId] !== undefined && (
+                      <span className="text-[10px] bg-cyan-500/10 text-cyan-400 px-2 py-0.5 rounded font-mono font-medium">
+                        Customized
+                      </span>
+                    )}
+                  </div>
+                  <textarea
+                    value={editedText}
+                    onChange={e => {
+                      setEditedText(e.target.value);
+                      setSaveSuccess(false);
+                    }}
+                    rows={8}
+                    className="flex w-full rounded-md border border-input bg-muted px-3 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 font-sans leading-relaxed"
+                    placeholder="Enter script text template..."
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1.5 leading-normal">
+                    You can use variables like{' '}
+                    <code className="bg-zinc-800 px-1 py-0.5 rounded text-cyan-300 font-mono">
+                      {'{first_name}'}
+                    </code>
+                    ,{' '}
+                    <code className="bg-zinc-800 px-1 py-0.5 rounded text-cyan-300 font-mono">
+                      {'{last_name}'}
+                    </code>
+                    ,{' '}
+                    <code className="bg-zinc-800 px-1 py-0.5 rounded text-cyan-300 font-mono">
+                      {'{state}'}
+                    </code>
+                    , and{' '}
+                    <code className="bg-zinc-800 px-1 py-0.5 rounded text-cyan-300 font-mono">
+                      {'{agent_name}'}
+                    </code>{' '}
+                    in the template.
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-between pt-2">
+                  <button
+                    onClick={() => {
+                      void (async () => {
+                        try {
+                          const defaultTxt = getDefaultScriptText(editingScriptType, editingNodeId);
+                          setEditedText(defaultTxt);
+                          setSavingScript(true);
+                          await apiClient.patch('/api/auth/me/settings', {
+                            customScripts: { [editingNodeId]: defaultTxt },
+                          });
+                          await refetchUser();
+                          setSaveSuccess(true);
+                        } catch (err) {
+                          console.error('Failed to reset script:', err);
+                        } finally {
+                          setSavingScript(false);
+                        }
+                      })();
+                    }}
+                    disabled={savingScript}
+                    className="text-xs text-amber-500 hover:text-amber-400 font-medium transition-colors disabled:opacity-50"
+                  >
+                    Reset to Default
+                  </button>
+                  <div className="flex items-center gap-3">
+                    {saveSuccess && (
+                      <span className="text-xs text-green-400 font-medium">
+                        ✓ Saved successfully
+                      </span>
+                    )}
+                    <button
+                      onClick={() => {
+                        void (async () => {
+                          setSavingScript(true);
+                          setSaveSuccess(false);
+                          try {
+                            await apiClient.patch('/api/auth/me/settings', {
+                              customScripts: { [editingNodeId]: editedText },
+                            });
+                            await refetchUser();
+                            setSaveSuccess(true);
+                          } catch (err) {
+                            console.error('Failed to save script step:', err);
+                          } finally {
+                            setSavingScript(false);
+                          }
+                        })();
+                      }}
+                      disabled={savingScript}
+                      className="px-4 py-2 bg-primary text-white font-medium text-xs rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
+                    >
+                      {savingScript ? 'Saving...' : 'Save Script Step'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="p-4 border-t border-border">
               <button
                 onClick={() => setShowSettings(false)}
-                className="w-full py-2 bg-primary text-white font-medium rounded-lg hover:opacity-90 transition-opacity"
+                className="w-full py-2 bg-muted text-white font-medium rounded-lg hover:bg-muted/80 transition-colors"
               >
-                Save Settings
+                Close Settings
               </button>
             </div>
           </div>
@@ -977,6 +1626,8 @@ export function CallCenterPortal(): JSX.Element {
               makeCall={makeCall}
               callNotes={callNotes}
               setCallNotes={setCallNotes}
+              hasHeldCalls={hasHeldCalls}
+              mergeCalls={mergeCalls}
             />
           )}
 
@@ -996,6 +1647,16 @@ export function CallCenterPortal(): JSX.Element {
               }}
               onDispositionSelect={() => {}}
               handleSkipDisposition={() => {
+                const leadId = activeCallData?.id || crmData?.customer?.id;
+                if (leadId) {
+                  apiClient
+                    .patch(`/api/v1/insurance-leads/${leadId}`, {
+                      lastContactedAt: new Date().toISOString(),
+                    })
+                    .catch(e => {
+                      console.error('Failed to update lastContactedAt on skip:', e);
+                    });
+                }
                 setShowDisposition(false);
                 setSelectedDisposition('');
                 setFollowUpDate('');
@@ -1009,7 +1670,8 @@ export function CallCenterPortal(): JSX.Element {
                 setCrmData(null);
                 setCrmPhone('');
 
-                if (isAutoDialing && autoDialIndex + 1 < applications.length) {
+                const nextIdx = getNextDialIndex();
+                if (isAutoDialing && nextIdx !== -1) {
                   setAutoDialStatus('wrapup');
                   setWrapUpCountdown(5);
                 } else {
@@ -1020,22 +1682,30 @@ export function CallCenterPortal(): JSX.Element {
             />
           )}
 
-          {!isIncomingCall && !isCallActive && !showDisposition && (
-            isAutoDialing && autoDialStatus === 'wrapup' ? (
+          {!isIncomingCall &&
+            !isCallActive &&
+            !showDisposition &&
+            (isAutoDialing && autoDialStatus === 'wrapup' ? (
               <div className="flex-1 p-6 bg-slate-900 border border-slate-800 rounded-xl flex flex-col justify-between">
                 <div>
-                  <h3 className="text-sm font-mono uppercase tracking-widest text-slate-400 mb-2">Auto-Dialer Queue</h3>
-                  <div className="text-xs text-slate-500 mb-4">Lead {autoDialIndex + 1} of {applications.length}</div>
-                  
+                  <h3 className="text-sm font-mono uppercase tracking-widest text-slate-400 mb-2">
+                    Auto-Dialer Queue
+                  </h3>
+                  <div className="text-xs text-slate-500 mb-4">
+                    Lead {autoDialIndex + 1} of {applications.length}
+                  </div>
+
                   <div className="flex flex-col items-center justify-center py-8">
                     <div className="relative flex items-center justify-center">
                       <div className="w-24 h-24 rounded-full border-4 border-cyan-500/20 border-t-cyan-500 animate-spin absolute" />
                       <div className="text-3xl font-bold text-white">{wrapUpCountdown}s</div>
                     </div>
-                    <p className="text-xs text-slate-400 mt-6 text-center font-medium">Wrap-up period active. Preparing to dial the next lead...</p>
+                    <p className="text-xs text-slate-400 mt-6 text-center font-medium">
+                      Wrap-up period active. Preparing to dial the next lead...
+                    </p>
                   </div>
                 </div>
-                
+
                 <div className="space-y-2">
                   <button
                     onClick={() => setWrapUpCountdown(0)}
@@ -1056,122 +1726,174 @@ export function CallCenterPortal(): JSX.Element {
                 </div>
               </div>
             ) : (
-              <DialerPanel
-                phoneNumber={phoneNumber}
-                setPhoneNumber={setPhoneNumber}
-                formatPhoneNumber={formatPhoneNumber}
-                handleKeypadPress={handleKeypadPress}
-                disabled={false}
-                onDial={() => {
-                  void (async () => {
-                    const dialNumber = phoneNumber.replace(/\D/g, '');
-                    if (dialNumber.length === 10) {
-                      const callData = {
-                        caller_id: dialNumber,
-                        first_name: 'Outbound',
-                        last_name: 'Call',
-                        phone: dialNumber,
-                      };
-                      setActiveCallData(callData);
-                      setIsCallActive(true);
-                      setAgentStatus('on_call');
-                      setCallTimer(0);
-                      setTotalCallsCount(prev => prev + 1);
-                      callTimerRef.current = setInterval(() => setCallTimer(prev => prev + 1), 1000);
-                      void fetchCrmData(dialNumber);
-                      try {
-                        await makeCall(dialNumber);
-                      } catch (e) {
-                        console.error(e);
-                        setIsCallActive(false);
-                        setAgentStatus('available');
-                        if (callTimerRef.current) clearInterval(callTimerRef.current);
-                      }
-                    }
-                  })();
-                }}
-              />
-            )
-          )}
+              <div className="flex-grow flex flex-col p-4 bg-background justify-between">
+                <div className="space-y-4 flex-grow flex flex-col">
+                  <div className="flex items-center justify-between pb-2 border-b border-border">
+                    <h3 className="text-xs font-mono uppercase tracking-widest font-bold text-foreground">
+                      Agent Dialer
+                    </h3>
+                  </div>
+                  <div className="flex-grow flex flex-col justify-center">
+                    <DialPad compact={true} />
+                  </div>
+                </div>
+              </div>
+            ))}
+
+          {isAddingThirdParty && <AddCallDialog onClose={() => setIsAddingThirdParty(false)} />}
         </div>
 
         {/* Center/Right Column - Script or Queue */}
         <div className="flex-1 p-4 overflow-hidden flex flex-col">
           {(isCallActive && activeCallData) || crmData ? (
-            <div className="flex-1 flex flex-col overflow-hidden gap-2">
-              <WorkspaceTabs
-                activeCallView={activeCallView}
-                setActiveCallView={setActiveCallView}
-              />
+            <div className="flex-1 flex flex-col lg:flex-row overflow-hidden gap-4">
+              <div className="flex-1 flex flex-col overflow-hidden gap-2">
+                <WorkspaceTabs
+                  activeCallView={activeCallView}
+                  setActiveCallView={setActiveCallView}
+                />
 
-              {activeCallView === 'script' && (
-                <div className="flex-1 overflow-hidden">
-                  {activeCallData ? (
-                    selectedScript === 'retention' && canAccessRetentionScript ? (
-                      <RetentionScriptPanel
-                        prospectData={activeCallData}
-                        onDataUpdate={(data: Record<string, unknown>) =>
-                          setActiveCallData(prev =>
-                            prev ? ({ ...prev, ...data } as ProspectData) : null
-                          )
-                        }
-                      />
-                    ) : selectedScript === 'underwriting' ? (
-                      <UnderwritingScriptPanel
-                        prospectData={activeCallData}
-                        onDataUpdate={(data: Record<string, unknown>) =>
-                          setActiveCallData(prev =>
-                            prev ? ({ ...prev, ...data } as ProspectData) : null
-                          )
+                {activeCallView === 'script' && (
+                  <div className="flex-1 overflow-hidden">
+                    {activeCallData ? (
+                      selectedScript === 'hvac' ? (
+                        <HvacScriptPanel
+                          prospectData={activeCallData}
+                          onDataUpdate={(data: Record<string, unknown>) =>
+                            setActiveCallData(prev =>
+                              prev ? ({ ...prev, ...data } as ProspectData) : null
+                            )
+                          }
+                        />
+                      ) : selectedScript === 'retention' && canAccessRetentionScript ? (
+                        <RetentionScriptPanel
+                          prospectData={activeCallData}
+                          onDataUpdate={(data: Record<string, unknown>) =>
+                            setActiveCallData(prev =>
+                              prev ? ({ ...prev, ...data } as ProspectData) : null
+                            )
+                          }
+                        />
+                      ) : selectedScript === 'underwriting' ? (
+                        <UnderwritingScriptPanel
+                          prospectData={activeCallData}
+                          onDataUpdate={(data: Record<string, unknown>) =>
+                            setActiveCallData(prev =>
+                              prev ? ({ ...prev, ...data } as ProspectData) : null
+                            )
+                          }
+                        />
+                      ) : selectedScript === 'verification' ? (
+                        <VerificationScriptPanel
+                          prospectData={activeCallData}
+                          onDataUpdate={(data: Record<string, unknown>) =>
+                            setActiveCallData(prev =>
+                              prev ? ({ ...prev, ...data } as ProspectData) : null
+                            )
+                          }
+                          setSelectedDisposition={setSelectedDisposition}
+                          setCallNotes={setCallNotes}
+                          setShowDisposition={setShowDisposition}
+                        />
+                      ) : selectedScript === 'cold_call_transfer' ? (
+                        <ColdCallTransferScriptPanel
+                          prospectData={activeCallData}
+                          leadId={activeCallData?.id}
+                          onDataUpdate={(data: Record<string, unknown>) =>
+                            setActiveCallData(prev =>
+                              prev ? ({ ...prev, ...data } as ProspectData) : null
+                            )
+                          }
+                          setSelectedDisposition={setSelectedDisposition}
+                          setCallNotes={setCallNotes}
+                          setShowDisposition={setShowDisposition}
+                        />
+                      ) : selectedScript === 'better_plan_callback' ? (
+                        <BetterPlanCallbackScriptPanel
+                          prospectData={activeCallData}
+                          leadId={activeCallData?.id}
+                          onDataUpdate={(data: Record<string, unknown>) =>
+                            setActiveCallData(prev =>
+                              prev ? ({ ...prev, ...data } as ProspectData) : null
+                            )
+                          }
+                          setSelectedDisposition={setSelectedDisposition}
+                          setCallNotes={setCallNotes}
+                          setShowDisposition={setShowDisposition}
+                        />
+                      ) : (
+                        <IntegratedScriptPanel
+                          prospectData={activeCallData}
+                          onDataUpdate={(data: Partial<ProspectData>) =>
+                            setActiveCallData(prev =>
+                              prev ? ({ ...prev, ...data } as ProspectData) : null
+                            )
+                          }
+                        />
+                      )
+                    ) : (
+                      <div className="flex-1 flex items-center justify-center text-muted-foreground p-8 text-center bg-white/5 border border-white/10 rounded-xl">
+                        <p className="text-sm">Script is not available when no call is active.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {activeCallView === 'captured_data' && (
+                  <div className="flex-1 overflow-hidden flex flex-col bg-card border border-border rounded-xl p-4">
+                    <CapturedScriptDataPanel activeCallData={activeCallData} crmPhone={crmPhone} />
+                  </div>
+                )}
+
+                {activeCallView === 'data' && (
+                  <div className="flex-1 overflow-hidden flex flex-col">
+                    {crmData ? (
+                      <CustomerCrmPanel
+                        data={crmData}
+                        loading={loadingCrm}
+                        phone={crmPhone}
+                        onRefresh={() => {
+                          void fetchCrmData(crmPhone);
+                        }}
+                        onSwitchCustomer={phoneToSwitch => {
+                          void fetchCrmData(phoneToSwitch);
+                        }}
+                        activeCall={
+                          currentCall
+                            ? {
+                                state: currentCall.state,
+                                direction: currentCall.direction,
+                                campaignName:
+                                  currentCall.prospectData?.campaignName ||
+                                  activeCallData?.campaignName,
+                                publisherName:
+                                  currentCall.prospectData?.publisherName ||
+                                  activeCallData?.publisherName,
+                                buyerName:
+                                  currentCall.prospectData?.buyerName || activeCallData?.buyerName,
+                              }
+                            : null
                         }
                       />
                     ) : (
-                      <IntegratedScriptPanel
-                        prospectData={activeCallData}
-                        onDataUpdate={(data: Partial<ProspectData>) =>
-                          setActiveCallData(prev =>
-                            prev ? ({ ...prev, ...data } as ProspectData) : null
-                          )
-                        }
-                      />
-                    )
-                  ) : (
-                    <div className="flex-1 flex items-center justify-center text-muted-foreground p-8 text-center bg-white/5 border border-white/10 rounded-xl">
-                      <p className="text-sm">Script is not available when no call is active.</p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {activeCallView === 'data' && (
-                <div className="flex-1 overflow-hidden flex flex-col">
-                  {crmData ? (
-                    <CustomerCrmPanel
-                      data={crmData}
-                      loading={loadingCrm}
-                      phone={crmPhone}
-                      onRefresh={() => fetchCrmData(crmPhone)}
-                      onSwitchCustomer={(phoneToSwitch) => fetchCrmData(phoneToSwitch)}
-                      activeCall={
-                        currentCall
-                          ? {
-                              state: currentCall.state,
-                              direction: currentCall.direction,
-                              campaignName: currentCall.prospectData?.campaignName || activeCallData?.campaignName,
-                              publisherName: currentCall.prospectData?.publisherName || activeCallData?.publisherName,
-                              buyerName: currentCall.prospectData?.buyerName || activeCallData?.buyerName,
-                            }
-                          : null
-                      }
-                    />
-                  ) : (
-                    <div className="flex-1 flex items-center justify-center text-muted-foreground p-8 text-center">
-                      <div>
-                        <User className="w-10 h-10 text-muted-foreground mx-auto mb-2 opacity-40" />
-                        <p className="text-sm">No profile data loaded. Dial a number or receive a call to fetch CRM records.</p>
+                      <div className="flex-1 flex items-center justify-center text-muted-foreground p-8 text-center">
+                        <div>
+                          <User className="w-10 h-10 text-muted-foreground mx-auto mb-2 opacity-40" />
+                          <p className="text-sm">
+                            No profile data loaded. Dial a number or receive a call to fetch CRM
+                            records.
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* PreClosed Premium Calculator Panel */}
+              {isPreClosed && (
+                <div className="w-full lg:w-[380px] xl:w-[420px] shrink-0 flex flex-col bg-slate-900 border border-slate-800 rounded-xl p-4 overflow-y-auto shadow-xl">
+                  <PreClosedStatsCard leadData={crmData?.customer || activeCallData} />
                 </div>
               )}
             </div>
@@ -1182,18 +1904,22 @@ export function CallCenterPortal(): JSX.Element {
                 appointmentsCount={appointmentsCount}
                 appointmentRate={appointmentRate}
                 followUpCount={followUpCount}
+                salesCount={salesCount}
+                conversionRate={conversionRate}
               />
-              
+
               {/* Auto-Dialer Control Panel */}
               <div className="p-4 bg-slate-900 border border-slate-800 rounded-xl flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 shadow-lg">
                 <div className="flex items-center gap-3">
-                  <div className={`w-3 h-3 rounded-full ${
-                    isAutoDialing 
-                      ? autoDialStatus === 'paused' 
-                        ? 'bg-amber-500 animate-pulse' 
-                        : 'bg-emerald-500 animate-pulse' 
-                      : 'bg-slate-700'
-                  }`} />
+                  <div
+                    className={`w-3 h-3 rounded-full ${
+                      isAutoDialing
+                        ? autoDialStatus === 'paused'
+                          ? 'bg-amber-500 animate-pulse'
+                          : 'bg-emerald-500 animate-pulse'
+                        : 'bg-slate-700'
+                    }`}
+                  />
                   <div>
                     <h3 className="text-sm font-bold text-white flex items-center gap-1.5 font-sans">
                       Auto-Dialer Queue
@@ -1204,14 +1930,53 @@ export function CallCenterPortal(): JSX.Element {
                       )}
                     </h3>
                     <p className="text-xs text-slate-400 mt-0.5 font-sans">
-                      {applications.length > 0 
-                        ? `Loaded: ${applications.length} leads. Current index: ${autoDialIndex + 1}.` 
+                      {applications.length > 0
+                        ? `Loaded: ${applications.length} leads. Current index: ${autoDialIndex + 1}.`
                         : 'Queue is empty. Upload leads to start.'}
                     </p>
                   </div>
                 </div>
-                
+
                 <div className="flex flex-wrap items-center gap-2">
+                  {/* Target List Dropdown */}
+                  <div className="flex items-center gap-2 bg-slate-800 border border-slate-700 hover:border-slate-600 rounded-lg px-3 py-2 text-white text-xs font-mono font-medium uppercase tracking-widest transition-all">
+                    <Database className="w-3.5 h-3.5 text-cyan-400" />
+                    <select
+                      value={selectedListId}
+                      onChange={e => {
+                        setSelectedListId(e.target.value);
+                        // Reset dialer state when list changes
+                        setIsAutoDialing(false);
+                        setAutoDialIndex(0);
+                        setAutoDialStatus('idle');
+                        dialedLeadIdsRef.current.clear();
+                      }}
+                      className="bg-transparent text-white text-xs font-mono focus:outline-none cursor-pointer pr-4 font-bold uppercase"
+                    >
+                      <option value="" className="bg-slate-900 text-slate-400">
+                        All Lists
+                      </option>
+                      {leadLists.map(list => (
+                        <option key={list.id} value={list.id} className="bg-slate-900 text-white">
+                          {list.name} ({list._count?.leads ?? 0})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {selectedListId && (
+                    <button
+                      onClick={() => {
+                        void handleDeleteList();
+                      }}
+                      className="px-4 py-2 bg-red-950/40 hover:bg-red-900/60 border border-red-900/50 hover:border-red-700 text-red-400 text-xs font-mono font-medium uppercase tracking-widest rounded-lg transition-all flex items-center gap-2"
+                      title="Delete Selected List"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Delete List
+                    </button>
+                  )}
+
                   <button
                     onClick={() => setShowUploadModal(true)}
                     className="px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 text-white text-xs font-mono font-medium uppercase tracking-widest rounded-lg transition-all flex items-center gap-2"
@@ -1219,52 +1984,63 @@ export function CallCenterPortal(): JSX.Element {
                     <Upload className="w-3.5 h-3.5" />
                     Upload Leads
                   </button>
-                  
-                  {applications.length > 0 && (
-                    <>
-                      {isAutoDialing && autoDialStatus !== 'paused' ? (
-                        <button
-                          onClick={() => {
-                            setIsAutoDialing(false);
-                            setAutoDialStatus('paused');
-                          }}
-                          className="px-4 py-2 bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 text-amber-400 text-xs font-mono font-bold uppercase tracking-widest rounded-lg transition-all flex items-center gap-2"
-                        >
-                          <Pause className="w-3.5 h-3.5" />
-                          Pause Dialer
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            setIsAutoDialing(true);
-                            setAutoDialStatus('calling');
-                            const lead = applications[autoDialIndex];
-                            if (lead) {
-                              void startCallWithApplication(lead);
-                            }
-                          }}
-                          className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-mono font-bold uppercase tracking-widest rounded-lg transition-all flex items-center gap-2 shadow-lg hover:shadow-cyan-500/10"
-                        >
-                          <Play className="w-3.5 h-3.5 fill-current" />
-                          Start Dialer
-                        </button>
-                      )}
-                      
-                      {autoDialIndex > 0 && (
-                        <button
-                          onClick={() => {
-                            setIsAutoDialing(false);
-                            setAutoDialStatus('idle');
-                            setAutoDialIndex(0);
-                          }}
-                          className="p-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-400 hover:text-white rounded-lg transition-all"
-                          title="Reset Dialer Queue"
-                        >
-                          <RotateCcw className="w-4 h-4" />
-                        </button>
-                      )}
-                    </>
+
+                  {/* Start / Pause Dialer */}
+                  {isAutoDialing && autoDialStatus !== 'paused' ? (
+                    <button
+                      onClick={() => {
+                        setIsAutoDialing(false);
+                        setAutoDialStatus('paused');
+                      }}
+                      className="px-4 py-2 bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 text-amber-400 text-xs font-mono font-bold uppercase tracking-widest rounded-lg transition-all flex items-center gap-2"
+                    >
+                      <Pause className="w-3.5 h-3.5" />
+                      Pause Dialer
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        // Don't redial the current lead if it was already called
+                        // this session (e.g. resuming after a pause)
+                        const current = applications[autoDialIndex];
+                        const idx =
+                          current && current.id && !dialedLeadIdsRef.current.has(current.id)
+                            ? autoDialIndex
+                            : getNextDialIndex();
+                        if (idx === -1) {
+                          alert('All leads in the queue have already been dialed.');
+                          return;
+                        }
+                        setIsAutoDialing(true);
+                        setAutoDialStatus('calling');
+                        setAutoDialIndex(idx);
+                        const lead = applications[idx];
+                        if (lead) {
+                          void startCallWithApplication(lead);
+                        }
+                      }}
+                      disabled={applications.length === 0}
+                      className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 disabled:bg-slate-800 disabled:text-slate-500 disabled:border-slate-850 disabled:shadow-none text-slate-950 text-xs font-mono font-bold uppercase tracking-widest rounded-lg transition-all flex items-center gap-2 shadow-lg hover:shadow-cyan-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-current" />
+                      Start Dialer
+                    </button>
                   )}
+
+                  {/* Reset Dialer Queue */}
+                  <button
+                    onClick={() => {
+                      setIsAutoDialing(false);
+                      setAutoDialStatus('idle');
+                      setAutoDialIndex(0);
+                      dialedLeadIdsRef.current.clear();
+                    }}
+                    disabled={applications.length === 0 || autoDialIndex === 0}
+                    className="p-2 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-900 disabled:text-slate-600 disabled:border-slate-850 border border-slate-700 text-slate-400 hover:text-white rounded-lg transition-all disabled:cursor-not-allowed disabled:opacity-50"
+                    title="Reset Dialer Queue"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
 
@@ -1273,6 +2049,7 @@ export function CallCenterPortal(): JSX.Element {
                 loadingApplications={loadingApplications}
                 fetchApplications={fetchApplications}
                 startCallWithApplication={startCallWithApplication}
+                onDeleteLead={handleDeleteLead}
               />
             </div>
           )}
@@ -1280,9 +2057,9 @@ export function CallCenterPortal(): JSX.Element {
       </div>
 
       {showUploadModal && (
-        <LeadUploadModal
+        <CsvImportDialog
           onClose={() => setShowUploadModal(false)}
-          onImportComplete={() => {
+          onSuccess={() => {
             void fetchApplications();
           }}
         />

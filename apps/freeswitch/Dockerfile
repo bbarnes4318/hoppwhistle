@@ -28,6 +28,7 @@ COPY apps/freeswitch/conf/sip_profiles/external/ /usr/share/freeswitch/conf/vani
 COPY apps/freeswitch/conf/dialplan/*.xml /usr/share/freeswitch/conf/vanilla/dialplan/
 
 # Copy our custom directory users (including vapi.xml for SIP auth)
+COPY apps/freeswitch/conf/directory/default.xml /usr/share/freeswitch/conf/vanilla/directory/default.xml
 COPY apps/freeswitch/conf/directory/default/*.xml /usr/share/freeswitch/conf/vanilla/directory/default/
 
 # Copy vars.xml for environment variable substitution
@@ -36,6 +37,13 @@ COPY apps/freeswitch/conf/vars.xml /usr/share/freeswitch/conf/vanilla/vars.xml
 # Copy scripts
 RUN mkdir -p /usr/share/freeswitch/scripts
 COPY apps/freeswitch/scripts/ /usr/share/freeswitch/scripts/
+
+# Campaign transfers to external buyer phones must present a verified FracTEL DID
+# with the same SIP caller-ID fields proven by the direct originate test.
+COPY scripts/apply-campaign-external-buyer-cid.sh /tmp/apply-campaign-external-buyer-cid.sh
+RUN chmod +x /tmp/apply-campaign-external-buyer-cid.sh \
+    && /tmp/apply-campaign-external-buyer-cid.sh /usr/share/freeswitch/scripts/inbound_route.lua \
+    && rm -f /tmp/apply-campaign-external-buyer-cid.sh
 
 # Copy entrypoint
 COPY apps/freeswitch/docker-entrypoint.sh /docker-entrypoint.sh

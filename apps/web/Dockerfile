@@ -32,6 +32,17 @@ COPY --from=deps /app/node_modules ./node_modules
 # Copy ALL source code
 COPY . .
 
+# Permanently apply the shared browser-phone ringback and RFC2833 DTMF repair.
+# The script is idempotent and fails the image build if expected source blocks drift.
+RUN node /app/scripts/apply-softphone-ringback-dtmf-source.mjs \
+  /app/apps/web/src/components/phone/phone-provider.tsx
+
+# Permanently expose the actual campaign routing contract in the UI: an external
+# cell number or a registered four-digit Hopwhistle extension, with same-priority
+# destinations ringing together and lower priorities acting as failover steps.
+RUN node /app/scripts/apply-campaign-routing-ui-source.mjs \
+  '/app/apps/web/src/app/(dashboard)/campaigns/[id]/page.tsx'
+
 WORKDIR /app/apps/web
 
 ENV NEXT_TELEMETRY_DISABLED=1

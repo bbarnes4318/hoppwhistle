@@ -1,5 +1,6 @@
 import { Headphones, Settings } from 'lucide-react';
 import React from 'react';
+
 import type { AgentStatus, SelectedScript } from './types';
 
 interface CallCenterHeaderProps {
@@ -24,7 +25,7 @@ export function CallCenterHeader({
   setAgentStatus,
   isCallActive,
   isIncomingCall,
-  isAdminOrOwner,
+  isAdminOrOwner: _isAdminOrOwner,
   rolesLoading,
   derivedJobTitle,
   canAccessRetentionScript,
@@ -41,12 +42,14 @@ export function CallCenterHeader({
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-2">
             <Headphones className="w-5 h-5 text-muted-foreground" />
-            <h1 className="text-sm font-bold uppercase tracking-widest text-foreground">Operator Console</h1>
+            <h1 className="text-sm font-bold uppercase tracking-widest text-foreground">
+              Operator Console
+            </h1>
           </div>
 
           <select
             value={agentStatus}
-            onChange={(e) => setAgentStatus(e.target.value as AgentStatus)}
+            onChange={e => setAgentStatus(e.target.value as AgentStatus)}
             disabled={isCallActive || isIncomingCall}
             className="appearance-none bg-muted text-foreground text-xs uppercase tracking-widest pl-3 pr-8 py-1.5 rounded border border-border focus:border-primary focus:outline-none cursor-pointer disabled:opacity-50"
           >
@@ -63,13 +66,17 @@ export function CallCenterHeader({
           {/* Script Selector */}
           <select
             value={selectedScript}
-            onChange={(e) => setSelectedScript(e.target.value as SelectedScript)}
+            onChange={e => setSelectedScript(e.target.value as SelectedScript)}
             className="appearance-none bg-muted text-foreground text-xs uppercase tracking-widest pl-3 pr-8 py-1.5 rounded border border-border focus:border-primary focus:outline-none cursor-pointer"
             title="Select call script"
           >
+            <option value="hvac">HVAC</option>
             <option value="sales">Contractor</option>
             {canAccessRetentionScript && <option value="retention">Retention</option>}
             <option value="underwriting">Underwriting</option>
+            <option value="verification">Verification</option>
+            <option value="cold_call_transfer">Cold Call Transfer</option>
+            <option value="better_plan_callback">Better Plan Callback</option>
           </select>
         </div>
 

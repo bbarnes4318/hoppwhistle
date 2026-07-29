@@ -76,3 +76,6 @@ __pycache__/
 pause.flag
 *.log
 recordings/
+
+# Exposed provider keys / research spec — never commit
+deep.md

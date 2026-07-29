@@ -2,7 +2,15 @@
  * Provisioning service types and interfaces
  */
 
-export type Provider = 'local' | 'signalwire' | 'telnyx' | 'bandwidth' | 'clec' | 'anveo' | 'bulkvs';
+export type Provider =
+  | 'local'
+  | 'signalwire'
+  | 'telnyx'
+  | 'bandwidth'
+  | 'clec'
+  | 'anveo'
+  | 'bulkvs'
+  | 'fractel';
 
 export type NumberStatus = 'available' | 'assigned' | 'released' | 'pending' | 'failed';
 
@@ -39,6 +47,8 @@ export interface ListNumbersOptions {
   features?: NumberFeatures;
   limit?: number;
   offset?: number;
+  /** Search local (default) or toll-free inventory, for carriers that support both. */
+  numberType?: 'local' | 'tollfree';
 }
 
 export interface AssignNumberRequest {

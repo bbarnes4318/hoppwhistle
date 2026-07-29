@@ -1,0 +1,22 @@
+# Task Checklist - Upgrading Call Logs to Operations Screen
+
+- [x] **Backend API Enhancements**
+  - [x] Update `mapCallRecord` helper in `apps/api/src/routes/index.ts` to include all requested fields and compute `billableReason`, `margin`, and extract RTB metadata.
+  - [x] Implement role-scoped financial visibility checks in `mapCallRecord`.
+  - [x] Update `GET /api/v1/calls/:callId` to include timeline legs, CDRs, ledger entries (accruals), manual adjustments (transactions), and side-load the matching `PingRequest` with bids.
+  - [x] Apply role-scoping inside `GET /api/v1/calls/:callId` for relations.
+  - [x] Update `/api/v1/calls/export.csv` to export the new columns with proper role scoping.
+- [x] **Frontend Call Logs UI Upgrades**
+  - [x] Upgrade columns in `apps/web/src/app/(dashboard)/calls/page.tsx` based on the user's role.
+  - [x] Add filters for Publisher, Buyer, Campaign, and Dispute Status.
+  - [x] Fetch Lead Lists on Call Logs Page
+  - [x] Add Lead Lists Dropdown to Filter Panel
+  - [x] Pass listId query param in fetchCalls and handleExportCSV
+  - [x] Build the interactive sliding `CallDetailDrawer` component.
+  - [x] Implement drawer tabs: Timeline, Billing & Ledger, Ping/Post, Audio & Transcript, and Admin Actions.
+  - [x] Integrate the detail drawer trigger on row click.
+- [x] **Deployment**
+  - [x] Commit, push, deploy, and verify changes on Hetzner server
+- [x] **Verification & Validation**
+  - [x] Run type-checking on both backend and frontend to verify compilation of modified files.
+  - [x] Confirm role-based views load correctly without leakage.

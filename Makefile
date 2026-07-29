@@ -37,7 +37,7 @@ help: ## Show this help message
 
 up: ## Start all services
 	@echo "$(BLUE)Starting Hopwhistle services...$(NC)"
-	@docker-compose $(COMPOSE_FILES) up -d
+	@docker compose $(COMPOSE_FILES) up -d
 	@echo "$(GREEN)✓ Services started$(NC)"
 	@echo ""
 	@echo "$(YELLOW)Waiting for services to be ready...$(NC)"
@@ -55,82 +55,82 @@ up: ## Start all services
 
 down: ## Stop all services
 	@echo "$(BLUE)Stopping Hopwhistle services...$(NC)"
-	@docker-compose $(COMPOSE_FILES) down
+	@docker compose $(COMPOSE_FILES) down
 	@echo "$(GREEN)✓ Services stopped$(NC)"
 
 restart: ## Restart all services
 	@echo "$(BLUE)Restarting Hopwhistle services...$(NC)"
-	@docker-compose $(COMPOSE_FILES) restart
+	@docker compose $(COMPOSE_FILES) restart
 	@echo "$(GREEN)✓ Services restarted$(NC)"
 
 build: ## Build all Docker images
 	@echo "$(BLUE)Building Docker images...$(NC)"
-	@docker-compose $(COMPOSE_FILES) build --no-cache
+	@docker compose $(COMPOSE_FILES) build --no-cache
 	@echo "$(GREEN)✓ Images built$(NC)"
 
 ps: ## Show running services
-	@docker-compose $(COMPOSE_FILES) ps
+	@docker compose $(COMPOSE_FILES) ps
 
 logs: ## View logs from all services
-	@docker-compose $(COMPOSE_FILES) logs -f
+	@docker compose $(COMPOSE_FILES) logs -f
 
 logs-api: ## View API logs
-	@docker-compose $(COMPOSE_FILES) logs -f api
+	@docker compose $(COMPOSE_FILES) logs -f api
 
 logs-web: ## View Web logs
-	@docker-compose $(COMPOSE_FILES) logs -f web
+	@docker compose $(COMPOSE_FILES) logs -f web
 
 logs-worker: ## View Worker logs
-	@docker-compose $(COMPOSE_FILES) logs -f worker
+	@docker compose $(COMPOSE_FILES) logs -f worker
 
 logs-freeswitch: ## View FreeSWITCH logs
-	@docker-compose $(COMPOSE_FILES) logs -f freeswitch
+	@docker compose $(COMPOSE_FILES) logs -f freeswitch
 
 seed: ## Seed the database
 	@echo "$(BLUE)Seeding database...$(NC)"
-	@docker-compose $(COMPOSE_FILES) exec api sh -c "cd /app && pnpm --filter @hopwhistle/api db:seed" || \
+	@docker compose $(COMPOSE_FILES) exec api sh -c "cd /app && pnpm --filter @hopwhistle/api db:seed" || \
 		echo "$(YELLOW)Note: Run 'pnpm db:seed' locally if seeding fails$(NC)"
 	@echo "$(GREEN)✓ Database seeded$(NC)"
 
 migrate: ## Run database migrations
 	@echo "$(BLUE)Running database migrations...$(NC)"
-	@docker-compose $(COMPOSE_FILES) exec api sh -c "cd /app && pnpm --filter @hopwhistle/api db:migrate" || \
+	@docker compose $(COMPOSE_FILES) exec api sh -c "cd /app && pnpm --filter @hopwhistle/api db:migrate" || \
 		echo "$(YELLOW)Note: Run 'pnpm db:migrate' locally if migration fails$(NC)"
 	@echo "$(GREEN)✓ Migrations completed$(NC)"
 
 health: ## Check service health
 	@echo "$(BLUE)Checking service health...$(NC)"
-	@docker-compose $(COMPOSE_FILES) ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}" | grep -E "(NAME|hopwhistle)" || true
+	@docker compose $(COMPOSE_FILES) ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}" | grep -E "(NAME|hopwhistle)" || true
 	@echo ""
 
 clean: ## Remove all containers, volumes, and networks (use clean-force to skip confirmation)
 	@echo "$(RED)WARNING: This will remove all containers, volumes, and networks!$(NC)"
 	@echo "Run 'make clean-force' to skip confirmation"
-	@docker-compose $(COMPOSE_FILES) down -v --remove-orphans
+	@docker compose $(COMPOSE_FILES) down -v --remove-orphans
 	@echo "$(GREEN)✓ Cleanup complete$(NC)"
 
 clean-force: ## Force remove all containers, volumes, and networks (no confirmation)
-	@docker-compose $(COMPOSE_FILES) down -v --remove-orphans
+	@docker compose $(COMPOSE_FILES) down -v --remove-orphans
 	@echo "$(GREEN)✓ Cleanup complete$(NC)"
 
 clean-volumes: ## Remove all volumes (WARNING: deletes data)
 	@echo "$(RED)WARNING: This will delete all volumes and data!$(NC)"
-	@docker-compose $(COMPOSE_FILES) down -v
+	@docker compose $(COMPOSE_FILES) down -v
 	@docker volume prune -f
 	@echo "$(GREEN)✓ Volumes removed$(NC)"
 
 shell-api: ## Open shell in API container
-	@docker-compose $(COMPOSE_FILES) exec api sh
+	@docker compose $(COMPOSE_FILES) exec api sh
 
 shell-postgres: ## Open shell in Postgres container
-	@docker-compose $(COMPOSE_FILES) exec postgres psql -U callfabric -d callfabric
+	@docker compose $(COMPOSE_FILES) exec postgres psql -U callfabric -d callfabric
 
 shell-redis: ## Open Redis CLI
-	@docker-compose $(COMPOSE_FILES) exec redis redis-cli
+	@docker compose $(COMPOSE_FILES) exec redis redis-cli
 
 test: ## Run tests
 	@echo "$(BLUE)Running tests...$(NC)"
-	@docker-compose $(COMPOSE_FILES) exec api sh -c "cd /app && pnpm test" || \
+	@docker compose $(COMPOSE_FILES) exec api sh -c "cd /app && pnpm test" || \
 		echo "$(YELLOW)Note: Run 'pnpm test' locally if tests fail$(NC)"
 
 test-sip: ## Run SIP tests

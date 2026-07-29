@@ -14,6 +14,61 @@ import { buyerStatsService } from '../services/buyer-stats-service.js';
 type AuthRequest = FastifyRequest & { user?: AuthenticatedUser };
 
 export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Promise<void> {
+  const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+
+  // Helper to get authenticated user profile (role, buyerId, publisherId)
+  async function getUserProfile(request: any) {
+    const user = request.user;
+    let userRoles: string[] = [];
+    let buyerId: string | null = null;
+    let publisherId: string | null = null;
+
+    if (user?.userId) {
+      const userRecord = await prisma.user.findUnique({
+        where: { id: user.userId },
+        include: { roles: { include: { role: true } } },
+      });
+      if (userRecord) {
+        userRoles = userRecord.roles.map((ur: any) => ur.role.name) || [];
+        buyerId = userRecord.buyerId || null;
+        publisherId = userRecord.publisherId || (userRecord.metadata as any)?.publisherId || null;
+      }
+    }
+
+    if (user?.roles && Array.isArray(user.roles)) {
+      for (const r of user.roles) {
+        if (!userRoles.includes(r)) userRoles.push(r);
+      }
+    }
+
+    const isAdminOrOwner = userRoles.some(role => role === 'ADMIN' || role === 'OWNER' || role === 'AGENT') || 
+                           (user?.roles?.some((role: string) => role === 'ADMIN' || role === 'OWNER' || role === 'AGENT') ?? false);
+
+    return {
+      isAdminOrOwner,
+      userRoles,
+      buyerId,
+      publisherId,
+    };
+  }
+
+  // Helper to verify buyer access permissions
+  async function checkBuyerAccess(buyerId: string, profile: any, tenantId: string): Promise<boolean> {
+    if (profile.isAdminOrOwner) {
+      return true;
+    }
+    if (profile.userRoles.includes('BUYER')) {
+      return buyerId === profile.buyerId;
+    }
+    if (profile.userRoles.includes('PUBLISHER')) {
+      const buyerRecord = await prisma.buyer.findFirst({
+        where: { id: buyerId, tenantId, publisherId: profile.publisherId }
+      });
+      return !!buyerRecord;
+    }
+    return false;
+  }
+
   /**
    * GET /api/v1/buyers/upfront-balances
    * Get all Upfront buyers with their balances for dashboard widget
@@ -29,12 +84,30 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
     }
 
     const balances = await buyerBillingService.getUpfrontBuyerBalances(tenantId);
+    const profile = await getUserProfile(request);
+    let filteredBalances = balances;
+
+    if (!profile.isAdminOrOwner) {
+      if (profile.userRoles.includes('BUYER')) {
+        filteredBalances = balances.filter(b => b.id === profile.buyerId);
+      } else if (profile.userRoles.includes('PUBLISHER')) {
+        // Find buyers managed by publisher
+        const managedBuyers = await prisma.buyer.findMany({
+          where: { tenantId, publisherId: profile.publisherId },
+          select: { id: true },
+        });
+        const managedIds = managedBuyers.map(b => b.id);
+        filteredBalances = balances.filter(b => managedIds.includes(b.id));
+      } else {
+        filteredBalances = [];
+      }
+    }
 
     return {
-      data: balances,
+      data: filteredBalances,
       meta: {
-        total: balances.length,
-        lowBalanceCount: balances.filter(b => b.isLowBalance).length,
+        total: filteredBalances.length,
+        lowBalanceCount: filteredBalances.filter(b => b.isLowBalance).length,
       },
     };
   });
@@ -62,12 +135,19 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
     }
 
     const { buyerId } = request.params;
+    const profile = await getUserProfile(request);
+    const isAllowed = await checkBuyerAccess(buyerId, profile, tenantId);
+
+    if (!isAllowed) {
+      void reply.code(403);
+      return { error: { code: 'FORBIDDEN', message: 'Access denied to this buyer transactions' } };
+    }
+
     const page = parseInt(request.query.page || '1', 10);
     const limit = parseInt(request.query.limit || '50', 10);
     const offset = (page - 1) * limit;
 
     // Verify buyer belongs to tenant
-    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
     const buyer = await prisma.buyer.findFirst({
       where: { id: buyerId, tenantId },
       include: {
@@ -95,6 +175,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
         publisherName: buyer.publisher.name,
         billingType: buyer.billingType,
         leadsRemaining: buyer.leadsRemaining,
+        walletBalance: Number(buyer.walletBalance),
         billableDuration: buyer.billableDuration,
         status: buyer.status,
       },
@@ -137,7 +218,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
     }
 
     // Require admin role for adding credits
-    const isAdmin = user?.roles?.some(r => r === 'ADMIN' || r === 'OWNER') ?? false;
+    const isAdmin = user?.roles?.some(r => r === 'ADMIN' || r === 'OWNER' || r === 'AGENT') ?? false;
     if (!demoTenantId && !isAdmin) {
       void reply.code(403);
       return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
@@ -146,9 +227,9 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
     const { buyerId } = request.params;
     const { amount, description } = request.body;
 
-    if (!amount || amount < 1) {
+    if (!amount || amount <= 0) {
       void reply.code(400);
-      return { error: { code: 'VALIDATION_ERROR', message: 'Amount must be at least 1' } };
+      return { error: { code: 'VALIDATION_ERROR', message: 'Amount must be greater than 0' } };
     }
 
     // Verify buyer belongs to tenant
@@ -186,7 +267,8 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       buyerId,
       amount,
       newBalance: result.newBalance,
-      message: `Added ${amount} leads to buyer wallet`,
+      walletBalance: result.newBalance,
+      message: `Added $${Number(amount).toFixed(2)} to buyer wallet`,
     };
   });
 
@@ -215,9 +297,22 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
     const limit = parseInt(request.query.limit || '50', 10);
     const skip = (page - 1) * limit;
 
-    const where: { tenantId: string; billingType?: 'TERMS' | 'UPFRONT' } = { tenantId };
+    const profile = await getUserProfile(request);
+
+    const where: any = { tenantId };
     if (request.query.billingType) {
       where.billingType = request.query.billingType;
+    }
+
+    if (!profile.isAdminOrOwner) {
+      if (profile.userRoles.includes('BUYER')) {
+        where.id = profile.buyerId;
+      } else if (profile.userRoles.includes('PUBLISHER')) {
+        where.publisherId = profile.publisherId;
+      } else {
+        void reply.code(403);
+        return { error: { code: 'FORBIDDEN', message: 'Access denied' } };
+      }
     }
 
     const [buyers, total] = await Promise.all([
@@ -243,6 +338,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
         status: b.status,
         billingType: b.billingType,
         leadsRemaining: b.leadsRemaining,
+        walletBalance: Number(b.walletBalance),
         billableDuration: b.billableDuration,
         canPauseTargets: b.canPauseTargets,
         canSetCaps: b.canSetCaps,
@@ -289,6 +385,12 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
     }
 
+    const profile = await getUserProfile(request);
+    if (!profile.isAdminOrOwner) {
+      void reply.code(403);
+      return { error: { code: 'FORBIDDEN', message: 'Admin access required to create buyers' } };
+    }
+
     const {
       name,
       code,
@@ -297,6 +399,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       billingType,
       billableDuration,
       leadsRemaining,
+      walletBalance,
       canPauseTargets,
       canSetCaps,
       canDisputeConversions,
@@ -346,7 +449,8 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
         subId: subId?.trim() || null,
         billingType: billingType || 'TERMS',
         billableDuration: billableDuration || 60,
-        leadsRemaining: leadsRemaining || 0,
+        leadsRemaining: leadsRemaining !== undefined ? leadsRemaining : Math.floor(walletBalance || 0),
+        walletBalance: walletBalance !== undefined ? walletBalance : (leadsRemaining || 0),
         canPauseTargets: canPauseTargets ?? false,
         canSetCaps: canSetCaps ?? false,
         canDisputeConversions: canDisputeConversions ?? false,
@@ -383,7 +487,61 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       status: buyer.status,
       billingType: buyer.billingType,
       leadsRemaining: buyer.leadsRemaining,
+      walletBalance: Number(buyer.walletBalance),
       billableDuration: buyer.billableDuration,
+      publisher: buyer.publisher,
+      createdAt: buyer.createdAt.toISOString(),
+      updatedAt: buyer.updatedAt.toISOString(),
+    };
+  });
+
+  /**
+   * GET /api/v1/buyers/:buyerId
+   * Get a single buyer's details
+   */
+  fastify.get<{
+    Params: { buyerId: string };
+  }>('/api/v1/buyers/:buyerId', async (request, reply) => {
+    const { buyerId } = request.params;
+    const user = (request as AuthRequest).user;
+    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
+    const tenantId = demoTenantId || user?.tenantId;
+    if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+
+    const userRecord = await prisma.user.findUnique({
+      where: { id: user?.userId },
+      include: { roles: { include: { role: true } } },
+    });
+    const roles = userRecord?.roles.map((ur: any) => ur.role.name) || [];
+    const isAdminOrOwner = roles.some(role => role === 'ADMIN' || role === 'OWNER' || role === 'AGENT');
+
+    if (!isAdminOrOwner && userRecord?.buyerId !== buyerId) {
+      return reply.code(403).send({ error: 'Forbidden' });
+    }
+
+    const buyer = await prisma.buyer.findUnique({
+      where: { id: buyerId },
+      include: {
+        publisher: { select: { id: true, name: true } },
+      },
+    });
+
+    if (!buyer || buyer.tenantId !== tenantId) {
+      return reply.code(404).send({ error: 'Buyer not found' });
+    }
+
+    return {
+      id: buyer.id,
+      name: buyer.name,
+      code: buyer.code,
+      status: buyer.status,
+      billingType: buyer.billingType,
+      leadsRemaining: buyer.leadsRemaining,
+      walletBalance: Number(buyer.walletBalance),
+      billableDuration: buyer.billableDuration,
+      canPauseTargets: buyer.canPauseTargets,
+      canSetCaps: buyer.canSetCaps,
+      canDisputeConversions: buyer.canDisputeConversions,
       publisher: buyer.publisher,
       createdAt: buyer.createdAt.toISOString(),
       updatedAt: buyer.updatedAt.toISOString(),
@@ -403,6 +561,8 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       status?: 'ACTIVE' | 'INACTIVE' | 'PAUSED';
       billingType?: 'TERMS' | 'UPFRONT';
       billableDuration?: number;
+      leadsRemaining?: number;
+      walletBalance?: number;
       canPauseTargets?: boolean;
       canSetCaps?: boolean;
       canDisputeConversions?: boolean;
@@ -418,6 +578,12 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
     }
 
     const { buyerId } = request.params;
+    const profile = await getUserProfile(request);
+    if (!profile.isAdminOrOwner) {
+      void reply.code(403);
+      return { error: { code: 'FORBIDDEN', message: 'Admin access required to update buyers' } };
+    }
+
     const {
       name,
       code,
@@ -425,6 +591,8 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       status,
       billingType,
       billableDuration,
+      leadsRemaining,
+      walletBalance,
       canPauseTargets,
       canSetCaps,
       canDisputeConversions,
@@ -447,6 +615,18 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
     if (status !== undefined) updateData.status = status;
     if (billingType !== undefined) updateData.billingType = billingType;
     if (billableDuration !== undefined) updateData.billableDuration = billableDuration;
+    if (leadsRemaining !== undefined) {
+      updateData.leadsRemaining = leadsRemaining;
+      if (walletBalance === undefined) {
+        updateData.walletBalance = leadsRemaining;
+      }
+    }
+    if (walletBalance !== undefined) {
+      updateData.walletBalance = walletBalance;
+      if (leadsRemaining === undefined) {
+        updateData.leadsRemaining = Math.floor(walletBalance);
+      }
+    }
     if (canPauseTargets !== undefined) updateData.canPauseTargets = canPauseTargets;
     if (canSetCaps !== undefined) updateData.canSetCaps = canSetCaps;
     if (canDisputeConversions !== undefined)
@@ -476,6 +656,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       status: buyer.status,
       billingType: buyer.billingType,
       leadsRemaining: buyer.leadsRemaining,
+      walletBalance: Number(buyer.walletBalance),
       billableDuration: buyer.billableDuration,
       canPauseTargets: buyer.canPauseTargets,
       canSetCaps: buyer.canSetCaps,
@@ -505,10 +686,27 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
     }
 
     const stats = await buyerStatsService.getBuyerStatsBulk(tenantId);
+    const profile = await getUserProfile(request);
+    let filteredStats = stats;
+
+    if (!profile.isAdminOrOwner) {
+      if (profile.userRoles.includes('BUYER')) {
+        filteredStats = stats.filter(s => s.buyerId === profile.buyerId);
+      } else if (profile.userRoles.includes('PUBLISHER')) {
+        const managedBuyers = await prisma.buyer.findMany({
+          where: { tenantId, publisherId: profile.publisherId },
+          select: { id: true },
+        });
+        const managedIds = managedBuyers.map(b => b.id);
+        filteredStats = stats.filter(s => managedIds.includes(s.buyerId));
+      } else {
+        filteredStats = [];
+      }
+    }
 
     return {
-      data: stats,
-      meta: { total: stats.length },
+      data: filteredStats,
+      meta: { total: filteredStats.length },
     };
   });
 
@@ -529,9 +727,15 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
     }
 
     const { buyerId } = request.params;
+    const profile = await getUserProfile(request);
+    const isAllowed = await checkBuyerAccess(buyerId, profile, tenantId);
+
+    if (!isAllowed) {
+      void reply.code(403);
+      return { error: { code: 'FORBIDDEN', message: 'Access denied to this buyer stats' } };
+    }
 
     // Verify buyer belongs to tenant
-    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
     const buyer = await prisma.buyer.findFirst({
       where: { id: buyerId, tenantId },
     });
@@ -577,9 +781,15 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
     }
 
     const { buyerId } = request.params;
+    const profile = await getUserProfile(request);
+    const isAllowed = await checkBuyerAccess(buyerId, profile, tenantId);
+
+    if (!isAllowed) {
+      void reply.code(403);
+      return { error: { code: 'FORBIDDEN', message: 'Access denied to this buyer live-status' } };
+    }
 
     // Verify buyer belongs to tenant
-    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
     const buyer = await prisma.buyer.findFirst({
       where: { id: buyerId, tenantId },
     });
@@ -614,8 +824,13 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
     }
 
     const { buyerId } = request.params;
+    const profile = await getUserProfile(request);
+    const isAllowed = await checkBuyerAccess(buyerId, profile, tenantId);
 
-    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+    if (!isAllowed) {
+      void reply.code(403);
+      return { error: { code: 'FORBIDDEN', message: 'Access denied to this buyer targets' } };
+    }
 
     // Verify buyer belongs to tenant
     const buyer = await prisma.buyer.findFirst({
@@ -689,6 +904,14 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
     }
 
     const { buyerId } = request.params;
+    const profile = await getUserProfile(request);
+    const isAllowed = await checkBuyerAccess(buyerId, profile, tenantId);
+
+    if (!isAllowed) {
+      void reply.code(403);
+      return { error: { code: 'FORBIDDEN', message: 'Access denied to manage this buyer targets' } };
+    }
+
     const {
       name,
       type,
@@ -717,8 +940,6 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       void reply.code(400);
       return { error: { code: 'VALIDATION_ERROR', message: 'Destination is required' } };
     }
-
-    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
 
     // Verify buyer belongs to tenant
     const buyer = await prisma.buyer.findFirst({
@@ -805,6 +1026,14 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
     }
 
     const { buyerId, targetId } = request.params;
+    const profile = await getUserProfile(request);
+    const isAllowed = await checkBuyerAccess(buyerId, profile, tenantId);
+
+    if (!isAllowed) {
+      void reply.code(403);
+      return { error: { code: 'FORBIDDEN', message: 'Access denied to manage this buyer targets' } };
+    }
+
     const {
       name,
       type,
@@ -821,8 +1050,6 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       basePrice,
       pricingRules,
     } = request.body;
-
-    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
 
     // Verify buyer belongs to tenant
     const buyer = await prisma.buyer.findFirst({
@@ -903,8 +1130,13 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
     }
 
     const { buyerId, targetId } = request.params;
+    const profile = await getUserProfile(request);
+    const isAllowed = await checkBuyerAccess(buyerId, profile, tenantId);
 
-    const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+    if (!isAllowed) {
+      void reply.code(403);
+      return { error: { code: 'FORBIDDEN', message: 'Access denied to manage this buyer targets' } };
+    }
 
     // Verify buyer belongs to tenant
     const buyer = await prisma.buyer.findFirst({
