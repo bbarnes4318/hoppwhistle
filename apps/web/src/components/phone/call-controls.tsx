@@ -10,6 +10,7 @@ import {
   PhoneOff,
   Play,
   UserPlus,
+  type LucideIcon,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -18,6 +19,72 @@ import { CallTransferDialog } from './call-transfer-dialog';
 import { usePhone } from './phone-provider';
 
 import { cn } from '@/lib/utils';
+
+// ============================================================================
+// Control Button
+// ============================================================================
+
+type ControlTone = 'red' | 'amber' | 'cyan' | 'purple';
+
+const toneStyles: Record<ControlTone, { ring: string; icon: string }> = {
+  red: { ring: 'bg-red-500/20 border-red-500', icon: 'text-red-400' },
+  amber: { ring: 'bg-amber-500/20 border-amber-500', icon: 'text-amber-400' },
+  cyan: { ring: 'bg-cyan-500/20 border-cyan-500', icon: 'text-cyan-400' },
+  purple: { ring: 'bg-purple-500/20 border-purple-500', icon: 'text-purple-400' },
+};
+
+interface ControlButtonProps {
+  icon: LucideIcon;
+  label: string;
+  onClick: () => void;
+  /** Renders the button in its "engaged" colour (muted, on hold, keypad open). */
+  active?: boolean;
+  disabled?: boolean;
+  title?: string;
+  tone?: ControlTone;
+  pulse?: boolean;
+}
+
+function ControlButton({
+  icon: Icon,
+  label,
+  onClick,
+  active = false,
+  disabled = false,
+  title,
+  tone = 'red',
+  pulse = false,
+}: ControlButtonProps): JSX.Element {
+  const styles = toneStyles[tone];
+
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title ?? label}
+      className={cn(
+        'flex flex-col items-center gap-1.5 min-w-0',
+        'transition-transform duration-150',
+        disabled ? 'cursor-not-allowed opacity-40' : 'hover:scale-105 active:scale-95'
+      )}
+    >
+      <div
+        className={cn(
+          'w-12 h-12 rounded-full flex items-center justify-center shrink-0',
+          'border-2 transition-all duration-200',
+          active
+            ? styles.ring
+            : 'bg-white/10 border-transparent hover:bg-white/15 hover:border-white/10'
+        )}
+      >
+        <Icon
+          className={cn('w-5 h-5', active ? styles.icon : 'text-white', pulse && 'animate-pulse')}
+        />
+      </div>
+      <span className="text-[10px] leading-tight text-gray-400 truncate max-w-full">{label}</span>
+    </button>
+  );
+}
 
 // ============================================================================
 // Call Controls Component
@@ -33,7 +100,6 @@ export function CallControls(): JSX.Element {
     canMerge,
     isMerging,
     mergeCalls,
-    addThirdParty,
   } = usePhone();
   const [showTransfer, setShowTransfer] = useState(false);
   const [showKeypad, setShowKeypad] = useState(false);
@@ -103,174 +169,59 @@ export function CallControls(): JSX.Element {
       {/* Transfer Dialog */}
       {showTransfer && <CallTransferDialog onClose={() => setShowTransfer(false)} />}
 
-      {/* Add Call Dialog */}
-      {showAddCall && (
-        <AddCallDialog
-          onClose={() => setShowAddCall(false)}
-          onAddCall={(phoneNumber: string) => {
-            void addThirdParty(phoneNumber);
-            setShowAddCall(false);
-          }}
-        />
-      )}
+      {/* Add Call Dialog — dials the third party itself via the phone context. */}
+      {showAddCall && <AddCallDialog onClose={() => setShowAddCall(false)} />}
 
-      {/* Controls Grid */}
       <div className="space-y-4">
-        {/* Main Controls */}
-        <div className="flex items-center justify-center gap-4">
-          {/* Mute Button */}
-          <button
+        {/* Controls grid.
+            A wrapping 3-column grid rather than a single flex row: the phone
+            panel is only 340px wide, and six 56px buttons plus gaps needed
+            ~416px — which pushed Merge, the last button, off the right edge. */}
+        <div className="grid grid-cols-3 gap-x-2 gap-y-3 justify-items-center">
+          <ControlButton
+            icon={isMuted ? MicOff : Mic}
+            label={isMuted ? 'Unmute' : 'Mute'}
             onClick={handleMute}
-            className={cn(
-              'group relative flex flex-col items-center gap-1.5',
-              'transition-transform hover:scale-105 active:scale-95'
-            )}
-          >
-            <div
-              className={cn(
-                'w-14 h-14 rounded-full flex items-center justify-center',
-                'transition-all duration-200',
-                isMuted
-                  ? 'bg-red-500/20 border-2 border-red-500'
-                  : 'bg-white/10 border-2 border-transparent hover:bg-white/15'
-              )}
-            >
-              {isMuted ? (
-                <MicOff className="w-6 h-6 text-red-400" />
-              ) : (
-                <Mic className="w-6 h-6 text-white" />
-              )}
-            </div>
-            <span className="text-xs text-gray-400">{isMuted ? 'Unmute' : 'Mute'}</span>
-          </button>
+            active={isMuted}
+          />
 
-          {/* Hold Button */}
-          <button
+          <ControlButton
+            icon={isOnHold ? Play : Pause}
+            label={isOnHold ? 'Resume' : 'Hold'}
             onClick={handleHold}
-            className={cn(
-              'group relative flex flex-col items-center gap-1.5',
-              'transition-transform hover:scale-105 active:scale-95'
-            )}
-          >
-            <div
-              className={cn(
-                'w-14 h-14 rounded-full flex items-center justify-center',
-                'transition-all duration-200',
-                isOnHold
-                  ? 'bg-amber-500/20 border-2 border-amber-500'
-                  : 'bg-white/10 border-2 border-transparent hover:bg-white/15'
-              )}
-            >
-              {isOnHold ? (
-                <Play className="w-6 h-6 text-amber-400" />
-              ) : (
-                <Pause className="w-6 h-6 text-white" />
-              )}
-            </div>
-            <span className="text-xs text-gray-400">{isOnHold ? 'Resume' : 'Hold'}</span>
-          </button>
+            active={isOnHold}
+            tone="amber"
+          />
 
-          {/* Transfer Button */}
-          <button
-            onClick={handleTransfer}
-            className={cn(
-              'group relative flex flex-col items-center gap-1.5',
-              'transition-transform hover:scale-105 active:scale-95'
-            )}
-          >
-            <div
-              className={cn(
-                'w-14 h-14 rounded-full flex items-center justify-center',
-                'bg-white/10 border-2 border-transparent hover:bg-white/15',
-                'transition-all duration-200'
-              )}
-            >
-              <PhoneForwarded className="w-6 h-6 text-white" />
-            </div>
-            <span className="text-xs text-gray-400">Transfer</span>
-          </button>
+          <ControlButton icon={PhoneForwarded} label="Transfer" onClick={handleTransfer} />
 
-          {/* Keypad Button */}
-          <button
+          <ControlButton
+            icon={Grid}
+            label="Keypad"
             onClick={() => setShowKeypad(!showKeypad)}
-            className={cn(
-              'group relative flex flex-col items-center gap-1.5',
-              'transition-transform hover:scale-105 active:scale-95'
-            )}
-          >
-            <div
-              className={cn(
-                'w-14 h-14 rounded-full flex items-center justify-center',
-                'transition-all duration-200',
-                showKeypad
-                  ? 'bg-cyan-500/20 border-2 border-cyan-500'
-                  : 'bg-white/10 border-2 border-transparent hover:bg-white/15'
-              )}
-            >
-              <Grid className="w-6 h-6 text-white" />
-            </div>
-            <span className="text-xs text-gray-400">Keypad</span>
-          </button>
+            active={showKeypad}
+            tone="cyan"
+          />
 
-          {/* Add Call Button */}
-          <button
-            onClick={handleAddCall}
-            className={cn(
-              'group relative flex flex-col items-center gap-1.5',
-              'transition-transform hover:scale-105 active:scale-95'
-            )}
-          >
-            <div
-              className={cn(
-                'w-14 h-14 rounded-full flex items-center justify-center',
-                'bg-white/10 border-2 border-transparent hover:bg-white/15',
-                'transition-all duration-200'
-              )}
-            >
-              <UserPlus className="w-6 h-6 text-white" />
-            </div>
-            <span className="text-xs text-gray-400">Add Call</span>
-          </button>
+          <ControlButton icon={UserPlus} label="Add Call" onClick={handleAddCall} />
 
-          {/* Merge Button (Only appears when there is a held call).
- Stays disabled until the added call is actually answered — merging a
- ringing leg tears down both calls. */}
+          {/* Only shown once a second call exists, and only enabled once that
+              call is answered — merging a ringing leg tears down both calls. */}
           {hasHeldCalls && (
-            <button
+            <ControlButton
+              icon={Merge}
+              label={isMerging ? 'Merging…' : canMerge ? 'Merge' : 'Ringing…'}
               onClick={handleMerge}
+              active={canMerge}
               disabled={!canMerge}
+              tone="purple"
+              pulse={isMerging}
               title={
                 canMerge
                   ? 'Merge both calls into a 3-way conference'
                   : 'Waiting for the added call to be answered'
               }
-              className={cn(
-                'group relative flex flex-col items-center gap-1.5',
-                'transition-transform',
-                canMerge ? 'hover:scale-105 active:scale-95' : 'cursor-not-allowed opacity-50'
-              )}
-            >
-              <div
-                className={cn(
-                  'w-14 h-14 rounded-full flex items-center justify-center',
-                  'transition-all duration-200',
-                  canMerge
-                    ? 'bg-purple-500/20 border-2 border-purple-500'
-                    : 'bg-white/5 border-2 border-white/10'
-                )}
-              >
-                <Merge
-                  className={cn(
-                    'w-6 h-6',
-                    canMerge ? 'text-purple-400' : 'text-gray-500',
-                    isMerging && 'animate-pulse'
-                  )}
-                />
-              </div>
-              <span className="text-xs text-gray-400">
-                {isMerging ? 'Merging…' : canMerge ? 'Merge' : 'Ringing…'}
-              </span>
-            </button>
+            />
           )}
         </div>
 
@@ -281,15 +232,13 @@ export function CallControls(): JSX.Element {
         <button
           onClick={handleHangup}
           className={cn(
-            'w-full py-4 rounded-xl flex items-center justify-center gap-3',
-            'bg-destructive',
-            'hover: hover:',
-            'shadow-lg hover:shadow-sm hover:',
-            'transition-all duration-200',
-            'active:scale-98'
+            'w-full py-3.5 rounded-xl flex items-center justify-center gap-3',
+            'bg-destructive hover:bg-destructive/90',
+            'shadow-lg shadow-destructive/20',
+            'transition-all duration-200 active:scale-[0.98]'
           )}
         >
-          <PhoneOff className="w-6 h-6 text-white" />
+          <PhoneOff className="w-5 h-5 text-white" />
           <span className="text-white font-semibold">End Call</span>
         </button>
 
@@ -316,13 +265,13 @@ function InCallKeypad(): JSX.Element {
   const digits = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'];
 
   return (
-    <div className="grid grid-cols-3 gap-2 p-4 bg-white/5 rounded-xl">
+    <div className="grid grid-cols-3 gap-2 p-3 bg-white/5 rounded-xl">
       {digits.map(digit => (
         <button
           key={digit}
           onClick={() => sendDTMF(digit)}
           className={cn(
-            'h-12 rounded-lg flex items-center justify-center',
+            'h-11 rounded-lg flex items-center justify-center',
             'bg-white/5 hover:bg-white/10 active:bg-cyan-500/20',
             'text-white text-lg font-medium',
             'transition-all duration-150 active:scale-95'
