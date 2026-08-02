@@ -164,6 +164,26 @@ export class SipRegistrationRegistry {
     return true;
   }
 
+  /**
+   * Record a registration the resolver could not attribute. Public because the
+   * runtime, not the registry, owns the resolution decision.
+   */
+  quarantineUnresolved(
+    extension: string | null,
+    sipDomain: string | null,
+    subclass: string,
+    reason: string
+  ): void {
+    this.unattributed++;
+    this.quarantined.push({
+      extension,
+      sipDomain,
+      subclass: `${subclass}:${reason}`,
+      atMs: this.now(),
+    });
+    if (this.quarantined.length > 500) this.quarantined.splice(0, this.quarantined.length - 500);
+  }
+
   /** Registrations that could not be attributed to a verified tenant. */
   quarantinedRegistrations(): ReadonlyArray<{
     extension: string | null;

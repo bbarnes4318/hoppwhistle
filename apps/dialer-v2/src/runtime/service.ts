@@ -17,13 +17,14 @@ import { AssignmentResolver } from '../agents/assignments.js';
 import { ExtensionResolver } from '../agents/extension-resolver.js';
 import { AgentStateService, type ReconciliationCorrection } from '../agents/service.js';
 import { AgentSessionRegistry, SessionRejection, type AgentSession } from '../agents/sessions.js';
-import { SipRegistrationRegistry } from '../agents/sip-registry.js';
+import { SIP_REGISTRATION_SUBCLASSES, SipRegistrationRegistry } from '../agents/sip-registry.js';
 import { AgentState } from '../agents/state.js';
 import type { DialerV2Flags, FlagSource } from '../config/flags.js';
 import { EslClient, type EslStatus } from '../esl/client.js';
 import { SocketEslTransport } from '../esl/socket-transport.js';
 import { EventIngestor } from '../events/ingestor.js';
 import type { DedupeStore, EventStore } from '../events/store.js';
+import type { RawEslEvent } from '../events/types.js';
 import { ObservationCollector } from '../observation/collector.js';
 import { DialingMode } from '../pacing/controller.js';
 import {
@@ -158,7 +159,17 @@ export interface RuntimeStatus {
   shadowPassesSkippedForLock: number;
   shadowPassesAbandonedForLostLock: number;
   reconcilePassesSkippedForLock: number;
-  sip: { tracked: number; registered: number; processed: number; unattributed: number };
+  sip: {
+    tracked: number;
+    registered: number;
+    processed: number;
+    unattributed: number;
+    quarantined: number;
+  };
+  registrationsResolved: number;
+  registrationsQuarantined: number;
+  registrationsForgedTenant: number;
+  lastRegistrationRejection: string | null;
 }
 
 /** Every heartbeat outcome is auditable, accepted or not. */
@@ -192,6 +203,10 @@ export class DialerV2Runtime {
   private shadowPassesSkippedForLock = 0;
   private reconcilePassesSkippedForLock = 0;
   private shadowPassesAbandonedForLostLock = 0;
+  private registrationsResolved = 0;
+  private registrationsQuarantined = 0;
+  private registrationsForgedTenant = 0;
+  private lastRegistrationRejection: string | null = null;
 
   private readonly now: () => number;
   private readonly setTimer: (fn: () => void, ms: number) => unknown;
@@ -298,9 +313,16 @@ export class DialerV2Runtime {
           onCommand: redacted => this.log({ msg: 'esl command', command: redacted }),
         }),
       onRawEvent: raw => {
-        // sofia::register/unregister/expire carry SIP registration state, not
-        // call state. They go to the registry, not the call ingestor.
-        if (this.deps.sipRegistry.applyRegistrationEvent(raw)) return;
+        // sofia::* registration events carry endpoint state, not call state.
+        // They are routed by SUBCLASS, not by whether attribution succeeded —
+        // the previous code fell through to the call ingestor whenever the
+        // registry declined the event, which meant every registration lacking a
+        // trusted tenant variable was silently reprocessed as a call event.
+        const subclass = raw['Event-Subclass'];
+        if (subclass && SIP_REGISTRATION_SUBCLASSES.includes(subclass)) {
+          void this.handleRegistrationEvent(raw, subclass);
+          return;
+        }
         void this.ingestor.handleRaw(raw);
       },
       now: this.now,
@@ -319,6 +341,52 @@ export class DialerV2Runtime {
     this.reapTimer = null;
     this.eslClient?.stop();
     this.eslClient = null;
+  }
+
+  /**
+   * The single authoritative handler for every Sofia registration event.
+   *
+   * The SIP domain is a lookup INPUT. Identity comes back from the extension
+   * resolver, never from the event. A `variable_hopwhistle_tenant_id` on the
+   * event is not trusted either — it is only checked FOR AGREEMENT with the
+   * resolved binding, so a forged one causes rejection rather than acceptance.
+   *
+   * Returns true when applied, false when quarantined. Either way the event
+   * never reaches the call ingestor: a failed lookup is a quarantine, not a
+   * call event.
+   */
+  async handleRegistrationEvent(raw: RawEslEvent, subclass: string): Promise<boolean> {
+    const extension = raw['username'] ?? raw['from-user'] ?? raw['sip_auth_username'] ?? null;
+    const sipDomain = raw['domain_name'] ?? raw['sip_auth_realm'] ?? raw['realm'] ?? null;
+
+    const quarantine = (reason: string): false => {
+      this.registrationsQuarantined++;
+      this.lastRegistrationRejection = reason;
+      this.deps.sipRegistry.quarantineUnresolved(extension, sipDomain, subclass, reason);
+      this.log({ msg: 'registration quarantined', subclass, reason });
+      return false;
+    };
+
+    if (!extension || !sipDomain) return quarantine('MISSING_SIP_IDENTITY');
+
+    const resolution = await this.deps.extensions.forSipIdentity(extension, sipDomain);
+    if (!resolution.ok) return quarantine(resolution.rejection);
+
+    const binding = resolution.binding;
+
+    // A tenant variable on the event is corroboration, not authority. If it
+    // disagrees with the database binding, something is wrong — a
+    // misconfiguration or a forged header — and neither answer is safe to use.
+    const claimedTenant =
+      raw['variable_hopwhistle_tenant_id'] ?? raw['hopwhistle_tenant_id'] ?? null;
+    if (claimedTenant !== null && claimedTenant !== binding.tenantId) {
+      this.registrationsForgedTenant++;
+      return quarantine('TENANT_VARIABLE_CONTRADICTS_BINDING');
+    }
+
+    this.deps.sipRegistry.applyResolved(binding.tenantId, binding.extension, subclass, raw);
+    this.registrationsResolved++;
+    return true;
   }
 
   /**
@@ -509,6 +577,10 @@ export class DialerV2Runtime {
       shadowPassesAbandonedForLostLock: this.shadowPassesAbandonedForLostLock,
       reconcilePassesSkippedForLock: this.reconcilePassesSkippedForLock,
       sip: this.deps.sipRegistry.metrics(),
+      registrationsResolved: this.registrationsResolved,
+      registrationsQuarantined: this.registrationsQuarantined,
+      registrationsForgedTenant: this.registrationsForgedTenant,
+      lastRegistrationRejection: this.lastRegistrationRejection,
     };
   }
 
