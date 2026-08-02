@@ -110,6 +110,136 @@ jobs:
       - name: Test
         run: pnpm --filter @hopwhistle/dialer-v2 test
 
+      # The default config excludes `*.live.test.ts`. Assert that the exclusion
+      # is a routing decision and not a way to hide failing tests: the live
+      # files must exist and must be claimed by the live config.
+      - name: Assert live suites exist and are routed to the live job
+        run: |
+          set -euo pipefail
+          for f in \
+            apps/dialer-v2/src/stores/redis.live.test.ts \
+            apps/dialer-v2/src/agents/db-sources.live.test.ts
+          do
+            if [ ! -f "$f" ]; then
+              echo "::error file=$f::live suite is missing"
+              exit 1
+            fi
+          done
+          if ! grep -q "src/\*\*/\*.live.test.ts" apps/dialer-v2/vitest.config.ts; then
+            echo "::error::the default config does not exclude the live suites"
+            exit 1
+          fi
+          if ! grep -q "src/\*\*/\*.live.test.ts" apps/dialer-v2/vitest.live.config.ts; then
+            echo "::error::the live config does not include the live suites"
+            exit 1
+          fi
+
+  dialer-v2-live:
+    name: dialer-v2 against real Redis and PostgreSQL
+    runs-on: ubuntu-latest
+
+    # Real services, not mocks. The unit suites drive hand-written fakes that
+    # agree with the code by construction; these containers are the only thing
+    # that can contradict it.
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: dialer
+          POSTGRES_PASSWORD: dialer
+          POSTGRES_DB: dialer_v2_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      # Without this an unreachable service would skip every test and the job
+      # would pass having verified nothing.
+      DIALER_V2_REQUIRE_LIVE_SERVICES: 'true'
+      DIALER_V2_TEST_REDIS_URL: redis://127.0.0.1:6379/15
+      DIALER_V2_TEST_DATABASE_URL: postgresql://dialer:dialer@127.0.0.1:5432/dialer_v2_test?schema=public
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @hopwhistle/api exec prisma generate
+
+      # `db push` against an ephemeral container, never a production database.
+      # The DATABASE_URL here points only at the service container above.
+      - name: Create the schema in the throwaway database
+        env:
+          DATABASE_URL: postgresql://dialer:dialer@127.0.0.1:5432/dialer_v2_test?schema=public
+        run: pnpm --filter @hopwhistle/api exec prisma db push --skip-generate --accept-data-loss
+
+      - name: Prove both services are actually reachable
+        run: |
+          set -euo pipefail
+          node -e "
+            const { Client } = require('pg');
+            (async () => {
+              const c = new Client({ connectionString: process.env.DIALER_V2_TEST_DATABASE_URL });
+              await c.connect();
+              const r = await c.query(\"SELECT to_regclass('public.users') AS t\");
+              if (!r.rows[0].t) { console.error('users table was not created'); process.exit(1); }
+              await c.end();
+              console.log('postgres ready, users table present');
+            })().catch(e => { console.error(e); process.exit(1); });
+          "
+          node -e "
+            const Redis = require('ioredis');
+            const c = new Redis(process.env.DIALER_V2_TEST_REDIS_URL, { maxRetriesPerRequest: 1 });
+            c.ping().then(r => { console.log('redis ready:', r); return c.quit(); })
+                    .catch(e => { console.error(e); process.exit(1); });
+          "
+
+      - name: Live tests
+        run: |
+          set -euo pipefail
+          cd apps/dialer-v2
+          pnpm exec vitest run --config vitest.live.config.ts \
+            --reporter=verbose --reporter=json --outputFile=/tmp/live-results.json
+
+      # A live job that ran zero tests is the failure mode this whole workflow
+      # exists to prevent — the dialer-v2 job was once green having run none.
+      # Assert the count, do not trust the exit code.
+      - name: Assert the live tests actually ran
+        run: |
+          set -euo pipefail
+          node -e "
+            const r = require('/tmp/live-results.json');
+            const passed = r.numPassedTests ?? 0;
+            const total = r.numTotalTests ?? 0;
+            console.log('live tests passed', passed, 'of', total);
+            if (total < 30 || passed !== total) {
+              console.error('::error::expected every live test to run and pass');
+              process.exit(1);
+            }
+          "
+
   api-dialer-v2:
     name: api Dialer V2 units
     runs-on: ubuntu-latest
