@@ -363,9 +363,14 @@ describe('the full chain across two replicas', () => {
       // The invariant that must hold in every configuration.
       expect(decisions.every(d => d.originated === false)).toBe(true);
 
-      // ── 8. B is refused a stale write ────────────────────────────────────
-      const stale = await b.composition.stores.shadowStore.record(decisions[0]);
-      await expect(Promise.resolve(stale).catch(e => Promise.reject(e))).rejects.toBeDefined();
+      // ── 8. An unfenced write is refused on the store B actually holds ────
+      //
+      // Not a contrived object: this is the same instance the composition root
+      // handed the runtime, and it will not accept a decision that cannot prove
+      // it still owns the campaign lock.
+      await expect(b.composition.stores.shadowStore.record(decisions[0])).rejects.toThrow(
+        /recordFenced/
+      );
 
       // ── 9. Restart: a fresh replica reconstructs ─────────────────────────
       const c = await replica('replica-c');
