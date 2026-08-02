@@ -204,6 +204,37 @@ export async function registerAICampaignRoutes(
     }
   });
 
+  // Get campaign restart-unreached preview
+  fastify.get('/api/v1/ai-campaigns/:id/restart-unreached/preview', async (request, reply) => {
+    const tenantId = request.user.tenantId;
+    const { id } = request.params as { id: string };
+
+    try {
+      const preview = await AICampaignService.getRestartUnreachedPreview(id, tenantId);
+      return reply.send({ data: preview });
+    } catch (error) {
+      console.error('Failed to get restart preview:', error);
+      const message = error instanceof Error ? error.message : 'Failed to get preview';
+      return reply.status(400).send({ error: message });
+    }
+  });
+
+  // Execute campaign restart-unreached
+  fastify.post('/api/v1/ai-campaigns/:id/restart-unreached', async (request, reply) => {
+    const tenantId = request.user.tenantId;
+    const { id } = request.params as { id: string };
+
+    try {
+      const result = await AICampaignService.executeRestartUnreached(id, tenantId);
+      return reply.send({ data: result });
+    } catch (error) {
+      console.error('Failed to execute restart:', error);
+      const message = error instanceof Error ? error.message : 'Failed to execute restart';
+      return reply.status(400).send({ error: message });
+    }
+  });
+
+
   // ============================================================================
   // Contacts
   // ============================================================================

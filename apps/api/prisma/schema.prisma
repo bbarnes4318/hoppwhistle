@@ -29,33 +29,33 @@ model Tenant {
   budgetAlerts   BudgetAlert[]
 
   // Relations
-  users               User[]
-  apiKeys             ApiKey[]
-  rateLimitEntries    RateLimitEntry[]
-  phoneNumbers        PhoneNumber[]
-  carriers            Carrier[]
-  trunks              Trunk[]
-  callerIdPools       CallerIdPool[]
-  campaigns           Campaign[]
-  publishers          Publisher[]
-  buyers              Buyer[]
-  flows               Flow[]
-  calls               Call[]
-  billingAccounts     BillingAccount[]
-  webhooks            Webhook[]
-  events              Event[]
-  auditLogs           AuditLog[]
-  featureFlags        FeatureFlag[]
-  dncLists            DncList[]
-  consentTokens       ConsentToken[]
-  compliancePolicies  CompliancePolicy[]
-  complianceOverrides ComplianceOverride[]
-  stirShakenStatuses  StirShakenStatus[]
-  cnamLookups         CnamLookup[]
-  carrierLookups      CarrierLookup[]
-  tags                Tag[]
-  leads               Lead[]
-  retentionPolicies   RetentionPolicy[]
+  users                    User[]
+  apiKeys                  ApiKey[]
+  rateLimitEntries         RateLimitEntry[]
+  phoneNumbers             PhoneNumber[]
+  carriers                 Carrier[]
+  trunks                   Trunk[]
+  callerIdPools            CallerIdPool[]
+  campaigns                Campaign[]
+  publishers               Publisher[]
+  buyers                   Buyer[]
+  flows                    Flow[]
+  calls                    Call[]
+  billingAccounts          BillingAccount[]
+  webhooks                 Webhook[]
+  events                   Event[]
+  auditLogs                AuditLog[]
+  featureFlags             FeatureFlag[]
+  dncLists                 DncList[]
+  consentTokens            ConsentToken[]
+  compliancePolicies       CompliancePolicy[]
+  complianceOverrides      ComplianceOverride[]
+  stirShakenStatuses       StirShakenStatus[]
+  cnamLookups              CnamLookup[]
+  carrierLookups           CarrierLookup[]
+  tags                     Tag[]
+  leads                    Lead[]
+  retentionPolicies        RetentionPolicy[]
   insuranceLeads           InsuranceLead[]
   insuranceLeadSubmissions InsuranceLeadSubmission[]
   insuranceActivities      InsuranceActivity[]
@@ -340,7 +340,7 @@ model PhoneNumber {
   callLegs       CallLeg[]
   pingRequests   PingRequest[] // Numbers assigned via RTB Post
   aiCampaigns    AICampaign[] // AI outbound campaigns using this number
-  didRoutes      DidRoute[]   // Inbound routing: DID → buyer destination
+  didRoutes      DidRoute[] // Inbound routing: DID → buyer destination
 
   @@unique([tenantId, number])
   @@index([tenantId, number])
@@ -360,32 +360,32 @@ model PhoneNumber {
 // ============================================================================
 
 model DidRoute {
-  id              String         @id @default(uuid())
-  tenantId        String
-  phoneNumberId   String         // FK to PhoneNumber (the tracking DID)
-  did             String         // E.164 DID number (denormalized for fast lookup)
-  destination     String         // Buyer's forwarding phone number (E.164)
-  buyerId         String?        // Optional: link to a Buyer entity
-  campaignId      String?        // Optional: link to a Campaign
-  label           String?        // Friendly label e.g. "Medicare Q1 — John Smith"
-  recordingEnabled Boolean       @default(true)
-  status          DidRouteStatus @default(ACTIVE)
-  totalCalls      Int            @default(0)
-  totalDuration   Int            @default(0) // Seconds
-  lastCallAt      DateTime?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  id               String         @id @default(uuid())
+  tenantId         String
+  phoneNumberId    String // FK to PhoneNumber (the tracking DID)
+  did              String // E.164 DID number (denormalized for fast lookup)
+  destination      String // Buyer's forwarding phone number (E.164)
+  buyerId          String? // Optional: link to a Buyer entity
+  campaignId       String? // Optional: link to a Campaign
+  label            String? // Friendly label e.g. "Medicare Q1 — John Smith"
+  recordingEnabled Boolean        @default(true)
+  status           DidRouteStatus @default(ACTIVE)
+  totalCalls       Int            @default(0)
+  totalDuration    Int            @default(0) // Seconds
+  lastCallAt       DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
 
   // Relations
-  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  phoneNumber PhoneNumber  @relation(fields: [phoneNumberId], references: [id])
-  buyer       Buyer?       @relation(fields: [buyerId], references: [id])
-  campaign    Campaign?    @relation(fields: [campaignId], references: [id])
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  phoneNumber PhoneNumber @relation(fields: [phoneNumberId], references: [id])
+  buyer       Buyer?      @relation(fields: [buyerId], references: [id])
+  campaign    Campaign?   @relation(fields: [campaignId], references: [id])
   publisherId String?
-  publisher   Publisher?   @relation(fields: [publisherId], references: [id])
+  publisher   Publisher?  @relation(fields: [publisherId], references: [id])
 
   @@unique([tenantId, did]) // One route per DID per tenant
-  @@index([did])            // Fast lookup by DID (FreeSWITCH uses this)
+  @@index([did]) // Fast lookup by DID (FreeSWITCH uses this)
   @@index([tenantId])
   @@index([buyerId])
   @@index([publisherId])
@@ -395,8 +395,8 @@ model DidRoute {
 
 enum DidRouteStatus {
   ACTIVE
-  PAUSED     // Temporarily disabled
-  INACTIVE   // Permanently disabled
+  PAUSED // Temporarily disabled
+  INACTIVE // Permanently disabled
 }
 
 enum PhoneNumberStatus {
@@ -527,29 +527,29 @@ model CallerIdPoolPhoneNumber {
 // ============================================================================
 
 model Campaign {
-  id               String         @id @default(uuid())
-  tenantId         String
-  publisherId      String
-  name             String
-  offerName        String? // Name of the offer/product for this campaign
-  country          String         @default("US") // ISO country code
-  recordingEnabled Boolean        @default(true) // Whether call recording is enabled
-  status           CampaignStatus @default(ACTIVE)
-  routingMode      RoutingMode    @default(STATIC)
-  callerIdPoolId   String?
-  flowId           String? // Current active flow version
+  id                             String         @id @default(uuid())
+  tenantId                       String
+  publisherId                    String
+  name                           String
+  offerName                      String? // Name of the offer/product for this campaign
+  country                        String         @default("US") // ISO country code
+  recordingEnabled               Boolean        @default(true) // Whether call recording is enabled
+  status                         CampaignStatus @default(ACTIVE)
+  routingMode                    RoutingMode    @default(STATIC)
+  callerIdPoolId                 String?
+  flowId                         String? // Current active flow version
   metadata                       Json?
-  billableDurationSeconds        Int                 @default(60)
-  publisherPayoutPerBillableCall Decimal             @default(0) @db.Decimal(10, 4)
-  buyerPricePerBillableCall      Decimal             @default(0) @db.Decimal(10, 4)
-  createdAt                      DateTime            @default(now())
-  updatedAt                      DateTime            @updatedAt
+  billableDurationSeconds        Int            @default(60)
+  publisherPayoutPerBillableCall Decimal        @default(0) @db.Decimal(10, 4)
+  buyerPricePerBillableCall      Decimal        @default(0) @db.Decimal(10, 4)
+  createdAt                      DateTime       @default(now())
+  updatedAt                      DateTime       @updatedAt
 
   // Relations
-  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  publisher    Publisher     @relation(fields: [publisherId], references: [id])
-  callerIdPool CallerIdPool? @relation(fields: [callerIdPoolId], references: [id])
-  flow         Flow?         @relation(fields: [flowId], references: [id])
+  tenant       Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  publisher    Publisher           @relation(fields: [publisherId], references: [id])
+  callerIdPool CallerIdPool?       @relation(fields: [callerIdPoolId], references: [id])
+  flow         Flow?               @relation(fields: [flowId], references: [id])
   phoneNumbers PhoneNumber[]
   calls        Call[]
   leads        Lead[]
@@ -943,24 +943,24 @@ model Call {
   // ============================================================================
   // Recording Lifecycle Fields
   // ============================================================================
-  primaryRecordingId         String?           // ID of the canonical Recording row for this call
-  recordingStatus            String?           // PENDING | RECORDING | PROCESSING | READY | FAILED
-  recordingStartedAt         DateTime?         // When recording began
-  recordingCompletedAt       DateTime?         // When recording file was finalized
-  recordingError             String?           // Error message if recording failed
+  primaryRecordingId   String? // ID of the canonical Recording row for this call
+  recordingStatus      String? // PENDING | RECORDING | PROCESSING | READY | FAILED
+  recordingStartedAt   DateTime? // When recording began
+  recordingCompletedAt DateTime? // When recording file was finalized
+  recordingError       String? // Error message if recording failed
 
-  callerZipCode              String? // 5-digit ZIP code for geo-routing
+  callerZipCode String? // 5-digit ZIP code for geo-routing
 
   // Financial Fields (Currency/Decimal)
-  revenue                    Decimal?  @db.Decimal(10, 4) // Total revenue for this call
-  payout                     Decimal?  @db.Decimal(10, 4) // Amount paid to publisher
-  profit                     Decimal?  @db.Decimal(10, 4) // Revenue minus payout/cost
-  billable                   Boolean   @default(false)
-  billableDurationThreshold  Int?
-  publisherPayoutAmount      Decimal?  @db.Decimal(10, 4)
-  buyerBillableAmount        Decimal?  @db.Decimal(10, 4)
-  billingCalculatedAt        DateTime?
-  billingRuleSnapshot        Json?
+  revenue                   Decimal?  @db.Decimal(10, 4) // Total revenue for this call
+  payout                    Decimal?  @db.Decimal(10, 4) // Amount paid to publisher
+  profit                    Decimal?  @db.Decimal(10, 4) // Revenue minus payout/cost
+  billable                  Boolean   @default(false)
+  billableDurationThreshold Int?
+  publisherPayoutAmount     Decimal?  @db.Decimal(10, 4)
+  buyerBillableAmount       Decimal?  @db.Decimal(10, 4)
+  billingCalculatedAt       DateTime?
+  billingRuleSnapshot       Json?
 
   // Semantic Status Tracking Fields
   buyerChargeStatus          String?
@@ -987,11 +987,11 @@ model Call {
   // ============================================================================
   // Contractor Call Intelligence Fields
   // ============================================================================
-  disposition         String?   // Canonical: SET_APPOINTMENT, SET_CALLBACK, FOLLOW_UP, NOT_INTERESTED, NOT_QUALIFIED, NO_ANSWER, WRONG_NUMBER, DISCONNECTED
-  dispositionNotes    String?   // Free-text agent notes on the call
-  callSource          String?   // CALL_CENTER | SOFTPHONE | AI_VOICE
-  followUpAt          DateTime? // Scheduled follow-up or callback timestamp
-  followUpStatus      String?   // PENDING | COMPLETED | CANCELLED
+  disposition      String? // Canonical: SET_APPOINTMENT, SET_CALLBACK, FOLLOW_UP, NOT_INTERESTED, NOT_QUALIFIED, NO_ANSWER, WRONG_NUMBER, DISCONNECTED
+  dispositionNotes String? // Free-text agent notes on the call
+  callSource       String? // CALL_CENTER | SOFTPHONE | AI_VOICE
+  followUpAt       DateTime? // Scheduled follow-up or callback timestamp
+  followUpStatus   String? // PENDING | COMPLETED | CANCELLED
 
   // Relations
   tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -2206,7 +2206,7 @@ enum ProspectIntakeStatus {
 
 model VapiTemplate {
   id            String   @id @default(uuid())
-  name          String   // "ACA Health", "Final Expense"
+  name          String // "ACA Health", "Final Expense"
   vertical      String   @unique // "ACA", "FINAL_EXPENSE"
   basePrompt    String   @db.Text // Core system prompt with {{placeholders}}
   voiceId       String   @default("alloy")
@@ -2286,6 +2286,8 @@ model AICampaignContact {
   calledAt    DateTime?
   createdAt   DateTime      @default(now())
 
+  calls AICampaignCall[] @relation("ContactCalls")
+
   @@index([campaignId])
   @@index([campaignId, status])
   @@index([phoneNumber])
@@ -2302,12 +2304,13 @@ enum ContactStatus {
 }
 
 model AICampaignCall {
-  id         String       @id @default(uuid())
+  id         String            @id @default(uuid())
   campaignId String
-  campaign   AICampaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  campaign   AICampaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   contactId  String
+  contact    AICampaignContact @relation("ContactCalls", fields: [contactId], references: [id], onDelete: Cascade)
   externalId String? // Vapi call ID (internal use only, never shown in UI)
-  status     AICallStatus @default(QUEUED)
+  status     AICallStatus      @default(QUEUED)
   duration   Int? // Call duration in seconds
   outcome    String? // e.g., "answered", "voicemail", "busy"
 
@@ -2395,7 +2398,7 @@ model InsuranceLead {
   lastName  String?
   fullName  String?
   email     String?
-  phone     String  // 10-digit normalized
+  phone     String // 10-digit normalized
 
   // Address
   address  String?
@@ -2419,16 +2422,16 @@ model InsuranceLead {
 
   // CRM fields
   assignedToId    String?
-  assignedTo      User?               @relation("InsuranceLeadAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  assignedTo      User?           @relation("InsuranceLeadAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
   assignedAt      DateTime?
   lastContactedAt DateTime?
   nextFollowUpAt  DateTime?
   priority        String?
   leadStage       String?
-  doNotCall       Boolean             @default(false)
+  doNotCall       Boolean         @default(false)
   duplicateOfId   String?
-  duplicateOf     InsuranceLead?      @relation("InsuranceLeadDuplicates", fields: [duplicateOfId], references: [id], onDelete: SetNull)
-  duplicates      InsuranceLead[]     @relation("InsuranceLeadDuplicates")
+  duplicateOf     InsuranceLead?  @relation("InsuranceLeadDuplicates", fields: [duplicateOfId], references: [id], onDelete: SetNull)
+  duplicates      InsuranceLead[] @relation("InsuranceLeadDuplicates")
 
   // Final Expense specific CRM fields
   smoker          String?
@@ -2459,7 +2462,7 @@ model InsuranceLead {
   list   LeadList? @relation(fields: [listId], references: [id], onDelete: SetNull)
 
   // Relations
-  tenant      Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant      Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   submissions InsuranceLeadSubmission[]
   activities  InsuranceActivity[]
   tasks       InsuranceTask[]
@@ -2500,7 +2503,7 @@ model InsuranceLeadSubmission {
   receivedAt      DateTime          @default(now())
 
   // Payload preservation
-  rawPayload            Json  // Original inbound JSON
+  rawPayload            Json // Original inbound JSON
   normalizedPayload     Json? // After normalization
   mappedOutboundPayload Json? // Final Ameriquote payload (secrets redacted)
 
@@ -2509,8 +2512,8 @@ model InsuranceLeadSubmission {
   validationErrors Json? // Structured Zod errors
 
   // Posting
-  postStatus     InsurancePostStatus @default(PENDING)
-  postMode       InsuranceLeadMode   @default(TEST)
+  postStatus InsurancePostStatus @default(PENDING)
+  postMode   InsuranceLeadMode   @default(TEST)
 
   // Ameriquote response
   ameriquoteResponseRaw    String? // Raw response body
