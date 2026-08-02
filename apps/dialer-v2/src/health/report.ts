@@ -46,6 +46,26 @@ export interface HealthSnapshot {
 
   campaignsObserved: number;
   shadowDecisionsRecorded: number;
+
+  /** Where state actually lives. 'memory' is single-instance only. */
+  storeBackend: 'redis' | 'memory';
+  /** Where agent sessions actually live. */
+  sessionBackend: 'redis' | 'memory';
+  /** False when loop coordination is the single-instance no-op lock. */
+  lockDistributed: boolean;
+  /**
+   * Whether agent-to-campaign assignment can be resolved at all.
+   *
+   * False is not "no agents assigned" — it is "this schema models no
+   * assignment", which is a different and much more serious statement. Without
+   * it every campaign forecast has zero agents, and reporting that as an empty
+   * roster would hide a capability gap behind an ordinary-looking number.
+   */
+  assignmentsResolvable: boolean;
+  /** Decision writes refused because the fencing token was stale or duplicated. */
+  shadowWritesRejected: number;
+  /** Agent-state writes refused because the revision was stale. */
+  agentStateStaleWrites: number;
 }
 
 export interface HealthReport {
@@ -55,6 +75,16 @@ export interface HealthReport {
   ready: boolean;
   /** True only when ingestion is trustworthy enough to pace on. */
   ingestionHealthy: boolean;
+  /**
+   * True only when the shadow history is evidence worth promoting on.
+   *
+   * Separate from `ready` on purpose. A deployment can be perfectly healthy —
+   * ingesting events, writing decisions — and still be producing decisions that
+   * mean nothing, because no agent resolves to any campaign or because state is
+   * not shared between replicas. Reporting that as "ready" would let a Phase 3
+   * decision be taken on numbers that were never trustworthy.
+   */
+  shadowEvidenceTrustworthy: boolean;
   originationPermitted: boolean;
   originationImplemented: boolean;
   emergencyStop: boolean;
@@ -172,6 +202,51 @@ export function buildHealthReport(flags: DialerV2Flags, snap: HealthSnapshot): H
       : 'Origination is disabled by configuration (expected default)',
   });
 
+  // Where state actually lives, stated rather than implied.
+  checks.push({
+    name: 'state_backend',
+    status: snap.storeBackend === 'redis' ? 'pass' : 'warn',
+    detail:
+      snap.storeBackend === 'redis'
+        ? undefined
+        : 'state is in process memory: single-instance only, and lost on restart',
+  });
+
+  checks.push({
+    name: 'session_backend',
+    status: snap.sessionBackend === 'redis' ? 'pass' : 'warn',
+    detail:
+      snap.sessionBackend === 'redis'
+        ? undefined
+        : 'agent sessions are in process memory: a session issued here is unknown to every other replica',
+  });
+
+  checks.push({
+    name: 'loop_coordination',
+    status: snap.lockDistributed ? 'pass' : 'warn',
+    detail: snap.lockDistributed
+      ? undefined
+      : 'coordination is the no-op lock: safe for one instance, double-processing with more than one',
+  });
+
+  // The gap that would otherwise read as an ordinary empty roster.
+  checks.push({
+    name: 'campaign_assignments',
+    status: snap.assignmentsResolvable ? 'pass' : 'warn',
+    detail: snap.assignmentsResolvable
+      ? undefined
+      : 'no agent-to-campaign assignment exists in the schema, so every campaign forecast has zero agents',
+  });
+
+  checks.push({
+    name: 'rejected_writes',
+    status: snap.shadowWritesRejected > 0 || snap.agentStateStaleWrites > 0 ? 'warn' : 'pass',
+    detail:
+      snap.shadowWritesRejected > 0 || snap.agentStateStaleWrites > 0
+        ? `${snap.shadowWritesRejected} shadow decision(s) and ${snap.agentStateStaleWrites} agent write(s) refused as stale`
+        : undefined,
+  });
+
   checks.push({
     name: 'emergency_stop',
     status: flags.emergencyStop ? 'warn' : 'pass',
@@ -194,6 +269,17 @@ export function buildHealthReport(flags: DialerV2Flags, snap: HealthSnapshot): H
     snap.lastEventAgeMs !== null &&
     snap.lastEventAgeMs <= snap.maxEventAgeMs;
 
+  // Everything the shadow history depends on to mean anything. Deliberately
+  // stricter than `ready`: a deployment can be healthy and still be recording
+  // decisions that are not evidence.
+  const shadowEvidenceTrustworthy =
+    ingestionHealthy &&
+    snap.redisConnected &&
+    snap.postgresConnected &&
+    snap.storeBackend === 'redis' &&
+    snap.lockDistributed &&
+    snap.assignmentsResolvable;
+
   return {
     service: 'hopwhistle-dialer-v2',
     status: worst(checks.map(c => c.status)),
@@ -202,6 +288,7 @@ export function buildHealthReport(flags: DialerV2Flags, snap: HealthSnapshot): H
     live: true,
     ready: snap.redisConnected && snap.postgresConnected && ingestionHealthy,
     ingestionHealthy,
+    shadowEvidenceTrustworthy,
     originationPermitted,
     originationImplemented: false,
     emergencyStop: flags.emergencyStop,

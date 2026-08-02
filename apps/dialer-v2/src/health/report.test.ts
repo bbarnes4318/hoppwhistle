@@ -23,6 +23,12 @@ function snapshot(overrides: Partial<HealthSnapshot> = {}): HealthSnapshot {
     maxReconciliationLagMs: 30_000,
     campaignsObserved: 2,
     shadowDecisionsRecorded: 40,
+    storeBackend: 'redis',
+    sessionBackend: 'redis',
+    lockDistributed: true,
+    assignmentsResolvable: true,
+    shadowWritesRejected: 0,
+    agentStateStaleWrites: 0,
     ...overrides,
   };
 }
@@ -155,5 +161,84 @@ describe('origination permission is reported, never treated as a fault', () => {
     const report = buildHealthReport({ ...dialing, shadowEnabled: true }, snapshot());
     expect(report.shadowEnabled).toBe(true);
     expect(report.checks.find(c => c.name === 'shadow_mode')?.detail).toContain('40 decision');
+  });
+});
+
+describe('health states what is actually true, not what is convenient', () => {
+  const find = (r: ReturnType<typeof buildHealthReport>, name: string) =>
+    r.checks.find(c => c.name === name);
+
+  it('says plainly when state is in process memory', () => {
+    const r = buildHealthReport(SAFE_DEFAULTS, snapshot({ storeBackend: 'memory' }));
+    expect(find(r, 'state_backend')?.status).toBe('warn');
+    expect(find(r, 'state_backend')?.detail).toMatch(/single-instance|lost on restart/);
+  });
+
+  it('says plainly when sessions are not shared between replicas', () => {
+    const r = buildHealthReport(SAFE_DEFAULTS, snapshot({ sessionBackend: 'memory' }));
+    expect(find(r, 'session_backend')?.status).toBe('warn');
+    expect(find(r, 'session_backend')?.detail).toMatch(/unknown to every other replica/);
+  });
+
+  it('says plainly when loop coordination is the no-op lock', () => {
+    const r = buildHealthReport(SAFE_DEFAULTS, snapshot({ lockDistributed: false }));
+    expect(find(r, 'loop_coordination')?.status).toBe('warn');
+    expect(find(r, 'loop_coordination')?.detail).toMatch(/double-processing/);
+  });
+
+  it('reports missing assignment support as a capability gap, not an empty roster', () => {
+    // Zero assigned agents and "the schema models no assignment" produce the
+    // same number and mean completely different things.
+    const r = buildHealthReport(SAFE_DEFAULTS, snapshot({ assignmentsResolvable: false }));
+    expect(find(r, 'campaign_assignments')?.status).toBe('warn');
+    expect(find(r, 'campaign_assignments')?.detail).toMatch(/no agent-to-campaign assignment/);
+  });
+
+  it('surfaces refused writes rather than swallowing them', () => {
+    const r = buildHealthReport(
+      SAFE_DEFAULTS,
+      snapshot({ shadowWritesRejected: 3, agentStateStaleWrites: 2 })
+    );
+    expect(find(r, 'rejected_writes')?.status).toBe('warn');
+    expect(find(r, 'rejected_writes')?.detail).toMatch(/3 shadow decision\(s\) and 2 agent/);
+  });
+});
+
+describe('shadow evidence is judged separately from readiness', () => {
+  it('is trustworthy only when everything it depends on holds', () => {
+    const r = buildHealthReport(SAFE_DEFAULTS, snapshot());
+    expect(r.ready).toBe(true);
+    expect(r.shadowEvidenceTrustworthy).toBe(true);
+  });
+
+  for (const [label, override] of [
+    ['no assignment model', { assignmentsResolvable: false }],
+    ['memory stores', { storeBackend: 'memory' as const }],
+    ['no distributed lock', { lockDistributed: false }],
+  ] as const) {
+    it(`is untrustworthy with ${label}, even while ready`, () => {
+      // A deployment can be perfectly healthy and still be recording decisions
+      // that mean nothing. Promoting on those numbers is the failure this
+      // separation exists to prevent.
+      const r = buildHealthReport(SAFE_DEFAULTS, snapshot(override));
+      expect(r.shadowEvidenceTrustworthy).toBe(false);
+    });
+  }
+
+  it('is untrustworthy when ingestion has stopped', () => {
+    const r = buildHealthReport(SAFE_DEFAULTS, snapshot({ lastEventAgeMs: 999_999 }));
+    expect(r.ingestionHealthy).toBe(false);
+    expect(r.shadowEvidenceTrustworthy).toBe(false);
+  });
+
+  it('never claims trustworthy evidence while Redis is down', () => {
+    const r = buildHealthReport(SAFE_DEFAULTS, snapshot({ redisConnected: false }));
+    expect(r.shadowEvidenceTrustworthy).toBe(false);
+    expect(r.ready).toBe(false);
+  });
+
+  it('keeps liveness independent so a correct refusal is not restart-looped', () => {
+    const r = buildHealthReport(SAFE_DEFAULTS, snapshot({ redisConnected: false }));
+    expect(r.live).toBe(true);
   });
 });

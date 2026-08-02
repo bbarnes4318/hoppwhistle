@@ -104,6 +104,18 @@ async function currentSnapshot(): Promise<HealthSnapshot> {
 
     campaignsObserved: status.observedScopes,
     shadowDecisionsRecorded: status.shadowDecisionsThisRun,
+
+    storeBackend: stores.backend,
+    // Sessions are still the in-process registry in this entrypoint. Reported
+    // as such rather than assumed shared — a wrong answer here would say a
+    // session issued on this replica is known to every other one.
+    sessionBackend: 'memory',
+    lockDistributed: status.lockDistributed,
+    // The schema models no agent-to-campaign relation, so this is false until
+    // one exists. See DatabaseAssignmentSource.
+    assignmentsResolvable: false,
+    shadowWritesRejected: status.shadowWritesRejected,
+    agentStateStaleWrites: 0,
   };
 }
 
