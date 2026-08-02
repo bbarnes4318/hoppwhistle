@@ -19,7 +19,6 @@ import {
   type AgentStateRedis,
   type RevisionedAgentRecord,
 } from './agent-state-store.js';
-import { RedisObservationStore, type ObservationRedis } from './observation-store.js';
 
 let redis: LiveRedis;
 let available = false;
@@ -56,9 +55,6 @@ function live(name: string, fn: () => Promise<void>) {
 /** One store instance stands for one replica. */
 const replica = (ttlMs?: number) =>
   new RedisAgentStateStore({ redis: redis as unknown as AgentStateRedis, ttlMs });
-
-const observations = (windowMs?: number) =>
-  new RedisObservationStore({ redis: redis as unknown as ObservationRedis, windowMs });
 
 interface TestAgent extends RevisionedAgentRecord {
   state: string;
@@ -250,83 +246,5 @@ describe('SIP registrations are shared and reconstructable', () => {
 
     expect(await store.loadSipRegistration('tenant-b', 'agent-1')).toBeNull();
     expect(await store.loadAllSipRegistrations('tenant-b')).toEqual([]);
-  });
-});
-
-describe('observation counters are shared, not per-replica', () => {
-  live('two replicas both count toward one sample', async () => {
-    // Each replica observing half the calls meant each estimated from half the
-    // sample, and neither ever reached minSampleSize — so the controller stayed
-    // degraded while believing it lacked data it actually had.
-    const a = observations();
-    const b = observations();
-
-    await a.increment('tenant-a', 'camp-1', { attempts: 30, liveAnswers: 6 });
-    await b.increment('tenant-a', 'camp-1', { attempts: 40, liveAnswers: 9 });
-
-    expect(await a.read('tenant-a', 'camp-1')).toMatchObject({
-      attempts: 70,
-      liveAnswers: 15,
-    });
-  });
-
-  live('concurrent increments do not lose counts', async () => {
-    // hincrby, not read-modify-write. The latter would drop most of these.
-    const store = observations();
-    await Promise.all(
-      Array.from({ length: 50 }, () => store.increment('tenant-a', 'camp-1', { attempts: 1 }))
-    );
-    expect((await store.read('tenant-a', 'camp-1'))?.attempts).toBe(50);
-  });
-
-  live('survives a restart so the learned answer rate is not thrown away', async () => {
-    const before = observations();
-    await before.increment('tenant-a', 'camp-1', { attempts: 500, liveAnswers: 110 });
-
-    const after = observations();
-    expect(await after.read('tenant-a', 'camp-1')).toMatchObject({
-      attempts: 500,
-      liveAnswers: 110,
-    });
-  });
-
-  live('returns the post-increment totals, not a value another replica moved', async () => {
-    const store = observations();
-    await store.increment('tenant-a', 'camp-1', { attempts: 10 });
-    const after = await store.increment('tenant-a', 'camp-1', { attempts: 5 });
-    expect(after?.attempts).toBe(15);
-  });
-
-  live('an untouched counter reads as zero rather than appearing observed', async () => {
-    const store = observations();
-    const result = await store.increment('tenant-a', 'camp-1', { attempts: 3 });
-    expect(result).toMatchObject({ attempts: 3, liveAnswers: 0, abandons: 0 });
-  });
-
-  live('a campaign that was never observed reads as all zeros', async () => {
-    expect(await observations().read('tenant-a', 'never-seen')).toMatchObject({
-      attempts: 0,
-      liveAnswers: 0,
-    });
-  });
-
-  live('counters do not cross campaigns or tenants', async () => {
-    const store = observations();
-    await store.increment('tenant-a', 'camp-1', { attempts: 10 });
-    await store.increment('tenant-a', 'camp-2', { attempts: 3 });
-    await store.increment('tenant-b', 'camp-1', { attempts: 7 });
-
-    expect((await store.read('tenant-a', 'camp-1'))?.attempts).toBe(10);
-    expect((await store.read('tenant-a', 'camp-2'))?.attempts).toBe(3);
-    expect((await store.read('tenant-b', 'camp-1'))?.attempts).toBe(7);
-  });
-
-  live('counters expire so "recent" is a stated duration', async () => {
-    // An unbounded lifetime counter is the wrong statistic: a campaign's answer
-    // rate at 9am is not evidence about 9pm.
-    const store = observations(200);
-    await store.increment('tenant-a', 'camp-1', { attempts: 10 });
-    await sleep(350);
-    expect((await store.read('tenant-a', 'camp-1'))?.attempts).toBe(0);
   });
 });

@@ -169,6 +169,10 @@ jobs:
       DIALER_V2_REQUIRE_LIVE_SERVICES: 'true'
       DIALER_V2_TEST_REDIS_URL: redis://127.0.0.1:6379/15
       DIALER_V2_TEST_DATABASE_URL: postgresql://dialer:dialer@127.0.0.1:5432/dialer_v2_test?schema=public
+      # The composition suite calls composeRuntime exactly as index.ts does, so
+      # it reads the same variables the running service reads.
+      DATABASE_URL: postgresql://dialer:dialer@127.0.0.1:5432/dialer_v2_test?schema=public
+      DIALER_V2_SIP_DOMAIN: live.dialer.test
 
     steps:
       - uses: actions/checkout@v4
@@ -203,8 +207,12 @@ jobs:
             (async () => {
               const c = new Client({ connectionString: process.env.DIALER_V2_TEST_DATABASE_URL });
               await c.connect();
-              const r = await c.query(\"SELECT to_regclass('public.users') AS t\");
+              const r = await c.query(\"SELECT to_regclass('public.users') AS t, to_regclass('public.campaign_agents') AS a\");
               if (!r.rows[0].t) { console.error('users table was not created'); process.exit(1); }
+              // The assignment table is what lets the composition suite prove a
+              // campaign resolves at all. Without it those tests would pass by
+              // asserting an empty result, which is what they exist to rule out.
+              if (!r.rows[0].a) { console.error('campaign_agents table was not created'); process.exit(1); }
               await c.end();
               console.log('postgres ready, users table present');
             })().catch(e => { console.error(e); process.exit(1); });
@@ -234,11 +242,53 @@ jobs:
             const passed = r.numPassedTests ?? 0;
             const total = r.numTotalTests ?? 0;
             console.log('live tests passed', passed, 'of', total);
-            if (total < 30 || passed !== total) {
+            if (total < 80 || passed !== total) {
               console.error('::error::expected every live test to run and pass');
               process.exit(1);
             }
+
+            // A count alone would not notice the production-composition suite
+            // being dropped or renamed. It is the only test that exercises the
+            // bundle index.ts actually builds, so it is asserted by name.
+            const names = (r.testResults ?? []).map(f => f.name ?? '');
+            if (!names.some(n => n.includes('composition.live.test'))) {
+              console.error('::error::the production-composition suite did not run');
+              process.exit(1);
+            }
           "
+
+  assignment-migration:
+    name: assignment migration is additive and reversible
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The migration and its rollback are reviewable artefacts, not something
+      # generated at deploy time. A missing down.sql means a change that cannot
+      # be backed out of a live database.
+      - name: Both directions are tracked
+        run: |
+          set -euo pipefail
+          DIR=apps/api/prisma/migrations/20260802000000_add_campaign_agent_assignments
+          test -f "$DIR/migration.sql" || { echo "::error::migration.sql is missing"; exit 1; }
+          test -f "$DIR/down.sql" || { echo "::error::down.sql is missing"; exit 1; }
+
+      # Additive only. An ALTER or DROP against an existing table would make this
+      # unsafe to apply to a live database, which is a different review entirely.
+      - name: The migration alters no existing table
+        run: |
+          set -euo pipefail
+          DIR=apps/api/prisma/migrations/20260802000000_add_campaign_agent_assignments
+          if grep -qiE '^\s*(DROP TABLE|DROP COLUMN|ALTER COLUMN|TRUNCATE)' "$DIR/migration.sql"; then
+            echo "::error::the migration is not additive"
+            exit 1
+          fi
+          # grep -E has no negative lookahead, so this lists every ALTER TABLE
+          # target and fails if any of them is not the new table.
+          if grep -oiE '^[[:space:]]*ALTER TABLE "[^"]+"' "$DIR/migration.sql"              | grep -qv 'campaign_agents'; then
+            echo "::error::the migration alters a table other than campaign_agents"
+            exit 1
+          fi
 
   api-dialer-v2:
     name: api Dialer V2 units

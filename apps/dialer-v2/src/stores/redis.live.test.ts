@@ -3,8 +3,12 @@
  *
  * Everything here is chosen because a hand-written fake would agree with the
  * code under test rather than check it: Lua's `false`-not-`nil` for a missing
- * key, integer reply coercion, `SET NX PX` atomicity, real wall-clock TTL
+ * key, integer reply coercion, atomic compare-and-act, real wall-clock TTL
  * expiry, and `EVAL` argument stringification.
+ *
+ * The ownership cases matter most here. A fake cannot show a key genuinely
+ * disappearing when its TTL elapses, and "the lock expired and nobody replaced
+ * it" is the exact case a token comparison could not see.
  *
  * Skips when no server is reachable. In CI `DIALER_V2_REQUIRE_LIVE_SERVICES`
  * is set, which turns an unreachable server into a failure — a suite that
@@ -20,6 +24,9 @@ import {
   RELEASE_IF_OWNER,
   RENEW_IF_OWNER,
   RedisDistributedLock,
+  campaignShadowLock,
+  globalLock,
+  type LockDescriptor,
   type LockRedis,
 } from './coordination.js';
 import {
@@ -28,7 +35,7 @@ import {
   FencedShadowDecisionStore,
   type FencedRedis,
 } from './fenced-decisions.js';
-import { RedisDedupeStore, RedisShadowDecisionStore, type MinimalRedis } from './redis.js';
+import { RedisDedupeStore, type MinimalRedis } from './redis.js';
 
 let redis: LiveRedis;
 let available = false;
@@ -67,6 +74,8 @@ const asLock = () => redis as unknown as LockRedis;
 const asMinimal = () => redis as unknown as MinimalRedis;
 const asFenced = () => redis as unknown as FencedRedis;
 
+const CAMPAIGN: LockDescriptor = campaignShadowLock('live-tenant', 'live-camp');
+
 function decision(overrides: Partial<ShadowDecisionRecord> = {}): ShadowDecisionRecord {
   return {
     tenantId: 'live-tenant',
@@ -85,6 +94,13 @@ function decision(overrides: Partial<ShadowDecisionRecord> = {}): ShadowDecision
     ...overrides,
   };
 }
+
+/** Authority a holder presents to the decision store. */
+function authorityOf(handle: { fencingToken: number; lockValue: string }) {
+  return { fencingToken: handle.fencingToken, lockValue: handle.lockValue };
+}
+
+const store = () => new FencedShadowDecisionStore({ redis: asFenced(), intervalMs: 1_000 });
 
 describe('Lua semantics a fake cannot reproduce', () => {
   live('RELEASE_IF_OWNER compares against a missing key without erroring', async () => {
@@ -115,219 +131,344 @@ describe('Lua semantics a fake cannot reproduce', () => {
     expect(await redis.pttl('lock')).toBeGreaterThan(1_000);
   });
 
-  live('EVAL coerces the -1 duplicate reply to an integer, not a string', async () => {
-    const first = await redis.eval(
+  live('ACCEPT_FENCED_DECISION returns 0 for a lock key that does not exist', async () => {
+    // The `not held` branch: an expired lock holds Lua `false`, which must not
+    // compare equal to the presented value.
+    const reply = await redis.eval(
       ACCEPT_FENCED_DECISION,
-      3,
+      5,
+      'lock',
       'fence',
       'bucket',
       'list',
+      'index',
+      'A:1',
       '1',
       '{}',
       '10',
       '60000',
-      '5000'
+      '5000',
+      'camp-1',
+      '1800000000000',
+      '60000'
     );
-    expect(first).toBe(1);
-    expect(typeof first).toBe('number');
+    expect(reply).toBe(0);
+    expect(typeof reply).toBe('number');
+  });
 
-    const dup = await redis.eval(
-      ACCEPT_FENCED_DECISION,
-      3,
+  live('EVAL coerces the -1 and -2 replies to integers, not strings', async () => {
+    await redis.set('lock', 'A:1');
+    await redis.set('fence', '1');
+
+    const args = [
+      'lock',
       'fence',
       'bucket',
       'list',
-      '2',
+      'index',
+      'A:1',
+      '1',
       '{}',
       '10',
       '60000',
-      '5000'
-    );
+      '5000',
+      'camp-1',
+      '1800000000000',
+      '60000',
+    ];
+
+    const first = await redis.eval(ACCEPT_FENCED_DECISION, 5, ...args);
+    expect(first).toBe(1);
+
+    const dup = await redis.eval(ACCEPT_FENCED_DECISION, 5, ...args);
     expect(dup).toBe(-1);
+
+    // Fence moved on: the -2 branch.
+    await redis.set('fence', '9');
+    await redis.del('bucket');
+    const stale = await redis.eval(ACCEPT_FENCED_DECISION, 5, ...args);
+    expect(stale).toBe(-2);
   });
 });
 
-describe('real TTL expiry', () => {
-  live('a lock genuinely becomes acquirable after its TTL lapses', async () => {
-    const a = new RedisDistributedLock({ redis: asLock(), ownerId: 'replica-a' });
-    const b = new RedisDistributedLock({ redis: asLock(), ownerId: 'replica-b' });
+describe('real TTL expiry, on the server rather than in a fake', () => {
+  live('a lock genuinely becomes free after its TTL', async () => {
+    const a = new RedisDistributedLock({ redis: asLock(), ownerId: 'A' });
+    const b = new RedisDistributedLock({ redis: asLock(), ownerId: 'B' });
 
-    expect(await a.acquire('ttl-lock', 200)).not.toBeNull();
-    expect(await b.acquire('ttl-lock', 200)).toBeNull();
+    expect(await a.acquire(CAMPAIGN, 200)).not.toBeNull();
+    expect(await b.acquire(CAMPAIGN, 200)).toBeNull();
 
-    await sleep(350);
-
-    // No clock was faked. Redis expired the key on its own.
-    expect(await b.acquire('ttl-lock', 200)).not.toBeNull();
+    await sleep(320);
+    expect(await b.acquire(CAMPAIGN, 200)).not.toBeNull();
   });
 
-  live('a renewing holder keeps the lock past the original TTL', async () => {
-    const a = new RedisDistributedLock({ redis: asLock(), ownerId: 'replica-a' });
-    const b = new RedisDistributedLock({ redis: asLock(), ownerId: 'replica-b' });
+  live('renewing keeps a lock the holder would otherwise lose', async () => {
+    const a = new RedisDistributedLock({ redis: asLock(), ownerId: 'A' });
+    const b = new RedisDistributedLock({ redis: asLock(), ownerId: 'B' });
 
-    expect(await a.acquire('renewed', 300)).not.toBeNull();
-    await sleep(150);
-    expect(await a.renew('renewed', 1_500)).toBe(true);
-    await sleep(300);
+    expect(await a.acquire(CAMPAIGN, 300)).not.toBeNull();
+    await sleep(200);
+    expect(await a.renew(CAMPAIGN, 300)).toBe(true);
+    await sleep(200);
 
-    expect(await b.acquire('renewed', 300)).toBeNull();
-    expect(await a.renew('renewed', 300)).toBe(true);
+    // Past the original TTL, still held.
+    expect(await b.acquire(CAMPAIGN, 300)).toBeNull();
   });
 
-  live('renew reports false once the lock has actually been lost', async () => {
-    const a = new RedisDistributedLock({ redis: asLock(), ownerId: 'replica-a' });
-    expect(await a.acquire('lost', 150)).not.toBeNull();
+  live('renew reports false once the lock has actually expired', async () => {
+    const a = new RedisDistributedLock({ redis: asLock(), ownerId: 'A' });
+    expect(await a.acquire(CAMPAIGN, 150)).not.toBeNull();
     await sleep(300);
-    expect(await a.renew('lost', 1_000)).toBe(false);
+    expect(await a.renew(CAMPAIGN, 150)).toBe(false);
   });
 });
 
-describe('SET NX PX is atomic on the server', () => {
-  live('exactly one of many concurrent acquirers wins', async () => {
+describe('the fence advances only on a granted lock', () => {
+  live('a failed acquisition leaves the counter alone', async () => {
+    // The previous INCR-then-SET-NX version advanced the counter on a FAILED
+    // attempt, so B could starve A — the uninterrupted holder — simply by
+    // trying, because A's token was no longer the latest issued.
+    const a = new RedisDistributedLock({ redis: asLock(), ownerId: 'A' });
+    const b = new RedisDistributedLock({ redis: asLock(), ownerId: 'B' });
+
+    const held = await a.acquire(CAMPAIGN, 5_000);
+    for (let i = 0; i < 5; i++) expect(await b.acquire(CAMPAIGN, 5_000)).toBeNull();
+
+    expect(await redis.get(CAMPAIGN.fenceKey)).toBe(String(held!.fencingToken));
+
+    // A can still write, despite five intervening attempts by B.
+    expect((await store().recordFenced(decision(), authorityOf(held!))).accepted).toBe(true);
+  });
+
+  live('exactly one of twelve concurrent acquirers wins', async () => {
     const locks = Array.from(
       { length: 12 },
-      (_, i) => new RedisDistributedLock({ redis: asLock(), ownerId: `replica-${i}` })
+      (_, i) => new RedisDistributedLock({ redis: asLock(), ownerId: `owner-${i}` })
     );
-
-    const handles = await Promise.all(locks.map(l => l.acquire('contended', 5_000)));
-    expect(handles.filter(h => h !== null)).toHaveLength(1);
+    const handles = await Promise.all(locks.map(l => l.acquire(CAMPAIGN, 5_000)));
+    expect(handles.filter(Boolean)).toHaveLength(1);
   });
 
-  live('fencing tokens increase monotonically across real acquisitions', async () => {
+  live('tokens are strictly increasing across successive grants', async () => {
+    const lock = new RedisDistributedLock({ redis: asLock(), ownerId: 'A' });
     const tokens: number[] = [];
     for (let i = 0; i < 5; i++) {
-      const lock = new RedisDistributedLock({ redis: asLock(), ownerId: `replica-${i}` });
-      const handle = await lock.acquire('sequenced', 5_000);
-      expect(handle).not.toBeNull();
+      const handle = await lock.acquire(CAMPAIGN, 5_000);
       tokens.push(handle!.fencingToken);
-      await lock.release('sequenced');
+      await lock.release(CAMPAIGN);
     }
+    expect(tokens).toEqual([...tokens].sort((x, y) => x - y));
+    expect(new Set(tokens).size).toBe(tokens.length);
+  });
 
-    for (let i = 1; i < tokens.length; i++) {
-      expect(tokens[i]).toBeGreaterThan(tokens[i - 1]);
-    }
+  live('a global lock never enters a tenant namespace', async () => {
+    const lock = new RedisDistributedLock({ redis: asLock(), ownerId: 'A' });
+    const reconcile = globalLock('reconcile');
+    await lock.acquire(reconcile, 5_000);
+
+    const keys = await redis.keys('*');
+    expect(keys).toContain(reconcile.key);
+    expect(keys.filter(k => k.startsWith('tenant:'))).toHaveLength(0);
   });
 });
 
-describe('the pause-resume race against a real server', () => {
-  live('a replica that resumes after losing its lock has its write refused', async () => {
-    const store = new FencedShadowDecisionStore({ redis: asFenced(), intervalMs: 1_000 });
+describe('a decision write proves current lock ownership', () => {
+  live('accepts the current holder', async () => {
+    const a = new RedisDistributedLock({ redis: asLock(), ownerId: 'A' });
+    const handle = await a.acquire(CAMPAIGN, 5_000);
+    expect((await store().recordFenced(decision(), authorityOf(handle!))).accepted).toBe(true);
+  });
 
-    const a = new RedisDistributedLock({ redis: asLock(), ownerId: 'replica-a' });
-    const b = new RedisDistributedLock({ redis: asLock(), ownerId: 'replica-b' });
+  live('rejects a write after the lock expired, with no replacement holder', async () => {
+    // The case a token comparison cannot see: NOTHING was written under a newer
+    // token, because there is no newer token. Only the server's own expiry
+    // makes this real, which is why it is here and not in a fake.
+    const a = new RedisDistributedLock({ redis: asLock(), ownerId: 'A' });
+    const handle = await a.acquire(CAMPAIGN, 150);
+    await sleep(300);
 
-    // 1. A acquires with a short TTL and is about to evaluate.
-    const handleA = await a.acquire('campaign:live-tenant:live-camp:shadow', 200);
-    expect(handleA).not.toBeNull();
+    const result = await store().recordFenced(decision(), authorityOf(handle!));
+    expect(result.accepted).toBe(false);
+    expect(result.rejection).toBe(DecisionRejection.LOCK_NOT_HELD);
+  });
 
-    // 2. A pauses long enough for its lock to lapse. Real elapsed time, real
-    //    server-side expiry — this is the step a fake clock cannot honestly test.
-    await sleep(350);
+  live('rejects A when B acquired a higher token and never wrote', async () => {
+    const a = new RedisDistributedLock({ redis: asLock(), ownerId: 'A' });
+    const b = new RedisDistributedLock({ redis: asLock(), ownerId: 'B' });
 
-    // 3. B takes over with a strictly higher token and writes.
-    const handleB = await b.acquire('campaign:live-tenant:live-camp:shadow', 5_000);
-    expect(handleB).not.toBeNull();
+    const handleA = await a.acquire(CAMPAIGN, 150);
+    await sleep(300);
+    const handleB = await b.acquire(CAMPAIGN, 5_000);
     expect(handleB!.fencingToken).toBeGreaterThan(handleA!.fencingToken);
 
-    const wroteB = await store.recordFenced(
-      decision({ recommendedOriginateCount: 42, decidedAtMs: 1_800_000_000_000 }),
-      handleB!.fencingToken
-    );
-    expect(wroteB.accepted).toBe(true);
-
-    // 4. A resumes, still believing it holds the lock, and writes.
-    const wroteA = await store.recordFenced(
-      decision({ recommendedOriginateCount: 7, decidedAtMs: 1_800_000_002_000 }),
-      handleA!.fencingToken
-    );
-
-    expect(wroteA.accepted).toBe(false);
-    expect(wroteA.rejection).toBe(DecisionRejection.STALE_FENCING_TOKEN);
-
-    // Only B's decision is in the history Phase 3 will be judged on.
-    const history = await store.recent('live-tenant', 10, 'live-camp');
-    expect(history).toHaveLength(1);
-    expect(history[0].recommendedOriginateCount).toBe(42);
+    // B crashes here — it never writes.
+    const late = await store().recordFenced(decision(), authorityOf(handleA!));
+    expect(late.rejection).toBe(DecisionRejection.LOCK_NOT_HELD);
   });
 
-  live('one decision per campaign per interval survives concurrent replicas', async () => {
-    const store = new FencedShadowDecisionStore({ redis: asFenced(), intervalMs: 1_000 });
+  live('the paused replica loses to the one that took over and wrote', async () => {
+    // The full race, with real elapsed time and real server-side expiry.
+    const a = new RedisDistributedLock({ redis: asLock(), ownerId: 'A' });
+    const b = new RedisDistributedLock({ redis: asLock(), ownerId: 'B' });
+    const s = store();
+
+    const handleA = await a.acquire(CAMPAIGN, 200);
+    await sleep(350);
+    const handleB = await b.acquire(CAMPAIGN, 5_000);
+
+    expect(
+      (await s.recordFenced(decision({ recommendedOriginateCount: 99 }), authorityOf(handleB!)))
+        .accepted
+    ).toBe(true);
+    expect(
+      (await s.recordFenced(decision({ recommendedOriginateCount: 1 }), authorityOf(handleA!)))
+        .accepted
+    ).toBe(false);
+
+    const survivors = await s.recent('live-tenant', 10, 'live-camp');
+    expect(survivors).toHaveLength(1);
+    expect(survivors[0].recommendedOriginateCount).toBe(99);
+  });
+
+  live('rejects the wrong owner presenting the right token', async () => {
+    const a = new RedisDistributedLock({ redis: asLock(), ownerId: 'A' });
+    const handle = await a.acquire(CAMPAIGN, 5_000);
+
+    const result = await store().recordFenced(decision(), {
+      fencingToken: handle!.fencingToken,
+      lockValue: `B:${handle!.fencingToken}`,
+    });
+    expect(result.rejection).toBe(DecisionRejection.LOCK_NOT_HELD);
+  });
+
+  live('rejects the right owner presenting a stale token', async () => {
+    const a = new RedisDistributedLock({ redis: asLock(), ownerId: 'A' });
+    const handle = await a.acquire(CAMPAIGN, 5_000);
+
+    const result = await store().recordFenced(decision(), {
+      fencingToken: handle!.fencingToken - 1,
+      lockValue: `A:${handle!.fencingToken - 1}`,
+    });
+    expect(result.rejection).toBe(DecisionRejection.LOCK_NOT_HELD);
+  });
+
+  live('rejects a token the fence counter has moved past', async () => {
+    const a = new RedisDistributedLock({ redis: asLock(), ownerId: 'A' });
+    const handle = await a.acquire(CAMPAIGN, 5_000);
+    // Lock value agrees, but the counter has been bumped.
+    await redis.set(CAMPAIGN.fenceKey, String(handle!.fencingToken + 5));
+
+    const result = await store().recordFenced(decision(), authorityOf(handle!));
+    expect(result.rejection).toBe(DecisionRejection.STALE_FENCING_TOKEN);
+  });
+
+  live('rejects a second decision in the same interval bucket', async () => {
+    const a = new RedisDistributedLock({ redis: asLock(), ownerId: 'A' });
+    const handle = await a.acquire(CAMPAIGN, 5_000);
+    const s = store();
+
+    expect(
+      (await s.recordFenced(decision({ decidedAtMs: 1_000 }), authorityOf(handle!))).accepted
+    ).toBe(true);
+    const dup = await s.recordFenced(decision({ decidedAtMs: 1_050 }), authorityOf(handle!));
+    expect(dup.rejection).toBe(DecisionRejection.DUPLICATE_INTERVAL);
+
+    // A later interval is a different slot.
+    expect(
+      (await s.recordFenced(decision({ decidedAtMs: 2_050 }), authorityOf(handle!))).accepted
+    ).toBe(true);
+  });
+
+  live('leaves another campaign entirely independent', async () => {
+    const a = new RedisDistributedLock({ redis: asLock(), ownerId: 'A' });
+    const other = campaignShadowLock('live-tenant', 'other-camp');
+
+    const one = await a.acquire(CAMPAIGN, 5_000);
+    const two = await a.acquire(other, 5_000);
+    const s = store();
+
+    expect((await s.recordFenced(decision(), authorityOf(one!))).accepted).toBe(true);
+    expect(
+      (await s.recordFenced(decision({ campaignId: 'other-camp' }), authorityOf(two!))).accepted
+    ).toBe(true);
+  });
+
+  live('twelve concurrent writers under one authority produce one decision', async () => {
+    const a = new RedisDistributedLock({ redis: asLock(), ownerId: 'A' });
+    const handle = await a.acquire(CAMPAIGN, 5_000);
+    const s = store();
 
     const results = await Promise.all(
-      Array.from({ length: 8 }, (_, i) =>
-        store.recordFenced(decision({ recommendedOriginateCount: i }), i + 1)
-      )
+      Array.from({ length: 12 }, () => s.recordFenced(decision(), authorityOf(handle!)))
+    );
+    expect(results.filter(r => r.accepted)).toHaveLength(1);
+  });
+});
+
+describe('an unfiltered tenant query is answerable from a real keyspace', () => {
+  live('merges every campaign without scanning the keyspace', async () => {
+    const a = new RedisDistributedLock({ redis: asLock(), ownerId: 'A' });
+    const s = store();
+
+    for (const [campaignId, atMs] of [
+      ['camp-1', 1_800_000_001_000],
+      ['camp-2', 1_800_000_002_000],
+    ] as const) {
+      const handle = await a.acquire(campaignShadowLock('live-tenant', campaignId), 5_000);
+      await s.recordFenced(decision({ campaignId, decidedAtMs: atMs }), authorityOf(handle!));
+    }
+
+    const all = await s.recent('live-tenant', 10);
+    expect(all.map(d => d.campaignId).sort()).toEqual(['camp-1', 'camp-2']);
+    expect(all[0].campaignId).toBe('camp-2');
+  });
+
+  live('never returns decisions belonging to another tenant', async () => {
+    const a = new RedisDistributedLock({ redis: asLock(), ownerId: 'A' });
+    const s = store();
+
+    const handle = await a.acquire(campaignShadowLock('tenant-one', 'camp-1'), 5_000);
+    await s.recordFenced(
+      decision({ tenantId: 'tenant-one', campaignId: 'camp-1' }),
+      authorityOf(handle!)
     );
 
-    expect(results.filter(r => r.accepted)).toHaveLength(1);
-    expect(await store.recent('live-tenant', 20, 'live-camp')).toHaveLength(1);
-  });
-
-  live('different campaigns are not serialised against each other', async () => {
-    const store = new FencedShadowDecisionStore({ redis: asFenced(), intervalMs: 1_000 });
-
-    expect((await store.recordFenced(decision({ campaignId: 'camp-x' }), 1)).accepted).toBe(true);
-    expect((await store.recordFenced(decision({ campaignId: 'camp-y' }), 1)).accepted).toBe(true);
-  });
-
-  live('the interval bucket marker expires so later intervals are writable', async () => {
-    const store = new FencedShadowDecisionStore({ redis: asFenced(), intervalMs: 100 });
-    expect((await store.recordFenced(decision({ decidedAtMs: 1_000 }), 1)).accepted).toBe(true);
-
-    // Same bucket, refused.
-    expect((await store.recordFenced(decision({ decidedAtMs: 1_050 }), 2)).accepted).toBe(false);
-    // Next bucket, accepted.
-    expect((await store.recordFenced(decision({ decidedAtMs: 1_150 }), 3)).accepted).toBe(true);
+    expect(await s.recent('tenant-two', 10)).toEqual([]);
   });
 });
 
 describe('dedupe against a real server', () => {
-  live('the second delivery of an event id is rejected', async () => {
-    const dedupe = new RedisDedupeStore({ redis: asMinimal() });
-    expect(await dedupe.markSeen('live-tenant', 'evt-1', 60_000)).toBe(true);
-    expect(await dedupe.markSeen('live-tenant', 'evt-1', 60_000)).toBe(false);
-  });
-
-  live('concurrent deliveries of the same id admit exactly one', async () => {
+  live('SET NX PX admits exactly one of many concurrent markers', async () => {
     const dedupe = new RedisDedupeStore({ redis: asMinimal() });
     const results = await Promise.all(
-      Array.from({ length: 10 }, () => dedupe.markSeen('live-tenant', 'evt-race', 60_000))
+      Array.from({ length: 20 }, () => dedupe.markSeen('live-tenant', 'event-1', 5_000))
     );
     expect(results.filter(Boolean)).toHaveLength(1);
   });
 
-  live('the same event id in another tenant is a different key', async () => {
+  live('a marker genuinely expires', async () => {
     const dedupe = new RedisDedupeStore({ redis: asMinimal() });
-    expect(await dedupe.markSeen('tenant-one', 'evt-shared', 60_000)).toBe(true);
-    expect(await dedupe.markSeen('tenant-two', 'evt-shared', 60_000)).toBe(true);
-  });
-
-  live('a dedupe marker really expires', async () => {
-    const dedupe = new RedisDedupeStore({ redis: asMinimal() });
-    expect(await dedupe.markSeen('live-tenant', 'evt-ttl', 150)).toBe(true);
+    expect(await dedupe.markSeen('live-tenant', 'event-ttl', 150)).toBe(true);
     await sleep(300);
-    expect(await dedupe.markSeen('live-tenant', 'evt-ttl', 150)).toBe(true);
+    expect(await dedupe.markSeen('live-tenant', 'event-ttl', 150)).toBe(true);
   });
 });
 
 describe('tenant isolation on a real keyspace', () => {
-  live('one tenant cannot read another tenant decisions', async () => {
-    const store = new RedisShadowDecisionStore({ redis: asMinimal() });
-    await store.record(decision({ tenantId: 'tenant-one', campaignId: 'shared-name' }));
-    await store.record(decision({ tenantId: 'tenant-two', campaignId: 'shared-name' }));
+  live('every key a tenant writes lives under that tenant', async () => {
+    const a = new RedisDistributedLock({ redis: asLock(), ownerId: 'A' });
+    const s = store();
 
-    expect(await store.recent('tenant-one', 10, 'shared-name')).toHaveLength(1);
-    expect((await store.recent('tenant-one', 10, 'shared-name'))[0].tenantId).toBe('tenant-one');
-  });
+    const handle = await a.acquire(campaignShadowLock('tenant-one', 'camp-1'), 5_000);
+    await s.recordFenced(
+      decision({ tenantId: 'tenant-one', campaignId: 'camp-1' }),
+      authorityOf(handle!)
+    );
 
-  live('every key written is inside its own tenant namespace', async () => {
-    const store = new RedisShadowDecisionStore({ redis: asMinimal() });
-    await store.record(decision({ tenantId: 'tenant-one' }));
-
-    const keys = await redis.keys('*');
-    expect(keys.length).toBeGreaterThan(0);
-    for (const key of keys) {
-      expect(key).toMatch(/^tenant:tenant-one:dialer:v2:/);
-    }
+    const foreign = (await redis.keys('*')).filter(
+      k => !k.startsWith('tenant:tenant-one:') && !k.startsWith('dialer:v2:global:')
+    );
+    expect(foreign).toEqual([]);
   });
 });

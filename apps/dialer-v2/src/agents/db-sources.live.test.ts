@@ -327,6 +327,9 @@ describe('a real database failure fails closed', () => {
       user: {
         findMany: () => prisma.$queryRawUnsafe('SELECT * FROM table_that_does_not_exist'),
       },
+      campaignAgent: {
+        findMany: () => prisma.$queryRawUnsafe('SELECT * FROM table_that_does_not_exist'),
+      },
     };
 
     const resolver = new ExtensionResolver({

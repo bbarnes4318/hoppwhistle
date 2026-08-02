@@ -115,16 +115,31 @@ async function authorize(
   return result.context;
 }
 
+/**
+ * Marks an instance as having had cookie support requested.
+ *
+ * `hasReplyDecorator('setCookie')` cannot be used as the guard: `register`
+ * ENQUEUES a plugin rather than applying it, so the decorator does not exist
+ * until boot and a second call would queue it again — and registering
+ * `@fastify/cookie` twice throws at boot. `decorate` applies immediately, so
+ * this flag is true from the moment it is set.
+ */
+const COOKIES_REQUESTED = 'dialerV2CookiesRequested';
+
+// eslint-disable-next-line @typescript-eslint/require-await
 export async function registerDialerV2ShadowRoutes(
   fastify: FastifyInstance,
   options: DialerV2RouteOptions = {}
 ) {
   // Registered here rather than globally: these are the only routes that use
-  // cookies, and the session cookie is scoped to their path. Guarded because
-  // registering the plugin twice on one instance throws, and the app may add it
-  // globally later.
-  if (!fastify.hasReplyDecorator('setCookie')) {
-    await fastify.register(fastifyCookie);
+  // cookies, and the session cookie is scoped to their path.
+  //
+  // Deliberately NOT awaited. Awaiting would make this function's routes
+  // register asynchronously, and callers that do not await it — including the
+  // route tests — would then have Fastify reach `ready()` with no routes bound.
+  if (!fastify.hasDecorator(COOKIES_REQUESTED)) {
+    fastify.decorate(COOKIES_REQUESTED, true);
+    void fastify.register(fastifyCookie);
   }
 
   const client =

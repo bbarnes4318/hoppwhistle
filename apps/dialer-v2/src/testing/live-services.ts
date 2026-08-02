@@ -50,6 +50,7 @@ export interface LiveRedis {
   ltrim(key: string, start: number, stop: number): Promise<unknown>;
   pexpire(key: string, ms: number): Promise<number>;
   keys(pattern: string): Promise<string[]>;
+  type(key: string): Promise<string>;
   flushdb(): Promise<unknown>;
   incr(key: string): Promise<number>;
   hset(key: string, ...args: (string | number)[]): Promise<number>;
@@ -144,6 +145,8 @@ export function sleep(ms: number): Promise<void> {
  */
 export interface LivePrisma {
   $queryRawUnsafe<T = unknown>(sql: string, ...values: unknown[]): Promise<T>;
+  /** Used by the composition suite to seed exactly the rows production holds. */
+  $executeRawUnsafe(sql: string, ...values: unknown[]): Promise<number>;
   $disconnect(): Promise<void>;
   tenant: {
     create(args: { data: Record<string, unknown> }): Promise<Record<string, unknown>>;
