@@ -103,6 +103,52 @@ async function makeUser(opts: {
   return row.id as string;
 }
 
+/**
+ * A campaign needs a publisher, so both are created.
+ *
+ * Raw SQL rather than the generated client: the point is to write the rows the
+ * production tables hold, and `campaign_agents` has no generated model until
+ * `prisma generate` has run against the new schema.
+ */
+async function makeCampaign(tenantId: string): Promise<string> {
+  const publisherId = `${MARK}-pub-${seq++}`;
+  const campaignId = `${MARK}-camp-${seq++}`;
+
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO publishers (id, "tenantId", name, status, "createdAt", "updatedAt")
+     VALUES ($1, $2, $3, 'ACTIVE', NOW(), NOW())`,
+    publisherId,
+    tenantId,
+    `${MARK} publisher`
+  );
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO campaigns (id, "tenantId", "publisherId", name, status, "createdAt", "updatedAt")
+     VALUES ($1, $2, $3, $4, 'ACTIVE', NOW(), NOW())`,
+    campaignId,
+    tenantId,
+    publisherId,
+    `${MARK} campaign`
+  );
+  return campaignId;
+}
+
+async function assign(
+  tenantId: string,
+  campaignId: string,
+  userId: string,
+  status = 'ACTIVE'
+): Promise<void> {
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO campaign_agents (id, "tenantId", "campaignId", "userId", status, "createdAt", "updatedAt")
+     VALUES ($1, $2, $3, $4, $5::"CampaignAgentStatus", NOW(), NOW())`,
+    `${MARK}-assign-${seq++}`,
+    tenantId,
+    campaignId,
+    userId,
+    status
+  );
+}
+
 describe('the extension really lives in JSONB metadata', () => {
   live('round-trips a string extension through PostgreSQL', async () => {
     const tenantId = await makeTenant('t1');
@@ -262,34 +308,44 @@ describe('SIP identity resolution against real rows', () => {
 });
 
 describe('assignments against the real schema', () => {
-  live('confirms the schema still has no agent-to-campaign relation', async () => {
-    // If this ever starts failing, the schema gained an assignment model and
-    // DatabaseAssignmentSource should be implemented rather than fail closed.
+  live('confirms the assignment table exists with the shape the source reads', async () => {
+    // This used to assert the OPPOSITE — that no agent-to-campaign relation
+    // existed anywhere — because the schema modelled none and the source failed
+    // closed. Migration 20260802000000 adds one, so the assertion inverts: if
+    // the table ever disappears, assignment resolution silently returns nothing
+    // and every campaign forecast counts zero agents again.
     const columns = await prisma.$queryRawUnsafe<Array<{ column_name: string }>>(
-      `SELECT column_name FROM information_schema.columns WHERE table_name = 'users'`
+      `SELECT column_name FROM information_schema.columns WHERE table_name = 'campaign_agents'`
     );
     const names = columns.map(c => c.column_name);
 
-    expect(names).toContain('metadata');
     expect(names).toContain('tenantId');
-    // No extension column, and no campaign linkage on the user.
-    expect(names).not.toContain('extension');
-    expect(names.filter(n => n.toLowerCase().includes('campaign'))).toEqual([]);
+    expect(names).toContain('campaignId');
+    expect(names).toContain('userId');
+    expect(names).toContain('status');
 
-    const joinTables = await prisma.$queryRawUnsafe<Array<{ table_name: string }>>(
-      `SELECT table_name FROM information_schema.tables
-        WHERE table_schema = 'public'
-          AND (table_name ILIKE '%agent_campaign%'
-            OR table_name ILIKE '%campaign_agent%'
-            OR table_name ILIKE '%campaign_user%'
-            OR table_name ILIKE '%user_campaign%')`
+    // Still no extension column on users — the extension lives in metadata.
+    const userColumns = await prisma.$queryRawUnsafe<Array<{ column_name: string }>>(
+      `SELECT column_name FROM information_schema.columns WHERE table_name = 'users'`
     );
-    expect(joinTables).toEqual([]);
+    expect(userColumns.map(c => c.column_name)).not.toContain('extension');
   });
 
-  live('resolves a real user to no campaigns and reports why', async () => {
+  live('enforces one assignment per agent per campaign', async () => {
+    // A duplicate would double-count that agent in the campaign's available
+    // capacity, which is the number the controller multiplies by lines-per-agent.
+    const indexes = await prisma.$queryRawUnsafe<Array<{ indexdef: string }>>(
+      `SELECT indexdef FROM pg_indexes WHERE tablename = 'campaign_agents'`
+    );
+    const unique = indexes.map(i => i.indexdef).filter(d => d.includes('UNIQUE'));
+    expect(unique.some(d => /tenantId[\s\S]*campaignId[\s\S]*userId/.test(d))).toBe(true);
+  });
+
+  live('resolves a real user to a real campaign', async () => {
     const tenantId = await makeTenant('assign');
     const userId = await makeUser({ tenantId, metadata: { extension: '1011' } });
+    const campaignId = await makeCampaign(tenantId);
+    await assign(tenantId, campaignId, userId);
 
     const reasons: AssignmentUnavailableReason[] = [];
     const source = new DatabaseAssignmentSource({
@@ -298,8 +354,86 @@ describe('assignments against the real schema', () => {
     });
 
     const assignment = await source.resolve(tenantId, userId);
-    expect(assignment).toMatchObject({ tenantId, agentId: userId, campaignIds: [], queueIds: [] });
-    expect(reasons).toEqual([AssignmentUnavailableReason.NO_SCHEMA_SUPPORT]);
+    expect(assignment).toMatchObject({ tenantId, agentId: userId, campaignIds: [campaignId] });
+    // Nothing is unavailable, so nothing is reported.
+    expect(reasons).toEqual([]);
+  });
+
+  live('a disabled assignment grants nothing', async () => {
+    const tenantId = await makeTenant('assign-off');
+    const userId = await makeUser({ tenantId, metadata: { extension: '1012' } });
+    const campaignId = await makeCampaign(tenantId);
+    await assign(tenantId, campaignId, userId, 'INACTIVE');
+
+    const source = new DatabaseAssignmentSource({ db: asDb() });
+    expect(await source.resolve(tenantId, userId)).toMatchObject({ campaignIds: [] });
+  });
+
+  live('revoking the assignment removes the capacity', async () => {
+    const tenantId = await makeTenant('assign-rev');
+    const userId = await makeUser({ tenantId, metadata: { extension: '1013' } });
+    const campaignId = await makeCampaign(tenantId);
+    await assign(tenantId, campaignId, userId);
+
+    const source = new DatabaseAssignmentSource({ db: asDb() });
+    expect((await source.resolve(tenantId, userId))?.campaignIds).toEqual([campaignId]);
+
+    await prisma.$executeRawUnsafe(
+      `DELETE FROM campaign_agents WHERE "tenantId" = $1 AND "userId" = $2`,
+      tenantId,
+      userId
+    );
+    expect((await source.resolve(tenantId, userId))?.campaignIds).toEqual([]);
+  });
+
+  live('one agent can hold several campaigns', async () => {
+    const tenantId = await makeTenant('assign-multi');
+    const userId = await makeUser({ tenantId, metadata: { extension: '1014' } });
+    const first = await makeCampaign(tenantId);
+    const second = await makeCampaign(tenantId);
+    await assign(tenantId, first, userId);
+    await assign(tenantId, second, userId);
+
+    const source = new DatabaseAssignmentSource({ db: asDb() });
+    const result = await source.resolve(tenantId, userId);
+    expect(result?.campaignIds.sort()).toEqual([first, second].sort());
+  });
+
+  live('a suspended user grants nothing even with a live assignment', async () => {
+    // An assignment row outliving a suspended user must not keep granting
+    // capacity.
+    const tenantId = await makeTenant('assign-susp');
+    const userId = await makeUser({
+      tenantId,
+      status: 'SUSPENDED',
+      metadata: { extension: '1015' },
+    });
+    const campaignId = await makeCampaign(tenantId);
+    await assign(tenantId, campaignId, userId);
+
+    const source = new DatabaseAssignmentSource({ db: asDb() });
+    expect(await source.resolve(tenantId, userId)).toBeNull();
+  });
+
+  live('a cross-tenant assignment cannot resolve', async () => {
+    // The unique constraint does not prevent a row pairing a tenant with
+    // another tenant's campaign, so the query checks the campaign's own tenant.
+    const tenantA = await makeTenant('x-a');
+    const tenantB = await makeTenant('x-b');
+    const userInA = await makeUser({ tenantId: tenantA, metadata: { extension: '1016' } });
+    const campaignInB = await makeCampaign(tenantB);
+
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO campaign_agents (id, "tenantId", "campaignId", "userId", status, "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, 'ACTIVE', NOW(), NOW())`,
+      `${tenantA}-cross`,
+      tenantA,
+      campaignInB,
+      userInA
+    );
+
+    const source = new DatabaseAssignmentSource({ db: asDb() });
+    expect((await source.resolve(tenantA, userInA))?.campaignIds).toEqual([]);
   });
 
   live('returns null across tenants', async () => {

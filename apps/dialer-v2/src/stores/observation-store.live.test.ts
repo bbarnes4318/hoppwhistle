@@ -48,8 +48,12 @@ function live(name: string, fn: () => Promise<void>) {
   });
 }
 
-/** Short buckets so a real window boundary can be crossed inside a test. */
-const store = (bucketMs = 300, bucketCount = 3, now?: () => number) =>
+/**
+ * `bucketMs` is floored at one second by the store — a sub-second bucket is not
+ * a meaningful statistic — so tests that need to cross a boundary quickly drive
+ * an injected clock rather than passing a smaller bucket that would be ignored.
+ */
+const store = (bucketMs = 60_000, bucketCount = 12, now?: () => number) =>
   new RedisObservationStore({
     redis: redis as unknown as ObservationRedis,
     bucketMs,
@@ -60,51 +64,75 @@ const store = (bucketMs = 300, bucketCount = 3, now?: () => number) =>
 const TENANT = 'live-tenant';
 const CAMPAIGN = 'live-camp';
 
-describe('the window forgets on the server', () => {
-  live('drops a bucket that has aged out, under continuous traffic', async () => {
+describe('the window forgets, under continuous traffic', () => {
+  live('drops evidence that has aged out while the campaign stays busy', async () => {
     // The bug: one hash with PEXPIRE refreshed on every write never expires
-    // while a campaign is busy. Traffic here is unbroken, so if the old
-    // behaviour were still present nothing would ever fall out.
-    const s = store(200, 3);
+    // while a campaign is busy, so a "one hour window" ran from the campaign's
+    // first event to its last. Traffic here is unbroken throughout, which is
+    // exactly the condition under which the old behaviour never forgot.
+    const clock = { value: Date.now() };
+    const s = store(60_000, 3, () => clock.value);
 
-    await s.apply(TENANT, CAMPAIGN, Date.now(), { attempts: 100 });
+    await s.apply(TENANT, CAMPAIGN, clock.value, { attempts: 100 });
+    expect((await s.read(TENANT, CAMPAIGN))!.attempts).toBe(100);
 
     for (let i = 0; i < 8; i++) {
-      await sleep(150);
-      await s.apply(TENANT, CAMPAIGN, Date.now(), { attempts: 1 });
+      clock.value += 60_000;
+      await s.apply(TENANT, CAMPAIGN, clock.value, { attempts: 1 });
     }
 
     const snapshot = await s.read(TENANT, CAMPAIGN);
-    expect(snapshot).not.toBeNull();
-    // The original 100 is outside the trailing window and genuinely gone.
-    expect(snapshot!.attempts).toBeLessThan(100);
+    // Only the trailing three buckets remain. The original 100 is gone despite
+    // the campaign never having gone quiet.
+    expect(snapshot!.attempts).toBe(3);
   });
 
-  live('a campaign that goes quiet loses its counters entirely', async () => {
-    const s = store(150, 2);
-    await s.apply(TENANT, CAMPAIGN, Date.now(), { attempts: 42 });
+  live('a campaign that goes quiet reads as zero', async () => {
+    const clock = { value: Date.now() };
+    const s = store(60_000, 2, () => clock.value);
+
+    await s.apply(TENANT, CAMPAIGN, clock.value, { attempts: 42 });
     expect((await s.read(TENANT, CAMPAIGN))!.attempts).toBe(42);
 
-    await sleep(700);
+    clock.value += 10 * 60_000;
     expect((await s.read(TENANT, CAMPAIGN))!.attempts).toBe(0);
   });
 
-  live('sums across buckets while they are all still live', async () => {
-    const s = store(300, 6);
+  live('sums across every bucket still inside the window', async () => {
+    const clock = { value: Date.now() };
+    const s = store(60_000, 6, () => clock.value);
+
     for (let i = 0; i < 3; i++) {
-      await s.apply(TENANT, CAMPAIGN, Date.now(), { attempts: 5 });
-      await sleep(310);
+      await s.apply(TENANT, CAMPAIGN, clock.value, { attempts: 5 });
+      clock.value += 60_000;
     }
     expect((await s.read(TENANT, CAMPAIGN))!.attempts).toBe(15);
+  });
+});
+
+describe('a bucket really expires on the server', () => {
+  live('the key is gone after its TTL, not merely outside the window', async () => {
+    // The test above proves the READ excludes an old bucket. This proves Redis
+    // itself drops it, so a busy campaign cannot accumulate keys forever. The
+    // TTL is window + one bucket, so the shortest honest wait is a few seconds.
+    const s = store(1_000, 1);
+    const at = Date.now();
+    await s.apply(TENANT, CAMPAIGN, at, { attempts: 9 });
+
+    const key = `tenant:${TENANT}:dialer:v2:campaign:${CAMPAIGN}:observation:${Math.floor(at / 1_000)}`;
+    expect(await redis.exists(key)).toBe(1);
+
+    await sleep(2_600);
+    expect(await redis.exists(key)).toBe(0);
   });
 });
 
 describe('the bucket is chosen by event time', () => {
   live('files a late event under a real earlier bucket key', async () => {
     const nowRef = { value: Date.now() };
-    const s = store(1_000, 12, () => nowRef.value);
+    const s = store(60_000, 12, () => nowRef.value);
 
-    await s.apply(TENANT, CAMPAIGN, nowRef.value - 4_000, { attempts: 3 });
+    await s.apply(TENANT, CAMPAIGN, nowRef.value - 4 * 60_000, { attempts: 3 });
 
     // Two distinct bucket keys exist only if selection used event time.
     await s.apply(TENANT, CAMPAIGN, nowRef.value, { attempts: 1 });
@@ -116,9 +144,9 @@ describe('the bucket is chosen by event time', () => {
 
   live('rejects an event older than every live bucket', async () => {
     const nowRef = { value: Date.now() };
-    const s = store(1_000, 3, () => nowRef.value);
+    const s = store(60_000, 3, () => nowRef.value);
 
-    await s.apply(TENANT, CAMPAIGN, nowRef.value - 60_000, { attempts: 99 });
+    await s.apply(TENANT, CAMPAIGN, nowRef.value - 60 * 60_000, { attempts: 99 });
     expect(s.metrics().rejectedOutsideWindow).toBe(1);
     expect((await s.read(TENANT, CAMPAIGN))!.attempts).toBe(0);
   });
