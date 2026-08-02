@@ -18,6 +18,24 @@ import { useCallback, useEffect, useState } from 'react';
 
 const API_URL = typeof window !== 'undefined' ? window.location.origin : '';
 
+interface AgentView {
+  agentId: string;
+  state: string;
+  sipRegistered: boolean;
+  lastHeartbeatAgeMs: number | null;
+  countedAsCapacity: boolean;
+  lastReconciliationReason: string | null;
+}
+
+interface CorrectionView {
+  agentId: string;
+  reason: string;
+  fromState: string;
+  toState: string;
+  atMs: number;
+  detail: string;
+}
+
 interface ShadowStatus {
   serviceReachable: boolean;
   serviceDetail: string;
@@ -92,21 +110,29 @@ function formatAge(ms: number | null): string {
 export default function DialerV2ShadowPage() {
   const [status, setStatus] = useState<ShadowStatus | null>(null);
   const [decisions, setDecisions] = useState<ShadowDecision[] | null>(null);
+  const [agents, setAgents] = useState<AgentView[] | null>(null);
+  const [corrections, setCorrections] = useState<CorrectionView[] | null>(null);
+  const [authenticated, setAuthenticated] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [statusRes, decisionsRes] = await Promise.all([
+      const [statusRes, decisionsRes, agentsRes, correctionsRes] = await Promise.all([
         fetch(`${API_URL}/api/v1/dialer-v2/shadow/status`, { credentials: 'include' }),
         fetch(`${API_URL}/api/v1/dialer-v2/shadow/decisions?limit=25`, { credentials: 'include' }),
+        fetch(`${API_URL}/api/v1/dialer-v2/agents/state`, { credentials: 'include' }),
+        fetch(`${API_URL}/api/v1/dialer-v2/reconciliation/corrections`, { credentials: 'include' }),
       ]);
 
       if (statusRes.status === 401 || decisionsRes.status === 401) {
         setError('You are not signed in, or your session has expired.');
+        setAuthenticated(false);
         setStatus(null);
         setDecisions(null);
+        setAgents(null);
+        setCorrections(null);
         return;
       }
       if (!statusRes.ok || !decisionsRes.ok) {
@@ -118,6 +144,14 @@ export default function DialerV2ShadowPage() {
       const decisionsBody = (await decisionsRes.json()) as { data: ShadowDecision[] };
       setStatus(statusBody.data);
       setDecisions(decisionsBody.data);
+      setAuthenticated(true);
+
+      if (agentsRes.ok) {
+        setAgents(((await agentsRes.json()) as { data: AgentView[] }).data);
+      }
+      if (correctionsRes.ok) {
+        setCorrections(((await correctionsRes.json()) as { data: CorrectionView[] }).data);
+      }
     } catch {
       setError('Could not reach the shadow API.');
     } finally {
@@ -155,6 +189,14 @@ export default function DialerV2ShadowPage() {
           Refresh
         </button>
       </header>
+
+      {/* Required label. Rendered unconditionally, above every metric. */}
+      <div
+        role="status"
+        className="rounded-lg border-2 border-amber-500/50 bg-amber-500/10 px-4 py-3 text-center text-sm font-semibold tracking-wide"
+      >
+        SHADOW MODE — NO CALLS ARE BEING PLACED
+      </div>
 
       {error ? (
         <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
@@ -213,6 +255,23 @@ export default function DialerV2ShadowPage() {
               hint="quarantined, no tenant could be proven"
               tone={status.unresolvedEventCount > 0 ? 'warn' : 'neutral'}
             />
+            <Stat
+              label="Authentication"
+              value={authenticated ? 'Verified' : 'Not verified'}
+              hint="session-derived tenant, never a header"
+              tone={authenticated ? 'good' : 'bad'}
+            />
+            <Stat
+              label="Shadow mode"
+              value={status.shadowEnabled ? 'Enabled' : 'Disabled'}
+              tone={status.shadowEnabled ? 'good' : 'warn'}
+            />
+            <Stat
+              label="Origination"
+              value={status.originationImplemented ? 'IMPLEMENTED' : 'No code path'}
+              hint="Dialer V2 cannot place a call in this build"
+              tone={status.originationImplemented ? 'bad' : 'good'}
+            />
           </div>
         </section>
       ) : null}
@@ -253,6 +312,77 @@ export default function DialerV2ShadowPage() {
               Limiting factor: <code>{latest.bindingConstraint}</code>
               {latest.blockedBy.length > 0 ? ` · Blocked by: ${latest.blockedBy.join(', ')}` : ''}
             </p>
+          </div>
+        </section>
+      ) : null}
+
+      {agents ? (
+        <section aria-labelledby="agents-heading" className="space-y-3">
+          <h2 id="agents-heading" className="text-sm font-medium text-muted-foreground">
+            Agents
+          </h2>
+          {agents.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+              No agents have reported to Dialer V2 yet.
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <Stat
+                label="Counted as capacity"
+                value={String(agents.filter(a => a.countedAsCapacity).length)}
+                hint="verified available and SIP-registered"
+                tone="good"
+              />
+              <Stat
+                label="Stale"
+                value={String(agents.filter(a => a.state === 'STALE').length)}
+                hint="excluded from predictive capacity"
+                tone={agents.some(a => a.state === 'STALE') ? 'warn' : 'neutral'}
+              />
+              <Stat
+                label="On calls"
+                value={String(agents.filter(a => a.state === 'ON_CALL').length)}
+              />
+              <Stat
+                label="SIP unregistered"
+                value={String(agents.filter(a => !a.sipRegistered).length)}
+                tone={agents.some(a => !a.sipRegistered) ? 'warn' : 'neutral'}
+              />
+            </div>
+          )}
+        </section>
+      ) : null}
+
+      {corrections && corrections.length > 0 ? (
+        <section aria-labelledby="corrections-heading" className="space-y-3">
+          <h2 id="corrections-heading" className="text-sm font-medium text-muted-foreground">
+            Recent reconciliation corrections
+          </h2>
+          <div className="overflow-x-auto rounded-lg border">
+            <table className="w-full text-sm">
+              <thead className="border-b bg-muted/50 text-left">
+                <tr>
+                  <th className="px-3 py-2 font-medium">Time</th>
+                  <th className="px-3 py-2 font-medium">Agent</th>
+                  <th className="px-3 py-2 font-medium">Change</th>
+                  <th className="px-3 py-2 font-medium">Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {corrections.map((c, i) => (
+                  <tr key={`${c.agentId}-${c.atMs}-${i}`} className="border-b last:border-0">
+                    <td className="whitespace-nowrap px-3 py-2 tabular-nums text-muted-foreground">
+                      {new Date(c.atMs).toLocaleTimeString()}
+                    </td>
+                    <td className="px-3 py-2">{c.agentId}</td>
+                    <td className="px-3 py-2">
+                      {c.fromState} &rarr; {c.toState}
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">{c.detail}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </section>
       ) : null}
