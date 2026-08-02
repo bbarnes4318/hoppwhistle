@@ -7,6 +7,12 @@ name: Dialer V2
 # across 41 files this branch did not introduce. A job that is red for reasons
 # unrelated to the change teaches everyone to ignore it, so this one only
 # asserts things this work is actually responsible for.
+#
+# Every job that uses `pnpm --filter` first asserts the target package exists.
+# `pnpm --filter` exits 0 when nothing matches, and apps/dialer-v2/package.json
+# was gitignored by a blanket `*.json` rule — so this workflow once reported
+# success while running zero tests. A vacuously green job is worse than a red
+# one.
 
 on:
   push:
@@ -19,7 +25,10 @@ on:
       - 'apps/api/src/services/hopper-preflight.ts'
       - 'apps/api/src/cli/hopper-preflight.ts'
       - 'apps/web/src/app/(dashboard)/dialer-v2-shadow/**'
+      - 'apps/web/tsconfig.dialer-v2.json'
+      - 'apps/web/vitest.config.ts'
       - '.github/workflows/dialer-v2.yml'
+      - '.gitignore'
   pull_request:
     paths:
       - 'apps/dialer-v2/**'
@@ -29,13 +38,43 @@ on:
       - 'apps/api/src/services/hopper-preflight.ts'
       - 'apps/api/src/cli/hopper-preflight.ts'
       - 'apps/web/src/app/(dashboard)/dialer-v2-shadow/**'
+      - 'apps/web/tsconfig.dialer-v2.json'
+      - 'apps/web/vitest.config.ts'
       - '.github/workflows/dialer-v2.yml'
+      - '.gitignore'
 
 concurrency:
   group: dialer-v2-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  tracked-files:
+    name: required files are tracked
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The root cause of a previously fake-green run. A file that exists
+      # locally but is gitignored produces exactly this failure mode, so assert
+      # presence on a fresh checkout rather than trusting a local `ls`.
+      - name: Assert config files exist on a clean checkout
+        run: |
+          set -euo pipefail
+          missing=0
+          for f in \
+            apps/dialer-v2/package.json \
+            apps/dialer-v2/tsconfig.json \
+            apps/dialer-v2/vitest.config.ts \
+            apps/web/tsconfig.dialer-v2.json \
+            apps/web/vitest.config.ts
+          do
+            if [ ! -f "$f" ]; then
+              echo "::error file=$f::missing from the repository (gitignored?)"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
   dialer-v2:
     name: dialer-v2 tests, typecheck, lint
     runs-on: ubuntu-latest
@@ -53,6 +92,14 @@ jobs:
 
       - name: Install
         run: pnpm install --frozen-lockfile
+
+      - name: Assert dialer-v2 is a real workspace package
+        run: |
+          set -euo pipefail
+          if ! pnpm ls --filter @hopwhistle/dialer-v2 --depth -1 | grep -q '@hopwhistle/dialer-v2'; then
+            echo "::error::pnpm does not see @hopwhistle/dialer-v2 as a workspace project"
+            exit 1
+          fi
 
       - name: Typecheck
         run: pnpm --filter @hopwhistle/dialer-v2 typecheck
@@ -112,13 +159,28 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      - name: Generate Prisma client
-        run: pnpm --filter @hopwhistle/api exec prisma generate
+      - name: Assert the scoped config actually covers the page
+        run: |
+          set -euo pipefail
+          if ! grep -q 'dialer-v2-shadow/page.tsx' apps/web/tsconfig.dialer-v2.json; then
+            echo "::error::the scoped config does not include page.tsx"
+            exit 1
+          fi
 
       # A real compile check for the supervisor page. Before this, the page was
       # never type-checked or built by any automation at all.
-      - name: Typecheck web
+      - name: Typecheck web supervisor
         run: pnpm --filter @hopwhistle/web typecheck
+
+      - name: Assert the page itself was compiled
+        run: |
+          set -euo pipefail
+          cd apps/web
+          if ! pnpm exec tsc -p tsconfig.dialer-v2.json --listFiles \
+               | grep -q 'dialer-v2-shadow/page.tsx'; then
+            echo "::error::page.tsx was not part of the compilation"
+            exit 1
+          fi
 
       - name: Supervisor page contract tests
         run: pnpm --filter @hopwhistle/web test
@@ -140,9 +202,9 @@ jobs:
           if grep -rnE "\b(originate|bgapi|uuid_transfer|uuid_bridge|uuid_kill|sendmsg)\b" \
                apps/dialer-v2/src \
                --include='*.ts' \
-               | grep -v 'socket-transport' \
-               | grep -v '\.test\.ts' \
-               | grep -vE ':[0-9]+:[[:space:]]*(\*|//|/\*)' ; then
+             | grep -v 'socket-transport' \
+             | grep -v '\.test\.ts' \
+             | grep -vE ':[0-9]+:[[:space:]]*(\*|//|/\*)' ; then
             echo "::error::A call-control command appears outside the read-only guard."
             exit 1
           fi

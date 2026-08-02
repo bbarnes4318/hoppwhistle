@@ -1,0 +1,23 @@
+{
+  // Scoped compile check for the Dialer V2 supervisor page.
+  //
+  // apps/web does not typecheck as a whole (141 pre-existing errors in
+  // unrelated components), so a whole-app check would be red for reasons this
+  // work did not cause. This config compiles the page itself, its extracted
+  // presentation logic, and its tests — not just an isolated helper.
+  //
+  // `next-env.d.ts` is deliberately NOT in `include`: Next generates it and the
+  // repo gitignores it, so it does not exist on a fresh CI checkout. React and
+  // JSX types come from the inherited `jsx` setting and @types/react.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "tsBuildInfoFile": "./.tsbuildinfo-dialer-v2"
+  },
+  "include": [
+    "src/app/(dashboard)/dialer-v2-shadow/page.tsx",
+    "src/app/(dashboard)/dialer-v2-shadow/lib.ts",
+    "src/app/(dashboard)/dialer-v2-shadow/lib.test.ts"
+  ],
+  "exclude": ["node_modules", ".next"]
+}

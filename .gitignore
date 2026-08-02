@@ -79,3 +79,12 @@ recordings/
 
 # Exposed provider keys / research spec — never commit
 deep.md
+
+# The blanket `*.json` rule above silently swallowed package.json and
+# tsconfig.json for apps/dialer-v2, so that package never existed on the
+# remote at all. `pnpm --filter` exits 0 when nothing matches, so CI reported
+# success while running zero tests. Config files that define a workspace must
+# never be ignorable.
+!**/package.json
+!**/tsconfig*.json
+!**/vitest.config.json
