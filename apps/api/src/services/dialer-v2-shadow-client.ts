@@ -85,25 +85,41 @@ export interface CorrectionView {
   detail: string;
 }
 
+export interface SessionGrant {
+  sessionId: string;
+  expiresAtMs: number;
+  issuedAtMs: number;
+}
+
+/**
+ * What a heartbeat may carry.
+ *
+ * Deliberately does NOT include sipRegistered, currentCallId,
+ * currentChannelUuid, campaignIds, or queueIds. Those are derived server-side
+ * from FreeSWITCH events and the assignment source; accepting them from a
+ * browser is what let a stale tab stay in predictive capacity and let a client
+ * add itself to campaigns it was never assigned.
+ */
 export interface HeartbeatInput {
   tenantId: string;
   agentId: string;
   userId: string;
+  /** Server-issued. The browser cannot invent one. */
   sessionId: string;
   sequence: number;
   uiState: string | null;
-  sipRegistered: boolean;
-  currentCallId: string | null;
-  currentChannelUuid: string | null;
-  campaignIds: string[];
-  queueIds: string[];
-  softphoneReady: boolean;
+  /** May narrow the authoritative assignment; can never widen it. */
+  preferredCampaignIds?: string[];
+  /** Recorded for comparison against FreeSWITCH; never used as truth. */
+  browserClaimsSipRegistered?: boolean;
 }
 
 export interface HeartbeatResult {
   accepted: boolean;
   countedAsCapacity?: boolean;
   state?: string;
+  sipRegistered?: boolean;
+  campaignIds?: string[];
   reason?: string;
   message?: string;
   status?: number;
@@ -255,6 +271,29 @@ export class DialerV2ShadowClient {
       `/internal/reconciliation/corrections?${params.toString()}`
     );
     return Array.isArray(body?.corrections) ? body.corrections : [];
+  }
+
+  async issueSession(
+    tenantId: string,
+    agentId: string,
+    userId: string
+  ): Promise<SessionGrant | null> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const response = await this.fetchImpl(`${this.baseUrl}/internal/agents/session`, {
+        method: 'POST',
+        headers: { ...this.headers(), 'content-type': 'application/json' },
+        body: JSON.stringify({ tenantId, agentId, userId }),
+        signal: controller.signal,
+      });
+      if (!response.ok) return null;
+      return (await response.json()) as SessionGrant;
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   async postHeartbeat(input: HeartbeatInput): Promise<HeartbeatResult> {

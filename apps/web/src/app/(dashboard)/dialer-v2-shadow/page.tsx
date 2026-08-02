@@ -16,6 +16,20 @@
 import { AlertTriangle, Eye, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
+import {
+  SHADOW_BANNER,
+  abandonTone,
+  displayableDecisions,
+  emptyStateMessage,
+  eslTone,
+  eventFreshnessTone,
+  formatAge,
+  originationLabel,
+  type ShadowDecision,
+  type ShadowStatus,
+  type Tone,
+} from './lib';
+
 const API_URL = typeof window !== 'undefined' ? window.location.origin : '';
 
 interface AgentView {
@@ -36,41 +50,6 @@ interface CorrectionView {
   detail: string;
 }
 
-interface ShadowStatus {
-  serviceReachable: boolean;
-  serviceDetail: string;
-  shadowEnabled: boolean;
-  ingestionHealthy: boolean;
-  eslConnected: boolean;
-  eslDetail: string;
-  lastEventAgeMs: number | null;
-  staleAgentCount: number;
-  unresolvedEventCount: number;
-  emergencyStop: boolean;
-  originationPermitted: boolean;
-  originationImplemented: boolean;
-  checks: Array<{ name: string; status: string; detail?: string }>;
-}
-
-interface ShadowDecision {
-  campaignId: string;
-  decidedAtMs: number;
-  recommendedOriginateCount: number;
-  bindingConstraint: string;
-  degradationMode: string;
-  safetyReasons: string[];
-  blockedBy: string[];
-  originated: boolean;
-  explanation: string;
-  agentsAvailable: number;
-  agentsEligible: number;
-  callsDialing: number;
-  liveAnswersWaiting: number;
-  abandonRate: number;
-  pLive: number | null;
-  confidence: string | null;
-}
-
 function Stat({
   label,
   value,
@@ -80,7 +59,7 @@ function Stat({
   label: string;
   value: string;
   hint?: string;
-  tone?: 'neutral' | 'good' | 'warn' | 'bad';
+  tone?: Tone;
 }) {
   const toneClass =
     tone === 'good'
@@ -98,13 +77,6 @@ function Stat({
       {hint ? <div className="mt-1 text-xs text-muted-foreground">{hint}</div> : null}
     </div>
   );
-}
-
-function formatAge(ms: number | null): string {
-  if (ms === null) return 'never';
-  if (ms < 1000) return `${ms} ms`;
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)} s`;
-  return `${Math.round(ms / 60_000)} min`;
 }
 
 export default function DialerV2ShadowPage() {
@@ -165,7 +137,9 @@ export default function DialerV2ShadowPage() {
     return () => clearInterval(timer);
   }, [load]);
 
-  const latest = decisions && decisions.length > 0 ? decisions[0] : null;
+  const rows = displayableDecisions(decisions);
+  const latest = rows.length > 0 ? rows[0] : null;
+  const emptyMessage = emptyStateMessage(status, decisions);
 
   return (
     <div className="space-y-6 p-6">
@@ -195,7 +169,7 @@ export default function DialerV2ShadowPage() {
         role="status"
         className="rounded-lg border-2 border-amber-500/50 bg-amber-500/10 px-4 py-3 text-center text-sm font-semibold tracking-wide"
       >
-        SHADOW MODE — NO CALLS ARE BEING PLACED
+        {SHADOW_BANNER}
       </div>
 
       {error ? (
@@ -235,13 +209,13 @@ export default function DialerV2ShadowPage() {
               label="FreeSWITCH ESL"
               value={status.eslConnected ? 'Connected' : 'Disconnected'}
               hint={status.eslDetail}
-              tone={status.eslConnected ? 'good' : 'bad'}
+              tone={eslTone(status)}
             />
             <Stat
               label="Last event"
               value={formatAge(status.lastEventAgeMs)}
               hint={status.lastEventAgeMs === null ? 'no telephony event observed yet' : undefined}
-              tone={status.ingestionHealthy ? 'good' : 'warn'}
+              tone={eventFreshnessTone(status)}
             />
             <Stat
               label="Stale agents"
@@ -268,9 +242,9 @@ export default function DialerV2ShadowPage() {
             />
             <Stat
               label="Origination"
-              value={status.originationImplemented ? 'IMPLEMENTED' : 'No code path'}
+              value={originationLabel(status).text}
               hint="Dialer V2 cannot place a call in this build"
-              tone={status.originationImplemented ? 'bad' : 'good'}
+              tone={originationLabel(status).tone}
             />
           </div>
         </section>
@@ -300,7 +274,7 @@ export default function DialerV2ShadowPage() {
             <Stat
               label="Abandonment"
               value={`${(latest.abandonRate * 100).toFixed(2)}%`}
-              tone={latest.abandonRate >= 0.02 ? 'warn' : 'good'}
+              tone={abandonTone(latest.abandonRate)}
             />
           </div>
           <div className="rounded-lg border p-4 text-sm">
@@ -392,17 +366,14 @@ export default function DialerV2ShadowPage() {
           Recent shadow decisions
         </h2>
 
-        {decisions && decisions.length === 0 ? (
+        {emptyMessage ? (
           <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
             <p className="font-medium text-foreground">No shadow decisions have been recorded.</p>
-            <p className="mt-1">
-              Shadow mode has not observed any real campaign activity for your tenant yet. Nothing
-              is being simulated or filled in — this table stays empty until real data arrives.
-            </p>
+            <p className="mt-1">{emptyMessage}</p>
           </div>
         ) : null}
 
-        {decisions && decisions.length > 0 ? (
+        {rows.length > 0 ? (
           <div className="overflow-x-auto rounded-lg border">
             <table className="w-full text-sm">
               <thead className="border-b bg-muted/50 text-left">
@@ -418,7 +389,7 @@ export default function DialerV2ShadowPage() {
                 </tr>
               </thead>
               <tbody>
-                {decisions.map((d, i) => (
+                {rows.map((d, i) => (
                   <tr
                     key={`${d.campaignId}-${d.decidedAtMs}-${i}`}
                     className="border-b last:border-0"

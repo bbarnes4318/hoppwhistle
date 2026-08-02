@@ -180,17 +180,42 @@ export async function registerDialerV2ShadowRoutes(
    * originate, bridge, or control a call. Tenant and agent identity come from
    * verified authentication — the browser cannot select either.
    */
+  /**
+   * POST /api/v1/dialer-v2/agents/session
+   *
+   * Mints a server-issued session for the authenticated agent. The browser
+   * cannot choose its own session id, which is what makes duplicate-session
+   * detection and replay protection meaningful.
+   */
+  fastify.post('/api/v1/dialer-v2/agents/session', async (request, reply) => {
+    const result = await verify(request);
+    if (!result.ok) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Verified authentication required' } };
+    }
+    const auth = result.context;
+    if (auth.source !== 'jwt' || !auth.userId) {
+      void reply.code(403);
+      return {
+        error: { code: 'FORBIDDEN', message: 'Agent session requires an authenticated user' },
+      };
+    }
+
+    const grant = await client.issueSession(auth.tenantId, auth.userId, auth.userId);
+    if (!grant) {
+      void reply.code(503);
+      return { error: { code: 'UNAVAILABLE', message: 'Dialer V2 service is unavailable' } };
+    }
+    return { data: grant, meta: { tenantId: auth.tenantId, agentId: auth.userId } };
+  });
+
   fastify.post<{
     Body: {
       sessionId?: string;
       sequence?: number;
       uiState?: string;
-      sipRegistered?: boolean;
-      currentCallId?: string | null;
-      currentChannelUuid?: string | null;
-      campaignIds?: string[];
-      queueIds?: string[];
-      softphoneReady?: boolean;
+      preferredCampaignIds?: string[];
+      browserClaimsSipRegistered?: boolean;
     };
   }>('/api/v1/dialer-v2/agents/heartbeat', async (request, reply) => {
     const result = await verify(request);
@@ -224,12 +249,12 @@ export async function registerDialerV2ShadowRoutes(
       sessionId: body.sessionId,
       sequence: typeof body.sequence === 'number' ? body.sequence : 0,
       uiState: typeof body.uiState === 'string' ? body.uiState : null,
-      sipRegistered: body.sipRegistered === true,
-      currentCallId: body.currentCallId ?? null,
-      currentChannelUuid: body.currentChannelUuid ?? null,
-      campaignIds: Array.isArray(body.campaignIds) ? body.campaignIds : [],
-      queueIds: Array.isArray(body.queueIds) ? body.queueIds : [],
-      softphoneReady: body.softphoneReady === true,
+      // A preference only. SIP state, call ids, channel UUIDs, and campaign
+      // membership are all derived server-side and are not accepted here.
+      preferredCampaignIds: Array.isArray(body.preferredCampaignIds)
+        ? body.preferredCampaignIds
+        : undefined,
+      browserClaimsSipRegistered: body.browserClaimsSipRegistered === true,
     });
 
     if (!accepted.accepted) {
@@ -241,9 +266,11 @@ export async function registerDialerV2ShadowRoutes(
       data: {
         accepted: true,
         // Browser claims are signals, never truth. The agent counts as capacity
-        // only after reconciliation against SIP and FreeSWITCH channel state.
+        // only when FreeSWITCH confirms SIP registration.
         countedAsCapacity: accepted.countedAsCapacity === true,
         state: accepted.state ?? null,
+        sipRegistered: accepted.sipRegistered === true,
+        campaignIds: accepted.campaignIds ?? [],
       },
       meta: { tenantId: auth.tenantId, agentId: auth.userId },
     };

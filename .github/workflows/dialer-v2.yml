@@ -1,0 +1,149 @@
+name: Dialer V2
+
+# Targeted CI for Dialer V2 and the code it touches.
+#
+# Deliberately scoped rather than running the whole repo suite: the API suite
+# needs a live PostgreSQL and `pnpm typecheck` has ~150 pre-existing errors
+# across 41 files this branch did not introduce. A job that is red for reasons
+# unrelated to the change teaches everyone to ignore it, so this one only
+# asserts things this work is actually responsible for.
+
+on:
+  push:
+    branches: ['feature/predictive-dialer-v2', main]
+    paths:
+      - 'apps/dialer-v2/**'
+      - 'apps/api/src/lib/dialer-v2-auth.ts'
+      - 'apps/api/src/routes/dialer-v2-shadow.ts'
+      - 'apps/api/src/services/dialer-v2-shadow-client.ts'
+      - 'apps/api/src/services/hopper-preflight.ts'
+      - 'apps/api/src/cli/hopper-preflight.ts'
+      - 'apps/web/src/app/(dashboard)/dialer-v2-shadow/**'
+      - '.github/workflows/dialer-v2.yml'
+  pull_request:
+    paths:
+      - 'apps/dialer-v2/**'
+      - 'apps/api/src/lib/dialer-v2-auth.ts'
+      - 'apps/api/src/routes/dialer-v2-shadow.ts'
+      - 'apps/api/src/services/dialer-v2-shadow-client.ts'
+      - 'apps/api/src/services/hopper-preflight.ts'
+      - 'apps/api/src/cli/hopper-preflight.ts'
+      - 'apps/web/src/app/(dashboard)/dialer-v2-shadow/**'
+      - '.github/workflows/dialer-v2.yml'
+
+concurrency:
+  group: dialer-v2-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dialer-v2:
+    name: dialer-v2 tests, typecheck, lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm --filter @hopwhistle/dialer-v2 typecheck
+
+      - name: Lint
+        run: pnpm --filter @hopwhistle/dialer-v2 lint
+
+      - name: Test
+        run: pnpm --filter @hopwhistle/dialer-v2 test
+
+  api-dialer-v2:
+    name: api Dialer V2 units
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @hopwhistle/api exec prisma generate
+
+      # Only the Dialer V2 and preflight files. The rest of the API suite needs
+      # PostgreSQL and is covered by the existing pr.yml workflow.
+      - name: Test
+        run: |
+          pnpm --filter @hopwhistle/api exec vitest run \
+            src/lib/__tests__/dialer-v2-auth.test.ts \
+            src/routes/__tests__/dialer-v2-shadow.routes.test.ts \
+            src/services/__tests__/dialer-v2-shadow-client.test.ts \
+            src/services/__tests__/hopper-preflight.test.ts
+
+  web-supervisor:
+    name: web supervisor page compiles
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @hopwhistle/api exec prisma generate
+
+      # A real compile check for the supervisor page. Before this, the page was
+      # never type-checked or built by any automation at all.
+      - name: Typecheck web
+        run: pnpm --filter @hopwhistle/web typecheck
+
+      - name: Supervisor page contract tests
+        run: pnpm --filter @hopwhistle/web test
+
+  no-origination-path:
+    name: no origination path exists
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # A grep-level backstop for the central safety claim. The unit tests
+      # assert the transport refuses these commands; this asserts nobody added
+      # a new call site anywhere in the service.
+      - name: Assert no call-control command is constructed
+        run: |
+          set -euo pipefail
+          # Exclude the guard itself, its tests, and comment lines (which
+          # legitimately discuss these words when explaining the restriction).
+          if grep -rnE "\b(originate|bgapi|uuid_transfer|uuid_bridge|uuid_kill|sendmsg)\b" \
+               apps/dialer-v2/src \
+               --include='*.ts' \
+               | grep -v 'socket-transport' \
+               | grep -v '\.test\.ts' \
+               | grep -vE ':[0-9]+:[[:space:]]*(\*|//|/\*)' ; then
+            echo "::error::A call-control command appears outside the read-only guard."
+            exit 1
+          fi
+          echo "No call-control command found outside the guard."
