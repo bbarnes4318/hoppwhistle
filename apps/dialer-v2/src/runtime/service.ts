@@ -13,7 +13,10 @@
  * origination does not exist to enable.
  */
 
+import { AssignmentResolver } from '../agents/assignments.js';
 import { AgentStateService, type ReconciliationCorrection } from '../agents/service.js';
+import { AgentSessionRegistry, SessionRejection, type AgentSession } from '../agents/sessions.js';
+import { SipRegistrationRegistry } from '../agents/sip-registry.js';
 import { AgentState } from '../agents/state.js';
 import type { DialerV2Flags, FlagSource } from '../config/flags.js';
 import { EslClient, type EslStatus } from '../esl/client.js';
@@ -28,6 +31,7 @@ import {
   type ShadowDecisionStore,
   type ShadowObservation,
 } from '../shadow/engine.js';
+import type { DistributedLock } from '../stores/coordination.js';
 
 export interface EslIngestConfig {
   enabled: boolean;
@@ -125,6 +129,13 @@ export interface RuntimeDeps {
   dedupe: DedupeStore;
   shadowStore: ShadowDecisionStore;
   agents: AgentStateService;
+  sessions: AgentSessionRegistry;
+  assignments: AssignmentResolver;
+  sipRegistry: SipRegistrationRegistry;
+  lock: DistributedLock;
+  /** Real Redis health. There is no hardcoded value anywhere. */
+  redisHealthy: () => boolean;
+  onAudit?: (record: HeartbeatAudit) => void;
   config: RuntimeConfig;
   now?: () => number;
   setTimer?: (fn: () => void, ms: number) => unknown;
@@ -140,12 +151,31 @@ export interface RuntimeStatus {
   lastShadowRunAtMs: number | null;
   shadowDecisionsThisRun: number;
   observedScopes: number;
+  redisHealthy: boolean;
+  lockDistributed: boolean;
+  shadowPassesSkippedForLock: number;
+  reconcilePassesSkippedForLock: number;
+  sip: { tracked: number; registered: number; processed: number; unattributed: number };
+}
+
+/** Every heartbeat outcome is auditable, accepted or not. */
+export interface HeartbeatAudit {
+  atMs: number;
+  tenantId: string;
+  agentId: string;
+  accepted: boolean;
+  rejection?: SessionRejection | 'INVALID_TENANT' | 'UNKNOWN_AGENT';
+  sequence: number;
+  sessionIdPrefix: string;
+  browserClaimedSip: boolean;
+  freeswitchSip: boolean;
+  countedAsCapacity: boolean;
 }
 
 export class DialerV2Runtime {
-  private readonly ingestor: EventIngestor;
+  private ingestor: EventIngestor;
   private readonly collector: ObservationCollector;
-  private readonly shadow: ShadowEngine;
+  private shadow: ShadowEngine;
   private eslClient: EslClient | null = null;
   private eslRefusal: EslStartRefusal | null = null;
 
@@ -156,13 +186,15 @@ export class DialerV2Runtime {
   private lastReconciliationAtMs: number | null = null;
   private lastShadowRunAtMs: number | null = null;
   private shadowDecisionsThisRun = 0;
+  private shadowPassesSkippedForLock = 0;
+  private reconcilePassesSkippedForLock = 0;
 
   private readonly now: () => number;
   private readonly setTimer: (fn: () => void, ms: number) => unknown;
   private readonly clearTimer: (handle: unknown) => void;
   private readonly log: (record: Record<string, unknown>) => void;
 
-  constructor(private readonly deps: RuntimeDeps) {
+  constructor(private deps: RuntimeDeps) {
     this.now = deps.now ?? (() => Date.now());
     this.setTimer = deps.setTimer ?? ((fn, ms) => setInterval(fn, ms));
     this.clearTimer = deps.clearTimer ?? (h => clearInterval(h as NodeJS.Timeout));
@@ -173,22 +205,34 @@ export class DialerV2Runtime {
       assignmentDeadlineMs: deps.config.defaultPolicy.assignmentDeadlineMs,
     });
 
-    this.ingestor = new EventIngestor({
-      store: deps.eventStore,
-      dedupe: deps.dedupe,
-      now: this.now,
-      onEvent: event => {
-        // Observation only. Nothing downstream of this callback can dial.
-        this.collector.apply(event);
-        if (event.agentId) {
-          deps.agents.noteFreeswitchEvent(event.tenantId, event.agentId, this.now());
-        }
-      },
-      onError: (error, context) =>
-        this.log({ msg: 'ingestor error', context, error: error.message }),
-    });
-
+    this.ingestor = this.buildIngestor();
     this.shadow = new ShadowEngine(deps.shadowStore);
+  }
+
+  /**
+   * Swap in real stores once Redis has connected.
+   *
+   * Called before `start()`. The ingestor is rebuilt so it uses the shared
+   * dedupe store — without that, the in-memory dedupe created at construction
+   * would remain in use and cross-instance idempotency would silently not apply.
+   */
+  replaceStores(next: {
+    eventStore: EventStore;
+    dedupe: DedupeStore;
+    shadowStore: ShadowDecisionStore;
+    lock: DistributedLock;
+    redisHealthy: () => boolean;
+  }): void {
+    this.deps = {
+      ...this.deps,
+      eventStore: next.eventStore,
+      dedupe: next.dedupe,
+      shadowStore: next.shadowStore,
+      lock: next.lock,
+      redisHealthy: next.redisHealthy,
+    };
+    this.ingestor = this.buildIngestor();
+    this.shadow = new ShadowEngine(next.shadowStore);
   }
 
   getIngestor(): EventIngestor {
@@ -196,6 +240,23 @@ export class DialerV2Runtime {
   }
   getCollector(): ObservationCollector {
     return this.collector;
+  }
+
+  private buildIngestor(): EventIngestor {
+    return new EventIngestor({
+      store: this.deps.eventStore,
+      dedupe: this.deps.dedupe,
+      now: this.now,
+      onEvent: event => {
+        // Observation only. Nothing downstream of this callback can dial.
+        this.collector.apply(event);
+        if (event.agentId) {
+          this.deps.agents.noteFreeswitchEvent(event.tenantId, event.agentId, this.now());
+        }
+      },
+      onError: (error, context) =>
+        this.log({ msg: 'ingestor error', context, error: error.message }),
+    });
   }
 
   start(): void {
@@ -206,7 +267,7 @@ export class DialerV2Runtime {
     }, this.deps.config.shadowIntervalMs);
 
     this.reconcileTimer = this.setTimer(() => {
-      this.runReconciliation();
+      void this.runReconciliation();
     }, this.deps.config.reconcileIntervalMs);
 
     this.reapTimer = this.setTimer(() => {
@@ -233,6 +294,9 @@ export class DialerV2Runtime {
           onCommand: redacted => this.log({ msg: 'esl command', command: redacted }),
         }),
       onRawEvent: raw => {
+        // sofia::register/unregister/expire carry SIP registration state, not
+        // call state. They go to the registry, not the call ingestor.
+        if (this.deps.sipRegistry.applyRegistrationEvent(raw)) return;
         void this.ingestor.handleRaw(raw);
       },
       now: this.now,
@@ -253,9 +317,44 @@ export class DialerV2Runtime {
     this.eslClient = null;
   }
 
-  /** Reconcile agent state against live channel ownership from the collector. */
-  runReconciliation(): ReconciliationCorrection[] {
+  /**
+   * Reconcile agent state against live channel ownership and authoritative SIP
+   * registration. Coordinated: only one replica runs a pass per interval.
+   */
+  async runReconciliation(): Promise<ReconciliationCorrection[]> {
+    const lockName = 'reconcile';
+    const acquired = await this.deps.lock.acquire(
+      lockName,
+      Math.max(1_000, this.deps.config.reconcileIntervalMs - 100)
+    );
+    if (!acquired) {
+      this.reconcilePassesSkippedForLock++;
+      return [];
+    }
+
+    try {
+      return this.reconcileNow();
+    } finally {
+      await this.deps.lock.release(lockName);
+    }
+  }
+
+  /**
+   * The reconciliation body, without locking. Exposed for tests and for the
+   * single-instance path.
+   */
+  reconcileNow(): ReconciliationCorrection[] {
     const nowMs = this.now();
+
+    // Push authoritative SIP state into the agent service BEFORE reconciling,
+    // so the reconciler compares against FreeSWITCH rather than a browser claim.
+    for (const record of this.deps.agents.allAgents()) {
+      const registered = this.deps.sipRegistry.isRegistered(record.tenantId, record.extension);
+      if (record.sipRegistered !== registered) {
+        this.deps.agents.setSipRegistration(record.tenantId, record.agentId, registered, nowMs);
+      }
+    }
+
     const corrections = this.deps.agents.reconcile(nowMs, {
       liveChannelUuids: this.collector.liveChannelUuids(),
       channelOwners: this.collector.channelOwners(),
@@ -264,6 +363,8 @@ export class DialerV2Runtime {
     if (corrections.length > 0) {
       this.log({ msg: 'agent corrections', count: corrections.length });
     }
+    this.deps.sessions.sweep(nowMs);
+    this.deps.sipRegistry.sweep();
     return corrections;
   }
 
@@ -272,6 +373,24 @@ export class DialerV2Runtime {
    * campaign; originates nothing.
    */
   async runShadowPass(): Promise<number> {
+    const lockName = 'shadow';
+    const acquired = await this.deps.lock.acquire(
+      lockName,
+      Math.max(500, this.deps.config.shadowIntervalMs - 50)
+    );
+    if (!acquired) {
+      this.shadowPassesSkippedForLock++;
+      return 0;
+    }
+    try {
+      return await this.shadowPassNow();
+    } finally {
+      await this.deps.lock.release(lockName);
+    }
+  }
+
+  /** The shadow body, without locking. Exposed for tests. */
+  async shadowPassNow(): Promise<number> {
     const flags: DialerV2Flags = this.deps.flags.get();
     const nowMs = this.now();
     const eslStatus = this.eslClient?.getStatus() ?? null;
@@ -330,7 +449,7 @@ export class DialerV2Runtime {
         // No ESL client at all ⇒ unhealthy. The controller then hard-stops,
         // which is the correct answer for a dialer that cannot see the switch.
         eslHealthy: eslStatus !== null && eslStatus.connected && !eslStatus.degraded,
-        redisHealthy: true,
+        redisHealthy: this.deps.redisHealthy(),
         eventLagMs: this.ingestor.currentLagMs(),
         maxEventLagMs: this.deps.config.maxEventLagMs,
         agentStateAgeMs,
@@ -348,70 +467,166 @@ export class DialerV2Runtime {
       lastShadowRunAtMs: this.lastShadowRunAtMs,
       shadowDecisionsThisRun: this.shadowDecisionsThisRun,
       observedScopes: this.collector.activeScopes().length,
+      redisHealthy: this.deps.redisHealthy(),
+      lockDistributed: this.deps.lock.distributed,
+      shadowPassesSkippedForLock: this.shadowPassesSkippedForLock,
+      reconcilePassesSkippedForLock: this.reconcilePassesSkippedForLock,
+      sip: this.deps.sipRegistry.metrics(),
     };
   }
 
+  /** Mint a server-issued session. Identity must already be verified. */
+  issueSession(tenantId: string, agentId: string, userId: string): AgentSession | null {
+    return this.deps.sessions.issue(tenantId, agentId, userId, this.now());
+  }
+
   /**
-   * Record an agent heartbeat. Browser claims are signals, not truth: the agent
-   * only becomes capacity after `runReconciliation()` corroborates them against
-   * SIP registration and live FreeSWITCH channels.
+   * Record an agent heartbeat.
+   *
+   * What the browser may influence: the session token it was issued, a
+   * monotonic sequence, a UI state, and a *preference* among campaigns it is
+   * already assigned to.
+   *
+   * What the browser may NOT influence, and which is now derived server-side:
+   *  - tenant and agent identity (from the verified JWT, upstream)
+   *  - session validity, expiry, and replay window (server-issued)
+   *  - SIP registration (from FreeSWITCH sofia events)
+   *  - current call id and channel UUID (from observed telephony events)
+   *  - campaign and queue membership (from the assignment source)
    */
-  recordHeartbeat(input: {
+  async recordHeartbeat(input: {
     tenantId: string;
     agentId: string;
     userId: string;
     sessionId: string;
     sequence: number;
     uiState: string | null;
+    preferredCampaignIds?: string[];
+    /** Reported for comparison only; never used as truth. */
+    browserClaimsSipRegistered?: boolean;
+  }): Promise<{
+    accepted: boolean;
+    reason?: string;
+    state?: string;
+    countedAsCapacity: boolean;
     sipRegistered: boolean;
-    currentCallId: string | null;
-    currentChannelUuid: string | null;
     campaignIds: string[];
-    queueIds: string[];
-  }): { accepted: boolean; reason?: string; state?: string; countedAsCapacity: boolean } {
+  }> {
     const nowMs = this.now();
     const agents = this.deps.agents;
 
-    const existing = agents.get(input.tenantId, input.agentId);
-    if (existing && input.sequence > 0 && input.sequence <= existing.lastSequence) {
-      // Replay or out-of-order delivery. Rejecting is safe: the next in-order
-      // heartbeat refreshes liveness, and accepting a stale one could resurrect
-      // an agent the reconciler has already withdrawn.
-      return { accepted: false, reason: 'STALE_SEQUENCE', countedAsCapacity: false };
+    const audit = (
+      accepted: boolean,
+      rejection: HeartbeatAudit['rejection'] | undefined,
+      countedAsCapacity: boolean,
+      freeswitchSip: boolean
+    ): void => {
+      this.deps.onAudit?.({
+        atMs: nowMs,
+        tenantId: input.tenantId,
+        agentId: input.agentId,
+        accepted,
+        rejection,
+        sequence: input.sequence,
+        // Never log a whole bearer token.
+        sessionIdPrefix: (input.sessionId ?? '').slice(0, 6),
+        browserClaimedSip: input.browserClaimsSipRegistered === true,
+        freeswitchSip,
+        countedAsCapacity,
+      });
+    };
+
+    const validation = this.deps.sessions.validate(
+      input.sessionId,
+      input.tenantId,
+      input.agentId,
+      input.sequence,
+      nowMs
+    );
+
+    if (!validation.ok || !validation.session) {
+      audit(false, validation.rejection, false, false);
+      return {
+        accepted: false,
+        reason: validation.rejection ?? SessionRejection.UNKNOWN_SESSION,
+        countedAsCapacity: false,
+        sipRegistered: false,
+        campaignIds: [],
+      };
     }
 
+    const session = validation.session;
+
     const record =
-      existing ??
+      agents.get(input.tenantId, input.agentId) ??
       agents.upsertAgent(input.tenantId, input.agentId, input.userId, nowMs, {
         state: AgentState.AUTHENTICATING,
       });
-    if (!record) return { accepted: false, reason: 'INVALID_TENANT', countedAsCapacity: false };
+    if (!record) {
+      audit(false, 'INVALID_TENANT', false, false);
+      return {
+        accepted: false,
+        reason: 'INVALID_TENANT',
+        countedAsCapacity: false,
+        sipRegistered: false,
+        campaignIds: [],
+      };
+    }
 
-    const beat = agents.heartbeat(input.tenantId, input.agentId, input.sessionId, nowMs);
-    if (!beat.accepted)
-      return { accepted: false, reason: 'UNKNOWN_AGENT', countedAsCapacity: false };
+    // Liveness is recorded against the SERVER-issued session id.
+    agents.heartbeat(input.tenantId, input.agentId, session.sessionId, nowMs);
 
-    agents.setSipRegistration(input.tenantId, input.agentId, input.sipRegistered, nowMs);
+    // SIP registration: FreeSWITCH is the authority. The browser's claim is
+    // recorded in the audit trail so a disagreement is visible.
+    const sipRegistered = this.deps.sipRegistry.isRegistered(input.tenantId, record.extension);
+    agents.setSipRegistration(input.tenantId, input.agentId, sipRegistered, nowMs);
+
+    // Campaign and queue membership: resolved server-side, narrowed only.
+    const assignment = await this.deps.assignments.resolve(
+      input.tenantId,
+      input.agentId,
+      input.preferredCampaignIds
+    );
+    record.campaignIds = assignment.campaignIds;
+    record.queueIds = assignment.queueIds;
     record.lastSequence = input.sequence;
-    record.campaignIds = input.campaignIds;
-    record.queueIds = input.queueIds;
-    record.currentCallId = input.currentCallId;
-    record.currentChannelUuid = input.currentChannelUuid;
 
-    // The browser's claimed UI state is applied only where the state machine
-    // permits it. It cannot force an agent into ON_CALL, and it cannot clear a
-    // STALE marking the reconciler set — recovery goes through AUTHENTICATING.
-    if (input.uiState === 'AVAILABLE' && !beat.duplicateSession) {
+    // Call id and channel UUID come from observed telephony, never the browser.
+    const ownedChannel = this.channelOwnedBy(input.tenantId, input.agentId);
+    record.currentChannelUuid = ownedChannel;
+    if (ownedChannel === null) record.currentCallId = null;
+
+    // An older session may still beat, but must not be counted as capacity —
+    // two tabs both claiming AVAILABLE would double-count the agent.
+    const newest = this.deps.sessions.isNewestForAgent(session);
+
+    if (input.uiState === 'AVAILABLE' && newest) {
       agents.transition(input.tenantId, input.agentId, AgentState.AVAILABLE, nowMs);
     } else if (input.uiState === 'PAUSED') {
       agents.transition(input.tenantId, input.agentId, AgentState.PAUSED, nowMs);
     }
 
     const after = agents.get(input.tenantId, input.agentId);
+    const countedAsCapacity = after?.state === AgentState.AVAILABLE && sipRegistered && newest;
+
+    audit(true, undefined, countedAsCapacity, sipRegistered);
+
     return {
       accepted: true,
       state: after?.state,
-      countedAsCapacity: after?.state === AgentState.AVAILABLE && after.sipRegistered,
+      countedAsCapacity,
+      sipRegistered,
+      campaignIds: assignment.campaignIds,
     };
+  }
+
+  /** Channel currently owned by this agent, from observed events only. */
+  private channelOwnedBy(tenantId: string, agentId: string): string | null {
+    const live = this.collector.liveChannelUuids();
+    for (const [uuid, owner] of this.collector.channelOwners()) {
+      if (owner === agentId && live.has(uuid)) return uuid;
+    }
+    void tenantId;
+    return null;
   }
 }

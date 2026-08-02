@@ -15,7 +15,10 @@
 
 import http from 'node:http';
 
+import { AssignmentResolver, StaticAssignmentSource } from './agents/assignments.js';
 import { AgentStateService } from './agents/service.js';
+import { AgentSessionRegistry } from './agents/sessions.js';
+import { SipRegistrationRegistry } from './agents/sip-registry.js';
 import { AgentState } from './agents/state.js';
 import { EnvFlagSource } from './config/flags.js';
 import {
@@ -24,28 +27,44 @@ import {
   verifyInternalToken,
 } from './config/internal-auth.js';
 import { isValidTenantId } from './config/redis-keys.js';
-import { InMemoryDedupeStore, InMemoryEventStore } from './events/store.js';
 import { buildHealthReport, type HealthSnapshot } from './health/report.js';
 import { DialerV2Runtime, defaultRuntimeConfig } from './runtime/service.js';
-import { InMemoryShadowDecisionStore } from './shadow/engine.js';
+import { buildStores, connectRedis, type RedisConnection } from './stores/provider.js';
 
 const PORT = Number(process.env.DIALER_V2_PORT) || 9092;
 
 const flagSource = new EnvFlagSource();
-const eventStore = new InMemoryEventStore();
-const dedupeStore = new InMemoryDedupeStore();
 const agents = new AgentStateService();
-const shadowStore = new InMemoryShadowDecisionStore();
+const sessions = new AgentSessionRegistry();
+const sipRegistry = new SipRegistrationRegistry();
+const assignmentSource = new StaticAssignmentSource();
+const assignments = new AssignmentResolver({ source: assignmentSource });
 const config = defaultRuntimeConfig();
+
+const log = (record: Record<string, unknown>): void => {
+  process.stdout.write(`${JSON.stringify(record)}\n`);
+};
+
+/** Identifies this replica in distributed locks. */
+const OWNER_ID = `${process.env.HOSTNAME ?? 'dialer-v2'}-${process.pid}`;
+
+let redisConnection: RedisConnection | null = null;
+let stores = buildStores({ connection: null, ownerId: OWNER_ID }, process.env);
 
 const runtime = new DialerV2Runtime({
   flags: flagSource,
-  eventStore,
-  dedupe: dedupeStore,
-  shadowStore,
+  eventStore: stores.eventStore,
+  dedupe: stores.dedupe,
+  shadowStore: stores.shadowStore,
   agents,
+  sessions,
+  assignments,
+  sipRegistry,
+  lock: stores.lock,
+  redisHealthy: () => stores.redisHealthy(),
+  onAudit: record => log({ msg: 'agent heartbeat', ...record }),
   config,
-  log: record => process.stdout.write(`${JSON.stringify(record)}\n`),
+  log,
 });
 
 async function currentSnapshot(): Promise<HealthSnapshot> {
@@ -58,7 +77,8 @@ async function currentSnapshot(): Promise<HealthSnapshot> {
     eslDetail: status.esl?.detail ?? status.eslRefusal ?? 'ESL ingestion not started',
     eslConsecutiveFailures: status.esl?.consecutiveFailures ?? 0,
 
-    redisConnected: false,
+    // Real connection state. There is no hardcoded value here any more.
+    redisConnected: stores.redisHealthy(),
     postgresConnected: false,
 
     lastEventAgeMs: ingestor.lastEventAgeMs(),
@@ -66,7 +86,7 @@ async function currentSnapshot(): Promise<HealthSnapshot> {
     eventLagMs: ingestor.currentLagMs(),
     maxEventLagMs: config.maxEventLagMs,
 
-    unresolvedEventCount: await eventStore.quarantinedCount(),
+    unresolvedEventCount: await stores.eventStore.quarantinedCount(),
     staleAgentCount: agents.staleCount(),
     totalAgentCount: agents.size(),
     reconciliationLagMs:
@@ -74,7 +94,7 @@ async function currentSnapshot(): Promise<HealthSnapshot> {
     maxReconciliationLagMs: config.reconcileIntervalMs * 4,
 
     campaignsObserved: status.observedScopes,
-    shadowDecisionsRecorded: shadowStore.size(),
+    shadowDecisionsRecorded: status.shadowDecisionsThisRun,
   };
 }
 
@@ -173,6 +193,13 @@ export function createServer(): http.Server {
         eslRefusal: status.eslRefusal,
         lastShadowRunAtMs: status.lastShadowRunAtMs,
         shadowDecisionsThisRun: status.shadowDecisionsThisRun,
+        storeBackend: stores.backend,
+        redisHealthy: status.redisHealthy,
+        lockDistributed: status.lockDistributed,
+        shadowPassesSkippedForLock: status.shadowPassesSkippedForLock,
+        reconcilePassesSkippedForLock: status.reconcilePassesSkippedForLock,
+        sip: status.sip,
+        sessions: sessions.size(),
       });
       return;
     }
@@ -191,7 +218,7 @@ export function createServer(): http.Server {
         const campaignId = url.searchParams.get('campaignId') ?? undefined;
         const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit')) || 50));
 
-        void shadowStore.recent(tenantId, limit, campaignId).then(decisions => {
+        void stores.shadowStore.recent(tenantId, limit, campaignId).then(decisions => {
           json(res, 200, {
             tenantId,
             shadowEnabled: flags.shadowEnabled,
@@ -266,6 +293,32 @@ export function createServer(): http.Server {
         return;
       }
 
+      if (path === '/internal/agents/session' && req.method === 'POST') {
+        void readBody(req).then(body => {
+          const input = body as Record<string, unknown>;
+          const bodyTenant = typeof input.tenantId === 'string' ? input.tenantId : '';
+          const agentId = typeof input.agentId === 'string' ? input.agentId : '';
+          const userId = typeof input.userId === 'string' ? input.userId : agentId;
+
+          if (!isValidTenantId(bodyTenant) || !agentId) {
+            json(res, 400, { error: 'invalid_identity' });
+            return;
+          }
+
+          const session = runtime.issueSession(bodyTenant, agentId, userId);
+          if (!session) {
+            json(res, 400, { error: 'invalid_identity' });
+            return;
+          }
+          json(res, 200, {
+            sessionId: session.sessionId,
+            expiresAtMs: session.expiresAtMs,
+            issuedAtMs: session.issuedAtMs,
+          });
+        });
+        return;
+      }
+
       if (path === '/internal/agents/heartbeat' && req.method === 'POST') {
         void readBody(req).then(body => {
           const input = body as Record<string, unknown>;
@@ -278,25 +331,25 @@ export function createServer(): http.Server {
             return;
           }
 
-          // The tenant here was already derived from a verified JWT in apps/api.
-          // This service is not internet-reachable and requires the internal
-          // token, so it trusts the identity the API asserts.
-          const result = runtime.recordHeartbeat({
-            tenantId: bodyTenant,
-            agentId,
-            userId,
-            sessionId: typeof input.sessionId === 'string' ? input.sessionId : '',
-            sequence: typeof input.sequence === 'number' ? input.sequence : 0,
-            uiState: typeof input.uiState === 'string' ? input.uiState : null,
-            sipRegistered: input.sipRegistered === true,
-            currentCallId: typeof input.currentCallId === 'string' ? input.currentCallId : null,
-            currentChannelUuid:
-              typeof input.currentChannelUuid === 'string' ? input.currentChannelUuid : null,
-            campaignIds: Array.isArray(input.campaignIds) ? (input.campaignIds as string[]) : [],
-            queueIds: Array.isArray(input.queueIds) ? (input.queueIds as string[]) : [],
-          });
-
-          json(res, result.accepted ? 200 : 409, result);
+          // Tenant and agent were derived from a verified JWT in apps/api. Call
+          // ids, channel UUIDs, SIP state, and campaign membership are NOT read
+          // from this payload — the runtime derives all four server-side.
+          void runtime
+            .recordHeartbeat({
+              tenantId: bodyTenant,
+              agentId,
+              userId,
+              sessionId: typeof input.sessionId === 'string' ? input.sessionId : '',
+              sequence: typeof input.sequence === 'number' ? input.sequence : 0,
+              uiState: typeof input.uiState === 'string' ? input.uiState : null,
+              preferredCampaignIds: Array.isArray(input.preferredCampaignIds)
+                ? (input.preferredCampaignIds as string[])
+                : undefined,
+              browserClaimsSipRegistered: input.browserClaimsSipRegistered === true,
+            })
+            .then(result => {
+              json(res, result.accepted ? 200 : 409, result);
+            });
         });
         return;
       }
@@ -309,10 +362,35 @@ export function createServer(): http.Server {
   });
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const flags = flagSource.get();
-  const server = createServer();
 
+  const redisUrl = process.env.REDIS_URL;
+  if (redisUrl) {
+    redisConnection = await connectRedis(redisUrl, (state, detail) =>
+      log({ msg: 'redis', state, detail })
+    );
+    if (redisConnection) {
+      stores = buildStores(
+        {
+          connection: redisConnection,
+          ownerId: OWNER_ID,
+          onFailure: (operation, error) =>
+            log({ msg: 'redis failure', operation, error: error.message }),
+        },
+        process.env
+      );
+      runtime.replaceStores({
+        eventStore: stores.eventStore,
+        dedupe: stores.dedupe,
+        shadowStore: stores.shadowStore,
+        lock: stores.lock,
+        redisHealthy: () => stores.redisHealthy(),
+      });
+    }
+  }
+
+  const server = createServer();
   runtime.start();
 
   server.listen(PORT, '0.0.0.0', () => {
@@ -330,6 +408,7 @@ function main(): void {
 
   const shutdown = (): void => {
     runtime.stop();
+    void redisConnection?.disconnect();
     server.close(() => process.exit(0));
   };
   process.on('SIGTERM', shutdown);
@@ -337,6 +416,6 @@ function main(): void {
 }
 
 const entry = process.argv[1] ?? '';
-if (entry.endsWith('index.ts') || entry.endsWith('index.js')) main();
+if (entry.endsWith('index.ts') || entry.endsWith('index.js')) void main();
 
-export { agents, eventStore, flagSource, runtime, shadowStore };
+export { agents, assignmentSource, flagSource, runtime, sessions, sipRegistry, stores };
