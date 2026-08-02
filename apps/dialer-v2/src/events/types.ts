@@ -41,6 +41,25 @@ export const SUBSCRIBED_EVENT_TYPES: readonly TelephonyEventType[] = Object.free
 ]);
 
 /**
+ * CUSTOM event subclasses carrying SIP registration lifecycle.
+ *
+ * These are NOT channel events — they describe endpoint registration, which is
+ * what determines whether an agent can actually receive a call. Without them
+ * `SipRegistrationRegistry` never sees a single event and no agent can ever
+ * become eligible.
+ *
+ * In the inbound ESL protocol, everything after the literal `CUSTOM` token in an
+ * `event plain` command is parsed as a subclass name, so `CUSTOM` must be the
+ * LAST standard token in the subscription and the subclasses must follow it.
+ */
+export const SUBSCRIBED_CUSTOM_SUBCLASSES: readonly string[] = Object.freeze([
+  'sofia::register',
+  'sofia::unregister',
+  'sofia::expire',
+  'sofia::register_failure',
+]);
+
+/**
  * Monotonic rank used to reject backwards state transitions after an ESL
  * reconnect redelivers events out of order. Events not in this map (DTMF,
  * RECORD_*) do not move call state and carry rank 0.

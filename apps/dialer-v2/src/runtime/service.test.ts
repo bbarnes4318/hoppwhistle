@@ -363,7 +363,8 @@ describe('distributed coordination', () => {
   it('skips the shadow pass when the lock is held elsewhere', async () => {
     const denied: DistributedLock = {
       distributed: true,
-      acquire: () => Promise.resolve(false),
+      acquire: () => Promise.resolve(null),
+      renew: () => Promise.resolve(false),
       release: () => Promise.resolve(),
     };
     const ctx = build({}, { lock: denied });
@@ -377,7 +378,8 @@ describe('distributed coordination', () => {
   it('skips reconciliation when the lock is held elsewhere', async () => {
     const denied: DistributedLock = {
       distributed: true,
-      acquire: () => Promise.resolve(false),
+      acquire: () => Promise.resolve(null),
+      renew: () => Promise.resolve(false),
       release: () => Promise.resolve(),
     };
     const ctx = build({}, { lock: denied });
@@ -389,7 +391,8 @@ describe('distributed coordination', () => {
     const release = vi.fn(() => Promise.resolve());
     const lock: DistributedLock = {
       distributed: true,
-      acquire: () => Promise.resolve(true),
+      acquire: () => Promise.resolve({ fencingToken: 1, ownerId: 'a' }),
+      renew: () => Promise.resolve(true),
       release,
     };
     const ctx = build({}, { lock });
@@ -398,11 +401,29 @@ describe('distributed coordination', () => {
     expect(release).toHaveBeenCalledWith('shadow');
   });
 
+  it('abandons a pass when ownership is lost mid-way', async () => {
+    // The TTL can lapse during a long pass. A holder that has been superseded
+    // must stop, not keep writing decisions under stale authority.
+    const lock: DistributedLock = {
+      distributed: true,
+      acquire: () => Promise.resolve({ fencingToken: 1, ownerId: 'a' }),
+      renew: () => Promise.resolve(false),
+      release: () => Promise.resolve(),
+    };
+    const ctx = build({}, { lock });
+    await ctx.runtime.getIngestor().handleRaw(rawEvent());
+
+    expect(await ctx.runtime.runShadowPass()).toBe(0);
+    expect(ctx.runtime.status().shadowPassesAbandonedForLostLock).toBe(1);
+    expect(await ctx.shadowStore.recent('tenant-a', 10)).toHaveLength(0);
+  });
+
   it('reports whether coordination is actually distributed', () => {
     expect(build().runtime.status().lockDistributed).toBe(false);
     const distributed: DistributedLock = {
       distributed: true,
-      acquire: () => Promise.resolve(true),
+      acquire: () => Promise.resolve({ fencingToken: 1, ownerId: 'a' }),
+      renew: () => Promise.resolve(true),
       release: () => Promise.resolve(),
     };
     expect(build({}, { lock: distributed }).runtime.status().lockDistributed).toBe(true);

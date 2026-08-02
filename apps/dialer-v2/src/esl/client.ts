@@ -11,7 +11,11 @@
  * without a real timer.
  */
 
-import { SUBSCRIBED_EVENT_TYPES, type RawEslEvent } from '../events/types.js';
+import {
+  SUBSCRIBED_CUSTOM_SUBCLASSES,
+  SUBSCRIBED_EVENT_TYPES,
+  type RawEslEvent,
+} from '../events/types.js';
 
 export type EslConnectionState =
   | 'DISCONNECTED'
@@ -25,7 +29,7 @@ export interface EslTransport {
   connect(): Promise<void>;
   disconnect(): void;
   /** Send the event subscription. The ONLY write this client performs. */
-  subscribe(eventNames: readonly string[]): Promise<void>;
+  subscribe(eventNames: readonly string[], customSubclasses: readonly string[]): Promise<void>;
   onEvent(handler: (raw: RawEslEvent) => void): void;
   onClose(handler: () => void): void;
   onError(handler: (error: Error) => void): void;
@@ -193,7 +197,7 @@ export class EslClient {
       await transport.connect();
       if (this.stopped || this.transport !== transport) return;
 
-      await transport.subscribe(SUBSCRIBED_EVENT_TYPES);
+      await transport.subscribe(SUBSCRIBED_EVENT_TYPES, SUBSCRIBED_CUSTOM_SUBCLASSES);
       if (this.stopped || this.transport !== transport) return;
 
       this.subscriptionCount++;

@@ -60,6 +60,13 @@ export class SipRegistrationRegistry {
 
   private processed = 0;
   private unattributed = 0;
+  /** Registrations we could not attribute. They contribute no capacity. */
+  private readonly quarantined: Array<{
+    extension: string | null;
+    sipDomain: string | null;
+    subclass: string;
+    atMs: number;
+  }> = [];
 
   constructor(options: SipRegistryOptions = {}) {
     this.now = options.now ?? (() => Date.now());
@@ -83,14 +90,17 @@ export class SipRegistrationRegistry {
     this.processed++;
 
     const extension = raw['username'] ?? raw['from-user'] ?? raw['sip_auth_username'] ?? null;
-    const tenantId =
-      raw['variable_hopwhistle_tenant_id'] ??
-      raw['hopwhistle_tenant_id'] ??
-      raw['domain_name'] ??
-      null;
+
+    // The SIP domain is an INPUT to a lookup, never an identity. It was
+    // previously used as a tenant id fallback, which made a caller-controlled
+    // REGISTER header a tenancy boundary. A registration is now attributed only
+    // via an explicit tenant channel variable, or by the resolver in
+    // `resolveAndApply`.
+    const tenantId = raw['variable_hopwhistle_tenant_id'] ?? raw['hopwhistle_tenant_id'] ?? null;
 
     if (!extension || !tenantId || !isValidTenantId(tenantId)) {
       this.unattributed++;
+      this.quarantine(raw, extension, subclass);
       return false;
     }
 
@@ -114,6 +124,54 @@ export class SipRegistrationRegistry {
     });
 
     return true;
+  }
+
+  private quarantine(raw: RawEslEvent, extension: string | null, subclass: string): void {
+    this.quarantined.push({
+      extension,
+      sipDomain: raw['domain_name'] ?? raw['sip_auth_realm'] ?? null,
+      subclass,
+      atMs: this.now(),
+    });
+    if (this.quarantined.length > 500) this.quarantined.splice(0, this.quarantined.length - 500);
+  }
+
+  /**
+   * Apply a registration event whose tenant was established by an authoritative
+   * resolver rather than by a header on the event itself.
+   */
+  applyResolved(tenantId: string, extension: string, subclass: string, raw: RawEslEvent): boolean {
+    if (!isValidTenantId(tenantId) || !extension) return false;
+    if (!SIP_REGISTRATION_SUBCLASSES.includes(subclass)) return false;
+
+    const nowMs = this.now();
+    const expiresRaw = raw['expires'];
+    const expiresSeconds = expiresRaw ? Number.parseInt(expiresRaw, 10) : Number.NaN;
+
+    this.registrations.set(this.key(tenantId, extension), {
+      tenantId,
+      extension,
+      registered: subclass === 'sofia::register',
+      expiresAtMs:
+        Number.isFinite(expiresSeconds) && expiresSeconds > 0
+          ? nowMs + expiresSeconds * 1000
+          : null,
+      lastEventAtMs: nowMs,
+      lastEvent: subclass,
+      contact: raw['contact'] ?? null,
+      networkIp: raw['network-ip'] ?? null,
+    });
+    return true;
+  }
+
+  /** Registrations that could not be attributed to a verified tenant. */
+  quarantinedRegistrations(): ReadonlyArray<{
+    extension: string | null;
+    sipDomain: string | null;
+    subclass: string;
+    atMs: number;
+  }> {
+    return this.quarantined;
   }
 
   /**
@@ -164,7 +222,13 @@ export class SipRegistrationRegistry {
     return removed;
   }
 
-  metrics(): { tracked: number; registered: number; processed: number; unattributed: number } {
+  metrics(): {
+    tracked: number;
+    registered: number;
+    processed: number;
+    unattributed: number;
+    quarantined: number;
+  } {
     let registered = 0;
     for (const record of this.registrations.values()) {
       if (this.isRegistered(record.tenantId, record.extension)) registered++;
@@ -174,6 +238,7 @@ export class SipRegistrationRegistry {
       registered,
       processed: this.processed,
       unattributed: this.unattributed,
+      quarantined: this.quarantined.length,
     };
   }
 }

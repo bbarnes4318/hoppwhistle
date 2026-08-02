@@ -154,6 +154,7 @@ export interface RuntimeStatus {
   redisHealthy: boolean;
   lockDistributed: boolean;
   shadowPassesSkippedForLock: number;
+  shadowPassesAbandonedForLostLock: number;
   reconcilePassesSkippedForLock: number;
   sip: { tracked: number; registered: number; processed: number; unattributed: number };
 }
@@ -188,6 +189,7 @@ export class DialerV2Runtime {
   private shadowDecisionsThisRun = 0;
   private shadowPassesSkippedForLock = 0;
   private reconcilePassesSkippedForLock = 0;
+  private shadowPassesAbandonedForLostLock = 0;
 
   private readonly now: () => number;
   private readonly setTimer: (fn: () => void, ms: number) => unknown;
@@ -323,11 +325,11 @@ export class DialerV2Runtime {
    */
   async runReconciliation(): Promise<ReconciliationCorrection[]> {
     const lockName = 'reconcile';
-    const acquired = await this.deps.lock.acquire(
+    const handle = await this.deps.lock.acquire(
       lockName,
       Math.max(1_000, this.deps.config.reconcileIntervalMs - 100)
     );
-    if (!acquired) {
+    if (!handle) {
       this.reconcilePassesSkippedForLock++;
       return [];
     }
@@ -374,29 +376,40 @@ export class DialerV2Runtime {
    */
   async runShadowPass(): Promise<number> {
     const lockName = 'shadow';
-    const acquired = await this.deps.lock.acquire(
-      lockName,
-      Math.max(500, this.deps.config.shadowIntervalMs - 50)
-    );
-    if (!acquired) {
+    // TTL comfortably longer than one interval, then renewed per campaign. A
+    // TTL sized for exactly one interval expires mid-pass on a tenant with many
+    // campaigns, letting a second replica start while the first still runs.
+    const ttlMs = Math.max(3_000, this.deps.config.shadowIntervalMs * 3);
+    const handle = await this.deps.lock.acquire(lockName, ttlMs);
+    if (!handle) {
       this.shadowPassesSkippedForLock++;
       return 0;
     }
     try {
-      return await this.shadowPassNow();
+      return await this.shadowPassNow(lockName, ttlMs);
     } finally {
       await this.deps.lock.release(lockName);
     }
   }
 
-  /** The shadow body, without locking. Exposed for tests. */
-  async shadowPassNow(): Promise<number> {
+  /** The shadow body. `lockName` non-null means renew while working. */
+  async shadowPassNow(lockName?: string, ttlMs?: number): Promise<number> {
     const flags: DialerV2Flags = this.deps.flags.get();
     const nowMs = this.now();
     const eslStatus = this.eslClient?.getStatus() ?? null;
 
     let count = 0;
     for (const scope of this.collector.activeScopes()) {
+      // Renew before each campaign. If ownership has been lost — this replica
+      // paused, the TTL lapsed, another replica took over — stop immediately
+      // rather than writing decisions under stale authority.
+      if (lockName && ttlMs) {
+        const stillOwned = await this.deps.lock.renew(lockName, ttlMs);
+        if (!stillOwned) {
+          this.shadowPassesAbandonedForLostLock++;
+          break;
+        }
+      }
       const obs = this.buildObservation(scope.tenantId, scope.campaignId, nowMs, eslStatus);
       await this.shadow.evaluate(flags, obs);
       count++;
@@ -470,6 +483,7 @@ export class DialerV2Runtime {
       redisHealthy: this.deps.redisHealthy(),
       lockDistributed: this.deps.lock.distributed,
       shadowPassesSkippedForLock: this.shadowPassesSkippedForLock,
+      shadowPassesAbandonedForLostLock: this.shadowPassesAbandonedForLostLock,
       reconcilePassesSkippedForLock: this.reconcilePassesSkippedForLock,
       sip: this.deps.sipRegistry.metrics(),
     };

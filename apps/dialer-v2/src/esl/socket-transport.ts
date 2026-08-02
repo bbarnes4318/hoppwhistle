@@ -97,6 +97,25 @@ export function parseProtocolHeaders(text: string): RawEslEvent {
   return parseLines(text, false);
 }
 
+/**
+ * Build the `event plain` subscription.
+ *
+ * FreeSWITCH parses every token after the literal `CUSTOM` as a subclass name,
+ * so `CUSTOM` must come last and the subclasses must follow it. Putting a normal
+ * event after `CUSTOM` would silently register it as a subclass and that event
+ * would never be delivered.
+ *
+ * This is still a subscription. It cannot execute anything.
+ */
+export function buildSubscribeCommand(
+  eventNames: readonly string[],
+  customSubclasses: readonly string[] = []
+): string {
+  const parts = [...eventNames];
+  if (customSubclasses.length > 0) parts.push('CUSTOM', ...customSubclasses);
+  return `event plain ${parts.join(' ')}`;
+}
+
 export class SocketEslTransport implements EslTransport {
   private socket: net.Socket | null = null;
   private buffer = '';
@@ -233,10 +252,12 @@ export class SocketEslTransport implements EslTransport {
     }
   }
 
-  subscribe(eventNames: readonly string[]): Promise<void> {
+  subscribe(
+    eventNames: readonly string[],
+    customSubclasses: readonly string[] = []
+  ): Promise<void> {
     if (!this.socket) return Promise.reject(new Error('ESL socket is not connected'));
-    // `event plain` is a subscription. It cannot execute anything.
-    this.write(`event plain ${eventNames.join(' ')}`);
+    this.write(buildSubscribeCommand(eventNames, customSubclasses));
     return Promise.resolve();
   }
 
