@@ -111,6 +111,46 @@ export function createServer(): http.Server {
       return;
     }
 
+    // Internal surface consumed by apps/api, which supplies the tenant from a
+    // VERIFIED session. This port is not internet-exposed, and the tenant is
+    // never taken from a browser-supplied value anywhere in the chain.
+    if (path === '/internal/shadow/decisions') {
+      const tenantId = url.searchParams.get('tenantId');
+      if (!tenantId) {
+        json(res, 400, { error: 'tenantId_required' });
+        return;
+      }
+      const campaignId = url.searchParams.get('campaignId') ?? undefined;
+      const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit')) || 50));
+
+      void shadowStore.recent(tenantId, limit, campaignId).then(decisions => {
+        json(res, 200, {
+          tenantId,
+          shadowEnabled: flags.shadowEnabled,
+          decisions: decisions.map(d => ({
+            campaignId: d.campaignId,
+            decidedAtMs: d.decidedAtMs,
+            controllerVersion: d.controllerVersion,
+            recommendedOriginateCount: d.recommendedOriginateCount,
+            bindingConstraint: d.bindingConstraint,
+            degradationMode: d.degradationMode,
+            safetyReasons: d.safetyReasons,
+            blockedBy: d.blockedBy,
+            originated: d.originated,
+            explanation: d.explanation,
+            agentsAvailable: d.inputs.agentsAvailable,
+            agentsEligible: d.inputs.agentsEligible,
+            callsDialing: d.inputs.callsDialing,
+            liveAnswersWaiting: d.inputs.callsLiveWaiting,
+            abandonRate: d.inputs.abandonRate,
+            pLive: d.decision?.pLive ?? null,
+            confidence: d.decision?.confidence ?? null,
+          })),
+        });
+      });
+      return;
+    }
+
     if (path === '/status/ingestion') {
       json(res, 200, {
         metrics: ingestor.getMetrics(),

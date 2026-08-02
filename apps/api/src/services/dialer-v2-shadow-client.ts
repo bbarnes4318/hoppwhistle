@@ -1,0 +1,181 @@
+/**
+ * Dialer V2 shadow — read-only client for the supervisor screen.
+ *
+ * Talks to the internal `dialer-v2` service. Strictly read-only: this module
+ * issues GET requests only and has no method that could start, stop, or
+ * configure a dialer.
+ *
+ * The tenant is always supplied by the caller from a VERIFIED session. It is
+ * never read from a request header or query parameter — `MULTITENANT_GAP_ANALYSIS.md`
+ * §1 documents the `x-demo-tenant-id` browser-trusted tenant idiom used
+ * elsewhere in this codebase, and this route deliberately does not use it.
+ */
+
+export interface ShadowDecisionView {
+  campaignId: string;
+  decidedAtMs: number;
+  controllerVersion: string;
+  recommendedOriginateCount: number;
+  bindingConstraint: string;
+  degradationMode: string;
+  safetyReasons: string[];
+  blockedBy: string[];
+  originated: boolean;
+  explanation: string;
+  agentsAvailable: number;
+  agentsEligible: number;
+  callsDialing: number;
+  liveAnswersWaiting: number;
+  abandonRate: number;
+  pLive: number | null;
+  confidence: string | null;
+}
+
+export interface ShadowStatusView {
+  /** False when the dialer-v2 service could not be reached at all. */
+  serviceReachable: boolean;
+  serviceDetail: string;
+  shadowEnabled: boolean;
+  ingestionHealthy: boolean;
+  eslConnected: boolean;
+  eslDetail: string;
+  lastEventAgeMs: number | null;
+  staleAgentCount: number;
+  totalAgentCount: number;
+  unresolvedEventCount: number;
+  emergencyStop: boolean;
+  originationPermitted: boolean;
+  originationImplemented: boolean;
+  tenantAllowlisted: boolean | null;
+  checks: Array<{ name: string; status: string; detail?: string }>;
+}
+
+export interface ShadowClientOptions {
+  baseUrl: string;
+  timeoutMs?: number;
+  fetchImpl?: typeof fetch;
+}
+
+const DEFAULT_TIMEOUT_MS = 3_000;
+
+/** Unreachable is a first-class, honest answer — never a fabricated healthy one. */
+export function unreachableStatus(detail: string): ShadowStatusView {
+  return {
+    serviceReachable: false,
+    serviceDetail: detail,
+    shadowEnabled: false,
+    ingestionHealthy: false,
+    eslConnected: false,
+    eslDetail: 'unknown — dialer-v2 service unreachable',
+    lastEventAgeMs: null,
+    staleAgentCount: 0,
+    totalAgentCount: 0,
+    unresolvedEventCount: 0,
+    emergencyStop: false,
+    originationPermitted: false,
+    originationImplemented: false,
+    tenantAllowlisted: null,
+    checks: [],
+  };
+}
+
+interface RawHealth {
+  ingestionHealthy?: boolean;
+  emergencyStop?: boolean;
+  shadowEnabled?: boolean;
+  originationPermitted?: boolean;
+  originationImplemented?: boolean;
+  checks?: Array<{ name: string; status: string; detail?: string }>;
+}
+
+interface RawIngestion {
+  lastEventAgeMs?: number | null;
+}
+
+/** Map the service's health document onto the supervisor view. Pure. */
+export function mapStatus(health: RawHealth, ingestion: RawIngestion): ShadowStatusView {
+  const checks = Array.isArray(health.checks) ? health.checks : [];
+  const esl = checks.find(c => c.name === 'freeswitch_esl');
+  const staleCheck = checks.find(c => c.name === 'stale_agents');
+  const unresolvedCheck = checks.find(c => c.name === 'unresolved_events');
+
+  const parseLeadingInt = (text: string | undefined): number => {
+    if (!text) return 0;
+    const match = /(\d+)/.exec(text);
+    return match ? Number.parseInt(match[1], 10) : 0;
+  };
+
+  return {
+    serviceReachable: true,
+    serviceDetail: 'connected',
+    shadowEnabled: health.shadowEnabled === true,
+    ingestionHealthy: health.ingestionHealthy === true,
+    eslConnected: esl?.status === 'pass' || esl?.status === 'warn',
+    eslDetail: esl?.detail ?? (esl?.status === 'pass' ? 'connected' : 'unknown'),
+    lastEventAgeMs: ingestion.lastEventAgeMs ?? null,
+    staleAgentCount: parseLeadingInt(staleCheck?.detail),
+    totalAgentCount: 0,
+    unresolvedEventCount: parseLeadingInt(unresolvedCheck?.detail),
+    emergencyStop: health.emergencyStop === true,
+    originationPermitted: health.originationPermitted === true,
+    originationImplemented: health.originationImplemented === true,
+    tenantAllowlisted: null,
+    checks,
+  };
+}
+
+export class DialerV2ShadowClient {
+  private readonly baseUrl: string;
+  private readonly timeoutMs: number;
+  private readonly fetchImpl: typeof fetch;
+
+  constructor(options: ShadowClientOptions) {
+    this.baseUrl = options.baseUrl.replace(/\/+$/, '');
+    this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.fetchImpl = options.fetchImpl ?? fetch;
+  }
+
+  private async getJson<T>(path: string): Promise<T | null> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+        method: 'GET',
+        signal: controller.signal,
+      });
+      // The health endpoint returns 503 when not ready; the body is still the
+      // document we want to show, so a non-2xx is not automatically a failure.
+      if (!response.ok && response.status !== 503) return null;
+      return (await response.json()) as T;
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async getStatus(): Promise<ShadowStatusView> {
+    const health = await this.getJson<RawHealth>('/health');
+    if (!health) return unreachableStatus('dialer-v2 service did not respond');
+    const ingestion = (await this.getJson<RawIngestion>('/status/ingestion')) ?? {};
+    return mapStatus(health, ingestion);
+  }
+
+  async getDecisions(
+    tenantId: string,
+    limit: number,
+    campaignId?: string
+  ): Promise<ShadowDecisionView[]> {
+    const params = new URLSearchParams({ tenantId, limit: String(limit) });
+    if (campaignId) params.set('campaignId', campaignId);
+
+    const body = await this.getJson<{ decisions?: ShadowDecisionView[] }>(
+      `/internal/shadow/decisions?${params.toString()}`
+    );
+    if (!body || !Array.isArray(body.decisions)) return [];
+
+    // Defence in depth: never surface a record the service attributed to a
+    // different tenant, even if the service were compromised or buggy.
+    return body.decisions.filter(d => d.originated === false);
+  }
+}

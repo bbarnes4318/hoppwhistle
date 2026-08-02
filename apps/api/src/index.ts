@@ -310,6 +310,10 @@ async function buildServer() {
   const { registerBotRoutes } = await import('./routes/bot.js');
   await server.register(registerBotRoutes);
 
+  // Register Dialer V2 shadow routes (read-only observation; no dialer control)
+  const { registerDialerV2ShadowRoutes } = await import('./routes/dialer-v2-shadow.js');
+  await server.register(registerDialerV2ShadowRoutes);
+
   // Register Retention & Onboarding routes
   const { registerRetentionRoutes } = await import('./routes/retention.js');
   await server.register(registerRetentionRoutes);

@@ -233,6 +233,9 @@ export interface PreflightQueryClient {
 }
 
 export interface PreflightEnv {
+  // Index signature so `process.env` (NodeJS.ProcessEnv) is directly assignable
+  // without a cast at the call site.
+  [key: string]: string | undefined;
   MAX_CONCURRENT_CALLS?: string;
   DIALER_BATCH_SIZE?: string;
   FREESWITCH_ESL_HOST?: string;
