@@ -123,6 +123,33 @@ export function tenantHealthKey(tenantId: string): string {
   return `${tenantNamespace(tenantId)}:health`;
 }
 
+/**
+ * A session record, keyed by the HASH of the bearer token.
+ *
+ * The plaintext token never becomes part of a key. Redis keys turn up in
+ * `SCAN` output, `MONITOR`, slow logs, and RDB dumps; a bearer credential that
+ * appears in any of those is a credential that has leaked. The caller hashes
+ * first, and this only ever sees the digest.
+ */
+export function agentSessionKey(tenantId: string, sessionTokenHash: string): string {
+  return `${tenantNamespace(tenantId)}:session:${assertSegment(sessionTokenHash, 'sessionTokenHash')}`;
+}
+
+/** The set of live session hashes for one agent, so duplicates are detectable. */
+export function agentSessionIndexKey(tenantId: string, agentId: string): string {
+  return `${tenantNamespace(tenantId)}:agent:${assertSegment(agentId, 'agentId')}:sessions`;
+}
+
+/** A SIP registration observed on the wire, keyed by the resolved agent. */
+export function sipRegistrationKey(tenantId: string, agentId: string): string {
+  return `${tenantNamespace(tenantId)}:agent:${assertSegment(agentId, 'agentId')}:sip`;
+}
+
+/** Rolling per-campaign observation counters, for restart reconstruction. */
+export function observationKey(tenantId: string, campaignId: string): string {
+  return `${tenantNamespace(tenantId)}:campaign:${assertSegment(campaignId, 'campaignId')}:observation`;
+}
+
 export function shadowDecisionKey(tenantId: string, campaignId: string): string {
   return `${tenantNamespace(tenantId)}:campaign:${assertSegment(campaignId, 'campaignId')}:shadow`;
 }
