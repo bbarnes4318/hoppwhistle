@@ -46,6 +46,16 @@ export interface ShadowStatusView {
   emergencyStop: boolean;
   originationPermitted: boolean;
   originationImplemented: boolean;
+  /**
+   * Whether the recorded history is evidence worth promoting on.
+   *
+   * Passed through from the service rather than inferred from the check list. A
+   * deployment can be entirely healthy and still be recording decisions that
+   * mean nothing, and the supervisor page has to be able to say so.
+   */
+  evidenceTrustworthy: boolean;
+  /** Deployment mode, so the page can say whether memory backends are expected. */
+  mode: string;
   tenantAllowlisted: boolean | null;
   checks: Array<{ name: string; status: string; detail?: string }>;
 }
@@ -160,6 +170,9 @@ export function unreachableStatus(detail: string): ShadowStatusView {
     emergencyStop: false,
     originationPermitted: false,
     originationImplemented: false,
+    // Unreachable means unknown, and unknown is never trustworthy.
+    evidenceTrustworthy: false,
+    mode: 'unknown',
     tenantAllowlisted: null,
     checks: [],
   };
@@ -171,6 +184,8 @@ interface RawHealth {
   shadowEnabled?: boolean;
   originationPermitted?: boolean;
   originationImplemented?: boolean;
+  shadowEvidenceTrustworthy?: boolean;
+  mode?: string;
   checks?: Array<{ name: string; status: string; detail?: string }>;
 }
 
@@ -205,6 +220,11 @@ export function mapStatus(health: RawHealth, ingestion: RawIngestion): ShadowSta
     emergencyStop: health.emergencyStop === true,
     originationPermitted: health.originationPermitted === true,
     originationImplemented: health.originationImplemented === true,
+    // `=== true` rather than a truthiness check: a service that omits the field
+    // is an older build that cannot make the claim, and the safe reading of a
+    // missing claim is that it does not hold.
+    evidenceTrustworthy: health.shadowEvidenceTrustworthy === true,
+    mode: typeof health.mode === 'string' ? health.mode : 'unknown',
     tenantAllowlisted: null,
     checks,
   };

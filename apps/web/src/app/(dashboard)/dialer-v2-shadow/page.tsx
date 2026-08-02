@@ -26,6 +26,7 @@ import {
   formatAge,
   originationLabel,
   type ShadowDecision,
+  decisionScopeLabel,
   type ShadowStatus,
   type Tone,
 } from './lib';
@@ -363,7 +364,9 @@ export default function DialerV2ShadowPage() {
 
       <section aria-labelledby="decisions-heading" className="space-y-3">
         <h2 id="decisions-heading" className="text-sm font-medium text-muted-foreground">
-          Recent shadow decisions
+          {/* States its own scope: a short list looks identical whether it
+              covers one campaign or all of them. */}
+          {decisionScopeLabel(null)}
         </h2>
 
         {emptyMessage ? (

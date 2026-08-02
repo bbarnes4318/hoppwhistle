@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import {
   SHADOW_BANNER,
   abandonTone,
+  decisionScopeLabel,
   displayableDecisions,
   emptyStateMessage,
   eslTone,
@@ -30,6 +31,7 @@ function status(overrides: Partial<ShadowStatus> = {}): ShadowStatus {
     emergencyStop: false,
     originationPermitted: false,
     originationImplemented: false,
+    evidenceTrustworthy: true,
     checks: [],
     ...overrides,
   };
@@ -190,5 +192,54 @@ describe('the page itself', () => {
   it('never sends a tenantId from the browser', () => {
     expect(source).not.toMatch(/tenantId=\$\{/);
     expect(source).not.toContain('x-demo-tenant-id');
+  });
+});
+
+describe('an empty table says WHY it is empty', () => {
+  it('distinguishes "cannot be read as evidence" from "nothing observed"', () => {
+    // These were previously the same message. The decision store returned an
+    // empty list for any query without a campaign filter, so a deployment that
+    // could not answer at all rendered as a quiet one — and an operator would
+    // reasonably conclude the dialer had simply seen no traffic.
+    const cannotAnswer = emptyStateMessage(status({ evidenceTrustworthy: false }), []);
+    const nothingSeen = emptyStateMessage(status({ evidenceTrustworthy: true }), []);
+
+    expect(cannotAnswer).not.toBe(nothingSeen);
+    expect(cannotAnswer).toMatch(/not shared or not resolvable/);
+    expect(nothingSeen).toMatch(/has not observed any campaign activity/);
+  });
+
+  it('still puts unreachable and disabled ahead of untrustworthy', () => {
+    // An unreachable service explains everything downstream; reporting the
+    // narrower cause first would send an operator to the wrong place.
+    expect(
+      emptyStateMessage(status({ serviceReachable: false, evidenceTrustworthy: false }), [])
+    ).toMatch(/not reachable/);
+    expect(
+      emptyStateMessage(status({ shadowEnabled: false, evidenceTrustworthy: false }), [])
+    ).toMatch(/Shadow mode is disabled/);
+  });
+
+  it('says nothing at all when there are decisions to show', () => {
+    const decision = { originated: false } as ShadowDecision;
+    expect(emptyStateMessage(status({ evidenceTrustworthy: false }), [decision])).toBeNull();
+  });
+
+  it('says nothing while decisions are still loading', () => {
+    // null is "not loaded yet", which is not an empty result.
+    expect(emptyStateMessage(status(), null)).toBeNull();
+  });
+});
+
+describe('the decision list states its own scope', () => {
+  it('names the campaign when one is selected', () => {
+    expect(decisionScopeLabel('camp-1')).toBe('Recent decisions for campaign camp-1');
+  });
+
+  it('says plainly when the list spans every campaign', () => {
+    // "These are every campaign's recent decisions" and "these are one
+    // campaign's" are different claims, and a short list looks the same either
+    // way.
+    expect(decisionScopeLabel(null)).toMatch(/across every campaign in this tenant/);
   });
 });

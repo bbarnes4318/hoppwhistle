@@ -22,6 +22,16 @@ export interface ShadowStatus {
   emergencyStop: boolean;
   originationPermitted: boolean;
   originationImplemented: boolean;
+  /**
+   * Whether the recorded history is evidence worth promoting on.
+   *
+   * Deliberately separate from health. A deployment can be entirely healthy and
+   * still be recording decisions that mean nothing — because no agent resolves
+   * to any campaign, or because state is not shared between replicas. A page
+   * that showed those decisions without saying so would let a promotion
+   * decision be taken on numbers that were never evidence.
+   */
+  evidenceTrustworthy: boolean;
   checks: Array<{ name: string; status: string; detail?: string }>;
 }
 
@@ -98,6 +108,12 @@ export function emptyStateMessage(
   if (!status.shadowEnabled) {
     return 'Shadow mode is disabled. No decisions are being evaluated or recorded.';
   }
+  if (!status.evidenceTrustworthy) {
+    // Previously indistinguishable from the line below. The decision store used
+    // to return an empty list for any query without a campaign filter, so a
+    // deployment that could not answer at all rendered as a quiet one.
+    return 'No decisions can be read as evidence for this tenant. The service reports that at least one input it depends on is not shared or not resolvable — see the checks below.';
+  }
   return 'Shadow mode has not observed any campaign activity for your tenant yet. Nothing is being simulated or filled in.';
 }
 
@@ -117,4 +133,17 @@ export function originationLabel(status: ShadowStatus | null): { text: string; t
     return { text: 'IMPLEMENTED', tone: 'bad' };
   }
   return { text: 'No code path', tone: 'good' };
+}
+
+/**
+ * How a decision list was scoped.
+ *
+ * Surfaced because "these are every campaign's recent decisions" and "these are
+ * one campaign's" are different claims, and an operator reading a short list
+ * needs to know which one they are looking at.
+ */
+export function decisionScopeLabel(campaignId: string | null): string {
+  return campaignId
+    ? `Recent decisions for campaign ${campaignId}`
+    : 'Recent decisions across every campaign in this tenant';
 }
