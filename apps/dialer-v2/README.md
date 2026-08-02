@@ -71,6 +71,18 @@ Required in `staging` and `production`:
 | `DIALER_V2_ALLOWED_TENANT_IDS` | which tenants this replica reconstructs at startup                                                                                                               |
 | `DIALER_V2_INTERNAL_TOKEN`     | gates `/internal/*`                                                                                                                                              |
 
+Optional, and validated rather than clamped — a value this service cannot
+provide is a startup failure, not a silent substitution:
+
+| Variable                             | Default  | Constraint                                            |
+| ------------------------------------ | -------- | ----------------------------------------------------- |
+| `DIALER_V2_OBSERVATION_BUCKET_MS`    | `300000` | ≥ 1000; below that a bucket is noise, not a statistic |
+| `DIALER_V2_OBSERVATION_BUCKET_COUNT` | `12`     | positive integer                                      |
+
+An empty string means "not configured" and takes the default. A value that is
+present but unparseable is rejected, so a typo cannot hide behind a default that
+then looks deliberate.
+
 ## Why the controller is a pure function
 
 `decidePacing(inputs, prev)` performs no I/O and reads no clock — `nowMs` is an argument.

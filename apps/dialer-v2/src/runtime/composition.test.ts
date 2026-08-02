@@ -299,3 +299,55 @@ describe('assignment resolvability is observed, not assumed', () => {
     expect(composition.assignmentsResolvable()).toBe(true);
   });
 });
+
+describe('an unusable observation window refuses to start', () => {
+  // Consistent with every other backend: a value this service cannot provide is
+  // a startup failure, not something quietly replaced with a default that then
+  // looks deliberate to whoever reads the config next.
+  const withWindow = (over: Record<string, string>) =>
+    ({ ...PRODUCTION_ENV, ...over }) as NodeJS.ProcessEnv;
+
+  it('refuses a bucket shorter than a second', async () => {
+    await expect(
+      composeRuntime(withWindow({ DIALER_V2_OBSERVATION_BUCKET_MS: '200' }), OPTIONS)
+    ).rejects.toThrow(CompositionError);
+  });
+
+  it('refuses a bucket width that is not a number', async () => {
+    await expect(
+      composeRuntime(withWindow({ DIALER_V2_OBSERVATION_BUCKET_MS: 'abc' }), OPTIONS)
+    ).rejects.toThrow(/observation window/);
+  });
+
+  it('refuses a zero bucket count', async () => {
+    await expect(
+      composeRuntime(withWindow({ DIALER_V2_OBSERVATION_BUCKET_COUNT: '0' }), OPTIONS)
+    ).rejects.toThrow(CompositionError);
+  });
+
+  it('accepts a valid override', async () => {
+    const composition = await composeRuntime(
+      withWindow({
+        DIALER_V2_OBSERVATION_BUCKET_MS: '60000',
+        DIALER_V2_OBSERVATION_BUCKET_COUNT: '30',
+      }),
+      OPTIONS
+    );
+    expect(composition.backends.observationBackend).toBe('redis');
+  });
+
+  it('applies the default when neither variable is set', async () => {
+    const composition = await composeRuntime(PRODUCTION_ENV, OPTIONS);
+    expect(composition.backends.observationBackend).toBe('redis');
+  });
+
+  it('treats an empty string as unset rather than as nonsense', async () => {
+    // Deployment tooling frequently emits an empty variable for "not
+    // configured", and failing on that would break a valid deployment.
+    const composition = await composeRuntime(
+      withWindow({ DIALER_V2_OBSERVATION_BUCKET_MS: '' }),
+      OPTIONS
+    );
+    expect(composition.backends.observationBackend).toBe('redis');
+  });
+});

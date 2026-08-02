@@ -166,6 +166,42 @@ export interface ObservationStoreOptions {
 const DEFAULT_BUCKET_MS = 5 * 60 * 1000;
 const DEFAULT_BUCKET_COUNT = 12;
 
+/** Below this a bucket is not a statistic, it is noise. */
+export const MIN_BUCKET_MS = 1_000;
+
+/**
+ * Rejects an unusable window instead of quietly widening it.
+ *
+ * This used to be `Math.max(1_000, options.bucketMs ?? DEFAULT)`, which is the
+ * same defect class as everything else this store exists to fix: a value the
+ * caller supplied, silently replaced, with nothing anywhere reporting the
+ * substitution. A deployment setting a 200 ms bucket got 1000 ms and no signal,
+ * and a test passing 200 ms measured a window that never advanced — which is
+ * exactly how two CI runs failed on assertions that could not have held.
+ *
+ * Throwing is the right response because the caller asked for something this
+ * store cannot provide, and every alternative reading of that is a guess.
+ */
+export function resolveWindow(
+  bucketMs: number | undefined,
+  bucketCount: number | undefined
+): { bucketMs: number; bucketCount: number } {
+  const ms = bucketMs ?? DEFAULT_BUCKET_MS;
+  const count = bucketCount ?? DEFAULT_BUCKET_COUNT;
+
+  if (!Number.isFinite(ms) || ms < MIN_BUCKET_MS) {
+    throw new RangeError(
+      `Observation bucketMs must be at least ${MIN_BUCKET_MS} ms; received ${String(bucketMs)}`
+    );
+  }
+  if (!Number.isFinite(count) || count < 1 || !Number.isInteger(count)) {
+    throw new RangeError(
+      `Observation bucketCount must be a positive integer; received ${String(bucketCount)}`
+    );
+  }
+  return { bucketMs: ms, bucketCount: count };
+}
+
 export class RedisObservationStore {
   /** Satisfies `CampaignObservationRepository`; reported through health. */
   readonly backend = 'redis' as const;
@@ -178,8 +214,9 @@ export class RedisObservationStore {
   private rejectedFuture = 0;
 
   constructor(private readonly options: ObservationStoreOptions) {
-    this.bucketMs = Math.max(1_000, options.bucketMs ?? DEFAULT_BUCKET_MS);
-    this.bucketCount = Math.max(1, options.bucketCount ?? DEFAULT_BUCKET_COUNT);
+    const window = resolveWindow(options.bucketMs, options.bucketCount);
+    this.bucketMs = window.bucketMs;
+    this.bucketCount = window.bucketCount;
     this.maxSkewMs = options.maxSkewMs ?? this.bucketMs;
     this.now = options.now ?? (() => Date.now());
   }

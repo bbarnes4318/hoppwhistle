@@ -14,8 +14,10 @@ import { observationBucketKey } from '../config/redis-keys.js';
 
 import {
   INCREMENT_AND_READ_WINDOW,
+  MIN_BUCKET_MS,
   ObservationReject,
   RedisObservationStore,
+  resolveWindow,
   type ObservationRedis,
 } from './observation-store.js';
 
@@ -297,5 +299,52 @@ describe('failures and bad scopes', () => {
     expect(args).toContain('2');
     expect(args).toContain('abandons');
     expect(args).not.toContain('liveAnswers');
+  });
+});
+
+describe('an unusable window is refused, not quietly widened', () => {
+  // This was `Math.max(1_000, options.bucketMs ?? DEFAULT)`. A caller asking for
+  // a 200 ms bucket got 1000 ms and nothing anywhere reported the substitution —
+  // the same defect class this store exists to fix. It cost two CI runs, on
+  // assertions that could not have held against a window that never advanced.
+  it('rejects a bucket shorter than a second', () => {
+    expect(() => resolveWindow(200, 12)).toThrow(RangeError);
+    expect(() => resolveWindow(200, 12)).toThrow(/at least 1000 ms; received 200/);
+  });
+
+  it('rejects zero and negative bucket widths', () => {
+    expect(() => resolveWindow(0, 12)).toThrow(RangeError);
+    expect(() => resolveWindow(-5_000, 12)).toThrow(RangeError);
+  });
+
+  it('rejects a bucket width that is not a number', () => {
+    // A deployment variable of "abc" parses to NaN. Treating that as absent
+    // would hide the typo behind a default that looked deliberate.
+    expect(() => resolveWindow(Number.NaN, 12)).toThrow(RangeError);
+  });
+
+  it('rejects a fractional or non-positive bucket count', () => {
+    expect(() => resolveWindow(60_000, 0)).toThrow(/positive integer/);
+    expect(() => resolveWindow(60_000, 2.5)).toThrow(/positive integer/);
+    expect(() => resolveWindow(60_000, Number.NaN)).toThrow(/positive integer/);
+  });
+
+  it('accepts the boundary exactly', () => {
+    expect(resolveWindow(MIN_BUCKET_MS, 1)).toEqual({ bucketMs: 1_000, bucketCount: 1 });
+  });
+
+  it('applies the trailing-hour default when neither is supplied', () => {
+    expect(resolveWindow(undefined, undefined)).toEqual({
+      bucketMs: 5 * 60 * 1000,
+      bucketCount: 12,
+    });
+  });
+
+  it('refuses to construct a store with an unusable window', () => {
+    // The constructor must not accept what the validator rejects, or the
+    // validation is decorative.
+    expect(
+      () => new RedisObservationStore({ redis: { eval: () => Promise.resolve([]) }, bucketMs: 200 })
+    ).toThrow(RangeError);
   });
 });

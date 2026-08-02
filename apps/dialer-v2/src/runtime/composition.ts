@@ -51,7 +51,7 @@ import { AgentStateService } from '../agents/service.js';
 import { RedisAgentSessionStore } from '../agents/session-store.js';
 import { RedisAgentStateStore } from '../stores/agent-state-store.js';
 import { RedisChannelOwnershipStore } from '../stores/channel-ownership.js';
-import { RedisObservationStore } from '../stores/observation-store.js';
+import { RedisObservationStore, resolveWindow } from '../stores/observation-store.js';
 import {
   buildStores,
   connectRedis,
@@ -96,6 +96,19 @@ export function readRuntimeMode(env: NodeJS.ProcessEnv): RuntimeMode {
   // typo in a deployment variable silently arm the real backends; defaulting to
   // DEVELOPMENT would make it silently accept memory in a real deployment.
   return RuntimeMode.TEST;
+}
+
+/**
+ * Read an optional integer, distinguishing "not set" from "set to nonsense".
+ *
+ * An unset variable returns undefined so the caller's default applies. A value
+ * that is present but unparseable returns NaN, which the validator then rejects
+ * — silently treating `"abc"` as absent would hide a typo in a deployment.
+ */
+function readOptionalInt(env: NodeJS.ProcessEnv, name: string): number | undefined {
+  const raw = env[name];
+  if (raw === undefined || raw.trim() === '') return undefined;
+  return Number.parseInt(raw, 10);
 }
 
 export class CompositionError extends Error {
@@ -348,9 +361,29 @@ export async function composeRuntime(
       })
     : new MemorySipRegistrationRepository();
 
+  // Validated here rather than clamped inside the store, so a deployment that
+  // asks for a window this service cannot provide fails at composition — the
+  // same rule every other backend follows. `resolveWindow` throws on a bad
+  // value; that is caught and reported as a CompositionError like the rest.
+  let window: { bucketMs: number; bucketCount: number };
+  try {
+    window = resolveWindow(
+      readOptionalInt(env, 'DIALER_V2_OBSERVATION_BUCKET_MS'),
+      readOptionalInt(env, 'DIALER_V2_OBSERVATION_BUCKET_COUNT')
+    );
+  } catch (error) {
+    throw new CompositionError(
+      mode,
+      'the observation window must be usable',
+      (error as Error).message
+    );
+  }
+
   const observations: CampaignObservationRepository = redisClient
     ? new RedisObservationStore({
         redis: redisClient,
+        bucketMs: window.bucketMs,
+        bucketCount: window.bucketCount,
         onFailure: (op, e) => log({ msg: 'observation store failure', op, error: e.message }),
       })
     : new MemoryObservationRepository();
