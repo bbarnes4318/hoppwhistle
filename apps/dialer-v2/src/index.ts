@@ -16,6 +16,7 @@
 import http from 'node:http';
 
 import { AssignmentResolver, StaticAssignmentSource } from './agents/assignments.js';
+import { ExtensionResolver, StaticExtensionSource } from './agents/extension-resolver.js';
 import { AgentStateService } from './agents/service.js';
 import { AgentSessionRegistry } from './agents/sessions.js';
 import { SipRegistrationRegistry } from './agents/sip-registry.js';
@@ -39,6 +40,13 @@ const sessions = new AgentSessionRegistry();
 const sipRegistry = new SipRegistrationRegistry();
 const assignmentSource = new StaticAssignmentSource();
 const assignments = new AssignmentResolver({ source: assignmentSource });
+
+// Development fixture sources, explicitly labelled. The database-backed
+// implementations are the remaining Phase 1 work; until they land, an agent
+// resolves to no extension and no campaigns, so nobody becomes capacity by
+// accident.
+const extensionSource = new StaticExtensionSource();
+const extensions = new ExtensionResolver({ source: extensionSource });
 const config = defaultRuntimeConfig();
 
 const log = (record: Record<string, unknown>): void => {
@@ -60,6 +68,7 @@ const runtime = new DialerV2Runtime({
   sessions,
   assignments,
   sipRegistry,
+  extensions,
   lock: stores.lock,
   redisHealthy: () => stores.redisHealthy(),
   onAudit: record => log({ msg: 'agent heartbeat', ...record }),
@@ -418,4 +427,13 @@ async function main(): Promise<void> {
 const entry = process.argv[1] ?? '';
 if (entry.endsWith('index.ts') || entry.endsWith('index.js')) void main();
 
-export { agents, assignmentSource, flagSource, runtime, sessions, sipRegistry, stores };
+export {
+  agents,
+  assignmentSource,
+  extensionSource,
+  flagSource,
+  runtime,
+  sessions,
+  sipRegistry,
+  stores,
+};

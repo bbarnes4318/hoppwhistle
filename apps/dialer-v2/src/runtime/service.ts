@@ -14,6 +14,7 @@
  */
 
 import { AssignmentResolver } from '../agents/assignments.js';
+import { ExtensionResolver } from '../agents/extension-resolver.js';
 import { AgentStateService, type ReconciliationCorrection } from '../agents/service.js';
 import { AgentSessionRegistry, SessionRejection, type AgentSession } from '../agents/sessions.js';
 import { SipRegistrationRegistry } from '../agents/sip-registry.js';
@@ -132,6 +133,7 @@ export interface RuntimeDeps {
   sessions: AgentSessionRegistry;
   assignments: AssignmentResolver;
   sipRegistry: SipRegistrationRegistry;
+  extensions: ExtensionResolver;
   lock: DistributedLock;
   /** Real Redis health. There is no hardcoded value anywhere. */
   redisHealthy: () => boolean;
@@ -347,20 +349,41 @@ export class DialerV2Runtime {
    */
   reconcileNow(): ReconciliationCorrection[] {
     const nowMs = this.now();
+    const corrections: ReconciliationCorrection[] = [];
 
     // Push authoritative SIP state into the agent service BEFORE reconciling,
     // so the reconciler compares against FreeSWITCH rather than a browser claim.
     for (const record of this.deps.agents.allAgents()) {
+      // record.extension is refreshed on each heartbeat by the resolver; a null
+      // one means the agent has no proven extension and can never be
+      // registered, which `isRegistered` already reports as false.
       const registered = this.deps.sipRegistry.isRegistered(record.tenantId, record.extension);
       if (record.sipRegistered !== registered) {
         this.deps.agents.setSipRegistration(record.tenantId, record.agentId, registered, nowMs);
       }
+
+      if (registered || !record.extension) continue;
+
+      // Positive evidence the endpoint is gone (an unregister or expire) is not
+      // a transient blip, so it bypasses the grace period entirely.
+      const registration = this.deps.sipRegistry.get(record.tenantId, record.extension);
+      if (registration && !registration.registered) {
+        const correction = this.deps.agents.withdrawForSipLoss(
+          record.tenantId,
+          record.agentId,
+          nowMs,
+          `FreeSWITCH reported ${registration.lastEvent} for extension ${registration.extension}`
+        );
+        if (correction) corrections.push(correction);
+      }
     }
 
-    const corrections = this.deps.agents.reconcile(nowMs, {
-      liveChannelUuids: this.collector.liveChannelUuids(),
-      channelOwners: this.collector.channelOwners(),
-    });
+    corrections.push(
+      ...this.deps.agents.reconcile(nowMs, {
+        liveChannelUuids: this.collector.liveChannelUuids(),
+        channelOwners: this.collector.channelOwners(),
+      })
+    );
     this.lastReconciliationAtMs = nowMs;
     if (corrections.length > 0) {
       this.log({ msg: 'agent corrections', count: corrections.length });
@@ -525,6 +548,8 @@ export class DialerV2Runtime {
     countedAsCapacity: boolean;
     sipRegistered: boolean;
     campaignIds: string[];
+    extension?: string | null;
+    extensionRejection?: string;
   }> {
     const nowMs = this.now();
     const agents = this.deps.agents;
@@ -590,6 +615,14 @@ export class DialerV2Runtime {
     // Liveness is recorded against the SERVER-issued session id.
     agents.heartbeat(input.tenantId, input.agentId, session.sessionId, nowMs);
 
+    // Extension: resolved server-side, never taken from the browser and never
+    // assumed to equal the agent id. Until this resolves, `record.extension` is
+    // null and no SIP registration can ever match — which is exactly why this
+    // step has to happen before the SIP check rather than after it.
+    const extension = await this.deps.extensions.forAgent(input.tenantId, input.agentId);
+    record.extension = extension.ok ? extension.binding.extension : null;
+    if (extension.ok) record.maxConcurrentCalls = extension.binding.maxConcurrentCalls;
+
     // SIP registration: FreeSWITCH is the authority. The browser's claim is
     // recorded in the audit trail so a disagreement is visible.
     const sipRegistered = this.deps.sipRegistry.isRegistered(input.tenantId, record.extension);
@@ -631,6 +664,8 @@ export class DialerV2Runtime {
       countedAsCapacity,
       sipRegistered,
       campaignIds: assignment.campaignIds,
+      extension: record.extension,
+      extensionRejection: extension.ok ? undefined : extension.rejection,
     };
   }
 

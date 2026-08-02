@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { AssignmentResolver, StaticAssignmentSource } from '../agents/assignments.js';
+import { ExtensionResolver, StaticExtensionSource } from '../agents/extension-resolver.js';
 import { AgentStateService } from '../agents/service.js';
 import { AgentSessionRegistry, SessionRejection } from '../agents/sessions.js';
 import { SipRegistrationRegistry } from '../agents/sip-registry.js';
@@ -56,6 +57,16 @@ function build(
   const sessions = new AgentSessionRegistry({ maxBeatsPerWindow: 5, rateWindowMs: 10_000 });
   const sipRegistry = new SipRegistrationRegistry({ now: () => nowRef.value });
   const assignmentSource = new StaticAssignmentSource();
+  const extensionSource = new StaticExtensionSource();
+  extensionSource.add({
+    tenantId: 'tenant-a',
+    userId: 'user-1',
+    agentId: 'agent-1',
+    extension: EXT,
+    sipDomain: 'hopwhistle.com',
+    enabled: true,
+    maxConcurrentCalls: 1,
+  });
   const assignments = new AssignmentResolver({ source: assignmentSource, now: () => nowRef.value });
   const shadowStore = new InMemoryShadowDecisionStore();
   const audits: HeartbeatAudit[] = [];
@@ -75,6 +86,7 @@ function build(
     sessions,
     assignments,
     sipRegistry,
+    extensions: new ExtensionResolver({ source: extensionSource, now: () => nowRef.value }),
     lock: opts.lock ?? new NoOpLock(),
     redisHealthy: opts.redisHealthy ?? (() => true),
     onAudit: a => audits.push(a),
@@ -84,7 +96,17 @@ function build(
     clearTimer: () => {},
   });
 
-  return { runtime, agents, sessions, sipRegistry, assignmentSource, shadowStore, audits, nowRef };
+  return {
+    runtime,
+    agents,
+    sessions,
+    sipRegistry,
+    assignmentSource,
+    extensionSource,
+    shadowStore,
+    audits,
+    nowRef,
+  };
 }
 
 /** Register an agent with an extension, a server session, and SIP presence. */
