@@ -227,6 +227,8 @@ export interface AgentRecord {
 
   /** Why the service last corrected this agent, if it did. */
   lastReconciliationReason: string | null;
+  /** Highest heartbeat sequence accepted, for replay rejection. */
+  lastSequence: number;
 }
 
 export function createAgentRecord(
@@ -258,6 +260,7 @@ export function createAgentRecord(
     pauseCode: null,
     maxConcurrentCalls: 1,
     lastReconciliationReason: null,
+    lastSequence: 0,
     ...overrides,
   };
 }
