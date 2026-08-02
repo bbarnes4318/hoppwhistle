@@ -1,0 +1,57 @@
+# Dialer V2 — additive compose overlay.
+#
+# Deliberately a SEPARATE file rather than an edit to docker-compose.dev.yml, so
+# that adding or removing Dialer V2 never touches the compose file the running
+# platform depends on. Rollback is "stop passing this -f flag".
+#
+#   docker compose -f docker-compose.dev.yml -f docker-compose.dialer-v2.yml up -d dialer-v2
+#
+# Every flag below defaults to the value that PREVENTS origination. Bringing this
+# container up with no environment configuration starts a health endpoint and
+# nothing else — in Phase 0 there is no origination code path in the image at
+# all.
+services:
+  dialer-v2:
+    build:
+      context: ../..
+      dockerfile: apps/dialer-v2/Dockerfile
+    container_name: hopwhistle-dialer-v2
+    restart: unless-stopped
+    ports:
+      - '9092:9092'
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      DIALER_V2_PORT: 9092
+
+      # ---- Master switches (all default OFF) ----------------------------
+      TENANT_DIALER_V2_ENABLED: ${TENANT_DIALER_V2_ENABLED:-false}
+      TENANT_DIALER_V2_SHADOW_ENABLED: ${TENANT_DIALER_V2_SHADOW_ENABLED:-false}
+      TENANT_DIALER_V2_ORIGINATE_ENABLED: ${TENANT_DIALER_V2_ORIGINATE_ENABLED:-false}
+
+      # ---- Dry run defaults ON; emergency stop is the tier-0 rollback ----
+      TENANT_DIALER_V2_DRY_RUN: ${TENANT_DIALER_V2_DRY_RUN:-true}
+      TENANT_DIALER_V2_EMERGENCY_STOP: ${TENANT_DIALER_V2_EMERGENCY_STOP:-false}
+
+      # ---- Allowlists: empty means nothing is permitted ------------------
+      TENANT_DIALER_V2_ALLOWED_TENANT_IDS: ${TENANT_DIALER_V2_ALLOWED_TENANT_IDS:-}
+      TENANT_DIALER_V2_ALLOWED_CAMPAIGN_IDS: ${TENANT_DIALER_V2_ALLOWED_CAMPAIGN_IDS:-}
+
+      # ---- Capacity must be granted explicitly; 0 means no calls ---------
+      TENANT_DIALER_V2_MAX_GLOBAL_CPS: ${TENANT_DIALER_V2_MAX_GLOBAL_CPS:-0}
+      TENANT_DIALER_V2_MAX_GLOBAL_CALLS: ${TENANT_DIALER_V2_MAX_GLOBAL_CALLS:-0}
+
+      TENANT_DIALER_V2_REQUIRE_HEALTHY_AGENT_HEARTBEATS: ${TENANT_DIALER_V2_REQUIRE_HEALTHY_AGENT_HEARTBEATS:-true}
+
+      # ---- Dependencies (unused in Phase 0; wired in Phase 1) ------------
+      DATABASE_URL: postgresql://${POSTGRES_USER:-callfabric}:${POSTGRES_PASSWORD:-callfabric_dev}@postgres:5432/${POSTGRES_DB:-callfabric}
+      REDIS_URL: redis://redis:6379
+      FREESWITCH_ESL_HOST: freeswitch
+      FREESWITCH_ESL_PORT: 8021
+      FREESWITCH_ESL_PASSWORD: ${FREESWITCH_ESL_PASSWORD:-ClueCon}
+    networks:
+      - hopwhistle-network
+
+networks:
+  hopwhistle-network:
+    external: true
+    name: docker_hopwhistle-network
