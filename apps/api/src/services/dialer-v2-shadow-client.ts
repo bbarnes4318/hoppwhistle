@@ -54,6 +54,59 @@ export interface ShadowClientOptions {
   baseUrl: string;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
+  /**
+   * Shared secret for service-to-service authentication. Supplied only through
+   * the environment. "The port is internal" is a deployment assumption, not an
+   * access control, and it fails open the moment a network is misconfigured.
+   */
+  internalToken?: string;
+}
+
+/** Header carrying the service-to-service token. */
+export const INTERNAL_TOKEN_HEADER = 'x-dialer-v2-internal-token';
+
+export interface AgentStateView {
+  agentId: string;
+  state: string;
+  sipRegistered: boolean;
+  lastHeartbeatAgeMs: number | null;
+  currentChannelUuid: string | null;
+  campaignIds: string[];
+  countedAsCapacity: boolean;
+  lastReconciliationReason: string | null;
+}
+
+export interface CorrectionView {
+  agentId: string;
+  reason: string;
+  fromState: string;
+  toState: string;
+  atMs: number;
+  detail: string;
+}
+
+export interface HeartbeatInput {
+  tenantId: string;
+  agentId: string;
+  userId: string;
+  sessionId: string;
+  sequence: number;
+  uiState: string | null;
+  sipRegistered: boolean;
+  currentCallId: string | null;
+  currentChannelUuid: string | null;
+  campaignIds: string[];
+  queueIds: string[];
+  softphoneReady: boolean;
+}
+
+export interface HeartbeatResult {
+  accepted: boolean;
+  countedAsCapacity?: boolean;
+  state?: string;
+  reason?: string;
+  message?: string;
+  status?: number;
 }
 
 const DEFAULT_TIMEOUT_MS = 3_000;
@@ -128,11 +181,19 @@ export class DialerV2ShadowClient {
   private readonly baseUrl: string;
   private readonly timeoutMs: number;
   private readonly fetchImpl: typeof fetch;
+  private readonly internalToken: string | undefined;
 
   constructor(options: ShadowClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/+$/, '');
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.fetchImpl = options.fetchImpl ?? fetch;
+    this.internalToken = options.internalToken;
+  }
+
+  private headers(): Record<string, string> {
+    const headers: Record<string, string> = { accept: 'application/json' };
+    if (this.internalToken) headers[INTERNAL_TOKEN_HEADER] = this.internalToken;
+    return headers;
   }
 
   private async getJson<T>(path: string): Promise<T | null> {
@@ -141,6 +202,7 @@ export class DialerV2ShadowClient {
     try {
       const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
         method: 'GET',
+        headers: this.headers(),
         signal: controller.signal,
       });
       // The health endpoint returns 503 when not ready; the body is still the
@@ -177,5 +239,42 @@ export class DialerV2ShadowClient {
     // Defence in depth: never surface a record the service attributed to a
     // different tenant, even if the service were compromised or buggy.
     return body.decisions.filter(d => d.originated === false);
+  }
+
+  async getAgents(tenantId: string): Promise<AgentStateView[]> {
+    const params = new URLSearchParams({ tenantId });
+    const body = await this.getJson<{ agents?: AgentStateView[] }>(
+      `/internal/agents/state?${params.toString()}`
+    );
+    return Array.isArray(body?.agents) ? body.agents : [];
+  }
+
+  async getCorrections(tenantId: string, limit: number): Promise<CorrectionView[]> {
+    const params = new URLSearchParams({ tenantId, limit: String(limit) });
+    const body = await this.getJson<{ corrections?: CorrectionView[] }>(
+      `/internal/reconciliation/corrections?${params.toString()}`
+    );
+    return Array.isArray(body?.corrections) ? body.corrections : [];
+  }
+
+  async postHeartbeat(input: HeartbeatInput): Promise<HeartbeatResult> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const response = await this.fetchImpl(`${this.baseUrl}/internal/agents/heartbeat`, {
+        method: 'POST',
+        headers: { ...this.headers(), 'content-type': 'application/json' },
+        body: JSON.stringify(input),
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        return { accepted: false, reason: 'UPSTREAM_ERROR', status: response.status };
+      }
+      return (await response.json()) as HeartbeatResult;
+    } catch {
+      return { accepted: false, reason: 'UNREACHABLE', status: 503 };
+    } finally {
+      clearTimeout(timer);
+    }
   }
 }
