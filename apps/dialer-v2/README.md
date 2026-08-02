@@ -1,6 +1,6 @@
 # @hopwhistle/dialer-v2
 
-Predictive dialing control plane. **Phase 0 — off by default and cannot place a call.**
+Predictive dialing control plane. **Phase 1 — off by default and cannot place a call.**
 
 Design documents live in [`docs/dialer-v2/`](../../docs/dialer-v2). Start with
 `CURRENT_STATE_AUDIT.md`, then `TARGET_ARCHITECTURE.md`.
@@ -18,9 +18,16 @@ Design documents live in [`docs/dialer-v2/`](../../docs/dialer-v2). Start with
 
 ## What is NOT here yet
 
-No FreeSWITCH connection, no lead selection, no origination path, no database access.
-`src/index.ts` starts an HTTP health surface and nothing else. Those arrive in Phases 1–3
-per `ROLLOUT_AND_ROLLBACK.md`.
+**No origination path and no lead selection.** That is structural, not a setting: the ESL
+transport can write exactly two commands (`auth`, `event plain`) and refuses anything else
+before it reaches the socket, and nothing in this service writes a lead status, campaign
+status, disposition, or billing record. There is no switch to turn origination on, because
+there is nothing to turn on. It arrives in Phases 2–3 per `ROLLOUT_AND_ROLLBACK.md`.
+
+What IS here as of Phase 1: an inbound ESL connection, event ingestion and deduplication,
+authoritative agent state, SIP registration tracking ordered by FreeSWITCH event order,
+rolling per-campaign observations, database-backed extension and campaign-assignment
+resolution, and shadow pacing that records what the dialer _would_ have done.
 
 ## Running
 
