@@ -266,7 +266,13 @@ describe('reconciliation inputs', () => {
   it('maps live channels to their owning agent', () => {
     const { c } = collector();
     c.apply(event(TelephonyEventType.CHANNEL_CREATE, { channelUuid: 'c1', agentId: 'agent-7' }));
-    expect(c.channelOwners().get('c1')).toBe('agent-7');
+    // Ownership carries the tenant: agent ids are unique within a tenant,
+    // not across the platform.
+    expect(c.channelOwners().get('c1')).toMatchObject({
+      tenantId: 'tenant-a',
+      agentId: 'agent-7',
+      channelUuid: 'c1',
+    });
   });
 
   it('omits an agent owner once the channel completes', () => {

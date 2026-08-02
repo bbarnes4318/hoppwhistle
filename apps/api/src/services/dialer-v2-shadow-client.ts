@@ -86,7 +86,18 @@ export interface CorrectionView {
 }
 
 export interface SessionGrant {
-  sessionId: string;
+  /**
+   * The bearer token, crossing the internal service boundary exactly once.
+   *
+   * The API places it directly into an HttpOnly cookie and never returns it in
+   * a response body. It is not logged and is never echoed back on a heartbeat.
+   */
+  sessionToken: string;
+  /**
+   * SHA-256 of the token. Safe to hold, safe to log, and what revocation is
+   * addressed by — so logout never needs the token itself.
+   */
+  sessionTokenHash: string;
   expiresAtMs: number;
   issuedAtMs: number;
 }
@@ -104,8 +115,14 @@ export interface HeartbeatInput {
   tenantId: string;
   agentId: string;
   userId: string;
-  /** Server-issued. The browser cannot invent one. */
-  sessionId: string;
+  /**
+   * Server-issued, read by the API from an HttpOnly cookie.
+   *
+   * Never present in a browser-visible request body — page JavaScript cannot
+   * read it, so an XSS that can call the heartbeat endpoint still cannot
+   * exfiltrate a reusable credential.
+   */
+  sessionToken: string;
   sequence: number;
   uiState: string | null;
   /** May narrow the authoritative assignment; can never widen it. */
@@ -291,6 +308,32 @@ export class DialerV2ShadowClient {
       return (await response.json()) as SessionGrant;
     } catch {
       return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * Revoke a session on logout, addressed by hash.
+   *
+   * The API holds the hash from issue time, so revocation never requires
+   * reading the token back out of the cookie.
+   */
+  async revokeSession(tenantId: string, sessionTokenHash: string): Promise<boolean> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const response = await this.fetchImpl(`${this.baseUrl}/internal/agents/session/revoke`, {
+        method: 'POST',
+        headers: { ...this.headers(), 'content-type': 'application/json' },
+        body: JSON.stringify({ tenantId, sessionTokenHash }),
+        signal: controller.signal,
+      });
+      if (!response.ok) return false;
+      const body = (await response.json()) as { revoked?: boolean };
+      return body.revoked === true;
+    } catch {
+      return false;
     } finally {
       clearTimeout(timer);
     }

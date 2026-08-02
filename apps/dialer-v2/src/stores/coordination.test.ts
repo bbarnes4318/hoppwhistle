@@ -1,245 +1,233 @@
+/**
+ * Lock tests against a fake that executes each script's semantics atomically.
+ *
+ * The fake is honest about the one property that matters: a script runs to
+ * completion without interleaving, because that is what Redis guarantees and
+ * what the correctness argument rests on. Timing, expiry, and genuine
+ * concurrency are proven in `redis.live.test.ts` against a real server.
+ */
+
 import { describe, expect, it, vi } from 'vitest';
 
+import { InvalidKeySegmentError } from '../config/redis-keys.js';
+
 import {
+  ACQUIRE_WITH_FENCE,
+  campaignShadowLock,
+  globalLock,
   NoOpLock,
+  RedisDistributedLock,
   RELEASE_IF_OWNER,
   RENEW_IF_OWNER,
-  RedisDistributedLock,
   type LockRedis,
 } from './coordination.js';
 
-/**
- * A fake Redis that models the semantics the lock depends on: NX, PX expiry,
- * INCR, and — critically — `eval` executing the compare and the mutation as one
- * indivisible step.
- */
-function fakeRedis(clock = { value: 0 }) {
-  const store = new Map<string, { value: string; expiresAt: number }>();
-  const counters = new Map<string, number>();
-
-  const live = (key: string): { value: string; expiresAt: number } | undefined => {
-    const entry = store.get(key);
-    if (!entry) return undefined;
-    if (entry.expiresAt <= clock.value) {
-      store.delete(key);
-      return undefined;
-    }
-    return entry;
-  };
-
-  const redis: LockRedis & { store: typeof store; expire: (k: string) => void } = {
+/** A Redis whose EVAL implements the three scripts this module uses. */
+function fakeRedis(store = new Map<string, string>(), expiries = new Map<string, number>()) {
+  const redis: LockRedis & { store: Map<string, string>; expiries: Map<string, number> } = {
     store,
-    /** Force a key to expire, to simulate a lapsed TTL. */
-    expire: (key: string) => store.delete(key),
-
-    set: (key, value, _mode, ttlMs, _condition) => {
-      if (live(key)) return Promise.resolve(null);
-      store.set(key, { value, expiresAt: clock.value + ttlMs });
-      return Promise.resolve('OK');
-    },
-    get: key => Promise.resolve(live(key)?.value ?? null),
+    expiries,
+    get: key => Promise.resolve(store.get(key) ?? null),
     del: key => Promise.resolve(store.delete(key) ? 1 : 0),
-    incr: key => {
-      const next = (counters.get(key) ?? 0) + 1;
-      counters.set(key, next);
-      return Promise.resolve(next);
-    },
     eval: (script, _numKeys, ...args) => {
-      const [key, expected, ttl] = args;
-      const entry = live(key);
+      if (script === ACQUIRE_WITH_FENCE) {
+        const [lockKey, fenceKey, ownerId, ttlMs, fenceTtlMs] = args;
+        if (store.has(lockKey)) return Promise.resolve(0);
+        const token = Number(store.get(fenceKey) ?? '0') + 1;
+        store.set(fenceKey, String(token));
+        expiries.set(fenceKey, Number(fenceTtlMs));
+        store.set(lockKey, `${ownerId}:${token}`);
+        expiries.set(lockKey, Number(ttlMs));
+        return Promise.resolve(token);
+      }
       if (script === RELEASE_IF_OWNER) {
-        if (entry?.value === expected) {
+        const [key, value] = args;
+        if (store.get(key) === value) {
           store.delete(key);
           return Promise.resolve(1);
         }
         return Promise.resolve(0);
       }
       if (script === RENEW_IF_OWNER) {
-        if (entry?.value === expected) {
-          entry.expiresAt = clock.value + Number(ttl);
-          return Promise.resolve(1);
-        }
-        return Promise.resolve(0);
+        const [key, value, ttlMs] = args;
+        if (store.get(key) !== value) return Promise.resolve(0);
+        expiries.set(key, Number(ttlMs));
+        return Promise.resolve(1);
       }
-      return Promise.resolve(0);
+      throw new Error('unexpected script');
     },
   };
   return redis;
 }
 
-describe('mutual exclusion', () => {
-  it('lets exactly one replica acquire', async () => {
-    const redis = fakeRedis();
-    const a = new RedisDistributedLock({ redis, ownerId: 'replica-a' });
-    const b = new RedisDistributedLock({ redis, ownerId: 'replica-b' });
+const CAMPAIGN = campaignShadowLock('tenant-a', 'camp-1');
 
-    const [ha, hb] = await Promise.all([a.acquire('shadow', 5_000), b.acquire('shadow', 5_000)]);
-    expect([ha, hb].filter(Boolean)).toHaveLength(1);
+describe('the fence advances only when the lock is granted', () => {
+  it('does not burn a token on a failed acquisition', async () => {
+    // This is the bug the previous INCR-then-SET-NX version had. B's failed
+    // attempt moved the fence to 2, so A — the uninterrupted holder — was no
+    // longer presenting the latest token and its own writes were refused. A
+    // replica that never obtained the lock could starve the one that did,
+    // simply by trying.
+    const redis = fakeRedis();
+    const a = new RedisDistributedLock({ redis, ownerId: 'A' });
+    const b = new RedisDistributedLock({ redis, ownerId: 'B' });
+
+    const held = await a.acquire(CAMPAIGN, 5_000);
+    expect(held?.fencingToken).toBe(1);
+
+    expect(await b.acquire(CAMPAIGN, 5_000)).toBeNull();
+
+    expect(redis.store.get(CAMPAIGN.fenceKey)).toBe('1');
+    expect(redis.store.get(CAMPAIGN.key)).toBe('A:1');
   });
 
-  it('lets the next replica in after a release', async () => {
+  it('issues a strictly higher token on each successful acquisition', async () => {
     const redis = fakeRedis();
-    const a = new RedisDistributedLock({ redis, ownerId: 'replica-a' });
-    const b = new RedisDistributedLock({ redis, ownerId: 'replica-b' });
+    const a = new RedisDistributedLock({ redis, ownerId: 'A' });
 
-    expect(await a.acquire('shadow', 5_000)).not.toBeNull();
-    await a.release('shadow');
-    expect(await b.acquire('shadow', 5_000)).not.toBeNull();
+    const first = await a.acquire(CAMPAIGN, 5_000);
+    await a.release(CAMPAIGN);
+    const second = await a.acquire(CAMPAIGN, 5_000);
+
+    expect(second!.fencingToken).toBeGreaterThan(first!.fencingToken);
   });
 });
 
-describe('release is atomic and ownership-checked', () => {
-  it('does not delete a lock another replica now owns', async () => {
-    // The exact race the Lua script exists to close:
-    //   A acquires -> A's TTL lapses -> B acquires -> A releases
-    // With GET-then-DEL, A's delete would destroy B's valid lock.
-    const clock = { value: 0 };
-    const redis = fakeRedis(clock);
-    const a = new RedisDistributedLock({ redis, ownerId: 'replica-a' });
-    const b = new RedisDistributedLock({ redis, ownerId: 'replica-b' });
-
-    expect(await a.acquire('shadow', 1_000)).not.toBeNull();
-    clock.value = 2_000; // A's lock has expired
-    const bHandle = await b.acquire('shadow', 5_000);
-    expect(bHandle).not.toBeNull();
-
-    await a.release('shadow');
-
-    // B must still hold it.
-    const current = await redis.get('dialer:v2:global:lock:shadow');
-    expect(current).toContain('replica-b');
-  });
-
-  it('uses a single eval rather than GET then DEL', async () => {
+describe('the handle carries the exact stored value', () => {
+  it('returns owner and token, matching what the lock key holds', async () => {
+    // Reconstructing this string at the call site would let a formatting
+    // difference turn a real ownership check into a string-equality accident.
     const redis = fakeRedis();
-    const evalSpy = vi.spyOn(redis, 'eval');
-    const getSpy = vi.spyOn(redis, 'get');
-    const delSpy = vi.spyOn(redis, 'del');
+    const lock = new RedisDistributedLock({ redis, ownerId: 'replica-7' });
 
-    const lock = new RedisDistributedLock({ redis, ownerId: 'a' });
-    await lock.acquire('shadow', 5_000);
-    await lock.release('shadow');
-
-    expect(evalSpy).toHaveBeenCalledWith(
-      RELEASE_IF_OWNER,
-      1,
-      expect.any(String),
-      expect.any(String)
-    );
-    expect(getSpy).not.toHaveBeenCalled();
-    expect(delSpy).not.toHaveBeenCalled();
+    const handle = await lock.acquire(CAMPAIGN, 5_000);
+    expect(handle?.lockValue).toBe('replica-7:1');
+    expect(redis.store.get(CAMPAIGN.key)).toBe(handle?.lockValue);
   });
 
-  it('does not release a lock it never held', async () => {
+  it('distinguishes two acquisitions by the same replica', async () => {
+    // Two passes by one replica must be distinguishable, or a slow first pass
+    // releases the second pass's lock.
     const redis = fakeRedis();
-    const a = new RedisDistributedLock({ redis, ownerId: 'replica-a' });
-    const b = new RedisDistributedLock({ redis, ownerId: 'replica-b' });
+    const lock = new RedisDistributedLock({ redis, ownerId: 'A' });
 
-    await a.acquire('shadow', 5_000);
-    await b.release('shadow'); // B never acquired it
+    const first = await lock.acquire(CAMPAIGN, 5_000);
+    await lock.release(CAMPAIGN);
+    const second = await lock.acquire(CAMPAIGN, 5_000);
 
-    expect(await redis.get('dialer:v2:global:lock:shadow')).toContain('replica-a');
-  });
-
-  it('distinguishes two acquisitions by the SAME replica', async () => {
-    // Without the fencing token in the stored value, a slow first pass could
-    // release the second pass's lock.
-    const clock = { value: 0 };
-    const redis = fakeRedis(clock);
-    const lock = new RedisDistributedLock({ redis, ownerId: 'replica-a' });
-
-    const first = await lock.acquire('shadow', 1_000);
-    clock.value = 2_000;
-    const second = await lock.acquire('shadow', 5_000);
-
-    expect(first?.fencingToken).toBeLessThan(second!.fencingToken);
-    expect(await redis.get('dialer:v2:global:lock:shadow')).toContain(String(second!.fencingToken));
+    expect(first?.lockValue).not.toBe(second?.lockValue);
   });
 });
 
-describe('renewal for long passes', () => {
-  it('extends the lock while the holder is still working', async () => {
-    const clock = { value: 0 };
-    const redis = fakeRedis(clock);
-    const lock = new RedisDistributedLock({ redis, ownerId: 'a' });
+describe('release compares before deleting', () => {
+  it('does not delete a lock another owner now holds', async () => {
+    const redis = fakeRedis();
+    const a = new RedisDistributedLock({ redis, ownerId: 'A' });
+    await a.acquire(CAMPAIGN, 5_000);
 
-    await lock.acquire('shadow', 1_000);
-    clock.value = 900;
-    expect(await lock.renew('shadow', 1_000)).toBe(true);
+    // A's lock expires and B takes it.
+    redis.store.set(CAMPAIGN.key, 'B:2');
+    await a.release(CAMPAIGN);
 
-    clock.value = 1_500; // would have expired without the renewal
-    expect(await redis.get('dialer:v2:global:lock:shadow')).not.toBeNull();
+    expect(redis.store.get(CAMPAIGN.key)).toBe('B:2');
   });
 
-  it('reports false once ownership has been lost', async () => {
-    const clock = { value: 0 };
-    const redis = fakeRedis(clock);
-    const a = new RedisDistributedLock({ redis, ownerId: 'replica-a' });
-    const b = new RedisDistributedLock({ redis, ownerId: 'replica-b' });
-
-    await a.acquire('shadow', 1_000);
-    clock.value = 2_000;
-    await b.acquire('shadow', 5_000);
-
-    expect(await a.renew('shadow', 1_000)).toBe(false);
-  });
-
-  it('stops attempting release after ownership is lost', async () => {
-    const clock = { value: 0 };
-    const redis = fakeRedis(clock);
-    const a = new RedisDistributedLock({ redis, ownerId: 'replica-a' });
-
-    await a.acquire('shadow', 1_000);
-    clock.value = 2_000;
-    await a.renew('shadow', 1_000); // false, drops the held entry
-
+  it('does nothing for a lock this replica never held', async () => {
+    const redis = fakeRedis();
     const evalSpy = vi.spyOn(redis, 'eval');
-    await a.release('shadow');
+    const lock = new RedisDistributedLock({ redis, ownerId: 'A' });
+
+    await lock.release(CAMPAIGN);
     expect(evalSpy).not.toHaveBeenCalled();
   });
+});
 
-  it('recovers after a replica dies without releasing', async () => {
-    const clock = { value: 0 };
-    const redis = fakeRedis(clock);
-    const dead = new RedisDistributedLock({ redis, ownerId: 'dead' });
-    const alive = new RedisDistributedLock({ redis, ownerId: 'alive' });
+describe('renew stops believing in lost ownership', () => {
+  it('returns false and forgets the lock once the value changed', async () => {
+    const redis = fakeRedis();
+    const lock = new RedisDistributedLock({ redis, ownerId: 'A' });
+    await lock.acquire(CAMPAIGN, 5_000);
 
-    await dead.acquire('shadow', 1_000);
-    // No release — the process is gone. The TTL is the recovery mechanism.
-    clock.value = 1_500;
-    expect(await alive.acquire('shadow', 5_000)).not.toBeNull();
+    redis.store.set(CAMPAIGN.key, 'B:2');
+    expect(await lock.renew(CAMPAIGN, 5_000)).toBe(false);
+
+    // Having forgotten it, a later release cannot delete B's lock either.
+    await lock.release(CAMPAIGN);
+    expect(redis.store.get(CAMPAIGN.key)).toBe('B:2');
   });
 });
 
-describe('failure handling', () => {
-  it('fails closed when Redis is unreachable', async () => {
-    const broken: LockRedis = {
-      set: () => Promise.reject(new Error('down')),
-      get: () => Promise.reject(new Error('down')),
-      del: () => Promise.reject(new Error('down')),
-      eval: () => Promise.reject(new Error('down')),
-      incr: () => Promise.reject(new Error('down')),
-    };
+describe('acquisition fails closed', () => {
+  it('returns null when Redis throws', async () => {
+    // Skipping a pass costs one interval of history; running an uncoordinated
+    // one corrupts it.
     const onFailure = vi.fn();
-    const lock = new RedisDistributedLock({ redis: broken, ownerId: 'a', onFailure });
+    const redis = fakeRedis();
+    redis.eval = () => Promise.reject(new Error('down'));
 
-    expect(await lock.acquire('shadow', 5_000)).toBeNull();
-    expect(onFailure).toHaveBeenCalledWith('lock.acquire', expect.any(Error));
+    const lock = new RedisDistributedLock({ redis, ownerId: 'A', onFailure });
+    expect(await lock.acquire(CAMPAIGN, 5_000)).toBeNull();
+    expect(onFailure).toHaveBeenCalled();
   });
 });
 
-describe('single-instance fallback', () => {
-  it('always grants and reports that it is not distributed', async () => {
+describe('lock keys are tenant-scoped and validated', () => {
+  it('places a campaign lock inside its tenant namespace', () => {
+    expect(CAMPAIGN.key).toBe('tenant:tenant-a:dialer:v2:campaign:camp-1:shadow:lock');
+    expect(CAMPAIGN.fenceKey).toBe('tenant:tenant-a:dialer:v2:campaign:camp-1:shadow:fence');
+  });
+
+  it('keeps the global lock out of every tenant namespace', () => {
+    expect(globalLock('reconcile').key).toBe('dialer:v2:global:lock:reconcile');
+    expect(globalLock('reconcile').fenceKey).toBe('dialer:v2:global:lock:reconcile:fence');
+  });
+
+  it('refuses a campaign id containing a colon', () => {
+    // Redis key segments are colon-delimited, so this would otherwise address
+    // another campaign's lock — the runtime used to interpolate these directly.
+    expect(() => campaignShadowLock('tenant-a', 'camp:evil:shadow:lock')).toThrow(
+      InvalidKeySegmentError
+    );
+  });
+
+  it('refuses braces, whitespace and glob characters', () => {
+    for (const bad of ['camp{1}', 'camp 1', 'camp*', 'camp?', 'camp[1]', 'camp\\1', 'camp\n1']) {
+      expect(() => campaignShadowLock('tenant-a', bad)).toThrow(InvalidKeySegmentError);
+    }
+  });
+
+  it('refuses an oversized id', () => {
+    expect(() => campaignShadowLock('tenant-a', 'c'.repeat(129))).toThrow(InvalidKeySegmentError);
+  });
+
+  it('refuses a reserved tenant id', () => {
+    for (const bad of ['global', 'platform', 'admin', 'system', 'dialer', 'tenant']) {
+      expect(() => campaignShadowLock(bad, 'camp-1')).toThrow(InvalidKeySegmentError);
+    }
+  });
+
+  it('gives two tenants different keys for the same campaign id', async () => {
+    const redis = fakeRedis();
+    const lock = new RedisDistributedLock({ redis, ownerId: 'A' });
+
+    const a = campaignShadowLock('tenant-a', 'camp-1');
+    const b = campaignShadowLock('tenant-b', 'camp-1');
+    expect(a.key).not.toBe(b.key);
+
+    // Holding one leaves the other free.
+    expect(await lock.acquire(a, 5_000)).not.toBeNull();
+    expect(await lock.acquire(b, 5_000)).not.toBeNull();
+  });
+});
+
+describe('the single-instance lock is honest about what it is', () => {
+  it('reports that coordination is not distributed', async () => {
     const lock = new NoOpLock();
     expect(lock.distributed).toBe(false);
-    expect(await lock.acquire('shadow', 1_000)).not.toBeNull();
-    expect(await lock.renew('shadow', 1_000)).toBe(true);
-  });
-
-  it('issues increasing fencing tokens', async () => {
-    const lock = new NoOpLock();
-    const a = await lock.acquire('shadow', 1_000);
-    const b = await lock.acquire('shadow', 1_000);
-    expect(b!.fencingToken).toBeGreaterThan(a!.fencingToken);
+    // Still monotonic, so the fencing contract holds in a single process.
+    const first = await lock.acquire(CAMPAIGN, 1_000);
+    const second = await lock.acquire(CAMPAIGN, 1_000);
+    expect(second!.fencingToken).toBeGreaterThan(first!.fencingToken);
   });
 });

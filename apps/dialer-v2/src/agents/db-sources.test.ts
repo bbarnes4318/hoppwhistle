@@ -11,11 +11,36 @@ import { ExtensionRejection, ExtensionResolver } from './extension-resolver.js';
 
 const DOMAIN = 'hopwhistle.com';
 
-/** Rows shaped exactly like the real `users` table selection. */
-function db(rows: Array<Record<string, unknown>>): DialerV2Db & { calls: unknown[] } {
+/** Rows shaped exactly like the real `users` and `campaign_agents` selections. */
+function db(
+  rows: Array<Record<string, unknown>>,
+  assignments: Array<Record<string, unknown>> = []
+): DialerV2Db & { calls: unknown[]; assignmentWhere: unknown[] } {
   const calls: unknown[] = [];
+  const assignmentWhere: unknown[] = [];
   return {
     calls,
+    assignmentWhere,
+    campaignAgent: {
+      findMany: (args: { where: Record<string, unknown> }) => {
+        assignmentWhere.push(args.where);
+        const w = args.where;
+        return Promise.resolve(
+          assignments.filter(r => {
+            if (typeof w.tenantId === 'string' && r.tenantId !== w.tenantId) return false;
+            if (typeof w.userId === 'string' && r.userId !== w.userId) return false;
+            if (typeof w.status === 'string' && r.status !== w.status) return false;
+            // The nested campaign predicate: a row whose campaign belongs to
+            // another tenant is a data-integrity failure the unique constraint
+            // does not prevent.
+            const campaign = w.campaign as { tenantId?: string; status?: string } | undefined;
+            if (campaign?.tenantId && r.campaignTenantId !== campaign.tenantId) return false;
+            if (campaign?.status && r.campaignStatus !== campaign.status) return false;
+            return true;
+          })
+        );
+      },
+    },
     user: {
       findMany: (args: { where: Record<string, unknown> }) => {
         calls.push(args.where);
@@ -171,6 +196,7 @@ describe('database failure fails closed', () => {
   it('reports LOOKUP_FAILED rather than granting capacity', async () => {
     const broken: DialerV2Db = {
       user: { findMany: () => Promise.reject(new Error('connection refused')) },
+      campaignAgent: { findMany: () => Promise.reject(new Error('connection refused')) },
     };
     const resolver = new ExtensionResolver({
       source: new DatabaseExtensionSource({ db: broken, sipDomain: DOMAIN }),
@@ -182,40 +208,125 @@ describe('database failure fails closed', () => {
   });
 });
 
-describe('DatabaseAssignmentSource', () => {
-  it('resolves no campaigns, because the schema models no agent-campaign link', async () => {
-    // Not an oversight. There is no join table, no relation on User, no
-    // relation on Campaign, and no Queue/Team/Skill model. Returning a wildcard
-    // would put every agent in every campaign and inflate predictive capacity.
-    const onUnavailable = vi.fn();
-    const source = new DatabaseAssignmentSource({ db: db([userRow()]), onUnavailable });
+function assignmentRow(overrides: Record<string, unknown> = {}) {
+  return {
+    campaignId: 'camp-1',
+    tenantId: 'tenant-a',
+    userId: 'user-1',
+    status: 'ACTIVE',
+    campaignTenantId: 'tenant-a',
+    campaignStatus: 'ACTIVE',
+    priority: null,
+    ...overrides,
+  };
+}
 
-    const assignment = await source.resolve('tenant-a', 'user-1');
-    expect(assignment).toMatchObject({ campaignIds: [], queueIds: [] });
-    expect(onUnavailable).toHaveBeenCalledWith(AssignmentUnavailableReason.NO_SCHEMA_SUPPORT);
+describe('DatabaseAssignmentSource reads campaign_agents', () => {
+  it('grants campaign membership from an active assignment', async () => {
+    const source = new DatabaseAssignmentSource({ db: db([userRow()], [assignmentRow()]) });
+    expect(await source.resolve('tenant-a', 'user-1')).toMatchObject({
+      campaignIds: ['camp-1'],
+      queueIds: [],
+    });
+  });
+
+  it('grants nothing from a disabled assignment', async () => {
+    const source = new DatabaseAssignmentSource({
+      db: db([userRow()], [assignmentRow({ status: 'INACTIVE' })]),
+    });
+    expect(await source.resolve('tenant-a', 'user-1')).toMatchObject({ campaignIds: [] });
+  });
+
+  it('grants nothing once the assignment is revoked', async () => {
+    // Removing the row is how an operator withdraws an agent from a campaign,
+    // and it has to take effect on the next resolve.
+    const source = new DatabaseAssignmentSource({ db: db([userRow()], []) });
+    expect(await source.resolve('tenant-a', 'user-1')).toMatchObject({ campaignIds: [] });
+  });
+
+  it('resolves multiple campaigns for one agent', async () => {
+    const source = new DatabaseAssignmentSource({
+      db: db([userRow()], [assignmentRow(), assignmentRow({ campaignId: 'camp-2' })]),
+    });
+    const result = await source.resolve('tenant-a', 'user-1');
+    expect(result?.campaignIds.sort()).toEqual(['camp-1', 'camp-2']);
+  });
+
+  it('cannot resolve a cross-tenant assignment', async () => {
+    // Both predicates: the assignment's tenant AND the campaign's own tenant.
+    const source = new DatabaseAssignmentSource({
+      db: db([userRow()], [assignmentRow({ campaignTenantId: 'tenant-b' })]),
+    });
+    expect(await source.resolve('tenant-a', 'user-1')).toMatchObject({ campaignIds: [] });
+  });
+
+  it('scopes the query by tenant, user and status rather than post-filtering', async () => {
+    const database = db([userRow()], [assignmentRow()]);
+    await new DatabaseAssignmentSource({ db: database }).resolve('tenant-a', 'user-1');
+
+    expect(database.assignmentWhere[0]).toMatchObject({
+      tenantId: 'tenant-a',
+      userId: 'user-1',
+      status: 'ACTIVE',
+      campaign: { tenantId: 'tenant-a', status: 'ACTIVE' },
+    });
   });
 
   it('returns null for an unknown user', async () => {
-    const source = new DatabaseAssignmentSource({ db: db([]) });
+    const source = new DatabaseAssignmentSource({ db: db([], [assignmentRow()]) });
     expect(await source.resolve('tenant-a', 'nobody')).toBeNull();
   });
 
-  it('returns null for a disabled user', async () => {
+  it('returns null for a disabled user even with a live assignment', async () => {
+    // An assignment row outliving a suspended user must not keep granting
+    // capacity.
     const source = new DatabaseAssignmentSource({
-      db: db([userRow({ status: 'SUSPENDED' })]),
+      db: db([userRow({ status: 'SUSPENDED' })], [assignmentRow()]),
     });
     expect(await source.resolve('tenant-a', 'user-1')).toBeNull();
   });
 
   it('returns null across tenants', async () => {
-    const source = new DatabaseAssignmentSource({ db: db([userRow({ tenantId: 'tenant-b' })]) });
+    const source = new DatabaseAssignmentSource({
+      db: db([userRow({ tenantId: 'tenant-b' })], [assignmentRow()]),
+    });
     expect(await source.resolve('tenant-a', 'user-1')).toBeNull();
   });
 
-  it('never reports NO_SCHEMA_SUPPORT for a user it could not resolve', async () => {
+  it('grants no capacity when the assignment query fails', async () => {
+    // A catch returning [] would make an unreachable database look exactly like
+    // an agent nobody has assigned to anything. Both grant no capacity, but only
+    // one of them should page somebody.
     const onUnavailable = vi.fn();
-    const source = new DatabaseAssignmentSource({ db: db([]), onUnavailable });
-    await source.resolve('tenant-a', 'nobody');
-    expect(onUnavailable).not.toHaveBeenCalled();
+    const database = db([userRow()]);
+    database.campaignAgent.findMany = () => Promise.reject(new Error('connection reset'));
+
+    const source = new DatabaseAssignmentSource({ db: database, onUnavailable });
+    expect(await source.resolve('tenant-a', 'user-1')).toBeNull();
+    expect(onUnavailable).toHaveBeenCalledWith(
+      AssignmentUnavailableReason.LOOKUP_FAILED,
+      'connection reset'
+    );
+  });
+
+  it('names a missing table specifically, so an unapplied migration is visible', async () => {
+    const onUnavailable = vi.fn();
+    const database = db([userRow()]);
+    database.campaignAgent.findMany = () =>
+      Promise.reject(new Error('relation "campaign_agents" does not exist'));
+
+    const source = new DatabaseAssignmentSource({ db: database, onUnavailable });
+    expect(await source.resolve('tenant-a', 'user-1')).toBeNull();
+    expect(onUnavailable).toHaveBeenCalledWith(
+      AssignmentUnavailableReason.NO_SCHEMA_SUPPORT,
+      expect.stringContaining('campaign_agents')
+    );
+  });
+
+  it('grants no capacity when the user lookup itself fails', async () => {
+    const database = db([userRow()], [assignmentRow()]);
+    database.user.findMany = () => Promise.reject(new Error('down'));
+    const source = new DatabaseAssignmentSource({ db: database });
+    expect(await source.resolve('tenant-a', 'user-1')).toBeNull();
   });
 });

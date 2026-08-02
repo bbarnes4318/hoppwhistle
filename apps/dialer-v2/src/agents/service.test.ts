@@ -7,8 +7,24 @@ const T0 = 1_800_000_000_000;
 
 const noTruth: ExternalTruth = { liveChannelUuids: new Set(), channelOwners: new Map() };
 
-function truthWith(uuids: string[], owners: Array<[string, string]> = []): ExternalTruth {
-  return { liveChannelUuids: new Set(uuids), channelOwners: new Map(owners) };
+/**
+ * Ownership entries carry the tenant. Matching on agent id alone let a live
+ * channel in one tenant mark a same-named agent in another as ON_CALL.
+ */
+function truthWith(
+  uuids: string[],
+  owners: Array<[string, string]> = [],
+  tenantId = 'tenant-a'
+): ExternalTruth {
+  return {
+    liveChannelUuids: new Set(uuids),
+    channelOwners: new Map(
+      owners.map(([uuid, agentId]) => [
+        uuid,
+        { tenantId, agentId, channelUuid: uuid, callId: null, observedAtMs: T0 },
+      ])
+    ),
+  };
 }
 
 function serviceWithAgent(state = AgentState.AVAILABLE, overrides = {}) {
@@ -326,5 +342,59 @@ describe('correction audit trail', () => {
     });
     expect(() => svc.reconcile(T0 + 10_000, noTruth)).not.toThrow();
     expect(svc.get('tenant-a', 'a1')?.state).toBe(AgentState.STALE);
+  });
+});
+
+describe('channel ownership is tenant-scoped', () => {
+  it('ignores a live channel owned by the same agent id in another tenant', () => {
+    // Agent ids are unique within a tenant, not across the platform.
+    const svc = serviceWithAgent(AgentState.AVAILABLE);
+    const corrections = svc.reconcile(
+      T0 + 1_000,
+      truthWith(['uuid-b'], [['uuid-b', 'agent-1']], 'tenant-b')
+    );
+
+    expect(corrections).toHaveLength(0);
+    expect(svc.get('tenant-a', 'agent-1')?.state).toBe(AgentState.AVAILABLE);
+  });
+
+  it('still moves the agent when the channel belongs to their own tenant', () => {
+    const svc = serviceWithAgent(AgentState.AVAILABLE);
+    svc.reconcile(T0 + 1_000, truthWith(['uuid-a'], [['uuid-a', 'agent-1']], 'tenant-a'));
+    expect(svc.get('tenant-a', 'agent-1')?.state).toBe(AgentState.ON_CALL);
+  });
+
+  it('does not hold an agent ON_CALL against another tenant’s live channel', () => {
+    // The agent cannot hang up a channel that is not theirs, so treating it as
+    // theirs would pin them out of capacity indefinitely.
+    const svc = serviceWithAgent(AgentState.ON_CALL, { currentChannelUuid: 'uuid-x' });
+    svc.reconcile(T0 + 1_000, truthWith(['uuid-x'], [['uuid-x', 'agent-1']], 'tenant-b'));
+
+    expect(svc.get('tenant-a', 'agent-1')?.state).toBe(AgentState.WRAP_UP);
+  });
+});
+
+describe('the cache can be rebuilt from durable state', () => {
+  it('hydrates records and drops ones with an unusable tenant', () => {
+    const svc = new AgentStateService();
+    const loaded = svc.hydrate([
+      { tenantId: 'tenant-a', agentId: 'agent-1', state: AgentState.AVAILABLE },
+      { tenantId: 'global', agentId: 'agent-2', state: AgentState.AVAILABLE },
+    ] as never);
+
+    expect(loaded).toBe(1);
+    expect(svc.get('tenant-a', 'agent-1')?.state).toBe(AgentState.AVAILABLE);
+  });
+
+  it('adopts the authoritative record after a refused write', () => {
+    const svc = serviceWithAgent(AgentState.AVAILABLE);
+    svc.adopt({
+      ...svc.get('tenant-a', 'agent-1')!,
+      revision: 12,
+      state: AgentState.ON_CALL,
+    });
+
+    expect(svc.get('tenant-a', 'agent-1')?.revision).toBe(12);
+    expect(svc.get('tenant-a', 'agent-1')?.state).toBe(AgentState.ON_CALL);
   });
 });

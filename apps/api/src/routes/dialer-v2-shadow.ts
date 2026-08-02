@@ -17,6 +17,7 @@
 
 import { createHash } from 'node:crypto';
 
+import fastifyCookie from '@fastify/cookie';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import {
@@ -26,6 +27,16 @@ import {
   type ApiKeyRecord,
   type VerifiedAuthContext,
 } from '../lib/dialer-v2-auth.js';
+import {
+  CSRF_COOKIE,
+  SESSION_COOKIE,
+  SESSION_HASH_COOKIE,
+  clearSessionCookies,
+  csrfCookieOptions,
+  mintCsrfToken,
+  readSessionFromCookies,
+  sessionCookieOptions,
+} from '../lib/dialer-v2-session-cookie.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { DialerV2ShadowClient } from '../services/dialer-v2-shadow-client.js';
 
@@ -104,11 +115,18 @@ async function authorize(
   return result.context;
 }
 
-// eslint-disable-next-line @typescript-eslint/require-await
 export async function registerDialerV2ShadowRoutes(
   fastify: FastifyInstance,
   options: DialerV2RouteOptions = {}
 ) {
+  // Registered here rather than globally: these are the only routes that use
+  // cookies, and the session cookie is scoped to their path. Guarded because
+  // registering the plugin twice on one instance throws, and the app may add it
+  // globally later.
+  if (!fastify.hasReplyDecorator('setCookie')) {
+    await fastify.register(fastifyCookie);
+  }
+
   const client =
     options.client ??
     new DialerV2ShadowClient({
@@ -206,12 +224,76 @@ export async function registerDialerV2ShadowRoutes(
       void reply.code(503);
       return { error: { code: 'UNAVAILABLE', message: 'Dialer V2 service is unavailable' } };
     }
-    return { data: grant, meta: { tenantId: auth.tenantId, agentId: auth.userId } };
+
+    const now = Date.now();
+    const csrfToken = mintCsrfToken();
+
+    // The token goes into the cookie and NOWHERE else. It is not in the
+    // response body, so page JavaScript never holds it and an XSS cannot
+    // exfiltrate a credential that outlives the page.
+    void reply.setCookie(
+      SESSION_COOKIE,
+      grant.sessionToken,
+      sessionCookieOptions(grant.expiresAtMs, now)
+    );
+    // The hash rides along so logout can revoke without reading the token back.
+    void reply.setCookie(
+      SESSION_HASH_COOKIE,
+      grant.sessionTokenHash,
+      sessionCookieOptions(grant.expiresAtMs, now)
+    );
+    // Readable by script on purpose: it must be echoed in a header, and it is
+    // not a credential — it proves only same-origin, which is what a
+    // cross-origin attacker cannot fake.
+    void reply.setCookie(CSRF_COOKIE, csrfToken, csrfCookieOptions(grant.expiresAtMs, now));
+
+    return {
+      data: {
+        // No token, no hash. Only what the page legitimately needs to schedule
+        // its next heartbeat and to know when to re-authenticate.
+        expiresAtMs: grant.expiresAtMs,
+        issuedAtMs: grant.issuedAtMs,
+        csrfToken,
+      },
+      meta: { tenantId: auth.tenantId, agentId: auth.userId },
+    };
+  });
+
+  /**
+   * POST /api/v1/dialer-v2/agents/logout
+   *
+   * Revokes the Redis session and clears every cookie. Revoking rather than
+   * merely clearing matters: a cleared cookie leaves the session valid to
+   * anyone who captured the token, and the whole point of a server-side session
+   * is that the server can end it.
+   */
+  fastify.post('/api/v1/dialer-v2/agents/logout', async (request, reply) => {
+    const result = await verify(request);
+    if (!result.ok) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Verified authentication required' } };
+    }
+    const auth = result.context;
+    if (auth.source !== 'jwt' || !auth.userId) {
+      void reply.code(403);
+      return { error: { code: 'FORBIDDEN', message: 'Logout requires an authenticated user' } };
+    }
+
+    const cookie = readSessionFromCookies(request);
+    let revoked = false;
+    if (cookie.ok && cookie.sessionTokenHash) {
+      revoked = await client.revokeSession(auth.tenantId, cookie.sessionTokenHash);
+    }
+
+    // Cookies are cleared whether or not revocation succeeded. Leaving them in
+    // place after a failed revoke would keep presenting a credential the user
+    // has asked to give up.
+    clearSessionCookies(reply);
+    return { data: { revoked }, meta: { tenantId: auth.tenantId, agentId: auth.userId } };
   });
 
   fastify.post<{
     Body: {
-      sessionId?: string;
       sequence?: number;
       uiState?: string;
       preferredCampaignIds?: string[];
@@ -235,18 +317,28 @@ export async function registerDialerV2ShadowRoutes(
       };
     }
 
-    const body = request.body ?? {};
-    if (typeof body.sessionId !== 'string' || body.sessionId.length === 0) {
-      void reply.code(400);
-      return { error: { code: 'SESSION_REQUIRED', message: 'sessionId is required' } };
+    // The session token comes from the HttpOnly cookie, read here on the
+    // server. It is not in the request body and cannot be: the body arrives
+    // from page JavaScript, which by construction cannot read the cookie.
+    const cookie = readSessionFromCookies(request);
+    if (!cookie.ok || !cookie.token) {
+      void reply.code(401);
+      return {
+        error: {
+          code: cookie.rejection ?? 'SESSION_REQUIRED',
+          message: 'A valid agent session cookie and CSRF header are required',
+        },
+      };
     }
+
+    const body = request.body ?? {};
 
     const accepted = await client.postHeartbeat({
       // Never from the body — always from the verified token.
       tenantId: auth.tenantId,
       agentId: auth.userId,
       userId: auth.userId,
-      sessionId: body.sessionId,
+      sessionToken: cookie.token,
       sequence: typeof body.sequence === 'number' ? body.sequence : 0,
       uiState: typeof body.uiState === 'string' ? body.uiState : null,
       // A preference only. SIP state, call ids, channel UUIDs, and campaign

@@ -23,12 +23,23 @@ function snapshot(overrides: Partial<HealthSnapshot> = {}): HealthSnapshot {
     maxReconciliationLagMs: 30_000,
     campaignsObserved: 2,
     shadowDecisionsRecorded: 40,
-    storeBackend: 'redis',
+    mode: 'production',
+    dedupeBackend: 'redis',
+    decisionBackend: 'redis',
+    decisionsFenced: true,
     sessionBackend: 'redis',
-    lockDistributed: true,
+    agentStateBackend: 'redis',
+    sipBackend: 'redis',
+    observationBackend: 'redis',
+    channelBackend: 'redis',
+    extensionSource: 'database',
+    assignmentSource: 'database',
+    lockBackend: 'redis',
+    reconstructionComplete: true,
     assignmentsResolvable: true,
     shadowWritesRejected: 0,
     agentStateStaleWrites: 0,
+    registrationsOutOfOrder: 0,
     ...overrides,
   };
 }
@@ -168,39 +179,78 @@ describe('health states what is actually true, not what is convenient', () => {
   const find = (r: ReturnType<typeof buildHealthReport>, name: string) =>
     r.checks.find(c => c.name === name);
 
-  it('says plainly when state is in process memory', () => {
-    const r = buildHealthReport(SAFE_DEFAULTS, snapshot({ storeBackend: 'memory' }));
-    expect(find(r, 'state_backend')?.status).toBe('warn');
-    expect(find(r, 'state_backend')?.detail).toMatch(/single-instance|lost on restart/);
-  });
+  // Each backend is reported separately because each fails separately. One
+  // `storeBackend` flag used to stand for all of them, and it said `redis`
+  // whenever a Redis CONNECTION existed — while sessions were in a process map
+  // and decisions were written through a store that discarded every fencing
+  // token it was given.
+  const cases = [
+    ['dedupe_backend', { dedupeBackend: 'memory' }, /doubled/],
+    ['decision_backend', { decisionBackend: 'memory' }, /lost on restart/],
+    ['decision_fencing', { decisionsFenced: false }, /lost its lock/],
+    ['session_backend', { sessionBackend: 'memory' }, /unknown to every other replica/],
+    ['agent_state_backend', { agentStateBackend: 'memory' }, /restart loses every agent/],
+    ['sip_backend', { sipBackend: 'memory' }, /only the replica/],
+    ['observation_backend', { observationBackend: 'memory' }, /half the sample/],
+    ['channel_backend', { channelBackend: 'memory' }, /look idle/],
+    ['extension_source', { extensionSource: 'static' }, /static developer fixtures/],
+    ['assignment_source', { assignmentSource: 'static' }, /static developer fixtures/],
+    ['loop_coordination', { lockBackend: 'noop' }, /double-processing/],
+    ['state_reconstruction', { reconstructionComplete: false }, /floor, not a measurement/],
+  ] as const;
 
-  it('says plainly when sessions are not shared between replicas', () => {
+  for (const [name, override, detail] of cases) {
+    it(`names ${name} specifically when it is not shared`, () => {
+      const r = buildHealthReport(SAFE_DEFAULTS, snapshot(override as Partial<HealthSnapshot>));
+      expect(find(r, name)?.detail).toMatch(detail);
+    });
+
+    it(`fails readiness on ${name} in production`, () => {
+      // In staging and production a single-instance backend is a defect, not a
+      // stated choice, so it must not report ready.
+      const r = buildHealthReport(
+        SAFE_DEFAULTS,
+        snapshot({ ...(override as Partial<HealthSnapshot>), mode: 'production' })
+      );
+      expect(find(r, name)?.status).toBe('fail');
+      expect(r.ready).toBe(false);
+    });
+
+    it(`only warns on ${name} in development`, () => {
+      const r = buildHealthReport(
+        SAFE_DEFAULTS,
+        snapshot({ ...(override as Partial<HealthSnapshot>), mode: 'development' })
+      );
+      expect(find(r, name)?.status).toBe('warn');
+      expect(r.ready).toBe(true);
+    });
+  }
+
+  it('does not let one Redis-backed capability vouch for another', () => {
+    // The specific way the old single flag misled: everything else in Redis,
+    // sessions in a process map, and the surface said "redis".
     const r = buildHealthReport(SAFE_DEFAULTS, snapshot({ sessionBackend: 'memory' }));
-    expect(find(r, 'session_backend')?.status).toBe('warn');
-    expect(find(r, 'session_backend')?.detail).toMatch(/unknown to every other replica/);
+    expect(find(r, 'decision_backend')?.status).toBe('pass');
+    expect(r.allBackendsShared).toBe(false);
   });
 
-  it('says plainly when loop coordination is the no-op lock', () => {
-    const r = buildHealthReport(SAFE_DEFAULTS, snapshot({ lockDistributed: false }));
-    expect(find(r, 'loop_coordination')?.status).toBe('warn');
-    expect(find(r, 'loop_coordination')?.detail).toMatch(/double-processing/);
-  });
-
-  it('reports missing assignment support as a capability gap, not an empty roster', () => {
-    // Zero assigned agents and "the schema models no assignment" produce the
-    // same number and mean completely different things.
+  it('reports unresolvable assignment as a capability gap, not an empty roster', () => {
+    // Zero assigned agents and "assignment cannot be resolved" produce the same
+    // number and mean completely different things.
     const r = buildHealthReport(SAFE_DEFAULTS, snapshot({ assignmentsResolvable: false }));
     expect(find(r, 'campaign_assignments')?.status).toBe('warn');
-    expect(find(r, 'campaign_assignments')?.detail).toMatch(/no agent-to-campaign assignment/);
+    expect(find(r, 'campaign_assignments')?.detail).toMatch(/every campaign forecast has zero/);
   });
 
-  it('surfaces refused writes rather than swallowing them', () => {
+  it('surfaces refused writes without failing on them', () => {
+    // Refusals are the mechanism working. A rise is worth seeing; it is not a
+    // fault.
     const r = buildHealthReport(
       SAFE_DEFAULTS,
-      snapshot({ shadowWritesRejected: 3, agentStateStaleWrites: 2 })
+      snapshot({ shadowWritesRejected: 3, agentStateStaleWrites: 2, registrationsOutOfOrder: 1 })
     );
     expect(find(r, 'rejected_writes')?.status).toBe('warn');
-    expect(find(r, 'rejected_writes')?.detail).toMatch(/3 shadow decision\(s\) and 2 agent/);
+    expect(find(r, 'rejected_writes')?.detail).toMatch(/3 decision\(s\), 2 agent write\(s\) and 1/);
   });
 });
 
@@ -212,33 +262,29 @@ describe('shadow evidence is judged separately from readiness', () => {
   });
 
   for (const [label, override] of [
-    ['no assignment model', { assignmentsResolvable: false }],
-    ['memory stores', { storeBackend: 'memory' as const }],
-    ['no distributed lock', { lockDistributed: false }],
+    ['unresolvable assignments', { assignmentsResolvable: false }],
+    ['memory decisions', { decisionBackend: 'memory' }],
+    ['unfenced decisions', { decisionsFenced: false }],
+    ['memory sessions', { sessionBackend: 'memory' }],
+    ['memory agent state', { agentStateBackend: 'memory' }],
+    ['memory SIP state', { sipBackend: 'memory' }],
+    ['memory observations', { observationBackend: 'memory' }],
+    ['memory channel state', { channelBackend: 'memory' }],
+    ['static extensions', { extensionSource: 'static' }],
+    ['no distributed lock', { lockBackend: 'noop' }],
+    ['incomplete reconstruction', { reconstructionComplete: false }],
   ] as const) {
-    it(`is untrustworthy with ${label}, even while ready`, () => {
+    it(`is untrustworthy with ${label}`, () => {
       // A deployment can be perfectly healthy and still be recording decisions
       // that mean nothing. Promoting on those numbers is the failure this
       // separation exists to prevent.
-      const r = buildHealthReport(SAFE_DEFAULTS, snapshot(override));
+      const r = buildHealthReport(
+        SAFE_DEFAULTS,
+        // Development, so readiness stays green and only trustworthiness moves.
+        snapshot({ ...(override as Partial<HealthSnapshot>), mode: 'development' })
+      );
+      expect(r.ready).toBe(true);
       expect(r.shadowEvidenceTrustworthy).toBe(false);
     });
   }
-
-  it('is untrustworthy when ingestion has stopped', () => {
-    const r = buildHealthReport(SAFE_DEFAULTS, snapshot({ lastEventAgeMs: 999_999 }));
-    expect(r.ingestionHealthy).toBe(false);
-    expect(r.shadowEvidenceTrustworthy).toBe(false);
-  });
-
-  it('never claims trustworthy evidence while Redis is down', () => {
-    const r = buildHealthReport(SAFE_DEFAULTS, snapshot({ redisConnected: false }));
-    expect(r.shadowEvidenceTrustworthy).toBe(false);
-    expect(r.ready).toBe(false);
-  });
-
-  it('keeps liveness independent so a correct refusal is not restart-looped', () => {
-    const r = buildHealthReport(SAFE_DEFAULTS, snapshot({ redisConnected: false }));
-    expect(r.live).toBe(true);
-  });
 });

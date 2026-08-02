@@ -14,7 +14,7 @@ import type { SessionRedis } from '../agents/session-store.js';
 import type { DedupeStore, EventStore } from '../events/store.js';
 import { InMemoryDedupeStore, InMemoryEventStore } from '../events/store.js';
 import type { AgentSessionStore } from '../runtime/ports.js';
-import { InMemoryShadowDecisionStore, type ShadowDecisionStore } from '../shadow/engine.js';
+import type { ShadowDecisionStore } from '../shadow/engine.js';
 
 import type { AgentStateRedis } from './agent-state-store.js';
 import type { ChannelRedis } from './channel-ownership.js';
@@ -24,7 +24,11 @@ import {
   type DistributedLock,
   type LockRedis,
 } from './coordination.js';
-import { FencedShadowDecisionStore, type FencedRedis } from './fenced-decisions.js';
+import {
+  FencedShadowDecisionStore,
+  InMemoryFencedDecisionStore,
+  type FencedRedis,
+} from './fenced-decisions.js';
 import type { ObservationRedis } from './observation-store.js';
 import { RedisDedupeStore, type MinimalRedis } from './redis.js';
 import type { SipStoreRedis } from './sip-store.js';
@@ -101,7 +105,10 @@ export function buildStores(options: BuildStoresOptions, env: NodeJS.ProcessEnv)
     return {
       eventStore: new InMemoryEventStore(),
       dedupe: new InMemoryDedupeStore(),
-      shadowStore: new InMemoryShadowDecisionStore(),
+      // Fenced in the only sense one process can be: monotonic tokens and
+      // one decision per interval. It cannot verify lock ownership, so
+      // `decisionsFenced` stays false and staging/production refuse it.
+      shadowStore: new InMemoryFencedDecisionStore(options.shadowIntervalMs),
       lock: new NoOpLock(),
       redisHealthy: () => allowMemory,
       backend: 'memory',

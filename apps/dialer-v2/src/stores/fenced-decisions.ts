@@ -332,3 +332,77 @@ export class FencedShadowDecisionStore implements ShadowDecisionStore {
     return out;
   }
 }
+
+/**
+ * An in-process decision store that can still adjudicate a fencing token.
+ *
+ * Needed because the runtime always presents authority, and a store that cannot
+ * evaluate it now throws rather than writing unfenced — which is correct, and
+ * which would otherwise make `development` and `test` crash on every shadow
+ * pass.
+ *
+ * It checks what a single process CAN check: that the token has not gone
+ * backwards, and that the interval bucket is unused. It cannot check lock
+ * ownership, because in one process holding the no-op lock there is no lock to
+ * check. That gap is exactly why `composition.ts` refuses to build this in
+ * staging or production, and why `decisionsFenced` is reported false for it.
+ */
+export class InMemoryFencedDecisionStore implements ShadowDecisionStore {
+  private readonly decisions: ShadowDecisionRecord[] = [];
+  private readonly highestToken = new Map<string, number>();
+  private readonly buckets = new Set<string>();
+
+  constructor(
+    private readonly intervalMs: number,
+    private readonly max = 2_000
+  ) {}
+
+  recordFenced(
+    record: ShadowDecisionRecord,
+    authority: DecisionAuthority
+  ): Promise<DecisionWriteResult> {
+    const scope = `${record.tenantId} ${record.campaignId}`;
+    const highest = this.highestToken.get(scope) ?? 0;
+    if (authority.fencingToken < highest) {
+      return Promise.resolve({
+        accepted: false,
+        rejection: DecisionRejection.STALE_FENCING_TOKEN,
+      });
+    }
+
+    const bucket = `${scope} ${record.controllerVersion} ${Math.floor(
+      record.decidedAtMs / Math.max(1, this.intervalMs)
+    )}`;
+    if (this.buckets.has(bucket)) {
+      return Promise.resolve({ accepted: false, rejection: DecisionRejection.DUPLICATE_INTERVAL });
+    }
+
+    this.highestToken.set(scope, authority.fencingToken);
+    this.buckets.add(bucket);
+    this.decisions.push(record);
+    if (this.decisions.length > this.max) {
+      this.decisions.splice(0, this.decisions.length - this.max);
+    }
+    return Promise.resolve({ accepted: true });
+  }
+
+  record(decision: ShadowDecisionRecord): Promise<void> {
+    void decision;
+    return Promise.reject(new Error('InMemoryFencedDecisionStore requires recordFenced()'));
+  }
+
+  recent(tenantId: string, limit: number, campaignId?: string): Promise<ShadowDecisionRecord[]> {
+    const out: ShadowDecisionRecord[] = [];
+    for (let i = this.decisions.length - 1; i >= 0 && out.length < limit; i--) {
+      const d = this.decisions[i];
+      if (d.tenantId !== tenantId) continue;
+      if (campaignId && d.campaignId !== campaignId) continue;
+      out.push(d);
+    }
+    return Promise.resolve(out);
+  }
+
+  size(): number {
+    return this.decisions.length;
+  }
+}

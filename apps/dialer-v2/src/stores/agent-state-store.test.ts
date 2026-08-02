@@ -15,26 +15,12 @@ import {
   RedisAgentStateStore,
   type AgentStateRedis,
 } from './agent-state-store.js';
-import {
-  EMPTY_COUNTERS,
-  RedisObservationStore,
-  type ObservationRedis,
-} from './observation-store.js';
-
 function stateRedis(overrides: Partial<AgentStateRedis> = {}): AgentStateRedis {
   return {
     eval: () => Promise.resolve('OK'),
     get: () => Promise.resolve(null),
     smembers: () => Promise.resolve([]),
     mget: () => Promise.resolve([]),
-    ...overrides,
-  };
-}
-
-function obsRedis(overrides: Partial<ObservationRedis> = {}): ObservationRedis {
-  return {
-    eval: () => Promise.resolve([]),
-    hgetall: () => Promise.resolve({}),
     ...overrides,
   };
 }
@@ -208,90 +194,5 @@ describe('fail closed', () => {
   it('reports a failed SIP write as failed', async () => {
     const store = new RedisAgentStateStore({ redis: broken() });
     expect(await store.saveSipRegistration('tenant-a', 'agent-1', {})).toBe(false);
-  });
-});
-
-describe('observation counters', () => {
-  it('sends only non-zero deltas', async () => {
-    // A zero would still create the field and make an untouched counter look
-    // observed.
-    const args: unknown[][] = [];
-    const store = new RedisObservationStore({
-      redis: obsRedis({
-        eval: (...a) => {
-          args.push(a);
-          return Promise.resolve(['attempts', '1']);
-        },
-      }),
-    });
-
-    await store.increment('tenant-a', 'camp-1', { attempts: 1, liveAnswers: 0, abandons: 2 });
-    const flat = args[0].map(String);
-    expect(flat).toContain('attempts');
-    expect(flat).toContain('abandons');
-    expect(flat).not.toContain('liveAnswers');
-  });
-
-  it('does not call Redis when every delta is zero', async () => {
-    const evalSpy = vi.fn(() => Promise.resolve([]));
-    const store = new RedisObservationStore({ redis: obsRedis({ eval: evalSpy }) });
-    await store.increment('tenant-a', 'camp-1', { attempts: 0 });
-    expect(evalSpy).not.toHaveBeenCalled();
-  });
-
-  it('truncates fractional deltas rather than sending them to hincrby', async () => {
-    const args: unknown[][] = [];
-    const store = new RedisObservationStore({
-      redis: obsRedis({
-        eval: (...a) => {
-          args.push(a);
-          return Promise.resolve([]);
-        },
-      }),
-    });
-    await store.increment('tenant-a', 'camp-1', { attempts: 2.7 });
-    expect(args[0].map(String)).toContain('2');
-  });
-
-  it('reads a flat Lua reply into typed counters', async () => {
-    const store = new RedisObservationStore({
-      redis: obsRedis({ eval: () => Promise.resolve(['attempts', '12', 'liveAnswers', '3']) }),
-    });
-    expect(await store.increment('tenant-a', 'camp-1', { attempts: 1 })).toMatchObject({
-      attempts: 12,
-      liveAnswers: 3,
-      abandons: 0,
-    });
-  });
-
-  it('never produces NaN from an unparsable counter', async () => {
-    // A NaN would propagate into the Beta-Binomial posterior and produce a
-    // nonsense originate count.
-    const store = new RedisObservationStore({
-      redis: obsRedis({ hgetall: () => Promise.resolve({ attempts: 'not-a-number' }) }),
-    });
-    const result = await store.read('tenant-a', 'camp-1');
-    expect(result).toMatchObject({ ...EMPTY_COUNTERS });
-    expect(Number.isNaN(result?.attempts)).toBe(false);
-  });
-
-  it('returns null rather than zeros when Redis is unreachable', async () => {
-    // Zeros are indistinguishable from a genuinely idle campaign, and the
-    // controller reads a zero sample as "dial cautiously" rather than
-    // "unknown". The caller has to be able to tell the difference.
-    const store = new RedisObservationStore({
-      redis: obsRedis({
-        eval: () => Promise.reject(new Error('down')),
-        hgetall: () => Promise.reject(new Error('down')),
-      }),
-    });
-    expect(await store.read('tenant-a', 'camp-1')).toBeNull();
-    expect(await store.increment('tenant-a', 'camp-1', { attempts: 1 })).toBeNull();
-  });
-
-  it('refuses an invalid tenant or empty campaign', async () => {
-    const store = new RedisObservationStore({ redis: obsRedis() });
-    expect(await store.read('global', 'camp-1')).toBeNull();
-    expect(await store.increment('tenant-a', '', { attempts: 1 })).toBeNull();
   });
 });
