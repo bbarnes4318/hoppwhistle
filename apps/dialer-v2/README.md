@@ -32,6 +32,45 @@ pnpm --filter @hopwhistle/dialer-v2 test
 pnpm --filter @hopwhistle/dialer-v2 typecheck
 ```
 
+The live suites need a real Redis and a real PostgreSQL and skip when neither is
+reachable, printing the reason:
+
+```bash
+pnpm --filter @hopwhistle/dialer-v2 test:live
+```
+
+## Runtime modes
+
+`DIALER_V2_RUNTIME_MODE` selects which implementations the service holds. It is
+read once, in `runtime/composition.ts`, and nowhere else.
+
+| Mode          | State     | Sources         |
+| ------------- | --------- | --------------- |
+| `test`        | in memory | static fixtures |
+| `development` | in memory | static fixtures |
+| `staging`     | Redis     | PostgreSQL      |
+| `production`  | Redis     | PostgreSQL      |
+
+An unset or unrecognised value resolves to `test`, the most restrictive option.
+Defaulting to `production` would let a typo in a deployment variable silently arm
+the real backends; defaulting to `development` would let a real deployment
+silently accept single-instance state.
+
+**Staging and production refuse to start** when any required backend cannot be
+created — they never substitute an in-memory one. The process stays up to serve
+`/health/live`, so an orchestrator does not restart-loop a service that is
+correctly refusing, and `/health/ready` reports which requirement was not met.
+
+Required in `staging` and `production`:
+
+| Variable                       | Why                                                                                                                                                              |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `REDIS_URL`                    | every piece of shared state                                                                                                                                      |
+| `DATABASE_URL`                 | extension and campaign-assignment resolution                                                                                                                     |
+| `DIALER_V2_SIP_DOMAIN`         | the realm agents register against; there is no per-user domain column to read, and a wrong realm makes every registration fail to resolve with no error anywhere |
+| `DIALER_V2_ALLOWED_TENANT_IDS` | which tenants this replica reconstructs at startup                                                                                                               |
+| `DIALER_V2_INTERNAL_TOKEN`     | gates `/internal/*`                                                                                                                                              |
+
 ## Why the controller is a pure function
 
 `decidePacing(inputs, prev)` performs no I/O and reads no clock — `nowMs` is an argument.
