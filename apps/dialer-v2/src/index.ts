@@ -1,41 +1,67 @@
 /**
  * Dialer V2 — service entrypoint.
  *
- * PHASE 0 SCOPE. This process starts the health/observability surface and
- * nothing else. It does not connect to FreeSWITCH, does not poll for leads, and
- * has no code path that reaches an `originate`. Origination arrives in Phase 2,
- * behind `evaluateOriginationGate`.
+ * PHASE 1 SCOPE: event ingestion, agent state, reconciliation, and shadow
+ * pacing. There is NO origination code path in this build — nothing here, and
+ * nothing it imports, can write an `originate` to FreeSWITCH. The ESL client's
+ * only write is its event subscription.
  *
- * Deploying this container alongside the existing worker is therefore inert by
- * construction, which is the point: the rollout can be validated before any
- * dialing logic exists to go wrong.
+ * The service starts with in-memory stores. Redis and PostgreSQL implementations
+ * of `EventStore`/`DedupeStore`/`ShadowDecisionStore` slot in behind the same
+ * interfaces without touching ingestion or pacing.
  */
 
 import http from 'node:http';
 
+import { AgentStateService } from './agents/service.js';
 import { EnvFlagSource } from './config/flags.js';
+import { EventIngestor } from './events/ingestor.js';
+import { InMemoryDedupeStore, InMemoryEventStore } from './events/store.js';
 import { buildHealthReport, type HealthSnapshot } from './health/report.js';
+import { InMemoryShadowDecisionStore } from './shadow/engine.js';
 
 const PORT = Number(process.env.DIALER_V2_PORT) || 9092;
+const MAX_EVENT_AGE_MS = Number(process.env.DIALER_V2_MAX_EVENT_AGE_MS) || 60_000;
+const MAX_EVENT_LAG_MS = Number(process.env.DIALER_V2_MAX_EVENT_LAG_MS) || 1_000;
+const MAX_RECONCILE_LAG_MS = Number(process.env.DIALER_V2_MAX_RECONCILE_LAG_MS) || 30_000;
 
 const flagSource = new EnvFlagSource();
+const eventStore = new InMemoryEventStore();
+const dedupeStore = new InMemoryDedupeStore();
+const agents = new AgentStateService();
+const shadowStore = new InMemoryShadowDecisionStore();
+const ingestor = new EventIngestor({ store: eventStore, dedupe: dedupeStore });
 
-/**
- * Phase 0 has no dependency clients, so the snapshot reports "not connected"
- * honestly rather than claiming health it cannot verify. Phase 1 replaces this
- * with real probes.
- */
-function currentSnapshot(): HealthSnapshot {
+/** Reconciliation timestamp, set by the reconcile loop once it is wired. */
+const lastReconciliationAtMs: number | null = null;
+
+async function currentSnapshot(): Promise<HealthSnapshot> {
   return {
-    freeswitchConnected: false,
+    // The ESL client is not started in this build: no telephony credentials are
+    // assumed, and reporting "connected" when nothing is connected is exactly
+    // the failure mode CURRENT_STATE_AUDIT.md §5 documents.
+    eslConnected: false,
+    eslDegraded: false,
+    eslDetail: 'ESL client not started in this build',
+    eslConsecutiveFailures: 0,
+
     redisConnected: false,
     postgresConnected: false,
-    lastEventAgeMs: Number.MAX_SAFE_INTEGER,
-    maxEventAgeMs: 5_000,
-    agentStateAgeMs: Number.MAX_SAFE_INTEGER,
-    maxAgentStateAgeMs: 10_000,
-    campaignsOwned: 0,
-    activeAttempts: 0,
+
+    lastEventAgeMs: ingestor.lastEventAgeMs(),
+    maxEventAgeMs: MAX_EVENT_AGE_MS,
+    eventLagMs: ingestor.currentLagMs(),
+    maxEventLagMs: MAX_EVENT_LAG_MS,
+
+    unresolvedEventCount: await eventStore.quarantinedCount(),
+    staleAgentCount: agents.staleCount(),
+    totalAgentCount: agents.size(),
+    reconciliationLagMs:
+      lastReconciliationAtMs === null ? null : Date.now() - lastReconciliationAtMs,
+    maxReconciliationLagMs: MAX_RECONCILE_LAG_MS,
+
+    campaignsObserved: 0,
+    shadowDecisionsRecorded: shadowStore.size(),
   };
 }
 
@@ -50,22 +76,23 @@ function json(res: http.ServerResponse, code: number, body: unknown): void {
 export function createServer(): http.Server {
   return http.createServer((req, res) => {
     const flags = flagSource.get();
-    const url = req.url ?? '/';
+    const url = new URL(req.url ?? '/', 'http://localhost');
+    const path = url.pathname;
 
-    if (url === '/health/live') {
+    if (path === '/health/live') {
       json(res, 200, { live: true, service: 'hopwhistle-dialer-v2' });
       return;
     }
 
-    if (url === '/health/ready' || url === '/health') {
-      const report = buildHealthReport(flags, currentSnapshot());
-      // Phase 0 is intentionally not "ready" to dial: readiness reflects the
-      // dependencies a dialing service needs, and this build has none wired.
-      json(res, report.ready ? 200 : 503, report);
+    if (path === '/health/ready' || path === '/health') {
+      void currentSnapshot().then(snap => {
+        const report = buildHealthReport(flags, snap);
+        json(res, report.ready ? 200 : 503, report);
+      });
       return;
     }
 
-    if (url === '/status/flags') {
+    if (path === '/status/flags') {
       // Flag values only — no secrets, no tenant data.
       json(res, 200, {
         enabled: flags.enabled,
@@ -78,8 +105,18 @@ export function createServer(): http.Server {
         maxGlobalCps: flags.maxGlobalCps,
         maxGlobalCalls: flags.maxGlobalCalls,
         requireHealthyAgentHeartbeats: flags.requireHealthyAgentHeartbeats,
-        phase: 0,
+        phase: 1,
         originationImplemented: false,
+      });
+      return;
+    }
+
+    if (path === '/status/ingestion') {
+      json(res, 200, {
+        metrics: ingestor.getMetrics(),
+        lastEventAgeMs: ingestor.lastEventAgeMs(),
+        eventLagMs: ingestor.currentLagMs(),
+        trackedChannels: ingestor.trackedChannelCount(),
       });
       return;
     }
@@ -95,9 +132,10 @@ function main(): void {
   server.listen(PORT, '0.0.0.0', () => {
     process.stdout.write(
       `${JSON.stringify({
-        msg: 'dialer-v2 started (phase 0: health surface only, no origination path exists)',
+        msg: 'dialer-v2 started (phase 1: ingestion, agent state, shadow pacing; no origination path exists)',
         port: PORT,
         enabled: flags.enabled,
+        shadowEnabled: flags.shadowEnabled,
         originateEnabled: flags.originateEnabled,
         dryRun: flags.dryRun,
         emergencyStop: flags.emergencyStop,
@@ -112,8 +150,7 @@ function main(): void {
   process.on('SIGINT', shutdown);
 }
 
-// Only run when executed directly, so tests can import `createServer`.
-if (process.argv[1] && process.argv[1].endsWith('index.ts')) main();
-else if (process.argv[1] && process.argv[1].endsWith('index.js')) main();
+const entry = process.argv[1] ?? '';
+if (entry.endsWith('index.ts') || entry.endsWith('index.js')) main();
 
-export { flagSource };
+export { agents, eventStore, flagSource, ingestor, shadowStore };

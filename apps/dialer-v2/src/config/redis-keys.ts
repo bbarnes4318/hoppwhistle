@@ -5,23 +5,32 @@
  * tenant-scoped. Every Dialer V2 key is built here and nowhere else, so tenant
  * scoping is structural rather than a rule people have to remember.
  *
- * Layout: `dialer2:{tenantId}:{dimension}:{id}:{field}`
- * The tenant segment is always second and always present.
+ * Layout:  tenant:{tenantId}:dialer:v2:{dimension}:{id}:{field}
+ * Global:  dialer:v2:global:{name}   — enumerated, never parameterised
  *
- * `dialer2:global:*` exists only for genuinely platform-wide values (the global
- * concurrency counter, the raw event stream). Those are enumerated explicitly in
- * `globalKey()` — an arbitrary global key cannot be constructed.
+ * The tenant segment is always second and always present.
  */
 
-const PREFIX = 'dialer2';
+const TENANT_PREFIX = 'tenant';
+const NAMESPACE = 'dialer:v2';
+const GLOBAL_PREFIX = `${NAMESPACE}:global`;
 
 /**
  * Redis key segments are colon-delimited, so a segment containing a colon would
  * let a caller forge a key in another tenant's namespace. Braces are rejected
- * too: they are Redis Cluster hash-tag delimiters and would silently change
- * slot routing.
+ * too: they are Redis Cluster hash-tag delimiters and would silently change slot
+ * routing. Newlines are rejected because they terminate commands in the inline
+ * RESP protocol.
  */
-const FORBIDDEN = /[:{}\s]/;
+const FORBIDDEN = /[:{}\s*?[\]\\]/;
+
+/**
+ * Tenant ids that would collide with structural parts of the keyspace or with
+ * the platform namespace. A tenant literally named `global` must not be able to
+ * address platform-wide counters; `admin` and `platform` are reserved for the
+ * same reason before anything starts using them.
+ */
+const RESERVED_TENANT_IDS = new Set(['global', 'platform', 'admin', 'system', 'dialer', 'tenant']);
 
 export class InvalidKeySegmentError extends Error {
   constructor(segment: string, reason: string) {
@@ -37,7 +46,7 @@ function assertSegment(value: string, label: string): string {
   if (FORBIDDEN.test(value)) {
     throw new InvalidKeySegmentError(
       value,
-      `${label} must not contain ':', '{', '}', or whitespace`
+      `${label} must not contain ':', '{', '}', whitespace, or glob characters`
     );
   }
   if (value.length > 128) {
@@ -46,36 +55,56 @@ function assertSegment(value: string, label: string): string {
   return value;
 }
 
-/**
- * Segments that may never be used as a tenant id. A tenant literally named
- * `global` would otherwise be able to construct platform-wide keys and read or
- * clobber another tenant's counters.
- */
-const RESERVED_TENANT_SEGMENTS = new Set(['global']);
-
 function assertTenantId(tenantId: string): string {
   assertSegment(tenantId, 'tenantId');
-  if (RESERVED_TENANT_SEGMENTS.has(tenantId)) {
-    throw new InvalidKeySegmentError(tenantId, 'tenantId is reserved for platform-wide keys');
+  if (RESERVED_TENANT_IDS.has(tenantId.toLowerCase())) {
+    throw new InvalidKeySegmentError(tenantId, 'tenantId is reserved');
   }
   return tenantId;
 }
 
+/** Returns true when a tenant id is safe to use in a key. Never throws. */
+export function isValidTenantId(tenantId: unknown): tenantId is string {
+  if (typeof tenantId !== 'string') return false;
+  try {
+    assertTenantId(tenantId);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Base namespace for a tenant. All tenant-scoped keys descend from this. */
 export function tenantNamespace(tenantId: string): string {
-  return `${PREFIX}:${assertTenantId(tenantId)}`;
+  return `${TENANT_PREFIX}:${assertTenantId(tenantId)}:${NAMESPACE}`;
 }
 
-export function campaignKey(tenantId: string, campaignId: string, field: string): string {
-  return `${tenantNamespace(tenantId)}:campaign:${assertSegment(campaignId, 'campaignId')}:${assertSegment(field, 'field')}`;
+export function agentStateKey(tenantId: string, agentId: string): string {
+  return `${tenantNamespace(tenantId)}:agent:${assertSegment(agentId, 'agentId')}:state`;
 }
 
-export function agentKey(tenantId: string, agentId: string, field: string): string {
-  return `${tenantNamespace(tenantId)}:agent:${assertSegment(agentId, 'agentId')}:${assertSegment(field, 'field')}`;
+export function agentIndexKey(tenantId: string): string {
+  return `${tenantNamespace(tenantId)}:agents`;
 }
 
-export function callerIdKey(tenantId: string, e164: string, field: string): string {
-  return `${tenantNamespace(tenantId)}:callerid:${assertSegment(e164, 'e164')}:${assertSegment(field, 'field')}`;
+export function campaignRuntimeKey(tenantId: string, campaignId: string): string {
+  return `${tenantNamespace(tenantId)}:campaign:${assertSegment(campaignId, 'campaignId')}:runtime`;
+}
+
+export function campaignOwnerKey(tenantId: string, campaignId: string): string {
+  return `${tenantNamespace(tenantId)}:campaign:${assertSegment(campaignId, 'campaignId')}:owner`;
+}
+
+export function callStateKey(tenantId: string, callId: string): string {
+  return `${tenantNamespace(tenantId)}:call:${assertSegment(callId, 'callId')}:state`;
+}
+
+export function eventDedupeKey(tenantId: string, eventId: string): string {
+  return `${tenantNamespace(tenantId)}:events:dedupe:${assertSegment(eventId, 'eventId')}`;
+}
+
+export function callerIdUsageKey(tenantId: string, e164: string, window: string): string {
+  return `${tenantNamespace(tenantId)}:callerid:${assertSegment(e164, 'e164')}:${assertSegment(window, 'window')}`;
 }
 
 export function leadLeaseKey(tenantId: string, leadId: string): string {
@@ -86,17 +115,16 @@ export function attemptKey(tenantId: string, attemptId: string): string {
   return `${tenantNamespace(tenantId)}:attempt:${assertSegment(attemptId, 'attemptId')}`;
 }
 
-export function eventDedupeKey(tenantId: string, eventId: string): string {
-  return `${tenantNamespace(tenantId)}:evt:${assertSegment(eventId, 'eventId')}`;
-}
-
 export function tenantCounterKey(tenantId: string, counter: string): string {
   return `${tenantNamespace(tenantId)}:counter:${assertSegment(counter, 'counter')}`;
 }
 
-/** Campaign ownership lease — the key behind single-owner distribution. */
-export function campaignOwnerKey(tenantId: string, campaignId: string): string {
-  return campaignKey(tenantId, campaignId, 'owner');
+export function tenantHealthKey(tenantId: string): string {
+  return `${tenantNamespace(tenantId)}:health`;
+}
+
+export function shadowDecisionKey(tenantId: string, campaignId: string): string {
+  return `${tenantNamespace(tenantId)}:campaign:${assertSegment(campaignId, 'campaignId')}:shadow`;
 }
 
 /**
@@ -107,36 +135,32 @@ export function campaignOwnerKey(tenantId: string, campaignId: string): string {
 const GLOBAL_KEYS = {
   activeCalls: 'active_calls',
   cpsWindow: 'cps_window',
-  rawEventStream: 'raw',
-  quarantineStream: 'quarantine',
+  rawEventStream: 'events:raw',
+  quarantineStream: 'events:quarantine',
   emergencyStop: 'emergency_stop',
+  health: 'health',
 } as const;
 
 export type GlobalKeyName = keyof typeof GLOBAL_KEYS;
 
 export function globalKey(name: GlobalKeyName): string {
-  return `${PREFIX}:global:${GLOBAL_KEYS[name]}`;
+  return `${GLOBAL_PREFIX}:${GLOBAL_KEYS[name]}`;
 }
 
-/**
- * True if `key` belongs to `tenantId`. Used by tests and by the runtime guard
- * that asserts a command is not touching another tenant's namespace.
- *
- * Matches the namespace root itself as well as its descendants, and always
- * returns false for a reserved segment so `keyBelongsToTenant(k, 'global')`
- * cannot be used to claim ownership of platform keys.
- */
+/** True if `key` belongs to `tenantId`. Always false for a reserved id. */
 export function keyBelongsToTenant(key: string, tenantId: string): boolean {
-  if (RESERVED_TENANT_SEGMENTS.has(tenantId)) return false;
-  const base = `${PREFIX}:${tenantId}`;
+  if (!isValidTenantId(tenantId)) return false;
+  const base = `${TENANT_PREFIX}:${tenantId}:${NAMESPACE}`;
   return key === base || key.startsWith(`${base}:`);
 }
 
-/** Extract the tenant from a V2 key, or null for global/foreign keys. */
+/** Extract the tenant from a V2 key, or null for global/foreign/malformed keys. */
 export function tenantOfKey(key: string): string | null {
+  if (typeof key !== 'string') return null;
   const parts = key.split(':');
-  // Length 2 is the namespace root (`dialer2:{tenantId}`), which is still owned.
-  if (parts.length < 2 || parts[0] !== PREFIX) return null;
-  if (RESERVED_TENANT_SEGMENTS.has(parts[1])) return null;
-  return parts[1] || null;
+  if (parts.length < 4) return null;
+  if (parts[0] !== TENANT_PREFIX) return null;
+  if (parts[2] !== 'dialer' || parts[3] !== 'v2') return null;
+  const tenantId = parts[1];
+  return isValidTenantId(tenantId) ? tenantId : null;
 }
