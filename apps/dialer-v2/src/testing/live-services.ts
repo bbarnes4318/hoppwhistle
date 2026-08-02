@@ -79,6 +79,7 @@ export async function connectLiveRedis(): Promise<LiveHandle<LiveRedis>> {
         opts: Record<string, unknown>
       ) => LiveRedis & {
         on(event: string, handler: (arg?: unknown) => void): void;
+        connect(): Promise<void>;
         ping(): Promise<string>;
       };
     };
@@ -89,10 +90,20 @@ export async function connectLiveRedis(): Promise<LiveHandle<LiveRedis>> {
       connectTimeout: 3_000,
       lazyConnect: true,
     });
-    // Swallow async errors so an unreachable server surfaces at ping(), below,
-    // rather than as an unhandled rejection that kills the whole run.
+    // Swallow async errors so an unreachable server surfaces at connect(),
+    // below, rather than as an unhandled rejection that kills the whole run.
     client.on('error', () => {});
 
+    // Connect explicitly, and wait for it.
+    //
+    // `lazyConnect` defers connecting until the first command, and
+    // `enableOfflineQueue: false` refuses to buffer that command while the
+    // socket is still opening — so issuing one immediately fails with
+    // "Stream isn't writeable" against a server that is perfectly healthy.
+    // That combination reported every Redis test as skipped-because-unreachable
+    // while Redis was running, which is exactly the false negative these live
+    // suites exist to rule out.
+    await client.connect();
     await client.ping();
     return { available: true, client };
   } catch (error) {
