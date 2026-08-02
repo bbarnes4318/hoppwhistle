@@ -126,12 +126,15 @@ async function seedTenant(
   );
 
   await db.$executeRawUnsafe(
-    `INSERT INTO publishers (id, "tenantId", name, status, "createdAt", "updatedAt")
-     VALUES ($1, $2, $3, 'ACTIVE', NOW(), NOW())
+    // `code` is NOT NULL with no default, so it has to be supplied. Derived
+    // from the id so it is unique per row without needing a counter.
+    `INSERT INTO publishers (id, "tenantId", name, code, status, "createdAt", "updatedAt")
+     VALUES ($1, $2, $3, $4, 'ACTIVE', NOW(), NOW())
      ON CONFLICT (id) DO NOTHING`,
     p,
     t,
-    'Dialer V2 live publisher'
+    'Dialer V2 live publisher',
+    p
   );
 
   await db.$executeRawUnsafe(

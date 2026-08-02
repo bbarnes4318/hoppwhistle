@@ -115,11 +115,14 @@ async function makeCampaign(tenantId: string): Promise<string> {
   const campaignId = `${MARK}-camp-${seq++}`;
 
   await prisma.$executeRawUnsafe(
-    `INSERT INTO publishers (id, "tenantId", name, status, "createdAt", "updatedAt")
-     VALUES ($1, $2, $3, 'ACTIVE', NOW(), NOW())`,
+    // `code` is NOT NULL with no default, so it has to be supplied. Derived
+    // from the id so it is unique per row without needing a counter.
+    `INSERT INTO publishers (id, "tenantId", name, code, status, "createdAt", "updatedAt")
+     VALUES ($1, $2, $3, $4, 'ACTIVE', NOW(), NOW())`,
     publisherId,
     tenantId,
-    `${MARK} publisher`
+    `${MARK} publisher`,
+    publisherId
   );
   await prisma.$executeRawUnsafe(
     `INSERT INTO campaigns (id, "tenantId", "publisherId", name, status, "createdAt", "updatedAt")
