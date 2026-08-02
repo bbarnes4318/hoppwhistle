@@ -32,7 +32,8 @@
     "numbers:assign": "tsx src/cli/numbers-assign.ts",
     "numbers:audit": "tsx src/cli/numbers-audit.ts",
     "quota:test": "tsx src/cli/test-quota-overage.ts",
-    "migrate": "tsx src/cli/migrate.ts"
+    "migrate": "tsx src/cli/migrate.ts",
+    "hopper:preflight": "tsx src/cli/hopper-preflight.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.490.0",
