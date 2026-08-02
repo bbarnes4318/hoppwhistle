@@ -425,7 +425,10 @@ describe('two replicas sharing one Redis', () => {
 
     // A takes the lock and never releases it — simulating a dead process.
     await a.runtime.getIngestor().handleRaw(raw);
-    await new RedisDistributedLock({ redis, ownerId: 'replica-a' }).acquire('shadow', 1_000);
+    await new RedisDistributedLock({ redis, ownerId: 'replica-a' }).acquire(
+      `campaign:${TENANT}:${CAMPAIGN}:shadow`,
+      1_000
+    );
 
     expect(await b.runtime.runShadowPass()).toBe(0);
 

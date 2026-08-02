@@ -9,7 +9,7 @@ import { AgentState } from '../agents/state.js';
 import { EnvFlagSource } from '../config/flags.js';
 import { InMemoryDedupeStore, InMemoryEventStore } from '../events/store.js';
 import { PacingReason } from '../pacing/controller.js';
-import { InMemoryShadowDecisionStore } from '../shadow/engine.js';
+import { InMemoryShadowDecisionStore, type ShadowDecisionRecord } from '../shadow/engine.js';
 import { NoOpLock, type DistributedLock } from '../stores/coordination.js';
 
 import {
@@ -23,6 +23,23 @@ import {
 
 const T0 = 1_800_000_000_000;
 const EXT = '1001';
+
+/**
+ * An in-memory store that can verify fencing tokens, so the runtime exercises
+ * the fenced write path rather than the plain one.
+ */
+class RejectableShadowStore extends InMemoryShadowDecisionStore {
+  rejectWrites = false;
+
+  async recordFenced(
+    record: ShadowDecisionRecord,
+    _fencingToken: number
+  ): Promise<{ accepted: boolean; rejection?: string }> {
+    if (this.rejectWrites) return { accepted: false, rejection: 'STALE_FENCING_TOKEN' };
+    await this.record(record);
+    return { accepted: true };
+  }
+}
 
 function rawEvent(overrides: Record<string, string | undefined> = {}) {
   return {
@@ -68,7 +85,7 @@ function build(
     maxConcurrentCalls: 1,
   });
   const assignments = new AssignmentResolver({ source: assignmentSource, now: () => nowRef.value });
-  const shadowStore = new InMemoryShadowDecisionStore();
+  const shadowStore = new RejectableShadowStore();
   const audits: HeartbeatAudit[] = [];
 
   const runtime = new DialerV2Runtime({
@@ -420,23 +437,54 @@ describe('distributed coordination', () => {
     const ctx = build({}, { lock });
     await ctx.runtime.getIngestor().handleRaw(rawEvent());
     await ctx.runtime.runShadowPass();
-    expect(release).toHaveBeenCalledWith('shadow');
+    // Per campaign, not one global lock: a slow campaign must not stall every
+    // other campaign and tenant in the deployment.
+    expect(release).toHaveBeenCalledWith('campaign:tenant-a:camp-1:shadow');
   });
 
-  it('abandons a pass when ownership is lost mid-way', async () => {
-    // The TTL can lapse during a long pass. A holder that has been superseded
-    // must stop, not keep writing decisions under stale authority.
+  it('takes a separate lock per campaign so campaigns do not block each other', async () => {
+    const acquired: string[] = [];
     const lock: DistributedLock = {
       distributed: true,
-      acquire: () => Promise.resolve({ fencingToken: 1, ownerId: 'a' }),
-      renew: () => Promise.resolve(false),
+      acquire: name => {
+        acquired.push(name);
+        return Promise.resolve({ fencingToken: acquired.length, ownerId: 'a' });
+      },
+      renew: () => Promise.resolve(true),
       release: () => Promise.resolve(),
     };
     const ctx = build({}, { lock });
     await ctx.runtime.getIngestor().handleRaw(rawEvent());
+    await ctx.runtime.getIngestor().handleRaw(
+      rawEvent({
+        'Unique-ID': 'chan-2',
+        'Event-Sequence': '2',
+        variable_hopwhistle_campaign_id: 'camp-2',
+      })
+    );
+    await ctx.runtime.runShadowPass();
+
+    expect(acquired).toEqual([
+      'campaign:tenant-a:camp-1:shadow',
+      'campaign:tenant-a:camp-2:shadow',
+    ]);
+  });
+
+  it('does not count a decision the store refused', async () => {
+    // A holder whose TTL lapsed mid-pass is superseded. Renewing cannot prevent
+    // that — the write itself carries the fencing token and Redis refuses it.
+    const lock: DistributedLock = {
+      distributed: true,
+      acquire: () => Promise.resolve({ fencingToken: 1, ownerId: 'a' }),
+      renew: () => Promise.resolve(true),
+      release: () => Promise.resolve(),
+    };
+    const ctx = build({}, { lock });
+    ctx.shadowStore.rejectWrites = true;
+    await ctx.runtime.getIngestor().handleRaw(rawEvent());
 
     expect(await ctx.runtime.runShadowPass()).toBe(0);
-    expect(ctx.runtime.status().shadowPassesAbandonedForLostLock).toBe(1);
+    expect(ctx.runtime.status().shadowWritesRejected).toBe(1);
     expect(await ctx.shadowStore.recent('tenant-a', 10)).toHaveLength(0);
   });
 

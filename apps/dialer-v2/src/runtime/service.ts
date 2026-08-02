@@ -157,7 +157,7 @@ export interface RuntimeStatus {
   redisHealthy: boolean;
   lockDistributed: boolean;
   shadowPassesSkippedForLock: number;
-  shadowPassesAbandonedForLostLock: number;
+  shadowWritesRejected: number;
   reconcilePassesSkippedForLock: number;
   sip: {
     tracked: number;
@@ -202,7 +202,7 @@ export class DialerV2Runtime {
   private shadowDecisionsThisRun = 0;
   private shadowPassesSkippedForLock = 0;
   private reconcilePassesSkippedForLock = 0;
-  private shadowPassesAbandonedForLostLock = 0;
+  private shadowWritesRejected = 0;
   private registrationsResolved = 0;
   private registrationsQuarantined = 0;
   private registrationsForgedTenant = 0;
@@ -466,44 +466,41 @@ export class DialerV2Runtime {
    * campaign; originates nothing.
    */
   async runShadowPass(): Promise<number> {
-    const lockName = 'shadow';
-    // TTL comfortably longer than one interval, then renewed per campaign. A
-    // TTL sized for exactly one interval expires mid-pass on a tenant with many
-    // campaigns, letting a second replica start while the first still runs.
-    const ttlMs = Math.max(3_000, this.deps.config.shadowIntervalMs * 3);
-    const handle = await this.deps.lock.acquire(lockName, ttlMs);
-    if (!handle) {
-      this.shadowPassesSkippedForLock++;
-      return 0;
-    }
-    try {
-      return await this.shadowPassNow(lockName, ttlMs);
-    } finally {
-      await this.deps.lock.release(lockName);
-    }
-  }
-
-  /** The shadow body. `lockName` non-null means renew while working. */
-  async shadowPassNow(lockName?: string, ttlMs?: number): Promise<number> {
     const flags: DialerV2Flags = this.deps.flags.get();
     const nowMs = this.now();
     const eslStatus = this.eslClient?.getStatus() ?? null;
+    const scopes = this.collector.activeScopes();
 
     let count = 0;
-    for (const scope of this.collector.activeScopes()) {
-      // Renew before each campaign. If ownership has been lost — this replica
-      // paused, the TTL lapsed, another replica took over — stop immediately
-      // rather than writing decisions under stale authority.
-      if (lockName && ttlMs) {
-        const stillOwned = await this.deps.lock.renew(lockName, ttlMs);
-        if (!stillOwned) {
-          this.shadowPassesAbandonedForLostLock++;
-          break;
-        }
+
+    // Per-campaign coordination. A single global lock serialised every tenant
+    // and campaign, so one slow campaign stalled the whole deployment and two
+    // tenants could never progress concurrently. Each campaign now takes its
+    // own lock, and its fencing token authorises that campaign's write only.
+    const ttlMs = Math.max(3_000, this.deps.config.shadowIntervalMs * 3);
+
+    for (const scope of scopes) {
+      const lockName = `campaign:${scope.tenantId}:${scope.campaignId}:shadow`;
+      const handle = await this.deps.lock.acquire(lockName, ttlMs);
+      if (!handle) {
+        this.shadowPassesSkippedForLock++;
+        continue;
       }
-      const obs = this.buildObservation(scope.tenantId, scope.campaignId, nowMs, eslStatus);
-      await this.shadow.evaluate(flags, obs);
-      count++;
+
+      try {
+        const obs = this.buildObservation(scope.tenantId, scope.campaignId, nowMs, eslStatus);
+        const record = await this.shadow.evaluate(flags, obs, {
+          // The token travels with the decision. Redis, not this process,
+          // decides whether it is still current at the moment of the write —
+          // this replica may have paused between acquire and write.
+          fencingToken: handle.fencingToken,
+          intervalMs: this.deps.config.shadowIntervalMs,
+        });
+        if (record.persisted) count++;
+        else this.shadowWritesRejected++;
+      } finally {
+        await this.deps.lock.release(lockName);
+      }
     }
 
     this.lastShadowRunAtMs = nowMs;
@@ -574,7 +571,7 @@ export class DialerV2Runtime {
       redisHealthy: this.deps.redisHealthy(),
       lockDistributed: this.deps.lock.distributed,
       shadowPassesSkippedForLock: this.shadowPassesSkippedForLock,
-      shadowPassesAbandonedForLostLock: this.shadowPassesAbandonedForLostLock,
+      shadowWritesRejected: this.shadowWritesRejected,
       reconcilePassesSkippedForLock: this.reconcilePassesSkippedForLock,
       sip: this.deps.sipRegistry.metrics(),
       registrationsResolved: this.registrationsResolved,

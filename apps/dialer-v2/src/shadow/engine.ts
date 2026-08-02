@@ -233,6 +233,32 @@ export function explainDecision(
   return `${parts.join(' ')}.`;
 }
 
+/** Optional proof that this replica still holds the campaign lock. */
+export interface FencedWriteContext {
+  fencingToken: number;
+  intervalMs: number;
+}
+
+/** A store that can verify a fencing token at the moment of the write. */
+export interface FencedDecisionWriter {
+  recordFenced(
+    record: ShadowDecisionRecord,
+    fencingToken: number
+  ): Promise<{ accepted: boolean; rejection?: string }>;
+}
+
+function isFencedWriter(
+  store: ShadowDecisionStore
+): store is ShadowDecisionStore & FencedDecisionWriter {
+  return typeof (store as Partial<FencedDecisionWriter>).recordFenced === 'function';
+}
+
+export type ShadowEvaluation = ShadowDecisionRecord & {
+  /** False when the store refused the write — stale token or duplicate interval. */
+  persisted: boolean;
+  rejection?: string;
+};
+
 export class ShadowEngine {
   private readonly lastState = new Map<string, PacingState>();
 
@@ -241,8 +267,17 @@ export class ShadowEngine {
   /**
    * Evaluate one campaign and persist the hypothetical decision.
    * Returns the record. Never originates.
+   *
+   * When `fenced` is supplied and the store can verify tokens, the write carries
+   * the token and Redis decides whether this replica is still authoritative. A
+   * refused write does not advance the ramp state: a replica that lost its lock
+   * mid-pass must not carry a decision nobody accepted into its next interval.
    */
-  async evaluate(flags: DialerV2Flags, obs: ShadowObservation): Promise<ShadowDecisionRecord> {
+  async evaluate(
+    flags: DialerV2Flags,
+    obs: ShadowObservation,
+    fenced?: FencedWriteContext
+  ): Promise<ShadowEvaluation> {
     const { tenantId, campaignId } = obs.policy;
 
     const blockedBy: ShadowBlockReason[] = [];
@@ -255,13 +290,12 @@ export class ShadowEngine {
     }
 
     const inputs = buildPacingInputs(obs);
+    const key = `${tenantId} ${campaignId}`;
 
     let decision: PacingDecision | null = null;
     if (blockedBy.length === 0) {
-      const key = `${tenantId} ${campaignId}`;
       const prev = this.lastState.get(key) ?? { originateCount: 0 };
       decision = decidePacing(inputs, prev);
-      this.lastState.set(key, { originateCount: decision.originateCount });
     }
 
     const record: ShadowDecisionRecord = {
@@ -280,7 +314,16 @@ export class ShadowEngine {
       explanation: explainDecision(decision, blockedBy, obs),
     };
 
-    await this.store.record(record);
-    return record;
+    if (fenced && isFencedWriter(this.store)) {
+      const result = await this.store.recordFenced(record, fenced.fencingToken);
+      if (!result.accepted) {
+        return { ...record, persisted: false, rejection: result.rejection };
+      }
+    } else {
+      await this.store.record(record);
+    }
+
+    if (decision) this.lastState.set(key, { originateCount: decision.originateCount });
+    return { ...record, persisted: true };
   }
 }
