@@ -175,6 +175,7 @@ export interface IssuedSession {
   /** Returned to the caller once. Never stored, never logged. */
   token: string;
   sessionTokenHash: string;
+  issuedAtMs: number;
   expiresAtMs: number;
   /** Sessions evicted for exceeding the per-agent cap. */
   evictedHashes: string[];
@@ -190,6 +191,8 @@ export interface RedisSessionValidation {
 const DEFAULT_TTL_MS = 12 * 60 * 60 * 1000;
 
 export class RedisAgentSessionStore {
+  /** Satisfies `AgentSessionStore`; reported through health. */
+  readonly backend = 'redis' as const;
   private readonly ttlMs: number;
   private readonly maxBeatsPerWindow: number;
   private readonly rateWindowMs: number;
@@ -253,7 +256,7 @@ export class RedisAgentSessionStore {
         await this.options.redis.del(...evictedHashes.map(h => agentSessionKey(tenantId, h)));
       }
 
-      return { token, sessionTokenHash, expiresAtMs, evictedHashes };
+      return { token, sessionTokenHash, issuedAtMs, expiresAtMs, evictedHashes };
     } catch (error) {
       this.options.onFailure?.('session.issue', error as Error);
       // Fail closed. No session is better than one whose replay state is not
@@ -382,6 +385,41 @@ export class RedisAgentSessionStore {
       this.options.onFailure?.('session.revoke', error as Error);
       return false;
     }
+  }
+
+  /**
+   * Revoke every live session for an agent. Used on logout and when an
+   * identity is withdrawn.
+   *
+   * Revoking rather than deleting is deliberate: a deleted session validates as
+   * UNKNOWN_SESSION, which is indistinguishable from a forged token, while a
+   * revoked one reports REVOKED and tells an operator what actually happened.
+   */
+  async revokeAllForAgent(tenantId: string, agentId: string, reason: string): Promise<number> {
+    const hashes = await this.hashesForAgent(tenantId, agentId);
+    let revoked = 0;
+    for (const hash of hashes) {
+      if (await this.revoke(tenantId, hash, reason)) revoked++;
+    }
+    return revoked;
+  }
+
+  /**
+   * Redis expires sessions itself via `PEXPIREAT`, so there is nothing for a
+   * periodic sweep to do. Present so the runtime does not have to know which
+   * implementation it is holding.
+   */
+  sweep(_nowMs: number): Promise<number> {
+    return Promise.resolve(0);
+  }
+
+  /**
+   * Live session count is not cheaply available without scanning the keyspace,
+   * and a status endpoint is not worth a `SCAN`. Reported as -1 — "not
+   * counted" — rather than 0, which would read as "no agent is signed in".
+   */
+  size(): Promise<number> {
+    return Promise.resolve(-1);
   }
 
   /** Session hashes for an agent, oldest first. Never returns tokens. */

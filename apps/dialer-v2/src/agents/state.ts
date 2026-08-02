@@ -229,6 +229,16 @@ export interface AgentRecord {
   lastReconciliationReason: string | null;
   /** Highest heartbeat sequence accepted, for replay rejection. */
   lastSequence: number;
+  /**
+   * Revision of the durable record this cache entry was built from.
+   *
+   * The in-memory map is a CACHE of the shared record, not the record itself.
+   * Carrying the revision is what lets a write say "I am changing the version I
+   * read", so a replica holding a stale copy is refused instead of silently
+   * reverting a transition another replica already made. A record that has
+   * never been persisted is revision 0.
+   */
+  revision: number;
 }
 
 export function createAgentRecord(
@@ -261,6 +271,7 @@ export function createAgentRecord(
     maxConcurrentCalls: 1,
     lastReconciliationReason: null,
     lastSequence: 0,
+    revision: 0,
     ...overrides,
   };
 }

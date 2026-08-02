@@ -9,17 +9,20 @@
  * and nothing writes a lead status, campaign status, disposition, or billing
  * record.
  *
+ * ── What this file no longer does ────────────────────────────────────────────
+ *
+ * It used to construct the runtime's dependencies by hand, and every one of
+ * them was the in-memory or static implementation even though shared ones
+ * existed and were tested. Selection now lives in `composition.ts`, driven by
+ * `DIALER_V2_RUNTIME_MODE`, so what the running service holds is a testable
+ * value rather than a sequence of `new` calls nobody asserts on.
+ *
  * Public routes: `/health*`, `/status/*` — no tenant data.
  * Internal routes: `/internal/*` — require `DIALER_V2_INTERNAL_TOKEN`.
  */
 
 import http from 'node:http';
 
-import { AssignmentResolver, StaticAssignmentSource } from './agents/assignments.js';
-import { ExtensionResolver, StaticExtensionSource } from './agents/extension-resolver.js';
-import { AgentStateService } from './agents/service.js';
-import { AgentSessionRegistry } from './agents/sessions.js';
-import { SipRegistrationRegistry } from './agents/sip-registry.js';
 import { AgentState } from './agents/state.js';
 import { EnvFlagSource } from './config/flags.js';
 import {
@@ -29,24 +32,18 @@ import {
 } from './config/internal-auth.js';
 import { isValidTenantId } from './config/redis-keys.js';
 import { buildHealthReport, type HealthSnapshot } from './health/report.js';
+import {
+  CompositionError,
+  composeRuntime,
+  readRuntimeMode,
+  RuntimeMode,
+  type RuntimeComposition,
+} from './runtime/composition.js';
 import { DialerV2Runtime, defaultRuntimeConfig } from './runtime/service.js';
-import { buildStores, connectRedis, type RedisConnection } from './stores/provider.js';
 
 const PORT = Number(process.env.DIALER_V2_PORT) || 9092;
 
 const flagSource = new EnvFlagSource();
-const agents = new AgentStateService();
-const sessions = new AgentSessionRegistry();
-const sipRegistry = new SipRegistrationRegistry();
-const assignmentSource = new StaticAssignmentSource();
-const assignments = new AssignmentResolver({ source: assignmentSource });
-
-// Development fixture sources, explicitly labelled. The database-backed
-// implementations are the remaining Phase 1 work; until they land, an agent
-// resolves to no extension and no campaigns, so nobody becomes capacity by
-// accident.
-const extensionSource = new StaticExtensionSource();
-const extensions = new ExtensionResolver({ source: extensionSource });
 const config = defaultRuntimeConfig();
 
 const log = (record: Record<string, unknown>): void => {
@@ -56,68 +53,14 @@ const log = (record: Record<string, unknown>): void => {
 /** Identifies this replica in distributed locks. */
 const OWNER_ID = `${process.env.HOSTNAME ?? 'dialer-v2'}-${process.pid}`;
 
-let redisConnection: RedisConnection | null = null;
-let stores = buildStores({ connection: null, ownerId: OWNER_ID }, process.env);
-
-const runtime = new DialerV2Runtime({
-  flags: flagSource,
-  eventStore: stores.eventStore,
-  dedupe: stores.dedupe,
-  shadowStore: stores.shadowStore,
-  agents,
-  sessions,
-  assignments,
-  sipRegistry,
-  extensions,
-  lock: stores.lock,
-  redisHealthy: () => stores.redisHealthy(),
-  onAudit: record => log({ msg: 'agent heartbeat', ...record }),
-  config,
-  log,
-});
-
-async function currentSnapshot(): Promise<HealthSnapshot> {
-  const status = runtime.status();
-  const ingestor = runtime.getIngestor();
-
-  return {
-    eslConnected: status.esl?.connected ?? false,
-    eslDegraded: status.esl?.degraded ?? false,
-    eslDetail: status.esl?.detail ?? status.eslRefusal ?? 'ESL ingestion not started',
-    eslConsecutiveFailures: status.esl?.consecutiveFailures ?? 0,
-
-    // Real connection state. There is no hardcoded value here any more.
-    redisConnected: stores.redisHealthy(),
-    postgresConnected: false,
-
-    lastEventAgeMs: ingestor.lastEventAgeMs(),
-    maxEventAgeMs: config.maxEventAgeMs,
-    eventLagMs: ingestor.currentLagMs(),
-    maxEventLagMs: config.maxEventLagMs,
-
-    unresolvedEventCount: await stores.eventStore.quarantinedCount(),
-    staleAgentCount: agents.staleCount(),
-    totalAgentCount: agents.size(),
-    reconciliationLagMs:
-      status.lastReconciliationAtMs === null ? null : Date.now() - status.lastReconciliationAtMs,
-    maxReconciliationLagMs: config.reconcileIntervalMs * 4,
-
-    campaignsObserved: status.observedScopes,
-    shadowDecisionsRecorded: status.shadowDecisionsThisRun,
-
-    storeBackend: stores.backend,
-    // Sessions are still the in-process registry in this entrypoint. Reported
-    // as such rather than assumed shared — a wrong answer here would say a
-    // session issued on this replica is known to every other one.
-    sessionBackend: 'memory',
-    lockDistributed: status.lockDistributed,
-    // The schema models no agent-to-campaign relation, so this is false until
-    // one exists. See DatabaseAssignmentSource.
-    assignmentsResolvable: false,
-    shadowWritesRejected: status.shadowWritesRejected,
-    agentStateStaleWrites: 0,
-  };
-}
+/**
+ * Set once composition succeeds. Until then every route other than liveness
+ * reports why — a service that cannot assemble its backends must not answer as
+ * though it had.
+ */
+let composition: RuntimeComposition | null = null;
+let runtime: DialerV2Runtime | null = null;
+let compositionFailure: string | null = null;
 
 function json(res: http.ServerResponse, code: number, body: unknown): void {
   const payload = JSON.stringify(body);
@@ -125,6 +68,90 @@ function json(res: http.ServerResponse, code: number, body: unknown): void {
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Content-Length', Buffer.byteLength(payload));
   res.end(payload);
+}
+
+async function currentSnapshot(): Promise<HealthSnapshot> {
+  const mode = readRuntimeMode(process.env);
+
+  if (!composition || !runtime) {
+    // Composition failed. Report the truth: nothing is connected, nothing is
+    // shared, nothing has been reconstructed. Reporting zeros against a
+    // `memory` backend would be indistinguishable from an idle healthy service.
+    return {
+      eslConnected: false,
+      eslDegraded: true,
+      eslDetail: compositionFailure ?? 'composition has not completed',
+      eslConsecutiveFailures: 0,
+      redisConnected: false,
+      postgresConnected: false,
+      lastEventAgeMs: null,
+      maxEventAgeMs: config.maxEventAgeMs,
+      eventLagMs: 0,
+      maxEventLagMs: config.maxEventLagMs,
+      unresolvedEventCount: 0,
+      staleAgentCount: 0,
+      totalAgentCount: 0,
+      reconciliationLagMs: null,
+      maxReconciliationLagMs: config.reconcileIntervalMs * 4,
+      campaignsObserved: 0,
+      shadowDecisionsRecorded: 0,
+      mode,
+      dedupeBackend: 'memory',
+      decisionBackend: 'memory',
+      decisionsFenced: false,
+      sessionBackend: 'memory',
+      agentStateBackend: 'memory',
+      sipBackend: 'memory',
+      observationBackend: 'memory',
+      channelBackend: 'memory',
+      extensionSource: 'static',
+      assignmentSource: 'static',
+      lockBackend: 'noop',
+      reconstructionComplete: false,
+      assignmentsResolvable: false,
+      shadowWritesRejected: 0,
+      agentStateStaleWrites: 0,
+      registrationsOutOfOrder: 0,
+    };
+  }
+
+  const status = runtime.status();
+  const ingestor = runtime.getIngestor();
+  const backends = composition.backends;
+
+  return {
+    eslConnected: status.esl?.connected ?? false,
+    eslDegraded: status.esl?.degraded ?? false,
+    eslDetail: status.esl?.detail ?? status.eslRefusal ?? 'ESL ingestion not started',
+    eslConsecutiveFailures: status.esl?.consecutiveFailures ?? 0,
+
+    // Real connection state, both of them. There is no hardcoded value here.
+    redisConnected: composition.redisHealthy(),
+    postgresConnected: composition.postgresHealthy(),
+
+    lastEventAgeMs: ingestor.lastEventAgeMs(),
+    maxEventAgeMs: config.maxEventAgeMs,
+    eventLagMs: ingestor.currentLagMs(),
+    maxEventLagMs: config.maxEventLagMs,
+
+    unresolvedEventCount: await composition.stores.eventStore.quarantinedCount(),
+    staleAgentCount: composition.agents.staleCount(),
+    totalAgentCount: composition.agents.size(),
+    reconciliationLagMs:
+      status.lastReconciliationAtMs === null ? null : Date.now() - status.lastReconciliationAtMs,
+    maxReconciliationLagMs: config.reconcileIntervalMs * 4,
+
+    campaignsObserved: status.observedScopes,
+    shadowDecisionsRecorded: status.shadowDecisionsThisRun,
+
+    mode: composition.mode,
+    ...backends,
+    reconstructionComplete: status.reconstructionComplete,
+    assignmentsResolvable: composition.assignmentsResolvable(),
+    shadowWritesRejected: status.shadowWritesRejected,
+    agentStateStaleWrites: status.agentStaleWrites,
+    registrationsOutOfOrder: status.registrationsOutOfOrder,
+  };
 }
 
 /** Gate for `/internal/*`. Returns false when a 401 has already been sent. */
@@ -167,6 +194,10 @@ export function createServer(): http.Server {
     const path = url.pathname;
 
     // ---- Public: no tenant data, no secrets -------------------------------
+    //
+    // Liveness answers even when composition failed. An orchestrator that
+    // restart-loops a service which is correctly refusing to start turns a
+    // configuration error into an outage and hides the reason.
     if (path === '/health/live') {
       json(res, 200, { live: true, service: 'hopwhistle-dialer-v2' });
       return;
@@ -175,7 +206,10 @@ export function createServer(): http.Server {
     if (path === '/health/ready' || path === '/health') {
       void currentSnapshot().then(snap => {
         const report = buildHealthReport(flags, snap);
-        json(res, report.ready ? 200 : 503, report);
+        json(res, report.ready ? 200 : 503, {
+          ...report,
+          compositionError: compositionFailure ?? undefined,
+        });
       });
       return;
     }
@@ -193,6 +227,7 @@ export function createServer(): http.Server {
         maxGlobalCalls: flags.maxGlobalCalls,
         requireHealthyAgentHeartbeats: flags.requireHealthyAgentHeartbeats,
         phase: 1,
+        mode: readRuntimeMode(process.env),
         originationImplemented: false,
         // Reports WHETHER a token is configured, never its value or length.
         internalAuthConfigured: verifyInternalToken(
@@ -203,24 +238,36 @@ export function createServer(): http.Server {
       return;
     }
 
+    if (!composition || !runtime) {
+      json(res, 503, {
+        error: 'composition_failed',
+        detail: compositionFailure ?? 'the runtime has not been composed',
+      });
+      return;
+    }
+
+    const live = composition;
+    const engine = runtime;
+
     if (path === '/status/ingestion') {
-      const status = runtime.status();
+      const status = engine.status();
       json(res, 200, {
-        metrics: runtime.getIngestor().getMetrics(),
-        collector: runtime.getCollector().metrics(),
-        lastEventAgeMs: runtime.getIngestor().lastEventAgeMs(),
-        eventLagMs: runtime.getIngestor().currentLagMs(),
+        metrics: engine.getIngestor().getMetrics(),
+        collector: engine.getCollector().metrics(),
+        lastEventAgeMs: engine.getIngestor().lastEventAgeMs(),
+        eventLagMs: engine.getIngestor().currentLagMs(),
         eslStarted: status.eslStarted,
         eslRefusal: status.eslRefusal,
         lastShadowRunAtMs: status.lastShadowRunAtMs,
         shadowDecisionsThisRun: status.shadowDecisionsThisRun,
-        storeBackend: stores.backend,
+        backends: live.backends,
         redisHealthy: status.redisHealthy,
-        lockDistributed: status.lockDistributed,
         shadowPassesSkippedForLock: status.shadowPassesSkippedForLock,
+        shadowWritesRejected: status.shadowWritesRejected,
+        shadowScopesUnkeyable: status.shadowScopesUnkeyable,
         reconcilePassesSkippedForLock: status.reconcilePassesSkippedForLock,
+        reconstructionComplete: status.reconstructionComplete,
         sip: status.sip,
-        sessions: sessions.size(),
       });
       return;
     }
@@ -239,9 +286,15 @@ export function createServer(): http.Server {
         const campaignId = url.searchParams.get('campaignId') ?? undefined;
         const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit')) || 50));
 
-        void stores.shadowStore.recent(tenantId, limit, campaignId).then(decisions => {
+        void live.stores.shadowStore.recent(tenantId, limit, campaignId).then(decisions => {
           json(res, 200, {
             tenantId,
+            campaignId: campaignId ?? null,
+            // Whether this answer spans every campaign or one. Without it an
+            // empty list is ambiguous between "no decisions" and "the store
+            // cannot answer an unfiltered query", which is exactly how the
+            // previous behaviour misled: it returned [] for the second case.
+            scope: campaignId ? 'campaign' : 'tenant',
             shadowEnabled: flags.shadowEnabled,
             decisions: decisions.map(d => ({
               campaignId: d.campaignId,
@@ -275,10 +328,11 @@ export function createServer(): http.Server {
         const nowMs = Date.now();
         json(res, 200, {
           tenantId,
-          agents: agents.listForTenant(tenantId).map(a => ({
+          agents: live.agents.listForTenant(tenantId).map(a => ({
             agentId: a.agentId,
             state: a.state,
             sipRegistered: a.sipRegistered,
+            revision: a.revision,
             lastHeartbeatAgeMs:
               a.lastBrowserHeartbeatAtMs === null ? null : nowMs - a.lastBrowserHeartbeatAtMs,
             currentChannelUuid: a.currentChannelUuid,
@@ -286,7 +340,7 @@ export function createServer(): http.Server {
             countedAsCapacity: a.state === AgentState.AVAILABLE && a.sipRegistered,
             lastReconciliationReason: a.lastReconciliationReason,
           })),
-          capacity: agents.capacity(tenantId, nowMs),
+          capacity: live.agents.capacity(tenantId, nowMs),
         });
         return;
       }
@@ -299,7 +353,7 @@ export function createServer(): http.Server {
         const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit')) || 50));
         json(res, 200, {
           tenantId,
-          corrections: agents
+          corrections: live.agents
             .recentCorrections(limit)
             .filter(c => c.tenantId === tenantId)
             .map(c => ({
@@ -315,7 +369,7 @@ export function createServer(): http.Server {
       }
 
       if (path === '/internal/agents/session' && req.method === 'POST') {
-        void readBody(req).then(body => {
+        void readBody(req).then(async body => {
           const input = body as Record<string, unknown>;
           const bodyTenant = typeof input.tenantId === 'string' ? input.tenantId : '';
           const agentId = typeof input.agentId === 'string' ? input.agentId : '';
@@ -326,16 +380,36 @@ export function createServer(): http.Server {
             return;
           }
 
-          const session = runtime.issueSession(bodyTenant, agentId, userId);
+          const session = await engine.issueSession(bodyTenant, agentId, userId);
           if (!session) {
             json(res, 400, { error: 'invalid_identity' });
             return;
           }
+          // The token crosses this internal, token-authenticated boundary once,
+          // to the API, which puts it straight into an HttpOnly cookie. It is
+          // never returned to a browser as JSON and never logged.
           json(res, 200, {
-            sessionId: session.sessionId,
+            sessionToken: session.token,
+            sessionTokenHash: session.sessionTokenHash,
             expiresAtMs: session.expiresAtMs,
             issuedAtMs: session.issuedAtMs,
           });
+        });
+        return;
+      }
+
+      if (path === '/internal/agents/session/revoke' && req.method === 'POST') {
+        void readBody(req).then(async body => {
+          const input = body as Record<string, unknown>;
+          const bodyTenant = typeof input.tenantId === 'string' ? input.tenantId : '';
+          const hash = typeof input.sessionTokenHash === 'string' ? input.sessionTokenHash : '';
+
+          if (!isValidTenantId(bodyTenant) || !hash) {
+            json(res, 400, { error: 'invalid_identity' });
+            return;
+          }
+          const revoked = await engine.revokeSession(bodyTenant, hash, 'logout');
+          json(res, 200, { revoked });
         });
         return;
       }
@@ -352,15 +426,17 @@ export function createServer(): http.Server {
             return;
           }
 
-          // Tenant and agent were derived from a verified JWT in apps/api. Call
-          // ids, channel UUIDs, SIP state, and campaign membership are NOT read
-          // from this payload — the runtime derives all four server-side.
-          void runtime
+          // Tenant and agent were derived from a verified JWT in apps/api, and
+          // the session token was read there from an HttpOnly cookie — it is
+          // never in a browser-visible payload. Call ids, channel UUIDs, SIP
+          // state, and campaign membership are NOT read from this payload; the
+          // runtime derives all four server-side.
+          void engine
             .recordHeartbeat({
               tenantId: bodyTenant,
               agentId,
               userId,
-              sessionId: typeof input.sessionId === 'string' ? input.sessionId : '',
+              sessionToken: typeof input.sessionToken === 'string' ? input.sessionToken : '',
               sequence: typeof input.sequence === 'number' ? input.sequence : 0,
               uiState: typeof input.uiState === 'string' ? input.uiState : null,
               preferredCampaignIds: Array.isArray(input.preferredCampaignIds)
@@ -383,53 +459,78 @@ export function createServer(): http.Server {
   });
 }
 
+/** Tenants this replica reconstructs at startup. */
+function reconstructionTenants(): string[] {
+  return (process.env.DIALER_V2_ALLOWED_TENANT_IDS ?? '')
+    .split(',')
+    .map(t => t.trim())
+    .filter(t => isValidTenantId(t));
+}
+
 async function main(): Promise<void> {
   const flags = flagSource.get();
+  const mode = readRuntimeMode(process.env);
 
-  const redisUrl = process.env.REDIS_URL;
-  if (redisUrl) {
-    redisConnection = await connectRedis(redisUrl, (state, detail) =>
-      log({ msg: 'redis', state, detail })
-    );
-    if (redisConnection) {
-      stores = buildStores(
-        {
-          connection: redisConnection,
-          ownerId: OWNER_ID,
-          onFailure: (operation, error) =>
-            log({ msg: 'redis failure', operation, error: error.message }),
-        },
-        process.env
-      );
-      runtime.replaceStores({
-        eventStore: stores.eventStore,
-        dedupe: stores.dedupe,
-        shadowStore: stores.shadowStore,
-        lock: stores.lock,
-        redisHealthy: () => stores.redisHealthy(),
-      });
-    }
+  try {
+    composition = await composeRuntime(process.env, {
+      ownerId: OWNER_ID,
+      shadowIntervalMs: config.shadowIntervalMs,
+      log,
+    });
+
+    runtime = new DialerV2Runtime({
+      flags: flagSource,
+      eventStore: composition.stores.eventStore,
+      dedupe: composition.stores.dedupe,
+      shadowStore: composition.stores.shadowStore,
+      agents: composition.agents,
+      agentStore: composition.agentStore,
+      sessions: composition.sessions,
+      assignments: composition.assignments,
+      sip: composition.sip,
+      observations: composition.observations,
+      channels: composition.channels,
+      extensions: composition.extensions,
+      lock: composition.stores.lock,
+      redisHealthy: () => composition?.redisHealthy() ?? false,
+      onAudit: record => log({ msg: 'agent heartbeat', ...record }),
+      config,
+      log,
+    });
+
+    // Reconstruct BEFORE starting the loops. A shadow pass over an empty agent
+    // map would record a decision claiming zero capacity, and that decision
+    // goes into the same history a promotion decision is read from.
+    await runtime.reconstruct(reconstructionTenants());
+    runtime.start();
+  } catch (error) {
+    compositionFailure =
+      error instanceof CompositionError ? error.message : (error as Error).message;
+    // Deliberately not fatal. The process stays up to serve liveness and to
+    // report, through readiness, exactly which requirement was not met.
+    log({ msg: 'dialer-v2 composition failed', mode, error: compositionFailure });
   }
 
   const server = createServer();
-  runtime.start();
 
   server.listen(PORT, '0.0.0.0', () => {
-    process.stdout.write(
-      `${JSON.stringify({
-        msg: 'dialer-v2 started (phase 1: ingestion + shadow pacing; no origination path exists)',
-        port: PORT,
-        enabled: flags.enabled,
-        shadowEnabled: flags.shadowEnabled,
-        eslIngestEnabled: config.esl.enabled,
-        emergencyStop: flags.emergencyStop,
-      })}\n`
-    );
+    log({
+      msg: composition
+        ? 'dialer-v2 started (phase 1: ingestion + shadow pacing; no origination path exists)'
+        : 'dialer-v2 started in a refusing state; readiness reports why',
+      port: PORT,
+      mode,
+      enabled: flags.enabled,
+      shadowEnabled: flags.shadowEnabled,
+      eslIngestEnabled: config.esl.enabled,
+      emergencyStop: flags.emergencyStop,
+      strictBackends: mode === RuntimeMode.STAGING || mode === RuntimeMode.PRODUCTION,
+    });
   });
 
   const shutdown = (): void => {
-    runtime.stop();
-    void redisConnection?.disconnect();
+    runtime?.stop();
+    void composition?.close();
     server.close(() => process.exit(0));
   };
   process.on('SIGTERM', shutdown);
@@ -439,13 +540,4 @@ async function main(): Promise<void> {
 const entry = process.argv[1] ?? '';
 if (entry.endsWith('index.ts') || entry.endsWith('index.js')) void main();
 
-export {
-  agents,
-  assignmentSource,
-  extensionSource,
-  flagSource,
-  runtime,
-  sessions,
-  sipRegistry,
-  stores,
-};
+export { composition, currentSnapshot, flagSource, runtime };

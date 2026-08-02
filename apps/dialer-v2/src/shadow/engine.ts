@@ -233,24 +233,44 @@ export function explainDecision(
   return `${parts.join(' ')}.`;
 }
 
-/** Optional proof that this replica still holds the campaign lock. */
+/** Proof that this replica still holds the campaign lock, carried to the write. */
 export interface FencedWriteContext {
   fencingToken: number;
-  intervalMs: number;
+  /** The exact value the lock key must still hold for the write to be accepted. */
+  lockValue: string;
 }
 
-/** A store that can verify a fencing token at the moment of the write. */
+/** A store that verifies lock ownership at the moment of the write. */
 export interface FencedDecisionWriter {
   recordFenced(
     record: ShadowDecisionRecord,
-    fencingToken: number
+    authority: { fencingToken: number; lockValue: string }
   ): Promise<{ accepted: boolean; rejection?: string }>;
 }
 
-function isFencedWriter(
+export function isFencedWriter(
   store: ShadowDecisionStore
 ): store is ShadowDecisionStore & FencedDecisionWriter {
   return typeof (store as Partial<FencedDecisionWriter>).recordFenced === 'function';
+}
+
+/**
+ * Thrown when a runtime configured for distributed operation is holding a store
+ * that cannot adjudicate authority.
+ *
+ * Falling back to `record()` here is the failure mode this whole mechanism
+ * exists to prevent: the runtime would go on passing tokens, the health surface
+ * would go on reporting a Redis backend, and every write would be unfenced. A
+ * silent downgrade of a safety property is worse than a crash, because nothing
+ * observable changes.
+ */
+export class UnfencedStoreError extends Error {
+  constructor() {
+    super(
+      'A fenced write was requested but the configured ShadowDecisionStore cannot verify authority'
+    );
+    this.name = 'UnfencedStoreError';
+  }
 }
 
 export type ShadowEvaluation = ShadowDecisionRecord & {
@@ -268,8 +288,9 @@ export class ShadowEngine {
    * Evaluate one campaign and persist the hypothetical decision.
    * Returns the record. Never originates.
    *
-   * When `fenced` is supplied and the store can verify tokens, the write carries
-   * the token and Redis decides whether this replica is still authoritative. A
+   * When `fenced` is supplied the write carries proof of lock ownership and
+   * Redis decides whether this replica is still authoritative. If the store
+   * cannot adjudicate that proof this throws rather than writing unfenced. A
    * refused write does not advance the ramp state: a replica that lost its lock
    * mid-pass must not carry a decision nobody accepted into its next interval.
    */
@@ -314,8 +335,13 @@ export class ShadowEngine {
       explanation: explainDecision(decision, blockedBy, obs),
     };
 
-    if (fenced && isFencedWriter(this.store)) {
-      const result = await this.store.recordFenced(record, fenced.fencingToken);
+    if (fenced) {
+      // No silent fallback. See UnfencedStoreError.
+      if (!isFencedWriter(this.store)) throw new UnfencedStoreError();
+      const result = await this.store.recordFenced(record, {
+        fencingToken: fenced.fencingToken,
+        lockValue: fenced.lockValue,
+      });
       if (!result.accepted) {
         return { ...record, persisted: false, rejection: result.rejection };
       }

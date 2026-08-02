@@ -41,6 +41,13 @@ export interface DialerV2Db {
       select: Record<string, boolean>;
     }): Promise<Array<Record<string, unknown>>>;
   };
+  campaignAgent: {
+    findMany(args: {
+      where: Record<string, unknown>;
+      select: Record<string, unknown>;
+      orderBy?: Record<string, unknown> | Array<Record<string, unknown>>;
+    }): Promise<Array<Record<string, unknown>>>;
+  };
 }
 
 export interface DatabaseExtensionSourceOptions {
@@ -130,57 +137,110 @@ export class DatabaseExtensionSource implements ExtensionSource {
 }
 
 export enum AssignmentUnavailableReason {
-  /** No agent-to-campaign relation exists in the Prisma schema. */
+  /** The agent-to-campaign table is absent — the migration has not been applied. */
   NO_SCHEMA_SUPPORT = 'NO_SCHEMA_SUPPORT',
+  /** The query failed. Distinct from "this agent has no campaigns". */
+  LOOKUP_FAILED = 'LOOKUP_FAILED',
 }
 
 export interface DatabaseAssignmentSourceOptions {
   db: DialerV2Db;
-  /** Reported through health so the gap is visible rather than implied. */
-  onUnavailable?: (reason: AssignmentUnavailableReason) => void;
+  /** Reported through health so a gap is visible rather than implied. */
+  onUnavailable?: (reason: AssignmentUnavailableReason, detail: string) => void;
 }
 
 /**
- * Database-backed assignment source.
+ * Database-backed assignment source, reading `campaign_agents`.
  *
- * ── Why this resolves to nothing ─────────────────────────────────────────────
+ * ── What changed ─────────────────────────────────────────────────────────────
  *
- * There is no agent-to-campaign assignment anywhere in the schema: no join
- * table, no relation on `User`, no relation on `Campaign`, and no Queue, Team,
- * or Skill model. Campaign membership is simply not modelled.
+ * The schema previously modelled no relation between an agent and a campaign in
+ * either direction — no join table, no relation on `User`, no relation on
+ * `Campaign`, no Queue, Team, or Skill model. This class failed closed and
+ * reported `NO_SCHEMA_SUPPORT`, which was correct but permanent: with no
+ * assignments, every campaign forecast counts zero agents and the shadow history
+ * can never become evidence.
  *
- * Three options were available. Inventing a table was explicitly out of scope.
- * Returning a wildcard would put every agent into every campaign, inflating
- * predictive capacity for campaigns nobody is assigned to — the exact failure
- * the server-side resolution work was meant to close. So this resolves the part
- * that IS modelled — tenant ownership and user status — and returns no
- * campaigns, which fails closed.
+ * Migration `20260802000000_add_campaign_agent_assignments` adds the smallest
+ * table that closes it. This reads it.
  *
- * Until an assignment model exists, no agent contributes to any campaign
- * forecast. Health reports `NO_SCHEMA_SUPPORT` so this is visible rather than
- * looking like an empty roster.
+ * ── Why a failed query is not an empty result ────────────────────────────────
+ *
+ * A `catch` that returns `[]` would make an unreachable database look exactly
+ * like an agent nobody has assigned to anything. Both produce no capacity, so
+ * the dialer behaves identically — but one is a configuration state and the
+ * other is an outage, and only one of them should page somebody. A failure
+ * returns null and is reported.
  */
 export class DatabaseAssignmentSource implements AssignmentSource {
   constructor(private readonly options: DatabaseAssignmentSourceOptions) {}
 
   async resolve(tenantId: string, agentId: string): Promise<AgentAssignment | null> {
-    const rows = await this.options.db.user.findMany({
-      where: { id: agentId, tenantId, status: 'ACTIVE' },
-      select: { id: true, tenantId: true, status: true },
-    });
+    // The agent must still be an active user of this tenant. An assignment row
+    // outliving a suspended user would otherwise keep granting capacity.
+    let users: Array<Record<string, unknown>>;
+    try {
+      users = await this.options.db.user.findMany({
+        where: { id: agentId, tenantId, status: 'ACTIVE' },
+        select: { id: true, tenantId: true, status: true },
+      });
+    } catch (error) {
+      this.options.onUnavailable?.(
+        AssignmentUnavailableReason.LOOKUP_FAILED,
+        (error as Error).message
+      );
+      return null;
+    }
 
     // An unknown, disabled, or cross-tenant user resolves to null, which the
     // AssignmentResolver already treats as no capacity.
-    if (rows.length !== 1) return null;
+    if (users.length !== 1) return null;
 
-    this.options.onUnavailable?.(AssignmentUnavailableReason.NO_SCHEMA_SUPPORT);
+    try {
+      const rows = await this.options.db.campaignAgent.findMany({
+        // Tenant is part of the predicate, not a post-filter, and the campaign's
+        // own tenant is checked too. A row whose campaign belongs to another
+        // tenant is a data-integrity failure, and the unique constraint does not
+        // prevent one being inserted with a mismatched pair.
+        where: {
+          tenantId,
+          userId: agentId,
+          status: 'ACTIVE',
+          campaign: { tenantId, status: 'ACTIVE' },
+        },
+        select: { campaignId: true, priority: true },
+        orderBy: [{ priority: 'asc' }, { campaignId: 'asc' }],
+      });
 
-    return {
-      tenantId,
-      agentId,
-      campaignIds: [],
-      queueIds: [],
-      resolvedAtMs: 0,
-    };
+      const campaignIds: string[] = [];
+      for (const row of rows) {
+        if (typeof row.campaignId === 'string' && row.campaignId.length > 0) {
+          campaignIds.push(row.campaignId);
+        }
+      }
+
+      return {
+        tenantId,
+        agentId,
+        campaignIds,
+        // Queues are still not modelled. Reported as empty rather than
+        // synthesised from campaigns, which would invent a concept the rest of
+        // the system does not have.
+        queueIds: [],
+        resolvedAtMs: 0,
+      };
+    } catch (error) {
+      const detail = (error as Error).message;
+      // A missing table means the migration has not been applied here. That is
+      // a deployment state worth naming, not a generic query failure.
+      const missing = /campaign_agents|does not exist|Unknown arg|relation/i.test(detail);
+      this.options.onUnavailable?.(
+        missing
+          ? AssignmentUnavailableReason.NO_SCHEMA_SUPPORT
+          : AssignmentUnavailableReason.LOOKUP_FAILED,
+        detail
+      );
+      return null;
+    }
   }
 }

@@ -99,6 +99,25 @@ export function callStateKey(tenantId: string, callId: string): string {
   return `${tenantNamespace(tenantId)}:call:${assertSegment(callId, 'callId')}:state`;
 }
 
+/**
+ * Which agent owns a live channel.
+ *
+ * Tenant-scoped because channel ownership was previously answered by agent id
+ * alone. Agent ids are only unique within a tenant, so two tenants that both
+ * number their agents from 1 would see each other's channels: an active call in
+ * tenant A would mark tenant B's agent 1 as ON_CALL and remove them from B's
+ * dialable capacity, or — worse in the other direction — make B's agent look
+ * busy so A keeps dialling for them.
+ */
+export function channelOwnerKey(tenantId: string, channelUuid: string): string {
+  return `${tenantNamespace(tenantId)}:channel:${assertSegment(channelUuid, 'channelUuid')}:owner`;
+}
+
+/** The set of channels currently attributed to a tenant. */
+export function channelIndexKey(tenantId: string): string {
+  return `${tenantNamespace(tenantId)}:channels`;
+}
+
 export function eventDedupeKey(tenantId: string, eventId: string): string {
   return `${tenantNamespace(tenantId)}:events:dedupe:${assertSegment(eventId, 'eventId')}`;
 }
@@ -145,13 +164,99 @@ export function sipRegistrationKey(tenantId: string, agentId: string): string {
   return `${tenantNamespace(tenantId)}:agent:${assertSegment(agentId, 'agentId')}:sip`;
 }
 
-/** Rolling per-campaign observation counters, for restart reconstruction. */
-export function observationKey(tenantId: string, campaignId: string): string {
-  return `${tenantNamespace(tenantId)}:campaign:${assertSegment(campaignId, 'campaignId')}:observation`;
+/**
+ * The set of agents with a known SIP registration.
+ *
+ * Deliberately separate from the agent-state index. A `sofia::register` can
+ * arrive before the agent's browser has ever heartbeated — the softphone
+ * registers as soon as the tab loads, and often before the agent signs in — so
+ * the agent-state index may not exist yet. Reusing it would mean the first
+ * registration for an agent is written and then never found again on restart,
+ * because reconstruction iterates the index rather than scanning keys.
+ */
+export function sipIndexKey(tenantId: string): string {
+  return `${tenantNamespace(tenantId)}:sip:agents`;
+}
+
+/**
+ * One fixed observation bucket for a campaign.
+ *
+ * The window is a set of fixed buckets rather than one key with a sliding TTL.
+ * A sliding TTL never expires under continuous traffic — every event pushes the
+ * expiry out — so a "one hour rolling window" implemented that way is really a
+ * counter that accumulates from the first event to the last, and a campaign's
+ * 9am answer rate goes on influencing its 9pm forecast forever.
+ *
+ * A bucket, in contrast, is written only while its own interval is current.
+ * Once time moves past it nothing extends it, and it expires on schedule whether
+ * or not the campaign is still busy.
+ */
+export function observationBucketKey(
+  tenantId: string,
+  campaignId: string,
+  bucketIndex: number
+): string {
+  const base = `${tenantNamespace(tenantId)}:campaign:${assertSegment(campaignId, 'campaignId')}:observation`;
+  return `${base}:${Math.trunc(bucketIndex)}`;
 }
 
 export function shadowDecisionKey(tenantId: string, campaignId: string): string {
   return `${tenantNamespace(tenantId)}:campaign:${assertSegment(campaignId, 'campaignId')}:shadow`;
+}
+
+/**
+ * A tenant-scoped index of every campaign that has recorded a decision.
+ *
+ * Exists so "recent decisions for this tenant" is answerable. Without it the
+ * only way to serve an unfiltered request is a `KEYS`/`SCAN` over the keyspace,
+ * and the store previously answered by returning an empty list — which reads
+ * identically to "this tenant has never recorded a decision".
+ */
+export function shadowDecisionIndexKey(tenantId: string): string {
+  return `${tenantNamespace(tenantId)}:shadow:campaigns`;
+}
+
+/**
+ * The campaign shadow lock.
+ *
+ * ── Why this is not a parameterised global lock name ─────────────────────────
+ *
+ * The runtime used to build the string `campaign:${tenantId}:${campaignId}:shadow`
+ * and hand it to a generic lock provider, which placed it under the GLOBAL
+ * namespace. Two things were wrong with that. The tenant and campaign ids never
+ * passed segment validation, so a campaign id containing a colon could address
+ * another campaign's lock — and a tenant's coordination state lived outside that
+ * tenant's namespace, where no tenant-scoped sweep, audit, or eviction policy
+ * would ever find it.
+ *
+ * Building it here means both ids are validated exactly like every other key
+ * segment, and the lock lives inside the tenant it belongs to.
+ */
+export function campaignShadowLockKey(tenantId: string, campaignId: string): string {
+  return `${shadowDecisionKey(tenantId, campaignId)}:lock`;
+}
+
+/** The monotonic fencing counter for that lock. */
+export function campaignShadowFenceKey(tenantId: string, campaignId: string): string {
+  return `${shadowDecisionKey(tenantId, campaignId)}:fence`;
+}
+
+/**
+ * Identity of one decision slot: at most one decision per campaign, per
+ * controller version, per interval bucket.
+ *
+ * The controller version is part of the identity so a deliberate controller
+ * upgrade inside one interval is not mistaken for a duplicate write.
+ */
+export function campaignDecisionBucketKey(
+  tenantId: string,
+  campaignId: string,
+  controllerVersion: string,
+  decidedAtMs: number,
+  intervalMs: number
+): string {
+  const bucket = Math.floor(decidedAtMs / Math.max(1, intervalMs));
+  return `${shadowDecisionKey(tenantId, campaignId)}:bucket:${assertSegment(controllerVersion, 'controllerVersion')}:${bucket}`;
 }
 
 /**
@@ -172,6 +277,28 @@ export type GlobalKeyName = keyof typeof GLOBAL_KEYS;
 
 export function globalKey(name: GlobalKeyName): string {
   return `${GLOBAL_PREFIX}:${GLOBAL_KEYS[name]}`;
+}
+
+/**
+ * Platform-wide locks, enumerated for the same reason as the keys above.
+ *
+ * A lock whose name is a caller-supplied string is a lock whose namespace a
+ * caller can escape. Anything that needs to be locked per tenant or per campaign
+ * uses a tenant-scoped builder instead — there is deliberately no way to put a
+ * tenant id into this list.
+ */
+const GLOBAL_LOCKS = {
+  reconcile: 'reconcile',
+} as const;
+
+export type GlobalLockName = keyof typeof GLOBAL_LOCKS;
+
+export function globalLockKey(name: GlobalLockName): string {
+  return `${GLOBAL_PREFIX}:lock:${GLOBAL_LOCKS[name]}`;
+}
+
+export function globalLockFenceKey(name: GlobalLockName): string {
+  return `${globalLockKey(name)}:fence`;
 }
 
 /** True if `key` belongs to `tenantId`. Always false for a reserved id. */

@@ -18,30 +18,89 @@
  * Both replicas then run the same pass. The compare and the delete have to be
  * one operation, so both are done in a Lua script that Redis executes atomically.
  *
- * ── Why there is a fencing token ─────────────────────────────────────────────
+ * ── Why acquisition is also a Lua script ─────────────────────────────────────
  *
- * A TTL sized for one interval is too short for a pass over many campaigns. The
- * holder therefore renews while it works, and carries a monotonic fencing token
- * so a holder that resumes after a long pause can detect that a newer owner has
- * taken over rather than acting on stale authority.
+ * The previous version did `INCR fence` and then `SET NX`. That advanced the
+ * fence counter even when the lock was NOT granted, which is fatal once a write
+ * has to prove it presents the LATEST issued token:
+ *
+ *   1. A acquires; fence = 7; lock = "A:7".
+ *   2. B attempts to acquire. Its INCR moves the fence to 8. Its SET NX fails,
+ *      so B holds nothing.
+ *   3. A — still the legitimate, uninterrupted holder — presents token 7, which
+ *      is no longer the latest. Its write is refused.
+ *
+ * A replica that never obtained the lock could therefore starve the replica that
+ * did, simply by trying. So the counter is incremented inside the same script
+ * that takes the lock, and only on the branch that succeeds. `EXISTS` followed
+ * by `SET` is safe here precisely because Redis runs the whole script without
+ * interleaving.
+ *
+ * ── Why the value is owner AND token ─────────────────────────────────────────
+ *
+ * The stored value is `{ownerId}:{token}`, not just the owner. Two acquisitions
+ * by the SAME replica must be distinguishable, or a slow first pass could
+ * release — or write under — the second pass's lock.
  */
 
-import { globalKey, isValidTenantId, tenantNamespace } from '../config/redis-keys.js';
+import {
+  campaignShadowFenceKey,
+  campaignShadowLockKey,
+  globalLockFenceKey,
+  globalLockKey,
+  type GlobalLockName,
+} from '../config/redis-keys.js';
 
 export interface LockRedis {
-  set(
-    key: string,
-    value: string,
-    mode: 'PX',
-    ttlMs: number,
-    condition: 'NX'
-  ): Promise<string | null>;
   get(key: string): Promise<string | null>;
   del(key: string): Promise<number>;
   /** Atomic compare-and-act. Required — GET-then-DEL is not safe. */
   eval(script: string, numKeys: number, ...args: string[]): Promise<unknown>;
-  incr(key: string): Promise<number>;
 }
+
+/**
+ * A fully-built lock identity.
+ *
+ * Both keys are constructed by a validated builder in `redis-keys.ts`, never
+ * assembled from caller strings here. That is what keeps a campaign id
+ * containing a colon from addressing another campaign's lock.
+ */
+export interface LockDescriptor {
+  key: string;
+  fenceKey: string;
+  /** For logs and metrics only. Never used to build a key. */
+  label: string;
+}
+
+export function globalLock(name: GlobalLockName): LockDescriptor {
+  return { key: globalLockKey(name), fenceKey: globalLockFenceKey(name), label: `global:${name}` };
+}
+
+export function campaignShadowLock(tenantId: string, campaignId: string): LockDescriptor {
+  return {
+    key: campaignShadowLockKey(tenantId, campaignId),
+    fenceKey: campaignShadowFenceKey(tenantId, campaignId),
+    label: 'campaign-shadow',
+  };
+}
+
+/**
+ * KEYS[1] = lock key, KEYS[2] = fence counter
+ * ARGV[1] = ownerId, ARGV[2] = lock TTL ms, ARGV[3] = fence TTL ms
+ *
+ * Returns the granted fencing token, or 0 when the lock is held elsewhere.
+ */
+export const ACQUIRE_WITH_FENCE = [
+  "if redis.call('exists', KEYS[1]) == 1 then return 0 end",
+  "local token = redis.call('incr', KEYS[2])",
+  // The counter outlives the lock by a wide margin so tokens stay monotonic
+  // across an idle period. If it ever did expire and reset, the lock-ownership
+  // check below is still the binding one — a reset token cannot match a lock
+  // value that no longer exists.
+  "redis.call('pexpire', KEYS[2], tonumber(ARGV[3]))",
+  "redis.call('set', KEYS[1], ARGV[1] .. ':' .. token, 'PX', tonumber(ARGV[2]))",
+  'return token',
+].join('\n');
 
 /** Delete the key only if it still holds our exact value. */
 export const RELEASE_IF_OWNER = [
@@ -63,14 +122,23 @@ export interface LockHandle {
   /** Monotonic fencing token. A holder with a lower token is stale. */
   fencingToken: number;
   ownerId: string;
+  /**
+   * The exact string stored in the lock key.
+   *
+   * Carried on the handle so a downstream write can present it verbatim and
+   * have Redis compare it against what the lock key holds AT THE MOMENT OF THE
+   * WRITE. Reconstructing it at the call site would let a formatting difference
+   * turn a genuine ownership check into a string-equality accident.
+   */
+  lockValue: string;
 }
 
 export interface DistributedLock {
   /** Returns a handle when acquired, null when the lock is held elsewhere. */
-  acquire(name: string, ttlMs: number): Promise<LockHandle | null>;
+  acquire(lock: LockDescriptor, ttlMs: number): Promise<LockHandle | null>;
   /** Extend the lock. Returns false once ownership has been lost. */
-  renew(name: string, ttlMs: number): Promise<boolean>;
-  release(name: string): Promise<void>;
+  renew(lock: LockDescriptor, ttlMs: number): Promise<boolean>;
+  release(lock: LockDescriptor): Promise<void>;
   readonly distributed: boolean;
 }
 
@@ -79,19 +147,24 @@ export interface DistributedLock {
  *
  * `distributed` is false so health can say plainly that loop coordination is
  * not distributed, rather than implying a guarantee that is not provided.
+ * Staging and production refuse to build with this — see `composition.ts`.
  */
 export class NoOpLock implements DistributedLock {
   readonly distributed = false;
   private token = 0;
 
-  acquire(_name: string, _ttlMs: number): Promise<LockHandle | null> {
+  acquire(_lock: LockDescriptor, _ttlMs: number): Promise<LockHandle | null> {
     this.token += 1;
-    return Promise.resolve({ fencingToken: this.token, ownerId: 'single-instance' });
+    return Promise.resolve({
+      fencingToken: this.token,
+      ownerId: 'single-instance',
+      lockValue: `single-instance:${this.token}`,
+    });
   }
-  renew(_name: string, _ttlMs: number): Promise<boolean> {
+  renew(_lock: LockDescriptor, _ttlMs: number): Promise<boolean> {
     return Promise.resolve(true);
   }
-  release(_name: string): Promise<void> {
+  release(_lock: LockDescriptor): Promise<void> {
     return Promise.resolve();
   }
 }
@@ -100,44 +173,44 @@ export interface RedisLockOptions {
   redis: LockRedis;
   /** Identifies this replica. */
   ownerId: string;
-  /** Namespace: a tenant id, or undefined for a platform-wide lock. */
-  tenantId?: string;
+  /**
+   * How long the fence counter survives without an acquisition. Far longer than
+   * any lock TTL, so tokens remain monotonic across quiet periods.
+   */
+  fenceTtlMs?: number;
   onFailure?: (operation: string, error: Error) => void;
 }
 
+const DEFAULT_FENCE_TTL_MS = 24 * 60 * 60 * 1000;
+
 export class RedisDistributedLock implements DistributedLock {
   readonly distributed = true;
-  /** name → the exact value we wrote, so release compares against our own. */
+  /** key → the exact value we wrote, so release compares against our own. */
   private readonly held = new Map<string, string>();
+  private readonly fenceTtlMs: number;
 
-  constructor(private readonly options: RedisLockOptions) {}
-
-  private keyFor(name: string): string {
-    if (this.options.tenantId && isValidTenantId(this.options.tenantId)) {
-      return `${tenantNamespace(this.options.tenantId)}:lock:${name}`;
-    }
-    return `${globalKey('health').replace(/:health$/, '')}:lock:${name}`;
+  constructor(private readonly options: RedisLockOptions) {
+    this.fenceTtlMs = options.fenceTtlMs ?? DEFAULT_FENCE_TTL_MS;
   }
 
-  private fenceKeyFor(name: string): string {
-    return `${this.keyFor(name)}:fence`;
-  }
-
-  async acquire(name: string, ttlMs: number): Promise<LockHandle | null> {
+  async acquire(lock: LockDescriptor, ttlMs: number): Promise<LockHandle | null> {
     try {
-      // Issued before the lock is taken and monotonic across the deployment, so
-      // a holder resuming after a pause can tell it has been superseded.
-      const fencingToken = await this.options.redis.incr(this.fenceKeyFor(name));
-      // Stored value is owner+token, not just owner: two acquisitions by the
-      // SAME replica must be distinguishable, or a slow first pass could
-      // release the second pass's lock.
-      const value = `${this.options.ownerId}:${fencingToken}`;
+      const token = Number(
+        await this.options.redis.eval(
+          ACQUIRE_WITH_FENCE,
+          2,
+          lock.key,
+          lock.fenceKey,
+          this.options.ownerId,
+          String(ttlMs),
+          String(this.fenceTtlMs)
+        )
+      );
+      if (!Number.isFinite(token) || token <= 0) return null;
 
-      const result = await this.options.redis.set(this.keyFor(name), value, 'PX', ttlMs, 'NX');
-      if (result !== 'OK') return null;
-
-      this.held.set(name, value);
-      return { fencingToken, ownerId: this.options.ownerId };
+      const lockValue = `${this.options.ownerId}:${token}`;
+      this.held.set(lock.key, lockValue);
+      return { fencingToken: token, ownerId: this.options.ownerId, lockValue };
     } catch (error) {
       this.options.onFailure?.('lock.acquire', error as Error);
       // Fail closed. If coordination cannot be established this replica does
@@ -147,34 +220,34 @@ export class RedisDistributedLock implements DistributedLock {
     }
   }
 
-  async renew(name: string, ttlMs: number): Promise<boolean> {
-    const value = this.held.get(name);
+  async renew(lock: LockDescriptor, ttlMs: number): Promise<boolean> {
+    const value = this.held.get(lock.key);
     if (!value) return false;
     try {
       const result = await this.options.redis.eval(
         RENEW_IF_OWNER,
         1,
-        this.keyFor(name),
+        lock.key,
         value,
         String(ttlMs)
       );
       const renewed = Number(result) === 1;
       // Ownership lost — stop believing we hold it, so release cannot fire.
-      if (!renewed) this.held.delete(name);
+      if (!renewed) this.held.delete(lock.key);
       return renewed;
     } catch (error) {
       this.options.onFailure?.('lock.renew', error as Error);
-      this.held.delete(name);
+      this.held.delete(lock.key);
       return false;
     }
   }
 
-  async release(name: string): Promise<void> {
-    const value = this.held.get(name);
+  async release(lock: LockDescriptor): Promise<void> {
+    const value = this.held.get(lock.key);
     if (!value) return;
-    this.held.delete(name);
+    this.held.delete(lock.key);
     try {
-      await this.options.redis.eval(RELEASE_IF_OWNER, 1, this.keyFor(name), value);
+      await this.options.redis.eval(RELEASE_IF_OWNER, 1, lock.key, value);
     } catch (error) {
       this.options.onFailure?.('lock.release', error as Error);
       // The TTL is the backstop — an unreleased lock expires on its own.

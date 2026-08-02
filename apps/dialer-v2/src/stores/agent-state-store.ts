@@ -88,12 +88,17 @@ export enum AgentWriteOutcome {
   UNAVAILABLE = 'UNAVAILABLE',
 }
 
-/** Anything with a tenant, an agent, and a revision can be stored here. */
+/**
+ * Anything with a tenant, an agent, and a revision can be stored here.
+ *
+ * No index signature: adding one would make this satisfiable by any object at
+ * all, and `AgentRecord` — the type that actually goes through here — would
+ * stop being checkable against it.
+ */
 export interface RevisionedAgentRecord {
   tenantId: string;
   agentId: string;
   revision: number;
-  [field: string]: unknown;
 }
 
 export interface AgentWriteResult<T> {
@@ -120,15 +125,26 @@ export interface AgentStateStoreOptions {
 const DEFAULT_TTL_MS = 6 * 60 * 60 * 1000;
 
 export class RedisAgentStateStore {
+  /** Satisfies `AgentStateRepository`; reported through health. */
+  readonly backend = 'redis' as const;
   private readonly ttlMs: number;
-  private staleWrites = 0;
+  private staleWriteCount = 0;
 
   constructor(private readonly options: AgentStateStoreOptions) {
     this.ttlMs = options.ttlMs ?? DEFAULT_TTL_MS;
   }
 
   metrics(): { staleWrites: number } {
-    return { staleWrites: this.staleWrites };
+    return { staleWrites: this.staleWriteCount };
+  }
+
+  staleWrites(): number {
+    return this.staleWriteCount;
+  }
+
+  /** `AgentStateRepository` name for `loadAll`. */
+  loadTenant<T extends RevisionedAgentRecord>(tenantId: string): Promise<T[]> {
+    return this.loadAll<T>(tenantId);
   }
 
   /**
@@ -167,7 +183,7 @@ export class RedisAgentStateStore {
       if (reply === 'OK') return { outcome: AgentWriteOutcome.SAVED, revision };
       if (reply === 'GONE') return { outcome: AgentWriteOutcome.GONE };
 
-      this.staleWrites++;
+      this.staleWriteCount++;
       return {
         outcome: AgentWriteOutcome.STALE_REVISION,
         current: safeParse<T>(reply) ?? undefined,

@@ -64,6 +64,7 @@ model Tenant {
   didRoutes                DidRoute[]
   campaignPublishers       CampaignPublisher[]
   campaignBuyers           CampaignBuyer[]
+  campaignAgents           CampaignAgent[]
   voiceAgents              VoiceAgent[]
 
   @@index([slug])
@@ -205,6 +206,7 @@ model User {
   financials     UserFinancials?
   payrollPayouts PayrollPayout[]
   voiceAgents    VoiceAgent[]
+  campaignAgents CampaignAgent[]
 
   @@index([tenantId, email])
   @@index([tenantId, status])
@@ -556,6 +558,7 @@ model Campaign {
   didRoutes    DidRoute[]
   publishers   CampaignPublisher[]
   buyers       CampaignBuyer[]
+  agents       CampaignAgent[]
 
   @@index([tenantId])
   @@index([publisherId])
@@ -2963,4 +2966,47 @@ model ResearchTeamProfile {
   @@index([tenantId])
   @@index([tenantId, createdAt])
   @@map("research_team_profiles")
+}
+
+/// Which agents may take calls for which campaigns.
+///
+/// Added for Dialer V2. Before this the schema modelled no relation between an
+/// agent and a campaign in either direction, so predictive pacing had no way to
+/// know how many agents a campaign actually has. The dialer failed closed —
+/// every campaign forecast counted zero agents — because the alternative, a
+/// wildcard, would have put every agent in every campaign and inflated the
+/// capacity number that governs how hard the dialer is allowed to dial.
+///
+/// Deliberately additive: nothing else in the schema reads this table, and
+/// removing it restores the previous behaviour exactly.
+model CampaignAgent {
+  id         String              @id @default(uuid())
+  tenantId   String
+  campaignId String
+  /// The agent. `User` IS the agent in this schema — there is no Agent model.
+  userId     String
+  status     CampaignAgentStatus @default(ACTIVE)
+  /// Lower is preferred. Null means no preference among a campaign's agents.
+  priority   Int?
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// One row per agent per campaign. A duplicate would double-count that agent
+  /// in the campaign's available capacity.
+  @@unique([tenantId, campaignId, userId])
+  @@index([tenantId])
+  @@index([campaignId])
+  @@index([userId])
+  /// The dialer's hot read: every active campaign for one agent.
+  @@index([tenantId, userId, status])
+  @@map("campaign_agents")
+}
+
+enum CampaignAgentStatus {
+  ACTIVE
+  INACTIVE
 }

@@ -10,20 +10,40 @@
  * providing none.
  */
 
+import type { SessionRedis } from '../agents/session-store.js';
 import type { DedupeStore, EventStore } from '../events/store.js';
 import { InMemoryDedupeStore, InMemoryEventStore } from '../events/store.js';
+import type { AgentSessionStore } from '../runtime/ports.js';
 import { InMemoryShadowDecisionStore, type ShadowDecisionStore } from '../shadow/engine.js';
 
+import type { AgentStateRedis } from './agent-state-store.js';
+import type { ChannelRedis } from './channel-ownership.js';
 import {
   NoOpLock,
   RedisDistributedLock,
   type DistributedLock,
   type LockRedis,
 } from './coordination.js';
-import { RedisDedupeStore, RedisShadowDecisionStore, type MinimalRedis } from './redis.js';
+import { FencedShadowDecisionStore, type FencedRedis } from './fenced-decisions.js';
+import type { ObservationRedis } from './observation-store.js';
+import { RedisDedupeStore, type MinimalRedis } from './redis.js';
+import type { SipStoreRedis } from './sip-store.js';
 
-/** The full client surface these stores need. */
-export type DialerRedis = MinimalRedis & LockRedis;
+/**
+ * The full client surface every Dialer V2 store needs.
+ *
+ * Composed from each store's own narrow interface rather than declared as one
+ * list, so adding a command to a store is a compile error here rather than a
+ * runtime `client.xyz is not a function` in a code path nobody exercised.
+ */
+export type DialerRedis = MinimalRedis &
+  LockRedis &
+  FencedRedis &
+  SessionRedis &
+  AgentStateRedis &
+  SipStoreRedis &
+  ChannelRedis &
+  ObservationRedis;
 
 export interface RedisConnection {
   client: DialerRedis;
@@ -40,12 +60,25 @@ export interface StoreBundle {
   redisHealthy: () => boolean;
   /** What was actually selected, for the health surface. */
   backend: 'redis' | 'memory';
+  /**
+   * Whether decision writes are adjudicated against the campaign lock.
+   *
+   * Reported separately from `backend`. "Redis is connected" and "decisions are
+   * fenced" are different facts, and the previous health surface conflated them:
+   * `buildStores` returned an UNFENCED Redis store while the runtime passed
+   * fencing tokens into it, so every token was silently discarded and the
+   * health page said `storeBackend: 'redis'` the whole time.
+   */
+  decisionsFenced: boolean;
 }
 
 export interface BuildStoresOptions {
   connection?: RedisConnection | null;
   ownerId: string;
+  /** Decision bucket width. Must match the shadow loop interval. */
+  shadowIntervalMs: number;
   onFailure?: (operation: string, error: Error) => void;
+  onDecisionRejection?: (rejection: string, tenantId: string, campaignId: string) => void;
 }
 
 /**
@@ -72,6 +105,7 @@ export function buildStores(options: BuildStoresOptions, env: NodeJS.ProcessEnv)
       lock: new NoOpLock(),
       redisHealthy: () => allowMemory,
       backend: 'memory',
+      decisionsFenced: false,
     };
   }
 
@@ -83,7 +117,18 @@ export function buildStores(options: BuildStoresOptions, env: NodeJS.ProcessEnv)
     // used for local forensics. Dedupe and decisions are what must be shared.
     eventStore: new InMemoryEventStore(),
     dedupe: new RedisDedupeStore({ redis, onFailure: options.onFailure }),
-    shadowStore: new RedisShadowDecisionStore({ redis, onFailure: options.onFailure }),
+    // The FENCED store, not the plain one. The plain `RedisShadowDecisionStore`
+    // ignores the fencing token entirely, so wiring it here meant the runtime
+    // computed a token, passed it down, and had it dropped on the floor — the
+    // race the token exists to close was open the whole time in the only
+    // configuration that runs in production.
+    shadowStore: new FencedShadowDecisionStore({
+      redis,
+      intervalMs: options.shadowIntervalMs,
+      onFailure: options.onFailure,
+      onRejection: (rejection, record) =>
+        options.onDecisionRejection?.(rejection, record.tenantId, record.campaignId),
+    }),
     lock: new RedisDistributedLock({
       redis,
       ownerId: options.ownerId,
@@ -91,7 +136,18 @@ export function buildStores(options: BuildStoresOptions, env: NodeJS.ProcessEnv)
     }),
     redisHealthy: () => connection.isHealthy(),
     backend: 'redis',
+    decisionsFenced: true,
   };
+}
+
+/** Satisfied by any store bundle that can be used behind a load balancer. */
+export function bundleIsDistributed(bundle: StoreBundle): boolean {
+  return bundle.backend === 'redis' && bundle.decisionsFenced && bundle.lock.distributed;
+}
+
+/** Narrowing helper used by the composition root's staging/production gate. */
+export function sessionsAreShared(sessions: AgentSessionStore): boolean {
+  return sessions.backend === 'redis';
 }
 
 /**

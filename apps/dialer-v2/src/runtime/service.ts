@@ -16,15 +16,18 @@
 import { AssignmentResolver } from '../agents/assignments.js';
 import { ExtensionResolver } from '../agents/extension-resolver.js';
 import { AgentStateService, type ReconciliationCorrection } from '../agents/service.js';
-import { AgentSessionRegistry, SessionRejection, type AgentSession } from '../agents/sessions.js';
-import { SIP_REGISTRATION_SUBCLASSES, SipRegistrationRegistry } from '../agents/sip-registry.js';
-import { AgentState } from '../agents/state.js';
+import { SessionRejection } from '../agents/sessions.js';
+import { AgentState, type AgentRecord } from '../agents/state.js';
 import type { DialerV2Flags, FlagSource } from '../config/flags.js';
 import { EslClient, type EslStatus } from '../esl/client.js';
 import { SocketEslTransport } from '../esl/socket-transport.js';
 import { EventIngestor } from '../events/ingestor.js';
 import type { DedupeStore, EventStore } from '../events/store.js';
-import type { RawEslEvent } from '../events/types.js';
+import {
+  TelephonyEventType,
+  type NormalizedTelephonyEvent,
+  type RawEslEvent,
+} from '../events/types.js';
 import { ObservationCollector } from '../observation/collector.js';
 import { DialingMode } from '../pacing/controller.js';
 import {
@@ -33,7 +36,24 @@ import {
   type ShadowDecisionStore,
   type ShadowObservation,
 } from '../shadow/engine.js';
-import type { DistributedLock } from '../stores/coordination.js';
+import { AgentWriteOutcome } from '../stores/agent-state-store.js';
+import { campaignShadowLock, globalLock, type DistributedLock } from '../stores/coordination.js';
+import type { ObservationCounters } from '../stores/observation-store.js';
+import {
+  SIP_REGISTRATION_SUBCLASSES,
+  SipLifecycle,
+  SipWriteOutcome,
+  readSipEventOrdering,
+} from '../stores/sip-store.js';
+
+import type {
+  IssuedSessionResult,
+  AgentSessionStore,
+  AgentStateRepository,
+  CampaignObservationRepository,
+  ChannelOwnershipRepository,
+  SipRegistrationRepository,
+} from './ports.js';
 
 export interface EslIngestConfig {
   enabled: boolean;
@@ -130,10 +150,19 @@ export interface RuntimeDeps {
   eventStore: EventStore;
   dedupe: DedupeStore;
   shadowStore: ShadowDecisionStore;
+  /**
+   * The hot-path cache the synchronous pacing loop reads.
+   *
+   * Not the record. `agentStore` is the record; this is reconstructed from it at
+   * startup and only ever updated after a write it accepted.
+   */
   agents: AgentStateService;
-  sessions: AgentSessionRegistry;
+  agentStore: AgentStateRepository;
+  sessions: AgentSessionStore;
   assignments: AssignmentResolver;
-  sipRegistry: SipRegistrationRegistry;
+  sip: SipRegistrationRepository;
+  observations: CampaignObservationRepository;
+  channels: ChannelOwnershipRepository;
   extensions: ExtensionResolver;
   lock: DistributedLock;
   /** Real Redis health. There is no hardcoded value anywhere. */
@@ -158,17 +187,30 @@ export interface RuntimeStatus {
   lockDistributed: boolean;
   shadowPassesSkippedForLock: number;
   shadowWritesRejected: number;
+  /** Observed scopes whose ids could not form a valid Redis key. */
+  shadowScopesUnkeyable: number;
   reconcilePassesSkippedForLock: number;
   sip: {
-    tracked: number;
-    registered: number;
-    processed: number;
-    unattributed: number;
+    resolved: number;
     quarantined: number;
+    outOfOrder: number;
+    forgedTenant: number;
   };
   registrationsResolved: number;
   registrationsQuarantined: number;
   registrationsForgedTenant: number;
+  /** Registration writes refused because a newer event had already been applied. */
+  registrationsOutOfOrder: number;
+  agentStaleWrites: number;
+  agentWritesUnavailable: number;
+  /**
+   * Whether shared state was fully reconstructed at startup.
+   *
+   * False means this replica is running on a partial view — some agents or
+   * registrations could not be loaded — and its capacity numbers are therefore
+   * a floor, not a measurement.
+   */
+  reconstructionComplete: boolean;
   lastRegistrationRejection: string | null;
 }
 
@@ -180,7 +222,6 @@ export interface HeartbeatAudit {
   accepted: boolean;
   rejection?: SessionRejection | 'INVALID_TENANT' | 'UNKNOWN_AGENT';
   sequence: number;
-  sessionIdPrefix: string;
   browserClaimedSip: boolean;
   freeswitchSip: boolean;
   countedAsCapacity: boolean;
@@ -203,10 +244,21 @@ export class DialerV2Runtime {
   private shadowPassesSkippedForLock = 0;
   private reconcilePassesSkippedForLock = 0;
   private shadowWritesRejected = 0;
+  private shadowScopesUnkeyable = 0;
   private registrationsResolved = 0;
   private registrationsQuarantined = 0;
   private registrationsForgedTenant = 0;
+  private registrationsOutOfOrder = 0;
+  private agentStaleWrites = 0;
+  private agentWritesUnavailable = 0;
+  private reconstructionComplete = false;
   private lastRegistrationRejection: string | null = null;
+  private readonly quarantinedRegistrations: Array<{
+    extension: string | null;
+    sipDomain: string | null;
+    subclass: string;
+    reason: string;
+  }> = [];
 
   private readonly now: () => number;
   private readonly setTimer: (fn: () => void, ms: number) => unknown;
@@ -272,10 +324,58 @@ export class DialerV2Runtime {
         if (event.agentId) {
           this.deps.agents.noteFreeswitchEvent(event.tenantId, event.agentId, this.now());
         }
+        // Shared counters, bucketed by the event's OWN timestamp. Deduplication
+        // has already happened in the ingestor, which is what makes these
+        // HINCRBYs safe to apply once per event across every replica.
+        void this.recordObservation(event);
       },
       onError: (error, context) =>
         this.log({ msg: 'ingestor error', context, error: error.message }),
     });
+  }
+
+  /**
+   * Translate one telephony event into shared counter deltas.
+   *
+   * Only outcome-bearing events contribute. A CHANNEL_CREATE is one attempt; an
+   * ANSWER is one live answer; a HANGUP resolves into exactly one of abandoned,
+   * busy, no-answer, or failed. Counting the same call under two headings would
+   * make the abandonment rate — the number that governs whether a campaign may
+   * keep dialing — quietly wrong in the permissive direction.
+   */
+  private async recordObservation(event: NormalizedTelephonyEvent): Promise<void> {
+    if (!event.tenantId || !event.campaignId) return;
+
+    const deltas: Partial<ObservationCounters> = {};
+
+    switch (event.eventType) {
+      case TelephonyEventType.CHANNEL_CREATE:
+        deltas.attempts = 1;
+        break;
+      case TelephonyEventType.CHANNEL_ANSWER:
+        deltas.liveAnswers = 1;
+        break;
+      case TelephonyEventType.CHANNEL_HANGUP_COMPLETE: {
+        const cause = event.hangupCause ?? 'UNKNOWN';
+        if (cause === 'USER_BUSY') deltas.busy = 1;
+        else if (cause === 'NO_ANSWER' || cause === 'NO_USER_RESPONSE') deltas.noAnswer = 1;
+        else if (cause !== 'NORMAL_CLEARING') deltas.failed = 1;
+        break;
+      }
+      default:
+        return;
+    }
+
+    try {
+      await this.deps.observations.applyEvent(
+        event.tenantId,
+        event.campaignId,
+        event.occurredAt,
+        deltas
+      );
+    } catch (error) {
+      this.log({ msg: 'observation write failed', error: (error as Error).message });
+    }
   }
 
   start(): void {
@@ -362,10 +462,17 @@ export class DialerV2Runtime {
     const quarantine = (reason: string): false => {
       this.registrationsQuarantined++;
       this.lastRegistrationRejection = reason;
-      this.deps.sipRegistry.quarantineUnresolved(extension, sipDomain, subclass, reason);
+      this.quarantinedRegistrations.push({ extension, sipDomain, subclass, reason });
+      if (this.quarantinedRegistrations.length > 500) this.quarantinedRegistrations.shift();
       this.log({ msg: 'registration quarantined', subclass, reason });
       return false;
     };
+
+    // Ordering is read from the event BEFORE the lookup, so it reflects when
+    // FreeSWITCH emitted the event rather than when a database call happened to
+    // finish. That distinction is the whole point: lookups complete out of
+    // order, and without it a slow register overwrites a fast unregister.
+    const ordering = readSipEventOrdering(raw, this.now());
 
     if (!extension || !sipDomain) return quarantine('MISSING_SIP_IDENTITY');
 
@@ -384,9 +491,50 @@ export class DialerV2Runtime {
       return quarantine('TENANT_VARIABLE_CONTRADICTS_BINDING');
     }
 
-    this.deps.sipRegistry.applyResolved(binding.tenantId, binding.extension, subclass, raw);
-    this.registrationsResolved++;
-    return true;
+    const expiresRaw = raw['expires'];
+    const expiresSeconds = expiresRaw ? Number.parseInt(expiresRaw, 10) : Number.NaN;
+
+    const result = await this.deps.sip.apply({
+      tenantId: binding.tenantId,
+      // The resolved agent is persisted alongside the extension. Storing only
+      // the extension would force every later reader to redo the same lookup,
+      // and a reassignment between those lookups would attribute the
+      // registration to a different agent than the one it was resolved for.
+      agentId: binding.agentId,
+      extension: binding.extension,
+      subclass,
+      eventAtMs: ordering.eventAtMs,
+      eventSequence: ordering.eventSequence,
+      receivedAtMs: this.now(),
+      expiresAtMs:
+        Number.isFinite(expiresSeconds) && expiresSeconds > 0
+          ? ordering.eventAtMs + expiresSeconds * 1000
+          : null,
+      contact: raw['contact'] ?? null,
+      networkIp: raw['network-ip'] ?? null,
+    });
+
+    if (result.outcome === SipWriteOutcome.APPLIED) {
+      this.registrationsResolved++;
+      return true;
+    }
+    if (result.outcome === SipWriteOutcome.STALE_EVENT) {
+      // Not an error: this is the mechanism working. A lookup finished after a
+      // newer event had already been applied, and the newer one stands.
+      this.registrationsOutOfOrder++;
+      return false;
+    }
+    return quarantine(`SIP_WRITE_${result.outcome}`);
+  }
+
+  /** Registrations that could not be attributed. They contribute no capacity. */
+  recentQuarantinedRegistrations(): ReadonlyArray<{
+    extension: string | null;
+    sipDomain: string | null;
+    subclass: string;
+    reason: string;
+  }> {
+    return this.quarantinedRegistrations;
   }
 
   /**
@@ -394,9 +542,9 @@ export class DialerV2Runtime {
    * registration. Coordinated: only one replica runs a pass per interval.
    */
   async runReconciliation(): Promise<ReconciliationCorrection[]> {
-    const lockName = 'reconcile';
+    const lock = globalLock('reconcile');
     const handle = await this.deps.lock.acquire(
-      lockName,
+      lock,
       Math.max(1_000, this.deps.config.reconcileIntervalMs - 100)
     );
     if (!handle) {
@@ -405,9 +553,9 @@ export class DialerV2Runtime {
     }
 
     try {
-      return this.reconcileNow();
+      return await this.reconcileNow();
     } finally {
-      await this.deps.lock.release(lockName);
+      await this.deps.lock.release(lock);
     }
   }
 
@@ -415,32 +563,32 @@ export class DialerV2Runtime {
    * The reconciliation body, without locking. Exposed for tests and for the
    * single-instance path.
    */
-  reconcileNow(): ReconciliationCorrection[] {
+  async reconcileNow(): Promise<ReconciliationCorrection[]> {
     const nowMs = this.now();
     const corrections: ReconciliationCorrection[] = [];
 
     // Push authoritative SIP state into the agent service BEFORE reconciling,
     // so the reconciler compares against FreeSWITCH rather than a browser claim.
     for (const record of this.deps.agents.allAgents()) {
-      // record.extension is refreshed on each heartbeat by the resolver; a null
-      // one means the agent has no proven extension and can never be
-      // registered, which `isRegistered` already reports as false.
-      const registered = this.deps.sipRegistry.isRegistered(record.tenantId, record.extension);
+      // Keyed by agent, not extension. The registration was resolved to an
+      // agent when it was written, so re-deriving the mapping here would give a
+      // second chance for a reassignment to attribute it to someone else.
+      const registered = await this.deps.sip.isRegistered(record.tenantId, record.agentId);
       if (record.sipRegistered !== registered) {
         this.deps.agents.setSipRegistration(record.tenantId, record.agentId, registered, nowMs);
       }
 
-      if (registered || !record.extension) continue;
+      if (registered) continue;
 
       // Positive evidence the endpoint is gone (an unregister or expire) is not
       // a transient blip, so it bypasses the grace period entirely.
-      const registration = this.deps.sipRegistry.get(record.tenantId, record.extension);
-      if (registration && !registration.registered) {
+      const registration = await this.deps.sip.get(record.tenantId, record.agentId);
+      if (registration && registration.lifecycle !== SipLifecycle.REGISTERED) {
         const correction = this.deps.agents.withdrawForSipLoss(
           record.tenantId,
           record.agentId,
           nowMs,
-          `FreeSWITCH reported ${registration.lastEvent} for extension ${registration.extension}`
+          `FreeSWITCH reported ${registration.lifecycle} for extension ${registration.extension}`
         );
         if (correction) corrections.push(correction);
       }
@@ -455,10 +603,51 @@ export class DialerV2Runtime {
     this.lastReconciliationAtMs = nowMs;
     if (corrections.length > 0) {
       this.log({ msg: 'agent corrections', count: corrections.length });
+      // A correction changes durable state, so it has to reach the shared
+      // record. Leaving it only in the cache means the next replica to read the
+      // agent gets the state this pass just decided was wrong.
+      for (const correction of corrections) {
+        await this.persistAgent(correction.tenantId, correction.agentId);
+      }
     }
-    this.deps.sessions.sweep(nowMs);
-    this.deps.sipRegistry.sweep();
+    await this.deps.sessions.sweep(nowMs);
     return corrections;
+  }
+
+  /**
+   * Persist a cached agent record under its revision.
+   *
+   * The cache is NEVER advanced on a refused write. On a stale revision the
+   * store hands back what is current and the cache adopts that instead — the
+   * refused change is dropped rather than retried blindly, because the state it
+   * was computed against no longer exists.
+   */
+  private async persistAgent(tenantId: string, agentId: string): Promise<AgentWriteOutcome> {
+    const record = this.deps.agents.get(tenantId, agentId);
+    if (!record) return AgentWriteOutcome.GONE;
+
+    const result = await this.deps.agentStore.save({ ...record }, record.revision);
+
+    switch (result.outcome) {
+      case AgentWriteOutcome.SAVED:
+        record.revision = result.revision ?? record.revision + 1;
+        return result.outcome;
+
+      case AgentWriteOutcome.STALE_REVISION:
+        this.agentStaleWrites++;
+        if (result.current) this.deps.agents.adopt(result.current);
+        return result.outcome;
+
+      case AgentWriteOutcome.GONE:
+        // The durable record expired underneath us. Re-create from revision 0
+        // rather than resurrecting under a revision nobody else has seen.
+        record.revision = 0;
+        return result.outcome;
+
+      default:
+        this.agentWritesUnavailable++;
+        return result.outcome;
+    }
   }
 
   /**
@@ -476,30 +665,40 @@ export class DialerV2Runtime {
     // Per-campaign coordination. A single global lock serialised every tenant
     // and campaign, so one slow campaign stalled the whole deployment and two
     // tenants could never progress concurrently. Each campaign now takes its
-    // own lock, and its fencing token authorises that campaign's write only.
+    // own lock, built by a validated tenant-scoped key builder, and that lock
+    // authorises that campaign's write only.
     const ttlMs = Math.max(3_000, this.deps.config.shadowIntervalMs * 3);
 
     for (const scope of scopes) {
-      const lockName = `campaign:${scope.tenantId}:${scope.campaignId}:shadow`;
-      const handle = await this.deps.lock.acquire(lockName, ttlMs);
+      let lock;
+      try {
+        lock = campaignShadowLock(scope.tenantId, scope.campaignId);
+      } catch {
+        // A scope whose ids cannot form a valid key cannot be locked, and a
+        // decision written without a lock is not evidence.
+        this.shadowScopesUnkeyable++;
+        continue;
+      }
+
+      const handle = await this.deps.lock.acquire(lock, ttlMs);
       if (!handle) {
         this.shadowPassesSkippedForLock++;
         continue;
       }
 
       try {
-        const obs = this.buildObservation(scope.tenantId, scope.campaignId, nowMs, eslStatus);
+        const obs = await this.buildObservation(scope.tenantId, scope.campaignId, nowMs, eslStatus);
         const record = await this.shadow.evaluate(flags, obs, {
-          // The token travels with the decision. Redis, not this process,
-          // decides whether it is still current at the moment of the write —
-          // this replica may have paused between acquire and write.
+          // Proof of ownership travels with the decision. Redis, not this
+          // process, decides whether the lock is still ours at the moment of
+          // the write — this replica may have paused between acquire and write.
           fencingToken: handle.fencingToken,
-          intervalMs: this.deps.config.shadowIntervalMs,
+          lockValue: handle.lockValue,
         });
         if (record.persisted) count++;
         else this.shadowWritesRejected++;
       } finally {
-        await this.deps.lock.release(lockName);
+        await this.deps.lock.release(lock);
       }
     }
 
@@ -508,14 +707,23 @@ export class DialerV2Runtime {
     return count;
   }
 
-  private buildObservation(
+  private async buildObservation(
     tenantId: string,
     campaignId: string,
     nowMs: number,
     eslStatus: EslStatus | null
-  ): ShadowObservation {
+  ): Promise<ShadowObservation> {
     const observed = this.collector.observe(tenantId, campaignId);
     const capacity = this.deps.agents.capacity(tenantId, nowMs, campaignId);
+
+    // Rates come from the SHARED trailing window, not this replica's slice of
+    // it. Two replicas each seeing half the calls would each estimate from half
+    // the sample and neither would ever reach minSampleSize — the controller
+    // would stay degraded while believing it lacked data it had.
+    const shared = await this.deps.observations.read(tenantId, campaignId);
+    const attempts = shared?.attempts ?? observed.attempts;
+    const liveAnswers = shared?.liveAnswers ?? observed.liveAnswers;
+    const abandons = shared?.abandons ?? observed.abandonedCount;
 
     // Agent-state age: if nothing has ever reported, treat it as infinitely
     // stale so the controller hard-stops rather than guessing.
@@ -536,14 +744,18 @@ export class DialerV2Runtime {
         liveAnswersWaiting: observed.liveAnswersWaiting,
       },
       rates: {
-        attempts: observed.attempts,
-        liveAnswers: observed.liveAnswers,
-        meanAnswerLatencyMs: observed.meanAnswerLatencyMs,
+        attempts,
+        liveAnswers,
+        meanAnswerLatencyMs: shared?.meanAnswerLatencyMs || observed.meanAnswerLatencyMs,
+        // The p95 stays local: a percentile cannot be reconstructed from sums,
+        // and shipping every latency sample to Redis to compute one is not
+        // worth it. Reported from this replica's view and known to be that.
         p95AnswerLatencyMs: observed.p95AnswerLatencyMs,
-        meanHandleTimeMs: observed.meanCallDurationMs || 150_000,
+        meanHandleTimeMs: shared?.meanCallDurationMs || observed.meanCallDurationMs || 150_000,
         meanWrapUpMs: 15_000,
-        abandonRate: observed.abandonRate,
-        abandonSampleSize: observed.abandonSampleSize,
+        // Compliance definition: abandoned ÷ live-answered, not ÷ attempts.
+        abandonRate: liveAnswers > 0 ? abandons / liveAnswers : observed.abandonRate,
+        abandonSampleSize: liveAnswers,
         assignmentLatencyMsP95: observed.p95BridgeLatencyMs,
       },
       health: {
@@ -572,18 +784,82 @@ export class DialerV2Runtime {
       lockDistributed: this.deps.lock.distributed,
       shadowPassesSkippedForLock: this.shadowPassesSkippedForLock,
       shadowWritesRejected: this.shadowWritesRejected,
+      shadowScopesUnkeyable: this.shadowScopesUnkeyable,
       reconcilePassesSkippedForLock: this.reconcilePassesSkippedForLock,
-      sip: this.deps.sipRegistry.metrics(),
+      sip: {
+        resolved: this.registrationsResolved,
+        quarantined: this.registrationsQuarantined,
+        outOfOrder: this.registrationsOutOfOrder,
+        forgedTenant: this.registrationsForgedTenant,
+      },
       registrationsResolved: this.registrationsResolved,
       registrationsQuarantined: this.registrationsQuarantined,
       registrationsForgedTenant: this.registrationsForgedTenant,
+      registrationsOutOfOrder: this.registrationsOutOfOrder,
+      agentStaleWrites: this.agentStaleWrites,
+      agentWritesUnavailable: this.agentWritesUnavailable,
+      reconstructionComplete: this.reconstructionComplete,
       lastRegistrationRejection: this.lastRegistrationRejection,
     };
   }
 
+  /**
+   * Reconstruct shared state before this replica claims its evidence is
+   * trustworthy.
+   *
+   * Called once at startup, per tenant. Until it succeeds
+   * `reconstructionComplete` is false and health refuses to describe the shadow
+   * history as evidence: a replica that started with an empty map is not
+   * observing a quiet deployment, it is observing nothing.
+   */
+  async reconstruct(tenantIds: readonly string[]): Promise<{ agents: number; sip: number }> {
+    let agents = 0;
+    let sip = 0;
+    let complete = true;
+
+    for (const tenantId of tenantIds) {
+      try {
+        const records = await this.deps.agentStore.loadTenant<AgentRecord>(tenantId);
+        agents += this.deps.agents.hydrate(records);
+
+        const registrations = await this.deps.sip.loadAll(tenantId);
+        sip += registrations.length;
+
+        // Channel ownership is restored so an agent genuinely mid-call is not
+        // "corrected" to WRAP_UP on the first reconciliation pass after a
+        // deploy, which would drop the call from every capacity number at once.
+        const channels = await this.deps.channels.loadAll(tenantId);
+        for (const channel of channels) {
+          const record = this.deps.agents.get(channel.tenantId, channel.agentId);
+          if (record) record.currentChannelUuid = channel.channelUuid;
+        }
+      } catch (error) {
+        complete = false;
+        this.log({
+          msg: 'reconstruction failed',
+          tenantId,
+          error: (error as Error).message,
+        });
+      }
+    }
+
+    this.reconstructionComplete = complete;
+    this.log({ msg: 'reconstruction', agents, sip, complete });
+    return { agents, sip };
+  }
+
   /** Mint a server-issued session. Identity must already be verified. */
-  issueSession(tenantId: string, agentId: string, userId: string): AgentSession | null {
-    return this.deps.sessions.issue(tenantId, agentId, userId, this.now());
+  issueSession(
+    tenantId: string,
+    agentId: string,
+    userId: string
+  ): Promise<IssuedSessionResult | null> {
+    return this.deps.sessions.issue(tenantId, agentId, userId);
+  }
+
+  /** Revoke a session on logout. The caller holds the hash, never the token. */
+  revokeSession(tenantId: string, sessionTokenHash: string, reason: string): Promise<boolean> {
+    return this.deps.sessions.revoke(tenantId, sessionTokenHash, reason);
   }
 
   /**
@@ -604,7 +880,12 @@ export class DialerV2Runtime {
     tenantId: string;
     agentId: string;
     userId: string;
-    sessionId: string;
+    /**
+     * The bearer token, read server-side from an HttpOnly cookie by the API.
+     *
+     * Never present in a browser-visible request body and never echoed back.
+     */
+    sessionToken: string;
     sequence: number;
     uiState: string | null;
     preferredCampaignIds?: string[];
@@ -619,6 +900,8 @@ export class DialerV2Runtime {
     campaignIds: string[];
     extension?: string | null;
     extensionRejection?: string;
+    durable?: boolean;
+    writeOutcome?: AgentWriteOutcome;
   }> {
     const nowMs = this.now();
     const agents = this.deps.agents;
@@ -636,20 +919,22 @@ export class DialerV2Runtime {
         accepted,
         rejection,
         sequence: input.sequence,
-        // Never log a whole bearer token.
-        sessionIdPrefix: (input.sessionId ?? '').slice(0, 6),
+        // No part of the token appears here. A six-character prefix of a
+        // base64url token is 36 bits of the credential written to durable
+        // storage on every single heartbeat, which is both a real reduction in
+        // the search space and a value that ends up wherever logs are shipped.
+        // The agent id already identifies the session's subject.
         browserClaimedSip: input.browserClaimsSipRegistered === true,
         freeswitchSip,
         countedAsCapacity,
       });
     };
 
-    const validation = this.deps.sessions.validate(
-      input.sessionId,
+    const validation = await this.deps.sessions.validate(
+      input.sessionToken,
       input.tenantId,
       input.agentId,
-      input.sequence,
-      nowMs
+      input.sequence
     );
 
     if (!validation.ok || !validation.session) {
@@ -681,8 +966,10 @@ export class DialerV2Runtime {
       };
     }
 
-    // Liveness is recorded against the SERVER-issued session id.
-    agents.heartbeat(input.tenantId, input.agentId, session.sessionId, nowMs);
+    // Liveness is recorded against the token HASH, not the token. The hash is a
+    // stable per-session identifier that is safe to hold in memory and safe to
+    // compare, and the duplicate-tab check needs nothing more than that.
+    agents.heartbeat(input.tenantId, input.agentId, session.sessionTokenHash, nowMs);
 
     // Extension: resolved server-side, never taken from the browser and never
     // assumed to equal the agent id. Until this resolves, `record.extension` is
@@ -692,9 +979,10 @@ export class DialerV2Runtime {
     record.extension = extension.ok ? extension.binding.extension : null;
     if (extension.ok) record.maxConcurrentCalls = extension.binding.maxConcurrentCalls;
 
-    // SIP registration: FreeSWITCH is the authority. The browser's claim is
-    // recorded in the audit trail so a disagreement is visible.
-    const sipRegistered = this.deps.sipRegistry.isRegistered(input.tenantId, record.extension);
+    // SIP registration: FreeSWITCH is the authority, read from shared state so
+    // a registration seen by another replica still counts. The browser's claim
+    // is recorded in the audit trail so a disagreement is visible.
+    const sipRegistered = await this.deps.sip.isRegistered(input.tenantId, input.agentId);
     agents.setSipRegistration(input.tenantId, input.agentId, sipRegistered, nowMs);
 
     // Campaign and queue membership: resolved server-side, narrowed only.
@@ -707,14 +995,30 @@ export class DialerV2Runtime {
     record.queueIds = assignment.queueIds;
     record.lastSequence = input.sequence;
 
-    // Call id and channel UUID come from observed telephony, never the browser.
-    const ownedChannel = this.channelOwnedBy(input.tenantId, input.agentId);
-    record.currentChannelUuid = ownedChannel;
-    if (ownedChannel === null) record.currentCallId = null;
+    // Call id and channel UUID come from observed telephony, never the browser,
+    // and the lookup requires BOTH ids — see channelOwnedBy.
+    const owned = this.collector.channelOwnedBy(input.tenantId, input.agentId);
+    record.currentChannelUuid = owned?.channelUuid ?? null;
+    record.currentCallId = owned?.callId ?? null;
+    if (owned) {
+      // Persisted so a restarting replica can tell "this agent has no channel"
+      // apart from "I have not observed this agent's channel yet".
+      await this.deps.channels.claim(
+        input.tenantId,
+        input.agentId,
+        owned.channelUuid,
+        owned.callId
+      );
+    }
 
     // An older session may still beat, but must not be counted as capacity —
-    // two tabs both claiming AVAILABLE would double-count the agent.
-    const newest = this.deps.sessions.isNewestForAgent(session);
+    // two tabs both claiming AVAILABLE would double-count the agent. Across
+    // replicas this is only answerable from shared state.
+    const newest = await this.deps.sessions.isNewestForAgent(
+      input.tenantId,
+      input.agentId,
+      session.sessionTokenHash
+    );
 
     if (input.uiState === 'AVAILABLE' && newest) {
       agents.transition(input.tenantId, input.agentId, AgentState.AVAILABLE, nowMs);
@@ -722,8 +1026,15 @@ export class DialerV2Runtime {
       agents.transition(input.tenantId, input.agentId, AgentState.PAUSED, nowMs);
     }
 
+    // Everything above mutated the CACHE. Nothing is true across the deployment
+    // until the shared record accepts it, and a refused write must not leave
+    // this replica believing a transition landed.
+    const written = await this.persistAgent(input.tenantId, input.agentId);
+    const durable = written === AgentWriteOutcome.SAVED;
+
     const after = agents.get(input.tenantId, input.agentId);
-    const countedAsCapacity = after?.state === AgentState.AVAILABLE && sipRegistered && newest;
+    const countedAsCapacity =
+      durable && after?.state === AgentState.AVAILABLE && sipRegistered && newest;
 
     audit(true, undefined, countedAsCapacity, sipRegistered);
 
@@ -735,16 +1046,10 @@ export class DialerV2Runtime {
       campaignIds: assignment.campaignIds,
       extension: record.extension,
       extensionRejection: extension.ok ? undefined : extension.rejection,
+      // A heartbeat whose state could not be shared is reported as such. The
+      // agent is not counted as capacity, and the caller can say why.
+      durable,
+      writeOutcome: written,
     };
-  }
-
-  /** Channel currently owned by this agent, from observed events only. */
-  private channelOwnedBy(tenantId: string, agentId: string): string | null {
-    const live = this.collector.liveChannelUuids();
-    for (const [uuid, owner] of this.collector.channelOwners()) {
-      if (owner === agentId && live.has(uuid)) return uuid;
-    }
-    void tenantId;
-    return null;
   }
 }
