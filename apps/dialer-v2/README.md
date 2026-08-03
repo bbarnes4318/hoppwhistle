@@ -29,6 +29,53 @@ authoritative agent state, SIP registration tracking ordered by FreeSWITCH event
 rolling per-campaign observations, database-backed extension and campaign-assignment
 resolution, and shadow pacing that records what the dialer _would_ have done.
 
+## Building
+
+`prisma generate` must run before the build, and it is not optional.
+
+```bash
+pnpm install --frozen-lockfile
+pnpm --filter @hopwhistle/api exec prisma generate
+pnpm --filter @hopwhistle/dialer-v2 build
+```
+
+`@prisma/client` is a declared production dependency of this package and tsup
+leaves it external, so the artifact loads it from `node_modules` at runtime
+instead of carrying an inlined copy. That copy has to be there, and it only
+exists after generation — `@prisma/client/default.js` re-exports
+`.prisma/client/default`, which is an output directory rather than a package.
+
+Skipping generation produces:
+
+```text
+Could not resolve ".prisma/client/default"
+```
+
+Externalizing is the right call rather than a way around that error. The
+generated client is determined by the deployment's schema and engine binaries,
+so an inlined snapshot would drift from the schema at the next migration and
+would bake engine paths resolved on the build machine into an image with a
+different libc. A client that is missing at runtime fails startup and readiness
+with a named, credential-free error rather than presenting as "database
+unreachable".
+
+The `Dockerfile` runs generation in the builder stage and copies `node_modules`
+into the runner, so `@prisma/client` and the generated `.prisma/client` sit
+beside the artifact.
+
+### Smoke-testing what was built
+
+```bash
+node apps/dialer-v2/scripts/smoke.mjs --mode test --allow-fail freeswitch_esl,redis,postgres
+```
+
+Starts `dist/index.js` with `node` — not `tsx`, not Vitest, not the TypeScript
+source — checks `/health/live`, inspects `/health/ready` check by check, and
+terminates on `SIGTERM`. Readiness is asserted per check rather than as a single
+boolean, because the production run deliberately expects some checks to fail;
+accepting any failure would pass just as happily with a missing Prisma client or
+memory-backed sessions.
+
 ## Running
 
 ```bash
