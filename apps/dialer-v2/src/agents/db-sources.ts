@@ -46,6 +46,8 @@ export interface DialerV2Db {
       where: Record<string, unknown>;
       select: Record<string, unknown>;
       orderBy?: Record<string, unknown> | Array<Record<string, unknown>>;
+      /** Used by the schema probe to prove the relation without reading rows. */
+      take?: number;
     }): Promise<Array<Record<string, unknown>>>;
   };
 }
@@ -147,6 +149,25 @@ export interface DatabaseAssignmentSourceOptions {
   db: DialerV2Db;
   /** Reported through health so a gap is visible rather than implied. */
   onUnavailable?: (reason: AssignmentUnavailableReason, detail: string) => void;
+  /**
+   * How every lookup ended, including the successful ones.
+   *
+   * `onUnavailable` alone cannot drive capability health, because it only fires
+   * on failure — silence from it means either "everything is fine" or "nothing
+   * has been tried yet", and health has to tell those apart. This fires on every
+   * path, so an absence of events is unambiguous.
+   */
+  onLookup?: (outcome: AssignmentLookupResult) => void;
+}
+
+/** How a single `resolve` ended, from the perspective of capability health. */
+export enum AssignmentLookupResult {
+  /** The queries ran. Zero campaigns is a success — the agent may have no work. */
+  SUCCESS = 'success',
+  /** `campaign_agents` is absent. The migration has not been applied here. */
+  SCHEMA_MISSING = 'schema_missing',
+  /** The query errored for some other reason. */
+  FAILED = 'failed',
 }
 
 /**
@@ -189,12 +210,19 @@ export class DatabaseAssignmentSource implements AssignmentSource {
         AssignmentUnavailableReason.LOOKUP_FAILED,
         (error as Error).message
       );
+      this.options.onLookup?.(AssignmentLookupResult.FAILED);
       return null;
     }
 
     // An unknown, disabled, or cross-tenant user resolves to null, which the
-    // AssignmentResolver already treats as no capacity.
-    if (users.length !== 1) return null;
+    // AssignmentResolver already treats as no capacity. The lookup itself
+    // succeeded though — a cross-tenant request being correctly refused is the
+    // source working, not the source failing, and reporting it as a failure
+    // would let one bad request mark the whole capability unhealthy.
+    if (users.length !== 1) {
+      this.options.onLookup?.(AssignmentLookupResult.SUCCESS);
+      return null;
+    }
 
     try {
       const rows = await this.options.db.campaignAgent.findMany({
@@ -219,6 +247,7 @@ export class DatabaseAssignmentSource implements AssignmentSource {
         }
       }
 
+      this.options.onLookup?.(AssignmentLookupResult.SUCCESS);
       return {
         tenantId,
         agentId,
@@ -239,6 +268,9 @@ export class DatabaseAssignmentSource implements AssignmentSource {
           ? AssignmentUnavailableReason.NO_SCHEMA_SUPPORT
           : AssignmentUnavailableReason.LOOKUP_FAILED,
         detail
+      );
+      this.options.onLookup?.(
+        missing ? AssignmentLookupResult.SCHEMA_MISSING : AssignmentLookupResult.FAILED
       );
       return null;
     }
