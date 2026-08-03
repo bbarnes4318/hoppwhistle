@@ -106,6 +106,22 @@ terminal status. There is no ESL event handler in this worker that advances a
 lead to `CONTACTED`, `QUALIFIED`, `CONVERTED`, or `LOST`. A successfully
 originated lead would remain `DIALING` permanently.
 
+The originate hands off with `&socket(...)` to the FlowEngine, so it is worth
+asking whether something downstream closes the loop. It does not. Every writer of
+`leads.status` in the repository is:
+
+| Writer                                | Writes                             | Reached?                                                         |
+| ------------------------------------- | ---------------------------------- | ---------------------------------------------------------------- |
+| `dialer-worker.ts:273`                | `DIALING`                          | yes — and throws                                                 |
+| `dialer-worker.ts` revert path        | `NEW`                              | only on origination failure                                      |
+| `autodialer.ts:91`                    | `CONTACTED`                        | no — `dialer.start()` is commented out                           |
+| `fronter-bot.ts`                      | `IN_CALL`, `TRANSFERRED`, `FAILED` | yes — and all three are invalid, inside a swallowing `try/catch` |
+| `lead-service.ts:195` `markContacted` | `CONTACTED`                        | **no callers anywhere**                                          |
+
+`markContacted` is the one function that would legitimately advance a dialed
+lead, and nothing calls it. Whoever implements the fix should wire it rather
+than write a fourth status-writing path.
+
 ### 4. Persisted before origination, after, or only during reservation?
 
 **Before origination**, as a reservation. This matters: the state does not mean
