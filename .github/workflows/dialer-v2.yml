@@ -467,6 +467,11 @@ jobs:
       # A throwaway service container created and destroyed with this job.
       # No staging or production database is reachable from here.
       DATABASE_URL: postgresql://dialer:dialer@127.0.0.1:5432/migration_check?schema=public
+      # The same database without Prisma's `?schema=` parameter. libpq parses the
+      # query string strictly and rejects it outright — `invalid URI query
+      # parameter: "schema"` — so psql needs its own URL rather than the one
+      # Prisma reads.
+      PSQL_URL: postgresql://dialer:dialer@127.0.0.1:5432/migration_check
 
     steps:
       - uses: actions/checkout@v4
@@ -550,7 +555,7 @@ jobs:
       - name: Rebuild the base state from the schema
         run: |
           set -euo pipefail
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+          psql "$PSQL_URL" -v ON_ERROR_STOP=1 \
             -c 'DROP SCHEMA public CASCADE' -c 'CREATE SCHEMA public'
           pnpm --filter @hopwhistle/api exec prisma db push --skip-generate --accept-data-loss
 
@@ -562,7 +567,7 @@ jobs:
         run: |
           set -euo pipefail
           DIR=apps/api/prisma/migrations/20260802000000_add_campaign_agent_assignments
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$DIR/down.sql"
+          psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f "$DIR/down.sql"
           node -e "
             const { Client } = require('pg');
             (async () => {
@@ -580,7 +585,7 @@ jobs:
         run: |
           set -euo pipefail
           DIR=apps/api/prisma/migrations/20260802000000_add_campaign_agent_assignments
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$DIR/migration.sql"
+          psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f "$DIR/migration.sql"
 
       - name: The objects the migration claims to create exist
         run: |
@@ -654,7 +659,7 @@ jobs:
         run: |
           set -euo pipefail
           DIR=apps/api/prisma/migrations/20260802000000_add_campaign_agent_assignments
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$DIR/down.sql"
+          psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f "$DIR/down.sql"
 
       - name: The rollback removed exactly what it added, and nothing else
         run: |
@@ -694,7 +699,7 @@ jobs:
         run: |
           set -euo pipefail
           DIR=apps/api/prisma/migrations/20260802000000_add_campaign_agent_assignments
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$DIR/migration.sql"
+          psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f "$DIR/migration.sql"
           node -e "
             const { Client } = require('pg');
             (async () => {
