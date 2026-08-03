@@ -28,6 +28,17 @@ on:
       - 'apps/web/tsconfig.dialer-v2.json'
       - 'apps/web/vitest.config.ts'
       - '.github/workflows/dialer-v2.yml'
+      # The required jobs execute these, so a change to one must re-run CI.
+      # Without them the kill-switch guard and the migration checks could be
+      # edited — or broken — with nothing running them.
+      - 'scripts/ci/**'
+      # The enum and the Hopper entrypoint are what the kill-switch guard reads.
+      # A change to either must re-evaluate it, and neither lives under a path
+      # this workflow otherwise watches.
+      - 'apps/api/prisma/schema.prisma'
+      - 'apps/api/prisma/migrations/**'
+      - 'apps/worker/src/index.ts'
+      - 'docs/dialer-v2/**'
       - '.gitignore'
   pull_request:
     paths:
@@ -41,6 +52,17 @@ on:
       - 'apps/web/tsconfig.dialer-v2.json'
       - 'apps/web/vitest.config.ts'
       - '.github/workflows/dialer-v2.yml'
+      # The required jobs execute these, so a change to one must re-run CI.
+      # Without them the kill-switch guard and the migration checks could be
+      # edited — or broken — with nothing running them.
+      - 'scripts/ci/**'
+      # The enum and the Hopper entrypoint are what the kill-switch guard reads.
+      # A change to either must re-evaluate it, and neither lives under a path
+      # this workflow otherwise watches.
+      - 'apps/api/prisma/schema.prisma'
+      - 'apps/api/prisma/migrations/**'
+      - 'apps/worker/src/index.ts'
+      - 'docs/dialer-v2/**'
       - '.gitignore'
 
 concurrency:
