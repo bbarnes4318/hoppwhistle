@@ -24,6 +24,7 @@
 import http from 'node:http';
 
 import { AgentState } from './agents/state.js';
+import { portWithDefault } from './config/env.js';
 import { EnvFlagSource } from './config/flags.js';
 import {
   INTERNAL_AUTH_ERROR_BODY,
@@ -41,14 +42,55 @@ import {
 } from './runtime/composition.js';
 import { DialerV2Runtime, defaultRuntimeConfig } from './runtime/service.js';
 
-const PORT = Number(process.env.DIALER_V2_PORT) || 9092;
-
-const flagSource = new EnvFlagSource();
-const config = defaultRuntimeConfig();
-
 const log = (record: Record<string, unknown>): void => {
   process.stdout.write(`${JSON.stringify(record)}\n`);
 };
+
+/**
+ * A fault found while reading configuration, before composition is even
+ * attempted. Reported through readiness exactly like a composition failure.
+ */
+let startupFailure: string | null = null;
+
+/**
+ * Evaluate configuration without letting a bad value kill the process.
+ *
+ * Strict parsing means `defaultRuntimeConfig()`, the port, and the runtime mode
+ * can all now throw at module scope. Letting that propagate would abort before
+ * the HTTP server exists, so the container would crash-loop with the reason only
+ * in stdout and `/health/ready` never answering at all. The requirement is the
+ * opposite: stay up, serve liveness, and say through readiness precisely which
+ * variable is wrong.
+ *
+ * The first fault is kept rather than the last: it is the one that caused the
+ * fallbacks below it to be used, so it is the one worth acting on.
+ */
+function withoutCrashing<T>(work: () => T, fallback: T): T {
+  try {
+    return work();
+  } catch (error) {
+    startupFailure ??= (error as Error).message;
+    return fallback;
+  }
+}
+
+const PORT = withoutCrashing(() => portWithDefault(process.env, 'DIALER_V2_PORT', 9092), 9092);
+
+const flagSource = new EnvFlagSource();
+
+// The fallback is the same function over an empty environment: every safe
+// default, ESL ingestion off. A service that could not read its configuration
+// must not fall back to something more permissive than it was asked for.
+const config = withoutCrashing(
+  () => defaultRuntimeConfig(),
+  defaultRuntimeConfig({} as NodeJS.ProcessEnv)
+);
+
+/** `'unresolved'` when the mode could not be determined. Never guessed. */
+const MODE: RuntimeMode | 'unresolved' = withoutCrashing<RuntimeMode | 'unresolved'>(
+  () => readRuntimeMode(process.env),
+  'unresolved'
+);
 
 /** Identifies this replica in distributed locks. */
 const OWNER_ID = `${process.env.HOSTNAME ?? 'dialer-v2'}-${process.pid}`;
@@ -71,7 +113,7 @@ function json(res: http.ServerResponse, code: number, body: unknown): void {
 }
 
 async function currentSnapshot(): Promise<HealthSnapshot> {
-  const mode = readRuntimeMode(process.env);
+  const mode = MODE;
 
   if (!composition || !runtime) {
     // Composition failed. Report the truth: nothing is connected, nothing is
@@ -80,7 +122,7 @@ async function currentSnapshot(): Promise<HealthSnapshot> {
     return {
       eslConnected: false,
       eslDegraded: true,
-      eslDetail: compositionFailure ?? 'composition has not completed',
+      eslDetail: compositionFailure ?? startupFailure ?? 'composition has not completed',
       eslConsecutiveFailures: 0,
       redisConnected: false,
       postgresConnected: false,
@@ -469,9 +511,15 @@ function reconstructionTenants(): string[] {
 
 async function main(): Promise<void> {
   const flags = flagSource.get();
-  const mode = readRuntimeMode(process.env);
+  const mode = MODE;
 
   try {
+    // A configuration fault found at module scope is fatal to composition too —
+    // composing on top of fallback values would produce a service that runs on
+    // settings nobody wrote. Surfaced here so readiness reports the variable
+    // rather than a downstream symptom of it.
+    if (startupFailure) throw new Error(startupFailure);
+
     composition = await composeRuntime(process.env, {
       ownerId: OWNER_ID,
       shadowIntervalMs: config.shadowIntervalMs,
@@ -524,7 +572,8 @@ async function main(): Promise<void> {
       shadowEnabled: flags.shadowEnabled,
       eslIngestEnabled: config.esl.enabled,
       emergencyStop: flags.emergencyStop,
-      strictBackends: mode === RuntimeMode.STAGING || mode === RuntimeMode.PRODUCTION,
+      strictBackends:
+        mode === RuntimeMode.STAGING || mode === RuntimeMode.PRODUCTION || mode === 'unresolved',
     });
   });
 

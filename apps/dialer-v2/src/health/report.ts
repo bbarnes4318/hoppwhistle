@@ -50,8 +50,14 @@ export interface HealthSnapshot {
   /**
    * Deployment mode. `staging` and `production` refuse readiness on any
    * single-instance backend; `development` and `test` report but tolerate them.
+   *
+   * `unresolved` means `DIALER_V2_RUNTIME_MODE` was absent or not an exact match
+   * for a known mode, so the service never learned which rules apply to it. It is
+   * treated as strict: a process that does not know whether it is production must
+   * not answer ready, and the previous behaviour — quietly resolving an
+   * unrecognised value to `test` — is what let a typo disable every guard.
    */
-  mode: 'test' | 'development' | 'staging' | 'production';
+  mode: 'test' | 'development' | 'staging' | 'production' | 'unresolved';
 
   /**
    * Where each capability's state actually lives.
@@ -247,8 +253,21 @@ export function buildHealthReport(flags: DialerV2Flags, snap: HealthSnapshot): H
   // Each is reported separately because each fails separately. A deployment can
   // have a healthy Redis connection, distributed locks, and in-memory sessions,
   // and only the third of those is why agents are being logged out at random.
-  const strict = snap.mode === 'staging' || snap.mode === 'production';
+  // `unresolved` is strict. A process that could not determine its own mode has
+  // no basis for tolerating a single-instance backend, and the tolerant reading
+  // is the one that would let a mistyped mode pass as healthy.
+  const strict =
+    snap.mode === 'staging' || snap.mode === 'production' || snap.mode === 'unresolved';
   const degraded: CheckStatus = strict ? 'fail' : 'warn';
+
+  checks.push({
+    name: 'runtime_mode',
+    status: snap.mode === 'unresolved' ? 'fail' : 'pass',
+    detail:
+      snap.mode === 'unresolved'
+        ? 'DIALER_V2_RUNTIME_MODE is unset or not an exact match for a known mode; this service does not know which rules apply to it'
+        : undefined,
+  });
 
   const backendCheck = (name: string, shared: boolean, detail: string): void => {
     checks.push({

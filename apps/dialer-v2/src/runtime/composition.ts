@@ -38,9 +38,10 @@
 
 import { AssignmentResolver, StaticAssignmentSource } from '../agents/assignments.js';
 import {
+  AssignmentLookupResult,
+  AssignmentUnavailableReason,
   DatabaseAssignmentSource,
   DatabaseExtensionSource,
-  type DialerV2Db,
 } from '../agents/db-sources.js';
 import {
   ExtensionResolver,
@@ -49,6 +50,7 @@ import {
 } from '../agents/extension-resolver.js';
 import { AgentStateService } from '../agents/service.js';
 import { RedisAgentSessionStore } from '../agents/session-store.js';
+import { readPositiveInt } from '../config/env.js';
 import { RedisAgentStateStore } from '../stores/agent-state-store.js';
 import { RedisChannelOwnershipStore } from '../stores/channel-ownership.js';
 import { RedisObservationStore, resolveWindow } from '../stores/observation-store.js';
@@ -61,6 +63,11 @@ import {
 import { RedisSipRegistrationStore } from '../stores/sip-store.js';
 
 import {
+  AssignmentHealth,
+  AssignmentLookupOutcome,
+  type AssignmentHealthSnapshot,
+} from './assignment-health.js';
+import {
   MemoryAgentSessionStore,
   MemoryAgentStateRepository,
   MemoryChannelOwnershipRepository,
@@ -72,6 +79,28 @@ import {
   type ChannelOwnershipRepository,
   type SipRegistrationRepository,
 } from './ports.js';
+import {
+  connectPostgres,
+  describePostgresFailure,
+  PostgresHealthMonitor,
+  DEFAULT_PROBE_INTERVAL_MS,
+  type PostgresConnectResult,
+  type PostgresConnection,
+  type PostgresFailure,
+  type PostgresHealthSnapshot,
+} from './postgres.js';
+
+// Re-exported so callers and tests have one place to import the runtime's
+// vocabulary from, rather than reaching into the modules behind it.
+export {
+  connectPostgres,
+  PostgresFailure,
+  describePostgresFailure,
+  type PostgresConnection,
+  type PostgresConnectResult,
+  type PostgresHealthSnapshot,
+} from './postgres.js';
+export { AssignmentCapability, type AssignmentHealthSnapshot } from './assignment-health.js';
 
 export enum RuntimeMode {
   /** Unit tests. Everything in memory, nothing shared, no network. */
@@ -87,37 +116,93 @@ export function requiresSharedState(mode: RuntimeMode): boolean {
   return mode === RuntimeMode.STAGING || mode === RuntimeMode.PRODUCTION;
 }
 
-export function readRuntimeMode(env: NodeJS.ProcessEnv): RuntimeMode {
-  const raw = (env.DIALER_V2_RUNTIME_MODE ?? '').trim().toLowerCase();
-  const known = Object.values(RuntimeMode) as string[];
-  if (known.includes(raw)) return raw as RuntimeMode;
-  // An unset or unrecognised mode is TEST, the most restrictive option: it
-  // shares nothing and reaches nothing. Defaulting to PRODUCTION would make a
-  // typo in a deployment variable silently arm the real backends; defaulting to
-  // DEVELOPMENT would make it silently accept memory in a real deployment.
-  return RuntimeMode.TEST;
+/**
+ * Is a recognised test runner driving this process?
+ *
+ * Deliberately does NOT consult `NODE_ENV`. `NODE_ENV=test` is set by CI images,
+ * task runners, shell profiles and Dockerfiles that have nothing to do with a
+ * test process, and treating it as proof would hand the one mode that accepts
+ * in-memory state to any environment that happened to be labelled that way.
+ * These variables are injected by the runner itself and mean only one thing.
+ */
+export function isTestRunnerEnvironment(env: NodeJS.ProcessEnv): boolean {
+  return (
+    env.VITEST === 'true' ||
+    env.VITEST_WORKER_ID !== undefined ||
+    env.NODE_TEST_CONTEXT !== undefined
+  );
 }
 
 /**
- * Read an optional integer, distinguishing "not set" from "set to nonsense".
+ * Resolve the runtime mode, refusing anything that is not exact.
  *
- * An unset variable returns undefined so the caller's default applies. A value
- * that is present but unparseable returns NaN, which the validator then rejects
- * — silently treating `"abc"` as absent would hide a typo in a deployment.
+ * ── Why the previous default was unsafe ──────────────────────────────────────
+ *
+ * This used to lowercase the value and fall back to `TEST` for anything it did
+ * not recognise. `TEST` sounds like the cautious choice, and as a *destination*
+ * it is — it shares nothing and reaches nothing. As a *fallback* it is the
+ * dangerous one, because of what it does to the mode that follows it:
+ *
+ *     DIALER_V2_RUNTIME_MODE=prodution   →   TEST
+ *
+ * `TEST` is precisely the mode where memory and static sources are permitted, so
+ * a single transposed letter turns off every guard that staging and production
+ * exist to enforce. The service then starts cleanly, reports healthy, resolves
+ * agents from developer fixtures, and records per-replica shadow decisions that
+ * read exactly like real ones. There is no error and nothing to notice.
+ *
+ * A typo must not select a mode. It must stop the process. Every mode is now
+ * explicit, and an unrecognised value throws.
+ *
+ * ── Why the match is case-sensitive ──────────────────────────────────────────
+ *
+ * Surrounding whitespace is normalized, because a trailing newline out of a
+ * secrets file is a transport artefact rather than a different value. Case is
+ * not: `PRODUCTION` is not `production`, and accepting near-misses is how a
+ * validator drifts back into guessing what was meant.
  */
-function readOptionalInt(env: NodeJS.ProcessEnv, name: string): number | undefined {
-  const raw = env[name];
-  if (raw === undefined || raw.trim() === '') return undefined;
-  return Number.parseInt(raw, 10);
+export function readRuntimeMode(env: NodeJS.ProcessEnv): RuntimeMode {
+  const raw = env.DIALER_V2_RUNTIME_MODE;
+
+  if (raw === undefined || raw.trim() === '') {
+    if (isTestRunnerEnvironment(env)) return RuntimeMode.TEST;
+    throw new CompositionError(
+      'unresolved',
+      'DIALER_V2_RUNTIME_MODE must be set',
+      `expected exactly one of ${ACCEPTED_MODES}; refusing to infer a mode, because inferring one wrongly selects which backends are permitted`
+    );
+  }
+
+  const normalized = raw.trim();
+  if (!(Object.values(RuntimeMode) as string[]).includes(normalized)) {
+    // Echoing this one value is safe and useful: the variable holds a mode name
+    // from a published set, never a credential, and seeing `prodution` back is
+    // what makes the typo obvious. The numeric parser in config/env.ts takes the
+    // opposite rule, because it is applied to arbitrary variables.
+    throw new CompositionError(
+      'unresolved',
+      'DIALER_V2_RUNTIME_MODE is not a known mode',
+      `got "${normalized}", expected exactly one of ${ACCEPTED_MODES}`
+    );
+  }
+
+  return normalized as RuntimeMode;
 }
+
+const ACCEPTED_MODES = (Object.values(RuntimeMode) as string[]).map(m => `"${m}"`).join(', ');
 
 export class CompositionError extends Error {
   constructor(
-    readonly mode: RuntimeMode,
+    /** `'unresolved'` when the failure is the mode itself. */
+    readonly mode: RuntimeMode | 'unresolved',
     readonly requirement: string,
     detail: string
   ) {
-    super(`Dialer V2 cannot start in ${mode} mode: ${requirement} — ${detail}`);
+    super(
+      mode === 'unresolved'
+        ? `Dialer V2 cannot start: ${requirement} — ${detail}`
+        : `Dialer V2 cannot start in ${mode} mode: ${requirement} — ${detail}`
+    );
     this.name = 'CompositionError';
   }
 }
@@ -157,17 +242,21 @@ export interface RuntimeComposition {
   assignments: AssignmentResolver;
   backends: BackendReport;
   redisHealthy(): boolean;
+  /** Whether PostgreSQL is usable *now*, not whether it once was. */
   postgresHealthy(): boolean;
-  /** True once assignment resolution can name campaigns for an agent. */
+  /** Full PostgreSQL health detail, or null when no database is configured. */
+  postgresHealth(): PostgresHealthSnapshot | null;
+  assignmentHealth(): AssignmentHealthSnapshot;
+  /**
+   * Can campaign assignments be resolved authoritatively right now?
+   *
+   * Not "has an assigned agent ever been seen" — see `assignment-health.ts` for
+   * why those are different questions and why the old latch answered neither.
+   */
   assignmentsResolvable(): boolean;
+  /** Force a probe. Used by the outage tests to avoid waiting on the interval. */
+  probePostgresNow(): Promise<boolean>;
   close(): Promise<void>;
-}
-
-/** A live PostgreSQL handle. Narrow on purpose — this service only reads. */
-export interface PostgresConnection {
-  db: DialerV2Db;
-  isHealthy(): boolean;
-  disconnect(): Promise<void>;
 }
 
 export interface ComposeOptions {
@@ -176,44 +265,7 @@ export interface ComposeOptions {
   log?: (record: Record<string, unknown>) => void;
   /** Injected by tests so composition can be exercised without real servers. */
   connectRedisImpl?: typeof connectRedis;
-  connectPostgresImpl?: (url: string) => Promise<PostgresConnection | null>;
-}
-
-/**
- * Connect to PostgreSQL through the API's generated Prisma client.
- *
- * Imported lazily so the module graph does not require `@prisma/client` in a
- * mode that never touches a database.
- */
-export async function connectPostgres(url: string): Promise<PostgresConnection | null> {
-  try {
-    const mod = (await import('@prisma/client')) as unknown as {
-      PrismaClient: new (opts: Record<string, unknown>) => DialerV2Db & {
-        $queryRawUnsafe(sql: string): Promise<unknown>;
-        $disconnect(): Promise<void>;
-      };
-    };
-
-    const client = new mod.PrismaClient({ datasources: { db: { url } } });
-
-    // A connection that has not executed anything has not proved anything. This
-    // is the difference between "the client object exists" and "this database
-    // is reachable and has the table extension resolution reads".
-    await client.$queryRawUnsafe('SELECT 1 FROM users LIMIT 1');
-
-    let healthy = true;
-    return {
-      db: client,
-      isHealthy: () => healthy,
-      disconnect: async () => {
-        healthy = false;
-        await client.$disconnect();
-      },
-    };
-  } catch {
-    // The caller decides whether this is fatal. It is, in staging and production.
-    return null;
-  }
+  connectPostgresImpl?: (url: string) => Promise<PostgresConnectResult>;
 }
 
 /**
@@ -279,15 +331,44 @@ export async function composeRuntime(
   // ── PostgreSQL ───────────────────────────────────────────────────────────
   const databaseUrl = env.DATABASE_URL;
   let postgres: PostgresConnection | null = null;
+  let postgresFailure: PostgresFailure | null = null;
 
-  if (databaseUrl) postgres = await connectPostgresFn(databaseUrl);
+  if (databaseUrl) {
+    const result = await connectPostgresFn(databaseUrl);
+    if (result.ok) {
+      postgres = result.connection;
+    } else {
+      postgresFailure = result.category;
+      // The category, not the underlying message. Prisma embeds the datasource
+      // URL in its errors and the URL carries the password.
+      log({ msg: 'postgres unavailable', category: result.category });
+    }
+  }
   if (strict && !postgres) {
     throw new CompositionError(
       mode,
       'DATABASE_URL must point at a reachable PostgreSQL',
-      databaseUrl ? 'connection failed or the users table is absent' : 'DATABASE_URL is not set'
+      postgresFailure ? describePostgresFailure(postgresFailure) : 'DATABASE_URL is not set'
     );
   }
+
+  // Health that keeps asking, rather than a flag set once at startup. Created
+  // as soon as there is a connection to probe, and started below only after
+  // composition has otherwise succeeded — a monitor left running behind a failed
+  // composition would keep a timer alive on a process that is refusing to serve.
+  const probeIntervalMs =
+    readPositiveInt(env, 'DIALER_V2_POSTGRES_PROBE_INTERVAL_MS') ?? DEFAULT_PROBE_INTERVAL_MS;
+
+  const postgresMonitor: PostgresHealthMonitor | null = postgres
+    ? new PostgresHealthMonitor({
+        probe: () => postgres.probe(),
+        intervalMs: probeIntervalMs,
+        onTransition: (connected, category) => log({ msg: 'postgres health', connected, category }),
+      })
+    : null;
+  // The startup probe already ran inside connectPostgres. Recording it rather
+  // than re-running it keeps startup to one round trip.
+  postgresMonitor?.markInitiallyConnected();
 
   // The SIP realm is deployment configuration — there is no per-user domain
   // column to read — so it has to be supplied and validated rather than
@@ -307,7 +388,14 @@ export async function composeRuntime(
   let extensionBackend: 'database' | 'static';
 
   if (postgres && sipDomain.length > 0) {
-    extensionSource = new DatabaseExtensionSource({ db: postgres.db, sipDomain });
+    // Wrapped so every lookup reports into health. Real traffic is better
+    // evidence than a probe — it finds an outage the moment it happens, where a
+    // ten-second probe finds it up to ten seconds late — and a database-backed
+    // lookup that throws must grant no capacity rather than resolve to nothing.
+    extensionSource = reportingExtensionSource(
+      new DatabaseExtensionSource({ db: postgres.db, sipDomain }),
+      postgresMonitor
+    );
     extensionBackend = 'database';
   } else if (strict) {
     throw new CompositionError(
@@ -323,8 +411,39 @@ export async function composeRuntime(
   let assignmentSource;
   let assignmentBackend: 'database' | 'static';
 
+  // Health is created before the source so the source can report into it from
+  // its very first lookup. `databaseReachable` is a live read of the monitor,
+  // not a snapshot: capability has to fall the moment the database does.
+  const assignmentHealth = new AssignmentHealth({
+    configured: postgres !== null,
+    databaseReachable: () => postgresMonitor?.healthy() ?? false,
+  });
+
   if (postgres) {
-    assignmentSource = new DatabaseAssignmentSource({ db: postgres.db });
+    assignmentSource = new DatabaseAssignmentSource({
+      db: postgres.db,
+      onUnavailable: (reason, detail) => {
+        // The reason, never the detail: Prisma messages carry the datasource URL.
+        log({ msg: 'assignment source unavailable', reason });
+        // A query that errored is first-hand evidence the database is unusable,
+        // and better evidence than a probe that has not run yet. A missing table
+        // is not — the database answered perfectly well, it simply lacks the
+        // migration — so that case deliberately leaves connectivity alone.
+        if (reason === AssignmentUnavailableReason.LOOKUP_FAILED) {
+          postgresMonitor?.recordQueryFailure(new Error(detail));
+        }
+      },
+      onLookup: outcome => {
+        assignmentHealth.recordLookup(
+          outcome === AssignmentLookupResult.SUCCESS
+            ? AssignmentLookupOutcome.SUCCESS
+            : outcome === AssignmentLookupResult.SCHEMA_MISSING
+              ? AssignmentLookupOutcome.SCHEMA_MISSING
+              : AssignmentLookupOutcome.FAILED
+        );
+        postgresMonitor?.recordAssignmentLookup(outcome === AssignmentLookupResult.SUCCESS);
+      },
+    });
     assignmentBackend = 'database';
   } else if (strict) {
     throw new CompositionError(
@@ -368,8 +487,8 @@ export async function composeRuntime(
   let window: { bucketMs: number; bucketCount: number };
   try {
     window = resolveWindow(
-      readOptionalInt(env, 'DIALER_V2_OBSERVATION_BUCKET_MS'),
-      readOptionalInt(env, 'DIALER_V2_OBSERVATION_BUCKET_COUNT')
+      readPositiveInt(env, 'DIALER_V2_OBSERVATION_BUCKET_MS'),
+      readPositiveInt(env, 'DIALER_V2_OBSERVATION_BUCKET_COUNT')
     );
   } catch (error) {
     throw new CompositionError(
@@ -426,16 +545,21 @@ export async function composeRuntime(
   // a startup log is a credential in every log aggregator downstream.
   log({ msg: 'dialer-v2 composition', mode, ...backends });
 
-  let assignmentsWork = false;
-  const assignments = new AssignmentResolver({
-    source: {
-      resolve: async (tenantId: string, agentId: string) => {
-        const result = await assignmentSource.resolve(tenantId, agentId);
-        if (result && result.campaignIds.length > 0) assignmentsWork = true;
-        return result;
-      },
-    },
-  });
+  // Prove the assignment table exists now, rather than waiting for an agent to
+  // log in and reveal it. A migration that was never applied here is a startup
+  // fact; discovering it at the first login means capability reads "unknown"
+  // through the whole window in which somebody could still have fixed it.
+  if (postgres) {
+    const schemaPresent = await assignmentHealth.probeSchema(postgres.db);
+    if (!schemaPresent) {
+      log({ msg: 'assignment schema probe failed', capability: assignmentHealth.capability() });
+    }
+  }
+
+  const assignments = new AssignmentResolver({ source: assignmentSource });
+
+  // Started only now — after every refusal above has had its chance to throw.
+  postgresMonitor?.start();
 
   return {
     mode,
@@ -450,12 +574,47 @@ export async function composeRuntime(
     assignments,
     backends,
     redisHealthy: () => stores.redisHealthy(),
-    postgresHealthy: () => postgres?.isHealthy() ?? false,
-    assignmentsResolvable: () => assignmentsWork,
+    postgresHealthy: () => postgresMonitor?.healthy() ?? false,
+    postgresHealth: () => postgresMonitor?.snapshot() ?? null,
+    assignmentHealth: () => assignmentHealth.snapshot(),
+    assignmentsResolvable: () => assignmentHealth.resolvable(),
+    probePostgresNow: async () => (await postgresMonitor?.probeNow()) ?? false,
     close: async () => {
+      postgresMonitor?.stop();
       await redis?.disconnect();
       await postgres?.disconnect();
     },
+  };
+}
+
+/**
+ * Report every extension lookup into PostgreSQL health.
+ *
+ * The failure is rethrown rather than swallowed into an empty result. An empty
+ * result means "this agent has no extension", which the resolver correctly
+ * treats as no capacity — but so does a thrown error, and collapsing them would
+ * make a database outage look like an unconfigured agent for as long as it
+ * lasted. The caller sees the failure; health records it.
+ */
+function reportingExtensionSource(
+  inner: ExtensionSource,
+  monitor: PostgresHealthMonitor | null
+): ExtensionSource {
+  const report = async <T>(work: Promise<T>): Promise<T> => {
+    try {
+      const result = await work;
+      monitor?.recordExtensionLookup(true);
+      return result;
+    } catch (error) {
+      monitor?.recordExtensionLookup(false);
+      monitor?.recordQueryFailure(error);
+      throw error;
+    }
+  };
+
+  return {
+    byAgent: (tenantId, agentId) => report(inner.byAgent(tenantId, agentId)),
+    bySipIdentity: (extension, sipDomain) => report(inner.bySipIdentity(extension, sipDomain)),
   };
 }
 

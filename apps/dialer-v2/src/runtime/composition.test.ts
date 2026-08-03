@@ -23,11 +23,14 @@ import type { DialerRedis, RedisConnection } from '../stores/provider.js';
 import { RedisSipRegistrationStore } from '../stores/sip-store.js';
 
 import {
+  AssignmentCapability,
   CompositionError,
   composeRuntime,
+  PostgresFailure,
   readRuntimeMode,
   RuntimeMode,
   type ComposeOptions,
+  type PostgresConnectResult,
 } from './composition.js';
 
 /** A Redis client that answers every command shape the stores use. */
@@ -57,15 +60,42 @@ function fakeRedisConnection(): RedisConnection {
   };
 }
 
-function fakePostgres() {
+type Rows = Array<Record<string, unknown>>;
+type FindMany = (args: { where: Record<string, unknown> }) => Promise<Rows>;
+
+function fakePostgres(
+  overrides: {
+    user?: FindMany;
+    campaignAgent?: FindMany;
+    probe?: () => Promise<void>;
+  } = {}
+): PostgresConnectResult {
   return {
-    db: {
-      user: { findMany: () => Promise.resolve([]) },
-      campaignAgent: { findMany: () => Promise.resolve([]) },
+    ok: true,
+    connection: {
+      db: {
+        user: { findMany: overrides.user ?? (() => Promise.resolve([])) },
+        campaignAgent: { findMany: overrides.campaignAgent ?? (() => Promise.resolve([])) },
+      },
+      probe: overrides.probe ?? (() => Promise.resolve()),
+      disconnect: () => Promise.resolve(),
     },
-    isHealthy: () => true,
-    disconnect: () => Promise.resolve(),
   };
+}
+
+/**
+ * Rows that honour the `where.tenantId` predicate.
+ *
+ * A fake that returns its fixture regardless of the predicate cannot be used to
+ * test tenant scoping — it would report the isolation working while the query
+ * that enforces it was being ignored. PostgreSQL applies the predicate; so does
+ * this.
+ */
+function tenantScoped(rows: Rows): FindMany {
+  return ({ where }) =>
+    Promise.resolve(
+      rows.filter(row => where.tenantId === undefined || row.tenantId === where.tenantId)
+    );
 }
 
 const OPTIONS: ComposeOptions = {
@@ -82,20 +112,66 @@ const PRODUCTION_ENV = {
   DIALER_V2_SIP_DOMAIN: 'sip.example.test',
 } as NodeJS.ProcessEnv;
 
-describe('the mode defaults to the most restrictive option', () => {
-  it('treats an unset mode as test, not production', () => {
-    // Defaulting to production would let a typo in a deployment variable
-    // silently arm the real backends; defaulting to development would let a
-    // real deployment silently accept memory.
-    expect(readRuntimeMode({} as NodeJS.ProcessEnv)).toBe(RuntimeMode.TEST);
-    expect(readRuntimeMode({ DIALER_V2_RUNTIME_MODE: 'prod' } as NodeJS.ProcessEnv)).toBe(
-      RuntimeMode.TEST
+describe('the mode is exact or the service refuses', () => {
+  /** An environment with no test-runner markers, whatever runs these tests. */
+  const deployment = (over: Record<string, string> = {}): NodeJS.ProcessEnv =>
+    ({ ...over }) as NodeJS.ProcessEnv;
+
+  it.each(['prod', 'prodution', 'stage', 'PRODUCTIONAL', 'PRODUCTION', 'Staging', 'unknown', 'x'])(
+    'refuses %o rather than silently choosing test',
+    value => {
+      // This is the whole point. Falling back to TEST sounds cautious, but TEST
+      // is the mode that PERMITS memory and static sources — so one transposed
+      // letter used to disable every guard staging and production enforce, and
+      // the service started clean and reported healthy on fixture data.
+      expect(() => readRuntimeMode(deployment({ DIALER_V2_RUNTIME_MODE: value }))).toThrow(
+        CompositionError
+      );
+    }
+  );
+
+  it('refuses an unset mode outside a test runner', () => {
+    expect(() => readRuntimeMode(deployment())).toThrow(CompositionError);
+    expect(() => readRuntimeMode(deployment())).toThrow(/must be set/);
+  });
+
+  it('refuses an empty mode outside a test runner', () => {
+    expect(() => readRuntimeMode(deployment({ DIALER_V2_RUNTIME_MODE: '   ' }))).toThrow(
+      CompositionError
+    );
+  });
+
+  it('accepts an unset mode only when a real test runner injected itself', () => {
+    // Vitest announces itself specifically. This is what lets the pure suites
+    // run without every one of them setting the variable by hand.
+    expect(readRuntimeMode(deployment({ VITEST: 'true' }))).toBe(RuntimeMode.TEST);
+    expect(readRuntimeMode(deployment({ VITEST_WORKER_ID: '1' }))).toBe(RuntimeMode.TEST);
+  });
+
+  it('does not accept NODE_ENV as proof of a test runner', () => {
+    // NODE_ENV=test is set by CI images, task runners and shell profiles that
+    // have nothing to do with a test process. Honouring it would hand the
+    // memory-permitting mode to any environment labelled that way.
+    expect(() => readRuntimeMode(deployment({ NODE_ENV: 'test' }))).toThrow(CompositionError);
+  });
+
+  it('normalizes surrounding whitespace but nothing else', () => {
+    // A trailing newline out of a secrets file is a transport artefact, not a
+    // different value. Case is a different value.
+    expect(readRuntimeMode(deployment({ DIALER_V2_RUNTIME_MODE: '  staging\n' }))).toBe(
+      RuntimeMode.STAGING
+    );
+  });
+
+  it('names the offending value so the typo is visible', () => {
+    expect(() => readRuntimeMode(deployment({ DIALER_V2_RUNTIME_MODE: 'prodution' }))).toThrow(
+      /prodution/
     );
   });
 
   it('accepts each documented mode', () => {
     for (const mode of Object.values(RuntimeMode)) {
-      expect(readRuntimeMode({ DIALER_V2_RUNTIME_MODE: mode } as NodeJS.ProcessEnv)).toBe(mode);
+      expect(readRuntimeMode(deployment({ DIALER_V2_RUNTIME_MODE: mode }))).toBe(mode);
     }
   });
 });
@@ -188,8 +264,23 @@ describe('staging and production refuse rather than degrade', () => {
     [
       'PostgreSQL is unreachable',
       PRODUCTION_ENV,
-      { connectPostgresImpl: () => Promise.resolve(null) },
-      /DATABASE_URL/,
+      {
+        connectPostgresImpl: () =>
+          Promise.resolve({ ok: false as const, category: PostgresFailure.UNREACHABLE }),
+      },
+      /refused the connection/,
+    ],
+    [
+      'the generated Prisma client is missing',
+      PRODUCTION_ENV,
+      {
+        connectPostgresImpl: () =>
+          Promise.resolve({ ok: false as const, category: PostgresFailure.CLIENT_NOT_GENERATED }),
+      },
+      // The specific message this round exists to produce. An image built
+      // without `prisma generate` used to report "connection failed", sending
+      // whoever read it to look at the network.
+      /prisma generate/,
     ],
     [
       'the SIP realm is not configured',
@@ -272,31 +363,205 @@ describe('development composes, and says what it composed', () => {
   });
 });
 
-describe('assignment resolvability is observed, not assumed', () => {
-  it('reports false until an agent actually resolves to a campaign', async () => {
+describe('assignment capability answers "can we resolve now", not "did we ever"', () => {
+  const assignedAgent = () =>
+    fakePostgres({
+      user: tenantScoped([{ id: 'agent-1', tenantId: 'tenant-a', status: 'ACTIVE' }]),
+      campaignAgent: tenantScoped([{ campaignId: 'camp-1', tenantId: 'tenant-a' }]),
+    });
+
+  it('is resolvable once the schema probe passes, before any agent logs in', async () => {
+    // The old latch required an assigned agent to have been seen. On a fresh
+    // tenant, or before anyone is rostered, a healthy service reported its
+    // assignment source unusable.
     const composition = await composeRuntime(PRODUCTION_ENV, OPTIONS);
-    expect(composition.assignmentsResolvable()).toBe(false);
+    expect(composition.assignmentsResolvable()).toBe(true);
+    expect(composition.assignmentHealth().capability).toBe(AssignmentCapability.RESOLVABLE);
   });
 
-  it('reports true once one does', async () => {
+  it('stays resolvable for an agent who simply has no campaigns', async () => {
+    const composition = await composeRuntime(PRODUCTION_ENV, OPTIONS);
+    await composition.assignments.resolve('tenant-a', 'agent-nobody');
+
+    // A lookup that ran and correctly returned nothing is a success. Reporting
+    // it as a capability failure conflates "no work assigned" with "cannot tell".
+    expect(composition.assignmentsResolvable()).toBe(true);
+    expect(composition.assignmentHealth().lastAssignmentLookupSucceeded).toBe(true);
+  });
+
+  it('is resolvable with an assigned agent too', async () => {
+    const composition = await composeRuntime(PRODUCTION_ENV, {
+      ...OPTIONS,
+      connectPostgresImpl: () => Promise.resolve(assignedAgent()),
+    });
+    const result = await composition.assignments.resolve('tenant-a', 'agent-1');
+    expect(result?.campaignIds).toEqual(['camp-1']);
+    expect(composition.assignmentsResolvable()).toBe(true);
+  });
+
+  it('reports the static source as not database-backed rather than as working', async () => {
+    const composition = await composeRuntime(
+      { DIALER_V2_RUNTIME_MODE: 'development' } as NodeJS.ProcessEnv,
+      OPTIONS
+    );
+    expect(composition.assignmentsResolvable()).toBe(false);
+    expect(composition.assignmentHealth().capability).toBe(
+      AssignmentCapability.SOURCE_NOT_DATABASE
+    );
+    expect(composition.assignmentHealth().assignmentSourceConfigured).toBe(false);
+  });
+
+  it('reports a missing table as a schema gap, not a generic failure', async () => {
     const composition = await composeRuntime(PRODUCTION_ENV, {
       ...OPTIONS,
       connectPostgresImpl: () =>
-        Promise.resolve({
-          db: {
-            user: {
-              findMany: () =>
-                Promise.resolve([{ id: 'agent-1', tenantId: 'tenant-a', status: 'ACTIVE' }]),
-            },
-            campaignAgent: { findMany: () => Promise.resolve([{ campaignId: 'camp-1' }]) },
-          },
-          isHealthy: () => true,
-          disconnect: () => Promise.resolve(),
-        }),
+        Promise.resolve(
+          fakePostgres({
+            campaignAgent: () =>
+              Promise.reject(new Error('relation "campaign_agents" does not exist')),
+          })
+        ),
+    });
+
+    expect(composition.assignmentHealth().assignmentSchemaPresent).toBe(false);
+    expect(composition.assignmentHealth().capability).toBe(AssignmentCapability.SCHEMA_MISSING);
+    expect(composition.assignmentsResolvable()).toBe(false);
+  });
+
+  it('stops being resolvable when the database fails after a success', async () => {
+    // The defect the latch had: once true, permanently true. Drop the database
+    // and capability went on claiming assignments could be resolved.
+    let failing = false;
+    const composition = await composeRuntime(PRODUCTION_ENV, {
+      ...OPTIONS,
+      connectPostgresImpl: () =>
+        Promise.resolve(
+          fakePostgres({
+            user: args =>
+              failing
+                ? Promise.reject(new Error("Can't reach database server"))
+                : tenantScoped([{ id: 'agent-1', tenantId: 'tenant-a', status: 'ACTIVE' }])(args),
+            campaignAgent: tenantScoped([{ campaignId: 'camp-1', tenantId: 'tenant-a' }]),
+          })
+        ),
     });
 
     await composition.assignments.resolve('tenant-a', 'agent-1');
     expect(composition.assignmentsResolvable()).toBe(true);
+
+    failing = true;
+    await composition.assignments.resolve('tenant-a', 'agent-1');
+
+    expect(composition.postgresHealthy()).toBe(false);
+    expect(composition.assignmentsResolvable()).toBe(false);
+    expect(composition.assignmentHealth().capability).toBe(
+      AssignmentCapability.DATABASE_UNREACHABLE
+    );
+  });
+
+  it('recovers once the database answers again', async () => {
+    let failing = true;
+    const composition = await composeRuntime(PRODUCTION_ENV, {
+      ...OPTIONS,
+      connectPostgresImpl: () =>
+        Promise.resolve(
+          fakePostgres({
+            probe: () =>
+              failing ? Promise.reject(new Error('ECONNREFUSED')) : Promise.resolve(undefined),
+          })
+        ),
+    });
+
+    await composition.probePostgresNow();
+    expect(composition.postgresHealthy()).toBe(false);
+    expect(composition.assignmentsResolvable()).toBe(false);
+
+    failing = false;
+    await composition.probePostgresNow();
+    expect(composition.postgresHealthy()).toBe(true);
+    expect(composition.assignmentsResolvable()).toBe(true);
+  });
+
+  it('treats a cross-tenant lookup as a refusal, not a source failure', async () => {
+    // The tenant predicate is in the query, so a cross-tenant request returns no
+    // user. That is the source working correctly. Counting it as a failure would
+    // let one bad request mark the whole capability unhealthy.
+    const composition = await composeRuntime(PRODUCTION_ENV, {
+      ...OPTIONS,
+      connectPostgresImpl: () => Promise.resolve(assignedAgent()),
+    });
+
+    const result = await composition.assignments.resolve('tenant-b', 'agent-1');
+    expect(result?.campaignIds ?? []).toEqual([]);
+    expect(composition.assignmentsResolvable()).toBe(true);
+  });
+});
+
+describe('postgres health is a claim about now', () => {
+  it('goes unhealthy on a failed probe and healthy again on a good one', async () => {
+    let failing = false;
+    const composition = await composeRuntime(PRODUCTION_ENV, {
+      ...OPTIONS,
+      connectPostgresImpl: () =>
+        Promise.resolve(
+          fakePostgres({
+            probe: () =>
+              failing
+                ? Promise.reject(new Error("Can't reach database server"))
+                : Promise.resolve(undefined),
+          })
+        ),
+    });
+
+    expect(composition.postgresHealthy()).toBe(true);
+
+    failing = true;
+    await composition.probePostgresNow();
+    expect(composition.postgresHealthy()).toBe(false);
+    expect(composition.postgresHealth()?.consecutiveFailures).toBe(1);
+    expect(composition.postgresHealth()?.lastFailureCategory).toBe(PostgresFailure.UNREACHABLE);
+
+    failing = false;
+    await composition.probePostgresNow();
+    expect(composition.postgresHealthy()).toBe(true);
+    expect(composition.postgresHealth()?.consecutiveFailures).toBe(0);
+  });
+
+  it('goes unhealthy from a real query failure without waiting for a probe', async () => {
+    // Real traffic finds an outage before a ten-second probe does. Discarding
+    // that evidence means being knowingly wrong for up to a full interval.
+    const composition = await composeRuntime(PRODUCTION_ENV, {
+      ...OPTIONS,
+      connectPostgresImpl: () =>
+        Promise.resolve(fakePostgres({ user: () => Promise.reject(new Error('ECONNREFUSED')) })),
+    });
+
+    expect(composition.postgresHealthy()).toBe(true);
+    await composition.assignments.resolve('tenant-a', 'agent-1');
+    expect(composition.postgresHealthy()).toBe(false);
+  });
+
+  it('records the failure category and never a connection string', async () => {
+    const composition = await composeRuntime(PRODUCTION_ENV, {
+      ...OPTIONS,
+      connectPostgresImpl: () =>
+        Promise.resolve(
+          fakePostgres({
+            probe: () =>
+              Promise.reject(
+                new Error(
+                  'Authentication failed against database server at `postgres://app:hunter2@db:5432/app`'
+                )
+              ),
+          })
+        ),
+    });
+
+    await composition.probePostgresNow();
+    const snapshot = composition.postgresHealth();
+    expect(snapshot?.lastFailureCategory).toBe(PostgresFailure.AUTHENTICATION_REJECTED);
+    // The category is the whole diagnosis that leaves the process.
+    expect(JSON.stringify(snapshot)).not.toMatch(/hunter2|postgres:\/\//);
   });
 });
 
