@@ -902,12 +902,12 @@ jobs:
             const passed = r.numPassedTests ?? 0;
             const total = r.numTotalTests ?? 0;
             console.log('worker tests passed', passed, 'of', total);
-            if (total < 97 || passed !== total) {
-              console.error('::error::expected at least 97 worker tests to run and every one to pass');
+            if (total < 124 || passed !== total) {
+              console.error('::error::expected at least 124 worker tests to run and every one to pass');
               process.exit(1);
             }
             const names = (r.testResults ?? []).map(f => f.name ?? '');
-            for (const required of ['hopper-gate.test', 'hopper-preflight.test', 'hopper-supervisor.test']) {
+            for (const required of ['hopper-gate.test', 'hopper-preflight.test', 'hopper-supervisor.test', 'lead-reservation.test', 'hopper-origination.test']) {
               if (!names.some(n => n.includes(required))) {
                 console.error('::error::' + required + ' did not run');
                 process.exit(1);

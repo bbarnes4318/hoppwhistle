@@ -114,104 +114,44 @@ afterAll(async () => {
 }, 60_000);
 
 /**
- * Insert a row filling exactly the columns the DATABASE says are required.
+ * Seed a tenant, a publisher and a campaign.
  *
- * Hand-written INSERTs against another module's schema do not survive contact
- * with it — the first version of this omitted `campaigns.publisherId`, which is
- * NOT NULL with a foreign key, and failed for a reason that had nothing to do
- * with reservations. Required foreign keys are resolved by seeding the
- * referenced table first, so this stays correct as those tables change.
+ * Written out explicitly, matching `apps/dialer-v2/src/runtime/composition.live.test.ts`,
+ * which has been green against this schema in CI. Two earlier attempts here
+ * failed on facts about OTHER tables — `campaigns.publisherId` is NOT NULL with
+ * a foreign key, and `publishers.code` is NOT NULL with no default — and both
+ * failures looked like reservation bugs in the CI output while having nothing
+ * to do with reservations. Copying a seeding path that is already proven costs
+ * a few lines and removes a whole class of misleading failure.
  */
-async function seedRow(
-  table: string,
-  id: string,
-  overrides: Record<string, unknown> = {},
-  seen = new Set<string>()
-): Promise<string> {
-  if (seen.has(table)) return id;
-  seen.add(table);
-
-  const columns = await db.$queryRawUnsafe<
-    Array<{
-      column_name: string;
-      data_type: string;
-      udt_name: string;
-      is_nullable: string;
-      column_default: string | null;
-    }>
-  >(
-    `SELECT column_name, data_type, udt_name, is_nullable, column_default
-     FROM information_schema.columns WHERE table_schema='public' AND table_name=$1`,
-    table
-  );
-
-  const fks = await db.$queryRawUnsafe<Array<{ column_name: string; ref_table: string }>>(
-    `SELECT kcu.column_name, ccu.table_name AS ref_table
-     FROM information_schema.table_constraints tc
-     JOIN information_schema.key_column_usage kcu
-       ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
-     JOIN information_schema.constraint_column_usage ccu
-       ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
-     WHERE tc.constraint_type='FOREIGN KEY' AND tc.table_schema='public' AND tc.table_name=$1`,
-    table
-  );
-  const fkByColumn = new Map(fks.map(f => [f.column_name, f.ref_table]));
-
-  const names: string[] = [];
-  const values: unknown[] = [];
-
-  for (const c of columns) {
-    const required = c.is_nullable === 'NO' && c.column_default === null;
-    const overridden = Object.prototype.hasOwnProperty.call(overrides, c.column_name);
-    if (!required && !overridden) continue;
-
-    names.push(`"${c.column_name}"`);
-    if (overridden) {
-      values.push(overrides[c.column_name]);
-      continue;
-    }
-
-    const ref = fkByColumn.get(c.column_name);
-    if (ref && ref !== table) {
-      const parentId = `${id}-${ref}`;
-      await seedRow(ref, parentId, {}, seen);
-      values.push(parentId);
-      continue;
-    }
-
-    if (c.column_name === 'id') values.push(id);
-    else if (c.data_type === 'USER-DEFINED') {
-      const label = await db.$queryRawUnsafe<Array<{ enumlabel: string }>>(
-        `SELECT e.enumlabel FROM pg_enum e JOIN pg_type t ON t.oid=e.enumtypid
-         WHERE t.typname=$1 ORDER BY e.enumsortorder LIMIT 1`,
-        c.udt_name
-      );
-      values.push(label[0]?.enumlabel ?? null);
-    } else if (/timestamp|date/i.test(c.data_type)) values.push(new Date());
-    else if (/int|numeric|double|real/i.test(c.data_type)) values.push(0);
-    else if (/bool/i.test(c.data_type)) values.push(false);
-    else if (/json/i.test(c.data_type)) values.push('{}');
-    else if (/ARRAY/i.test(c.data_type)) values.push([]);
-    else values.push(`${id}-${c.column_name}`);
-  }
-
-  const placeholders = values.map((_, i) => `$${i + 1}`).join(',');
-  await db.$executeRawUnsafe(
-    `INSERT INTO "${table}" (${names.join(',')}) VALUES (${placeholders}) ON CONFLICT DO NOTHING`,
-    ...values
-  );
-  return id;
-}
-
 async function seed(): Promise<void> {
   for (const [tenant, campaign] of [
     [TENANT, CAMPAIGN],
     [OTHER_TENANT, OTHER_CAMPAIGN],
   ]) {
-    await seedRow('tenants', tenant);
-    // `status` must be ACTIVE — the reservation predicate requires it — and the
-    // tenant must be ours, not a synthetic one the FK resolver would invent.
-    await seedRow('campaigns', campaign, { tenantId: tenant, status: 'ACTIVE' });
+    const publisher = `p-${campaign}`;
+
+    await db.$executeRawUnsafe(
+      `INSERT INTO tenants (id, name, slug, status, "createdAt", "updatedAt")
+       VALUES ($1, $1, $1, 'ACTIVE', NOW(), NOW()) ON CONFLICT (id) DO NOTHING`,
+      tenant
+    );
+
+    // `code` is NOT NULL with no default, so it has to be supplied.
+    await db.$executeRawUnsafe(
+      `INSERT INTO publishers (id, "tenantId", name, code, status, "createdAt", "updatedAt")
+       VALUES ($1, $2, $1, $1, 'ACTIVE', NOW(), NOW()) ON CONFLICT (id) DO NOTHING`,
+      publisher,
+      tenant
+    );
+
+    await db.$executeRawUnsafe(
+      `INSERT INTO campaigns (id, "tenantId", "publisherId", name, status, "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $1, 'ACTIVE', NOW(), NOW()) ON CONFLICT (id) DO NOTHING`,
+      campaign,
+      tenant,
+      publisher
+    );
   }
 }
 
@@ -219,15 +159,17 @@ let phoneCounter = 0;
 
 async function makeLead(id: string, tenant = TENANT, campaign = CAMPAIGN): Promise<string> {
   phoneCounter += 1;
-  await seedRow('leads', id, {
-    tenantId: tenant,
-    campaignId: campaign,
-    phoneNumber: `+1555${String(1_000_000 + phoneCounter).slice(0, 7)}`,
-    status: 'NEW',
-  });
+  await db.$executeRawUnsafe(
+    `INSERT INTO leads (id, "tenantId", "campaignId", "phoneNumber", status, "createdAt", "updatedAt")
+     VALUES ($1, $2, $3, $4, 'NEW', NOW(), NOW())
+     ON CONFLICT (id) DO UPDATE SET status = 'NEW'`,
+    id,
+    tenant,
+    campaign,
+    `+1555${String(1_000_000 + phoneCounter).slice(0, 7)}`
+  );
   // Re-running a test must find the lead dialable again, whatever a previous
   // run left behind.
-  await db.$executeRawUnsafe(`UPDATE leads SET status='NEW' WHERE id = $1`, id);
   await db.$executeRawUnsafe(`DELETE FROM lead_dial_reservations WHERE "leadId" = $1`, id);
   return id;
 }
