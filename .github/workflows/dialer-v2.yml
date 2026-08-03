@@ -69,6 +69,10 @@ jobs:
             apps/dialer-v2/tsup.config.ts \
             apps/dialer-v2/scripts/smoke.mjs \
             apps/dialer-v2/Dockerfile \
+            scripts/ci/hopper-kill-switch-guard.mjs \
+            scripts/ci/hopper-kill-switch-guard.selftest.mjs \
+            docs/dialer-v2/F1_LEAD_STATUS_DIAGNOSIS.md \
+            docs/dialer-v2/PHASE_1_STAGING_VALIDATION.md \
             apps/web/tsconfig.dialer-v2.json \
             apps/web/vitest.config.ts
           do
@@ -568,3 +572,35 @@ jobs:
             exit 1
           fi
           echo "No call-control command found outside the guard."
+
+  hopper-kill-switch:
+    name: the hopper kill switch and the lead status enum agree
+    runs-on: ubuntu-latest
+
+    # Audit finding F-1 is currently the ONLY thing preventing the production
+    # Hopper from dialing: it starts unconditionally in apps/worker/src/index.ts
+    # and fails on every batch because it writes a LeadStatus value the enum does
+    # not contain. Adding that enum member — the change that makes TypeScript
+    # compile — removes the interlock, and outbound dialing begins on the next
+    # poll about a second later.
+    #
+    # This job makes the dangerous ordering unmergeable. It never requires the
+    # enum member; it only requires that the Hopper be gated BEFORE one appears.
+    #
+    # See docs/dialer-v2/F1_LEAD_STATUS_DIAGNOSIS.md.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Run first: a guard that has only ever been observed passing is
+      # indistinguishable from one that cannot fail. This drives it over
+      # fixtures for both safe and dangerous orderings and asserts the exit
+      # codes, so the check below means something.
+      - name: The guard actually fails when it should
+        run: node scripts/ci/hopper-kill-switch-guard.selftest.mjs
+
+      - name: Enum and kill switch are consistent
+        run: node scripts/ci/hopper-kill-switch-guard.mjs
