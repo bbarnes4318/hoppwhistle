@@ -24,10 +24,19 @@
  *   rollback-clean | reapplied | columns-match
  */
 
+import { readFileSync, writeFileSync } from 'node:fs';
+
 import pg from 'pg';
 
 const { Client } = pg;
 const command = process.argv[2];
+
+/** Tables the migration's foreign keys point at. */
+const REFERENCED_TABLES = ['tenants', 'users', 'campaigns'];
+/** Carries the pre-rollback row counts between two workflow steps. */
+const COUNTS_FILE = process.env.RUNNER_TEMP
+  ? `${process.env.RUNNER_TEMP}/referenced-counts.json`
+  : '/tmp/referenced-counts.json';
 
 const REQUIRED_INDEXES = [
   'campaign_agents_tenantId_userId_status_idx',
@@ -56,18 +65,54 @@ function fail(message) {
   throw new Error(message);
 }
 
+/** Which required columns are foreign keys, and at what. */
+async function foreignKeysOf(table) {
+  const { rows } = await client.query(
+    `SELECT kcu.column_name, ccu.table_name AS ref_table, ccu.column_name AS ref_column
+     FROM information_schema.table_constraints tc
+     JOIN information_schema.key_column_usage kcu
+       ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+     JOIN information_schema.constraint_column_usage ccu
+       ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
+     WHERE tc.constraint_type = 'FOREIGN KEY'
+       AND tc.table_schema = 'public' AND tc.table_name = $1`,
+    [table]
+  );
+  return new Map(rows.map(r => [r.column_name, { table: r.ref_table, column: r.ref_column }]));
+}
+
+/** A valid label for an enum-typed column, taken from the type itself. */
+async function firstEnumLabel(udtName) {
+  const { rows } = await client.query(
+    `SELECT e.enumlabel FROM pg_enum e
+     JOIN pg_type t ON t.oid = e.enumtypid
+     WHERE t.typname = $1 ORDER BY e.enumsortorder LIMIT 1`,
+    [udtName]
+  );
+  return rows[0]?.enumlabel ?? null;
+}
+
 /**
  * Insert one row into `table`, filling every column the DATABASE says is
- * required, and nothing else. Values are synthetic and typed from the column's
- * own data type, so this does not need to know the model.
+ * required, and nothing else.
+ *
+ * Required foreign keys are resolved by seeding the referenced table first.
+ * The first version filled them with synthetic strings and failed on
+ * `campaigns_publisherId_fkey` — `campaigns.publisherId` is NOT NULL and points
+ * at a real row. Recursing is the only version of this that stays correct
+ * without hard-coding another module's schema.
  */
-async function seedRow(table, id, overrides = {}) {
+async function seedRow(table, id, overrides = {}, seen = new Set()) {
+  if (seen.has(table)) return id;
+  seen.add(table);
+
   const { rows } = await client.query(
-    `SELECT column_name, data_type, is_nullable, column_default
+    `SELECT column_name, data_type, udt_name, is_nullable, column_default
      FROM information_schema.columns
      WHERE table_schema = 'public' AND table_name = $1`,
     [table]
   );
+  const fks = await foreignKeysOf(table);
 
   const cols = [];
   const vals = [];
@@ -81,7 +126,17 @@ async function seedRow(table, id, overrides = {}) {
       vals.push(overrides[c.column_name]);
       continue;
     }
+
+    const fk = fks.get(c.column_name);
+    if (fk && fk.table !== table) {
+      const parentId = `${id}-${fk.table}`;
+      await seedRow(fk.table, parentId, {}, seen);
+      vals.push(parentId);
+      continue;
+    }
+
     if (c.column_name === 'id') vals.push(id);
+    else if (c.data_type === 'USER-DEFINED') vals.push(await firstEnumLabel(c.udt_name));
     else if (/timestamp|date/i.test(c.data_type)) vals.push(new Date());
     else if (/int|numeric|double|real/i.test(c.data_type)) vals.push(0);
     else if (/bool/i.test(c.data_type)) vals.push(false);
@@ -94,6 +149,7 @@ async function seedRow(table, id, overrides = {}) {
     `INSERT INTO "${table}" (${cols.join(',')}) VALUES (${placeholders}) ON CONFLICT DO NOTHING`,
     vals
   );
+  return id;
 }
 
 async function atBaseState() {
@@ -152,7 +208,21 @@ async function duplicateRejected() {
   }
   if (!rejected) fail('the database accepted a duplicate assignment');
 
-  process.stdout.write('duplicate rejected by the unique index, deterministically\n');
+  // Snapshot what the referenced tables hold, so the rollback step can prove it
+  // changed nothing. A hard-coded expectation would be wrong: seeding resolves
+  // foreign keys recursively, so `campaigns` pulls in a publisher, which pulls
+  // in its own tenant. The count is whatever it is; what matters is that the
+  // rollback does not move it.
+  const counts = {};
+  for (const table of REFERENCED_TABLES) {
+    const r = await client.query(`SELECT COUNT(*)::int AS n FROM "${table}"`);
+    counts[table] = r.rows[0].n;
+  }
+  writeFileSync(COUNTS_FILE, JSON.stringify(counts));
+
+  process.stdout.write(
+    `duplicate rejected by the unique index, deterministically (referenced rows: ${JSON.stringify(counts)})\n`
+  );
 }
 
 async function rollbackClean() {
@@ -163,11 +233,16 @@ async function rollbackClean() {
   if (e.rowCount !== 0) fail('CampaignAgentStatus survived the rollback');
 
   // The tables the migration pointed AT must be untouched, with their rows
-  // intact. A rollback that cascaded into them would be a data-loss event.
-  for (const table of ['tenants', 'users', 'campaigns']) {
+  // intact. A rollback that cascaded into them would be a data-loss event, not
+  // a rollback — and the foreign keys are `ON DELETE CASCADE`, so this is a
+  // real possibility rather than a theoretical one.
+  const before = JSON.parse(readFileSync(COUNTS_FILE, 'utf8'));
+  for (const table of REFERENCED_TABLES) {
     const r = await client.query(`SELECT COUNT(*)::int AS n FROM "${table}"`);
-    if (r.rows[0].n !== 1) {
-      fail(`${table} has ${r.rows[0].n} rows after rollback, expected the 1 that was seeded`);
+    if (r.rows[0].n !== before[table]) {
+      fail(
+        `${table} has ${r.rows[0].n} rows after rollback, had ${before[table]} before — the rollback cascaded`
+      );
     }
   }
 
