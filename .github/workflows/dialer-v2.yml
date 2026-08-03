@@ -71,6 +71,7 @@ jobs:
             apps/dialer-v2/Dockerfile \
             scripts/ci/hopper-kill-switch-guard.mjs \
             scripts/ci/hopper-kill-switch-guard.selftest.mjs \
+            scripts/ci/assignment-migration-checks.mjs \
             docs/dialer-v2/F1_LEAD_STATUS_DIAGNOSIS.md \
             docs/dialer-v2/PHASE_1_STAGING_VALIDATION.md \
             apps/web/tsconfig.dialer-v2.json \
