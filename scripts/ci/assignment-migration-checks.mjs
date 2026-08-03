@@ -55,6 +55,7 @@ const EXPECTED_COLUMNS = [
   'status:NO',
   'tenantId:NO',
   'updatedAt:NO',
+  'userId:NO',
 ].join(',');
 
 const client = new Client({ connectionString: process.env.DATABASE_URL });
