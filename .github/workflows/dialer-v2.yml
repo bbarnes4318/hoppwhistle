@@ -384,8 +384,11 @@ jobs:
             const passed = r.numPassedTests ?? 0;
             const total = r.numTotalTests ?? 0;
             console.log('live tests passed', passed, 'of', total);
-            if (total < 80 || passed !== total) {
-              console.error('::error::expected every live test to run and pass');
+            // Raised from 80 as suites were added. A floor below the real count
+            // would let a whole file stop being collected without failing here,
+            // which is the exact shape of the false green this job exists for.
+            if (total < 128 || passed !== total) {
+              console.error('::error::expected at least 128 live tests to run and every one to pass');
               process.exit(1);
             }
 

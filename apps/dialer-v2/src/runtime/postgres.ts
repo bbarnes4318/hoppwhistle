@@ -123,6 +123,17 @@ export function classifyPostgresError(error: unknown): PostgresFailure {
   return PostgresFailure.UNKNOWN;
 }
 
+/**
+ * Does this category mean the connection itself is unusable?
+ *
+ * `SCHEMA_INCOMPLETE` is the one that is not. The server answered — it simply
+ * lacks a relation — so connectivity is demonstrably fine and the fix is a
+ * migration rather than anything to do with the database being up.
+ */
+export function indicatesUnusableConnection(category: PostgresFailure): boolean {
+  return category !== PostgresFailure.SCHEMA_INCOMPLETE;
+}
+
 /** Thrown by the bounded probe. Carries no query text and no connection detail. */
 export class PostgresProbeTimeout extends Error {
   readonly code = 'DIALER_V2_POSTGRES_PROBE_TIMEOUT';
@@ -358,14 +369,26 @@ export class PostgresHealthMonitor {
   /**
    * A query failed during real work.
    *
-   * Reported by the database-backed sources. This is first-hand evidence the
-   * database is not usable, and it is strictly better evidence than a probe that
-   * has not run yet.
+   * Reported by the database-backed sources. For a connectivity fault this is
+   * first-hand evidence the database is unusable, and strictly better evidence
+   * than a probe that has not run yet.
+   *
+   * A schema fault is deliberately NOT treated that way. `relation "x" does not
+   * exist` means the server connected, authenticated, parsed the statement and
+   * answered — it is a perfectly healthy database that is missing a migration.
+   * Marking connectivity unhealthy for it would conflate a migration gap with an
+   * outage, which is the same conflation the assignment capability rewrite
+   * exists to remove, and it would page whoever owns the database for something
+   * only a deploy can fix. The category is still recorded, so health reports it.
    */
   recordQueryFailure(error: unknown): void {
+    const category = classifyPostgresError(error);
+    this.lastFailureCategory = category;
     this.lastProbeFailedAtMs = this.now();
+
+    if (!indicatesUnusableConnection(category)) return;
+
     this.consecutiveFailures += 1;
-    this.lastFailureCategory = classifyPostgresError(error);
     this.transitionTo(false);
   }
 

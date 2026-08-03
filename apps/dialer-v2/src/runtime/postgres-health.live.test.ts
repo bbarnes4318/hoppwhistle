@@ -231,7 +231,31 @@ describe('a real database, taken away and given back', () => {
     await connection.disconnect();
   });
 
-  live('a failed lookup marks health unhealthy without waiting for a probe', async () => {
+  live('a real query failure marks health unhealthy without waiting for a probe', async () => {
+    // Real traffic, not a probe. This is the evidence path that matters: a
+    // ten-second probe leaves health wrong for up to a full interval, and the
+    // first thing to notice an outage is always a query somebody made.
+    //
+    // The connectivity error is obtained by asking the real server for one —
+    // connecting while the role cannot log in — rather than by hand-writing a
+    // message. Driving it this way instead of severing a live pool is
+    // deliberate: an ORM pool transparently reopens connections, so a test that
+    // waits for the pool to surface an error is a test that can silently pass
+    // having observed nothing.
+    await takeDatabaseAway();
+    let connectivityError: unknown;
+    try {
+      const refused = await connectPostgres(probeUrl, { probeTimeoutMs: 5_000 });
+      expect(refused.ok).toBe(false);
+      // `connectPostgres` classifies internally rather than rethrowing, so
+      // reproduce the raw failure the sources would see.
+      await new (await import('@prisma/client')).PrismaClient({
+        datasources: { db: { url: probeUrl } },
+      }).$queryRawUnsafe('SELECT 1');
+      expect.unreachable('expected the login to be refused');
+    } catch (error) {
+      connectivityError = error;
+    }
     await restoreRole();
 
     const result = await connectPostgres(probeUrl, { probeTimeoutMs: 5_000 });
@@ -246,29 +270,44 @@ describe('a real database, taken away and given back', () => {
     monitor.markInitiallyConnected();
     expect(monitor.healthy()).toBe(true);
 
-    await takeDatabaseAway();
+    monitor.recordQueryFailure(connectivityError);
+    expect(monitor.healthy()).toBe(false);
+    expect(monitor.snapshot().consecutiveFailures).toBe(1);
 
-    // Real traffic, not a probe. This is the evidence path that matters: a
-    // ten-second probe would leave health wrong for up to a full interval.
-    let sawFailure = false;
-    for (let attempt = 0; attempt < 10 && !sawFailure; attempt += 1) {
-      try {
-        await connection.db.campaignAgent.findMany({
-          where: { tenantId: '', userId: '' },
-          select: { campaignId: true },
-          take: 0,
-        });
-        await takeDatabaseAway();
-      } catch (error) {
-        monitor.recordQueryFailure(error);
-        sawFailure = true;
-      }
+    monitor.stop();
+    await connection.disconnect();
+  });
+
+  live('a missing relation does not make a healthy database look unreachable', async () => {
+    // `relation "x" does not exist` means the server connected, authenticated,
+    // parsed the statement and answered. It is a healthy database missing a
+    // migration. Reporting it as a connectivity failure would conflate a deploy
+    // gap with an outage and page the wrong person — the same conflation the
+    // assignment capability rewrite exists to remove.
+    const result = await connectPostgres(probeUrl, { probeTimeoutMs: 5_000 });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const connection = result.connection;
+    const monitor = new PostgresHealthMonitor({
+      probe: () => connection.probe(),
+      intervalMs: 600_000,
+    });
+    monitor.markInitiallyConnected();
+
+    // Let PostgreSQL raise it, so the classification is checked against the
+    // server's own wording rather than a string written here.
+    try {
+      await admin.$queryRawUnsafe('SELECT 1 FROM definitely_not_a_table');
+      expect.unreachable('expected the missing relation to throw');
+    } catch (error) {
+      monitor.recordQueryFailure(error);
     }
 
-    expect(sawFailure).toBe(true);
-    expect(monitor.healthy()).toBe(false);
+    expect(monitor.healthy()).toBe(true);
+    expect(monitor.snapshot().lastFailureCategory).toBe(PostgresFailure.SCHEMA_INCOMPLETE);
+    expect(monitor.snapshot().consecutiveFailures).toBe(0);
 
-    await restoreRole();
     monitor.stop();
     await connection.disconnect();
   });

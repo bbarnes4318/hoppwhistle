@@ -14,6 +14,7 @@ import {
   classifyPostgresError,
   connectPostgres,
   describePostgresFailure,
+  indicatesUnusableConnection,
   PostgresFailure,
   PostgresHealthMonitor,
   PostgresProbeTimeout,
@@ -230,6 +231,32 @@ describe('health moves in both directions', () => {
     monitor.recordQueryFailure(new Error("Can't reach database server"));
     expect(monitor.healthy()).toBe(false);
     expect(monitor.snapshot().lastFailureCategory).toBe(PostgresFailure.UNREACHABLE);
+  });
+
+  it('does not treat a missing relation as the connection being down', () => {
+    // The server connected, authenticated, parsed the statement and answered.
+    // That is a healthy database missing a migration, and reporting it as an
+    // outage would page whoever owns the database for something only a deploy
+    // can fix — the same conflation the assignment capability rewrite removes.
+    const monitor = monitorWith(() => Promise.resolve());
+    monitor.markInitiallyConnected();
+    monitor.recordQueryFailure(new Error('relation "campaign_agents" does not exist'));
+
+    expect(monitor.healthy()).toBe(true);
+    expect(monitor.snapshot().consecutiveFailures).toBe(0);
+    // Still reported, so the gap is visible rather than swallowed.
+    expect(monitor.snapshot().lastFailureCategory).toBe(PostgresFailure.SCHEMA_INCOMPLETE);
+  });
+
+  it.each([
+    PostgresFailure.UNREACHABLE,
+    PostgresFailure.TIMEOUT,
+    PostgresFailure.AUTHENTICATION_REJECTED,
+    PostgresFailure.CLIENT_NOT_GENERATED,
+    PostgresFailure.CLIENT_NOT_INSTALLED,
+    PostgresFailure.UNKNOWN,
+  ])('treats %s as the connection being unusable', category => {
+    expect(indicatesUnusableConnection(category)).toBe(true);
   });
 
   it('treats a successful lookup as proof of reachability', () => {
