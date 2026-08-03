@@ -18,6 +18,7 @@ import { ExtensionResolver } from '../agents/extension-resolver.js';
 import { AgentStateService, type ReconciliationCorrection } from '../agents/service.js';
 import { SessionRejection } from '../agents/sessions.js';
 import { AgentState, type AgentRecord } from '../agents/state.js';
+import { portWithDefault, positiveIntWithDefault } from '../config/env.js';
 import type { DialerV2Flags, FlagSource } from '../config/flags.js';
 import { EslClient, type EslStatus } from '../esl/client.js';
 import { SocketEslTransport } from '../esl/socket-transport.js';
@@ -81,7 +82,7 @@ export function readEslConfig(env: NodeJS.ProcessEnv = process.env): EslIngestCo
   return {
     enabled,
     host: env.FREESWITCH_ESL_HOST || env.FREESWITCH_HOST || 'freeswitch',
-    port: Number.parseInt(env.FREESWITCH_ESL_PORT || '8021', 10) || 8021,
+    port: portWithDefault(env, 'FREESWITCH_ESL_PORT', 8021),
     password: env.FREESWITCH_ESL_PASSWORD || '',
     allowedHosts: (env.TENANT_DIALER_V2_ESL_ALLOWED_HOSTS || '')
       .split(',')
@@ -91,10 +92,12 @@ export function readEslConfig(env: NodeJS.ProcessEnv = process.env): EslIngestCo
 }
 
 export function defaultRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
-  const int = (name: string, fallback: number): number => {
-    const n = Number.parseInt(env[name] ?? '', 10);
-    return Number.isFinite(n) && n > 0 ? n : fallback;
-  };
+  // Every one of these is an interval or a cap that governs dialing behaviour.
+  // A malformed value now refuses rather than reverting to a default nobody
+  // chose — `"10 seconds"` used to parse as 10ms here, a thousandfold error that
+  // presents downstream as unexplained load.
+  const int = (name: string, fallback: number): number =>
+    positiveIntWithDefault(env, name, fallback);
 
   return {
     esl: readEslConfig(env),

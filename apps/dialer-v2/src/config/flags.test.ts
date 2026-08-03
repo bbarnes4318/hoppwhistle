@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { ConfigurationError } from './env.js';
 import {
   ALLOWLIST_DISABLED,
   EnvFlagSource,
@@ -51,9 +52,41 @@ describe('boolean parsing', () => {
 });
 
 describe('numeric parsing', () => {
-  it('rejects negative and non-numeric ceilings', () => {
-    expect(readFlagsFromEnv({ TENANT_DIALER_V2_MAX_GLOBAL_CPS: '-5' }).maxGlobalCps).toBe(0);
-    expect(readFlagsFromEnv({ TENANT_DIALER_V2_MAX_GLOBAL_CPS: 'lots' }).maxGlobalCps).toBe(0);
+  it('refuses a malformed ceiling instead of falling back to the default', () => {
+    // This used to return 0 — the safe default — with nothing reporting the
+    // substitution. Silent is the problem, not the value: the config file said
+    // one thing and the process did another, and the two never met. These are
+    // the caps that govern how fast the platform may dial, so a value nobody
+    // wrote is not an acceptable resolution of a value nobody can parse.
+    for (const bad of ['-5', 'lots', '10 calls', '1e3', '2.5']) {
+      expect(() => readFlagsFromEnv({ TENANT_DIALER_V2_MAX_GLOBAL_CPS: bad })).toThrow(
+        ConfigurationError
+      );
+    }
+  });
+
+  it('names the variable and never quotes the value', () => {
+    // These parsers run over the whole environment, which includes
+    // FREESWITCH_ESL_PASSWORD and DIALER_V2_INTERNAL_TOKEN. A parser that echoes
+    // what it found is one mistyped variable away from logging a credential.
+    try {
+      readFlagsFromEnv({ TENANT_DIALER_V2_MAX_GLOBAL_CPS: 'hunter2' });
+      expect.unreachable('expected a ConfigurationError');
+    } catch (error) {
+      expect((error as ConfigurationError).variable).toBe('TENANT_DIALER_V2_MAX_GLOBAL_CPS');
+      expect((error as Error).message).not.toMatch(/hunter2/);
+    }
+  });
+
+  it('keeps zero, because zero is a meaningful cap here', () => {
+    // `0` means "permit nothing" and is the safe default. Rejecting it as
+    // non-positive would make the safest configuration unwritable.
+    expect(readFlagsFromEnv({ TENANT_DIALER_V2_MAX_GLOBAL_CPS: '0' }).maxGlobalCps).toBe(0);
+  });
+
+  it('treats an empty value as unset', () => {
+    // Deployment tooling routinely emits an empty variable for "not configured".
+    expect(readFlagsFromEnv({ TENANT_DIALER_V2_MAX_GLOBAL_CALLS: '' }).maxGlobalCalls).toBe(0);
   });
 
   it('reads a valid ceiling', () => {

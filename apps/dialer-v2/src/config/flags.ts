@@ -16,6 +16,8 @@
  * change is additive.
  */
 
+import { nonNegativeIntWithDefault } from './env.js';
+
 /**
  * Sentinel meaning "allowlisting for this dimension is intentionally disabled".
  * Only honoured for the campaign allowlist. There is deliberately no wildcard
@@ -80,12 +82,17 @@ function envBool(env: FlagEnv, name: string, fallback: boolean): boolean {
   return fallback;
 }
 
+/**
+ * A cap, parsed strictly.
+ *
+ * Zero is permitted and meaningful here — it is the safe default and means
+ * "permit nothing" — so this is the non-negative parser rather than the positive
+ * one. Anything malformed throws instead of falling back: a cap that silently
+ * became the default is a cap nobody chose, and these two govern how fast the
+ * platform is allowed to dial.
+ */
 function envInt(env: FlagEnv, name: string, fallback: number): number {
-  const raw = env[name];
-  if (raw === undefined || raw === '') return fallback;
-  const n = Number.parseInt(raw.trim(), 10);
-  if (!Number.isFinite(n) || n < 0) return fallback;
-  return n;
+  return nonNegativeIntWithDefault(env, name, fallback);
 }
 
 function envList(env: FlagEnv, name: string): readonly string[] {
