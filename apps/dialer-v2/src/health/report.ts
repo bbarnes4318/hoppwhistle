@@ -135,6 +135,28 @@ export interface HealthReport {
   originationImplemented: boolean;
   emergencyStop: boolean;
   shadowEnabled: boolean;
+  redisConnected: boolean;
+  postgresConnected: boolean;
+  /**
+   * Which implementation each capability actually holds.
+   *
+   * Reported by name rather than only as `allBackendsShared`, so a reader — or
+   * the artifact smoke test — can see that sessions fell back to memory rather
+   * than only that something did.
+   */
+  backends: {
+    dedupeBackend: Backend;
+    decisionBackend: Backend;
+    decisionsFenced: boolean;
+    sessionBackend: Backend;
+    agentStateBackend: Backend;
+    sipBackend: Backend;
+    observationBackend: Backend;
+    channelBackend: Backend;
+    extensionSource: SourceBackend;
+    assignmentSource: SourceBackend;
+    lockBackend: 'redis' | 'noop';
+  };
   checks: HealthCheck[];
 }
 
@@ -438,6 +460,29 @@ export function buildHealthReport(flags: DialerV2Flags, snap: HealthSnapshot): H
     originationImplemented: false,
     emergencyStop: flags.emergencyStop,
     shadowEnabled: flags.shadowEnabled,
+    redisConnected: snap.redisConnected,
+    postgresConnected: snap.postgresConnected,
+    // Which implementation each capability actually holds.
+    //
+    // `allBackendsShared` collapses all of this into one boolean, which is
+    // enough to gate readiness and not enough to answer "why". The per-backend
+    // checks above carry pass/fail but not the value, so a reader could see
+    // `session_backend: fail` without learning what it fell back to. Reporting
+    // the names makes the health surface self-describing, and lets the artifact
+    // smoke test assert each one by value rather than infer it from a status.
+    backends: {
+      dedupeBackend: snap.dedupeBackend,
+      decisionBackend: snap.decisionBackend,
+      decisionsFenced: snap.decisionsFenced,
+      sessionBackend: snap.sessionBackend,
+      agentStateBackend: snap.agentStateBackend,
+      sipBackend: snap.sipBackend,
+      observationBackend: snap.observationBackend,
+      channelBackend: snap.channelBackend,
+      extensionSource: snap.extensionSource,
+      assignmentSource: snap.assignmentSource,
+      lockBackend: snap.lockBackend,
+    },
     checks,
   };
 }

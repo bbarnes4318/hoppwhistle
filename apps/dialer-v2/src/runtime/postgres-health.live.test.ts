@@ -247,16 +247,30 @@ describe('a real database, taken away and given back', () => {
     try {
       const refused = await connectPostgres(probeUrl, { probeTimeoutMs: 5_000 });
       expect(refused.ok).toBe(false);
+
       // `connectPostgres` classifies internally rather than rethrowing, so
-      // reproduce the raw failure the sources would see.
-      await new (await import('@prisma/client')).PrismaClient({
-        datasources: { db: { url: probeUrl } },
-      }).$queryRawUnsafe('SELECT 1');
-      expect.unreachable('expected the login to be refused');
+      // reproduce the raw failure a source would actually see. Cast through
+      // `unknown` because the dynamic import resolves to the module namespace,
+      // which is not the client's shape.
+      const mod = (await import('@prisma/client')) as unknown as {
+        PrismaClient: new (opts: Record<string, unknown>) => {
+          $queryRawUnsafe(sql: string): Promise<unknown>;
+          $disconnect(): Promise<void>;
+        };
+      };
+      const client = new mod.PrismaClient({ datasources: { db: { url: probeUrl } } });
+      try {
+        await client.$queryRawUnsafe('SELECT 1');
+        expect.unreachable('expected the login to be refused');
+      } finally {
+        await client.$disconnect().catch(() => {});
+      }
     } catch (error) {
       connectivityError = error;
     }
     await restoreRole();
+
+    expect(connectivityError).toBeDefined();
 
     const result = await connectPostgres(probeUrl, { probeTimeoutMs: 5_000 });
     expect(result.ok).toBe(true);

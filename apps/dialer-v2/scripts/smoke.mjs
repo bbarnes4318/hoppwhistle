@@ -241,7 +241,10 @@ try {
 
   // ── 6. Mode-specific expectations ────────────────────────────────────────
   if (mode === 'production') {
-    const b = ready.body ?? {};
+    const b = ready.body?.backends ?? {};
+    if (Object.keys(b).length === 0) {
+      fail('/health/ready did not report which backend each capability holds');
+    }
     // These are the substitutions a production composition must never make. If
     // any of them were true the service would be running on single-instance
     // state while reporting numbers that read exactly like real ones.
@@ -261,8 +264,8 @@ try {
       if (b[field] !== expected) fail(`${field} is "${b[field]}", expected "${expected}"`);
     }
     if (b.decisionsFenced !== true) fail('decisions are not fenced in a production composition');
-    if (b.postgresConnected !== true) fail('postgres is not reported connected');
-    if (b.redisConnected !== true) fail('redis is not reported connected');
+    if (ready.body?.postgresConnected !== true) fail('postgres is not reported connected');
+    if (ready.body?.redisConnected !== true) fail('redis is not reported connected');
   }
 
   if (exitedEarly) fail(`the process exited during the checks (code=${exitedEarly.code})`);

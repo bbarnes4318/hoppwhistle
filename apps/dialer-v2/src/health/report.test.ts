@@ -288,3 +288,44 @@ describe('shadow evidence is judged separately from readiness', () => {
     });
   }
 });
+
+describe('the report names which backend each capability holds', () => {
+  it('reports every backend by value, not only whether all are shared', () => {
+    // `allBackendsShared` is enough to gate readiness and not enough to answer
+    // "why". A reader seeing `session_backend: fail` learns something is wrong
+    // but not what it fell back to, and the artifact smoke test needs the value
+    // rather than a status in order to assert what production actually holds.
+    const r = buildHealthReport(SAFE_DEFAULTS, snapshot());
+
+    expect(r.backends).toEqual({
+      dedupeBackend: 'redis',
+      decisionBackend: 'redis',
+      decisionsFenced: true,
+      sessionBackend: 'redis',
+      agentStateBackend: 'redis',
+      sipBackend: 'redis',
+      observationBackend: 'redis',
+      channelBackend: 'redis',
+      extensionSource: 'database',
+      assignmentSource: 'database',
+      lockBackend: 'redis',
+    });
+  });
+
+  it('reports a fallback by name rather than only as a failing check', () => {
+    const r = buildHealthReport(
+      SAFE_DEFAULTS,
+      snapshot({ sessionBackend: 'memory', extensionSource: 'static' })
+    );
+
+    expect(r.backends.sessionBackend).toBe('memory');
+    expect(r.backends.extensionSource).toBe('static');
+    expect(r.allBackendsShared).toBe(false);
+  });
+
+  it('surfaces the real connection state alongside them', () => {
+    const r = buildHealthReport(SAFE_DEFAULTS, snapshot({ postgresConnected: false }));
+    expect(r.redisConnected).toBe(true);
+    expect(r.postgresConnected).toBe(false);
+  });
+});
