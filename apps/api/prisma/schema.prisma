@@ -65,6 +65,7 @@ model Tenant {
   campaignPublishers       CampaignPublisher[]
   campaignBuyers           CampaignBuyer[]
   campaignAgents           CampaignAgent[]
+  leadDialReservations     LeadDialReservation[]
   voiceAgents              VoiceAgent[]
 
   @@index([slug])
@@ -559,6 +560,7 @@ model Campaign {
   publishers   CampaignPublisher[]
   buyers       CampaignBuyer[]
   agents       CampaignAgent[]
+  dialReservations LeadDialReservation[]
 
   @@index([tenantId])
   @@index([publisherId])
@@ -1866,6 +1868,7 @@ model Lead {
   assignedTo        User?             @relation(fields: [assignedToId], references: [id])
   calls             LeadCall[]
   retentionPolicies RetentionPolicy[]
+  dialReservations  LeadDialReservation[]
 
   @@unique([tenantId, phoneNumber])
   @@index([tenantId])
@@ -1898,6 +1901,82 @@ enum LeadStatus {
   CONVERTED
   LOST
   DO_NOT_CALL
+}
+
+// ============================================================================
+// Lead dial reservations — operational state for the legacy Hopper.
+//
+// Audit finding F-1: the Hopper wrote `'DIALING'::"LeadStatus"`, a member this
+// enum does not contain, so PostgreSQL rejected every batch.
+//
+// `DIALING` is deliberately NOT added above. `LeadStatus` is a CRM outcome
+// ladder — every member answers "what came of this person". A reservation
+// answers "which worker is holding this row for the next thirty seconds", which
+// is not a fact about the person, and it needs an owner, a lease expiry and a
+// fencing token that no enum member can carry. Adding a member would also give
+// every consumer grouping leads by status a new bucket, and this repository
+// cannot enumerate those consumers.
+//
+// It is a separate table for one more reason: `DROP TABLE` is a real rollback.
+// PostgreSQL has no DROP VALUE for an enum, so adding `DIALING` would have been
+// forward-only, on the production `leads` table, under lock.
+// ============================================================================
+
+enum LeadDialReservationState {
+  /// Claimed. No origination command has been constructed.
+  RESERVED
+  /// A command is about to be, or has been, handed to FreeSWITCH.
+  ORIGINATION_SUBMITTED
+  /// FreeSWITCH acknowledged the command. A channel may exist.
+  ORIGINATION_ACCEPTED
+  /// The attempt reached a terminal outcome.
+  COMPLETED
+  /// Released with no attempt made. The lead returns to the pool at once.
+  RELEASED
+  /// Expired while a command may have been in flight. Never auto-redialed.
+  NEEDS_RECONCILIATION
+}
+
+model LeadDialReservation {
+  id         String @id @default(uuid())
+  leadId     String
+  tenantId   String
+  campaignId String
+
+  /// Which worker holds it. Checked on every transition.
+  ownerId String
+  /// Fencing token. A transition presenting a stale token is refused.
+  token String
+  /// Correlation id written into the channel so an attempt can be recognised.
+  attemptId String
+
+  state   LeadDialReservationState @default(RESERVED)
+  outcome String?
+
+  reservedAt     DateTime  @default(now())
+  /// Bounded lease. Past this, a reaper may recover it.
+  leaseExpiresAt DateTime
+  /// Set exactly once, when the reservation stops being active.
+  releasedAt     DateTime?
+
+  /// Who recovered it, and why. Sanitized — never a driver error.
+  recoveredBy     String?
+  recoveredAt     DateTime?
+  recoveryReason  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lead     Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([campaignId])
+  @@index([leadId])
+  /// The reaper's read: everything expired and still active.
+  @@index([state, leaseExpiresAt])
+  @@map("lead_dial_reservations")
 }
 
 // ============================================================================

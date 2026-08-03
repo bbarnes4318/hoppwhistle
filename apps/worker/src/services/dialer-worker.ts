@@ -15,9 +15,29 @@ const { Connection: ESLConnection } = modesl;
 import type { HopperScope } from '../config/hopper-gate.js';
 import { logger } from '../lib/logger.js';
 
+import { LeadReservationStore } from './lead-reservation-store.js';
+import {
+  AttemptOutcome,
+  provesHumanContact,
+  ReservationState,
+  ReserveRejection,
+} from './lead-reservation.js';
+
+/**
+ * How long a reservation is held before a reaper may recover it.
+ *
+ * Generously longer than a poll interval and than any plausible originate
+ * round-trip. Too short and a healthy worker's own reservations get recovered
+ * underneath it; too long and a crashed worker's leads sit idle. Thirty seconds
+ * is roughly thirty poll cycles.
+ */
+const RESERVATION_LEASE_MS = 30_000;
+
 /** Required at startup. There is no "unscoped" mode — see `start()`. */
 export interface HopperStartOptions {
   scope: HopperScope;
+  /** Identifies this replica in reservations. Defaults to the process id. */
+  ownerId?: string;
   /**
    * The second, independent interlock. Enabling the Hopper does not enable
    * calls: with this false the loop selects and reserves but never submits an
@@ -105,6 +125,8 @@ export class DialerWorker {
   private scope: HopperScope = NO_SCOPE;
   /** Set by `start()`. False until then, so nothing can be originated. */
   private originationEnabled = false;
+  /** Created at `start()`. The Hopper refuses to dial without one. */
+  private reservations: LeadReservationStore | null = null;
 
   // Per-tenant FracTEL DID rotation pool, cached from the DB with a short TTL so
   // caller-ID rotation always reflects the current active pool numbers.
@@ -187,6 +209,11 @@ export class DialerWorker {
 
     this.scope = options.scope;
     this.originationEnabled = options.originationEnabled;
+    this.reservations = new LeadReservationStore({
+      db: this.prisma,
+      ownerId: options.ownerId ?? `hopper-${process.pid}`,
+      leaseMs: RESERVATION_LEASE_MS,
+    });
 
     logger.info({
       msg: 'Starting DialerWorker...',
@@ -320,16 +347,91 @@ export class DialerWorker {
 
     logger.info({ msg: 'Fetched leads to dial', count: leads.length });
 
-    // Originate calls (fire and forget - do not await call completion)
     for (const lead of leads) {
-      // Immediately mark as DIALING to prevent re-fetch
-      await this.updateLeadStatus(lead.id, 'DIALING');
+      await this.attemptLead(lead);
+    }
+  }
 
-      // Fire originate command (non-blocking)
-      this.originateCall(lead).catch((err: unknown) => {
-        logger.error({ msg: 'Failed to originate call', leadId: lead.id, error: err });
-        // Revert status on failure
-        this.updateLeadStatus(lead.id, 'NEW').catch(() => {});
+  /**
+   * Reserve a lead, then attempt it.
+   *
+   * ── What this replaces ───────────────────────────────────────────────────
+   *
+   * The previous body was two lines:
+   *
+   *     await this.updateLeadStatus(lead.id, 'DIALING');   // F-1: threw, always
+   *     this.originateCall(lead).catch(() => revert to 'NEW');
+   *
+   * Three things were wrong with it beyond the invalid enum value. The write was
+   * not atomic, so two workers polling the same second both "claimed" the same
+   * lead. There was no lease, so a crash between the mark and the originate
+   * stranded the lead forever — selection is `status = 'NEW'`, so a lead left in
+   * any other state is never seen again. And the revert path could not tell
+   * "we never sent a command" from "FreeSWITCH already has one", so recovering
+   * would eventually mean redialing somebody whose phone was ringing.
+   */
+  private async attemptLead(lead: LeadToDial): Promise<void> {
+    const store = this.reservations;
+    if (!store) {
+      logger.error({ msg: 'No reservation store; refusing to dial', leadId: lead.id });
+      return;
+    }
+
+    const reserved = await store.reserve({
+      leadId: lead.id,
+      tenantIds: this.scope.tenantIds,
+      campaignIds: this.scope.campaignIds,
+    });
+
+    if (!reserved.ok) {
+      // ALREADY_RESERVED is the normal outcome of two workers racing, and is not
+      // an error. The others say the lead should not have been selected.
+      if (reserved.rejection !== ReserveRejection.ALREADY_RESERVED) {
+        logger.warn({ msg: 'Lead not reserved', leadId: lead.id, rejection: reserved.rejection });
+      }
+      return;
+    }
+
+    const { id: reservationId, token, attemptId } = reserved.reservation;
+
+    // Recorded BEFORE the command is built. If this process dies in the next
+    // few milliseconds, recovery finds ORIGINATION_SUBMITTED and holds the lead
+    // for reconciliation instead of handing it to another worker. Recording
+    // afterwards would leave a window in which a call exists and nothing knows.
+    const submitted = await store.transition({
+      reservationId,
+      token,
+      to: ReservationState.ORIGINATION_SUBMITTED,
+    });
+    if (!submitted.ok) {
+      logger.warn({
+        msg: 'Could not mark submitted',
+        leadId: lead.id,
+        rejection: submitted.rejection,
+      });
+      return;
+    }
+
+    try {
+      await this.originateCall(lead, attemptId);
+      await store.transition({
+        reservationId,
+        token,
+        to: ReservationState.ORIGINATION_ACCEPTED,
+      });
+    } catch (error) {
+      // The interlock being off is a decision, not a failure. The command was
+      // never constructed, so nothing rang and the lead is safe to free at once.
+      const disabled = error instanceof OriginationDisabledError;
+      if (!disabled) {
+        logger.error({ msg: 'Failed to originate call', leadId: lead.id, error });
+      }
+
+      await store.transition({
+        reservationId,
+        token,
+        to: ReservationState.RELEASED,
+        outcome: AttemptOutcome.NOT_ATTEMPTED,
       });
     }
   }
@@ -411,7 +513,7 @@ export class DialerWorker {
   /**
    * Originate a call to a lead via FreeSWITCH.
    */
-  private async originateCall(lead: LeadToDial): Promise<void> {
+  private async originateCall(lead: LeadToDial, attemptId: string): Promise<void> {
     // The second interlock, checked before anything is built rather than before
     // it is sent. There is no path from here to a gateway with this false: the
     // command string is never constructed, so it cannot be logged, retried, or
@@ -436,6 +538,17 @@ export class DialerWorker {
       `hopwhistle_lead_id=${lead.id}`,
       `hopwhistle_campaign_id=${lead.campaignId}`,
       `hopwhistle_tenant_id=${lead.tenantId}`,
+      // The correlation id, carried on the channel.
+      //
+      // This is what makes the uncertain case answerable at all. If this process
+      // dies between submitting the command and recording the acceptance, the
+      // reservation is left in ORIGINATION_SUBMITTED and a reaper moves it to
+      // NEEDS_RECONCILIATION rather than freeing the lead. Deciding what
+      // actually happened then means asking FreeSWITCH whether a channel exists
+      // carrying this id — without it there is no way to tell an abandoned
+      // reservation from a live call, and the only safe action would be to leave
+      // the lead stuck forever.
+      `hopwhistle_attempt_id=${attemptId}`,
     ].join(',');
 
     const dialString = `sofia/gateway/${getNextGateway()}/${phoneNumber}`;
@@ -461,13 +574,29 @@ export class DialerWorker {
   }
 
   /**
-   * Update lead status in the database using raw SQL.
+   * Record that a human was actually reached.
+   *
+   * `CONTACTED` means exactly that and nothing weaker. The old code set it — and
+   * `autodialer.ts` still would — before the originate command was even sent,
+   * which marks a lead contacted whether it rings, is busy, is disconnected, or
+   * is never dialed at all, and corrupts every conversion denominator that
+   * divides by it.
+   *
+   * Only an answer event may call this. `attemptLead` deliberately does not.
    */
-  private async updateLeadStatus(leadId: string, status: string): Promise<void> {
-    // Cast status to any to match query parameter expectations if needed, though strictly string should work
-    await this.prisma.$executeRaw`
-      UPDATE "leads" SET status = ${status}::"LeadStatus", "updatedAt" = NOW() WHERE id = ${leadId}
-    `;
+  async recordHumanContact(leadId: string, outcome: AttemptOutcome): Promise<void> {
+    if (!provesHumanContact(outcome)) {
+      throw new Error(
+        `refusing to mark lead ${leadId} CONTACTED: ${outcome} is not evidence a human was reached`
+      );
+    }
+    // No cast into an enum member that may not exist. `CONTACTED` is a declared
+    // member of LeadStatus and always has been — F-1 was only ever about
+    // `DIALING`, which is now a reservation state rather than a lead status.
+    await this.prisma.lead.update({
+      where: { id: leadId },
+      data: { status: 'CONTACTED', lastContactedAt: new Date() },
+    });
   }
 
   /**
