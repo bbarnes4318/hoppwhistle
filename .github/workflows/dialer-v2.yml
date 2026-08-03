@@ -65,6 +65,10 @@ jobs:
             apps/dialer-v2/package.json \
             apps/dialer-v2/tsconfig.json \
             apps/dialer-v2/vitest.config.ts \
+            apps/dialer-v2/vitest.live.config.ts \
+            apps/dialer-v2/tsup.config.ts \
+            apps/dialer-v2/scripts/smoke.mjs \
+            apps/dialer-v2/Dockerfile \
             apps/web/tsconfig.dialer-v2.json \
             apps/web/vitest.config.ts
           do
@@ -108,7 +112,27 @@ jobs:
         run: pnpm --filter @hopwhistle/dialer-v2 lint
 
       - name: Test
-        run: pnpm --filter @hopwhistle/dialer-v2 test
+        run: |
+          set -euo pipefail
+          cd apps/dialer-v2
+          pnpm exec vitest run --reporter=verbose --reporter=json --outputFile=/tmp/pure-results.json
+
+      # An exit code alone cannot distinguish "everything passed" from "nothing
+      # ran". A config change that stopped matching the spec files would be
+      # green, which is the failure this whole workflow exists to prevent.
+      - name: Assert the pure tests actually ran
+        run: |
+          set -euo pipefail
+          node -e "
+            const r = require('/tmp/pure-results.json');
+            const passed = r.numPassedTests ?? 0;
+            const total = r.numTotalTests ?? 0;
+            console.log('pure tests passed', passed, 'of', total);
+            if (total < 561 || passed !== total) {
+              console.error('::error::expected at least 561 pure tests to run and every one to pass');
+              process.exit(1);
+            }
+          "
 
       # The default config excludes `*.live.test.ts`. Assert that the exclusion
       # is a routing decision and not a way to hide failing tests: the live
@@ -133,6 +157,122 @@ jobs:
             echo "::error::the live config does not include the live suites"
             exit 1
           fi
+
+  dialer-v2-build:
+    name: dialer-v2 production build and smoke test
+    runs-on: ubuntu-latest
+
+    # This job exists because `pnpm --filter @hopwhistle/dialer-v2 build` failed
+    # on a clean checkout with `Could not resolve ".prisma/client/default"` and
+    # nothing here noticed, because nothing here built the package. It passed on
+    # a developer machine only because an earlier `prisma generate` had left the
+    # generated client on disk.
+    #
+    # Everything below runs from a clean checkout, in the order a deployment
+    # would: install, generate, build, then start the artifact that was built.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # `@prisma/client` is a declared production dependency of dialer-v2 and is
+      # left external by tsup, so the generated client must exist beside it
+      # before anything imports it. This is the step whose absence broke the
+      # build, and its absence from the Dockerfile broke image builds too.
+      - name: Generate the Prisma client
+        run: pnpm --filter @hopwhistle/api exec prisma generate
+
+      - name: Assert dialer-v2 declares @prisma/client itself
+        run: |
+          set -euo pipefail
+          node -e "
+            const pkg = require('./apps/dialer-v2/package.json');
+            const declared = (pkg.dependencies ?? {})['@prisma/client'];
+            if (!declared) {
+              console.error('::error::@prisma/client must be a direct production dependency of dialer-v2, not hoisted from another workspace');
+              process.exit(1);
+            }
+            console.log('dialer-v2 declares @prisma/client', declared);
+          "
+
+      - name: Build
+        run: pnpm --filter @hopwhistle/dialer-v2 build
+
+      - name: The artifact exists
+        run: test -f apps/dialer-v2/dist/index.js
+
+      # tsup exiting zero says the bundler was satisfied. These assertions are
+      # about what it actually emitted.
+      - name: Inspect the emitted artifact
+        run: |
+          set -euo pipefail
+
+          # The generated client must NOT be inlined. If it is, the bundle
+          # carries a snapshot that drifts from the schema at the next migration
+          # and embeds engine paths resolved on this runner.
+          if grep -q "\.prisma/client" apps/dialer-v2/dist/index.js; then
+            echo "::error::the bundle inlines the generated Prisma client; it must stay external"
+            exit 1
+          fi
+
+          # ...but it must still be reachable, as an external import.
+          if ! grep -q "@prisma/client" apps/dialer-v2/dist/index.js; then
+            echo "::error::the bundle does not reference @prisma/client at all; database composition was dropped"
+            exit 1
+          fi
+
+          # Development-only imports have no business in a production artifact.
+          for forbidden in "vitest" "tsx/" "@vitest/" "node:test"; do
+            if grep -q "from\"$forbidden" apps/dialer-v2/dist/index.js; then
+              echo "::error::the artifact imports the development-only module $forbidden"
+              exit 1
+            fi
+          done
+
+          # The composition root and the production entrypoint must be in it.
+          # Excluding either to make the build pass would be the wrong fix.
+          for required in "composeRuntime" "DIALER_V2_RUNTIME_MODE" "health/live"; do
+            if ! grep -q "$required" apps/dialer-v2/dist/index.js; then
+              echo "::error::the artifact does not contain $required"
+              exit 1
+            fi
+          done
+
+          echo "artifact size: $(wc -c < apps/dialer-v2/dist/index.js) bytes"
+
+      # Started with `node`, from `dist`. Not tsx, not Vitest, not the source.
+      - name: Smoke test — test mode
+        run: |
+          set -euo pipefail
+          cd apps/dialer-v2
+          node scripts/smoke.mjs \
+            --mode test \
+            --port 9192 \
+            --allow-fail freeswitch_esl,redis,postgres
+
+      # A mistyped mode must stop the service rather than silently selecting the
+      # one mode that permits memory and static sources.
+      - name: Smoke test — a mistyped mode refuses readiness
+        run: |
+          set -euo pipefail
+          cd apps/dialer-v2
+          node scripts/smoke.mjs \
+            --mode prodution \
+            --expect-mode unresolved \
+            --expect-not-ready \
+            --allow-any-fail \
+            --require-fail runtime_mode \
+            --port 9193
 
   dialer-v2-live:
     name: dialer-v2 against real Redis and PostgreSQL
@@ -256,6 +396,40 @@ jobs:
               process.exit(1);
             }
           "
+
+      # ── The built artifact, in production mode, against these containers ────
+      #
+      # The live suites above exercise composition from TypeScript through
+      # Vitest. That is not the thing that gets deployed. This builds the real
+      # bundle and starts it with `node dist/index.js` in production mode, which
+      # is the configuration that refuses to start on any memory or static
+      # backend — so it can only come up if every Redis and PostgreSQL
+      # implementation is genuinely wired.
+      #
+      # Throwaway service containers only. Nothing here reaches staging or
+      # production, ESL ingestion is off, and origination remains disabled.
+      - name: Build the artifact
+        run: pnpm --filter @hopwhistle/dialer-v2 build
+
+      - name: Smoke test — production composition against throwaway services
+        env:
+          SMOKE_REDIS_URL: redis://127.0.0.1:6379/14
+          SMOKE_DATABASE_URL: postgresql://dialer:dialer@127.0.0.1:5432/dialer_v2_test?schema=public
+          SMOKE_SIP_DOMAIN: live.dialer.test
+          SMOKE_ALLOWED_TENANT_IDS: smoke-tenant
+        run: |
+          set -euo pipefail
+          cd apps/dialer-v2
+          # `freeswitch_esl` and `state_reconstruction` are the only checks
+          # permitted to fail: ESL ingestion is deliberately disabled, so nothing
+          # has been ingested or reconstructed. Every other failure — a missing
+          # Prisma client, a memory fallback, a static source, unfenced decisions
+          # — fails this step, and the script additionally asserts each backend
+          # by name rather than accepting `ready: false` as good enough.
+          node scripts/smoke.mjs \
+            --mode production \
+            --port 9194 \
+            --allow-fail freeswitch_esl,state_reconstruction
 
   assignment-migration:
     name: assignment migration is additive and reversible
