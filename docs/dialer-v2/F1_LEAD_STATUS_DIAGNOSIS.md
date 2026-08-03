@@ -202,6 +202,31 @@ therefore reached production via `prisma db push`, so **the live enum's members
 are unknown from this repository**. It may already contain `DIALING`,
 `IN_CALL`, `TRANSFERRED`, or `FAILED` — `fronter-bot.ts` writes the last three.
 
+### F-3 — the migration chain does not apply from empty
+
+Discovered by the migration job added in this round. `prisma migrate deploy`
+against an empty database **fails**:
+
+```text
+Error: P3018
+Migration name: 20260721_add_call_contact_relation
+Database error code: 42P01
+ERROR: relation "ai_campaign_calls" does not exist
+```
+
+Twelve migrations apply, then the chain breaks. This is pre-existing, unrelated
+to Dialer V2, and consistent with F-2: if production was built with `db push`,
+nothing ever forced the history to be replayable, so it silently stopped being
+so.
+
+It is **not fixed here** — it sits in the AI-campaign zone, which is protected,
+and repairing a migration chain is its own change with its own review. The CI
+job pins it instead: it passes if the chain applies cleanly _or_ fails at
+exactly `20260721_add_call_contact_relation`, and fails if the breakage moves or
+spreads. The assignment migration is then validated against a base state built
+with `db push` — which is how production was built, so it is also the more
+realistic target.
+
 Two consequences:
 
 1. **A migration cannot be validated from an empty database.** `ALTER TYPE

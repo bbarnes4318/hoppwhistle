@@ -9,18 +9,154 @@
 > It requires **no change to FreeSWITCH**. Dialer V2 subscribes to events over
 > ESL; it does not modify dialplans, gateways, profiles, or the directory.
 
+> **Nothing in this document has been executed.** It is a prepared procedure.
+> The commit that introduced it applied no migration and contacted no staging
+> service.
+
 ## 0. Preconditions
 
-| Requirement                                  | Why                                                      |
-| -------------------------------------------- | -------------------------------------------------------- |
-| A staging FreeSWITCH with ESL reachable      | Ingestion source                                         |
-| Staging ESL password                         | `auth` is one of the two commands the transport can send |
-| At least one staging agent extension         | To exercise the human-call path                          |
-| A staging tenant id and campaign id          | Allowlists are explicit                                  |
-| No production credentials in the environment | This procedure must be incapable of touching production  |
+Every row is a gate. Record the answer; do not proceed on an unrecorded row.
+
+| #   | Precondition                                                                                                                                                  | Why                                                                                                                                                                                         | Recorded   |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| P1  | **Exact commit SHA** deployed, matching the built image                                                                                                       | A validation that cannot name what it validated proves nothing                                                                                                                              | `________` |
+| P2  | **PR #22 still draft and unmerged**                                                                                                                           | Staging validation precedes merge, not the reverse                                                                                                                                          | ☐          |
+| P3  | **Database backup completed AND restore-verified**                                                                                                            | A backup nobody has restored is a hope. Restore it to a scratch database and count rows before proceeding                                                                                   | ☐          |
+| P4  | **Current migration inventory recorded** — `SELECT migration_name, finished_at FROM _prisma_migrations ORDER BY finished_at`                                  | The rollback target. Without it "roll back" has no definition                                                                                                                               | `________` |
+| P5  | **Dedicated staging PostgreSQL**, not a schema inside the production instance                                                                                 | A shared instance means a bad migration is a production incident                                                                                                                            | ☐          |
+| P6  | **Dedicated staging Redis**, and `DIALER_V2_*` keys namespaced by tenant                                                                                      | Dialer V2 writes `tenant:{id}:dialer:v2:*`; a shared Redis lets a staging replica take a lock a production replica is waiting on                                                            | ☐          |
+| P7  | **FreeSWITCH ESL access is event-only**                                                                                                                       | The transport can write exactly `auth` and `event plain`; confirm the staging ESL ACL grants nothing more                                                                                   | ☐          |
+| P8  | **Origination disabled** — `TENANT_DIALER_V2_ORIGINATE_ENABLED` unset or `false`                                                                              | Defence in depth. No origination code path exists, and the flag stays off anyway                                                                                                            | ☐          |
+| P9  | **The existing Hopper remains authoritative and untouched**                                                                                                   | Dialer V2 is shadow-only. Nothing here starts, stops, or reconfigures `apps/worker`                                                                                                         | ☐          |
+| P10 | **F-1 status recorded** — run `hopper-preflight` against the staging database and record `leadStatusValues`, `immediatelyDialableFirstCycle`, and the verdict | If the staging enum already contains `DIALING`, the Hopper is not quiescent there and every "no calls placed" assertion below needs a different baseline. See `F1_LEAD_STATUS_DIAGNOSIS.md` | `________` |
+| P11 | **Rollback owner identified by name**, present for the window                                                                                                 | Tier 0–3 rollback below needs a person, not a document                                                                                                                                      | `________` |
+| P12 | **Metrics and log access confirmed** _before_ starting                                                                                                        | Confirming access during an incident is not confirming access                                                                                                                               | ☐          |
 
 **Stop and get authorisation** if any step would require editing FreeSWITCH
-config, touching carrier routing, applying DDL, or enabling origination.
+config, touching carrier routing, applying DDL outside the staging database,
+enabling origination, or modifying `apps/worker`.
+
+## 0a. Migration procedure
+
+Staging database only. Confirm `DATABASE_URL` points at P5's host before every
+command — read it aloud if someone else is present.
+
+```bash
+# 1. Dry run. Reports what WOULD be applied. Applies nothing.
+pnpm --filter @hopwhistle/api exec prisma migrate status
+```
+
+Expect exactly one pending migration, `20260802000000_add_campaign_agent_assignments`.
+**If any other migration is pending, stop** — this branch does not own it.
+
+```bash
+# 2. Apply, to staging only.
+pnpm --filter @hopwhistle/api exec prisma migrate deploy
+```
+
+```bash
+# 3. Confirm the expected objects, and only those.
+psql "$DATABASE_URL" -c "\d campaign_agents"
+psql "$DATABASE_URL" -c "SELECT indexname FROM pg_indexes WHERE tablename='campaign_agents'"
+psql "$DATABASE_URL" -c "SELECT conname FROM pg_constraint WHERE conrelid='campaign_agents'::regclass AND contype='f'"
+```
+
+Expect the table, five indexes including
+`campaign_agents_tenantId_campaignId_userId_key` and
+`campaign_agents_tenantId_userId_status_idx`, and three foreign keys. CI asserts
+the same set (`assignment migration is additive and reversible`).
+
+```bash
+# 4. Confirm no unrelated drift. `leads` in particular must be untouched.
+psql "$DATABASE_URL" -c "SELECT column_name FROM information_schema.columns WHERE table_name='leads' ORDER BY column_name"
+```
+
+Compare against the pre-migration capture from P4. **Any difference is a stop
+condition.**
+
+```bash
+# 5. Confirm the Prisma client was generated from THIS commit.
+node -e "console.log(require('@prisma/client').Prisma.prismaVersion)"
+git rev-parse HEAD
+```
+
+```bash
+# 6. Confirm the assignment schema probe passes from the running service.
+curl -s localhost:9092/health/ready | jq '.checks[] | select(.name=="campaign_assignments")'
+```
+
+Expect `status: "pass"`. `fail` with `schema_missing` means step 2 did not take
+effect on the database the service is actually connected to.
+
+**Rollback for this migration** is `down.sql` in the migration directory. It has
+been executed end-to-end in CI — forward, back, forward again — and asserted to
+leave `tenants`, `users` and `campaigns` rows intact. It **does** destroy the
+assignment rows themselves, which are operator-entered with no other source:
+
+```bash
+psql "$DATABASE_URL" -c "\copy campaign_agents TO '/tmp/campaign_agents.csv' CSV HEADER"
+```
+
+Take that copy before rolling back if the rollback is expected to be temporary.
+
+## 0b. Runtime procedure
+
+```bash
+# Start the artifact from the production image — not tsx, not source.
+docker run --rm \
+  -e DIALER_V2_RUNTIME_MODE=staging \
+  -e REDIS_URL=<staging-redis> \
+  -e DATABASE_URL=<staging-postgres> \
+  -e DIALER_V2_SIP_DOMAIN=<staging-sip-realm> \
+  -e DIALER_V2_ALLOWED_TENANT_IDS=<staging-tenant-id> \
+  -e DIALER_V2_INTERNAL_TOKEN="$(openssl rand -hex 32)" \
+  <image>:<sha>
+```
+
+`DIALER_V2_RUNTIME_MODE=staging` is **explicit and required**. An unset or
+mistyped value now refuses to start rather than silently selecting `test`, which
+is the mode that permits in-memory backends.
+
+Then, in order:
+
+| Step | Command                                                                                                             | Expect                                                                                    |
+| ---- | ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| R1   | `curl -s :9092/health/live`                                                                                         | `200`, `live: true`                                                                       |
+| R2   | `curl -s :9092/health/ready \| jq .backends`                                                                        | every value `redis` or `database`; no `memory`, `static`, or `noop`                       |
+| R3   | `curl -s :9092/health/ready \| jq .backends.decisionsFenced`                                                        | `true`                                                                                    |
+| R4   | `redis-cli --scan --pattern 'tenant:*:dialer:v2:*' \| head`                                                         | every key carries the staging tenant id; no other tenant appears                          |
+| R5   | `curl -s :9092/health/ready \| jq '.checks[] \| select(.name=="campaign_assignments")'`                             | `pass`                                                                                    |
+| R6   | Register a staging softphone, then check extension resolution in the logs                                           | resolved from the database, not a fixture                                                 |
+| R7   | `curl -s :9092/status/agents` after registration                                                                    | the agent appears, SIP state from the real `sofia::register`                              |
+| R8   | Place a normal human call on staging                                                                                | events ingest; **no** call-control command is sent (test 13 below)                        |
+| R9   | Restart the container, then `curl -s :9092/health/ready \| jq '.checks[] \| select(.name=="state_reconstruction")'` | `pass` — state came back from Redis, not from an empty map                                |
+| R10  | Stop staging PostgreSQL for 30s, poll `/health/ready`                                                               | `postgres` check turns `fail` **within one probe interval**, then recovers when restarted |
+| R11  | Stop staging Redis briefly, poll `/health/ready`                                                                    | `redis` check turns `fail`; the service stays up serving `/health/live`                   |
+| R12  | `docker logs <container> \| grep -Ei 'redis://[^ ]*@\|postgres(ql)?://[^ ]*@\|password\|token'`                     | **no output**                                                                             |
+
+R10 and R11 are the ones that were impossible before this branch: PostgreSQL
+health used to latch true at startup and never move.
+
+## 0c. Acceptance criteria
+
+All must hold. Any single failure is a stop-and-roll-back.
+
+| #   | Criterion                                         | How verified                                                                                                                                                                                                                  |
+| --- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A1  | `/health/live` returns 200 throughout             | R1, and during R10/R11                                                                                                                                                                                                        |
+| A2  | `/health/ready` reflects each dependency honestly | R2, R10, R11 — each check moves independently                                                                                                                                                                                 |
+| A3  | No memory or static backend in use                | R2                                                                                                                                                                                                                            |
+| A4  | No origination path exists                        | Test 13; CI job `no origination path exists`                                                                                                                                                                                  |
+| A5  | No duplicate lead assignment                      | Unique index verified in 0a step 3; CI proves the database itself rejects a duplicate                                                                                                                                         |
+| A6  | No cross-tenant data                              | R4, plus the live tenant-isolation suites                                                                                                                                                                                     |
+| A7  | No stale lead permanently locked                  | **Not applicable in Phase 1 — and not claimable.** Dialer V2 does not write lead status at all. The lead-locking question belongs to F-1 in `apps/worker`, which is unresolved and blocked. See `F1_LEAD_STATUS_DIAGNOSIS.md` |
+| A8  | Shadow decisions are reproducible                 | Test 12, plus fenced-decision live suites                                                                                                                                                                                     |
+| A9  | Existing production Hopper behaviour unchanged    | Test 13b — capture `SELECT status, COUNT(*) FROM leads GROUP BY status` before and after; it must be identical                                                                                                                |
+| A10 | Rollback executes without data loss               | 0a rollback, with the CSV copy taken first                                                                                                                                                                                    |
+
+**A7 is deliberately not marked satisfiable by this procedure.** Claiming it
+would imply Dialer V2 owns lead state, and it does not. Any document or report
+asserting staging readiness on lead locking while F-1 is open is wrong.
 
 ## 1. Configure
 

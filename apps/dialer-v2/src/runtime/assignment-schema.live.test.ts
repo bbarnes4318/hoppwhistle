@@ -36,6 +36,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import type { DialerV2Db } from '../agents/db-sources.js';
 import { connectLivePostgres, type LivePrisma } from '../testing/live-services.js';
 
 import { AssignmentCapability, AssignmentHealth } from './assignment-health.js';
@@ -165,6 +166,38 @@ describe('the migration produced the objects it claims to', () => {
   });
 });
 
+/**
+ * A `DialerV2Db` whose assignment read goes through raw SQL at an explicit
+ * schema.
+ *
+ * The first attempt at this pointed a Prisma client at a schema-qualified URL
+ * and expected it to see a database without `campaign_agents`. It does not:
+ * the generated client emits `"public"."campaign_agents"`, qualified from the
+ * schema it was GENERATED against, so the runtime `?schema=` never affected
+ * table resolution and the probe kept finding the real table. Both tests failed
+ * in CI, correctly.
+ *
+ * Going through raw SQL at a named schema removes the ambiguity. PostgreSQL
+ * raises the missing-relation error itself, so what is under test is
+ * `probeSchema`'s classification of a real server error — which is the actual
+ * claim — rather than Prisma's schema routing.
+ */
+function dbAtSchema(schema: string): DialerV2Db {
+  return {
+    user: {
+      findMany: () => Promise.resolve([]),
+    },
+    campaignAgent: {
+      findMany: async (args: { where: Record<string, unknown>; take?: number }) => {
+        const limit = args.take === 0 ? 0 : 1;
+        return admin.$queryRawUnsafe<Array<Record<string, unknown>>>(
+          `SELECT "campaignId" FROM ${schema}."campaign_agents" LIMIT ${limit}`
+        );
+      },
+    },
+  } as unknown as DialerV2Db;
+}
+
 describe('capability across a genuinely missing migration', () => {
   live('reports schema_missing, not database_unreachable', async () => {
     // The distinction that matters operationally: one is fixed by a deploy, the
@@ -185,7 +218,7 @@ describe('capability across a genuinely missing migration', () => {
       databaseReachable: () => monitor.healthy(),
     });
 
-    const probed = await health.probeSchema(connection.db);
+    const probed = await health.probeSchema(dbAtSchema(BARE_SCHEMA));
     expect(probed).toBe(false);
 
     // PostgreSQL itself is perfectly fine. Only the table is absent.
@@ -214,8 +247,9 @@ describe('capability across a genuinely missing migration', () => {
       configured: true,
       databaseReachable: () => monitor.healthy(),
     });
+    const db = dbAtSchema(BARE_SCHEMA);
 
-    await health.probeSchema(connection.db);
+    await health.probeSchema(db);
     expect(health.capability()).toBe(AssignmentCapability.SCHEMA_MISSING);
 
     // Apply the migration's table into the bare schema — the same DDL, minus the
@@ -234,8 +268,8 @@ describe('capability across a genuinely missing migration', () => {
       )
     `);
 
-    // No restart, no reconnect: the same live connection re-probes.
-    const probed = await health.probeSchema(connection.db);
+    // No restart, no reconnect: the same health object re-probes.
+    const probed = await health.probeSchema(db);
     expect(probed).toBe(true);
     expect(health.capability()).toBe(AssignmentCapability.RESOLVABLE);
     expect(health.resolvable()).toBe(true);
