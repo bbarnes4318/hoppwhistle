@@ -70,11 +70,25 @@ beforeAll(async () => {
     // Carry the constructor name and the first stack frame too. A Prisma
     // initialisation error can arrive with an empty `message`, and "PostgreSQL
     // is unusable: " with nothing after it is a failure nobody can act on.
-    const err = error as { name?: string; message?: string; stack?: string };
+    const err = error as {
+      name?: string;
+      message?: string;
+      code?: string;
+      meta?: unknown;
+      stack?: string;
+    };
     skipReason =
-      [err?.name, err?.message, err?.stack?.split('\n')[1]?.trim()].filter(Boolean).join(' | ') ||
+      [
+        err?.name,
+        err?.code,
+        err?.message,
+        err?.meta ? JSON.stringify(err.meta) : undefined,
+        err?.stack?.split('\n')[1]?.trim(),
+      ]
+        .filter(Boolean)
+        .join(' | ') ||
       String(error) ||
-      'an error with no name, message or stack';
+      'an error with no name, code, message or stack';
     if (REQUIRE_LIVE) {
       throw new Error(
         `DIALER_V2_REQUIRE_LIVE_SERVICES is set but PostgreSQL is unusable: ${skipReason}`
@@ -99,22 +113,105 @@ afterAll(async () => {
   await db.$disconnect();
 }, 60_000);
 
+/**
+ * Insert a row filling exactly the columns the DATABASE says are required.
+ *
+ * Hand-written INSERTs against another module's schema do not survive contact
+ * with it — the first version of this omitted `campaigns.publisherId`, which is
+ * NOT NULL with a foreign key, and failed for a reason that had nothing to do
+ * with reservations. Required foreign keys are resolved by seeding the
+ * referenced table first, so this stays correct as those tables change.
+ */
+async function seedRow(
+  table: string,
+  id: string,
+  overrides: Record<string, unknown> = {},
+  seen = new Set<string>()
+): Promise<string> {
+  if (seen.has(table)) return id;
+  seen.add(table);
+
+  const columns = await db.$queryRawUnsafe<
+    Array<{
+      column_name: string;
+      data_type: string;
+      udt_name: string;
+      is_nullable: string;
+      column_default: string | null;
+    }>
+  >(
+    `SELECT column_name, data_type, udt_name, is_nullable, column_default
+     FROM information_schema.columns WHERE table_schema='public' AND table_name=$1`,
+    table
+  );
+
+  const fks = await db.$queryRawUnsafe<Array<{ column_name: string; ref_table: string }>>(
+    `SELECT kcu.column_name, ccu.table_name AS ref_table
+     FROM information_schema.table_constraints tc
+     JOIN information_schema.key_column_usage kcu
+       ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+     JOIN information_schema.constraint_column_usage ccu
+       ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
+     WHERE tc.constraint_type='FOREIGN KEY' AND tc.table_schema='public' AND tc.table_name=$1`,
+    table
+  );
+  const fkByColumn = new Map(fks.map(f => [f.column_name, f.ref_table]));
+
+  const names: string[] = [];
+  const values: unknown[] = [];
+
+  for (const c of columns) {
+    const required = c.is_nullable === 'NO' && c.column_default === null;
+    const overridden = Object.prototype.hasOwnProperty.call(overrides, c.column_name);
+    if (!required && !overridden) continue;
+
+    names.push(`"${c.column_name}"`);
+    if (overridden) {
+      values.push(overrides[c.column_name]);
+      continue;
+    }
+
+    const ref = fkByColumn.get(c.column_name);
+    if (ref && ref !== table) {
+      const parentId = `${id}-${ref}`;
+      await seedRow(ref, parentId, {}, seen);
+      values.push(parentId);
+      continue;
+    }
+
+    if (c.column_name === 'id') values.push(id);
+    else if (c.data_type === 'USER-DEFINED') {
+      const label = await db.$queryRawUnsafe<Array<{ enumlabel: string }>>(
+        `SELECT e.enumlabel FROM pg_enum e JOIN pg_type t ON t.oid=e.enumtypid
+         WHERE t.typname=$1 ORDER BY e.enumsortorder LIMIT 1`,
+        c.udt_name
+      );
+      values.push(label[0]?.enumlabel ?? null);
+    } else if (/timestamp|date/i.test(c.data_type)) values.push(new Date());
+    else if (/int|numeric|double|real/i.test(c.data_type)) values.push(0);
+    else if (/bool/i.test(c.data_type)) values.push(false);
+    else if (/json/i.test(c.data_type)) values.push('{}');
+    else if (/ARRAY/i.test(c.data_type)) values.push([]);
+    else values.push(`${id}-${c.column_name}`);
+  }
+
+  const placeholders = values.map((_, i) => `$${i + 1}`).join(',');
+  await db.$executeRawUnsafe(
+    `INSERT INTO "${table}" (${names.join(',')}) VALUES (${placeholders}) ON CONFLICT DO NOTHING`,
+    ...values
+  );
+  return id;
+}
+
 async function seed(): Promise<void> {
   for (const [tenant, campaign] of [
     [TENANT, CAMPAIGN],
     [OTHER_TENANT, OTHER_CAMPAIGN],
   ]) {
-    await db.$executeRawUnsafe(
-      `INSERT INTO tenants (id,name,slug,status,"createdAt","updatedAt")
-       VALUES ($1,$1,$1,'ACTIVE',NOW(),NOW()) ON CONFLICT (id) DO NOTHING`,
-      tenant
-    );
-    await db.$executeRawUnsafe(
-      `INSERT INTO campaigns (id,name,status,"tenantId","createdAt","updatedAt")
-       VALUES ($1,$1,'ACTIVE',$2,NOW(),NOW()) ON CONFLICT (id) DO NOTHING`,
-      campaign,
-      tenant
-    );
+    await seedRow('tenants', tenant);
+    // `status` must be ACTIVE — the reservation predicate requires it — and the
+    // tenant must be ours, not a synthetic one the FK resolver would invent.
+    await seedRow('campaigns', campaign, { tenantId: tenant, status: 'ACTIVE' });
   }
 }
 
@@ -122,15 +219,15 @@ let phoneCounter = 0;
 
 async function makeLead(id: string, tenant = TENANT, campaign = CAMPAIGN): Promise<string> {
   phoneCounter += 1;
-  await db.$executeRawUnsafe(
-    `INSERT INTO leads (id,"tenantId","campaignId","phoneNumber",status,priority,tags,"createdAt","updatedAt")
-     VALUES ($1,$2,$3,$4,'NEW',0,'{}',NOW(),NOW())
-     ON CONFLICT (id) DO UPDATE SET status='NEW'`,
-    id,
-    tenant,
-    campaign,
-    `+1555${String(1_000_000 + phoneCounter).slice(0, 7)}`
-  );
+  await seedRow('leads', id, {
+    tenantId: tenant,
+    campaignId: campaign,
+    phoneNumber: `+1555${String(1_000_000 + phoneCounter).slice(0, 7)}`,
+    status: 'NEW',
+  });
+  // Re-running a test must find the lead dialable again, whatever a previous
+  // run left behind.
+  await db.$executeRawUnsafe(`UPDATE leads SET status='NEW' WHERE id = $1`, id);
   await db.$executeRawUnsafe(`DELETE FROM lead_dial_reservations WHERE "leadId" = $1`, id);
   return id;
 }
