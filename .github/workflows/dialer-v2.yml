@@ -100,6 +100,10 @@ jobs:
             apps/dialer-v2/tsconfig.json \
             apps/dialer-v2/vitest.config.ts \
             apps/dialer-v2/vitest.live.config.ts \
+            apps/worker/vitest.config.ts \
+            apps/worker/vitest.live.config.ts \
+            apps/api/prisma/migrations/20260803000000_add_lead_dial_reservations/migration.sql \
+            apps/api/prisma/migrations/20260803000000_add_lead_dial_reservations/down.sql \
             apps/dialer-v2/tsup.config.ts \
             apps/dialer-v2/scripts/smoke.mjs \
             apps/dialer-v2/Dockerfile \
@@ -455,6 +459,32 @@ jobs:
       - name: Build the artifact
         run: pnpm --filter @hopwhistle/dialer-v2 build
 
+      # The reservation lifecycle. Every claim in this suite is a claim about
+      # PostgreSQL — that a partial unique index settles a race, that
+      # FOR UPDATE SKIP LOCKED lets several reapers divide work rather than
+      # duplicate it — so a hand-written double could only confirm the author's
+      # belief. This is the only place they can be contradicted.
+      - name: Worker lead-reservation live suite
+        run: |
+          set -euo pipefail
+          cd apps/worker
+          pnpm exec vitest run --config vitest.live.config.ts \
+            --reporter=verbose --reporter=json --outputFile=/tmp/worker-live-results.json
+
+      - name: Assert the reservation live tests actually ran
+        run: |
+          set -euo pipefail
+          node -e "
+            const r = require('/tmp/worker-live-results.json');
+            const passed = r.numPassedTests ?? 0;
+            const total = r.numTotalTests ?? 0;
+            console.log('worker live tests passed', passed, 'of', total);
+            if (total < 15 || passed !== total) {
+              console.error('::error::expected at least 15 worker live tests to run and every one to pass');
+              process.exit(1);
+            }
+          "
+
       - name: Smoke test — production composition against throwaway services
         env:
           SMOKE_REDIS_URL: redis://127.0.0.1:6379/14
@@ -598,6 +628,34 @@ jobs:
       # Running down.sql removes exactly the objects this migration owns, which
       # leaves precisely the PRE-migration base state a real deployment starts
       # from — and proves down.sql works before anything depends on it.
+      # ── The reservation migration ────────────────────────────────────────
+      #
+      # Same treatment as the assignment one: applied, verified, rolled back,
+      # re-applied. The partial unique index is the whole design, so it is
+      # asserted by definition rather than only by behaviour — a plain unique
+      # index would pass every behavioural test that only ever reserves once,
+      # while making a lead dialable exactly one time ever.
+      - name: The reservation migration produces its objects
+        run: |
+          set -euo pipefail
+          DIR=apps/api/prisma/migrations/20260803000000_add_lead_dial_reservations
+          test -f "$DIR/migration.sql" || { echo "::error::reservation migration.sql is missing"; exit 1; }
+          test -f "$DIR/down.sql" || { echo "::error::reservation down.sql is missing"; exit 1; }
+          if grep -qiE '^\s*(DROP TABLE|DROP COLUMN|ALTER COLUMN|TRUNCATE)' "$DIR/migration.sql"; then
+            echo "::error::the reservation migration is not additive"
+            exit 1
+          fi
+          if grep -oiE '^[[:space:]]*ALTER TABLE "[^"]+"' "$DIR/migration.sql" \
+             | grep -qv 'lead_dial_reservations'; then
+            echo "::error::the reservation migration alters a table other than lead_dial_reservations"
+            exit 1
+          fi
+          # F-1's whole point: the enum must NOT have gained a member.
+          if grep -qiE 'ALTER TYPE "LeadStatus"' "$DIR/migration.sql"; then
+            echo "::error::the reservation migration alters LeadStatus; it must not"
+            exit 1
+          fi
+
       - name: Wind back to the pre-migration base state
         run: |
           set -euo pipefail
@@ -630,6 +688,36 @@ jobs:
           node scripts/ci/assignment-migration-checks.mjs reapplied
       - name: campaign_agents matches the Prisma model exactly
         run: node scripts/ci/assignment-migration-checks.mjs columns-match
+
+      # The reservation migration, against the same base state.
+      - name: Apply the reservation migration
+        run: |
+          set -euo pipefail
+          DIR=apps/api/prisma/migrations/20260803000000_add_lead_dial_reservations
+          psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f "$DIR/migration.sql"
+          node scripts/ci/assignment-migration-checks.mjs reservation-objects
+
+      - name: Roll the reservation migration back and forward again
+        run: |
+          set -euo pipefail
+          DIR=apps/api/prisma/migrations/20260803000000_add_lead_dial_reservations
+          psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f "$DIR/down.sql"
+          node -e "
+            const { Client } = require('pg');
+            (async () => {
+              const c = new Client({ connectionString: process.env.DATABASE_URL });
+              await c.connect();
+              const t = await c.query(\"SELECT to_regclass('public.lead_dial_reservations') AS t\");
+              if (t.rows[0].t) throw new Error('lead_dial_reservations survived the rollback');
+              const e = await c.query(\"SELECT 1 FROM pg_type WHERE typname='LeadDialReservationState'\");
+              if (e.rowCount !== 0) throw new Error('the reservation enum survived the rollback');
+              const leads = await c.query('SELECT COUNT(*)::int AS n FROM leads');
+              console.log('rollback clean; leads still holds', leads.rows[0].n, 'row(s)');
+              await c.end();
+            })().catch(e => { console.error('::error::' + e.message); process.exit(1); });
+          "
+          psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f "$DIR/migration.sql"
+          node scripts/ci/assignment-migration-checks.mjs reservation-objects
   api-dialer-v2:
     name: api Dialer V2 units
     runs-on: ubuntu-latest

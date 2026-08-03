@@ -276,7 +276,79 @@ const commands = {
   'rollback-clean': rollbackClean,
   reapplied,
   'columns-match': columnsMatch,
+  'reservation-objects': reservationObjects,
 };
+
+/**
+ * The reservation table, and specifically its PARTIAL unique index.
+ *
+ * Asserted by definition rather than only by behaviour. A plain unique index on
+ * `leadId` would satisfy every test that reserves a lead once — and would make a
+ * lead dialable exactly one time, ever. The `WHERE "releasedAt" IS NULL`
+ * predicate is the entire difference, so the index definition is read back and
+ * checked for it.
+ */
+async function reservationObjects() {
+  const table = await client.query(`SELECT to_regclass('public.lead_dial_reservations') AS t`);
+  if (!table.rows[0].t) fail('lead_dial_reservations was not created');
+
+  const idx = await client.query(
+    `SELECT indexname, indexdef FROM pg_indexes
+     WHERE schemaname='public' AND tablename='lead_dial_reservations'`
+  );
+  const byName = new Map(idx.rows.map(r => [r.indexname, r.indexdef]));
+
+  const partial = byName.get('lead_dial_reservations_active_lead_key');
+  if (!partial) fail('the partial unique index on (leadId) is missing');
+  if (!/CREATE UNIQUE INDEX/i.test(partial)) {
+    fail('lead_dial_reservations_active_lead_key is not UNIQUE');
+  }
+  if (!/WHERE\s*\(?"?releasedAt"?\s+IS\s+NULL\)?/i.test(partial)) {
+    fail(
+      'lead_dial_reservations_active_lead_key is not PARTIAL. Without the ' +
+        'WHERE "releasedAt" IS NULL predicate a lead can be dialled exactly once, ever.'
+    );
+  }
+
+  for (const required of [
+    'lead_dial_reservations_state_leaseExpiresAt_idx',
+    'lead_dial_reservations_tenantId_idx',
+    'lead_dial_reservations_campaignId_idx',
+    'lead_dial_reservations_leadId_idx',
+  ]) {
+    if (!byName.has(required)) fail(`missing index ${required}`);
+  }
+
+  const enumType = await client.query(
+    `SELECT enumlabel FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
+     WHERE t.typname = 'LeadDialReservationState' ORDER BY e.enumsortorder`
+  );
+  const labels = enumType.rows.map(r => r.enumlabel);
+  for (const required of [
+    'RESERVED',
+    'ORIGINATION_SUBMITTED',
+    'ORIGINATION_ACCEPTED',
+    'COMPLETED',
+    'RELEASED',
+    'NEEDS_RECONCILIATION',
+  ]) {
+    if (!labels.includes(required)) fail(`LeadDialReservationState is missing ${required}`);
+  }
+
+  // F-1's whole point. The reservation is a separate concept precisely so this
+  // enum does not gain a member, and the guard would fire if it did.
+  const leadStatus = await client.query(
+    `SELECT enumlabel FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
+     WHERE t.typname = 'LeadStatus'`
+  );
+  if (leadStatus.rows.map(r => r.enumlabel).includes('DIALING')) {
+    fail('LeadStatus gained DIALING; the reservation design exists so that it does not');
+  }
+
+  process.stdout.write(
+    `reservation objects present: table, partial unique index, 4 indexes, ${labels.length} states; LeadStatus unchanged\n`
+  );
+}
 
 if (!commands[command]) {
   process.stderr.write(`unknown command: ${command}\nknown: ${Object.keys(commands).join(', ')}\n`);
