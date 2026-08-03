@@ -8,6 +8,19 @@ RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
 COPY . .
 RUN pnpm install --no-frozen-lockfile
 
+# Generate the Prisma client BEFORE the build.
+#
+# `@prisma/client` is a production dependency of this service and is left
+# external by tsup, so the artifact loads it from node_modules at runtime rather
+# than carrying an inlined copy. That copy has to exist, and it only exists after
+# generation: `@prisma/client/default.js` re-exports `.prisma/client/default`,
+# which is an output directory rather than a package.
+#
+# Without this line the build fails with `Could not resolve ".prisma/client/default"`
+# — which is exactly how it failed, because nothing here generated it and nothing
+# in CI built the package at all.
+RUN pnpm --filter @hopwhistle/api exec prisma generate
+
 # Build the one workspace dependency this service uses.
 RUN pnpm --filter @hopwhistle/shared exec tsup --no-dts
 RUN rm -rf node_modules/@hopwhistle/shared && \
@@ -27,6 +40,10 @@ RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nodeapp
 
 COPY --from=builder /app/apps/dialer-v2/dist ./dist
+# Carries both `@prisma/client` and the generated `.prisma/client` beside it.
+# The artifact resolves the client from here at runtime; a runner stage without
+# it starts and then fails readiness with "the generated Prisma client is
+# missing" rather than crashing on an unresolved import.
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/dialer-v2/package.json ./package.json
 
