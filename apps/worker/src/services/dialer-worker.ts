@@ -12,7 +12,37 @@ import modesl, { ApiResponse } from 'modesl';
 // Workaround for CJS import in ESM
 const { Connection: ESLConnection } = modesl;
 
+import type { HopperScope } from '../config/hopper-gate.js';
 import { logger } from '../lib/logger.js';
+
+/** Required at startup. There is no "unscoped" mode — see `start()`. */
+export interface HopperStartOptions {
+  scope: HopperScope;
+  /**
+   * The second, independent interlock. Enabling the Hopper does not enable
+   * calls: with this false the loop selects and reserves but never submits an
+   * origination command, so the lifecycle can be exercised without a gateway.
+   */
+  originationEnabled: boolean;
+}
+
+const NO_SCOPE: HopperScope = { tenantIds: [], campaignIds: [] };
+
+/**
+ * Thrown when the loop reaches origination with the interlock off.
+ *
+ * A distinct type rather than a generic Error so the caller can tell "we chose
+ * not to dial" apart from "dialling failed", and release the reservation
+ * accordingly. Collapsing them would make a deliberately disabled worker look
+ * like a broken one in every metric.
+ */
+export class OriginationDisabledError extends Error {
+  readonly code = 'LEGACY_HOPPER_ORIGINATION_DISABLED';
+  constructor() {
+    super('origination is disabled by LEGACY_HOPPER_ORIGINATION_ENABLED');
+    this.name = 'OriginationDisabledError';
+  }
+}
 
 /** Configuration from environment */
 const FREESWITCH_HOST =
@@ -70,6 +100,11 @@ export class DialerWorker {
   private eslConnection: FreeSwitchESLConnection | null = null;
   private currentActiveCalls = 0;
   private redisEnabled = false;
+
+  /** Set by `start()`. Empty until then, so nothing can be selected. */
+  private scope: HopperScope = NO_SCOPE;
+  /** Set by `start()`. False until then, so nothing can be originated. */
+  private originationEnabled = false;
 
   // Per-tenant FracTEL DID rotation pool, cached from the DB with a short TTL so
   // caller-ID rotation always reflects the current active pool numbers.
@@ -131,12 +166,27 @@ export class DialerWorker {
 
   /**
    * Start the dialer worker loop.
+   *
+   * The scope is REQUIRED and comes from `config/hopper-gate.ts`. It is not
+   * optional and has no default, deliberately: an omitted scope was exactly the
+   * previous behaviour — every tenant, every campaign — and making it a
+   * parameter with no default means that behaviour cannot be reached by
+   * forgetting something.
    */
-  async start(): Promise<void> {
+  async start(options: HopperStartOptions): Promise<void> {
     if (this.isRunning) {
       logger.warn({ msg: 'DialerWorker already running' });
       return;
     }
+
+    if (options.scope.tenantIds.length === 0 && options.scope.campaignIds.length === 0) {
+      // Defence in depth. The gate already refuses this; so does the loop, so
+      // that a future caller bypassing the gate still cannot dial everything.
+      throw new Error('DialerWorker refused to start: the scope names no tenant and no campaign');
+    }
+
+    this.scope = options.scope;
+    this.originationEnabled = options.originationEnabled;
 
     logger.info({
       msg: 'Starting DialerWorker...',
@@ -145,6 +195,9 @@ export class DialerWorker {
         port: FREESWITCH_ESL_PORT,
         maxConcurrent: MAX_CONCURRENT_CALLS,
         pollInterval: DIALER_POLL_INTERVAL_MS,
+        scopedTenants: this.scope.tenantIds.length,
+        scopedCampaigns: this.scope.campaignIds.length,
+        originationEnabled: this.originationEnabled,
       },
     });
 
@@ -320,8 +373,15 @@ export class DialerWorker {
    * Fetch leads ready for dialing using raw SQL to avoid Prisma model issues.
    */
   private async fetchLeadsToDial(limit: number): Promise<LeadToDial[]> {
-    // Use raw SQL query to fetch leads with campaign info
-    // Note: We use quoted camelCase identifiers to match Prisma default mapping
+    // The allowlist is part of the PREDICATE, not a filter applied afterwards.
+    // A post-filter would still have fetched — and, before the reservation
+    // lifecycle existed, still have marked — leads outside the authorised
+    // scope. Empty arrays are passed explicitly so the `cardinality` guards
+    // below express "this dimension is unrestricted" rather than "match none",
+    // and the gate guarantees at least one of the two is non-empty.
+    const tenantIds = [...this.scope.tenantIds];
+    const campaignIds = [...this.scope.campaignIds];
+
     const leads = await this.prisma.$queryRaw<LeadRow[]>`
       SELECT
         l.id,
@@ -333,6 +393,8 @@ export class DialerWorker {
       INNER JOIN "campaigns" c ON l."campaignId" = c.id
       WHERE l.status = 'NEW'
         AND c.status = 'ACTIVE'
+        AND (cardinality(${tenantIds}::text[]) = 0 OR c."tenantId" = ANY(${tenantIds}::text[]))
+        AND (cardinality(${campaignIds}::text[]) = 0 OR l."campaignId" = ANY(${campaignIds}::text[]))
       ORDER BY l."createdAt" ASC
       LIMIT ${limit}
     `;
@@ -350,6 +412,14 @@ export class DialerWorker {
    * Originate a call to a lead via FreeSWITCH.
    */
   private async originateCall(lead: LeadToDial): Promise<void> {
+    // The second interlock, checked before anything is built rather than before
+    // it is sent. There is no path from here to a gateway with this false: the
+    // command string is never constructed, so it cannot be logged, retried, or
+    // accidentally forwarded either.
+    if (!this.originationEnabled) {
+      throw new OriginationDisabledError();
+    }
+
     if (!this.eslConnection) {
       throw new Error('ESL not connected');
     }
