@@ -568,19 +568,7 @@ jobs:
           set -euo pipefail
           DIR=apps/api/prisma/migrations/20260802000000_add_campaign_agent_assignments
           psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f "$DIR/down.sql"
-          node -e "
-            const { Client } = require('pg');
-            (async () => {
-              const c = new Client({ connectionString: process.env.DATABASE_URL });
-              await c.connect();
-              const t = await c.query(\"SELECT to_regclass('public.campaign_agents') AS t\");
-              if (t.rows[0].t) throw new Error('base state still has campaign_agents');
-              console.log('at the pre-migration base state');
-              await c.end();
-            })().catch(e => { console.error('::error::' + e.message); process.exit(1); });
-          "
-
-      # ── Forward, onto the base state ─────────────────────────────────────
+          node scripts/ci/assignment-migration-checks.mjs at-base-state
       - name: Apply the migration onto the base state
         run: |
           set -euo pipefail
@@ -588,73 +576,9 @@ jobs:
           psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f "$DIR/migration.sql"
 
       - name: The objects the migration claims to create exist
-        run: |
-          set -euo pipefail
-          node -e "
-            const { Client } = require('pg');
-            (async () => {
-              const c = new Client({ connectionString: process.env.DATABASE_URL });
-              await c.connect();
-
-              const table = await c.query(\"SELECT to_regclass('public.campaign_agents') AS t\");
-              if (!table.rows[0].t) throw new Error('campaign_agents was not created');
-
-              const idx = await c.query(
-                \"SELECT indexname FROM pg_indexes WHERE tablename='campaign_agents'\"
-              );
-              const names = idx.rows.map(r => r.indexname);
-              for (const required of [
-                'campaign_agents_tenantId_userId_status_idx',
-                'campaign_agents_tenantId_campaignId_userId_key',
-                'campaign_agents_tenantId_idx',
-                'campaign_agents_campaignId_idx',
-                'campaign_agents_userId_idx',
-              ]) {
-                if (!names.includes(required)) throw new Error('missing index ' + required);
-              }
-
-              const fks = await c.query(
-                \"SELECT conname FROM pg_constraint WHERE conrelid='public.campaign_agents'::regclass AND contype='f'\"
-              );
-              if (fks.rows.length !== 3) {
-                throw new Error('expected 3 foreign keys, found ' + fks.rows.length);
-              }
-
-              const enumT = await c.query(\"SELECT 1 FROM pg_type WHERE typname='CampaignAgentStatus'\");
-              if (enumT.rowCount !== 1) throw new Error('CampaignAgentStatus enum missing');
-
-              console.log('forward migration produced the table, 5 indexes, 3 FKs and the enum');
-              await c.end();
-            })().catch(e => { console.error('::error::' + e.message); process.exit(1); });
-          "
-
-      # The unique constraint has to be enforced by the DATABASE. An application
-      # check would satisfy a behavioural test while leaving two replicas free to
-      # race a duplicate in, which double-counts an agent's capacity.
+        run: node scripts/ci/assignment-migration-checks.mjs objects-exist
       - name: The database itself rejects a duplicate assignment
-        run: |
-          set -euo pipefail
-          node -e "
-            const { Client } = require('pg');
-            (async () => {
-              const c = new Client({ connectionString: process.env.DATABASE_URL });
-              await c.connect();
-              await c.query(\"INSERT INTO tenants (id,name,slug,status,\\\"createdAt\\\",\\\"updatedAt\\\") VALUES ('t1','T','t1','ACTIVE',NOW(),NOW()) ON CONFLICT DO NOTHING\");
-              await c.query(\"INSERT INTO users (id,email,\\\"passwordHash\\\",role,status,\\\"tenantId\\\",\\\"createdAt\\\",\\\"updatedAt\\\") VALUES ('u1','u1@x.test','x','AGENT','ACTIVE','t1',NOW(),NOW()) ON CONFLICT DO NOTHING\");
-              await c.query(\"INSERT INTO campaigns (id,name,status,\\\"tenantId\\\",\\\"createdAt\\\",\\\"updatedAt\\\") VALUES ('c1','C','ACTIVE','t1',NOW(),NOW()) ON CONFLICT DO NOTHING\");
-
-              const row = \"INSERT INTO campaign_agents (id,\\\"tenantId\\\",\\\"campaignId\\\",\\\"userId\\\",status,\\\"createdAt\\\",\\\"updatedAt\\\") VALUES (\$1,'t1','c1','u1','ACTIVE',NOW(),NOW())\";
-              await c.query(row, ['ca1']);
-              let rejected = false;
-              try { await c.query(row, ['ca2']); } catch (e) { rejected = /duplicate key/i.test(e.message); }
-              if (!rejected) throw new Error('the database accepted a duplicate assignment');
-
-              console.log('duplicate rejected by the unique index, deterministically');
-              await c.end();
-            })().catch(e => { console.error('::error::' + e.message); process.exit(1); });
-          "
-
-      # ── Backward, for real ───────────────────────────────────────────────
+        run: node scripts/ci/assignment-migration-checks.mjs duplicate-rejected
       - name: Roll back with down.sql
         run: |
           set -euo pipefail
@@ -662,85 +586,15 @@ jobs:
           psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f "$DIR/down.sql"
 
       - name: The rollback removed exactly what it added, and nothing else
-        run: |
-          set -euo pipefail
-          node -e "
-            const { Client } = require('pg');
-            (async () => {
-              const c = new Client({ connectionString: process.env.DATABASE_URL });
-              await c.connect();
-
-              const t = await c.query(\"SELECT to_regclass('public.campaign_agents') AS t\");
-              if (t.rows[0].t) throw new Error('campaign_agents survived the rollback');
-
-              const e = await c.query(\"SELECT 1 FROM pg_type WHERE typname='CampaignAgentStatus'\");
-              if (e.rowCount !== 0) throw new Error('CampaignAgentStatus survived the rollback');
-
-              // The tables the migration pointed AT must be untouched, with their
-              // rows intact — a rollback that cascaded into them would be a data
-              // loss event, not a rollback.
-              for (const [table, expected] of [['tenants',1],['users',1],['campaigns',1]]) {
-                const r = await c.query('SELECT COUNT(*)::int AS n FROM ' + table);
-                if (r.rows[0].n !== expected) {
-                  throw new Error(table + ' has ' + r.rows[0].n + ' rows after rollback, expected ' + expected);
-                }
-              }
-
-              console.log('rollback dropped the table and enum, and left referenced rows intact');
-              await c.end();
-            })().catch(e => { console.error('::error::' + e.message); process.exit(1); });
-          "
-
-      # ── Forward again ────────────────────────────────────────────────────
-      #
-      # Forward → rollback → forward. A rollback that leaves the database unable
-      # to take the migration again is not a rollback anyone can act on at 3am.
+        run: node scripts/ci/assignment-migration-checks.mjs rollback-clean
       - name: Re-apply the migration after the rollback
         run: |
           set -euo pipefail
           DIR=apps/api/prisma/migrations/20260802000000_add_campaign_agent_assignments
           psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f "$DIR/migration.sql"
-          node -e "
-            const { Client } = require('pg');
-            (async () => {
-              const c = new Client({ connectionString: process.env.DATABASE_URL });
-              await c.connect();
-              const t = await c.query(\"SELECT to_regclass('public.campaign_agents') AS t\");
-              if (!t.rows[0].t) throw new Error('re-apply did not recreate the table');
-              console.log('forward → rollback → forward completes cleanly');
-              await c.end();
-            })().catch(e => { console.error('::error::' + e.message); process.exit(1); });
-          "
-
-      # Scoped drift check. A whole-schema `migrate diff` cannot be clean here:
-      # audit finding F-2 records that `leads` and `LeadStatus` exist in NO
-      # migration, so the migration history and schema.prisma genuinely disagree
-      # about them. That is a pre-existing, documented blocker. What must hold is
-      # that OUR table introduces no drift of its own.
+          node scripts/ci/assignment-migration-checks.mjs reapplied
       - name: campaign_agents matches the Prisma model exactly
-        run: |
-          set -euo pipefail
-          node -e "
-            const { Client } = require('pg');
-            (async () => {
-              const c = new Client({ connectionString: process.env.DATABASE_URL });
-              await c.connect();
-              const r = await c.query(
-                \"SELECT column_name, is_nullable FROM information_schema.columns WHERE table_name='campaign_agents' ORDER BY column_name\"
-              );
-              const actual = r.rows.map(x => x.column_name + ':' + x.is_nullable).join(',');
-              const expected = [
-                'campaignId:NO','createdAt:NO','id:NO','priority:YES',
-                'status:NO','tenantId:NO','updatedAt:NO','userId:NO',
-              ].join(',');
-              if (actual !== expected) {
-                throw new Error('column drift.\\n  actual:   ' + actual + '\\n  expected: ' + expected);
-              }
-              console.log('campaign_agents columns and nullability match the model');
-              await c.end();
-            })().catch(e => { console.error('::error::' + e.message); process.exit(1); });
-          "
-
+        run: node scripts/ci/assignment-migration-checks.mjs columns-match
   api-dialer-v2:
     name: api Dialer V2 units
     runs-on: ubuntu-latest
