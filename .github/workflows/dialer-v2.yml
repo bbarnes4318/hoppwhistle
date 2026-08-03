@@ -769,6 +769,13 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      # Required before the worker typechecks at all: several worker modules
+      # reference `Prisma.InputJsonValue`, which only exists on the GENERATED
+      # client. Without this the typecheck fails across files this branch never
+      # touched, for a reason that has nothing to do with the gate.
+      - name: Generate the Prisma client
+        run: pnpm --filter @hopwhistle/api exec prisma generate
+
       # The worker's full lint has ~309 pre-existing problems across files this
       # branch never touched, so it is scoped to the gate rather than run whole.
       # A job that is red for unrelated reasons teaches everyone to ignore it.
