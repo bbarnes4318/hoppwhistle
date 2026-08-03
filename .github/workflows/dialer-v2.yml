@@ -38,6 +38,12 @@ on:
       - 'apps/api/prisma/schema.prisma'
       - 'apps/api/prisma/migrations/**'
       - 'apps/worker/src/index.ts'
+      # The gate, the supervisor, and the Hopper itself. The kill-switch job
+      # reads all three, so a change to any must re-evaluate it.
+      - 'apps/worker/src/config/**'
+      - 'apps/worker/src/services/hopper-supervisor.ts'
+      - 'apps/worker/src/services/dialer-worker.ts'
+      - 'apps/worker/package.json'
       - 'docs/dialer-v2/**'
       - '.gitignore'
   pull_request:
@@ -62,6 +68,12 @@ on:
       - 'apps/api/prisma/schema.prisma'
       - 'apps/api/prisma/migrations/**'
       - 'apps/worker/src/index.ts'
+      # The gate, the supervisor, and the Hopper itself. The kill-switch job
+      # reads all three, so a change to any must re-evaluate it.
+      - 'apps/worker/src/config/**'
+      - 'apps/worker/src/services/hopper-supervisor.ts'
+      - 'apps/worker/src/services/dialer-worker.ts'
+      - 'apps/worker/package.json'
       - 'docs/dialer-v2/**'
       - '.gitignore'
 
@@ -749,3 +761,70 @@ jobs:
 
       - name: Enum and kill switch are consistent
         run: node scripts/ci/hopper-kill-switch-guard.mjs
+
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8.15.0
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # The worker's full lint has ~309 pre-existing problems across files this
+      # branch never touched, so it is scoped to the gate rather than run whole.
+      # A job that is red for unrelated reasons teaches everyone to ignore it.
+      - name: Typecheck the worker
+        run: pnpm --filter @hopwhistle/worker typecheck
+
+      - name: Lint the gate
+        run: |
+          set -euo pipefail
+          cd apps/worker
+          pnpm exec eslint \
+            src/config \
+            src/services/hopper-supervisor.ts \
+            src/services/__tests__ \
+            --ext .ts
+
+      - name: The gate, the preflight and the supervisor
+        run: |
+          set -euo pipefail
+          cd apps/worker
+          pnpm exec vitest run --reporter=verbose --reporter=json --outputFile=/tmp/worker-results.json
+
+      # The gate is the safety control for an outbound dialer. An exit code
+      # alone cannot distinguish "every test passed" from "the suite stopped
+      # being collected", and the second reads exactly like the first.
+      - name: Assert the gate tests actually ran
+        run: |
+          set -euo pipefail
+          node -e "
+            const r = require('/tmp/worker-results.json');
+            const passed = r.numPassedTests ?? 0;
+            const total = r.numTotalTests ?? 0;
+            console.log('worker tests passed', passed, 'of', total);
+            if (total < 97 || passed !== total) {
+              console.error('::error::expected at least 97 worker tests to run and every one to pass');
+              process.exit(1);
+            }
+            const names = (r.testResults ?? []).map(f => f.name ?? '');
+            for (const required of ['hopper-gate.test', 'hopper-preflight.test', 'hopper-supervisor.test']) {
+              if (!names.some(n => n.includes(required))) {
+                console.error('::error::' + required + ' did not run');
+                process.exit(1);
+              }
+            }
+          "
+
+      # The shipped defaults must keep the Hopper off. A workflow, compose file
+      # or example env that turns it on would defeat every check above.
+      - name: No committed configuration enables the Hopper
+        run: |
+          set -euo pipefail
+          if grep -rn --include='*.yml' --include='*.yaml' --include='*.env' \
+               --include='env.example' --include='*.example' --include='Dockerfile*' \
+               -E "LEGACY_HOPPER_(ENABLED|ORIGINATION_ENABLED)\s*[:=]\s*['\"]?true" \
+               . 2>/dev/null | grep -v node_modules; then
+            echo "::error::a committed file enables the legacy Hopper or its origination interlock"
+            exit 1
+          fi
+          echo "no committed configuration enables the Hopper or origination"
