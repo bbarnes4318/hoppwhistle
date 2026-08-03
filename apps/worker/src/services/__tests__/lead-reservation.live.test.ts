@@ -57,8 +57,12 @@ beforeAll(async () => {
     db = new mod.PrismaClient({ datasources: { db: { url: DATABASE_URL } } });
     await db.$queryRawUnsafe('SELECT 1');
 
+    // `to_regclass` returns PostgreSQL's `regclass` OID type, which Prisma
+    // cannot deserialize — it fails with P2010 rather than returning null, so
+    // "is the table there?" turns into "the database is unusable". Casting to
+    // text keeps the answer readable.
     const table = await db.$queryRawUnsafe<Array<{ t: string | null }>>(
-      `SELECT to_regclass('public.lead_dial_reservations') AS t`
+      `SELECT to_regclass('public.lead_dial_reservations')::text AS t`
     );
     if (!table[0]?.t) {
       throw new Error('lead_dial_reservations is absent; the migration has not been applied here');
