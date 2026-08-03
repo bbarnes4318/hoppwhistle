@@ -659,6 +659,11 @@ jobs:
       - name: Wind back to the pre-migration base state
         run: |
           set -euo pipefail
+          # `db push` creates everything in schema.prisma, which now includes
+          # BOTH of this branch's migrations. Winding both back is what produces
+          # the genuine pre-migration base state a deployment starts from.
+          RES=apps/api/prisma/migrations/20260803000000_add_lead_dial_reservations
+          psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f "$RES/down.sql"
           DIR=apps/api/prisma/migrations/20260802000000_add_campaign_agent_assignments
           psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f "$DIR/down.sql"
           node scripts/ci/assignment-migration-checks.mjs at-base-state

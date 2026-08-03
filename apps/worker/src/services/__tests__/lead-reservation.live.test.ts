@@ -49,8 +49,11 @@ beforeAll(async () => {
     if (!DATABASE_URL) throw new Error('no test DATABASE_URL is set');
 
     const mod = (await import('@prisma/client')) as unknown as {
-      PrismaClient: new (opts: Record<string, unknown>) => LivePrisma;
+      PrismaClient?: new (opts: Record<string, unknown>) => LivePrisma;
     };
+    if (typeof mod?.PrismaClient !== 'function') {
+      throw new Error('PrismaClient is not a constructor; the client was probably never generated');
+    }
     db = new mod.PrismaClient({ datasources: { db: { url: DATABASE_URL } } });
     await db.$queryRawUnsafe('SELECT 1');
 
@@ -64,7 +67,14 @@ beforeAll(async () => {
     await seed();
     available = true;
   } catch (error) {
-    skipReason = error instanceof Error ? error.message : String(error);
+    // Carry the constructor name and the first stack frame too. A Prisma
+    // initialisation error can arrive with an empty `message`, and "PostgreSQL
+    // is unusable: " with nothing after it is a failure nobody can act on.
+    const err = error as { name?: string; message?: string; stack?: string };
+    skipReason =
+      [err?.name, err?.message, err?.stack?.split('\n')[1]?.trim()].filter(Boolean).join(' | ') ||
+      String(error) ||
+      'an error with no name, message or stack';
     if (REQUIRE_LIVE) {
       throw new Error(
         `DIALER_V2_REQUIRE_LIVE_SERVICES is set but PostgreSQL is unusable: ${skipReason}`

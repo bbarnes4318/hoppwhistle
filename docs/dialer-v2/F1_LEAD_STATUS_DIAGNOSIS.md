@@ -1,8 +1,84 @@
-# F-1 — `LeadStatus` diagnosis, and why the fix is blocked
+# F-1 — `LeadStatus` diagnosis, and how it was resolved
 
-Status: **investigation complete, code change STOPPED at a protected boundary.**
-No code in `apps/worker/` was modified. The `LeadStatus` enum was not modified.
-No migration was created.
+Status: **RESOLVED.** `DIALING` was **not** added to `LeadStatus`. The Hopper was
+gated first, then the reservation model replaced the invalid write.
+
+> The diagnosis below is preserved as written, because the reasoning is what
+> produced the design. The sections marked **RESOLUTION** record what was
+> actually done once the protected files were authorised.
+
+## RESOLUTION — summary
+
+The safety ordering was mandatory and was followed:
+
+| #   | Change                                                 | Commit                 |
+| --- | ------------------------------------------------------ | ---------------------- |
+| 1   | Legacy Hopper disabled by default, scope mandatory     | `4cc0a1ec`             |
+| 2   | 42 tests + 12 guard fixtures proving the gate          | `3cf3b4da`             |
+| 3   | CI requires the gate to hold                           | `dad22590`, `79f44f77` |
+| 4   | Reservation lifecycle replaces the `DIALING` write     | `8b942258`             |
+| 5   | Concurrency and crash recovery against real PostgreSQL | `608eca25`             |
+
+**The gate landed and went green in CI before the enum was touched at all.** That
+ordering is the entire safety argument: repairing F-1 while the Hopper started
+unconditionally would have begun outbound dialing about a second after the
+migration.
+
+### The gate contract
+
+| Variable                             | Meaning                                                                                                  |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `LEGACY_HOPPER_ENABLED`              | Exactly `true` or `false`. Anything else refuses and names the variable. Absent or empty means disabled. |
+| `LEGACY_HOPPER_ALLOWED_TENANT_IDS`   | Comma list. At least one tenant **or** campaign is required.                                             |
+| `LEGACY_HOPPER_ALLOWED_CAMPAIGN_IDS` | As above.                                                                                                |
+| `LEGACY_HOPPER_ORIGINATION_ENABLED`  | Second, independent interlock. Off by default even when the Hopper is on.                                |
+| `LEGACY_HOPPER_EMERGENCY_STOP`       | Evaluated first; overrides everything.                                                                   |
+| `LEGACY_HOPPER_TEST_AUTHORIZED`      | Required for the Hopper to start under a test runner.                                                    |
+
+Reported through `/health` as `disabled`, `refused_configuration`,
+`preflight_blocked`, `enabled_scoped`, `running`, or `failed`. `running` is never
+inferred from the process being alive.
+
+### The domain decision: Design B
+
+`DIALING` is **not** an enum member. A dedicated `lead_dial_reservations` record
+holds the operational state. Reasoning in
+`apps/worker/src/services/lead-reservation.ts`; the short version is that
+`LeadStatus` answers "what came of this person" while a reservation answers
+"which worker holds this row for thirty seconds", and the latter needs an owner,
+a lease and a fencing token that no enum member can carry.
+
+**Rollback:** `DROP TABLE` — a genuine one. That was a deciding factor:
+PostgreSQL has no `DROP VALUE`, so Design A would have been forward-only on the
+production `leads` table under lock.
+
+### Crash recovery, and the uncertain case
+
+Six states, because "origination accepted" is three different facts. Submission
+is recorded **before** the command is built, so the crash window has a name.
+
+| Found expired in        | Becomes                | Why                                                                     |
+| ----------------------- | ---------------------- | ----------------------------------------------------------------------- |
+| `RESERVED`              | `RELEASED`             | No command was built. Nothing rang.                                     |
+| `ORIGINATION_SUBMITTED` | `NEEDS_RECONCILIATION` | A call may exist. Freeing it would dial someone whose phone is ringing. |
+| `ORIGINATION_ACCEPTED`  | `NEEDS_RECONCILIATION` | As above.                                                               |
+
+`NEEDS_RECONCILIATION` stays **active**, which is what keeps the lead out of the
+pool. Nothing auto-redials it. The originate carries
+`hopwhistle_attempt_id`, so reconciliation is answerable by asking FreeSWITCH
+whether a channel with that id exists — without it the only safe action would be
+to leave the lead stuck forever.
+
+**Stop condition, stated plainly:** the evidence-based reconciler is _not_
+implemented in this branch. Resolving `NEEDS_RECONCILIATION` requires querying a
+real FreeSWITCH, which this work is not authorised to do. Reservations reaching
+that state require an operator until that reconciler exists. This is the honest
+position: the design makes the question answerable and refuses to guess the
+answer.
+
+---
+
+## The original diagnosis, as written
 
 ---
 
