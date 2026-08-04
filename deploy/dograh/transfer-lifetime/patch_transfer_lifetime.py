@@ -31,8 +31,7 @@ HANGUP_RE = re.compile(
     r'(?P=i)    logger\.warning\(\n'
     r'(?P=i)        "Cannot hang up Asterisk channel: missing channel_id or ari_endpoint"\n'
     r'(?P=i)    \)\n'
-    r'(?P=i)    return False\n\n'
-    r'(?P=i)endpoint = f"\{ari_endpoint\}/ari/channels/\{channel_id\}"\n',
+    r'(?P=i)    return False\n\n',
     re.MULTILINE,
 )
 
@@ -78,14 +77,12 @@ def _commit_replacement(match: re.Match[str]) -> str:
 
 def _hangup_replacement(match: re.Match[str]) -> str:
     indent = match.group("i")
-    prefix = match.group(0).rsplit(f"{indent}endpoint =", 1)[0]
-    return prefix + (
+    return match.group(0) + (
         f"{indent}if await self._human_handoff_is_committed(channel_id):\n"
         f"{indent}    logger.warning(\n"
         f"{indent}        f\"[ARI Hangup] Suppressed late AI hangup for transferred caller {{channel_id}}\"\n"
         f"{indent}    )\n"
         f"{indent}    return True\n\n"
-        f'{indent}endpoint = f"{{ari_endpoint}}/ari/channels/{{channel_id}}"\n'
     )
 
 
