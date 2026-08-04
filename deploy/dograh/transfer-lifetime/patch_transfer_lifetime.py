@@ -73,6 +73,36 @@ def _commit_replacement(match: re.Match[str]) -> str:
         f"{indent}            f\"stamp caller {{channel_id}} ownership; \"\n"
         f"{indent}            f\"status={{guard_response.status}} response={{error_text}}\"\n"
         f"{indent}        )\n"
+        f"{indent}        rollback_url = (\n"
+        f"{indent}            f\"{{ari_endpoint}}/ari/bridges/{{bridge_id}}/removeChannel\"\n"
+        f"{indent}        )\n"
+        f"{indent}        async with session.post(\n"
+        f"{indent}            rollback_url,\n"
+        f"{indent}            auth=auth,\n"
+        f"{indent}            params={{\"channel\": destination_channel_id}},\n"
+        f"{indent}        ) as rollback_response:\n"
+        f"{indent}            if rollback_response.status not in (200, 204, 404):\n"
+        f"{indent}                rollback_error = await rollback_response.text()\n"
+        f"{indent}                logger.error(\n"
+        f"{indent}                    f\"[ARI Transfer] Failed to remove unsafe destination \"\n"
+        f"{indent}                    f\"{{destination_channel_id}} from bridge {{bridge_id}}: \"\n"
+        f"{indent}                    f\"status={{rollback_response.status}} \"\n"
+        f"{indent}                    f\"response={{rollback_error}}\"\n"
+        f"{indent}                )\n"
+        f"{indent}        destination_url = (\n"
+        f"{indent}            f\"{{ari_endpoint}}/ari/channels/{{destination_channel_id}}\"\n"
+        f"{indent}        )\n"
+        f"{indent}        async with session.delete(\n"
+        f"{indent}            destination_url, auth=auth\n"
+        f"{indent}        ) as destination_hangup_response:\n"
+        f"{indent}            if destination_hangup_response.status not in (200, 204, 404):\n"
+        f"{indent}                hangup_error = await destination_hangup_response.text()\n"
+        f"{indent}                logger.error(\n"
+        f"{indent}                    f\"[ARI Transfer] Failed to hang up unsafe destination \"\n"
+        f"{indent}                    f\"{{destination_channel_id}}: \"\n"
+        f"{indent}                    f\"status={{destination_hangup_response.status}} \"\n"
+        f"{indent}                    f\"response={{hangup_error}}\"\n"
+        f"{indent}                )\n"
         f"{indent}        return False\n"
         f"{indent}try:\n"
         f"{indent}    workflow_run.gathered_context[\n"
@@ -134,6 +164,7 @@ def verify_source(source: str) -> None:
         "transfer_handoff_committed",
         "_human_handoff_is_committed",
         "Refusing unsafe handoff",
+        "Failed to remove unsafe destination",
         "Suppressed late AI hangup",
         "Suppressed caller deletion because handoff",
     )
