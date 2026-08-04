@@ -82,10 +82,25 @@ TRANSFER_START_NEW = f'''                # {HOTFIX_MARKER}
 PROVIDER_FAILURE_OLD = '''                except Exception as e:
                     logger.error(f"Transfer provider failed: {e}")
                     self._engine.set_mute_pipeline(False)
+                    self._engine._queued_speech_mute_state = "idle"
+                    await call_transfer_manager.remove_transfer_context(transfer_id)
+'''
+
+PROVIDER_FAILURE_OLD_ALT = '''                except Exception as e:
+                    logger.error(f"Transfer provider failed: {e}")
+                    self._engine.set_mute_pipeline(False)
                     await call_transfer_manager.remove_transfer_context(transfer_id)
 '''
 
 PROVIDER_FAILURE_NEW = '''                except Exception as e:
+                    logger.error(f"Transfer provider failed: {e}")
+                    self._engine._transfer_handoff_started = False
+                    self._engine.set_mute_pipeline(False)
+                    self._engine._queued_speech_mute_state = "idle"
+                    await call_transfer_manager.remove_transfer_context(transfer_id)
+'''
+
+PROVIDER_FAILURE_NEW_ALT = '''                except Exception as e:
                     logger.error(f"Transfer provider failed: {e}")
                     self._engine._transfer_handoff_started = False
                     self._engine.set_mute_pipeline(False)
@@ -97,9 +112,26 @@ OUTER_FAILURE_OLD = '''            except Exception as e:
                     f"Transfer call tool '{function_name}' execution failed: {e}"
                 )
                 self._engine.set_mute_pipeline(False)
+                self._engine._queued_speech_mute_state = "idle"
+'''
+
+OUTER_FAILURE_OLD_ALT = '''            except Exception as e:
+                logger.error(
+                    f"Transfer call tool '{function_name}' execution failed: {e}"
+                )
+                self._engine.set_mute_pipeline(False)
 '''
 
 OUTER_FAILURE_NEW = '''            except Exception as e:
+                logger.error(
+                    f"Transfer call tool '{function_name}' execution failed: {e}"
+                )
+                self._engine._transfer_handoff_started = False
+                self._engine.set_mute_pipeline(False)
+                self._engine._queued_speech_mute_state = "idle"
+'''
+
+OUTER_FAILURE_NEW_ALT = '''            except Exception as e:
                 logger.error(
                     f"Transfer call tool '{function_name}' execution failed: {e}"
                 )
@@ -152,15 +184,37 @@ def patch_callbacks(text: str) -> tuple[str, bool]:
     )
 
 
+def replace_any(text: str, pairs: list[tuple[str, str]], label: str) -> tuple[str, bool]:
+    for old, new in pairs:
+        if new in text:
+            return text, False
+        if old in text:
+            return replace_exact(text, old, new, label)
+    # If none found, call replace_exact on first pair to throw descriptive PatchError
+    return replace_exact(text, pairs[0][0], pairs[0][1], label)
+
+
 def patch_custom_tools(text: str) -> tuple[str, bool]:
     changed = False
-    for old, new, label in (
-        (TRANSFER_START_OLD, TRANSFER_START_NEW, "transfer start"),
-        (PROVIDER_FAILURE_OLD, PROVIDER_FAILURE_NEW, "provider failure reset"),
-        (OUTER_FAILURE_OLD, OUTER_FAILURE_NEW, "outer failure reset"),
-        (RESULT_HANDLER_OLD, RESULT_HANDLER_NEW, "transfer result reset"),
+    for pairs, label in (
+        ([(TRANSFER_START_OLD, TRANSFER_START_NEW)], "transfer start"),
+        (
+            [
+                (PROVIDER_FAILURE_OLD, PROVIDER_FAILURE_NEW),
+                (PROVIDER_FAILURE_OLD_ALT, PROVIDER_FAILURE_NEW_ALT),
+            ],
+            "provider failure reset",
+        ),
+        (
+            [
+                (OUTER_FAILURE_OLD, OUTER_FAILURE_NEW),
+                (OUTER_FAILURE_OLD_ALT, OUTER_FAILURE_NEW_ALT),
+            ],
+            "outer failure reset",
+        ),
+        ([(RESULT_HANDLER_OLD, RESULT_HANDLER_NEW)], "transfer result reset"),
     ):
-        text, did_change = replace_exact(text, old, new, label)
+        text, did_change = replace_any(text, pairs, label)
         changed = changed or did_change
     return text, changed
 
