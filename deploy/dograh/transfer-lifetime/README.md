@@ -3,8 +3,8 @@
 ## Incident
 
 On affected AI-to-agent handoffs, the Hopwhistle/FreeSWITCH leg is not the first
-leg to clear. The upstream Dograh/Asterisk/FracTEL leg sends the disconnect and
-FreeSWITCH correctly propagates it to the agent. Changing the browser softphone,
+leg to clear. The upstream Dograh/Asterisk/FracTEL leg clears and FreeSWITCH then
+propagates the disconnect to the agent. Changing the browser softphone,
 FreeSWITCH bridge timeout, extension registration, inbound routing, or FracTEL
 gateway failover would therefore treat the symptom and risk unrelated call paths.
 
@@ -20,19 +20,22 @@ This build-time source patch changes only
 `api/services/telephony/providers/ari/strategies.py` inside the Dograh API image:
 
 1. After Asterisk confirms the human destination was added to the live bridge,
-   Dograh writes `ari:transfer_handoff_committed:<caller-channel>` and persists
-   `transfer_handoff_committed=true` on the workflow run.
+   Dograh stamps `HOPWHISTLE_TRANSFER_HANDOFF_COMMITTED=<destination-channel>`
+   directly on the live caller channel through ARI and persists
+   `transfer_handoff_committed=true` on the workflow run for auditing.
 2. Before Dograh's AI hangup strategy sends `DELETE /ari/channels/<caller>`, it
-   checks that committed-handoff marker. A late AI teardown is acknowledged but
-   the caller channel is left alone.
-3. A failed or unanswered transfer never writes the marker, so normal failure
-   cleanup and AI hangup behavior remain unchanged.
+   reads that channel variable. A committed handoff is acknowledged but the
+   caller channel is left alone.
+3. If Dograh cannot verify ownership because the ARI read fails, it fails safely
+   and refuses to delete the caller rather than risking a live human call.
+4. A failed or unanswered transfer never receives the channel marker, so normal
+   failure cleanup and AI hangup behavior remain unchanged.
 
-The Redis guard expires after 24 hours only to prevent abandoned metadata. It is
-**not** a call timer and its expiry does not hang up or alter a live call.
-Participant hangup is still handled by Asterisk/ARI's existing transferred-leg
-teardown, so when either the prospect or agent actually hangs up, the peer leg is
-cleaned up normally.
+The ownership marker is attached to the Asterisk channel itself. It has no TTL,
+does not depend on Redis or database retention, and disappears automatically
+when the real caller channel ends. Participant hangup is still handled by
+Asterisk/ARI's existing transferred-leg teardown, so when either the prospect or
+agent actually hangs up, the peer leg is cleaned up normally.
 
 No Hopwhistle FreeSWITCH, RTP, SIP registration, caller-ID, routing, dialer,
 recording, FracTEL gateway, or STIR/SHAKEN code is changed.
@@ -99,7 +102,7 @@ Use one controlled prospect phone and one controlled Hopwhistle agent.
 6. Repeat and hang up from the agent side.
 7. Confirm failed/no-answer transfers still return to the existing failure path.
 
-During the canary, these logs are expected after handoff:
+During the canary, this log is expected after handoff:
 
 ```text
 [ARI Transfer] Human handoff committed ... late AI hangup is disabled
@@ -109,6 +112,12 @@ This line should appear only if a stale AI teardown actually tries to fire:
 
 ```text
 [ARI Hangup] Suppressed late AI hangup for transferred caller ...
+```
+
+Any ownership-read failure is intentionally conservative and produces:
+
+```text
+[ARI Hangup] Suppressed caller deletion because handoff ownership could not be verified ...
 ```
 
 ## Rollback
