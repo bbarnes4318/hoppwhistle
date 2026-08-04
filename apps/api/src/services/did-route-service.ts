@@ -91,8 +91,8 @@ export class DidRouteService {
           destination = isValidPhoneDestination(extension) ? extension : '';
           label = `Auto-routed User (${phoneNumber.user?.email || 'Agent'})`;
         } else {
-          destination = 'Campaign';
-          label = `Auto-routed Campaign`;
+          destination = '1005,1001';
+          label = `Auto-routed Campaign (Chantal & Khallel)`;
         }
 
         if (!destination) {
