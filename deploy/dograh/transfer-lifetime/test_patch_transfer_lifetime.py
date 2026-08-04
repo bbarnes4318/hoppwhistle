@@ -24,6 +24,9 @@ class ARIBridgeSwapStrategy(TransferStrategy):
         workflow_run = context["workflow_run"]
         db_client = context["db_client"]
         redis = context["redis"]
+        session = context["session"]
+        auth = context["auth"]
+        ari_endpoint = context["ari_endpoint"]
         logger.info(
             f"[ARI Transfer] Added destination {destination_channel_id} to bridge bridge"
         )
@@ -43,6 +46,8 @@ class ARIHangupStrategy(HangupStrategy):
     async def execute_hangup(self, context):
         channel_id = context["channel_id"]
         ari_endpoint = context["ari_endpoint"]
+        app_name = context["app_name"]
+        app_password = context["app_password"]
         if not channel_id or not ari_endpoint:
             logger.warning(
                 "Cannot hang up Asterisk channel: missing channel_id or ari_endpoint"
@@ -62,10 +67,10 @@ class TransferLifetimePatchTests(unittest.TestCase):
         self.assertEqual(patcher.apply_patch(patched), patched)
         self.assertLess(
             patched.index("Human handoff committed"),
-            patched.index("Remove external media channel from bridge"),
+            patched.index('f"ari:channel:{destination_channel_id}"'),
         )
         self.assertLess(
-            patched.index("_human_handoff_is_committed(channel_id)"),
+            patched.index("handoff_state = await self._human_handoff_is_committed"),
             patched.index("await self._terminate_external_pbx_if_any(channel_id)"),
         )
         self.assertLess(
