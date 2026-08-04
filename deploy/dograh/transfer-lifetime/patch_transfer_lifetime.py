@@ -12,10 +12,10 @@ STRATEGIES_PATH = Path("api/services/telephony/providers/ari/strategies.py")
 MARKER = "HOPWHISTLE_TRANSFER_LIFETIME_FIX_V1"
 
 CONSTANT_ANCHOR = "from pipecat.serializers.call_strategies import HangupStrategy, TransferStrategy\n"
-CONSTANT_BLOCK = """from pipecat.serializers.call_strategies import HangupStrategy, TransferStrategy\n\n\n# HOPWHISTLE_TRANSFER_LIFETIME_FIX_V1\n# A successful human handoff must outlive the AI pipeline. This marker protects\n# the caller channel from late CALL_DURATION_EXCEEDED / transport teardown work.\n_TRANSFER_HANDOFF_GUARD_PREFIX = \"ari:transfer_handoff_committed:\"\n_TRANSFER_HANDOFF_GUARD_TTL_SECONDS = 86400\n"""
+CONSTANT_BLOCK = """from pipecat.serializers.call_strategies import HangupStrategy, TransferStrategy\n\n\n# HOPWHISTLE_TRANSFER_LIFETIME_FIX_V1\n# A successful human handoff must outlive the AI pipeline. Ownership is stamped\n# directly on the live Asterisk caller channel so no Redis/database timeout can\n# later turn an AI lifecycle callback into a caller-to-agent disconnect.\n_TRANSFER_HANDOFF_CHANNEL_VAR = \"HOPWHISTLE_TRANSFER_HANDOFF_COMMITTED\"\n"""
 
 CLASS_ANCHOR = """class ARIHangupStrategy(HangupStrategy):\n    \"\"\"Implements hangup for Asterisk ARI channels.\"\"\"\n\n"""
-CLASS_BLOCK = CLASS_ANCHOR + """    async def _human_handoff_is_committed(self, channel_id: str) -> bool:\n        \"\"\"Return True when this caller is already bridged to a human.\"\"\"\n        redis = None\n        try:\n            import redis.asyncio as aioredis\n\n            from api.constants import REDIS_URL\n\n            redis = aioredis.from_url(REDIS_URL, decode_responses=True)\n            destination_channel_id = await redis.get(\n                f\"{_TRANSFER_HANDOFF_GUARD_PREFIX}{channel_id}\"\n            )\n            return bool(destination_channel_id)\n        except Exception as e:\n            logger.error(\n                f\"[ARI Hangup] Could not read human-handoff guard for {channel_id}: {e}\"\n            )\n            return False\n        finally:\n            if redis is not None:\n                try:\n                    close = getattr(redis, \"aclose\", None) or getattr(\n                        redis, \"close\", None\n                    )\n                    if close is not None:\n                        await close()\n                except Exception as e:\n                    logger.warning(\n                        f\"[ARI Hangup] Failed to close Redis guard client: {e}\"\n                    )\n\n"""
+CLASS_BLOCK = CLASS_ANCHOR + """    async def _human_handoff_is_committed(\n        self,\n        channel_id: str,\n        ari_endpoint: str,\n        app_name: str,\n        app_password: str,\n    ):\n        \"\"\"Read the handoff ownership marker from the live Asterisk channel.\n\n        Returns True when human ownership is committed, False when the marker is\n        definitely absent, and None when ownership cannot be determined safely.\n        \"\"\"\n        try:\n            import aiohttp\n            from aiohttp import BasicAuth\n\n            endpoint = f\"{ari_endpoint}/ari/channels/{channel_id}/variable\"\n            auth = BasicAuth(app_name, app_password)\n            async with aiohttp.ClientSession() as session:\n                async with session.get(\n                    endpoint,\n                    auth=auth,\n                    params={\"variable\": _TRANSFER_HANDOFF_CHANNEL_VAR},\n                ) as response:\n                    if response.status == 200:\n                        payload = await response.json()\n                        return bool((payload or {}).get(\"value\"))\n                    if response.status == 404:\n                        return False\n                    error_text = await response.text()\n                    logger.error(\n                        f\"[ARI Hangup] Handoff ownership check failed for {channel_id}: \"\n                        f\"status={response.status}, response={error_text}\"\n                    )\n                    return None\n        except Exception as e:\n            logger.error(\n                f\"[ARI Hangup] Could not verify handoff ownership for {channel_id}: {e}\"\n            )\n            return None\n\n"""
 
 COMMIT_RE = re.compile(
     r'(?P<i>^[ \t]+)await redis\.setex\(\n'
@@ -52,35 +52,64 @@ def replace_regex_once(text: str, pattern: re.Pattern[str], repl, label: str) ->
 
 def _commit_replacement(match: re.Match[str]) -> str:
     indent = match.group("i")
-    return match.group(0) + (
-        f"{indent}# Commit ownership of the live caller/destination bridge before\n"
-        f"{indent}# tearing down Dograh's external-media leg. Any late AI\n"
-        f"{indent}# timeout/hangup callback must not delete the caller leg.\n"
-        f"{indent}await redis.setex(\n"
-        f"{indent}    f\"{{_TRANSFER_HANDOFF_GUARD_PREFIX}}{{channel_id}}\",\n"
-        f"{indent}    _TRANSFER_HANDOFF_GUARD_TTL_SECONDS,\n"
-        f"{indent}    destination_channel_id,\n"
+    guard = (
+        f"{indent}# The destination is now in the live bridge. Commit ownership on\n"
+        f"{indent}# the Asterisk caller channel before any AI media teardown.\n"
+        f"{indent}handoff_guard_url = (\n"
+        f"{indent}    f\"{{ari_endpoint}}/ari/channels/{{channel_id}}/variable\"\n"
         f"{indent})\n"
-        f"{indent}workflow_run.gathered_context[\n"
-        f"{indent}    \"transfer_handoff_committed\"\n"
-        f"{indent}] = True\n"
-        f"{indent}await db_client.update_workflow_run(\n"
-        f"{indent}    run_id=int(workflow_run_id),\n"
-        f"{indent}    gathered_context=workflow_run.gathered_context,\n"
-        f"{indent})\n"
+        f"{indent}async with session.post(\n"
+        f"{indent}    handoff_guard_url,\n"
+        f"{indent}    auth=auth,\n"
+        f"{indent}    params={{\n"
+        f"{indent}        \"variable\": _TRANSFER_HANDOFF_CHANNEL_VAR,\n"
+        f"{indent}        \"value\": destination_channel_id,\n"
+        f"{indent}    }},\n"
+        f"{indent}) as guard_response:\n"
+        f"{indent}    if guard_response.status not in (200, 204):\n"
+        f"{indent}        error_text = await guard_response.text()\n"
+        f"{indent}        logger.error(\n"
+        f"{indent}            f\"[ARI Transfer] Refusing unsafe handoff: could not \"\n"
+        f"{indent}            f\"stamp caller {{channel_id}} ownership; \"\n"
+        f"{indent}            f\"status={{guard_response.status}} response={{error_text}}\"\n"
+        f"{indent}        )\n"
+        f"{indent}        return False\n"
+        f"{indent}try:\n"
+        f"{indent}    workflow_run.gathered_context[\n"
+        f"{indent}        \"transfer_handoff_committed\"\n"
+        f"{indent}    ] = True\n"
+        f"{indent}    await db_client.update_workflow_run(\n"
+        f"{indent}        run_id=int(workflow_run_id),\n"
+        f"{indent}        gathered_context=workflow_run.gathered_context,\n"
+        f"{indent}    )\n"
+        f"{indent}except Exception as e:\n"
+        f"{indent}    logger.warning(\n"
+        f"{indent}        f\"[ARI Transfer] Handoff is protected on-channel but \"\n"
+        f"{indent}        f\"workflow audit persistence failed: {{e}}\"\n"
+        f"{indent}    )\n"
         f"{indent}logger.info(\n"
         f"{indent}    f\"[ARI Transfer] Human handoff committed: caller={{channel_id}}, \"\n"
         f"{indent}    f\"destination={{destination_channel_id}}; late AI hangup is disabled\"\n"
         f"{indent})\n"
     )
+    return guard + match.group(0)
 
 
 def _hangup_replacement(match: re.Match[str]) -> str:
     indent = match.group("i")
     return match.group(0) + (
-        f"{indent}if await self._human_handoff_is_committed(channel_id):\n"
+        f"{indent}handoff_state = await self._human_handoff_is_committed(\n"
+        f"{indent}    channel_id, ari_endpoint, app_name, app_password\n"
+        f"{indent})\n"
+        f"{indent}if handoff_state is True:\n"
         f"{indent}    logger.warning(\n"
         f"{indent}        f\"[ARI Hangup] Suppressed late AI hangup for transferred caller {{channel_id}}\"\n"
+        f"{indent}    )\n"
+        f"{indent}    return True\n"
+        f"{indent}if handoff_state is None:\n"
+        f"{indent}    logger.error(\n"
+        f"{indent}        f\"[ARI Hangup] Suppressed caller deletion because handoff \"\n"
+        f"{indent}        f\"ownership could not be verified for {{channel_id}}\"\n"
         f"{indent}    )\n"
         f"{indent}    return True\n\n"
     )
@@ -101,21 +130,26 @@ def apply_patch(source: str) -> str:
 def verify_source(source: str) -> None:
     required = (
         MARKER,
-        "_TRANSFER_HANDOFF_GUARD_PREFIX",
+        "_TRANSFER_HANDOFF_CHANNEL_VAR",
         "transfer_handoff_committed",
         "_human_handoff_is_committed",
+        "Refusing unsafe handoff",
         "Suppressed late AI hangup",
+        "Suppressed caller deletion because handoff",
     )
     missing = [item for item in required if item not in source]
     if missing:
         raise RuntimeError(f"patched source is missing: {', '.join(missing)}")
     add_index = source.index("Added destination")
     commit_index = source.index("Human handoff committed")
+    mapping_index = source.index('f"ari:channel:{destination_channel_id}"')
     remove_index = source.index("Remove external media channel from bridge")
-    guard_index = source.index("await self._human_handoff_is_committed(channel_id)")
+    guard_index = source.index("handoff_state = await self._human_handoff_is_committed")
     delete_index = source.index('endpoint = f"{ari_endpoint}/ari/channels/{channel_id}"')
-    if not (add_index < commit_index < remove_index):
-        raise RuntimeError("handoff marker must be committed after bridge add and before AI media removal")
+    if not (add_index < commit_index < mapping_index < remove_index):
+        raise RuntimeError(
+            "handoff ownership must be committed immediately after bridge add and before AI media removal"
+        )
     if guard_index > delete_index:
         raise RuntimeError("handoff guard must run before ARI channel deletion")
     ast.parse(source)
