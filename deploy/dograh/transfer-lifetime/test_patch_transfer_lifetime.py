@@ -49,6 +49,7 @@ class ARIHangupStrategy(HangupStrategy):
             )
             return False
 
+        await self._terminate_external_pbx_if_any(channel_id)
         endpoint = f"{ari_endpoint}/ari/channels/{channel_id}"
         return endpoint
 '''
@@ -65,6 +66,10 @@ class TransferLifetimePatchTests(unittest.TestCase):
         )
         self.assertLess(
             patched.index("_human_handoff_is_committed(channel_id)"),
+            patched.index("await self._terminate_external_pbx_if_any(channel_id)"),
+        )
+        self.assertLess(
+            patched.index("await self._terminate_external_pbx_if_any(channel_id)"),
             patched.index('endpoint = f"{ari_endpoint}/ari/channels/{channel_id}"'),
         )
 
