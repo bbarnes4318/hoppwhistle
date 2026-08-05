@@ -53,8 +53,12 @@ services:
       FREESWITCH_ESL_PASSWORD: ${FREESWITCH_ESL_PASSWORD:-ClueCon}
       TENANT_DIALER_V2_ESL_ALLOWED_HOSTS: ${TENANT_DIALER_V2_ESL_ALLOWED_HOSTS:-hopwhistle-freeswitch-dev,freeswitch,localhost,127.0.0.1}
     networks:
-      - default
-      - hopwhistle-network
+      default:
+        aliases:
+          - dialer-v2
+      hopwhistle-network:
+        aliases:
+          - dialer-v2
 
 networks:
   default:
