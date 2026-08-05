@@ -22,7 +22,8 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-development}
       DIALER_V2_PORT: 9092
-      DIALER_V2_RUNTIME_MODE: ${DIALER_V2_RUNTIME_MODE:-staging}
+      DIALER_V2_RUNTIME_MODE: ${DIALER_V2_RUNTIME_MODE:-development}
+      DIALER_V2_SIP_DOMAIN: ${DIALER_V2_SIP_DOMAIN:-178.156.223.97}
 
       # ---- Master switches (all default OFF) ----------------------------
       TENANT_DIALER_V2_ENABLED: ${TENANT_DIALER_V2_ENABLED:-true}
