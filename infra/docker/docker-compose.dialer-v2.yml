@@ -51,6 +51,7 @@ services:
       FREESWITCH_ESL_HOST: ${FREESWITCH_ESL_HOST:-hopwhistle-freeswitch-dev}
       FREESWITCH_ESL_PORT: 8021
       FREESWITCH_ESL_PASSWORD: ${FREESWITCH_ESL_PASSWORD:-ClueCon}
+      TENANT_DIALER_V2_ESL_ALLOWED_HOSTS: ${TENANT_DIALER_V2_ESL_ALLOWED_HOSTS:-hopwhistle-freeswitch-dev,freeswitch,localhost,127.0.0.1}
     networks:
       - default
       - hopwhistle-network
