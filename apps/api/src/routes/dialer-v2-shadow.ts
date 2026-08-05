@@ -137,8 +137,7 @@ export async function registerDialerV2ShadowRoutes(
   // Deliberately NOT awaited. Awaiting would make this function's routes
   // register asynchronously, and callers that do not await it — including the
   // route tests — would then have Fastify reach `ready()` with no routes bound.
-  if (!fastify.hasDecorator(COOKIES_REQUESTED)) {
-    fastify.decorate(COOKIES_REQUESTED, true);
+  if (!fastify.hasRequestDecorator('cookies')) {
     void fastify.register(fastifyCookie);
   }
 
