@@ -22,10 +22,11 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-development}
       DIALER_V2_PORT: 9092
+      DIALER_V2_RUNTIME_MODE: ${DIALER_V2_RUNTIME_MODE:-staging}
 
       # ---- Master switches (all default OFF) ----------------------------
-      TENANT_DIALER_V2_ENABLED: ${TENANT_DIALER_V2_ENABLED:-false}
-      TENANT_DIALER_V2_SHADOW_ENABLED: ${TENANT_DIALER_V2_SHADOW_ENABLED:-false}
+      TENANT_DIALER_V2_ENABLED: ${TENANT_DIALER_V2_ENABLED:-true}
+      TENANT_DIALER_V2_SHADOW_ENABLED: ${TENANT_DIALER_V2_SHADOW_ENABLED:-true}
       TENANT_DIALER_V2_ORIGINATE_ENABLED: ${TENANT_DIALER_V2_ORIGINATE_ENABLED:-false}
 
       # ---- Dry run defaults ON; emergency stop is the tier-0 rollback ----
@@ -42,16 +43,20 @@ services:
 
       TENANT_DIALER_V2_REQUIRE_HEALTHY_AGENT_HEARTBEATS: ${TENANT_DIALER_V2_REQUIRE_HEALTHY_AGENT_HEARTBEATS:-true}
 
-      # ---- Dependencies (unused in Phase 0; wired in Phase 1) ------------
-      DATABASE_URL: postgresql://${POSTGRES_USER:-callfabric}:${POSTGRES_PASSWORD:-callfabric_dev}@postgres:5432/${POSTGRES_DB:-callfabric}
-      REDIS_URL: redis://redis:6379
-      FREESWITCH_ESL_HOST: freeswitch
+      # ---- Dependencies ----
+      DATABASE_URL: ${DATABASE_URL:-postgresql://callfabric:callfabric_dev@hopwhistle-postgres-dev:5432/callfabric}
+      REDIS_URL: ${REDIS_URL:-redis://hopwhistle-redis-dev:6379}
+      FREESWITCH_ESL_HOST: ${FREESWITCH_ESL_HOST:-hopwhistle-freeswitch-dev}
       FREESWITCH_ESL_PORT: 8021
       FREESWITCH_ESL_PASSWORD: ${FREESWITCH_ESL_PASSWORD:-ClueCon}
     networks:
+      - default
       - hopwhistle-network
 
 networks:
+  default:
+    external: true
+    name: docker_default
   hopwhistle-network:
     external: true
     name: docker_hopwhistle-network
