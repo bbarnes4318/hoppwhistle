@@ -146,6 +146,10 @@ services:
       ANTHROPIC_MAX_OUTPUT_TOKENS: ${ANTHROPIC_MAX_OUTPUT_TOKENS:-14000}
       # Protoface avatar briefings (optional; gated). The avatar agent worker URL
       # is only set once that worker is deployed.
+      INSURANCE_LEAD_MODE: ${INSURANCE_LEAD_MODE:-test}
+      AMERIQUOTE_API_KEY: ${AMERIQUOTE_API_KEY:-}
+      AMERIQUOTE_ACA_SRC: ${AMERIQUOTE_ACA_SRC:-PVNACA_aged}
+      AMERIQUOTE_FE_SRC: ${AMERIQUOTE_FE_SRC:-PVNFE_aged}
       PROTOFACE_API_KEY: ${PROTOFACE_API_KEY:-}
       PROTOFACE_AVATAR_ID: ${PROTOFACE_AVATAR_ID:-av_stock_280}
       PROTOFACE_AGENT_URL: ${PROTOFACE_AGENT_URL:-}
