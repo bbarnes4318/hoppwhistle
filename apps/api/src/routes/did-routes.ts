@@ -139,6 +139,28 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
         .send({ error: 'A route already exists for this DID', existingId: existing.id });
     }
 
+    // Record the campaign on the PHONE NUMBER as well as the route.
+    //
+    // Without this the assignment silently undoes itself. `syncDidRouteForNumber`
+    // reads `phoneNumber.campaignId` and writes it back onto the route, so a
+    // route created with a campaign here was reset to campaignId NULL the next
+    // time that sync ran — on any page load or credential fetch — and its
+    // destination replaced with the 1005,1001 default. Every one of the tenant's
+    // 286 routes had ended up with a NULL campaignId, which meant did-routes.ts
+    // never called selectBestBuyer and campaign routing never ran at all: no
+    // buyers, no ring groups, no per-buyer mobile numbers. The Campaigns page
+    // reads the same field, which is why it listed no routing numbers.
+    //
+    // A number also cannot be owned by a user and a campaign at once: the sync
+    // gives `phoneNumber.userId` priority, so a user-assigned number would keep
+    // routing to that user's extension and ignore the campaign entirely.
+    if (body.campaignId) {
+      await prisma.phoneNumber.update({
+        where: { id: body.phoneNumberId },
+        data: { campaignId: body.campaignId, userId: null },
+      });
+    }
+
     const route = await prisma.didRoute.create({
       data: {
         tenantId: user.tenantId,
@@ -236,6 +258,18 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
           error: 'A valid destination phone number is required when campaign routing is removed',
         });
       }
+    }
+
+    // Keep the phone number's campaign in step with the route's, for the reason
+    // documented on the create handler above: the sync reads the NUMBER, so a
+    // route-only change is undone the next time it runs.
+    if (body.campaignId !== undefined) {
+      await prisma.phoneNumber.update({
+        where: { id: existing.phoneNumberId },
+        data: body.campaignId
+          ? { campaignId: body.campaignId, userId: null }
+          : { campaignId: null },
+      });
     }
 
     const route = await prisma.didRoute.update({
