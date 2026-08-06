@@ -15,8 +15,6 @@
  * only `Authorization: Bearer` and `x-api-key`.
  */
 
-import { createHash } from 'node:crypto';
-
 import fastifyCookie from '@fastify/cookie';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
@@ -24,7 +22,6 @@ import {
   AuthFailure,
   isAuthorizedForDialerV2,
   verifyDialerV2Auth,
-  type ApiKeyRecord,
   type VerifiedAuthContext,
 } from '../lib/dialer-v2-auth.js';
 import {
@@ -37,7 +34,7 @@ import {
   readSessionFromCookies,
   sessionCookieOptions,
 } from '../lib/dialer-v2-session-cookie.js';
-import { getPrismaClient } from '../lib/prisma.js';
+import { buildDialerV2VerifyDeps } from '../lib/dialer-v2-verify-deps.js';
 import { DialerV2ShadowClient } from '../services/dialer-v2-shadow-client.js';
 
 const DEFAULT_BASE_URL = process.env.DIALER_V2_URL || 'http://dialer-v2:9092';
@@ -51,6 +48,7 @@ export interface DialerV2RouteOptions {
 }
 
 function defaultVerifier(fastify: FastifyInstance) {
+  const deps = buildDialerV2VerifyDeps(fastify);
   return async (request: FastifyRequest) => {
     return verifyDialerV2Auth(
       {
@@ -58,27 +56,7 @@ function defaultVerifier(fastify: FastifyInstance) {
         authorization: request.headers.authorization,
         'x-api-key': request.headers['x-api-key'] as string | undefined,
       },
-      {
-        verifyJwt: token => fastify.jwt.verify(token),
-        hashApiKey: raw => createHash('sha256').update(raw).digest('hex'),
-        now: () => new Date(),
-        lookupApiKey: async (keyHash: string): Promise<ApiKeyRecord | null> => {
-          const prisma = getPrismaClient();
-          const key = await prisma.apiKey.findUnique({
-            where: { keyHash },
-            include: { tenant: true },
-          });
-          if (!key) return null;
-          return {
-            id: key.id,
-            tenantId: key.tenantId,
-            status: key.status,
-            expiresAt: key.expiresAt,
-            scopes: key.scopes,
-            tenantStatus: key.tenant.status,
-          };
-        },
-      }
+      deps
     );
   };
 }
@@ -114,17 +92,6 @@ async function authorize(
 
   return result.context;
 }
-
-/**
- * Marks an instance as having had cookie support requested.
- *
- * `hasReplyDecorator('setCookie')` cannot be used as the guard: `register`
- * ENQUEUES a plugin rather than applying it, so the decorator does not exist
- * until boot and a second call would queue it again — and registering
- * `@fastify/cookie` twice throws at boot. `decorate` applies immediately, so
- * this flag is true from the moment it is set.
- */
-const COOKIES_REQUESTED = 'dialerV2CookiesRequested';
 
 // eslint-disable-next-line @typescript-eslint/require-await
 export async function registerDialerV2ShadowRoutes(

@@ -6,6 +6,7 @@ import {
   isAuthorizedForDialerV2,
   verifyDialerV2Auth,
   type ApiKeyRecord,
+  type UserRoleRecord,
   type VerifyDeps,
 } from '../dialer-v2-auth.js';
 
@@ -15,10 +16,16 @@ function deps(overrides: Partial<VerifyDeps> = {}): VerifyDeps {
   return {
     verifyJwt: (token: string) => {
       if (token !== 'good-jwt') throw new Error('invalid signature');
-      return { tenantId: 'tenant-a', userId: 'user-1', roles: ['ADMIN'] };
+      // Shaped like a real login token: tenantId/userId/email and NO roles
+      // claim. `apps/api/src/routes/auth.ts` has never written one.
+      return { tenantId: 'tenant-a', userId: 'user-1', email: 'a@example.com' };
     },
     hashApiKey: (raw: string) => `hash:${raw}`,
     now: () => NOW,
+    lookupUserRoles: (userId: string): Promise<UserRoleRecord | null> =>
+      Promise.resolve(
+        userId === 'user-1' ? { status: 'ACTIVE', tenantId: 'tenant-a', roles: ['ADMIN'] } : null
+      ),
     lookupApiKey: (hash: string): Promise<ApiKeyRecord | null> =>
       Promise.resolve(
         hash === 'hash:good-key'
@@ -90,6 +97,80 @@ describe('JWT', () => {
     expect(result.context.tenantId).toBe('tenant-a');
     expect(result.context.userId).toBe('user-1');
     expect(result.context.roles).toEqual(['ADMIN']);
+  });
+
+  it('resolves roles from the database, not from the token', async () => {
+    // The defect this closes: login tokens carry tenantId/userId/email and no
+    // `roles` claim, so reading roles from the token produced [] for every
+    // browser session and denied all of them with 403 — a denial that no
+    // database role grant could lift, because the claim was never written.
+    const lookupUserRoles = vi.fn(() =>
+      Promise.resolve({ status: 'ACTIVE', tenantId: 'tenant-a', roles: ['ANALYST'] })
+    );
+    const result = await verifyDialerV2Auth(
+      { authorization: 'Bearer good-jwt' },
+      deps({ lookupUserRoles })
+    );
+
+    expect(lookupUserRoles).toHaveBeenCalledWith('user-1');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.context.roles).toEqual(['ANALYST']);
+    expect(isAuthorizedForDialerV2(result.context)).toBe(true);
+  });
+
+  it('prefers the database over a roles claim, so a revoked role stops working at once', async () => {
+    // A token is good for 7 days. If its claim won, a revoked admin would keep
+    // Dialer V2 access for the remainder of that week.
+    const result = await verifyDialerV2Auth(
+      { authorization: 'Bearer good-jwt' },
+      deps({
+        verifyJwt: () => ({ tenantId: 'tenant-a', userId: 'user-1', roles: ['OWNER'] }),
+        lookupUserRoles: () =>
+          Promise.resolve({ status: 'ACTIVE', tenantId: 'tenant-a', roles: [] }),
+      })
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.context.roles).toEqual([]);
+    expect(isAuthorizedForDialerV2(result.context)).toBe(false);
+  });
+
+  it('refuses a validly signed token whose user is gone or deactivated', async () => {
+    for (const record of [null, { status: 'SUSPENDED', tenantId: 'tenant-a', roles: ['ADMIN'] }]) {
+      const result = await verifyDialerV2Auth(
+        { authorization: 'Bearer good-jwt' },
+        deps({ lookupUserRoles: () => Promise.resolve(record) })
+      );
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.failure).toBe(AuthFailure.USER_INACTIVE);
+    }
+  });
+
+  it('refuses a token whose tenant is no longer the user’s tenant', async () => {
+    const result = await verifyDialerV2Auth(
+      { authorization: 'Bearer good-jwt' },
+      deps({
+        lookupUserRoles: () =>
+          Promise.resolve({ status: 'ACTIVE', tenantId: 'tenant-b', roles: ['ADMIN'] }),
+      })
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.failure).toBe(AuthFailure.TENANT_MISMATCH);
+  });
+
+  it('denies rather than falling back to the token when the lookup fails', async () => {
+    // Falling through to the claim on a database blip would restore the very
+    // bug this lookup exists to fix, and do it silently.
+    const result = await verifyDialerV2Auth(
+      { authorization: 'Bearer good-jwt' },
+      deps({
+        verifyJwt: () => ({ tenantId: 'tenant-a', userId: 'user-1', roles: ['OWNER'] }),
+        lookupUserRoles: () => Promise.reject(new Error('db down')),
+      })
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.failure).toBe(AuthFailure.USER_INACTIVE);
   });
 
   it('rejects a bad signature', async () => {
