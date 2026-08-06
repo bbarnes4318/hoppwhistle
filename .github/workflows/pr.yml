@@ -105,6 +105,12 @@ jobs:
           NODE_ENV: test
           DATABASE_URL: postgresql://test:test@localhost:5432/test
           REDIS_URL: redis://localhost:6379
+          # Suites that truncate tables or write real Redis keys refuse to run
+          # unless pointed at services explicitly nominated as disposable — a
+          # developer's DATABASE_URL is production. The service containers above
+          # are exactly that, so those suites run here and skip everywhere else.
+          TEST_DATABASE_URL: postgresql://test:test@localhost:5432/test
+          TEST_REDIS_URL: redis://localhost:6379
 
       - name: Run carrier automation & call-center tests (blocking)
         run: >-

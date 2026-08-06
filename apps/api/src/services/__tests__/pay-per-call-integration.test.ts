@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import Fastify from 'fastify';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
+import { announceSkip, databaseGate, redisGate } from '../../__tests__/helpers/live-services.js';
 import { getPrismaClient } from '../../lib/prisma.js';
 import { registerAuthRoutes } from '../../routes/auth.js';
 import { registerDidRouteRoutes } from '../../routes/did-routes.js';
@@ -19,7 +20,15 @@ import { BuyerBillingService } from '../buyer-billing-service.js';
 import { postService } from '../post-service.js';
 import { getRedisClient } from '../redis.js';
 
-describe('Pay-Per-Call Real Database/Redis Integration Tests', () => {
+// Truncates real tables and uses real Redis. Runs only against services
+// explicitly nominated as disposable — never DATABASE_URL/REDIS_URL, which
+// point at production.
+const dbGate = databaseGate();
+const cacheGate = redisGate();
+const gate = dbGate.available ? cacheGate : dbGate;
+announceSkip('Pay-Per-Call Real Database/Redis Integration Tests', gate);
+
+describe.skipIf(!gate.available)('Pay-Per-Call Real Database/Redis Integration Tests', () => {
   let prisma: any;
   let redis: any;
   let app: any;

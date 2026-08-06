@@ -1,17 +1,26 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
+// `expect.objectContaining` and `vi.fn().mock.calls[n][m]` are both typed `any`
+// by vitest, so asserting on them trips the unsafe-any rules. Same allowance
+// pay-per-call-system.test.ts already makes for its mocks.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mockPrisma = {
-  insuranceLeadSubmission: {
-    findFirst: vi.fn(),
-    update: vi.fn(),
+// Declared through vi.hoisted because `vi.mock` calls are hoisted above every
+// top-level statement. Plain consts are still in their temporal dead zone when
+// a mock factory runs, which failed the whole suite to load with
+// "Cannot access 'mockMapToAmeriquote' before initialization".
+const { mockPrisma, mockPostToAmeriquote, mockMapToAmeriquote } = vi.hoisted(() => ({
+  mockPrisma: {
+    insuranceLeadSubmission: {
+      findFirst: vi.fn(),
+      update: vi.fn(),
+    },
+    insuranceActivity: {
+      create: vi.fn(),
+    },
   },
-  insuranceActivity: {
-    create: vi.fn(),
-  },
-};
-
-const mockPostToAmeriquote = vi.fn();
-const mockMapToAmeriquote = vi.fn();
+  mockPostToAmeriquote: vi.fn(),
+  mockMapToAmeriquote: vi.fn(),
+}));
 
 vi.mock('../../lib/prisma.js', () => ({
   getPrismaClient: () => mockPrisma,

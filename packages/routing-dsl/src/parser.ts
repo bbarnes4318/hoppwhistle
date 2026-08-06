@@ -110,15 +110,31 @@ export function createExecutionPlan(flow: Flow): ExecutionPlan {
     nodeMap[node.id] = node;
   }
 
-  // Ensure entry node exists
-  if (!nodeMap[flow.entry.id]) {
-    throw new Error(`Entry node "${flow.entry.id}" not found in nodes`);
+  // The entry node is a node, and belongs in the map.
+  //
+  // It arrives on its own `flow.entry` field rather than inside `flow.nodes`,
+  // and this function used to drop it — then assert it was present, which no
+  // valid flow could satisfy, so every flow was rejected. The executor's
+  // `case 'entry'` was unreachable for the same reason.
+  //
+  // `EntryNodeSchema` is a member of the `Node` union, and the plan starts at
+  // this node: executing it yields `target`, the first node with behaviour.
+  if (nodeMap[flow.entry.id]) {
+    throw new Error(`Duplicate node ID: ${flow.entry.id} (already declared as the entry node)`);
+  }
+  nodeMap[flow.entry.id] = flow.entry;
+
+  // The entry has to lead somewhere, or the flow stops on its first step.
+  if (!nodeMap[flow.entry.target]) {
+    throw new Error(
+      `Entry target "${flow.entry.target}" not found in nodes (referenced by entry node "${flow.entry.id}")`
+    );
   }
 
   return {
     flowId: flow.id,
     flowVersion: flow.version,
-    entryNodeId: flow.entry.target,
+    entryNodeId: flow.entry.id,
     nodes: nodeMap,
     metadata: flow.metadata,
   };

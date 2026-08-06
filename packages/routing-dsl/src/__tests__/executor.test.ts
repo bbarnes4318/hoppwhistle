@@ -80,7 +80,12 @@ describe('Flow Executor', () => {
         variables: {},
         history: [],
         tags: {},
-        ivrInput: '1',
+        // No ivrInput: the event below IS the caller's first keypress.
+        //
+        // This used to seed '1' as well, which the executor appends to — so
+        // the digit was counted twice, '11' matched no choice, and with
+        // maxDigits 1 it fell through to `default` (hangup-timeout). The
+        // fixture described two keypresses while asserting the outcome of one.
       };
 
       const result = executeNode(plan, context, {
@@ -159,4 +164,3 @@ describe('Flow Executor', () => {
     });
   });
 });
-
