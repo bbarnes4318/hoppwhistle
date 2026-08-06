@@ -4,11 +4,17 @@
  * Dialer V2 — Shadow Mode supervisor screen.
  *
  * READ-ONLY. This page has no control that can start, pause, or configure a
- * dialer, and Dialer V2 has no origination code path at all in this build.
+ * dialer.
  *
  * Everything shown comes from the live API. When the service is unreachable or
  * has observed nothing, the page says so — it never renders placeholder metrics
  * that could be mistaken for a running dialer.
+ *
+ * Whether an origination code path exists is REPORTED BY THE SERVICE, never
+ * asserted here. Hardcoding "there is no way to place a call" would keep
+ * claiming it after the day that stops being true, which is the one day the
+ * claim matters. Every sentence about origination below therefore derives from
+ * `status.originationImplemented`, and an unknown status makes no claim at all.
  *
  * Existing call-center pages are untouched; this is a new route.
  */
@@ -32,6 +38,24 @@ import {
 } from './lib';
 
 const API_URL = typeof window !== 'undefined' ? window.location.origin : '';
+
+/**
+ * The Dialer V2 verifier reads the bearer token and nothing else.
+ *
+ * `apps/api/src/lib/dialer-v2-auth.ts` consults only `Authorization` and
+ * `x-api-key` — deliberately no cookie and no `request.user`, because the global
+ * onRequest hook lets a browser-supplied header fabricate a tenant with
+ * ADMIN+OWNER. This page previously sent `credentials` alone, which that
+ * verifier cannot read, so every load 401'd for every user. The session cookie
+ * is additionally path-scoped to the agents route, so it was never attached
+ * here at all.
+ *
+ * `credentials` is still sent: the agent endpoints genuinely use the cookie.
+ */
+function authHeaders(): Record<string, string> {
+  const token = typeof window === 'undefined' ? null : window.localStorage.getItem('token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 interface AgentView {
   agentId: string;
@@ -92,24 +116,47 @@ export default function DialerV2ShadowPage() {
   const load = useCallback(async () => {
     setError(null);
     try {
+      const init = { credentials: 'include' as const, headers: authHeaders() };
       const [statusRes, decisionsRes, agentsRes, correctionsRes] = await Promise.all([
-        fetch(`${API_URL}/api/v1/dialer-v2/shadow/status`, { credentials: 'include' }),
-        fetch(`${API_URL}/api/v1/dialer-v2/shadow/decisions?limit=25`, { credentials: 'include' }),
-        fetch(`${API_URL}/api/v1/dialer-v2/agents/state`, { credentials: 'include' }),
-        fetch(`${API_URL}/api/v1/dialer-v2/reconciliation/corrections`, { credentials: 'include' }),
+        fetch(`${API_URL}/api/v1/dialer-v2/shadow/status`, init),
+        fetch(`${API_URL}/api/v1/dialer-v2/shadow/decisions?limit=25`, init),
+        fetch(`${API_URL}/api/v1/dialer-v2/agents/state`, init),
+        fetch(`${API_URL}/api/v1/dialer-v2/reconciliation/corrections`, init),
       ]);
 
-      if (statusRes.status === 401 || decisionsRes.status === 401) {
-        setError('You are not signed in, or your session has expired.');
+      // Clears every panel, so a rejected load cannot leave the previous poll's
+      // numbers on screen underneath an error the operator may not read.
+      const clearAll = () => {
         setAuthenticated(false);
         setStatus(null);
         setDecisions(null);
         setAgents(null);
         setCorrections(null);
+      };
+
+      if (statusRes.status === 401 || decisionsRes.status === 401) {
+        setError('You are not signed in, or your session has expired.');
+        clearAll();
+        return;
+      }
+      // Reported separately from 401. A 403 rendered as a generic failure sends
+      // an operator hunting for an outage when the service is perfectly healthy
+      // and simply will not answer this account.
+      if (statusRes.status === 403 || decisionsRes.status === 403) {
+        setError(
+          'Your account is signed in but is not permitted to view Dialer V2. ' +
+            'This page requires the OWNER, ADMIN or ANALYST role.'
+        );
+        clearAll();
         return;
       }
       if (!statusRes.ok || !decisionsRes.ok) {
-        setError('The shadow API returned an error.');
+        // Carries the status code: "returned an error" alone is not actionable.
+        setError(
+          `The shadow API returned an error (status ${
+            statusRes.ok ? decisionsRes.status : statusRes.status
+          }).`
+        );
         return;
       }
 
@@ -151,8 +198,20 @@ export default function DialerV2ShadowPage() {
             Dialer V2 — Shadow Mode
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Observation only. Dialer V2 has no origination code path in this build — these are
-            decisions it <em>would</em> have made. No call has been placed.
+            {status === null ? (
+              'Observation only. These are the decisions the pacing controller would have made against observed state.'
+            ) : status.originationImplemented ? (
+              <>
+                Observation only — but the service reports an origination code path in this build,
+                so the rows below are <em>not</em> necessarily hypothetical. Confirm the origination
+                controls before reading this page as a record of calls not placed.
+              </>
+            ) : (
+              <>
+                Observation only. The service reports no origination code path in this build — these
+                are decisions it <em>would</em> have made. No call has been placed.
+              </>
+            )}
           </p>
         </div>
         <button
@@ -172,6 +231,24 @@ export default function DialerV2ShadowPage() {
       >
         {SHADOW_BANNER}
       </div>
+
+      {/* The banner above renders unconditionally, so on its own it would keep
+          asserting that no call can be placed after the service starts saying
+          otherwise. This strip contradicts it in exactly that case, directly
+          beneath it, rather than leaving the correction to a tile further down
+          the page that an operator may never scroll to. */}
+      {status?.originationImplemented ? (
+        <div className="flex items-start gap-3 rounded-lg border-2 border-red-500/60 bg-red-500/10 p-4 text-sm">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <div>
+            <strong>The service reports an origination code path in this build.</strong>
+            <div className="mt-1 text-muted-foreground">
+              The banner above cannot be taken as evidence that no call can be placed. Verify the
+              origination flags and the emergency stop before acting on anything below.
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {error ? (
         <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
@@ -244,7 +321,11 @@ export default function DialerV2ShadowPage() {
             <Stat
               label="Origination"
               value={originationLabel(status).text}
-              hint="Dialer V2 cannot place a call in this build"
+              hint={
+                status.originationImplemented
+                  ? 'the service reports a code path that can place a call'
+                  : 'the service reports no code path that can place a call'
+              }
               tone={originationLabel(status).tone}
             />
           </div>
@@ -419,10 +500,14 @@ export default function DialerV2ShadowPage() {
 
       <footer className="rounded-lg border bg-muted/30 p-4 text-xs text-muted-foreground">
         <strong className="text-foreground">Shadow mode.</strong> Every row above is a decision the
-        pacing controller would have made against observed state. Dialer V2 contains no code path
-        that can place a call
-        {status ? (status.originationImplemented ? '.' : ' in this build.') : '.'} Existing dialing
-        — the Hopper, the agent softphone, and AI Voice — is unaffected by this page.
+        pacing controller would have made against observed state.{' '}
+        {status === null
+          ? 'The origination status of this build could not be read.'
+          : status.originationImplemented
+            ? 'The service reports a code path that can place a call, so this page is not on its own evidence that none was.'
+            : 'The service reports that Dialer V2 contains no code path that can place a call in this build.'}{' '}
+        Existing dialing — the Hopper, the agent softphone, and AI Voice — is unaffected by this
+        page.
       </footer>
     </div>
   );
