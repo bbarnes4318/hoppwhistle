@@ -58,10 +58,29 @@ describe('Flow Parser', () => {
 
   describe('createExecutionPlan', () => {
     it('should create execution plan from flow', () => {
+      // The plan starts AT the entry node, not at the node after it.
+      //
+      // This previously expected 'tag-1', the entry's target. That reading
+      // makes `executor.ts`'s `case 'entry'` unreachable and `EntryNodeSchema`
+      // pointless as a member of the `Node` union, and leaves a field called
+      // `entryNodeId` holding the id of the node *following* the entry.
+      // Executing the entry node yields 'tag-1', which is what
+      // executor.test.ts asserts.
       const plan = createExecutionPlan(simpleDirectRouteFlow);
       expect(plan.flowId).toBe('simple-direct-route');
-      expect(plan.entryNodeId).toBe('tag-1');
+      expect(plan.entryNodeId).toBe('entry-1');
+      expect(plan.nodes['entry-1']).toBeDefined();
       expect(plan.nodes['tag-1']).toBeDefined();
+    });
+
+    it('rejects an entry whose target does not exist', () => {
+      // Without this the flow stops on its first step, at runtime.
+      expect(() =>
+        createExecutionPlan({
+          ...simpleDirectRouteFlow,
+          entry: { id: 'entry-1', type: 'entry', target: 'nowhere' },
+        })
+      ).toThrow('not found in nodes');
     });
 
     it('should throw error for duplicate node IDs', () => {
@@ -90,12 +109,12 @@ describe('Flow Parser', () => {
   describe('complex flows', () => {
     it('should parse IVR flow', () => {
       const flow = parseFlow(ivrWithDTMFFlow);
-      expect(flow.nodes.find((n) => n.type === 'ivr')).toBeDefined();
+      expect(flow.nodes.find(n => n.type === 'ivr')).toBeDefined();
     });
 
     it('should parse buyer rotation flow', () => {
       const flow = parseFlow(buyerRotationFlow);
-      const buyerNode = flow.nodes.find((n) => n.type === 'buyer');
+      const buyerNode = flow.nodes.find(n => n.type === 'buyer');
       expect(buyerNode).toBeDefined();
       if (buyerNode && buyerNode.type === 'buyer') {
         expect(buyerNode.buyers.length).toBeGreaterThan(0);
@@ -103,4 +122,3 @@ describe('Flow Parser', () => {
     });
   });
 });
-

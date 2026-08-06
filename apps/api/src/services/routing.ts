@@ -457,84 +457,12 @@ export class RoutingService {
       }
 
       const sortedPriorities = [...priorityGroups.keys()].sort((a, b) => a - b);
-      const softphoneOnly = eligibleEndpoints.every(endpoint =>
-        isInternalAgentDestination(endpoint.destination)
-      );
-
-      if (softphoneOnly) {
-        const ringSteps = sortedPriorities
-          .map(priority => {
-            const seen = new Set<string>();
-            return priorityGroups
-              .get(priority)!
-              .map(endpoint => endpoint.destination.trim())
-              .filter(destination => {
-                if (!destination || seen.has(destination)) return false;
-                seen.add(destination);
-                return true;
-              })
-              .join(',');
-          })
-          .filter(Boolean);
-
-        // Optional external fallback: when campaign metadata explicitly enables
-        // it, ring the agents' assigned external DIDs as a final failover step
-        // after every softphone step. Never enabled implicitly.
-        const externalFallbacks = eligibleEndpoints
-          .map(endpoint => endpoint.externalFallbackDestination?.trim())
-          .filter((d): d is string => !!d);
-        if (externalFallbacks.length > 0) {
-          try {
-            const campaign = await this.prisma.campaign.findFirst({
-              where: { id: campaignId, tenantId },
-              select: { metadata: true },
-            });
-            const meta =
-              campaign?.metadata &&
-              typeof campaign.metadata === 'object' &&
-              !Array.isArray(campaign.metadata)
-                ? (campaign.metadata as Record<string, unknown>)
-                : {};
-            if (meta.allowAgentDidExternalFallback === true) {
-              ringSteps.push([...new Set(externalFallbacks)].join(','));
-              logger.info({
-                msg: 'Agent-routing: External DID fallback step enabled by campaign metadata',
-                campaignId,
-                fallbackCount: new Set(externalFallbacks).size,
-              });
-            }
-          } catch (metaErr) {
-            logger.warn({
-              msg: 'Agent-routing: Could not evaluate external-fallback setting (skipping fallback)',
-              campaignId,
-              error: (metaErr as Error).message,
-            });
-          }
-        }
-
-        const primaryEndpoint = priorityGroups.get(sortedPriorities[0])![0];
-        const ringGroupDestination = ringSteps.join('|');
-
-        logger.info({
-          msg: 'Selected internal softphone ring group',
-          campaignId,
-          destination: ringGroupDestination,
-          agentCount: eligibleEndpoints.length,
-          prioritySteps: ringSteps.length,
-          callerState: this.resolveCallerState(callData),
-        });
-
-        return {
-          buyerId: primaryEndpoint.buyerId,
-          endpoint: ringGroupDestination,
-          targetId: primaryEndpoint.endpointId,
-          callerState: this.resolveCallerState(callData),
-        };
-      }
-
-      const failoverEndpoints: EligibleEndpoint[] = [];
-      for (const priority of sortedPriorities) {
-        const group = priorityGroups.get(priority)!;
+      // Build one sequential failover step per priority. Every eligible internal
+      // Hopwhistle extension at that priority rings in parallel. When external
+      // buyers/cell phones share the priority, choose exactly one external leg by
+      // weight and ring it alongside the internal users. Pure external campaigns
+      // therefore retain their original weighted single-buyer behavior.
+      const pickWeighted = (group: EligibleEndpoint[]): EligibleEndpoint => {
         let totalWeight = 0;
         for (const endpoint of group) {
           totalWeight += Math.max(1, endpoint.weight);
@@ -543,7 +471,6 @@ export class RoutingService {
         const randomValue = Math.random() * totalWeight;
         let currentSum = 0;
         let selectedEndpoint = group[0];
-
         for (const endpoint of group) {
           currentSum += Math.max(1, endpoint.weight);
           if (randomValue <= currentSum) {
@@ -551,29 +478,144 @@ export class RoutingService {
             break;
           }
         }
-        failoverEndpoints.push(selectedEndpoint);
+        return selectedEndpoint;
+      };
+
+      // Ring EVERY external buyer in a step instead of one chosen by weight.
+      //
+      // Opt-in per campaign (`metadata.ringAllExternalBuyers`), because the
+      // weighted pick is what distributes calls across competing buyers
+      // everywhere else — switching it on globally would blast every call to
+      // every buyer on the campaign. Clearing the flag is the rollback.
+      //
+      // Only read when a step actually holds more than one external, so the
+      // usual routing decision does not gain a query.
+      const hasStepWithMultipleExternals = sortedPriorities.some(
+        priority =>
+          priorityGroups
+            .get(priority)!
+            .filter(endpoint => !isInternalAgentDestination(endpoint.destination)).length > 1
+      );
+
+      let ringAllExternalBuyers = false;
+      if (hasStepWithMultipleExternals) {
+        try {
+          const campaign = await this.prisma.campaign.findFirst({
+            where: { id: campaignId, tenantId },
+            select: { metadata: true },
+          });
+          const meta =
+            campaign?.metadata &&
+            typeof campaign.metadata === 'object' &&
+            !Array.isArray(campaign.metadata)
+              ? (campaign.metadata as Record<string, unknown>)
+              : {};
+          ringAllExternalBuyers = meta.ringAllExternalBuyers === true;
+        } catch (metaErr) {
+          // Fail closed, to the existing behaviour.
+          logger.warn({
+            msg: 'Agent-routing: could not read ringAllExternalBuyers (using weighted pick)',
+            campaignId,
+            error: (metaErr as Error).message,
+          });
+        }
       }
 
-      const primaryEndpoint = failoverEndpoints[0];
-      const failoverDestinationString = failoverEndpoints
-        .map(endpoint => endpoint.destination)
-        .join('|');
+      const ringSteps: string[] = [];
+      const selectedEndpoints: EligibleEndpoint[] = [];
+
+      for (const priority of sortedPriorities) {
+        const group = priorityGroups.get(priority)!;
+        const internalEndpoints = group.filter(endpoint =>
+          isInternalAgentDestination(endpoint.destination)
+        );
+        const externalEndpoints = group.filter(
+          endpoint => !isInternalAgentDestination(endpoint.destination)
+        );
+
+        const stepEndpoints: EligibleEndpoint[] = [...internalEndpoints];
+        if (externalEndpoints.length > 0) {
+          if (ringAllExternalBuyers) {
+            stepEndpoints.push(...externalEndpoints);
+          } else {
+            stepEndpoints.push(pickWeighted(externalEndpoints));
+          }
+        }
+
+        const seen = new Set<string>();
+        const destinations = stepEndpoints
+          .map(endpoint => endpoint.destination.trim())
+          .filter(destination => {
+            if (!destination || seen.has(destination)) return false;
+            seen.add(destination);
+            return true;
+          });
+
+        if (destinations.length > 0) {
+          ringSteps.push(destinations.join(','));
+          selectedEndpoints.push(...stepEndpoints);
+        }
+      }
+
+      // Agent-assigned external DIDs are translated to their registered
+      // Hopwhistle extension. Only append those DIDs as a final PSTN fallback
+      // when the campaign explicitly opts in.
+      const externalFallbacks = eligibleEndpoints
+        .map(endpoint => endpoint.externalFallbackDestination?.trim())
+        .filter((destination): destination is string => !!destination);
+
+      if (externalFallbacks.length > 0) {
+        try {
+          const campaign = await this.prisma.campaign.findFirst({
+            where: { id: campaignId, tenantId },
+            select: { metadata: true },
+          });
+          const meta =
+            campaign?.metadata &&
+            typeof campaign.metadata === 'object' &&
+            !Array.isArray(campaign.metadata)
+              ? (campaign.metadata as Record<string, unknown>)
+              : {};
+
+          if (meta.allowAgentDidExternalFallback === true) {
+            ringSteps.push([...new Set(externalFallbacks)].join(','));
+            logger.info({
+              msg: 'Agent-routing: External DID fallback step enabled by campaign metadata',
+              campaignId,
+              fallbackCount: new Set(externalFallbacks).size,
+            });
+          }
+        } catch (metaErr) {
+          logger.warn({
+            msg: 'Agent-routing: Could not evaluate external-fallback setting (skipping fallback)',
+            campaignId,
+            error: (metaErr as Error).message,
+          });
+        }
+      }
+
+      if (ringSteps.length === 0) {
+        return null;
+      }
+
+      const primaryEndpoint = selectedEndpoints[0] || eligibleEndpoints[0];
+      const routePlan = ringSteps.join('|');
 
       logger.info({
-        msg: 'Selected buyer via priority and weight routing with failover chain',
+        msg: 'Selected campaign mixed destination ring/failover plan',
         campaignId,
         buyerId: primaryEndpoint.buyerId,
         buyerName: primaryEndpoint.buyerName,
         endpointId: primaryEndpoint.endpointId,
-        destination: failoverDestinationString,
-        weight: primaryEndpoint.weight,
-        priority: primaryEndpoint.priority,
+        destination: routePlan,
+        eligibleCount: eligibleEndpoints.length,
+        prioritySteps: ringSteps.length,
         callerState: this.resolveCallerState(callData),
       });
 
       return {
         buyerId: primaryEndpoint.buyerId,
-        endpoint: failoverDestinationString,
+        endpoint: routePlan,
         targetId: primaryEndpoint.endpointId,
         callerState: this.resolveCallerState(callData),
       };

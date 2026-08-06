@@ -49,7 +49,18 @@ const mockPrismaData = {
   apiKeys: [] as any[],
   didRoutes: [] as any[],
   pingRequests: [] as any[],
+  buyerBids: [] as any[],
 };
+
+// Monotonic ids.
+//
+// Rows used to be keyed `${prefix}-${Date.now()}`, and two rows created in the
+// same millisecond — which is every row, these tests do no I/O — collided. Two
+// calls sharing an id meant findUnique returned the first for both, so the
+// second call inherited the first's DEBIT transaction and every idempotency
+// check reported it as already charged.
+let mockIdCounter = 0;
+const nextId = (prefix: string) => `${prefix}-${++mockIdCounter}`;
 
 // Helper to construct database objects
 const mockPrisma = {
@@ -178,11 +189,35 @@ const mockPrisma = {
   },
 
   buyerEndpoint: {
-    findMany: vi.fn(async () => {
-      return mockPrismaData.buyerEndpoints.map(ep => ({
-        ...ep,
-        buyer: mockPrismaData.buyers.find(b => b.id === ep.buyerId),
-      }));
+    // Honours the `where` clause. auction-service queries
+    // `{ status: 'ACTIVE', buyer: { status: 'ACTIVE', publisherId } }`, and a
+    // findMany that ignored it returned buyers belonging to no publisher —
+    // so an ineligible buyer could win the auction.
+    findMany: vi.fn(async ({ where }: any = {}) => {
+      return mockPrismaData.buyerEndpoints
+        .map(ep => ({
+          ...ep,
+          buyer: mockPrismaData.buyers.find(b => b.id === ep.buyerId),
+        }))
+        .filter(ep => {
+          if (where?.status !== undefined && ep.status !== where.status) return false;
+          if (where?.buyerId !== undefined && ep.buyerId !== where.buyerId) return false;
+
+          const buyerWhere = where?.buyer;
+          if (buyerWhere) {
+            if (!ep.buyer) return false;
+            if (buyerWhere.status !== undefined && ep.buyer.status !== buyerWhere.status) {
+              return false;
+            }
+            if (
+              buyerWhere.publisherId !== undefined &&
+              ep.buyer.publisherId !== buyerWhere.publisherId
+            ) {
+              return false;
+            }
+          }
+          return true;
+        });
     }),
     findUnique: vi.fn(async ({ where }) => {
       const ep = mockPrismaData.buyerEndpoints.find(e => e.id === where.id);
@@ -241,7 +276,7 @@ const mockPrisma = {
   pingRequest: {
     create: vi.fn(async ({ data }) => {
       const ping = {
-        id: data.id || `ping-${Date.now()}`,
+        id: data.id || nextId('ping'),
         ...data,
         createdAt: new Date(),
       };
@@ -256,12 +291,118 @@ const mockPrisma = {
       }
       return null;
     }),
+    // billing-service.ts looks for an RTB winning bid attached to the call's
+    // DID through this. It was missing, so the lookup threw inside the billing
+    // transaction; calculateCallBilling swallowed it into a failed result and
+    // never wrote `billable`, which is why every CDR-driven assertion saw
+    // undefined without any error being logged.
+    findMany: vi.fn(async ({ where, include }: any = {}) => {
+      const wantedNumber = where?.assignedPhoneNumber?.number;
+      const wantedTenant = where?.assignedPhoneNumber?.tenantId;
+
+      return mockPrismaData.pingRequests
+        .filter(p => {
+          if (where?.status !== undefined && p.status !== where.status) return false;
+          if (wantedNumber !== undefined) {
+            const phone = mockPrismaData.phoneNumbers.find(n => n.id === p.assignedPhoneNumberId);
+            if (!phone || phone.number !== wantedNumber) return false;
+            if (wantedTenant !== undefined && phone.tenantId !== wantedTenant) return false;
+          }
+          return true;
+        })
+        .map(p => {
+          if (!include?.bids) return { ...p };
+          const wanted = include.bids?.where?.status;
+          return {
+            ...p,
+            bids: mockPrismaData.buyerBids
+              .filter(b => b.pingRequestId === p.id && (!wanted || b.status === wanted))
+              .map(b =>
+                include.bids?.include?.buyerEndpoint
+                  ? {
+                      ...b,
+                      buyerEndpoint: mockPrismaData.buyerEndpoints.find(
+                        e => e.id === b.buyerEndpointId
+                      ),
+                    }
+                  : b
+              ),
+          };
+        });
+    }),
+    // did-routes.ts resolves an RTB CDR through this, with
+    // `include: { publisher, bids: { where: { status: 'WON' }, include: { buyerEndpoint } } }`.
+    findUnique: vi.fn(async ({ where, include }: any) => {
+      const ping = mockPrismaData.pingRequests.find(p => p.id === where.id);
+      if (!ping) return null;
+
+      const hydrated: any = { ...ping };
+      if (include?.publisher) {
+        hydrated.publisher = mockPrismaData.publishers.find(p => p.id === ping.publisherId);
+      }
+      if (include?.bids) {
+        const wanted = include.bids?.where?.status;
+        // post-service asks for buyerEndpoint WITH its nested buyer.
+        const wantsBuyer = !!include.bids?.include?.buyerEndpoint?.include?.buyer;
+        hydrated.bids = mockPrismaData.buyerBids
+          .filter(b => b.pingRequestId === ping.id && (!wanted || b.status === wanted))
+          .map(b => {
+            if (!include.bids?.include?.buyerEndpoint) return b;
+            const ep = mockPrismaData.buyerEndpoints.find(e => e.id === b.buyerEndpointId);
+            return {
+              ...b,
+              buyerEndpoint: ep
+                ? {
+                    ...ep,
+                    ...(wantsBuyer
+                      ? { buyer: mockPrismaData.buyers.find(x => x.id === ep.buyerId) }
+                      : {}),
+                  }
+                : ep,
+            };
+          });
+      }
+      return hydrated;
+    }),
+  },
+
+  // auction-service.ts writes every bid of an auction here and then reads the
+  // winner back out. Without this model the RTB path threw on
+  // `prisma.buyerBid.createMany` before any assertion could run.
+  buyerBid: {
+    createMany: vi.fn(async ({ data }: any) => {
+      const rows = Array.isArray(data) ? data : [data];
+      for (const [i, row] of rows.entries()) {
+        mockPrismaData.buyerBids.push({
+          id: row.id || `bid-${mockPrismaData.buyerBids.length + i + 1}`,
+          createdAt: new Date(),
+          ...row,
+        });
+      }
+      return { count: rows.length };
+    }),
+    findFirst: vi.fn(async ({ where }: any) => {
+      return (
+        mockPrismaData.buyerBids.find(
+          b =>
+            (where?.pingRequestId === undefined || b.pingRequestId === where.pingRequestId) &&
+            (where?.status === undefined || b.status === where.status)
+        ) || null
+      );
+    }),
+    findMany: vi.fn(async ({ where }: any) => {
+      return mockPrismaData.buyerBids.filter(
+        b =>
+          (where?.pingRequestId === undefined || b.pingRequestId === where.pingRequestId) &&
+          (where?.status === undefined || b.status === where.status)
+      );
+    }),
   },
 
   call: {
     create: vi.fn(async ({ data }) => {
       const call = {
-        id: `call-${Date.now()}`,
+        id: nextId('call'),
         ...data,
         createdAt: new Date(),
         buyerChargeStatus: data.buyerChargeStatus || 'PENDING',
@@ -524,7 +665,7 @@ const mockPrisma = {
       return mockPrismaData.billingAccounts.find(ba => ba.tenantId === where.tenantId) || null;
     }),
     create: vi.fn(async ({ data }) => {
-      const account = { id: `acc-${Date.now()}`, ...data, currency: 'USD' };
+      const account = { id: nextId('acc'), ...data, currency: 'USD' };
       mockPrismaData.billingAccounts.push(account);
       return account;
     }),
@@ -755,6 +896,9 @@ describe('Pay-Per-Call System End-to-End Integration Suite', () => {
         code: 'buyera123',
         status: 'ACTIVE',
         tenantId: 'tenant-1',
+        // Managed by pub-a, so it is the only buyer eligible for that
+        // publisher's auction. Buyer B is deliberately unmanaged.
+        publisherId: 'pub-a',
         billingType: 'UPFRONT',
         walletBalance: new Prisma.Decimal('100.00'),
         leadsRemaining: 100,
@@ -1140,6 +1284,11 @@ describe('Pay-Per-Call System End-to-End Integration Suite', () => {
         campaignId: 'camp-1',
         targetId: 'ep-b',
         did: '+18005550200',
+        // calculateCallBilling below RECOMPUTES billability, and treats a call
+        // that is not COMPLETED/ANSWERED as unbillable. Without a status the
+        // recompute overwrote the `billable: true` set here and the call came
+        // out NOT_BILLABLE.
+        status: 'COMPLETED',
         duration: 90,
         connectedDuration: 85,
         billable: true,
@@ -1207,7 +1356,11 @@ describe('Pay-Per-Call System End-to-End Integration Suite', () => {
     // Scoped to Publisher A only
     expect(data.rows.length).toBe(1);
     expect(data.rows[0].publisherId).toBe('pub-a');
-    expect(data.rows[0].earnings).toBe('10.00');
+    // 4dp: this endpoint serialises every money field with toFixed(4)
+    // (earnings, publisherRevenue, payoutRate, and the totals), matching the
+    // scale money is stored at. Asserting '10.00' described a display format
+    // the API has never returned.
+    expect(data.rows[0].earnings).toBe('10.0000');
 
     // 2. CSV endpoint
     const csvResponse = await app.inject({

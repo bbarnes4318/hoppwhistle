@@ -38,6 +38,46 @@ function patchRoutingService() {
         return selectedEndpoint;
       };
 
+      // Ring EVERY external buyer in a step instead of one chosen by weight.
+      //
+      // Opt-in per campaign (\`metadata.ringAllExternalBuyers\`), because the
+      // weighted pick is what distributes calls across competing buyers
+      // everywhere else — switching it on globally would blast every call to
+      // every buyer on the campaign. Clearing the flag is the rollback.
+      //
+      // Only read when a step actually holds more than one external, so the
+      // usual routing decision does not gain a query.
+      const hasStepWithMultipleExternals = sortedPriorities.some(
+        priority =>
+          priorityGroups
+            .get(priority)!
+            .filter(endpoint => !isInternalAgentDestination(endpoint.destination)).length > 1
+      );
+
+      let ringAllExternalBuyers = false;
+      if (hasStepWithMultipleExternals) {
+        try {
+          const campaign = await this.prisma.campaign.findFirst({
+            where: { id: campaignId, tenantId },
+            select: { metadata: true },
+          });
+          const meta =
+            campaign?.metadata &&
+            typeof campaign.metadata === 'object' &&
+            !Array.isArray(campaign.metadata)
+              ? (campaign.metadata as Record<string, unknown>)
+              : {};
+          ringAllExternalBuyers = meta.ringAllExternalBuyers === true;
+        } catch (metaErr) {
+          // Fail closed, to the existing behaviour.
+          logger.warn({
+            msg: 'Agent-routing: could not read ringAllExternalBuyers (using weighted pick)',
+            campaignId,
+            error: (metaErr as Error).message,
+          });
+        }
+      }
+
       const ringSteps: string[] = [];
       const selectedEndpoints: EligibleEndpoint[] = [];
 
@@ -52,7 +92,11 @@ function patchRoutingService() {
 
         const stepEndpoints: EligibleEndpoint[] = [...internalEndpoints];
         if (externalEndpoints.length > 0) {
-          stepEndpoints.push(pickWeighted(externalEndpoints));
+          if (ringAllExternalBuyers) {
+            stepEndpoints.push(...externalEndpoints);
+          } else {
+            stepEndpoints.push(pickWeighted(externalEndpoints));
+          }
         }
 
         const seen = new Set<string>();

@@ -6,10 +6,18 @@ import { describe, it, expect, beforeEach } from 'vitest';
 
 import { getPrismaClient } from '../lib/prisma.js';
 
+import { announceSkip, databaseGate } from './helpers/live-services.js';
+
+// Truncates tenants/users/roles CASCADE in beforeEach. Runs only against a
+// database explicitly nominated as disposable — never DATABASE_URL, which
+// apps/api/.env points at production.
+const gate = databaseGate();
+announceSkip('Security: Privilege Escalation Prevention', gate);
+
 /**
  * Test privilege escalation prevention
  */
-describe('Security: Privilege Escalation Prevention', () => {
+describe.skipIf(!gate.available)('Security: Privilege Escalation Prevention', () => {
   let prisma: ReturnType<typeof getPrismaClient>;
   let testTenantId: string;
   let readonlyUserId: string;

@@ -1,9 +1,14 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 
+import { announceSkip, redisGate } from '../../__tests__/helpers/live-services.js';
 import { EventBus, type EventPayload } from '../event-bus.js';
-import { getRedisClient, closeRedisClient } from '../redis.js';
+import { closeRedisClient } from '../redis.js';
 
-describe('EventBus', () => {
+// Publishes to and consumes from real Redis streams.
+const gate = redisGate();
+announceSkip('EventBus', gate);
+
+describe.skipIf(!gate.available)('EventBus', () => {
   let eventBus: EventBus;
   let testConsumerName: string;
 
@@ -67,7 +72,7 @@ describe('EventBus', () => {
       // Start subscription
       const unsubscribe = await eventBus.subscribe(
         'call.*',
-        async (payload) => {
+        payload => {
           receivedEvents.push(payload);
         },
         testConsumerName
@@ -77,16 +82,14 @@ describe('EventBus', () => {
       await eventBus.publish('call.*', testEvent);
 
       // Wait for event to be processed
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       // Cleanup
       await unsubscribe();
 
       // Verify event was received
       expect(receivedEvents.length).toBeGreaterThan(0);
-      const received = receivedEvents.find(
-        (e) => e.data.callId === 'test-call-subscribe'
-      );
+      const received = receivedEvents.find(e => e.data.callId === 'test-call-subscribe');
       expect(received).toBeDefined();
       expect(received?.event).toBe('call.started');
     }, 10000);
@@ -96,7 +99,7 @@ describe('EventBus', () => {
 
       const unsubscribe = await eventBus.subscribe(
         'call.*',
-        async (payload) => {
+        payload => {
           receivedEvents.push(payload);
         },
         testConsumerName
@@ -116,12 +119,12 @@ describe('EventBus', () => {
       });
 
       // Wait for events
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       await unsubscribe();
 
       // Should only receive call events
-      const callEvents = receivedEvents.filter((e) => e.event.startsWith('call.'));
+      const callEvents = receivedEvents.filter(e => e.event.startsWith('call.'));
       expect(callEvents.length).toBeGreaterThan(0);
     }, 10000);
   });
@@ -130,12 +133,9 @@ describe('EventBus', () => {
     it('should subscribe to pub/sub channels and receive events', async () => {
       const receivedEvents: Array<{ channel: string; payload: EventPayload }> = [];
 
-      const unsubscribe = await eventBus.subscribePubSub(
-        ['call.*'],
-        (channel, payload) => {
-          receivedEvents.push({ channel, payload });
-        }
-      );
+      const unsubscribe = await eventBus.subscribePubSub(['call.*'], (channel, payload) => {
+        receivedEvents.push({ channel, payload });
+      });
 
       // Publish event
       await eventBus.publish('call.*', {
@@ -145,15 +145,13 @@ describe('EventBus', () => {
       });
 
       // Wait for event
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       await unsubscribe();
 
       // Verify event was received
       expect(receivedEvents.length).toBeGreaterThan(0);
-      const received = receivedEvents.find(
-        (e) => e.payload.data.callId === 'test-call-pubsub'
-      );
+      const received = receivedEvents.find(e => e.payload.data.callId === 'test-call-pubsub');
       expect(received).toBeDefined();
       expect(received?.channel).toMatch(/^call\./);
     }, 10000);
@@ -171,7 +169,7 @@ describe('EventBus', () => {
       }
 
       // Wait a bit
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await new Promise(resolve => setTimeout(resolve, 200));
 
       const events = await eventBus.getEvents(10);
 
@@ -181,4 +179,3 @@ describe('EventBus', () => {
     });
   });
 });
-

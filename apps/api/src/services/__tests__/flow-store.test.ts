@@ -1,9 +1,14 @@
 import { simpleDirectRouteFlow, ivrWithDTMFFlow } from '@hopwhistle/routing-dsl';
 import { describe, it, expect, beforeEach } from 'vitest';
 
+import { announceSkip, databaseGate } from '../../__tests__/helpers/live-services.js';
 import { flowStore } from '../flow-store.js';
 
-describe('FlowStore', () => {
+// flowStore reads and writes real `flows` / `flow_versions` rows.
+const gate = databaseGate();
+announceSkip('FlowStore', gate);
+
+describe.skipIf(!gate.available)('FlowStore', () => {
   beforeEach(() => {
     // Clear store before each test (in production, use a test database)
     // For now, we'll just test with fresh flows
