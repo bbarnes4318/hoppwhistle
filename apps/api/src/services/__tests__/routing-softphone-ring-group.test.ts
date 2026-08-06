@@ -18,10 +18,7 @@ vi.mock('../../lib/geo.js', () => ({
   isCallerStateAccepted: vi.fn(() => true),
 }));
 
-import {
-  RoutingService,
-  type EligibleEndpoint,
-} from '../routing.js';
+import { RoutingService, type EligibleEndpoint } from '../routing.js';
 
 function endpoint(
   destination: string,
@@ -114,6 +111,83 @@ describe('RoutingService campaign ring groups', () => {
     const result = await service.selectBestBuyer('tenant-1', 'campaign-1');
 
     expect(result?.endpoint).toBe('1000,+14235550100|1001,+14235550101');
+  });
+
+  describe('ringAllExternalBuyers', () => {
+    // The flag lives on campaign.metadata. Routing reads it only when a step
+    // holds more than one external destination.
+    const withCampaignMeta = (metadata: unknown) => {
+      (service as unknown as { prisma: unknown }).prisma = {
+        campaign: { findFirst: () => Promise.resolve({ metadata }) },
+      };
+    };
+
+    it('rings only one external buyer by default, so weighted distribution is unchanged', async () => {
+      withCampaignMeta({});
+      vi.spyOn(service, 'getEligibleEndpoints').mockResolvedValue([
+        endpoint('+14235550100', 0, 'cell-a'),
+        endpoint('+14235550101', 0, 'cell-b'),
+      ]);
+      vi.spyOn(Math, 'random').mockReturnValue(0);
+
+      const result = await service.selectBestBuyer('tenant-1', 'campaign-1');
+
+      expect(result?.endpoint).toBe('+14235550100');
+    });
+
+    it('rings every external buyer in the step when the campaign opts in', async () => {
+      withCampaignMeta({ ringAllExternalBuyers: true });
+      vi.spyOn(service, 'getEligibleEndpoints').mockResolvedValue([
+        endpoint('+14235550100', 0, 'cell-a'),
+        endpoint('+14235550101', 0, 'cell-b'),
+      ]);
+
+      const result = await service.selectBestBuyer('tenant-1', 'campaign-1');
+
+      expect(result?.endpoint).toBe('+14235550100,+14235550101');
+    });
+
+    it('rings agents and every external buyer together when opted in', async () => {
+      withCampaignMeta({ ringAllExternalBuyers: true });
+      vi.spyOn(service, 'getEligibleEndpoints').mockResolvedValue([
+        endpoint('1000', 0, 'agent-a'),
+        endpoint('+14235550100', 0, 'cell-a'),
+        endpoint('+14235550101', 0, 'cell-b'),
+      ]);
+
+      const result = await service.selectBestBuyer('tenant-1', 'campaign-1');
+
+      expect(result?.endpoint).toBe('1000,+14235550100,+14235550101');
+    });
+
+    it('keeps lower priorities as sequential steps when opted in', async () => {
+      withCampaignMeta({ ringAllExternalBuyers: true });
+      vi.spyOn(service, 'getEligibleEndpoints').mockResolvedValue([
+        endpoint('+14235550100', 0, 'cell-a'),
+        endpoint('+14235550101', 0, 'cell-b'),
+        endpoint('+14235550102', 1, 'cell-c'),
+      ]);
+
+      const result = await service.selectBestBuyer('tenant-1', 'campaign-1');
+
+      expect(result?.endpoint).toBe('+14235550100,+14235550101|+14235550102');
+    });
+
+    it('falls back to the weighted pick when the campaign lookup fails', async () => {
+      // A database blip must not silently start ringing every buyer.
+      (service as unknown as { prisma: unknown }).prisma = {
+        campaign: { findFirst: () => Promise.reject(new Error('db down')) },
+      };
+      vi.spyOn(service, 'getEligibleEndpoints').mockResolvedValue([
+        endpoint('+14235550100', 0, 'cell-a'),
+        endpoint('+14235550101', 0, 'cell-b'),
+      ]);
+      vi.spyOn(Math, 'random').mockReturnValue(0);
+
+      const result = await service.selectBestBuyer('tenant-1', 'campaign-1');
+
+      expect(result?.endpoint).toBe('+14235550100');
+    });
   });
 
   it('preserves weighted single-destination selection for external buyers', async () => {
