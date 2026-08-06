@@ -16,6 +16,26 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    # Reachable from BOTH networks, under every name its clients use.
+    #
+    # This service had no `networks:` key, so starting it from this file alone
+    # put it on `default` only — while api, worker and dialer-v2 run on
+    # hopwhistle-network. They could not resolve it at all, and logged ~24k
+    # connection timeouts a day while every Redis-backed feature (agent state,
+    # caps, dedupe, the event bus, dialer-v2 shadow state) silently degraded.
+    #
+    # The two aliases are both required: api and worker use `redis`, while
+    # docker-compose.dialer-v2.yml points at `hopwhistle-redis-dev` — the
+    # container_name the dev override would have given this service had it
+    # been started with that file.
+    networks:
+      default:
+        aliases:
+          - redis
+      hopwhistle-network:
+        aliases:
+          - redis
+          - hopwhistle-redis-dev
 
   # ===========================================
   # CLICKHOUSE - Analytics Database
@@ -339,4 +359,10 @@ volumes:
 
 networks:
   default:
+    driver: bridge
+  # Declared here as well as in docker-compose.dev.yml. Same project name, so
+  # both resolve to `docker_hopwhistle-network` — this file therefore works
+  # standalone AND merged with the dev override, rather than requiring the
+  # network to already exist.
+  hopwhistle-network:
     driver: bridge
