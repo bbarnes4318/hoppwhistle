@@ -1095,7 +1095,36 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
 
       const activeExt = extension || '1000';
       const username = activeExt;
-      const password = '1234';
+
+      // The browser registers to FreeSWITCH with this, so it MUST match what
+      // FreeSWITCH's directory expects for the extension. The directory entries
+      // use `$${default_password}`, which is set from SIP_AGENT_PASSWORD.
+      //
+      // This was hardcoded to '1234'. Once the internal profile was hardened to
+      // require a real password, every agent registration was rejected — so no
+      // softphone was ever registered, and every inbound call to an agent died
+      // instantly with USER_NOT_REGISTERED while the dashboard still showed the
+      // agent as available.
+      //
+      // Refuse rather than hand out a credential that cannot work: a 503 with a
+      // reason is debuggable, a silently-wrong password is not.
+      const password = process.env.SIP_AGENT_PASSWORD;
+      if (!password) {
+        request.log.error({
+          msg: 'webrtc/credentials: SIP_AGENT_PASSWORD is not set — refusing to issue an unusable credential',
+          userId,
+          extension: activeExt,
+        });
+        void _reply.code(503);
+        return {
+          error: {
+            code: 'SIP_CREDENTIALS_UNAVAILABLE',
+            message:
+              'Softphone credentials are not configured on the server (SIP_AGENT_PASSWORD is unset).',
+          },
+        };
+      }
+
       const expiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
 
       // Build Verto WebSocket URL

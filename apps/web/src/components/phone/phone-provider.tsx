@@ -1416,9 +1416,23 @@ export function PhoneProvider({ children, apiUrl }: PhoneProviderProps): JSX.Ele
         // route call responses back over the same socket. (A TLS-terminating
         // reverse proxy hands FreeSWITCH a plain-WS connection while the client
         // still advertises Via WSS, which breaks INVITE response routing.)
+        //
+        // UPDATE: 7443 is a non-standard port and is filtered on many corporate,
+        // guest and mobile networks. An agent on such a network fetched
+        // credentials fine over 443 and then never opened the socket at all —
+        // conntrack showed zero connections to 7443 — so no REGISTER was ever
+        // sent and every call to them died with USER_NOT_REGISTERED while the
+        // dashboard still showed them available.
+        //
+        // Default to the WebSocket that nginx already proxies on 443, which no
+        // firewall blocks. Set NEXT_PUBLIC_SIP_WS_URL to go direct to
+        // wss://host:7443 if the Via/WSS routing issue above resurfaces — that
+        // is the one-setting rollback, no code change.
         let sipWsUrl = creds.wsUrl;
-        if (isSecure) {
-          sipWsUrl = `wss://${wsHost}:7443`;
+        if (process.env.NEXT_PUBLIC_SIP_WS_URL) {
+          sipWsUrl = process.env.NEXT_PUBLIC_SIP_WS_URL;
+        } else if (isSecure) {
+          sipWsUrl = `wss://${wsHost}/ws`;
         } else {
           sipWsUrl = `ws://${wsHost}:8083`;
         }
