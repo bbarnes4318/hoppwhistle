@@ -27,6 +27,7 @@
 
 import {
   type CellPosterior,
+  decayWeight,
   deriveCellPosterior,
   lowerBoundAsr,
   resolveConfidence,
@@ -36,62 +37,120 @@ import {
 } from './estimator.js';
 import {
   type Confidence,
+  type DidSelectionReason,
   type RouteDecision,
   type RouteObservation,
   RouteReason,
+  type RoutePrefixDiff,
   type RouteScoreDetail,
   type RouteScoringInputs,
   type RouteScoringPolicy,
   type RouteTableDiff,
-  type RoutePrefixDiff,
+  parseTableKey,
+  tableKey,
 } from './types.js';
 
 /** Posterior means within this of each other are not meaningfully different. */
 const EQUIVALENCE_EPSILON = 0.01;
 
+/**
+ * Reasons, most binding first.
+ *
+ * `RouteDecision.reason` is the single constraint that bound the decision, so it
+ * has to be the most binding one that applied — not whichever happened to be
+ * appended first. Push order is an implementation detail of the control flow and
+ * would, for instance, let a routine overflow fallback outrank a hold-down that
+ * actually determined the output.
+ */
+const REASON_PRECEDENCE: RouteReason[] = [
+  RouteReason.EPOCH_CHANGED,
+  RouteReason.INSUFFICIENT_POST_DEPLOY_DATA,
+  RouteReason.NO_ELIGIBLE_ROUTE,
+  RouteReason.HELD_AT_PREVIOUS_TABLE,
+  RouteReason.BLEND_CEILING_BINDING,
+  RouteReason.EXPLORATION_DRIVEN,
+  RouteReason.OVERFLOW_FALLBACK_TO_NPA_MATCH,
+  RouteReason.ALL_ROUTES_EQUIVALENT,
+  RouteReason.SCORED_ON_MEASURED_ASR,
+];
+
+function orderReasons(rs: RouteReason[]): RouteReason[] {
+  return [...new Set(rs)].sort(
+    (a, b) => REASON_PRECEDENCE.indexOf(a) - REASON_PRECEDENCE.indexOf(b)
+  );
+}
+
+/** Both strata, in a fixed order so the emitted table is deterministic. */
+const STRATA: DidSelectionReason[] = ['npa_match', 'overflow'];
+
+/**
+ * Separator for composite map keys — ASCII unit separator (0x1F).
+ *
+ * It cannot occur in a route name or an NPA, so composite keys are unambiguous.
+ * Built with `String.fromCharCode` rather than written as a literal on purpose:
+ * an inline control byte in the source makes git classify this file as binary,
+ * and a source file that cannot be diffed, blamed or merged costs real work in
+ * exchange for nothing. An earlier revision of this file did exactly that with a
+ * NUL and every test still passed, so the tests will not catch a regression
+ * here — only `git show --stat` reporting `Bin` will.
+ */
+const KEY_SEP = String.fromCharCode(31);
+
 interface Counts {
-  answered: number;
+  /** Raw call count. What an operator means by "how many calls". */
   observations: number;
+  answered: number;
+  /** Age-decayed counts. These are what the estimator weights. */
+  weightedObservations: number;
+  weightedAnswered: number;
   /** Summed `dialed_seconds` over answered calls, for ACD reporting only. */
   answeredSeconds: number;
 }
 
 function emptyCounts(): Counts {
-  return { answered: 0, observations: 0, answeredSeconds: 0 };
+  return {
+    observations: 0,
+    answered: 0,
+    weightedObservations: 0,
+    weightedAnswered: 0,
+    answeredSeconds: 0,
+  };
 }
 
-function bump(map: Map<string, Counts>, key: string, obs: RouteObservation): void {
+function add(c: Counts, obs: RouteObservation, weight: number): void {
+  c.observations++;
+  c.weightedObservations += weight;
+  if (obs.answered) {
+    c.answered++;
+    c.weightedAnswered += weight;
+    c.answeredSeconds += Number.isFinite(obs.dialed_seconds) ? obs.dialed_seconds : 0;
+  }
+}
+
+function bump(map: Map<string, Counts>, key: string, obs: RouteObservation, weight: number): void {
   let c = map.get(key);
   if (!c) {
     c = emptyCounts();
     map.set(key, c);
   }
-  c.observations++;
-  if (obs.answered) {
-    c.answered++;
-    c.answeredSeconds += Number.isFinite(obs.dialed_seconds) ? obs.dialed_seconds : 0;
-  }
+  add(c, obs, weight);
 }
 
 function get(map: Map<string, Counts>, key: string): Counts {
   return map.get(key) ?? emptyCounts();
 }
 
-/**
- * Key separator for composite map keys.
- *
- * A unit-separator control character cannot occur in a route name or an NPA,
- * so composite keys stay unambiguous. Written as an ESCAPE rather than as a
- * literal control character: an inline control byte makes git classify this
- * file as binary, and a source file that cannot be diffed, blamed or merged is
- * a real cost in exchange for nothing.
- */
-const KEY_SEP = '\u001f';
-
 const routeKey = (route: string): string => route;
 const npaKey = (route: string, npa: string): string => `${route}${KEY_SEP}${npa}`;
 const cellKey = (route: string, npa: string, did: string): string =>
   `${route}${KEY_SEP}${npa}${KEY_SEP}${did}`;
+
+interface Bucket {
+  fleet: Counts;
+  route: Map<string, Counts>;
+  routeNpa: Map<string, Counts>;
+  cell: Map<string, Counts>;
+}
 
 /**
  * Everything counted, split by epoch.
@@ -103,39 +162,25 @@ const cellKey = (route: string, npa: string, did: string): string =>
  * excluded from the observation count that drives confidence. Keeping them in
  * one map with a flag would make silent pooling a one-line mistake.
  */
-interface Ingested {
-  inEpoch: {
-    fleet: Counts;
-    route: Map<string, Counts>;
-    routeNpa: Map<string, Counts>;
-    cell: Map<string, Counts>;
-  };
-  offEpoch: {
-    fleet: Counts;
-    route: Map<string, Counts>;
-    routeNpa: Map<string, Counts>;
-    cell: Map<string, Counts>;
-  };
+export interface Ingested {
+  inEpoch: Bucket;
+  offEpoch: Bucket;
   rejectedRows: number;
   outOfWindowRows: number;
   offEpochRows: number;
   scoredRows: number;
+  effectiveScoredRows: number;
   retryAttempts: number;
   retryAnswered: number;
   observedPrefixes: Set<string>;
 }
 
-function emptyBucket(): Ingested['inEpoch'] {
-  return {
-    fleet: emptyCounts(),
-    route: new Map(),
-    routeNpa: new Map(),
-    cell: new Map(),
-  };
+function emptyBucket(): Bucket {
+  return { fleet: emptyCounts(), route: new Map(), routeNpa: new Map(), cell: new Map() };
 }
 
 /**
- * Filter and bucket the raw CDR rows.
+ * Filter, weight and bucket the raw CDR rows.
  *
  * The order of the guards is the order of the spec sections, and each one is a
  * hard exclusion rather than a down-weight, except the epoch check which is the
@@ -149,6 +194,7 @@ export function ingest(inputs: RouteScoringInputs): Ingested {
     outOfWindowRows: 0,
     offEpochRows: 0,
     scoredRows: 0,
+    effectiveScoredRows: 0,
     retryAttempts: 0,
     retryAnswered: 0,
     observedPrefixes: new Set(),
@@ -171,7 +217,9 @@ export function ingest(inputs: RouteScoringInputs): Ingested {
 
     // §2.1 — the window starts at the Phase 0 deploy, not "7 days ago".
     // Amplification was 2.48x on 08-11 and 1.67x on 08-12 as the gateway count
-    // fell; those attempts are drawn from a different process entirely.
+    // fell; those attempts are drawn from a different process entirely, and no
+    // weight is small enough to make a systematically biased population safe.
+    // This is a cliff, not a slope — the decay below is the slope.
     if (!(obs.observedAtMs >= inputs.windowStartMs)) {
       out.outOfWindowRows++;
       continue;
@@ -189,22 +237,33 @@ export function ingest(inputs: RouteScoringInputs): Ingested {
 
     out.observedPrefixes.add(obs.destination_npa);
 
+    // Age decay INSIDE the window. Carrier route quality changes underneath you,
+    // and without this the window only grows: after 90 days of history a bad
+    // week is 7% of the evidence and moves nothing.
+    const weight = decayWeight(inputs.nowMs - obs.observedAtMs, inputs.policy.halfLifeMs);
+
     // §2.2 — a route's identity is not stable across a change to its underlying
     // proxy set. Off-epoch rows go in a separate bucket and enter the estimate
     // only as a down-weighted prior.
-    const bucket = obs.topology_epoch === inputs.currentEpoch ? out.inEpoch : out.offEpoch;
-    if (bucket === out.offEpoch) out.offEpochRows++;
-    else out.scoredRows++;
-
-    bucket.fleet.observations++;
-    if (obs.answered) {
-      bucket.fleet.answered++;
-      bucket.fleet.answeredSeconds += Number.isFinite(obs.dialed_seconds) ? obs.dialed_seconds : 0;
+    const inEpoch = obs.topology_epoch === inputs.currentEpoch;
+    const bucket = inEpoch ? out.inEpoch : out.offEpoch;
+    if (inEpoch) {
+      out.scoredRows++;
+      out.effectiveScoredRows += weight;
+    } else {
+      out.offEpochRows++;
     }
-    bump(bucket.route, routeKey(obs.route_name), obs);
-    bump(bucket.routeNpa, npaKey(obs.route_name, obs.destination_npa), obs);
+
+    add(bucket.fleet, obs, weight);
+    bump(bucket.route, routeKey(obs.route_name), obs, weight);
+    bump(bucket.routeNpa, npaKey(obs.route_name, obs.destination_npa), obs, weight);
     // §2.4 — the stratum. `npa_match` and `overflow` are never pooled.
-    bump(bucket.cell, cellKey(obs.route_name, obs.destination_npa, obs.did_selection_reason), obs);
+    bump(
+      bucket.cell,
+      cellKey(obs.route_name, obs.destination_npa, obs.did_selection_reason),
+      obs,
+      weight
+    );
   }
 
   return out;
@@ -217,6 +276,11 @@ export interface CellEstimate {
   routeNpa: CellPosterior;
   cell: CellPosterior;
   confidence: Confidence;
+}
+
+/** Age-decayed counts, in the shape `deriveCellPosterior` expects. */
+function weighted(c: Counts): { answered: number; observations: number } {
+  return { answered: c.weightedAnswered, observations: c.weightedObservations };
 }
 
 /**
@@ -236,25 +300,41 @@ export function estimateCell(
   did: string,
   policy: RouteScoringPolicy
 ): CellEstimate {
+  const fleetIn = weighted(ing.inEpoch.fleet);
   const fleet = deriveCellPosterior(
-    ing.inEpoch.fleet.answered,
-    ing.inEpoch.fleet.observations,
+    fleetIn.answered,
+    fleetIn.observations,
     null,
     policy,
-    ing.offEpoch.fleet
+    weighted(ing.offEpoch.fleet)
   );
 
-  const rIn = get(ing.inEpoch.route, routeKey(route));
-  const rOff = get(ing.offEpoch.route, routeKey(route));
-  const routePost = deriveCellPosterior(rIn.answered, rIn.observations, fleet, policy, rOff);
+  const rIn = weighted(get(ing.inEpoch.route, routeKey(route)));
+  const routePost = deriveCellPosterior(
+    rIn.answered,
+    rIn.observations,
+    fleet,
+    policy,
+    weighted(get(ing.offEpoch.route, routeKey(route)))
+  );
 
-  const nIn = get(ing.inEpoch.routeNpa, npaKey(route, npa));
-  const nOff = get(ing.offEpoch.routeNpa, npaKey(route, npa));
-  const routeNpa = deriveCellPosterior(nIn.answered, nIn.observations, routePost, policy, nOff);
+  const nIn = weighted(get(ing.inEpoch.routeNpa, npaKey(route, npa)));
+  const routeNpa = deriveCellPosterior(
+    nIn.answered,
+    nIn.observations,
+    routePost,
+    policy,
+    weighted(get(ing.offEpoch.routeNpa, npaKey(route, npa)))
+  );
 
-  const cIn = get(ing.inEpoch.cell, cellKey(route, npa, did));
-  const cOff = get(ing.offEpoch.cell, cellKey(route, npa, did));
-  const cell = deriveCellPosterior(cIn.answered, cIn.observations, routeNpa, policy, cOff);
+  const cIn = weighted(get(ing.inEpoch.cell, cellKey(route, npa, did)));
+  const cell = deriveCellPosterior(
+    cIn.answered,
+    cIn.observations,
+    routeNpa,
+    policy,
+    weighted(get(ing.offEpoch.cell, cellKey(route, npa, did)))
+  );
 
   return { fleet, route: routePost, routeNpa, cell, confidence: resolveConfidence(cell, policy) };
 }
@@ -267,10 +347,10 @@ interface Candidate {
   upper: number;
   lower: number;
   mean: number;
-  overflow: CellPosterior;
   acdSeconds: number;
   observations: number;
   answered: number;
+  effectiveObservations: number;
 }
 
 function buildDiff(current: Map<string, string[]>, next: Map<string, string[]>): RouteTableDiff {
@@ -301,7 +381,7 @@ function buildDiff(current: Map<string, string[]>, next: Map<string, string[]>):
 }
 
 /**
- * Traffic-weighted projections for a given prefix→lead assignment.
+ * Traffic-weighted projections for a given key→lead assignment.
  *
  * `blend` is a MINUTE-weighted average of rates, and that is why it is weighted
  * by the UPPER bound of ASR rather than the mean. Billed minutes scale with ASR,
@@ -310,6 +390,9 @@ function buildDiff(current: Map<string, string[]>, next: Map<string, string[]>):
  * than production, and the ceiling gets breached by a table that validated as
  * affordable. See the note on `SAFETY_Z` in `estimator.ts` — the sign here is
  * deliberate and is the single most invertible line in this package.
+ *
+ * Weights are per (stratum, prefix), so the 60.6% of live traffic that goes out
+ * on overflow DIDs is priced at its own ASR rather than at local-presence ASR.
  *
  * ACD is assumed equal across routes and therefore cancels out of the weighting.
  * That assumption is only safe while §2.6 holds — calls capping at 44–47s across
@@ -322,23 +405,20 @@ function project(
 ): { blend: number; asr: number } {
   let minutes = 0;
   let cost = 0;
-  let weighted = 0;
+  let weightedAsr = 0;
   let volume = 0;
 
-  for (const [prefix, cand] of leads) {
-    const w = Math.max(0, trafficWeights.get(prefix) ?? 0);
+  for (const [key, cand] of leads) {
+    const w = Math.max(0, trafficWeights.get(key) ?? 0);
     if (w === 0) continue;
     const m = w * cand.upper;
     minutes += m;
     cost += m * cand.rate;
-    weighted += w * cand.mean;
+    weightedAsr += w * cand.mean;
     volume += w;
   }
 
-  return {
-    blend: minutes > 0 ? cost / minutes : 0,
-    asr: volume > 0 ? weighted / volume : 0,
-  };
+  return { blend: minutes > 0 ? cost / minutes : 0, asr: volume > 0 ? weightedAsr / volume : 0 };
 }
 
 /**
@@ -356,18 +436,17 @@ export function scoreRoutes(inputs: RouteScoringInputs): RouteDecision {
   const details: RouteScoreDetail[] = [];
   const exploredPrefixes: string[] = [];
 
-  const retry = {
-    attempts: ing.retryAttempts,
-    answered: ing.retryAnswered,
-    rescueRate: ing.retryAttempts > 0 ? ing.retryAnswered / ing.retryAttempts : 0,
-  };
-
   const base = {
-    retry,
+    retry: {
+      attempts: ing.retryAttempts,
+      answered: ing.retryAnswered,
+      rescueRate: ing.retryAttempts > 0 ? ing.retryAnswered / ing.retryAttempts : 0,
+    },
     rejectedRows: ing.rejectedRows,
     outOfWindowRows: ing.outOfWindowRows,
     offEpochRows: ing.offEpochRows,
     scoredRows: ing.scoredRows,
+    effectiveScoredRows: ing.effectiveScoredRows,
   };
 
   // §2.2 — the epoch moved and the current epoch has not yet accumulated enough
@@ -378,7 +457,8 @@ export function scoreRoutes(inputs: RouteScoringInputs): RouteDecision {
   if (epochUnsettled) reasons.push(RouteReason.EPOCH_CHANGED);
 
   // §2.1 — refuse to score rather than score on nothing, and report the refusal
-  // as a reason rather than as a silent fallback.
+  // as a reason rather than as a silent fallback. Gated on the RAW row count:
+  // "is there enough data to look at" is a question about volume, not currency.
   if (ing.scoredRows < policy.minPostDeployObservations) {
     reasons.push(RouteReason.INSUFFICIENT_POST_DEPLOY_DATA);
     return {
@@ -387,66 +467,98 @@ export function scoreRoutes(inputs: RouteScoringInputs): RouteDecision {
       projectedBlend: 0,
       projectedAsr: 0,
       confidence: 'LOW',
-      reason: reasons[0],
-      reasons,
+      reason: orderReasons(reasons)[0],
+      reasons: orderReasons(reasons),
       diff: buildDiff(inputs.currentTable, inputs.currentTable),
       details,
       exploredPrefixes,
     };
   }
 
-  const prefixes =
-    inputs.trafficWeights.size > 0 ? [...inputs.trafficWeights.keys()] : [...ing.observedPrefixes];
-  prefixes.sort();
+  // Traffic weights are keyed per (stratum, prefix); collapse to the prefix set.
+  const prefixSet = new Set<string>();
+  for (const key of inputs.trafficWeights.keys()) {
+    const parsed = parseTableKey(key);
+    if (parsed) prefixSet.add(parsed.prefix);
+  }
+  if (prefixSet.size === 0) for (const p of ing.observedPrefixes) prefixSet.add(p);
+  const prefixes = [...prefixSet].sort();
 
   const ranked = new Map<string, Candidate[]>();
+  const inherited = new Set<string>();
   let sawEligible = false;
 
   for (const prefix of prefixes) {
-    const candidates: Candidate[] = [];
+    // §2.4 — each stratum is ranked on its own evidence, and emitted as its own
+    // table entry. The dialplan knows which stratum it is in BEFORE it selects a
+    // route: SBC_DID_REASON is assigned at extensions.conf.tpl:402/:409, the DID
+    // pick Gosub runs at :403/:410, and the dial loop does not begin until
+    // n(dial) at :451, where the variable is still live (:458). So a per-stratum
+    // table is loadable as `sbc/route/<stratum>/<prefix>` and still costs three
+    // DB() reads.
+    //
+    // It is also necessary rather than merely possible. Production ran 60.6%
+    // overflow; ranking on npa_match alone would rank the table on a minority of
+    // live traffic, and the strata genuinely disagree — the §2.4 fixture has one
+    // route at 60% local-presence and 5% overflow.
+    const npaMatchOrder: string[] = [];
 
-    for (const route of inputs.routes) {
-      const rate = route.ratesByPrefix.get(prefix);
-      if (rate === undefined) continue;
+    for (const stratum of STRATA) {
+      const key = tableKey(stratum, prefix);
+      const candidates: Candidate[] = [];
 
-      // §2.4 — rank on the `npa_match` stratum. That is the intended operating
-      // mode: a DID local to the destination. The `overflow` stratum is a
-      // different experiment — an overflow DID is not local presence, and
-      // overflow usage spikes exactly when a pool is exhausted, which correlates
-      // with the high-volume NPAs most of the data comes from. It is estimated
-      // and reported alongside, never folded in. Ranking on a pooled figure
-      // would let a pool-exhaustion window make a good route look bad.
-      const estimate = estimateCell(ing, route.name, prefix, 'npa_match', policy);
-      const overflow = estimateCell(ing, route.name, prefix, 'overflow', policy).cell;
+      for (const route of inputs.routes) {
+        const rate = route.ratesByPrefix.get(prefix);
+        if (rate === undefined) continue;
 
-      const counts = get(ing.inEpoch.cell, cellKey(route.name, prefix, 'npa_match'));
+        const estimate = estimateCell(ing, route.name, prefix, stratum, policy);
+        const counts = get(ing.inEpoch.cell, cellKey(route.name, prefix, stratum));
 
-      candidates.push({
-        routeName: route.name,
-        rate,
-        estimate,
-        sampled: sampleAsr(estimate.cell, inputs.rng),
-        upper: upperBoundAsr(estimate.cell),
-        lower: lowerBoundAsr(estimate.cell),
-        mean: estimate.cell.mean,
-        overflow,
-        acdSeconds: counts.answered > 0 ? counts.answeredSeconds / counts.answered : 0,
-        observations: counts.observations,
-        answered: counts.answered,
-      });
+        candidates.push({
+          routeName: route.name,
+          rate,
+          estimate,
+          sampled: sampleAsr(estimate.cell, inputs.rng),
+          upper: upperBoundAsr(estimate.cell),
+          lower: lowerBoundAsr(estimate.cell),
+          mean: estimate.cell.mean,
+          acdSeconds: counts.answered > 0 ? counts.answeredSeconds / counts.answered : 0,
+          observations: counts.observations,
+          answered: counts.answered,
+          effectiveObservations: counts.weightedObservations,
+        });
+      }
+
+      if (candidates.length === 0) continue;
+      sawEligible = true;
+
+      // §3.3 — rank by the Thompson draw, not by the point estimate and not by
+      // rate. Ties break on posterior mean so the ordering stays deterministic.
+      const bySampled = [...candidates].sort((a, b) => b.sampled - a.sampled || b.mean - a.mean);
+      const byMean = [...candidates].sort((a, b) => b.mean - a.mean);
+
+      if (stratum === 'npa_match') {
+        npaMatchOrder.push(...bySampled.map(c => c.routeName));
+      } else if (!candidates.some(c => c.observations > 0) && npaMatchOrder.length > 0) {
+        // An overflow cell with no observations of its own would be ordered
+        // entirely by a Thompson draw off its parent prior — noise dressed as a
+        // measurement. Follow the local-presence ordering until it has evidence
+        // of its own, and SAY so rather than letting it read as measured.
+        bySampled.sort(
+          (a, b) => npaMatchOrder.indexOf(a.routeName) - npaMatchOrder.indexOf(b.routeName)
+        );
+        inherited.add(key);
+        if (!reasons.includes(RouteReason.OVERFLOW_FALLBACK_TO_NPA_MATCH)) {
+          reasons.push(RouteReason.OVERFLOW_FALLBACK_TO_NPA_MATCH);
+        }
+      }
+
+      if (!inherited.has(key) && bySampled[0].routeName !== byMean[0].routeName) {
+        exploredPrefixes.push(key);
+      }
+
+      ranked.set(key, bySampled);
     }
-
-    if (candidates.length === 0) continue;
-    sawEligible = true;
-
-    // §3.3 — rank by the Thompson draw, not by the point estimate and not by
-    // rate. Ties break on posterior mean so the ordering stays deterministic.
-    const bySampled = [...candidates].sort((a, b) => b.sampled - a.sampled || b.mean - a.mean);
-    const byMean = [...candidates].sort((a, b) => b.mean - a.mean);
-
-    if (bySampled[0].routeName !== byMean[0].routeName) exploredPrefixes.push(prefix);
-
-    ranked.set(prefix, bySampled);
   }
 
   if (!sawEligible) reasons.push(RouteReason.NO_ELIGIBLE_ROUTE);
@@ -460,11 +572,11 @@ export function scoreRoutes(inputs: RouteScoringInputs): RouteDecision {
     exploredPrefixes.length / ranked.size > policy.explorePercentCap
   ) {
     const allowed = Math.floor(ranked.size * policy.explorePercentCap);
-    for (const prefix of exploredPrefixes.slice(allowed)) {
-      const cands = ranked.get(prefix);
+    for (const key of exploredPrefixes.slice(allowed)) {
+      const cands = ranked.get(key);
       if (cands)
         ranked.set(
-          prefix,
+          key,
           [...cands].sort((a, b) => b.mean - a.mean)
         );
     }
@@ -474,9 +586,9 @@ export function scoreRoutes(inputs: RouteScoringInputs): RouteDecision {
   // ---- §3.4 the budget -----------------------------------------------------
   const leads = new Map<string, Candidate>();
   const depth = new Map<string, number>();
-  for (const [prefix, cands] of ranked) {
-    leads.set(prefix, cands[0]);
-    depth.set(prefix, 0);
+  for (const [key, cands] of ranked) {
+    leads.set(key, cands[0]);
+    depth.set(key, 0);
   }
 
   let projection = project(leads, inputs.trafficWeights);
@@ -486,12 +598,12 @@ export function scoreRoutes(inputs: RouteScoringInputs): RouteDecision {
   // per-prefix rate cap would be simpler and wrong: it discards exactly the
   // expensive-but-connecting routes this project exists to use.
   while (projection.blend > inputs.maxBlend) {
-    let bestPrefix: string | null = null;
+    let bestKey: string | null = null;
     let bestRatio = Infinity;
     let bestNext: Candidate | null = null;
 
-    for (const [prefix, cands] of ranked) {
-      const at = depth.get(prefix) ?? 0;
+    for (const [key, cands] of ranked) {
+      const at = depth.get(key) ?? 0;
       const current = cands[at];
       const next = cands[at + 1];
       if (!next) continue;
@@ -505,15 +617,15 @@ export function scoreRoutes(inputs: RouteScoringInputs): RouteDecision {
       const ratio = deltaAsr / deltaCost;
       if (ratio < bestRatio) {
         bestRatio = ratio;
-        bestPrefix = prefix;
+        bestKey = key;
         bestNext = next;
       }
     }
 
-    if (bestPrefix === null || bestNext === null) break;
+    if (bestKey === null || bestNext === null) break;
 
-    depth.set(bestPrefix, (depth.get(bestPrefix) ?? 0) + 1);
-    leads.set(bestPrefix, bestNext);
+    depth.set(bestKey, (depth.get(bestKey) ?? 0) + 1);
+    leads.set(bestKey, bestNext);
     demoted = true;
     projection = project(leads, inputs.trafficWeights);
   }
@@ -522,20 +634,24 @@ export function scoreRoutes(inputs: RouteScoringInputs): RouteDecision {
 
   // ---- Build the table -----------------------------------------------------
   const table = new Map<string, string[]>();
-  for (const [prefix, cands] of ranked) {
-    const at = depth.get(prefix) ?? 0;
+  for (const [key, cands] of ranked) {
+    const at = depth.get(key) ?? 0;
     const lead = cands[at];
     const rest = cands.filter(c => c !== lead);
-    table.set(prefix, [lead.routeName, ...rest.map(c => c.routeName)]);
+    table.set(key, [lead.routeName, ...rest.map(c => c.routeName)]);
   }
 
-  for (const [prefix, cands] of ranked) {
+  for (const [key, cands] of ranked) {
+    const parsed = parseTableKey(key);
+    if (!parsed) continue;
     for (const c of cands) {
       details.push({
         routeName: c.routeName,
-        prefix,
+        prefix: parsed.prefix,
+        stratum: parsed.stratum,
         observations: c.observations,
         answered: c.answered,
+        effectiveObservations: c.effectiveObservations,
         posteriorMean: c.mean,
         sampledAsr: c.sampled,
         upperBoundAsr: c.upper,
@@ -547,8 +663,7 @@ export function scoreRoutes(inputs: RouteScoringInputs): RouteDecision {
         // tooling shows it.
         costPerConnectedMinute: c.mean > 0 ? c.rate / c.mean : Infinity,
         acdSeconds: c.acdSeconds,
-        overflowObservations: c.overflow.observations,
-        overflowPosteriorMean: c.overflow.mean,
+        inheritedFromNpaMatch: inherited.has(key),
       });
     }
   }
@@ -556,8 +671,8 @@ export function scoreRoutes(inputs: RouteScoringInputs): RouteDecision {
   // Confidence is the weakest of the routes actually being assigned traffic.
   // The worst cell in the table is the one that will embarrass you.
   let confidence: Confidence = leads.size > 0 ? 'HIGH' : 'LOW';
-  for (const [prefix, cand] of leads) {
-    if ((inputs.trafficWeights.get(prefix) ?? 0) <= 0) continue;
+  for (const [key, cand] of leads) {
+    if ((inputs.trafficWeights.get(key) ?? 0) <= 0) continue;
     confidence = weakestConfidence(confidence, cand.estimate.confidence);
   }
   if (epochUnsettled) confidence = 'LOW';
@@ -575,11 +690,11 @@ export function scoreRoutes(inputs: RouteScoringInputs): RouteDecision {
   // bound for the proposal would suppress exactly the exploratory moves §3.3
   // exists to make, and the table would freeze.
   const currentLeads = new Map<string, Candidate>();
-  for (const [prefix, names] of inputs.currentTable) {
-    const cands = ranked.get(prefix);
+  for (const [key, names] of inputs.currentTable) {
+    const cands = ranked.get(key);
     if (!cands || names.length === 0) continue;
     const match = cands.find(c => c.routeName === names[0]);
-    if (match) currentLeads.set(prefix, match);
+    if (match) currentLeads.set(key, match);
   }
   const currentProjection = project(currentLeads, inputs.trafficWeights);
 
@@ -594,8 +709,8 @@ export function scoreRoutes(inputs: RouteScoringInputs): RouteDecision {
       projectedBlend: currentProjection.blend,
       projectedAsr: currentProjection.asr,
       confidence,
-      reason: reasons[0],
-      reasons,
+      reason: orderReasons(reasons)[0],
+      reasons: orderReasons(reasons),
       diff: buildDiff(inputs.currentTable, inputs.currentTable),
       details,
       exploredPrefixes,
@@ -612,8 +727,8 @@ export function scoreRoutes(inputs: RouteScoringInputs): RouteDecision {
     projectedBlend: projection.blend,
     projectedAsr: projection.asr,
     confidence,
-    reason: reasons[0],
-    reasons,
+    reason: orderReasons(reasons)[0],
+    reasons: orderReasons(reasons),
     diff,
     details,
     exploredPrefixes,

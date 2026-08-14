@@ -26,6 +26,37 @@ export type Confidence = 'LOW' | 'MEDIUM' | 'HIGH';
 export type DidSelectionReason = 'npa_match' | 'overflow';
 
 /**
+ * Composite key for the routing table and the traffic weights:
+ * `<stratum>/<prefix>`.
+ *
+ * The scorer emits a table per (stratum, prefix), not per prefix alone. That is
+ * possible because the dialplan knows which stratum it is in BEFORE route
+ * selection: `SBC_DID_REASON` is assigned at extensions.conf.tpl:402/:409, the
+ * DID pick Gosub runs at :403/:410, and the dial loop does not begin until
+ * n(dial) at :451 — where the variable is still live (:458).
+ *
+ * It matters because production ran 60.6% overflow. Ranking on `npa_match`
+ * alone would rank on a minority of live traffic, and the two strata routinely
+ * disagree: the §2.4 fixture has one route at 60% npa_match and 5% overflow.
+ *
+ * This shape maps straight onto the astdb layout — `sbc/route/npa_match/<digits>`
+ * and `sbc/route/overflow/<digits>` — so the dialplan still does three DB()
+ * reads, with the stratum as a key prefix.
+ */
+export function tableKey(stratum: DidSelectionReason, prefix: string): string {
+  return `${stratum}/${prefix}`;
+}
+
+/** Inverse of {@link tableKey}. Returns null for anything not in that shape. */
+export function parseTableKey(key: string): { stratum: DidSelectionReason; prefix: string } | null {
+  const slash = key.indexOf('/');
+  if (slash <= 0) return null;
+  const stratum = key.slice(0, slash);
+  if (stratum !== 'npa_match' && stratum !== 'overflow') return null;
+  return { stratum, prefix: key.slice(slash + 1) };
+}
+
+/**
  * One CDR row, as the scorer needs it.
  *
  * IMPORTANT: none of these columns exist in CDR yet. Phase 1 in the `voip` repo
@@ -127,6 +158,8 @@ export enum RouteReason {
   HELD_AT_PREVIOUS_TABLE = 'HELD_AT_PREVIOUS_TABLE',
   /** Nothing bound the decision: the table is the measured ASR ordering. */
   SCORED_ON_MEASURED_ASR = 'SCORED_ON_MEASURED_ASR',
+  /** An overflow cell had no data of its own; it inherited the npa_match order. */
+  OVERFLOW_FALLBACK_TO_NPA_MATCH = 'OVERFLOW_FALLBACK_TO_NPA_MATCH',
 }
 
 /** Plain-English rendering, for the operator report. Mirrors `PACING_REASON_TEXT`. */
@@ -146,6 +179,8 @@ export const ROUTE_REASON_TEXT: Record<RouteReason, string> = {
     'The new table did not beat the live table by the required margin; nothing changed.',
   [RouteReason.SCORED_ON_MEASURED_ASR]:
     'Routes are ordered by measured answer-seizure ratio; no constraint was binding.',
+  [RouteReason.OVERFLOW_FALLBACK_TO_NPA_MATCH]:
+    'At least one overflow stratum has no observations of its own and is following the local-presence ordering.',
 };
 
 /**
@@ -193,6 +228,23 @@ export interface RouteScoringPolicy {
    */
   offEpochWeight: number;
 
+  /**
+   * Half-life of an observation's weight, by age.
+   *
+   * The hard window start (§2.1) and this decay do different jobs and both are
+   * needed. The window start is a CLIFF at the Phase 0 deploy: pre-deploy
+   * attempts came from a different process — amplification 2.48x on 08-11
+   * against 1.67x on 08-12 as the gateway count fell — and are not comparable at
+   * any weight. Inside the window, evidence is comparable but not equally
+   * current, and carrier route quality genuinely changes underneath you.
+   *
+   * Without decay the window only ever grows, so a route that degrades takes
+   * progressively longer to correct: after 90 days of history, a week of bad
+   * performance is 7% of the evidence. With a half-life the correction time is
+   * constant no matter how long the window has been open.
+   */
+  halfLifeMs: number;
+
   /** Confidence ladder. Both the own-observation and total-evidence tests must pass. */
   minObservationsForMedium: number;
   minObservationsForHigh: number;
@@ -229,6 +281,9 @@ export const DEFAULT_ROUTE_SCORING_POLICY: RouteScoringPolicy = Object.freeze({
   maxParentPriorWeight: 60,
   parentEvidenceDiscount: 0.25,
   offEpochWeight: 0.25,
+  // Seven days. Long enough that a quiet weekend does not erase the week, short
+  // enough that a route which degrades is demoted inside a fortnight.
+  halfLifeMs: 7 * 86_400_000,
   minObservationsForMedium: 30,
   minObservationsForHigh: 200,
   minEvidenceForMedium: 60,
@@ -268,9 +323,16 @@ export interface RetryStats {
 export interface RouteScoreDetail {
   routeName: string;
   prefix: string;
-  /** The `npa_match` stratum — the production signal. See the note in `scorer.ts`. */
+  /** Which stratum this row scores. Scored and ranked separately (§2.4). */
+  stratum: DidSelectionReason;
+  /** Raw call count. What the operator means by "how many calls". */
   observations: number;
   answered: number;
+  /**
+   * Age-decayed call count — what the estimator actually weighted. Always at or
+   * below `observations`; the gap is how stale this cell's evidence is.
+   */
+  effectiveObservations: number;
   posteriorMean: number;
   /** What Thompson sampling drew this run. Drives ranking (§3.3). */
   sampledAsr: number;
@@ -293,9 +355,8 @@ export interface RouteScoreDetail {
    * information (§2.6). Gated behind `RouteScoringPolicy.useAcdInScore`.
    */
   acdSeconds: number;
-  /** The `overflow` stratum, reported separately and never pooled in (§2.4). */
-  overflowObservations: number;
-  overflowPosteriorMean: number;
+  /** True when this row is an overflow cell following the npa_match ordering. */
+  inheritedFromNpaMatch: boolean;
 }
 
 export interface RouteScoringInputs {
@@ -308,17 +369,28 @@ export interface RouteScoringInputs {
   routes: RouteConfig[];
   /** Blended-rate ceiling, dollars per minute. */
   maxBlend: number;
-  /** Recent call volume per prefix. Weights the blend and the projected ASR. */
+  /**
+   * Recent call volume keyed by {@link tableKey} — per (stratum, prefix), not
+   * per prefix. Weights the blend and the projected ASR.
+   *
+   * Per-stratum because the split is not incidental: production ran 60.6%
+   * overflow, and the two strata can carry materially different ASR on the same
+   * route. Weighting a minute-weighted blend by npa_match volume alone would
+   * misprice the majority of live traffic.
+   */
   trafficWeights: Map<string, number>;
   /** Injected and seeded, so the whole scorer stays deterministic and replayable. */
   rng: () => number;
-  /** The table currently loaded in astdb. Drives the diff and the hold-down. */
+  /** The table currently loaded in astdb, keyed by {@link tableKey}. */
   currentTable: Map<string, string[]>;
   policy: RouteScoringPolicy;
 }
 
 export interface RouteDecision {
-  /** prefix -> ordered route names. The artifact that becomes `routes.csv`. */
+  /**
+   * {@link tableKey} -> ordered route names. The artifact that becomes
+   * `routes.csv`, and thence `sbc/route/<stratum>/<prefix>` in astdb.
+   */
   table: Map<string, string[]>;
   projectedBlend: number;
   projectedAsr: number;
@@ -339,6 +411,12 @@ export interface RouteDecision {
   offEpochRows: number;
   /** Rows scored: in-window, in-epoch, first-attempt, not rejected. */
   scoredRows: number;
-  /** Prefixes whose lead route came from exploration rather than the point estimate. */
+  /** Table keys whose lead route came from exploration rather than the point estimate. */
   exploredPrefixes: string[];
+  /**
+   * Sum of age-decay weights over the scored rows. Compare against `scoredRows`
+   * to see how current the evidence is: equal means everything is fresh, half
+   * means the body of the evidence is about one half-life old.
+   */
+  effectiveScoredRows: number;
 }

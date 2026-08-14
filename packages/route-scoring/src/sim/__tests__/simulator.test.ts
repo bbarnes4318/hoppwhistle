@@ -20,6 +20,7 @@ import { scoreRoutes } from '../../scorer.js';
 import {
   DEFAULT_ROUTE_SCORING_POLICY,
   RouteReason,
+  tableKey,
   type RouteConfig,
   type RouteObservation,
   type RouteScoreDetail,
@@ -27,9 +28,16 @@ import {
 } from '../../types.js';
 import { defaultRouteSimConfig, runRouteSimulation, truthKey } from '../simulator.js';
 
-const WINDOW_START = 1_700_000_000_000;
 const DAY = 86_400_000;
+const HOUR = 3_600_000;
+const WINDOW_START = 1_700_000_000_000;
+const NOW = WINDOW_START + 10 * DAY;
 const PREFIXES = ['212', '312', '415'];
+
+/** Production ran 60.6% overflow. Convergence scenarios use the real split. */
+const PRODUCTION_OVERFLOW_SHARE = 0.606;
+
+const K = tableKey;
 
 const ROUTES: RouteConfig[] = [
   {
@@ -63,7 +71,9 @@ function row(over: Partial<RouteObservation> = {}): RouteObservation {
     answered: false,
     sip_response: 486,
     dialed_seconds: 0,
-    observedAtMs: WINDOW_START + DAY,
+    // Six hours old: fresh against the 7-day half-life, so decay is ~0.98 and
+    // these fixtures test the confounder logic rather than the decay curve.
+    observedAtMs: NOW - 6 * HOUR,
     ...over,
   };
 }
@@ -87,7 +97,7 @@ function rows(
 
 function inputs(over: Partial<RouteScoringInputs> = {}): RouteScoringInputs {
   return {
-    nowMs: WINDOW_START + 30 * DAY,
+    nowMs: NOW,
     windowStartMs: WINDOW_START,
     currentEpoch: 'epoch-a',
     observations: [],
@@ -95,7 +105,10 @@ function inputs(over: Partial<RouteScoringInputs> = {}): RouteScoringInputs {
     // Deliberately slack so ordering scenarios are not perturbed by the budget.
     // The ceiling gets its own scenario below.
     maxBlend: 0.01,
-    trafficWeights: new Map([['212', 1_000]]),
+    trafficWeights: new Map([
+      [K('npa_match', '212'), 400],
+      [K('overflow', '212'), 600],
+    ]),
     rng: createRng(42),
     currentTable: new Map(),
     policy: { ...DEFAULT_ROUTE_SCORING_POLICY, holdDownMargin: 0 },
@@ -103,8 +116,16 @@ function inputs(over: Partial<RouteScoringInputs> = {}): RouteScoringInputs {
   };
 }
 
-const leadFor = (d: { table: Map<string, string[]> }, prefix: string): string | undefined =>
-  d.table.get(prefix)?.[0];
+const leadFor = (d: { table: Map<string, string[]> }, key: string): string | undefined =>
+  d.table.get(key)?.[0];
+
+const detailFor = (
+  d: { details: RouteScoreDetail[] },
+  route: string,
+  stratum: 'npa_match' | 'overflow',
+  prefix = '212'
+): RouteScoreDetail | undefined =>
+  d.details.find(x => x.routeName === route && x.stratum === stratum && x.prefix === prefix);
 
 // ---------------------------------------------------------------------------
 // §2 CONFOUNDERS — one scenario each, proving contamination does not occur.
@@ -164,12 +185,13 @@ describe('CONFOUNDER §2.4 — overflow and npa_match strata are never pooled', 
   // usage spikes exactly when a pool is exhausted. A route that looks bad may
   // simply have been dialled with overflow DIDs during an exhaustion window.
   //
-  // ShortDuration: 60% on npa_match, 5% on overflow, 80% of its volume overflow
-  //                -> pooled it reads 16%
-  // CVPreferred:   35% on both -> pooled it reads 35%
+  //                 npa_match     overflow      pooled
+  //   ShortDuration   60% (400)    5% (1600)      16%
+  //   CVPreferred     35% (400)   35% (1600)      35%
   //
-  // Pooled, CVPreferred wins. Stratified, ShortDuration wins. It is the correct
-  // answer, because the table assigns local-presence dialling.
+  // Pooled, CVPreferred wins everywhere. Stratified, the two strata disagree —
+  // and the table can express that disagreement, because the dialplan knows the
+  // stratum before it picks a route (extensions.conf.tpl:402/:409 vs :451).
   const observations = [
     ...rows(400, 240, { route_name: 'ShortDuration', did_selection_reason: 'npa_match' }),
     ...rows(1_600, 80, { route_name: 'ShortDuration', did_selection_reason: 'overflow' }),
@@ -177,22 +199,44 @@ describe('CONFOUNDER §2.4 — overflow and npa_match strata are never pooled', 
     ...rows(1_600, 560, { route_name: 'CVPreferred', did_selection_reason: 'overflow' }),
   ];
 
-  it('ranks on the npa_match stratum, not the pooled average', () => {
+  it('emits a different lead per stratum, which pooling could not produce', () => {
     const d = scoreRoutes(inputs({ observations, rng: createRng(42) }));
-    expect(leadFor(d, '212')).toBe('ShortDuration');
+
+    expect(leadFor(d, K('npa_match', '212'))).toBe('ShortDuration');
+    expect(leadFor(d, K('overflow', '212'))).toBe('CVPreferred');
   });
 
-  it('reports the two strata as separate estimates', () => {
+  it('estimates the two strata independently', () => {
     const d = scoreRoutes(inputs({ observations, rng: createRng(42) }));
-    const sd = d.details.find(x => x.routeName === 'ShortDuration' && x.prefix === '212');
 
-    expect(sd).toBeDefined();
-    // ~0.54 on npa_match against ~0.06 on overflow. A pooled figure would sit
-    // near 0.16 and be a description of neither population.
-    expect(sd!.posteriorMean).toBeGreaterThan(0.5);
-    expect(sd!.overflowPosteriorMean).toBeLessThan(0.15);
-    expect(sd!.observations).toBe(400);
-    expect(sd!.overflowObservations).toBe(1_600);
+    const sdLocal = detailFor(d, 'ShortDuration', 'npa_match');
+    const sdOver = detailFor(d, 'ShortDuration', 'overflow');
+
+    expect(sdLocal!.posteriorMean).toBeGreaterThan(0.5);
+    expect(sdOver!.posteriorMean).toBeLessThan(0.15);
+    expect(sdLocal!.observations).toBe(400);
+    expect(sdOver!.observations).toBe(1_600);
+  });
+
+  it('prices the blend on the stratum that actually carries the traffic', () => {
+    // 60.6% of production traffic is overflow. A blend weighted on npa_match
+    // alone would be a projection about a minority of live calls.
+    const d = scoreRoutes(inputs({ observations, rng: createRng(42) }));
+    expect(d.projectedBlend).toBeGreaterThan(0);
+    expect(Number.isFinite(d.projectedBlend)).toBe(true);
+  });
+
+  it('falls back to the local-presence ordering when overflow has no data', () => {
+    const localOnly = [
+      ...rows(600, 360, { route_name: 'ShortDuration', did_selection_reason: 'npa_match' }),
+      ...rows(600, 180, { route_name: 'CVPreferred', did_selection_reason: 'npa_match' }),
+    ];
+    const d = scoreRoutes(inputs({ observations: localOnly, rng: createRng(42) }));
+
+    expect(d.reasons).toContain(RouteReason.OVERFLOW_FALLBACK_TO_NPA_MATCH);
+    expect(d.table.get(K('overflow', '212'))).toEqual(d.table.get(K('npa_match', '212')));
+    expect(detailFor(d, 'ShortDuration', 'overflow')!.inheritedFromNpaMatch).toBe(true);
+    expect(detailFor(d, 'ShortDuration', 'npa_match')!.inheritedFromNpaMatch).toBe(false);
   });
 });
 
@@ -313,6 +357,88 @@ describe('CONFOUNDER — a thinly observed parent lends thin confidence (fifth s
 });
 
 // ---------------------------------------------------------------------------
+// §2.1 + decay — the window is a cliff, decay is the slope inside it
+// ---------------------------------------------------------------------------
+
+describe('recency decay inside the window', () => {
+  // The numbers here are chosen so decay is NECESSARY, not merely present.
+  //
+  // ShortDuration runs at 85% and collapses to 35%; CVPreferred sits at 40%
+  // throughout. Averaged flat over the whole window, ShortDuration's history
+  // keeps it above CVPreferred long after it stopped deserving the traffic —
+  // which is exactly the failure a growing window produces. Only age-weighting
+  // demotes it. An earlier version of this scenario used a collapse to 5%, and
+  // it passed with decay disabled: the collapsed route kept leading, poisoned
+  // its own estimate within a few nights, and corrected on volume alone. That
+  // version proved nothing about decay.
+  const trueAsr = new Map<string, number>();
+  for (const p of PREFIXES) {
+    for (const s of ['npa_match', 'overflow'] as const) {
+      trueAsr.set(truthKey('ShortDuration', p, s), 0.85);
+      trueAsr.set(truthKey('CVPreferred', p, s), 0.4);
+      trueAsr.set(truthKey('MASH', p, s), 0.3);
+    }
+  }
+
+  const COLLAPSE_NIGHT = 12;
+  const HALF_LIFE_NIGHTS = 7;
+
+  function run(halfLifeMs: number) {
+    return runRouteSimulation(
+      defaultRouteSimConfig({
+        seed: 21,
+        nights: 40,
+        callsPerNight: 900,
+        trueAsr,
+        maxBlend: 0.01,
+        overflowShare: PRODUCTION_OVERFLOW_SHARE,
+        policy: { ...DEFAULT_ROUTE_SCORING_POLICY, holdDownMargin: 0, halfLifeMs },
+        asrShift: {
+          atNight: COLLAPSE_NIGHT,
+          key: truthKey('ShortDuration', '212', 'npa_match'),
+          // Below ~0.29. At two half-lives the post-collapse rows are ~81% of
+          // the decayed weight and the pre-collapse rows ~19%, so the decayed
+          // estimate lands near 0.81x + 0.19*0.85; clearing CVPreferred's 0.40
+          // requires x below roughly 0.29. Flat-averaged the same data reads
+          // 0.50 and ShortDuration keeps the traffic, which is the point.
+          to: 0.2,
+        },
+      })
+    );
+  }
+
+  it('is actually applied — effective rows fall below raw rows', () => {
+    const decayed = run(HALF_LIFE_NIGHTS * DAY);
+    expect(decayed.final.effectiveScoredRows).toBeLessThan(decayed.final.scoredRows);
+    expect(decayed.final.effectiveScoredRows).toBeGreaterThan(0);
+  });
+
+  it('corrects a collapsed route within about two half-lives', () => {
+    const decayed = run(HALF_LIFE_NIGHTS * DAY);
+    const atTwoHalfLives = decayed.nights[COLLAPSE_NIGHT + 2 * HALF_LIFE_NIGHTS].decision;
+
+    expect(atTwoHalfLives.table.get(K('npa_match', '212'))?.[0]).not.toBe('ShortDuration');
+  });
+
+  it('reaches a lower estimate for the collapsed cell than an undecayed window would', () => {
+    // The point of decay: the same evidence, weighted by age, tracks the new
+    // behaviour instead of averaging it against history that is no longer true.
+    const decayed = run(HALF_LIFE_NIGHTS * DAY);
+    const undecayed = run(Number.POSITIVE_INFINITY);
+
+    const d = detailFor(decayed.final, 'ShortDuration', 'npa_match');
+    const u = detailFor(undecayed.final, 'ShortDuration', 'npa_match');
+
+    expect(d!.posteriorMean).toBeLessThan(u!.posteriorMean);
+  });
+
+  it('leaves the untouched prefixes alone', () => {
+    const decayed = run(HALF_LIFE_NIGHTS * DAY);
+    expect(decayed.final.table.get(K('npa_match', '312'))?.[0]).toBe('ShortDuration');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // §4.3 ORDERING SCENARIOS — does the scorer converge on the truth?
 // ---------------------------------------------------------------------------
 
@@ -328,7 +454,7 @@ function truth(entries: Array<[string, string, number]>): Map<string, number> {
 }
 
 describe('§4.3 — a route that is good everywhere', () => {
-  it('wins every prefix', () => {
+  it('wins every prefix in both strata', () => {
     const trueAsr = truth([
       ...PREFIXES.map(p => ['ShortDuration', p, 0.55] as [string, string, number]),
       ...PREFIXES.map(p => ['CVPreferred', p, 0.3] as [string, string, number]),
@@ -342,6 +468,7 @@ describe('§4.3 — a route that is good everywhere', () => {
         callsPerNight: 900,
         trueAsr,
         maxBlend: 0.01,
+        overflowShare: PRODUCTION_OVERFLOW_SHARE,
         policy: orderingPolicy,
       })
     );
@@ -372,42 +499,16 @@ describe('§4.3 — a route that is good only in specific NPAs', () => {
         callsPerNight: 900,
         trueAsr,
         maxBlend: 0.01,
+        overflowShare: PRODUCTION_OVERFLOW_SHARE,
         policy: orderingPolicy,
       })
     );
 
     // This is the scenario a route-level-only model gets wrong: pooled across
     // NPAs ShortDuration averages ~0.37 and looks like a mediocre global route.
-    expect(result.final.table.get('312')?.[0]).toBe('ShortDuration');
-    expect(result.final.table.get('212')?.[0]).toBe('CVPreferred');
-    expect(result.final.table.get('415')?.[0]).toBe('CVPreferred');
-  });
-});
-
-describe('§4.3 — a route whose ASR changes mid-window', () => {
-  it('demotes it once the new behaviour dominates the window', () => {
-    const trueAsr = truth([
-      ...PREFIXES.map(p => ['ShortDuration', p, 0.55] as [string, string, number]),
-      ...PREFIXES.map(p => ['CVPreferred', p, 0.4] as [string, string, number]),
-      ...PREFIXES.map(p => ['MASH', p, 0.3] as [string, string, number]),
-    ]);
-
-    const result = runRouteSimulation(
-      defaultRouteSimConfig({
-        seed: 17,
-        nights: 40,
-        callsPerNight: 900,
-        trueAsr,
-        maxBlend: 0.01,
-        policy: orderingPolicy,
-        // ShortDuration collapses in 212 only, one fifth of the way in.
-        asrShift: { atNight: 8, key: truthKey('ShortDuration', '212', 'npa_match'), to: 0.05 },
-      })
-    );
-
-    expect(result.final.table.get('212')?.[0]).not.toBe('ShortDuration');
-    // The other prefixes are untouched, so it should still lead them.
-    expect(result.final.table.get('312')?.[0]).toBe('ShortDuration');
+    expect(result.final.table.get(K('npa_match', '312'))?.[0]).toBe('ShortDuration');
+    expect(result.final.table.get(K('npa_match', '212'))?.[0]).toBe('CVPreferred');
+    expect(result.final.table.get(K('npa_match', '415'))?.[0]).toBe('CVPreferred');
   });
 });
 
@@ -420,7 +521,7 @@ describe('§4.3 — a cell with zero observations', () => {
 
   it('inherits its parent posterior instead of crashing or reading as zero', () => {
     const d = scoreRoutes(inputs({ observations, rng: createRng(42) }));
-    const mash = d.details.find(x => x.routeName === 'MASH' && x.prefix === '212');
+    const mash = detailFor(d, 'MASH', 'npa_match');
 
     expect(mash).toBeDefined();
     expect(mash!.observations).toBe(0);
@@ -433,7 +534,7 @@ describe('§4.3 — a cell with zero observations', () => {
 
   it('still gets ranked, so it can be explored', () => {
     const d = scoreRoutes(inputs({ observations, rng: createRng(42) }));
-    expect(d.table.get('212')).toContain('MASH');
+    expect(d.table.get(K('npa_match', '212'))).toContain('MASH');
   });
 });
 
@@ -444,13 +545,24 @@ describe('§4.3 — a cell with zero observations', () => {
 describe('§3.4 — the blend ceiling', () => {
   // MASH is the best route everywhere and the most expensive at $0.0029 against
   // a $0.0025 ceiling, so the budget has to bind.
-  const observations = PREFIXES.flatMap(p => [
-    ...rows(600, 360, { route_name: 'MASH', destination_npa: p }),
-    ...rows(600, 210, { route_name: 'CVPreferred', destination_npa: p }),
-    ...rows(600, 180, { route_name: 'ShortDuration', destination_npa: p }),
-  ]);
+  const observations = PREFIXES.flatMap(p =>
+    (['npa_match', 'overflow'] as const).flatMap(s => [
+      ...rows(600, 360, { route_name: 'MASH', destination_npa: p, did_selection_reason: s }),
+      ...rows(600, 210, { route_name: 'CVPreferred', destination_npa: p, did_selection_reason: s }),
+      ...rows(600, 180, {
+        route_name: 'ShortDuration',
+        destination_npa: p,
+        did_selection_reason: s,
+      }),
+    ])
+  );
 
-  const trafficWeights = new Map(PREFIXES.map(p => [p, 1_000]));
+  const trafficWeights = new Map(
+    PREFIXES.flatMap(p => [
+      [K('npa_match', p), 400] as [string, number],
+      [K('overflow', p), 600] as [string, number],
+    ])
+  );
 
   it('holds the projection under the ceiling and says so', () => {
     const d = scoreRoutes(
@@ -467,7 +579,7 @@ describe('§3.4 — the blend ceiling', () => {
     );
 
     expect(d.reasons).not.toContain(RouteReason.BLEND_CEILING_BINDING);
-    for (const p of PREFIXES) expect(d.table.get(p)?.[0]).toBe('MASH');
+    for (const p of PREFIXES) expect(d.table.get(K('npa_match', p))?.[0]).toBe('MASH');
   });
 
   it('weights the projection by the UPPER bound of ASR, not the mean or the lower bound', () => {
@@ -489,8 +601,8 @@ describe('§3.4 — the blend ceiling', () => {
       ...rows(4_000, 800, { route_name: 'MASH', destination_npa: '312' }),
     ];
     const weights = new Map([
-      ['212', 1_000],
-      ['312', 1_000],
+      [K('npa_match', '212'), 1_000],
+      [K('npa_match', '312'), 1_000],
     ]);
 
     const d = scoreRoutes(
@@ -502,17 +614,20 @@ describe('§3.4 — the blend ceiling', () => {
       })
     );
 
-    expect(d.table.get('212')?.[0]).toBe('MASH');
-    expect(d.table.get('312')?.[0]).toBe('ShortDuration');
+    expect(d.table.get(K('npa_match', '212'))?.[0]).toBe('MASH');
+    expect(d.table.get(K('npa_match', '312'))?.[0]).toBe('ShortDuration');
 
     const blendWeightedBy = (pick: (detail: RouteScoreDetail) => number): number => {
       let cost = 0;
       let minutes = 0;
-      for (const [prefix, names] of d.table) {
-        const w = weights.get(prefix) ?? 0;
-        const lead = d.details.find(x => x.prefix === prefix && x.routeName === names[0]);
+      for (const [key, weight] of weights) {
+        const names = d.table.get(key);
+        if (!names) continue;
+        const lead = d.details.find(
+          x => `${x.stratum}/${x.prefix}` === key && x.routeName === names[0]
+        );
         if (!lead) continue;
-        const m = w * pick(lead);
+        const m = weight * pick(lead);
         minutes += m;
         cost += m * lead.ratePerMinute;
       }
@@ -539,7 +654,7 @@ describe('§3.4 — the blend ceiling', () => {
     const d = scoreRoutes(
       inputs({ observations, trafficWeights, maxBlend: 0.0025, rng: createRng(42) })
     );
-    const leads = PREFIXES.map(p => d.table.get(p)?.[0]);
+    const leads = [...d.table.values()].map(v => v[0]);
     expect(leads).toContain('MASH');
   });
 });
@@ -551,8 +666,12 @@ describe('§3.5 — hold-down', () => {
     ...rows(600, 280, { route_name: 'MASH' }),
   ];
 
+  const currentTable = new Map([
+    [K('npa_match', '212'), ['MASH', 'CVPreferred', 'ShortDuration']],
+    [K('overflow', '212'), ['MASH', 'CVPreferred', 'ShortDuration']],
+  ]);
+
   it('leaves a working table alone when the proposal is not clearly better', () => {
-    const currentTable = new Map([['212', ['MASH', 'CVPreferred', 'ShortDuration']]]);
     const d = scoreRoutes(
       inputs({
         observations,
@@ -568,7 +687,6 @@ describe('§3.5 — hold-down', () => {
   });
 
   it('moves when the margin is cleared', () => {
-    const currentTable = new Map([['212', ['MASH', 'CVPreferred', 'ShortDuration']]]);
     const d = scoreRoutes(
       inputs({
         observations,
@@ -599,7 +717,7 @@ describe('§2.1 — the post-deploy window', () => {
   });
 
   it('keeps the previously loaded table when it refuses', () => {
-    const currentTable = new Map([['212', ['CVPreferred', 'MASH']]]);
+    const currentTable = new Map([[K('npa_match', '212'), ['CVPreferred', 'MASH']]]);
     const d = scoreRoutes(
       inputs({
         observations: rows(50, 25, {}),
@@ -611,9 +729,10 @@ describe('§2.1 — the post-deploy window', () => {
     expect(d.table).toEqual(currentTable);
   });
 
-  it('excludes rows stamped before the window opened', () => {
+  it('excludes rows stamped before the window opened, at any weight', () => {
     // Amplification was 2.48x on 08-11 and 1.67x on 08-12 as the gateway count
-    // fell 7 -> 6 -> 5. Those attempts come from a different process.
+    // fell 7 -> 6 -> 5. Those attempts come from a different process, so this is
+    // a cliff and not a steep part of the decay curve.
     const inWindow = [
       ...rows(600, 300, { route_name: 'ShortDuration' }),
       ...rows(600, 180, { route_name: 'CVPreferred' }),

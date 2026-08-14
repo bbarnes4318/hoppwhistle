@@ -60,6 +60,26 @@ export const SAFETY_Z = 1.5;
 /** Numerical guard only. Real protection is the blend ceiling and the hold-down. */
 export const ASR_FLOOR = 0.001;
 
+/**
+ * Weight of an observation by age. Exponential, halving every `halfLifeMs`.
+ *
+ * This is the second of two mechanisms and it does a different job from the
+ * first. The window start (§2.1) is a CLIFF: pre-Phase-0 attempts came from a
+ * different process and are not comparable at any weight. Decay operates INSIDE
+ * the window, where evidence is comparable but not equally current.
+ *
+ * Both are needed. A hard window alone only ever grows, so the time to correct a
+ * degraded route grows with it — after 90 days of history a bad week is 7% of
+ * the evidence and moves nothing. Decay alone would let pre-deploy rows back in
+ * at a small weight, which is worse than excluding them, because their bias is
+ * systematic rather than noisy.
+ */
+export function decayWeight(ageMs: number, halfLifeMs: number): number {
+  if (!Number.isFinite(halfLifeMs) || halfLifeMs <= 0) return 1;
+  if (!Number.isFinite(ageMs) || ageMs <= 0) return 1;
+  return Math.pow(0.5, ageMs / halfLifeMs);
+}
+
 /** Rejection-sampler iteration cap, so a pathological RNG cannot hang the scorer. */
 const MAX_SAMPLE_ITERATIONS = 200;
 

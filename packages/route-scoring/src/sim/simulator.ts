@@ -28,13 +28,14 @@ import {
   type RouteDecision,
   type RouteObservation,
   type RouteScoringPolicy,
+  tableKey,
 } from '../types.js';
 
 const NIGHT_MS = 86_400_000;
 
 /** Ground-truth key. Mirrors the scorer's stratum exactly — route × NPA × DID reason. */
 export function truthKey(route: string, npa: string, did: DidSelectionReason): string {
-  return `${route} ${npa} ${did}`;
+  return `${route}/${npa}/${did}`;
 }
 
 export interface RouteSimConfig {
@@ -53,6 +54,7 @@ export interface RouteSimConfig {
   windowStartMs: number;
   epoch: string;
   policy: RouteScoringPolicy;
+  /** Keyed by `tableKey(stratum, prefix)`. Derived from `overflowShare` if omitted. */
   trafficWeights: Map<string, number>;
 
   /**
@@ -69,7 +71,14 @@ export interface RouteSimConfig {
   routingMode: 'table' | 'uniform';
 
   // ---- Confounder injection ------------------------------------------------
-  /** Share of calls dialled on a non-local (overflow) DID. §2.4 */
+  /**
+   * Share of calls dialled on a non-local (overflow) DID. §2.4
+   *
+   * Production ran 60.6%. The default here is 0 so that contamination scenarios
+   * stay simple, but convergence scenarios should set it near the real figure —
+   * a scorer tuned on a 0%-overflow world is tuned on a world that does not
+   * exist.
+   */
   overflowShare: number;
   /** Share of rows that never reached a Dial() and carry a `reject_reason`. §2.3 */
   rejectShare: number;
@@ -77,7 +86,7 @@ export interface RouteSimConfig {
   retryShare: number;
   /** Share of rows stamped before `windowStartMs`. §2.1 */
   preWindowShare: number;
-  /** Ground truth for one cell changes at this night (list-quality shift). */
+  /** Ground truth for one cell changes at this night (carrier quality shift). */
   asrShift?: { atNight: number; key: string; to: number };
   /** The topology epoch changes at this night. §2.2 */
   epochChangeAtNight?: number;
@@ -95,6 +104,9 @@ export interface RouteSimNightRecord {
 }
 
 export interface RouteSimLead {
+  /** `tableKey(stratum, prefix)`. */
+  key: string;
+  stratum: DidSelectionReason;
   prefix: string;
   chosen: string | null;
   trueBest: string;
@@ -109,13 +121,15 @@ export interface RouteSimResult {
   /** Every row generated, so a test can inject contamination and re-score. */
   observations: RouteObservation[];
   leads: RouteSimLead[];
-  /** Fraction of trafficked prefixes whose lead route is the true best. */
+  /** Fraction of trafficked (stratum, prefix) keys whose lead is the true best. */
   leadAccuracy: number;
   /** True ASR the final table would achieve, traffic-weighted. */
   realisedAsr: number;
   /** True ASR the perfect table would achieve. The ceiling. */
   optimalAsr: number;
 }
+
+const STRATA: DidSelectionReason[] = ['npa_match', 'overflow'];
 
 export function defaultRouteSimConfig(overrides: Partial<RouteSimConfig> = {}): RouteSimConfig {
   const prefixes = overrides.prefixes ?? ['212', '312', '415'];
@@ -140,6 +154,19 @@ export function defaultRouteSimConfig(overrides: Partial<RouteSimConfig> = {}): 
     },
   ];
 
+  const overflowShare = overrides.overflowShare ?? 0;
+
+  // Weights follow the stratum split, so the blend prices overflow traffic at
+  // overflow ASR rather than at local-presence ASR.
+  const trafficWeights =
+    overrides.trafficWeights ??
+    new Map(
+      prefixes.flatMap(p => [
+        [tableKey('npa_match', p), Math.round(1_000 * (1 - overflowShare))] as [string, number],
+        [tableKey('overflow', p), Math.round(1_000 * overflowShare)] as [string, number],
+      ])
+    );
+
   return {
     seed: 1,
     nights: 20,
@@ -152,25 +179,29 @@ export function defaultRouteSimConfig(overrides: Partial<RouteSimConfig> = {}): 
     windowStartMs: 1_700_000_000_000,
     epoch: 'epoch-a',
     policy: DEFAULT_ROUTE_SCORING_POLICY,
-    trafficWeights: new Map(prefixes.map(p => [p, 1_000])),
     routingMode: 'table',
-    overflowShare: 0,
     rejectShare: 0,
     retryShare: 0,
     preWindowShare: 0,
     ...overrides,
+    overflowShare,
+    trafficWeights,
   };
 }
 
-/** Weighted pick over prefixes, by traffic weight. Deterministic given `rng`. */
+/** Weighted pick over prefixes, by total traffic weight across both strata. */
 function pickPrefix(config: RouteSimConfig, rng: () => number): string {
+  const weightOf = (p: string): number =>
+    Math.max(0, config.trafficWeights.get(tableKey('npa_match', p)) ?? 0) +
+    Math.max(0, config.trafficWeights.get(tableKey('overflow', p)) ?? 0);
+
   let total = 0;
-  for (const p of config.prefixes) total += Math.max(0, config.trafficWeights.get(p) ?? 0);
+  for (const p of config.prefixes) total += weightOf(p);
   if (total <= 0) return config.prefixes[Math.floor(rng() * config.prefixes.length)];
 
   let r = rng() * total;
   for (const p of config.prefixes) {
-    r -= Math.max(0, config.trafficWeights.get(p) ?? 0);
+    r -= weightOf(p);
     if (r <= 0) return p;
   }
   return config.prefixes[config.prefixes.length - 1];
@@ -225,20 +256,22 @@ export function runRouteSimulation(config: RouteSimConfig): RouteSimResult {
       const candidates = candidatesFor(config, prefix);
       if (candidates.length === 0) continue;
 
+      // The stratum is decided BEFORE the route, exactly as the dialplan does it
+      // (SBC_DID_REASON at extensions.conf.tpl:402/:409, dial loop at :451).
+      // That ordering is what makes a per-stratum table loadable at all.
+      const did: DidSelectionReason = rng() < config.overflowShare ? 'overflow' : 'npa_match';
+
       let routeName: string;
-      const lead = table.get(prefix)?.[0];
+      const lead = table.get(tableKey(did, prefix))?.[0];
       if (config.routingMode === 'table' && lead) {
         routeName = lead;
       } else {
         routeName = candidates[Math.floor(rng() * candidates.length)].name;
       }
 
-      // Draw every confounder from the same stream so the whole run stays
-      // reproducible from the seed.
       const isReject = rng() < config.rejectShare;
       const isRetry = !isReject && rng() < config.retryShare;
       const isPreWindow = rng() < config.preWindowShare;
-      const did: DidSelectionReason = rng() < config.overflowShare ? 'overflow' : 'npa_match';
 
       const p = trueAsrFor(config, shifted, routeName, prefix, did);
       const answered = !isReject && rng() < p;
@@ -289,34 +322,35 @@ export function runRouteSimulation(config: RouteSimConfig): RouteSimResult {
   let trafficked = 0;
 
   for (const prefix of config.prefixes) {
-    const w = Math.max(0, config.trafficWeights.get(prefix) ?? 0);
     const candidates = candidatesFor(config, prefix);
     if (candidates.length === 0) continue;
 
-    // Ground truth is compared on the `npa_match` stratum, which is what the
-    // scorer ranks on. Comparing against a blended truth would score the scorer
-    // for failing to do the pooling §2.4 forbids.
-    let trueBest = candidates[0].name;
-    let bestTrueAsr = -1;
-    for (const c of candidates) {
-      const asr = trueAsrFor(config, shifted, c.name, prefix, 'npa_match');
-      if (asr > bestTrueAsr) {
-        bestTrueAsr = asr;
-        trueBest = c.name;
+    for (const stratum of STRATA) {
+      const key = tableKey(stratum, prefix);
+      const w = Math.max(0, config.trafficWeights.get(key) ?? 0);
+
+      let trueBest = candidates[0].name;
+      let bestTrueAsr = -1;
+      for (const c of candidates) {
+        const asr = trueAsrFor(config, shifted, c.name, prefix, stratum);
+        if (asr > bestTrueAsr) {
+          bestTrueAsr = asr;
+          trueBest = c.name;
+        }
       }
-    }
 
-    const chosen = table.get(prefix)?.[0] ?? null;
-    const chosenTrueAsr = chosen ? trueAsrFor(config, shifted, chosen, prefix, 'npa_match') : 0;
+      const chosen = table.get(key)?.[0] ?? null;
+      const chosenTrueAsr = chosen ? trueAsrFor(config, shifted, chosen, prefix, stratum) : 0;
 
-    leads.push({ prefix, chosen, trueBest, chosenTrueAsr, bestTrueAsr });
+      leads.push({ key, stratum, prefix, chosen, trueBest, chosenTrueAsr, bestTrueAsr });
 
-    if (w > 0) {
-      trafficked++;
-      if (chosen === trueBest) correct++;
-      weightedRealised += w * chosenTrueAsr;
-      weightedOptimal += w * bestTrueAsr;
-      volume += w;
+      if (w > 0) {
+        trafficked++;
+        if (chosen === trueBest) correct++;
+        weightedRealised += w * chosenTrueAsr;
+        weightedOptimal += w * bestTrueAsr;
+        volume += w;
+      }
     }
   }
 
