@@ -278,10 +278,16 @@ export async function registerAdminBillingRoutes(fastify: FastifyInstance) {
       return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
     }
 
-    const demoTenantId = request.headers['x-demo-tenant-id'] as string;
-    if (demoTenantId) {
-      return; // Allow demo request bypass
-    }
+    // The x-demo-tenant-id bypass that used to sit here has been removed.
+    //
+    // It returned early — skipping the ADMIN/OWNER check below — for any request
+    // carrying the header. The 401 above requires a real `userId`, so an
+    // unauthenticated caller could not reach it; what it did allow was an
+    // AUTHENTICATED NON-ADMIN user to grant themselves administrative billing
+    // access by adding one header. Invoices, the accrual ledger and every other
+    // route registered here were behind it.
+    //
+    // The role check now always runs.
 
     // Query roles from database using pg pool
     const roleResult = await pool.query(
