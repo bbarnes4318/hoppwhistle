@@ -1,6 +1,61 @@
 #!/bin/bash
 set -e
 
+# ── Host guard ───────────────────────────────────────────────────────────────
+#
+# Step 4 of this script runs `prisma migrate reset --force`, which DROPS AND
+# RECREATES THE ENTIRE SCHEMA. `--force` means there is no confirmation prompt.
+# Run against production it destroys the production database, and the `.env` it
+# loads has pointed at production before now.
+#
+# So the destination is checked before anything runs. Only a loopback host is
+# allowed. This is deliberately strict: the compose service name `postgres`
+# resolves, on the deployment host, to the production container -- so a hostname
+# that LOOKS local is exactly the case that has to be refused.
+#
+# If you need to reset a remote database, do it deliberately and by hand. Do not
+# relax this guard.
+
+ENV_FILE="${ENV_FILE:-.env}"
+
+if [ ! -f "$ENV_FILE" ]; then
+  echo "REFUSING TO RUN: no $ENV_FILE to read DATABASE_URL from." >&2
+  exit 1
+fi
+
+DB_URL="$(grep -m1 '^DATABASE_URL=' "$ENV_FILE" | sed 's/^DATABASE_URL=//; s/^"//; s/"$//')"
+
+if [ -z "$DB_URL" ]; then
+  echo "REFUSING TO RUN: no DATABASE_URL found in $ENV_FILE." >&2
+  exit 1
+fi
+
+# Strip scheme and any credentials, then take the host up to : or / -- so a
+# password containing an '@' cannot smuggle a different host past this.
+DB_HOST="$(printf '%s' "$DB_URL" | sed -E 's#^[a-zA-Z0-9+.-]+://##; s#^[^@/]*@##; s#[:/?].*$##')"
+
+case "$DB_HOST" in
+  localhost | 127.0.0.1 | ::1 | '[::1]')
+    echo "Host guard: target is '$DB_HOST' -- local, proceeding."
+    ;;
+  *)
+    echo "" >&2
+    echo "REFUSING TO RUN." >&2
+    echo "" >&2
+    echo "  DATABASE_URL in $ENV_FILE points at host: '$DB_HOST'" >&2
+    echo "  Only localhost, 127.0.0.1 and ::1 are permitted." >&2
+    echo "" >&2
+    echo "  Step 4 of this script runs 'prisma migrate reset --force', which drops" >&2
+    echo "  and recreates the entire schema with no confirmation prompt. Against a" >&2
+    echo "  non-local database that means destroying data that is not yours to lose." >&2
+    echo "" >&2
+    echo "  If you genuinely intend to reset a remote database, do it by hand and" >&2
+    echo "  deliberately. Do not edit this guard out." >&2
+    echo "" >&2
+    exit 1
+    ;;
+esac
+
 echo "=== Resetting Database Migrations ==="
 
 # 1. Pull latest code

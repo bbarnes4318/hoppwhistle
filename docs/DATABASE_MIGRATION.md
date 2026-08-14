@@ -21,6 +21,8 @@ ssh root@45.32.213.201
 cd /opt/hopwhistle
 
 # Run migration using db push (applies schema changes)
+# Never add --accept-data-loss. Without it, db push refuses changes that would
+# destroy data; a refusal means stop and find out what it wants to drop.
 docker exec -it hopwhistle-api-1 npx prisma db push
 
 # Or run Prisma generate to update the client

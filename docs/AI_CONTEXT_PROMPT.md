@@ -75,7 +75,9 @@ docker compose -f docker-compose.yml up -d api --no-deps
 docker network connect docker_default hopwhistle-postgres-dev 2>/dev/null
 docker network connect --alias redis docker_default hopwhistle-redis-1 2>/dev/null
 docker restart docker-api-1
-docker exec -it docker-api-1 npx prisma db push --accept-data-loss
+# db push REFUSES changes that would destroy data. A refusal means stop and find
+# out what it wants to drop -- it is NOT a reason to add --accept-data-loss.
+docker exec -it docker-api-1 npx prisma db push
 ```
 
 ### Common Issues & Fixes
@@ -104,7 +106,7 @@ docker exec -it docker-api-1 npx prisma db push --accept-data-loss
 4. **"Column does not exist"**: Schema migration not applied:
 
    ```bash
-   docker exec -it docker-api-1 npx prisma db push --accept-data-loss
+   docker exec -it docker-api-1 npx prisma db push
    ```
 
 5. **"EACCES permission denied" on Prisma**: IGNORE IT - the schema is still applied

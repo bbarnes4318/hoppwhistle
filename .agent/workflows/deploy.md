@@ -99,10 +99,16 @@ sudo git pull origin main
 
 ```bash
 # Apply schema changes to database
-sudo docker exec -it docker-api-1 npx prisma db push --accept-data-loss
+sudo docker exec -it docker-api-1 npx prisma db push
 
-# The above command IS SUFFICIENT - ignore EACCES errors for prisma generate
-# The schema is applied to the database, that's what matters
+# Without --accept-data-loss, db push REFUSES any change that would destroy data
+# and stops. A refusal is the safety mechanism doing its job: it means the diff
+# it computed would drop a column, a table or an index. STOP AND THINK. Work out
+# what it wants to drop and why. Do NOT add the flag back to make it proceed --
+# that converts the refusal into silent deletion against a database holding call
+# records and lead data.
+#
+# Ignore EACCES errors from prisma generate; those are unrelated to the schema.
 ```
 
 ### 4. Rebuild API Container
@@ -139,8 +145,11 @@ sudo docker restart docker-api-1
 ### 6. Apply Schema Migration (if needed)
 
 ```bash
-sudo docker exec -it docker-api-1 npx prisma db push --accept-data-loss
+sudo docker exec -it docker-api-1 npx prisma db push
 ```
+
+If this refuses, it is telling you the change would destroy data. See step 3 —
+stop and work out what it wants to drop. Do not add `--accept-data-loss`.
 
 ### 7. Verify Everything Works
 
@@ -155,8 +164,11 @@ curl -s http://localhost:3001/api/v1/buyers -H "x-demo-tenant-id: 00000000-0000-
 ## ONE-LINER: Full API Rebuild (Copy-Paste This)
 
 ```bash
-cd /opt/hopwhistle && sudo git pull origin main && cd infra/docker && sudo docker stop docker-api-1 2>/dev/null; sudo docker rm docker-api-1 2>/dev/null; sudo docker rm -f docker-redis-1 2>/dev/null; sudo docker compose -f docker-compose.yml build api --no-cache && sudo docker compose -f docker-compose.yml up -d redis api && sudo docker network connect docker_default hopwhistle-postgres-dev 2>/dev/null; sudo docker network connect --alias redis docker_default docker-redis-1 2>/dev/null; sudo docker restart docker-api-1 && sleep 5 && sudo docker exec docker-api-1 npx prisma db push --accept-data-loss && curl -s http://localhost:3001/health
+cd /opt/hopwhistle && sudo git pull origin main && cd infra/docker && sudo docker stop docker-api-1 2>/dev/null; sudo docker rm docker-api-1 2>/dev/null; sudo docker rm -f docker-redis-1 2>/dev/null; sudo docker compose -f docker-compose.yml build api --no-cache && sudo docker compose -f docker-compose.yml up -d redis api && sudo docker network connect docker_default hopwhistle-postgres-dev 2>/dev/null; sudo docker network connect --alias redis docker_default docker-redis-1 2>/dev/null; sudo docker restart docker-api-1 && sleep 5 && sudo docker exec docker-api-1 npx prisma db push && curl -s http://localhost:3001/health
 ```
+
+If the one-liner stops at `db push`, that is the destructive-change refusal, not a
+broken deploy. Read what it says before doing anything else.
 
 ## ONE-LINER: Full Web Rebuild (Copy-Paste This)
 
@@ -196,8 +208,12 @@ sudo docker restart docker-api-1
 The schema migration wasn't applied. Run:
 
 ```bash
-sudo docker exec -it docker-api-1 npx prisma db push --accept-data-loss
+sudo docker exec -it docker-api-1 npx prisma db push
 ```
+
+If it refuses, the change it wants to make would destroy data. That is not a
+reason to add `--accept-data-loss` — it is a reason to find out what it would
+drop before going any further.
 
 ### "EACCES permission denied" on Prisma Generate
 
@@ -221,16 +237,16 @@ sudo docker compose -f docker-compose.yml up -d web --no-deps
 
 ## Quick Command Reference
 
-| Task            | Command                                                                   |
-| --------------- | ------------------------------------------------------------------------- |
-| SSH to server   | `ssh -i ~/.ssh/hopwhistle-aws.pem ubuntu@3.214.60.13`                     |
-| Pull code       | `cd /opt/hopwhistle && sudo git pull`                                     |
-| List containers | `sudo docker ps`                                                          |
-| API logs        | `sudo docker logs docker-api-1 --tail 50`                                 |
-| Web logs        | `sudo docker logs docker-web-1 --tail 50`                                 |
-| Restart API     | `sudo docker restart docker-api-1`                                        |
-| Apply schema    | `sudo docker exec -it docker-api-1 npx prisma db push --accept-data-loss` |
-| Test API        | `curl -s http://localhost:3001/health`                                    |
+| Task            | Command                                                |
+| --------------- | ------------------------------------------------------ |
+| SSH to server   | `ssh -i ~/.ssh/hopwhistle-aws.pem ubuntu@3.214.60.13`  |
+| Pull code       | `cd /opt/hopwhistle && sudo git pull`                  |
+| List containers | `sudo docker ps`                                       |
+| API logs        | `sudo docker logs docker-api-1 --tail 50`              |
+| Web logs        | `sudo docker logs docker-web-1 --tail 50`              |
+| Restart API     | `sudo docker restart docker-api-1`                     |
+| Apply schema    | `sudo docker exec -it docker-api-1 npx prisma db push` |
+| Test API        | `curl -s http://localhost:3001/health`                 |
 
 ## AWS Infrastructure Reference
 

@@ -1418,7 +1418,9 @@ docker network connect --alias redis docker_default hopwhistle-redis-1
 docker restart docker-api-1
 
 # Apply schema
-docker exec -it docker-api-1 npx prisma db push --accept-data-loss
+# Refuses any change that would destroy data. A refusal means stop and find out
+# what it wants to drop -- it is NOT a reason to add --accept-data-loss.
+docker exec -it docker-api-1 npx prisma db push
 
 # Reload FreeSWITCH
 docker exec hopwhistle-freeswitch-dev fs_cli -x 'reloadxml'
@@ -1441,7 +1443,7 @@ docker exec hopwhistle-freeswitch-dev fs_cli -x 'reloadxml'
 | `ENOTFOUND redis`                   | `docker network connect --alias redis docker_default hopwhistle-redis-1` |
 | `ENOTFOUND hopwhistle-postgres-dev` | `docker network connect docker_default hopwhistle-postgres-dev`          |
 | Port 3001 Already Allocated         | `docker stop $(docker ps -q --filter "publish=3001")`                    |
-| Column Does Not Exist               | `docker exec -it docker-api-1 npx prisma db push --accept-data-loss`     |
+| Column Does Not Exist               | `docker exec -it docker-api-1 npx prisma db push`                        |
 | FreeSWITCH Gateway Invalid          | `docker exec hopwhistle-freeswitch-dev fs_cli -x 'reloadxml'`            |
 
 ### Health Checks
