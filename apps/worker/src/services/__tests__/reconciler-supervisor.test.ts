@@ -76,7 +76,7 @@ describe('disabled by default', () => {
     expect(reconciler.cycles).toBe(0);
   });
 
-  it('an empty allowlist is not a wildcard', async () => {
+  it('an empty allowlist is not a wildcard', () => {
     const status = resolveReconcilerGate({
       [RECONCILER_ENV.enabled]: 'true',
       [HOPPER_ENV.tenants]: ' , ,, ',

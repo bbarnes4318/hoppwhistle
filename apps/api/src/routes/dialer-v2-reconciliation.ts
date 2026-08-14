@@ -22,7 +22,11 @@
  * the last four digits only.
  */
 
-import { applyManualResolution, AttemptResolutionChoice, ResolutionRejection } from '@hopwhistle/shared';
+import {
+  applyManualResolution,
+  AttemptResolutionChoice,
+  ResolutionRejection,
+} from '@hopwhistle/shared';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import {
@@ -139,7 +143,8 @@ export async function registerDialerV2ReconciliationRoutes(
   options: ReconciliationRouteOptions = {}
 ) {
   const verify = options.verify ?? defaultVerifier(fastify);
-  const db = options.db ?? (getPrismaClient() as unknown as NonNullable<ReconciliationRouteOptions['db']>);
+  const db =
+    options.db ?? (getPrismaClient() as unknown as NonNullable<ReconciliationRouteOptions['db']>);
 
   /**
    * The manual-review queue for the caller's tenant.
@@ -156,7 +161,7 @@ export async function registerDialerV2ReconciliationRoutes(
       const rawLimit = Number.parseInt(request.query.limit ?? '', 10);
       const limit = Number.isFinite(rawLimit) ? Math.min(200, Math.max(1, rawLimit)) : 50;
 
-      const rows = await db!.$queryRawUnsafe<QueueRow[]>(
+      const rows = await db.$queryRawUnsafe<QueueRow[]>(
         `SELECT r."id", r."attemptId", r."leadId", r."tenantId", r."campaignId",
                 l."phoneNumber", r."reservedAt", r."token", r."reconcileAttempts",
                 r."manualReviewReason", r."lastReconciliationOutcome",
@@ -243,7 +248,7 @@ export async function registerDialerV2ReconciliationRoutes(
         actorLabel: actor.actorLabel,
         acknowledgedRedialRisk: body.acknowledgedRedialRisk === true,
       },
-      { db: db! }
+      { db }
     );
 
     if (!result.ok) {
