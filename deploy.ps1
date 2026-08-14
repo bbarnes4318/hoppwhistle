@@ -21,7 +21,18 @@ $remoteCommands = @(
     "echo '>>> Starting stack...'",
     "docker compose --env-file .env -f infra/docker/docker-compose.dev.yml up -d api web freeswitch",
     "echo '>>> Aligning database schema...'",
-    "docker exec -u root hopwhistle-api-dev npx prisma db push --accept-data-loss"
+    # --accept-data-loss was removed here deliberately.
+    #
+    # This runs on EVERY deploy against live production. With the flag, Prisma
+    # applies whatever diff it computes -- including dropping columns, tables and
+    # indexes -- with no prompt, no reviewable artifact and no record of what it
+    # did. Without it, db push REFUSES a destructive change and stops.
+    #
+    # The commands are joined with && , so a refusal halts the deploy. That is
+    # the intended behaviour: a stopped deploy is recoverable, dropped call
+    # records are not. If this step refuses, find out what it wants to drop
+    # before doing anything else. Do not add the flag back.
+    "docker exec -u root hopwhistle-api-dev npx prisma db push"
 ) -join " && "
 
 Write-Host "1. Connecting to root@$ip using key $keyPath..." -ForegroundColor Yellow

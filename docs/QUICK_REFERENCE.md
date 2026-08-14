@@ -6,7 +6,7 @@
 ## 🚀 ONE-LINER: Full API Rebuild (Copy-Paste This)
 
 ```bash
-cd /opt/hopwhistle && git pull origin main && cd infra/docker && docker stop docker-api-1 2>/dev/null; docker rm docker-api-1 2>/dev/null; docker rm -f docker-redis-1 2>/dev/null; docker compose -f docker-compose.yml build api --no-cache && docker compose -f docker-compose.yml up -d api --no-deps && docker network connect docker_default hopwhistle-postgres-dev 2>/dev/null; docker network connect --alias redis docker_default hopwhistle-redis-1 2>/dev/null; docker restart docker-api-1 && sleep 5 && docker exec docker-api-1 npx prisma db push --accept-data-loss && curl -s http://localhost:3001/health
+cd /opt/hopwhistle && git pull origin main && cd infra/docker && docker stop docker-api-1 2>/dev/null; docker rm docker-api-1 2>/dev/null; docker rm -f docker-redis-1 2>/dev/null; docker compose -f docker-compose.yml build api --no-cache && docker compose -f docker-compose.yml up -d api --no-deps && docker network connect docker_default hopwhistle-postgres-dev 2>/dev/null; docker network connect --alias redis docker_default hopwhistle-redis-1 2>/dev/null; docker restart docker-api-1 && sleep 5 && docker exec docker-api-1 npx prisma db push && curl -s http://localhost:3001/health
 ```
 
 ## 📦 Container Names (MEMORIZE THESE)
@@ -42,7 +42,9 @@ cd /opt/hopwhistle && git pull origin main && cd infra/docker && docker stop doc
 
 ```bash
 # Apply schema to DB (run on server)
-docker exec -it docker-api-1 npx prisma db push --accept-data-loss
+# Refuses any change that would destroy data. A refusal means stop and find out
+# what it wants to drop -- it is NOT a reason to add --accept-data-loss.
+docker exec -it docker-api-1 npx prisma db push
 ```
 
 ## 🔥 Fix Network Issues (ALWAYS DO THIS AFTER REBUILD)
