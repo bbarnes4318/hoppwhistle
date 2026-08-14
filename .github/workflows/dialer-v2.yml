@@ -15,8 +15,11 @@ name: Dialer V2
 # one.
 
 on:
+  # Manual runs ignore the path filters entirely, which is the only reliable way
+  # to re-run this after a red run caused by infrastructure rather than code.
+  workflow_dispatch:
   push:
-    branches: ['feature/predictive-dialer-v2', main]
+    branches: ['feature/predictive-dialer-v2', 'wip/attempt-reconciliation', main]
     paths:
       - 'apps/dialer-v2/**'
       - 'apps/api/src/lib/dialer-v2-auth.ts'
@@ -44,6 +47,14 @@ on:
       - 'apps/worker/src/services/hopper-supervisor.ts'
       - 'apps/worker/src/services/dialer-worker.ts'
       - 'apps/worker/package.json'
+      # The reconciliation services and their live suites. Without these the
+      # workflow fires for this work only by accident — the reconciliation
+      # branch happens to also touch schema.prisma and worker/src/config, and a
+      # branch that touched only the services would run nothing at all.
+      - 'apps/worker/src/services/**'
+      - 'apps/worker/vitest.live.config.ts'
+      # applyManualResolution lives here and is exercised by the live suite.
+      - 'packages/shared/**'
       - 'docs/dialer-v2/**'
       - '.gitignore'
   pull_request:
@@ -74,6 +85,11 @@ on:
       - 'apps/worker/src/services/hopper-supervisor.ts'
       - 'apps/worker/src/services/dialer-worker.ts'
       - 'apps/worker/package.json'
+      # As above: the reconciliation services, their live suites, and the shared
+      # package the operator-resolution path lives in.
+      - 'apps/worker/src/services/**'
+      - 'apps/worker/vitest.live.config.ts'
+      - 'packages/shared/**'
       - 'docs/dialer-v2/**'
       - '.gitignore'
 
@@ -723,6 +739,107 @@ jobs:
           "
           psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f "$DIR/migration.sql"
           node scripts/ci/assignment-migration-checks.mjs reservation-objects
+
+  worker-live:
+    name: worker reservation and reconciliation against real PostgreSQL
+    runs-on: ubuntu-latest
+
+    # Why this is a job rather than more steps on `dialer-v2-live`.
+    #
+    # That job does already run these suites — but only after the dialer-v2 live
+    # suite (128 tests) and the production artifact build have both passed.
+    # Those are unrelated gates, and while either is red this verdict is never
+    # produced at all. The two worker suites need PostgreSQL and nothing else:
+    # no Redis, no FreeSWITCH — they drive StaticPort and
+    # UnavailableFreeSwitchPort test doubles. So they can answer on their own,
+    # and a failure here points at reservation or reconciliation code rather
+    # than at whatever else was red that morning.
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: dialer
+          POSTGRES_PASSWORD: dialer
+          POSTGRES_DB: worker_live_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      # Both suites are written to SKIP with a printed reason when no database is
+      # reachable. Without this they would skip and the job would pass having
+      # verified nothing — the exact false green this workflow exists to prevent.
+      DIALER_V2_REQUIRE_LIVE_SERVICES: 'true'
+      DIALER_V2_TEST_DATABASE_URL: postgresql://dialer:dialer@127.0.0.1:5432/worker_live_test?schema=public
+      DATABASE_URL: postgresql://dialer:dialer@127.0.0.1:5432/worker_live_test?schema=public
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate the Prisma client
+        run: pnpm --filter @hopwhistle/api exec prisma generate
+
+      # `db push` against the ephemeral service container above, which is
+      # created and destroyed with this job. No production database is reachable
+      # from here, and the DATABASE_URL in scope points only at 127.0.0.1.
+      - name: Create the schema in the throwaway database
+        run: pnpm --filter @hopwhistle/api exec prisma db push --skip-generate --accept-data-loss
+
+      # The suites assert their own tables exist in beforeAll and, with
+      # DIALER_V2_REQUIRE_LIVE_SERVICES set, throw rather than skip when one is
+      # missing. That check is not duplicated here.
+      - name: Live suites
+        run: |
+          set -euo pipefail
+          cd apps/worker
+          pnpm exec vitest run --config vitest.live.config.ts \
+            --reporter=verbose --reporter=json --outputFile=/tmp/worker-live.json
+
+      # An exit code cannot distinguish "everything passed" from "nothing ran",
+      # and a silent zero is the one outcome worse than a failure.
+      #
+      # 43 is the real count today: 16 in lead-reservation.live.test.ts and 27
+      # in reconciliation.live.test.ts. Both files are ALSO asserted by name,
+      # because a floor alone would not notice one whole file dropping out of
+      # collection while the other still cleared the bar — and at the floor of
+      # 15 the neighbouring job carries, reconciliation could vanish entirely
+      # and still report success.
+      - name: Assert the live tests actually ran
+        run: |
+          set -euo pipefail
+          node -e "
+            const r = require('/tmp/worker-live.json');
+            const passed = r.numPassedTests ?? 0;
+            const total = r.numTotalTests ?? 0;
+            console.log('worker live tests passed', passed, 'of', total);
+            if (total < 43 || passed !== total) {
+              console.error('::error::expected at least 43 worker live tests to run and every one to pass');
+              process.exit(1);
+            }
+            const names = (r.testResults ?? []).map(f => f.name ?? '');
+            for (const required of ['lead-reservation.live.test', 'reconciliation.live.test']) {
+              if (!names.some(n => n.includes(required))) {
+                console.error('::error::' + required + ' did not run');
+                process.exit(1);
+              }
+            }
+          "
+
   api-dialer-v2:
     name: api Dialer V2 units
     runs-on: ubuntu-latest
