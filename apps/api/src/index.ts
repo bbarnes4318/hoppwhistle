@@ -314,6 +314,13 @@ async function buildServer() {
   const { registerDialerV2ShadowRoutes } = await import('./routes/dialer-v2-shadow.js');
   await server.register(registerDialerV2ShadowRoutes);
 
+  // Register the reconciliation review surface (read the manual-review queue and
+  // resolve one attempt; nothing here originates a call or writes to `leads`)
+  const { registerDialerV2ReconciliationRoutes } = await import(
+    './routes/dialer-v2-reconciliation.js'
+  );
+  await server.register(registerDialerV2ReconciliationRoutes);
+
   // Register Retention & Onboarding routes
   const { registerRetentionRoutes } = await import('./routes/retention.js');
   await server.register(registerRetentionRoutes);

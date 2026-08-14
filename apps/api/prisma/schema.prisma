@@ -66,6 +66,8 @@ model Tenant {
   campaignBuyers           CampaignBuyer[]
   campaignAgents           CampaignAgent[]
   leadDialReservations     LeadDialReservation[]
+  reconciliationRuns       AttemptReconciliationRun[]
+  manualResolutions        AttemptManualResolution[]
   voiceAgents              VoiceAgent[]
 
   @@index([slug])
@@ -1964,6 +1966,31 @@ model LeadDialReservation {
   recoveredAt     DateTime?
   recoveryReason  String?
 
+  // ── Reconciliation of an uncertain attempt ────────────────────────────────
+  // A reservation in NEEDS_RECONCILIATION is claimed by a reconciler under its
+  // own lease and its own fencing token, separate from the dialing lease above.
+  // Both must be separate: the dialing worker is gone by the time any of this
+  // runs, and reusing its token would let a resurrected worker finalize work a
+  // reconciler is holding.
+  /// Automatic runs already spent. Bounded by RECONCILER_MAX_ATTEMPTS.
+  reconcileAttempts        Int       @default(0)
+  /// Earliest the next automatic run may claim this. Drives the backoff.
+  reconcileNotBefore       DateTime?
+  reconcilerOwnerId        String?
+  /// Fencing token for the reconciler's claim. A stale one cannot finalize.
+  reconcilerToken          String?
+  reconcilerLeaseExpiresAt DateTime?
+
+  /// Parked for a person. Non-dialable and invisible to the reconciler's queue.
+  manualReviewRequired     Boolean   @default(false)
+  manualReviewReason       String?
+  /// The last classification, for the operator queue. Never a driver error.
+  lastReconciliationOutcome String?
+
+  resolvedBy       String?
+  resolvedAt       DateTime?
+  resolutionChoice AttemptResolutionChoice?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1971,12 +1998,114 @@ model LeadDialReservation {
   tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
+  reconciliationRuns AttemptReconciliationRun[]
+  manualResolution   AttemptManualResolution?
+
   @@index([tenantId])
   @@index([campaignId])
   @@index([leadId])
   /// The reaper's read: everything expired and still active.
   @@index([state, leaseExpiresAt])
+  /// The reconciler's claim query, in the order it filters.
+  @@index([state, manualReviewRequired, reconcileNotBefore], map: "lead_dial_reservations_reconcile_queue_idx")
+  /// The operator queue.
+  @@index([tenantId, manualReviewRequired], map: "lead_dial_reservations_manual_review_idx")
   @@map("lead_dial_reservations")
+}
+
+/// What an operator may decide about an attempt the reconciler could not resolve.
+/// Narrow on purpose — a free-text resolution would invent dispositions nothing
+/// downstream understands.
+enum AttemptResolutionChoice {
+  /// A call happened and is over. Releases the reservation.
+  CONFIRM_COMPLETED
+  /// No call was ever placed. Releases it and leaves the lead dialable.
+  CONFIRM_NEVER_ORIGINATED
+  /// Unknown, and it must never be dialed again.
+  SUPPRESS_RETRY
+  /// Accepts the risk of a later second call. Requires explicit acknowledgement.
+  RETURN_TO_ELIGIBLE
+}
+
+/// Append-only decision log. One row per reconciliation run per attempt.
+/// Never updated, never deleted by the application: an audit trail that can be
+/// rewritten is not one.
+model AttemptReconciliationRun {
+  id            String @id @default(uuid())
+  reservationId String
+  attemptId     String
+  leadId        String
+  tenantId      String
+  campaignId    String
+
+  reconcilerOwnerId String
+  fencingToken      String
+
+  startedAt   DateTime
+  completedAt DateTime?
+
+  /// Sources consulted, and sources that could not be reached. Separate arrays:
+  /// "asked and found nothing" and "could not ask" are different facts.
+  sourcesChecked     String[] @default([])
+  sourcesUnavailable String[] @default([])
+
+  channelUuid String?
+  evidenceAt  DateTime?
+
+  outcome       String
+  previousState LeadDialReservationState
+  newState      LeadDialReservationState?
+
+  retryCount      Int       @default(0)
+  nextReconcileAt DateTime?
+
+  manualReviewReason String?
+  /// A category such as "transport". Never a driver message — those carry hosts
+  /// and, on some drivers, the credential that was attempted.
+  errorCategory      String?
+
+  createdAt DateTime @default(now())
+
+  reservation LeadDialReservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([reservationId])
+  @@index([attemptId])
+  @@index([tenantId, startedAt])
+  @@map("attempt_reconciliation_runs")
+}
+
+/// Append-only operator-action log. Separate from the run log because these are
+/// the only rows a person authored, and "did a human decide this" is the first
+/// question asked about any released reservation.
+model AttemptManualResolution {
+  id            String @id @default(uuid())
+  reservationId String @unique
+  attemptId     String
+  tenantId      String
+
+  /// An internal user id and a display label. Never an email or a token.
+  actorId    String
+  actorLabel String?
+
+  choice AttemptResolutionChoice
+  /// Required. An unexplained release is not auditable.
+  reason String
+  /// RETURN_TO_ELIGIBLE is refused unless this is true.
+  acknowledgedRedialRisk Boolean @default(false)
+
+  /// The reservation token the operator's view was showing. A stale one is
+  /// refused, so a decision made against a screen the reconciler has since moved
+  /// past cannot be applied.
+  presentedToken String
+
+  createdAt DateTime @default(now())
+
+  reservation LeadDialReservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@map("attempt_manual_resolutions")
 }
 
 // ============================================================================

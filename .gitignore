@@ -88,3 +88,9 @@ deep.md
 !**/package.json
 !**/tsconfig*.json
 !**/vitest.config.json
+
+# Build caches, git bundles and editor/deploy backups keep getting swept into
+# commits. `*.tsbuildinfo` above does not match `.tsbuildinfo-dialer-v2`.
+*.tsbuildinfo*
+*.bundle
+*.bak

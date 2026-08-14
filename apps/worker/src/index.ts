@@ -11,6 +11,8 @@ import { ClickHouseETL } from './services/clickhouse-etl.js';
 import { DialerWorker } from './services/dialer-worker.js';
 import { superviseLegacyHopper } from './services/hopper-supervisor.js';
 import { IndustryResearchWorker } from './services/industry-research-worker.js';
+import { ReconcilerState, superviseReconciler } from './services/reconciler-supervisor.js';
+import { buildAttemptReconciler } from './services/reconciler-wiring.js';
 
 const billingWorker = new BillingWorker();
 const clickhouseETL = new ClickHouseETL();
@@ -29,6 +31,17 @@ const industryResearchWorker = new IndustryResearchWorker();
  */
 let hopperState: HopperState = HopperState.DISABLED;
 let hopperDetail = 'not evaluated';
+
+/**
+ * The attempt reconciler's state, reported the same way and for the same reason.
+ *
+ * It cannot place a call, but it can end a reservation, which returns a lead to
+ * the dialable pool. That is one step removed from dialing somebody, so it is
+ * disabled by default and its state is reported rather than assumed.
+ */
+let reconcilerState: ReconcilerState = ReconcilerState.DISABLED;
+let reconcilerDetail = 'not evaluated';
+let reconcilerTimer: NodeJS.Timeout | null = null;
 
 async function main() {
   try {
@@ -59,6 +72,7 @@ async function main() {
             // healthy and the Hopper being permitted are different facts and
             // conflating them is what made the previous state unreviewable.
             legacyHopper: { state: hopperState, detail: hopperDetail },
+            attemptReconciler: { state: reconcilerState, detail: reconcilerDetail },
           })
         );
       } else {
@@ -93,6 +107,39 @@ async function main() {
     hopperState = hopperStatus.state;
     hopperDetail = hopperStatus.detail;
 
+    // ── The attempt reconciler, gated ────────────────────────────────────
+    //
+    // Resolves reservations left in NEEDS_RECONCILIATION when a worker died
+    // mid-origination. It holds a read-only FreeSWITCH port that refuses every
+    // command able to create, move, or end a call, and it never redials on an
+    // absence of evidence. Disabled unless RECONCILER_ENABLED is exactly "true"
+    // AND a tenant or campaign allowlist names something.
+    const reconciler = buildAttemptReconciler(process.env);
+    if (reconciler) {
+      const cycle = async (): Promise<void> => {
+        const status = await superviseReconciler(process.env, reconciler, logger);
+        reconcilerState = status.state;
+        reconcilerDetail = status.detail;
+      };
+      await cycle();
+      if (reconcilerState === ReconcilerState.RUNNING) {
+        // The cycle interval is the backoff floor, not a poll: a claimed
+        // attempt sets its own `reconcileNotBefore`, so cycling faster than the
+        // backoff simply finds nothing to claim.
+        reconcilerTimer = setInterval(() => {
+          void cycle();
+        }, reconciler.cycleIntervalMs);
+      }
+    } else {
+      const status = await superviseReconciler(
+        process.env,
+        { runOnce: () => Promise.resolve({ claimed: 0, released: 0, parkedForReview: 0 }) },
+        logger
+      );
+      reconcilerState = status.state;
+      reconcilerDetail = status.detail;
+    }
+
     // Start Industry Research Worker (additive; gated by INDUSTRY_RESEARCH_ENABLED)
     if (process.env.INDUSTRY_RESEARCH_ENABLED !== 'false') {
       await industryResearchWorker.start();
@@ -110,6 +157,7 @@ async function main() {
   // Graceful shutdown
   const shutdown = async () => {
     logger.info({ msg: 'Shutting down workers' });
+    if (reconcilerTimer) clearInterval(reconcilerTimer);
     await shutdownTracing();
     await Promise.all([
       billingWorker.stop(),

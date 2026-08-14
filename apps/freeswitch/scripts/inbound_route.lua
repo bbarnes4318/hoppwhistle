@@ -42,6 +42,119 @@ local function json_value(json_str, key)
   return val
 end
 
+-- ── Agent busy check ────────────────────────────────────────────────────────
+-- An agent already on a call must never have a second call rung at them.
+-- FreeSWITCH's live channel table is the only real-time truth for this: the
+-- API's DB/Redis concurrency gate cannot see an in-progress inbound call (the
+-- Call row is written from the CDR *after* hangup), and static DID→extension
+-- routes never reach that gate at all. So busy endpoints are dropped from the
+-- ring group here, at bridge time.
+--
+-- Kill switch, effective on the very next call, no restart, no deploy:
+--     fs_cli -x "global_setvar agent_busy_check=false"     (disable)
+--     fs_cli -x "global_setvar agent_busy_check=true"      (re-enable)
+-- Falls back to env AGENT_BUSY_CHECK, default enabled.
+-- Per-agent limit: global var agent_max_concurrent_calls, or env
+-- AGENT_MAX_CONCURRENT_CALLS. Default 1 — one call at a time per agent.
+--
+-- The markers below delimit the block that tests/test_agent_busy.lua loads and
+-- exercises directly — keep them in place.
+-- ##AGENT_BUSY_BEGIN##
+local function fs_global(name)
+    local ok, val = pcall(function() return api:execute("global_getvar", name) or "" end)
+    if not ok or type(val) ~= "string" then return "" end
+    val = string.gsub(val, "^%s*(.-)%s*$", "%1")
+    if val == "" or val == "_undef_" or string.match(val, "^%-ERR") then return "" end
+    return val
+end
+
+local busy_check_setting = fs_global("agent_busy_check")
+if busy_check_setting == "" then
+    busy_check_setting = os.getenv("AGENT_BUSY_CHECK") or "true"
+end
+local AGENT_BUSY_CHECK = busy_check_setting ~= "false"
+
+local limit_setting = fs_global("agent_max_concurrent_calls")
+if limit_setting == "" then
+    limit_setting = os.getenv("AGENT_MAX_CONCURRENT_CALLS") or "1"
+end
+local AGENT_MAX_CONCURRENT = tonumber(limit_setting) or 1
+if AGENT_MAX_CONCURRENT < 1 then AGENT_MAX_CONCURRENT = 1 end
+
+-- Channel states that mean "this call is already going away". A call that just
+-- ended can sit in these for a moment; counting them would wrongly hold an
+-- agent busy and leave the next caller unanswered.
+local CHANNEL_TEARDOWN_STATES = {
+    CS_HANGUP = true,
+    CS_REPORTING = true,
+    CS_DESTROY = true,
+    CS_NONE = true,
+}
+
+-- Snapshot the live channel table as rows of fields.
+-- `show channels as delim |` emits a header row plus one row per channel.
+-- application_data (field 12) can itself contain the delimiter, so only fields
+-- 1-11 are trustworthy — we read uuid (1), direction (2), name (5), state (6)
+-- and cid_num (8), all of which sit safely before it.
+local function live_channel_rows()
+    local rows = {}
+    local ok, out = pcall(function()
+        return api:execute("show", "channels as delim |") or ""
+    end)
+    if not ok or type(out) ~= "string" or out == "" or string.match(out, "^%-ERR") then
+        return rows
+    end
+    for line in string.gmatch(out, "[^\r\n]+") do
+        if string.find(line, "|", 1, true) then
+            local fields = {}
+            for field in string.gmatch(line .. "|", "(.-)|") do
+                table.insert(fields, field)
+                if #fields >= 11 then break end
+            end
+            -- Skip the header row and the trailing "N total." summary.
+            if fields[1] and fields[1] ~= "uuid" and fields[1] ~= "" then
+                table.insert(rows, fields)
+            end
+        end
+    end
+    return rows
+end
+
+local function starts_with(s, prefix)
+    return string.sub(s or "", 1, string.len(prefix)) == prefix
+end
+
+-- Live channels belonging to one agent's softphone. Counts calls TO the phone
+-- (b-leg named after its registered contact, e.g. a WebRTC contact token) and
+-- calls FROM it (a-leg named after / identified by the extension). Our own
+-- A-leg is excluded so a call can never mark its own destination busy.
+local function agent_channel_count(extension, contact_uri, rows, self_uuid)
+    local contact_prefix = nil
+    local user_host = string.match(contact_uri or "", "^sofia/internal/sip:([^;>]+)")
+    if user_host and user_host ~= "" then
+        contact_prefix = "sofia/internal/" .. user_host
+    end
+    local ext_prefix = "sofia/internal/" .. extension .. "@"
+
+    local count = 0
+    for _, f in ipairs(rows) do
+        if f[1] ~= self_uuid and not CHANNEL_TEARDOWN_STATES[f[6] or ""] then
+            local name = f[5] or ""
+            local matched = false
+            if contact_prefix and starts_with(name, contact_prefix) then
+                matched = true
+            elseif starts_with(name, ext_prefix) then
+                matched = true
+            elseif starts_with(name, "sofia/internal/") and f[2] == "inbound" and f[8] == extension then
+                matched = true
+            end
+            if matched then count = count + 1 end
+        end
+    end
+    return count
+end
+-- ##AGENT_BUSY_END##
+
 -- ── Main Logic ──────────────────────────────────────────────────────────────
 local caller_number = session:getVariable("caller_id_number") or "unknown"
 local did_number    = session:getVariable("destination_number") or ""
@@ -245,7 +358,16 @@ for i, step in ipairs(failover_steps) do
     if step and step ~= "" then
         local parallel_destinations = split(step, ",")
         local bridge_components = {}
-        
+
+        -- Channel snapshot for this step only. Failover steps run seconds or
+        -- minutes apart, so it is refreshed per step, and only fetched at all
+        -- when the step actually contains an internal extension.
+        local channel_rows = nil
+        local function step_channel_rows()
+            if channel_rows == nil then channel_rows = live_channel_rows() end
+            return channel_rows
+        end
+
         for j, p_dest in ipairs(parallel_destinations) do
             -- Strip whitespace
             p_dest = string.gsub(p_dest, "^%s*(.-)%s*$", "%1")
@@ -283,7 +405,22 @@ for i, step in ipairs(failover_steps) do
                         end
                     end
 
-                    if contact ~= "" then
+                    -- Never ring an agent who is already on a call.
+                    local busy_calls = 0
+                    if AGENT_BUSY_CHECK then
+                        busy_calls = agent_channel_count(
+                            p_dest,
+                            (contact ~= "" and contact or nil),
+                            step_channel_rows(),
+                            call_uuid
+                        )
+                    end
+
+                    if busy_calls >= AGENT_MAX_CONCURRENT then
+                        log("WARNING", "[AGENT-BUSY] Extension " .. p_dest .. " already on " ..
+                            tostring(busy_calls) .. " call(s) (limit " .. tostring(AGENT_MAX_CONCURRENT) ..
+                            ") — NOT ringing; leaving their call undisturbed")
+                    elseif contact ~= "" then
                         log("INFO", "Internal extension " .. p_dest .. " registered: " .. contact)
                         table.insert(bridge_components, contact)
                     else
