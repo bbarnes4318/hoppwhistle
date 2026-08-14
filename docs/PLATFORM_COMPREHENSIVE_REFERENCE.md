@@ -216,7 +216,7 @@ hopwhistle/
 │
 ├── .agent/                     # Antigravity agent workflows
 │   └── workflows/
-│       └── deploy.md           # Deployment workflow
+│       └── deploy-hetzner.md           # Deployment workflow
 │
 └── package.json                # Root monorepo config
 ```
@@ -1149,7 +1149,7 @@ Header injection via FreeSWITCH dialplan:
 
 ### Deployment Workflow
 
-See `/.agent/workflows/deploy.md` for full details.
+See `/.agent/workflows/deploy-hetzner.md` for full details.
 
 **Quick Commands:**
 

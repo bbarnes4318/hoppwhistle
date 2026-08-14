@@ -254,7 +254,7 @@ hopwhistle/
 ├── tests/                      # E2E and performance tests
 ├── .agent/                     # Antigravity agent workflows
 │   └── workflows/
-│       └── deploy.md           # Deployment workflow
+│       └── deploy-hetzner.md           # Deployment workflow
 │
 └── package.json                # Root monorepo config
 ```

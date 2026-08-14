@@ -15,9 +15,14 @@ interface HealthStatus {
   };
 }
 
+// Kept `async` deliberately: Fastify decides between callback-style and
+// promise-style plugins from the signature, and a one-argument synchronous
+// function would be treated as callback-style and wait forever for a `done`
+// that is never called. The rule does not know that.
+// eslint-disable-next-line @typescript-eslint/require-await
 export async function registerHealthRoutes(fastify: FastifyInstance): Promise<void> {
   // Liveness probe - just checks if the service is running
-  fastify.get('/health/live', async () => {
+  fastify.get('/health/live', () => {
     return { status: 'ok', service: 'hopwhistle-api' };
   });
 
@@ -93,12 +98,18 @@ export async function registerHealthRoutes(fastify: FastifyInstance): Promise<vo
     };
 
     const statusCode = overallStatus === 'healthy' ? 200 : overallStatus === 'degraded' ? 200 : 503;
-    reply.code(statusCode);
+    void reply.code(statusCode);
     return status;
   });
 
-  // Health endpoint (detailed)
-  fastify.get('/health', async () => {
+  // Process-level status only. Despite the name, this checks NOTHING external:
+  // no database, no Redis, no ClickHouse. It cannot return anything but 200 as
+  // long as the process is alive, so it must not be used to verify a deploy --
+  // an API with an unusable DATABASE_URL answers this endpoint perfectly while
+  // failing every request that touches data.
+  //
+  // Use /health/ready for that. It is the one that queries the dependencies.
+  fastify.get('/health', () => {
     return {
       status: 'ok',
       service: 'hopwhistle-api',
@@ -108,4 +119,3 @@ export async function registerHealthRoutes(fastify: FastifyInstance): Promise<vo
     };
   });
 }
-

@@ -6,7 +6,7 @@
 ## 🚀 ONE-LINER: Full API Rebuild (Copy-Paste This)
 
 ```bash
-cd /opt/hopwhistle && git pull origin main && cd infra/docker && docker stop docker-api-1 2>/dev/null; docker rm docker-api-1 2>/dev/null; docker rm -f docker-redis-1 2>/dev/null; docker compose -f docker-compose.yml build api --no-cache && docker compose -f docker-compose.yml up -d api --no-deps && docker network connect docker_default hopwhistle-postgres-dev 2>/dev/null; docker network connect --alias redis docker_default hopwhistle-redis-1 2>/dev/null; docker restart docker-api-1 && sleep 5 && docker exec docker-api-1 npx prisma db push && curl -s http://localhost:3001/health
+cd /opt/hopwhistle && git pull origin main && cd infra/docker && docker stop docker-api-1 2>/dev/null; docker rm docker-api-1 2>/dev/null; docker rm -f docker-redis-1 2>/dev/null; docker compose -f docker-compose.yml build api --no-cache && docker compose -f docker-compose.yml up -d api --no-deps && docker network connect docker_default hopwhistle-postgres-dev 2>/dev/null; docker network connect --alias redis docker_default hopwhistle-redis-1 2>/dev/null; docker restart docker-api-1 && sleep 5 && docker exec docker-api-1 npx prisma db push && curl -s http://localhost:3001/health/ready
 ```
 
 ## 📦 Container Names (MEMORIZE THESE)
@@ -29,14 +29,14 @@ cd /opt/hopwhistle && git pull origin main && cd infra/docker && docker stop doc
 
 ## 🔧 Essential Commands
 
-| Task                 | Command                                  |
-| -------------------- | ---------------------------------------- |
-| **SSH to server**    | `ssh root@45.32.213.201`                 |
-| **Pull latest code** | `cd /opt/hopwhistle && git pull`         |
-| **API logs**         | `docker logs docker-api-1 --tail 50`     |
-| **Web logs**         | `docker logs hopwhistle-web-1 --tail 50` |
-| **Restart API**      | `docker restart docker-api-1`            |
-| **Test health**      | `curl -s http://localhost:3001/health`   |
+| Task                 | Command                                      |
+| -------------------- | -------------------------------------------- |
+| **SSH to server**    | `ssh root@45.32.213.201`                     |
+| **Pull latest code** | `cd /opt/hopwhistle && git pull`             |
+| **API logs**         | `docker logs docker-api-1 --tail 50`         |
+| **Web logs**         | `docker logs hopwhistle-web-1 --tail 50`     |
+| **Restart API**      | `docker restart docker-api-1`                |
+| **Test health**      | `curl -s http://localhost:3001/health/ready` |
 
 ## 🗄️ Schema Changes (Prisma)
 
@@ -67,25 +67,25 @@ docker rm -f docker-redis-1
 
 ## 📍 URLs
 
-| Service     | URL                                 |
-| ----------- | ----------------------------------- |
-| Web App     | http://45.32.213.201:3000           |
-| API         | http://45.32.213.201:3001           |
-| API Health  | http://45.32.213.201:3001/health    |
-| Buyers Page | http://45.32.213.201:3000/buyers    |
-| Campaigns   | http://45.32.213.201:3000/campaigns |
+| Service     | URL                                    |
+| ----------- | -------------------------------------- |
+| Web App     | http://45.32.213.201:3000              |
+| API         | http://45.32.213.201:3001              |
+| API Health  | http://45.32.213.201:3001/health/ready |
+| Buyers Page | http://45.32.213.201:3000/buyers       |
+| Campaigns   | http://45.32.213.201:3000/campaigns    |
 
 ## 📁 Key Paths
 
-| What                | Path                              |
-| ------------------- | --------------------------------- |
-| API Code            | `apps/api/src/`                   |
-| Web Code            | `apps/web/src/`                   |
-| Prisma Schema       | `apps/api/prisma/schema.prisma`   |
-| Docker Compose      | `infra/docker/docker-compose.yml` |
-| Route Registration  | `apps/api/src/index.ts`           |
-| Deployment Workflow | `.agent/workflows/deploy.md`      |
-| AI Context Prompt   | `docs/AI_CONTEXT_PROMPT.md`       |
+| What                | Path                                 |
+| ------------------- | ------------------------------------ |
+| API Code            | `apps/api/src/`                      |
+| Web Code            | `apps/web/src/`                      |
+| Prisma Schema       | `apps/api/prisma/schema.prisma`      |
+| Docker Compose      | `infra/docker/docker-compose.yml`    |
+| Route Registration  | `apps/api/src/index.ts`              |
+| Deployment Workflow | `.agent/workflows/deploy-hetzner.md` |
+| AI Context Prompt   | `docs/AI_CONTEXT_PROMPT.md`          |
 
 ## 🆕 Adding New API Routes
 

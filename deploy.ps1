@@ -32,7 +32,15 @@ $remoteCommands = @(
     # the intended behaviour: a stopped deploy is recoverable, dropped call
     # records are not. If this step refuses, find out what it wants to drop
     # before doing anything else. Do not add the flag back.
-    "docker exec -u root hopwhistle-api-dev npx prisma db push"
+    "docker exec -u root hopwhistle-api-dev npx prisma db push",
+    "echo '>>> Verifying readiness...'",
+    # /health/ready, NOT /health. /health returns {"status":"ok"} unconditionally
+    # -- it never touches the database, so it cannot fail and verifies nothing.
+    # An API with an unusable DATABASE_URL answers it perfectly while failing
+    # every request that reads data. /health/ready queries PostgreSQL, Redis and
+    # ClickHouse and returns a non-200 when a dependency is down, so --fail makes
+    # a broken deploy exit non-zero here instead of looking successful.
+    "curl -sS --fail-with-body http://localhost:3001/health/ready"
 ) -join " && "
 
 Write-Host "1. Connecting to root@$ip using key $keyPath..." -ForegroundColor Yellow
