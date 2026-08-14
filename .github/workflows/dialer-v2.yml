@@ -756,6 +756,99 @@ jobs:
           psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f "$DIR/migration.sql"
           node scripts/ci/assignment-migration-checks.mjs reservation-objects
 
+      # ── The reconciliation migration ─────────────────────────────────────
+      #
+      # Applied onto the reservation migration, verified, rolled back, verified,
+      # re-applied. Until now this was the ONLY migration on the branch with no
+      # apply-and-roll-back coverage of its own: the wind-back dropped it and
+      # nothing put it back, so its migration.sql was never executed against a
+      # server here while 20260802 and 20260803 both were.
+      #
+      # It runs last because both of its tables carry a foreign key to
+      # lead_dial_reservations, so the reservation migration has to be standing
+      # first -- which is the same dependency that forces the wind-back to
+      # unwind this one FIRST.
+      - name: The reconciliation migration is additive
+        run: |
+          set -euo pipefail
+          DIR=apps/api/prisma/migrations/20260804000000_add_attempt_reconciliation
+          test -f "$DIR/migration.sql" || { echo "::error::reconciliation migration.sql is missing"; exit 1; }
+          test -f "$DIR/down.sql" || { echo "::error::reconciliation down.sql is missing"; exit 1; }
+          # It legitimately ALTERs lead_dial_reservations to ADD columns, so the
+          # check is on destructive verbs rather than on ALTER itself.
+          if grep -qiE '^[[:space:]]*(DROP TABLE|TRUNCATE)' "$DIR/migration.sql"; then
+            echo "::error::the reconciliation migration drops or truncates a table"
+            exit 1
+          fi
+          if grep -qiE 'DROP COLUMN|ALTER COLUMN' "$DIR/migration.sql"; then
+            echo "::error::the reconciliation migration alters or drops an existing column"
+            exit 1
+          fi
+          if grep -oiE '^[[:space:]]*ALTER TABLE "[^"]+"' "$DIR/migration.sql" \
+             | grep -qvE 'attempt_reconciliation_runs|attempt_manual_resolutions|lead_dial_reservations'; then
+            echo "::error::the reconciliation migration alters an unexpected table"
+            exit 1
+          fi
+          # F-1 again: this migration must not touch the lead status enum either.
+          if grep -qiE 'ALTER TYPE "LeadStatus"' "$DIR/migration.sql"; then
+            echo "::error::the reconciliation migration alters LeadStatus; it must not"
+            exit 1
+          fi
+
+      - name: Apply the reconciliation migration and verify its objects
+        run: |
+          set -euo pipefail
+          DIR=apps/api/prisma/migrations/20260804000000_add_attempt_reconciliation
+          psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f "$DIR/migration.sql"
+          node -e "
+            const { Client } = require('pg');
+            (async () => {
+              const c = new Client({ connectionString: process.env.DATABASE_URL });
+              await c.connect();
+              const t = await c.query(\"SELECT to_regclass('public.attempt_reconciliation_runs')::text AS a, to_regclass('public.attempt_manual_resolutions')::text AS b\");
+              if (!t.rows[0].a) throw new Error('attempt_reconciliation_runs was not created');
+              if (!t.rows[0].b) throw new Error('attempt_manual_resolutions was not created');
+              const e = await c.query(\"SELECT 1 FROM pg_type WHERE typname='AttemptResolutionChoice'\");
+              if (e.rowCount !== 1) throw new Error('AttemptResolutionChoice enum missing');
+              // The reconciler's claim predicate reads these columns. Without
+              // them the live suite would assert against columns that do not
+              // exist, which is a different failure than the one it tests for.
+              const cols = await c.query(\"SELECT column_name FROM information_schema.columns WHERE table_name='lead_dial_reservations'\");
+              const have = new Set(cols.rows.map(r => r.column_name));
+              for (const col of ['reconcileAttempts','reconcileNotBefore','reconcilerToken','reconcilerLeaseExpiresAt','manualReviewRequired','resolutionChoice']) {
+                if (!have.has(col)) throw new Error('lead_dial_reservations is missing ' + col);
+              }
+              console.log('reconciliation objects present: 2 tables, 1 enum, 6 columns');
+              await c.end();
+            })().catch(e => { console.error('::error::' + e.message); process.exit(1); });
+          "
+
+      - name: Roll the reconciliation migration back and forward again
+        run: |
+          set -euo pipefail
+          DIR=apps/api/prisma/migrations/20260804000000_add_attempt_reconciliation
+          psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f "$DIR/down.sql"
+          node -e "
+            const { Client } = require('pg');
+            (async () => {
+              const c = new Client({ connectionString: process.env.DATABASE_URL });
+              await c.connect();
+              const t = await c.query(\"SELECT to_regclass('public.attempt_reconciliation_runs')::text AS a, to_regclass('public.attempt_manual_resolutions')::text AS b\");
+              if (t.rows[0].a) throw new Error('attempt_reconciliation_runs survived the rollback');
+              if (t.rows[0].b) throw new Error('attempt_manual_resolutions survived the rollback');
+              const e = await c.query(\"SELECT 1 FROM pg_type WHERE typname='AttemptResolutionChoice'\");
+              if (e.rowCount !== 0) throw new Error('AttemptResolutionChoice survived the rollback');
+              // The decisive assertion: rolling THIS back must leave the
+              // reservation migration standing. A CASCADE would take it too.
+              const res = await c.query(\"SELECT to_regclass('public.lead_dial_reservations')::text AS t\");
+              if (!res.rows[0].t) throw new Error('the rollback took lead_dial_reservations with it');
+              const leads = await c.query('SELECT COUNT(*)::int AS n FROM leads');
+              console.log('rollback clean; lead_dial_reservations intact, leads holds', leads.rows[0].n, 'row(s)');
+              await c.end();
+            })().catch(e => { console.error('::error::' + e.message); process.exit(1); });
+          "
+          psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f "$DIR/migration.sql"
+
   worker-live:
     name: worker reservation and reconciliation against real PostgreSQL
     runs-on: ubuntu-latest
