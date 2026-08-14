@@ -200,7 +200,11 @@ services:
       context: ../../
       dockerfile: apps/api/Dockerfile
     ports:
-      - '3001:3001'
+      # Loopback only -- nginx proxies to 127.0.0.1:3001 and other containers
+      # use http://api:3001 over the compose network. See docker-compose.dev.yml
+      # for the full reasoning; publishing on 0.0.0.0 exposed the API to the
+      # internet, bypassing nginx.
+      - '127.0.0.1:3001:3001'
     environment:
       - NODE_ENV=production
       - PORT=3001

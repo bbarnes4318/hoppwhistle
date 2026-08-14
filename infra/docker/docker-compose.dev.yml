@@ -99,7 +99,19 @@ services:
       dockerfile: apps/api/Dockerfile
     container_name: hopwhistle-api-dev
     ports:
-      - '3001:3001'
+      # Bound to loopback deliberately. This file runs PRODUCTION on the Hetzner
+      # host, and '3001:3001' published the API to 0.0.0.0 -- reachable from the
+      # internet, bypassing nginx and whatever it terminates or filters.
+      #
+      # Nothing legitimate needs the published port from outside:
+      #   - the browser calls window.location.origin (https://hopwhistle.com),
+      #     which nginx proxies to 127.0.0.1:3001 -- still works, host-local;
+      #   - other containers use http://api:3001 over the compose network, which
+      #     does not involve the published port at all.
+      #
+      # HOST: 0.0.0.0 below is the bind INSIDE the container and must stay as it
+      # is; it is what lets the compose network reach the process.
+      - '127.0.0.1:3001:3001'
     environment:
       NODE_ENV: development
       PORT: 3001
