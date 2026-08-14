@@ -675,9 +675,25 @@ jobs:
       - name: Wind back to the pre-migration base state
         run: |
           set -euo pipefail
-          # `db push` creates everything in schema.prisma, which now includes
-          # BOTH of this branch's migrations. Winding both back is what produces
-          # the genuine pre-migration base state a deployment starts from.
+          # `db push` creates everything in schema.prisma, which now includes all
+          # THREE of this branch's migrations. Winding all three back is what
+          # produces the genuine pre-migration base state a deployment starts from.
+          #
+          # Order is newest-first, and it is not cosmetic. 20260804 creates
+          # attempt_reconciliation_runs and attempt_manual_resolutions, both of
+          # which carry a foreign key to lead_dial_reservations("id"). 20260803's
+          # down.sql ends in a plain DROP TABLE, not CASCADE, so rolling it back
+          # first fails with:
+          #
+          #   cannot drop table lead_dial_reservations because other objects
+          #   depend on it
+          #
+          # This step previously rolled back only 20260803 and 20260802 -- 20260804
+          # was added to the branch without being added here, which made the
+          # reservation migration irreversible in place. Nothing caught it because
+          # the workflow did not trigger on this branch.
+          REC=apps/api/prisma/migrations/20260804000000_add_attempt_reconciliation
+          psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f "$REC/down.sql"
           RES=apps/api/prisma/migrations/20260803000000_add_lead_dial_reservations
           psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f "$RES/down.sql"
           DIR=apps/api/prisma/migrations/20260802000000_add_campaign_agent_assignments
