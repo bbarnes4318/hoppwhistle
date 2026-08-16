@@ -67,6 +67,8 @@ model Tenant {
   campaignAgents           CampaignAgent[]
   leadDialReservations     LeadDialReservation[]
   voiceAgents              VoiceAgent[]
+  carrierGateways          CarrierGateway[]
+  carrierRoutes            CarrierRoute[]
 
   @@index([slug])
   @@index([status])
@@ -436,6 +438,8 @@ model Carrier {
   tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   phoneNumbers PhoneNumber[]
   trunks       Trunk[]
+  gateways     CarrierGateway[]
+  routeSteps   CarrierRouteStep[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -3088,4 +3092,108 @@ model CampaignAgent {
 enum CampaignAgentStatus {
   ACTIVE
   INACTIVE
+}
+
+/// Destination formats carriers accept. Names describe the wire format, not a
+/// country: NANP11 is `1` + 10 digits, NANP10 is bare 10 digits, E164 is `+1`
+/// + 10 digits.
+enum CarrierNumberFormat {
+  E164
+  NANP11
+  NANP10
+}
+
+/// The call paths that get an independently configurable carrier waterfall.
+enum CallRouteType {
+  INBOUND
+  CC_MANUAL
+  CC_POWER_DIALER
+  SOFTPHONE_MANUAL
+  PREDICTIVE_DIALER
+  DOGRAH_AI
+}
+
+/// One FreeSWITCH gateway. `name` must match a `<gateway name="...">` in
+/// apps/freeswitch/conf/sip_profiles/external/ — it is interpolated straight
+/// into `sofia/gateway/<name>/<number>`, so a typo here is a dead call.
+model CarrierGateway {
+  id        String  @id @default(uuid())
+  tenantId  String
+  carrierId String
+  name      String
+  priority  Int     @default(0)
+  enabled   Boolean @default(true)
+
+  /// How the destination is written for this gateway. Carriers disagree:
+  /// FracTEL and BulkVS want 1XXXXXXXXXX, SignalWire wants +1XXXXXXXXXX. A
+  /// fallback that dials the right carrier in the wrong format is still a
+  /// dead call, so the format travels with the gateway.
+  numberFormat CarrierNumberFormat @default(NANP11)
+
+  /// Health, maintained by recordGatewayOutcome(). A gateway is skipped while
+  /// `circuitOpenUntil` is in the future; `consecutiveFailures` is what opens
+  /// it and any success resets both.
+  consecutiveFailures Int       @default(0)
+  circuitOpenUntil    DateTime?
+  lastFailureAt       DateTime?
+  lastFailureCause    String?
+  lastSuccessAt       DateTime?
+  totalAttempts       BigInt    @default(0)
+  totalFailures       BigInt    @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  carrier Carrier @relation(fields: [carrierId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@index([carrierId])
+  @@map("carrier_gateways")
+}
+
+/// The waterfall for one call type. Exactly one row per (tenant, callType);
+/// the ordering lives in the steps.
+model CarrierRoute {
+  id       String        @id @default(uuid())
+  tenantId String
+  callType CallRouteType
+  enabled  Boolean       @default(true)
+
+  /// Per-leg dial timeout handed to FreeSWITCH. Short enough that a
+  /// black-holing carrier falls through to the next one while the caller is
+  /// still listening.
+  legTimeoutSeconds Int @default(20)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  steps  CarrierRouteStep[]
+
+  @@unique([tenantId, callType])
+  @@index([tenantId])
+  @@map("carrier_routes")
+}
+
+/// One rung of the waterfall: try this carrier's gateways, then fall to the
+/// next position.
+model CarrierRouteStep {
+  id        String  @id @default(uuid())
+  routeId   String
+  carrierId String
+  position  Int
+  enabled   Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  route   CarrierRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  carrier Carrier      @relation(fields: [carrierId], references: [id], onDelete: Cascade)
+
+  @@unique([routeId, carrierId])
+  @@index([routeId])
+  @@index([carrierId])
+  @@map("carrier_route_steps")
 }

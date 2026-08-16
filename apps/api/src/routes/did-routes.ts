@@ -15,7 +15,8 @@ import { Prisma } from '@prisma/client';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
-import { getInboundExternalGateways, sanitizeDestinationString } from '../lib/route-destination.js';
+import { sanitizeDestinationString } from '../lib/route-destination.js';
+import { getInboundCarrierChain, gatewayFromChannelName, recordGatewayOutcome } from '../services/carrier-routing.js';
 import { numberPoolService } from '../services/number-pool-service.js';
 import { getRedisClient } from '../services/redis.js';
 import { tcpaValidationService } from '../services/tcpa-validation-service.js';
@@ -416,9 +417,12 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
         `[FS-LOOKUP] Redis RTB route: did=${foundDid} → buyer=${routeInfo.buyer_id} destination=${routeInfo.buyer_destination}`
       );
 
+      const rtbCarriers = await getInboundCarrierChain(routeInfo.tenant_id);
+
       return reply.send({
         destination: routeInfo.buyer_destination,
-        externalGateways: getInboundExternalGateways(),
+        externalGateways: rtbCarriers.gatewaysCsv,
+        externalBridgeTemplate: rtbCarriers.bridgeTemplate,
         recordingEnabled: recordingEnabled,
         routeId: `rtb-${routeInfo.ping_id}`, // Format routeId so CDR can recognise it's an RTB route
         buyerId: routeInfo.buyer_id,
@@ -537,9 +541,12 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
       });
     }
 
+    const inboundCarriers = await getInboundCarrierChain(route.tenantId);
+
     return reply.send({
       destination: sanitized.destination,
-      externalGateways: getInboundExternalGateways(),
+      externalGateways: inboundCarriers.gatewaysCsv,
+      externalBridgeTemplate: inboundCarriers.bridgeTemplate,
       recordingEnabled: route.recordingEnabled,
       routeId: route.id,
       buyerId: buyerId,
@@ -584,10 +591,30 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
       endedAt: string;
       recordingPath?: string; // Local file path on FS
       recordingDuration?: number;
+      /** Bridged B-leg channel name, e.g. sofia/gateway/fractel3/+18005551212 */
+      bridgeChannelName?: string;
+      /** Gateway the call actually used, when the Lua could name it directly. */
+      gateway?: string;
     };
 
     if (!body.callId || !body.routeId || !body.tenantId) {
       return reply.code(400).send({ error: 'callId, routeId, and tenantId are required' });
+    }
+
+    // Feed carrier health before anything that can fail below. Inbound forwards
+    // out to the PSTN through the same gateways as outbound, so their failures
+    // are evidence about the carrier and belong in the same counters that
+    // decide the waterfall order. Fire-and-forget: this must never be the
+    // reason a CDR is lost.
+    {
+      const gateway = body.gateway || gatewayFromChannelName(body.bridgeChannelName);
+      if (gateway) {
+        void recordGatewayOutcome(
+          gateway,
+          { ok: body.hangupCause === 'NORMAL_CLEARING', cause: body.hangupCause },
+          body.tenantId
+        );
+      }
     }
 
     try {

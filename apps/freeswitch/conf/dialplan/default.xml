@@ -121,6 +121,7 @@
              The PSTN (B-leg) stays G.711 for FracTEL — carrier leg is unchanged. -->
         <action application="set" data="absolute_codec_string=OPUS,G722,PCMU,PCMA"/>
         <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
+        <action application="export" data="nolocal:dtmf_type=rfc2833"/>
 
         <!-- Record both parties on separate stereo channels at 16 kHz (agent left,
              caller right) instead of a muddy 8 kHz mono mix. -->
@@ -145,6 +146,43 @@
         <action application="log" data="INFO [OUTBOUND-LOOKUP] response=${lookup_response} local_ext=${local_ext}"/>
       </condition>
 
+      <!-- ================================================================
+           Resolve the carrier waterfall for this call.
+
+           The carrier used to be a literal fractel1..6 chain written into the
+           bridge below. Six IPs, but one carrier: when FracTEL degraded there
+           was nothing to fall back to, and changing it meant rebuilding this
+           image. The API now answers with the configured waterfall for this
+           call type, so an admin can reorder carriers in the settings UI and
+           have it take effect on the next call.
+
+           X-Hopwhistle-Route-Type distinguishes the softphone from the call
+           center's manual and power-dialer paths; the API defaults to
+           SOFTPHONE_MANUAL when it is absent.
+           ================================================================ -->
+      <condition field="destination_number" expression="^\+?1?([2-9]\d{9})$" break="never">
+        <action application="set" data="hopwhistle_route_type=${sip_h_X-Hopwhistle-Route-Type}" inline="true"/>
+      </condition>
+      <condition field="${hopwhistle_route_type}" expression="^$" break="never">
+        <action application="set" data="hopwhistle_route_type=${sip_h_x-hopwhistle-route-type}" inline="true"/>
+      </condition>
+      <condition field="destination_number" expression="^\+?1?([2-9]\d{9})$" break="never">
+        <!-- Bounded so a slow or hung API cannot hold the caller in silence;
+             the static chain below covers the timeout. -->
+        <action application="set" data="curl_connect_timeout=2" inline="true"/>
+        <action application="set" data="curl_timeout=4" inline="true"/>
+        <action application="set" data="carrier_bridge=${curl(http://api:3001/api/v1/freeswitch/carrier-route?type=${hopwhistle_route_type}&amp;dest=$1&amp;cid=${clean_caller_id}&amp;cid_name=Hopwhistle)}" inline="true"/>
+      </condition>
+
+      <!-- If the API did not return a usable chain — down, timed out, or
+           answered with an error body — fall back to the chain that was
+           hardcoded here before. Routing must never be the reason a call
+           fails to leave the building. -->
+      <condition field="${carrier_bridge}" expression="sofia/gateway/" break="never">
+        <anti-action application="log" data="WARNING [OUTBOUND-PSTN] carrier-route lookup returned no chain; using static FracTEL fallback"/>
+        <anti-action application="set" data="carrier_bridge={sip_cid_type=pid,origination_caller_id_name=Hopwhistle,origination_caller_id_number=${clean_caller_id},sip_from_user=${clean_caller_id}}sofia/gateway/fractel1/1${clean_dest}|sofia/gateway/fractel2/1${clean_dest}|sofia/gateway/fractel3/1${clean_dest}|sofia/gateway/fractel4/1${clean_dest}|sofia/gateway/fractel5/1${clean_dest}|sofia/gateway/fractel6/1${clean_dest}" inline="true"/>
+      </condition>
+
       <!-- If local extension is matched but unregistered, clear local_ext to fall back to PSTN -->
       <condition field="${local_ext}:${sofia_contact(internal/${local_ext}@$${domain})}" expression="^\d{4}:error" break="never">
         <action application="log" data="WARNING [OUTBOUND-LOCAL] Extension ${local_ext} is offline. Routing call via PSTN carrier gateways."/>
@@ -159,10 +197,23 @@
         <action application="hangup" data="NORMAL_CLEARING"/>
         
         <!-- PSTN routing (anti-action) — FracTEL trunk, failover across all 6 outbound IPs -->
-        <anti-action application="log" data="INFO [OUTBOUND-PSTN] Routing to FracTEL for 1${clean_dest} with CID ${clean_caller_id}"/>
+        <anti-action application="log" data="INFO [OUTBOUND-PSTN] route=${hopwhistle_route_type} dest=1${clean_dest} cid=${clean_caller_id} bridge=${carrier_bridge}"/>
         <anti-action application="set" data="continue_on_fail=true"/>
         <anti-action application="set" data="fail_on_single_reject=false"/>
-        <anti-action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=Hopwhistle,origination_caller_id_number=${clean_caller_id},sip_from_user=${clean_caller_id}}sofia/gateway/fractel1/1${clean_dest}|sofia/gateway/fractel2/1${clean_dest}|sofia/gateway/fractel3/1${clean_dest}|sofia/gateway/fractel4/1${clean_dest}|sofia/gateway/fractel5/1${clean_dest}|sofia/gateway/fractel6/1${clean_dest}"/>
+        <anti-action application="bridge" data="${carrier_bridge}"/>
+
+        <!-- Reached only when the ENTIRE waterfall failed: continue_on_fail
+             keeps execution going past a failed bridge, and hangup_after_bridge
+             ends the call on a successful one. So arriving here means every
+             gateway in the chain refused, and reporting them is what demotes a
+             carrier that has stopped connecting calls.
+
+             Deliberately NOT an api_hangup_hook: this extension already sets
+             one, for upload-recording.sh, and api_hangup_hook holds a single
+             value — a second `set` would silently replace it and stop every
+             outbound recording from being uploaded. -->
+        <anti-action application="log" data="ERR [OUTBOUND-PSTN] entire carrier waterfall failed for 1${clean_dest}: ${originate_disposition}"/>
+        <anti-action application="set" data="carrier_report=${curl(http://api:3001/api/v1/freeswitch/carrier-result?chain=${carrier_bridge}&amp;cause=${originate_disposition}&amp;answered=false)}" inline="true"/>
         <anti-action application="hangup" data="NORMAL_CLEARING"/>
       </condition>
     </extension>

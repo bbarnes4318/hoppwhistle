@@ -387,6 +387,11 @@ async function buildServer() {
   const { registerCallerIdInventoryRoutes } = await import('./routes/caller-id-inventory.js');
   await server.register(registerCallerIdInventoryRoutes);
 
+  // Register carrier waterfall routing (admin settings + the dialplan's
+  // per-call carrier lookup and outcome feedback)
+  const { registerCarrierRoutingRoutes } = await import('./routes/carrier-routing.js');
+  await server.register(registerCarrierRoutingRoutes);
+
   // Register Insurance Lead Pipeline routes (inbound ingestion, CRM, Ameriquote routing)
   const { registerInsuranceLeadRoutes } = await import('./routes/insurance-leads.js');
   await server.register(registerInsuranceLeadRoutes);

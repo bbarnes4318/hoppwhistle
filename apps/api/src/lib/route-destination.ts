@@ -57,10 +57,28 @@ export function sanitizeDestinationString(raw: string | null | undefined): Sanit
   return { destination: steps.join('|'), dropped };
 }
 
-/** Carrier gateway chain used for external (PSTN) inbound-forwarding legs. */
+/**
+ * Static carrier gateway chain for external (PSTN) inbound-forwarding legs.
+ *
+ * Superseded by the configurable per-tenant INBOUND waterfall — see
+ * `getInboundCarrierChain` in services/carrier-routing.ts, which is what the
+ * FreeSWITCH lookup now calls. This remains as the value used when no tenant
+ * can be determined, and honors the same env override it always did so an
+ * operator can still pin the chain without touching the database.
+ */
 export function getInboundExternalGateways(): string {
   return (
     process.env.INBOUND_EXTERNAL_GATEWAYS ||
     'fractel1,fractel2,fractel3,fractel4,fractel5,fractel6'
   );
 }
+
+/**
+ * Placeholder the inbound Lua substitutes with the 10-digit destination.
+ *
+ * The API builds the whole leg list — including each carrier's number format,
+ * which differs between carriers — and hands the Lua a template rather than a
+ * list of gateway names. Formatting per carrier in Lua would mean shipping the
+ * carrier table into the dialplan.
+ */
+export const INBOUND_DEST_PLACEHOLDER = '{DEST}';

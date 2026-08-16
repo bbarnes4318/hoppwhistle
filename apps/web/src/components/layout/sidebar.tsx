@@ -14,6 +14,7 @@ import {
   LayoutDashboard,
   Megaphone,
   PhoneCall,
+  PhoneForwarded,
   Receipt,
   Settings,
   Shield,
@@ -182,6 +183,7 @@ export function Sidebar() {
         { name: 'Users', href: '/settings/users', icon: Users },
         { name: 'Webhooks', href: '/settings/webhooks', icon: FileText },
         { name: 'DNC Lists', href: '/settings/dnc', icon: Shield },
+        { name: 'Carrier Routing', href: '/settings/carriers', icon: PhoneForwarded },
         { name: 'Quotas & Budgets', href: '/settings/quotas', icon: DollarSign },
         { name: 'Payroll Admin', href: '/admin/payroll', icon: Receipt },
       ]
