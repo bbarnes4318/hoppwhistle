@@ -360,6 +360,11 @@ async function buildServer() {
   const { registerAiVoiceRoutes } = await import('./routes/aivoice.js');
   await server.register(registerAiVoiceRoutes);
 
+  // Register Fish Audio voice routes (Voice Studio: clone, manage, preview).
+  // Proxies api.fish.audio so FISH_API_KEY stays server-side.
+  const { registerFishRoutes } = await import('./routes/fish.js');
+  await server.register(registerFishRoutes);
+
   // Register AI Campaign routes (AI outbound calling - Vapi integration hidden from UI)
   const { registerAICampaignRoutes, registerVapiWebhookRoutes } = await import(
     './routes/ai-campaigns.js'

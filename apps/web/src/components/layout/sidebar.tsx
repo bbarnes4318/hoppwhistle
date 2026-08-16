@@ -67,6 +67,12 @@ export function Sidebar() {
         icon: Bot,
         title: 'AI voice agents & outbound campaigns',
       },
+      {
+        name: 'Voice Studio',
+        href: '/voice-studio',
+        icon: AudioLines,
+        title: 'Clone Fish Audio voices, preview scripts, tune delivery',
+      },
       { name: 'Call Center', href: '/call-center', icon: Headphones },
       { name: 'CRM', href: '/insurance-leads', icon: Users },
       { name: 'Numbers', href: '/numbers', icon: PhoneCall },
