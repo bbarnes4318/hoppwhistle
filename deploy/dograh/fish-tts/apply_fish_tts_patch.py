@@ -60,22 +60,18 @@ class PatchResult:
 # --------------------------------------------------------------------------
 
 ENUM_OLD = '''    XAI = "xai"
-    LMNT = "lmnt"
 '''
 
 ENUM_NEW = f'''    XAI = "xai"
-    LMNT = "lmnt"
     FISH = "fish"  # {MARKER}
 '''
 
 BASE_LITERAL_OLD = """        ServiceProviders.XAI,
-        ServiceProviders.LMNT,
     ]
     api_key: str | list[str]
 """
 
 BASE_LITERAL_NEW = f"""        ServiceProviders.XAI,
-        ServiceProviders.LMNT,
         ServiceProviders.FISH,  # {MARKER}
     ]
     api_key: str | list[str]
@@ -171,13 +167,13 @@ class FishAudioTTSConfiguration(BaseTTSConfiguration):
 
 '''
 
-UNION_OLD = """        LmntTTSConfiguration,
+UNION_OLD = """        XAITTSConfiguration,
     ],
     Field(discriminator="provider"),
 ]
 """
 
-UNION_NEW = f"""        LmntTTSConfiguration,
+UNION_NEW = f"""        XAITTSConfiguration,
         FishAudioTTSConfiguration,  # {MARKER}
     ],
     Field(discriminator="provider"),
@@ -250,11 +246,11 @@ FACTORY_NEW = f'''    elif user_config.tts.provider == ServiceProviders.FISH.val
 # check_validity.py
 # --------------------------------------------------------------------------
 
-VALIDATOR_MAP_OLD = """            ServiceProviders.LMNT.value: self._check_lmnt_api_key,
+VALIDATOR_MAP_OLD = """            ServiceProviders.XAI.value: self._check_xai_api_key,
         }
 """
 
-VALIDATOR_MAP_NEW = f"""            ServiceProviders.LMNT.value: self._check_lmnt_api_key,
+VALIDATOR_MAP_NEW = f"""            ServiceProviders.XAI.value: self._check_xai_api_key,
             ServiceProviders.FISH.value: self._check_fish_api_key,  # {MARKER}
         }}
 """
