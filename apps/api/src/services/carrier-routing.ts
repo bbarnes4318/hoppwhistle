@@ -132,7 +132,12 @@ async function loadRoute(tenantId: string, callType: CallRouteType): Promise<Rou
   const callerIdsByProvider = new Map<string, string[]>();
   if (poolProviders.length > 0) {
     const numbers = await prisma.phoneNumber.findMany({
-      where: { tenantId, status: 'ACTIVE', provider: { in: [...new Set(poolProviders)] } },
+      where: {
+        tenantId,
+        status: 'ACTIVE',
+        callerIdEligible: true,
+        provider: { in: [...new Set(poolProviders)] },
+      },
       select: { number: true, provider: true },
       orderBy: { number: 'asc' },
     });
@@ -519,7 +524,7 @@ export async function listCarrierRoutes(tenantId: string): Promise<CarrierRouteV
     prisma.carrierGateway.findMany({ where: { tenantId }, orderBy: { priority: 'asc' } }),
     prisma.phoneNumber.groupBy({
       by: ['provider'],
-      where: { tenantId, status: 'ACTIVE' },
+      where: { tenantId, status: 'ACTIVE', callerIdEligible: true },
       _count: { _all: true },
     }),
   ]);

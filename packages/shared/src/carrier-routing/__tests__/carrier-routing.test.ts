@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 
 import {
   CIRCUIT_FAILURE_THRESHOLD,
+  DEFAULT_PROGRESS_TIMEOUT_SECONDS,
   LEGACY_FALLBACK_GATEWAYS,
   applyOutcome,
   buildBridgeString,
@@ -205,6 +206,21 @@ describe('buildBridgeString', () => {
     expect(s.startsWith('{')).toBe(true);
     expect(s).toContain('origination_caller_id_number=19138999080');
     expect(s).toContain('call_timeout=15');
+  });
+
+  it('bounds silence separately from ringing, so a dead primary fails over fast', () => {
+    // The distinction that makes an unproven carrier safe to put first: a
+    // carrier that never responds is abandoned after progress_timeout, while a
+    // carrier that rings gets the full call_timeout to be answered.
+    const s = buildBridgeString(chain, '2816991120', { legTimeoutSeconds: 30 })!;
+    expect(s).toContain('call_timeout=30');
+    expect(s).toContain(`progress_timeout=${DEFAULT_PROGRESS_TIMEOUT_SECONDS}`);
+    expect(DEFAULT_PROGRESS_TIMEOUT_SECONDS).toBeLessThan(30);
+  });
+
+  it('allows the silence bound to be overridden per call', () => {
+    const s = buildBridgeString(chain, '2816991120', { progressTimeoutSeconds: 4 })!;
+    expect(s).toContain('progress_timeout=4');
   });
 
   it('strips characters that would split one variable into two', () => {

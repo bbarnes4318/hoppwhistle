@@ -81,7 +81,12 @@ async function loadRoute(
   const callerIdsByProvider = new Map<string, string[]>();
   if (poolProviders.length > 0) {
     const numbers = await prisma.phoneNumber.findMany({
-      where: { tenantId, status: 'ACTIVE', provider: { in: [...new Set(poolProviders)] } },
+      where: {
+        tenantId,
+        status: 'ACTIVE',
+        callerIdEligible: true,
+        provider: { in: [...new Set(poolProviders)] },
+      },
       select: { number: true, provider: true },
       orderBy: { number: 'asc' },
     });

@@ -319,6 +319,11 @@ model PhoneNumber {
   campaignId   String? // Assigned campaign
   provider     String? // local | signalwire | telnyx | bandwidth | clec
   status       PhoneNumberStatus @default(ACTIVE)
+  /// May the carrier waterfall present this number as outbound caller ID?
+  /// False for numbers that must stay inbound-only, such as the DIDs an AI
+  /// agent answers on. Separate from `status`: a number can be live for
+  /// inbound while being the wrong thing to dial out as.
+  callerIdEligible Boolean @default(true)
   capabilities Json? // SMS, MMS, Voice, etc.
   metadata     Json?
   purchasedAt  DateTime?

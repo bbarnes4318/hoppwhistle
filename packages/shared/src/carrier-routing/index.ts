@@ -67,8 +67,23 @@ export const CIRCUIT_FAILURE_THRESHOLD = 5;
 /** How long a demotion lasts before the gateway is retried at full rank. */
 export const CIRCUIT_OPEN_SECONDS = 120;
 
-/** Default per-leg dial timeout. */
+/** Default per-leg dial timeout — how long a leg may RING before giving up. */
 export const DEFAULT_LEG_TIMEOUT_SECONDS = 20;
+
+/**
+ * How long a leg may produce no progress at all before the chain moves on.
+ *
+ * This is the knob that makes a waterfall usable, and it is not the same as the
+ * ring timeout. `call_timeout` counts ringing, so shortening it to fail over
+ * quickly would abandon calls the callee was about to answer. `progress_timeout`
+ * counts only the silence before the carrier sends 180/183 — a healthy SBC
+ * answers in well under a second, so a carrier that is black-holing INVITEs is
+ * detected here in seconds instead of holding the caller for the full ring.
+ *
+ * Without it, putting an unproven carrier first means every call eats the whole
+ * ring timeout in dead air before reaching a carrier that works.
+ */
+export const DEFAULT_PROGRESS_TIMEOUT_SECONDS = 10;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Inputs
@@ -355,7 +370,10 @@ export function formatForGateway(tenDigits: string, format: CarrierNumberFormat)
 export interface BridgeOptions {
   /** Channel variables applied to every leg, e.g. caller ID. */
   channelVariables?: Record<string, string | number | undefined | null>;
+  /** How long a leg may ring. */
   legTimeoutSeconds?: number;
+  /** How long a leg may be silent before the chain gives up on it. */
+  progressTimeoutSeconds?: number;
 }
 
 /**
@@ -394,6 +412,7 @@ export function buildBridgeString(
   const vars = encodeChannelVariables({
     ...options.channelVariables,
     call_timeout: options.legTimeoutSeconds ?? chain.legTimeoutSeconds,
+    progress_timeout: options.progressTimeoutSeconds ?? DEFAULT_PROGRESS_TIMEOUT_SECONDS,
   });
   const prefix = vars ? `{${vars}}` : '';
 
