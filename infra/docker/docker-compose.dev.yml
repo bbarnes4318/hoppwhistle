@@ -1,3 +1,4 @@
+name: docker  # pinned: project name must never drift, or compose invents empty volumes
 services:
   # ============================================================================
   # Database & Cache
@@ -100,6 +101,8 @@ services:
     container_name: hopwhistle-api-dev
     ports:
       - '3001:3001'
+    env_file:
+      - ../../.env
     environment:
       NODE_ENV: development
       PORT: 3001
@@ -202,6 +205,8 @@ services:
     container_name: hopwhistle-worker-dev
     ports:
       - '9091:9091'
+    env_file:
+      - ../../.env
     environment:
       NODE_ENV: development
       DATABASE_URL: postgresql://${POSTGRES_USER:-callfabric}:${POSTGRES_PASSWORD:-callfabric_dev}@postgres:5432/${POSTGRES_DB:-callfabric}
