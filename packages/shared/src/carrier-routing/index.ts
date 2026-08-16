@@ -83,6 +83,8 @@ export interface GatewayRow {
   consecutiveFailures?: number;
 }
 
+export type CarrierCallerIdStrategy = 'PRESERVE' | 'POOL' | 'FIXED';
+
 export interface StepRow {
   position: number;
   enabled: boolean;
@@ -90,6 +92,12 @@ export interface StepRow {
   carrierName: string;
   carrierStatus?: string;
   gateways: GatewayRow[];
+  /** How this carrier's legs present caller ID. Defaults to PRESERVE. */
+  callerIdStrategy?: CarrierCallerIdStrategy;
+  /** Used when the strategy is FIXED. */
+  callerIdNumber?: string | null;
+  /** DIDs this carrier issued, for the POOL strategy. */
+  callerIdPool?: string[];
 }
 
 export interface RouteRow {
@@ -110,6 +118,16 @@ export interface ResolvedGateway {
   numberFormat: CarrierNumberFormat;
   /** True when this gateway is only in the chain because nothing healthier was left. */
   demoted: boolean;
+  /**
+   * Caller ID to present on this leg, or null to keep the call's existing one.
+   *
+   * Null is also what a POOL carrier that owns no DIDs resolves to. That is the
+   * safe answer: an empty caller ID is rejected outright by most carriers, so a
+   * misconfiguration degrades to "wrong attestation" rather than "no call".
+   */
+  callerId: string | null;
+  /** Set when the carrier wanted its own caller ID but had none to give. */
+  callerIdUnavailable?: boolean;
 }
 
 export interface ResolvedChain {
@@ -139,12 +157,66 @@ function fallbackChain(callType: CallRouteType, reason: string): ResolvedChain {
       carrierName: 'FracTEL',
       numberFormat: 'NANP11' as const,
       demoted: false,
+      callerId: null,
     })),
     legTimeoutSeconds: DEFAULT_LEG_TIMEOUT_SECONDS,
     source: 'fallback',
     fallbackReason: reason,
     carrierOrder: ['FRACTEL'],
   };
+}
+
+/** Digits-only form used to compare and emit caller IDs, or null if unusable. */
+function normalizeCallerId(raw: string | null | undefined): string | null {
+  const digits = (raw ?? '').replace(/\D/g, '');
+  if (digits.length === 11 && digits.startsWith('1')) return digits;
+  if (digits.length === 10) return `1${digits}`;
+  return null;
+}
+
+/**
+ * The caller ID one carrier should present.
+ *
+ * Returns null for "leave the call's own caller ID alone" — which is both the
+ * PRESERVE answer and the answer when a carrier is configured to use its own
+ * numbers but has none. Emitting an empty caller ID instead would be worse than
+ * presenting the wrong one: carriers reject anonymous origination outright,
+ * so a configuration mistake would silently stop calls rather than degrade
+ * their attestation.
+ */
+function selectCallerId(
+  step: StepRow,
+  rotation: number,
+  currentCallerId?: string | null
+): { callerId: string | null; unavailable: boolean } {
+  const strategy = step.callerIdStrategy ?? 'PRESERVE';
+  if (strategy === 'PRESERVE') return { callerId: null, unavailable: false };
+
+  const pool = (step.callerIdPool ?? []).map(normalizeCallerId).filter((n): n is string => !!n);
+
+  // If the call already presents a number THIS carrier issued, keep it.
+  //
+  // The swap exists to stop a carrier being handed a number it cannot attest
+  // to. When the number is already its own there is nothing to fix, and
+  // overriding would do real damage: an agent's manual softphone call
+  // deliberately presents that agent's assigned DID, and a caller-ID pool
+  // rotation would replace it with an unrelated number on every call.
+  const current = normalizeCallerId(currentCallerId);
+  if (current && pool.includes(current)) return { callerId: null, unavailable: false };
+
+  if (strategy === 'FIXED') {
+    const fixed = normalizeCallerId(step.callerIdNumber);
+    if (fixed && current === fixed) return { callerId: null, unavailable: false };
+    return { callerId: fixed, unavailable: fixed === null };
+  }
+
+  if (pool.length === 0) return { callerId: null, unavailable: true };
+  // Rotation is caller-supplied so one call presents a stable number across
+  // every leg of its own chain, while consecutive calls spread across the pool.
+  // Sorting first keeps the sequence independent of row order.
+  const sorted = [...pool].sort();
+  const index = ((rotation % sorted.length) + sorted.length) % sorted.length;
+  return { callerId: sorted[index], unavailable: false };
 }
 
 /**
@@ -160,7 +232,8 @@ function fallbackChain(callType: CallRouteType, reason: string): ResolvedChain {
 export function resolveChain(
   route: RouteRow | null | undefined,
   callType: CallRouteType,
-  now: Date = new Date()
+  now: Date = new Date(),
+  options: { callerIdRotation?: number; currentCallerId?: string | null } = {}
 ): ResolvedChain {
   if (!route) return fallbackChain(callType, 'no route configured for tenant');
   if (!route.enabled) return fallbackChain(callType, 'route disabled');
@@ -182,6 +255,12 @@ export function resolveChain(
     if (gateways.length === 0) continue;
     if (!carrierOrder.includes(step.carrierCode)) carrierOrder.push(step.carrierCode);
 
+    const { callerId, unavailable } = selectCallerId(
+      step,
+      options.callerIdRotation ?? 0,
+      options.currentCallerId
+    );
+
     for (const g of gateways) {
       const openUntil = toTime(g.circuitOpenUntil);
       const isOpen = openUntil !== null && openUntil > nowMs;
@@ -191,6 +270,8 @@ export function resolveChain(
         carrierName: step.carrierName,
         numberFormat: g.numberFormat,
         demoted: isOpen,
+        callerId,
+        ...(unavailable ? { callerIdUnavailable: true } : {}),
       };
       (isOpen ? demoted : healthy).push(entry);
     }
@@ -316,9 +397,22 @@ export function buildBridgeString(
   });
   const prefix = vars ? `{${vars}}` : '';
 
-  const legs = chain.gateways.map(
-    g => `sofia/gateway/${g.gateway}/${formatForGateway(tenDigits, g.numberFormat)}`
-  );
+  const legs = chain.gateways.map(g => {
+    // `{}` applies to every leg; `[]` applies to one. A carrier can only attest
+    // to a number it issued, so when the call falls to the next carrier its
+    // caller ID has to change with it — that is what the per-leg block is for.
+    // Legs with no override inherit the `{}` caller ID unchanged.
+    const legVars = g.callerId
+      ? encodeChannelVariables({
+          origination_caller_id_number: g.callerId,
+          effective_caller_id_number: g.callerId,
+          sip_from_user: g.callerId,
+          hopwhistle_carrier: g.carrierCode,
+        })
+      : '';
+    const legPrefix = legVars ? `[${legVars}]` : '';
+    return `${legPrefix}sofia/gateway/${g.gateway}/${formatForGateway(tenDigits, g.numberFormat)}`;
+  });
 
   return `${prefix}${legs.join('|')}`;
 }

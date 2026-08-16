@@ -58,6 +58,9 @@ interface StepView {
   carrierStatus: string;
   position: number;
   enabled: boolean;
+  callerIdStrategy: string;
+  callerIdCount: number;
+  callerIdUnattestable: boolean;
   gateways: GatewayView[];
 }
 
@@ -308,6 +311,27 @@ function WaterfallCard({
           </Alert>
         )}
 
+        {route.callType !== 'INBOUND' &&
+          route.steps.some(s => s.enabled && s.callerIdUnattestable) && (
+            <Alert className="border-amber-500/40 py-2">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              <AlertDescription className="text-xs">
+                <strong>
+                  {route.steps
+                    .filter(s => s.enabled && s.callerIdUnattestable)
+                    .map(s => s.carrierName)
+                    .join(', ')}
+                </strong>{' '}
+                {route.steps.filter(s => s.enabled && s.callerIdUnattestable).length === 1
+                  ? 'has'
+                  : 'have'}{' '}
+                no DIDs of their own, so calls falling to them present a number they did not issue.
+                A carrier cannot attest to someone else&apos;s number — expect low STIR/SHAKEN
+                attestation and spam labeling on those legs. Port or buy numbers there to fix it.
+              </AlertDescription>
+            </Alert>
+          )}
+
         <div className="divide-y divide-border/40 rounded border border-border/40">
           {route.steps.map((step, index) => {
             const enabledGateways = step.gateways.filter(g => g.enabled);
@@ -354,6 +378,27 @@ function WaterfallCard({
                         {demoted.length} demoted
                       </Badge>
                     )}
+                    {/* A carrier can only vouch for a number it issued. One that
+                        presents someone else's gets low attestation, which is
+                        the mechanism behind spam labeling — so it is called out
+                        here rather than left to be discovered from call data. */}
+                    {step.callerIdUnattestable ? (
+                      <Badge
+                        variant="outline"
+                        className="border-amber-500/60 text-[10px] text-amber-500"
+                        title={`No DIDs are registered to ${step.carrierName}, so calls on this leg present a number it did not issue and cannot attest to. Expect low STIR/SHAKEN attestation and spam labeling. Buy or port numbers to ${step.carrierName} to fix.`}
+                      >
+                        no caller ID of its own
+                      </Badge>
+                    ) : step.callerIdStrategy === 'POOL' ? (
+                      <Badge
+                        variant="outline"
+                        className="border-emerald-500/50 text-[10px] text-emerald-500"
+                        title={`Presents one of ${step.callerIdCount} DIDs registered to ${step.carrierName}, so it can attest to the call.`}
+                      >
+                        {step.callerIdCount} own DIDs
+                      </Badge>
+                    ) : null}
                   </div>
                   <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                     {step.gateways.length === 0 ? (

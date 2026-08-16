@@ -390,7 +390,11 @@ export async function registerCarrierRoutingRoutes(server: FastifyInstance) {
 
       try {
         const tenantId = query.tenant || (await resolveTenantForCallerId(query.cid));
-        const chain = await getCarrierChain(tenantId, callType);
+        // The caller ID already on the channel is passed in, not just stamped
+        // on: a carrier that issued that number keeps it — which is what makes
+        // an agent's manual call still present that agent's own DID — and only
+        // a carrier that cannot attest to it substitutes one of its own.
+        const chain = await getCarrierChain(tenantId, callType, query.cid);
 
         const bridge = buildBridgeString(chain, destination, {
           channelVariables: {

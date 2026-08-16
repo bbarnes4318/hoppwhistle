@@ -441,6 +441,22 @@ model Carrier {
   gateways     CarrierGateway[]
   routeSteps   CarrierRouteStep[]
 
+  /// How this carrier's outbound legs present caller ID.
+  ///
+  /// A carrier can only attest to a number it issued. Presenting a FracTEL DID
+  /// on Anveo's trunk gets the call C-attestation or a rejection — which is the
+  /// spam-labeling failure mode, not a fix for it. So when a call falls from one
+  /// carrier to the next, the caller ID has to move with it.
+  callerIdStrategy CarrierCallerIdStrategy @default(PRESERVE)
+
+  /// Used when callerIdStrategy is FIXED.
+  callerIdNumber String?
+
+  /// The `phone_numbers.provider` value identifying DIDs this carrier issued,
+  /// e.g. "fractel". Used by the POOL strategy to find a number this carrier can
+  /// legitimately attest to. Null means we own no numbers here.
+  numberProvider String?
+
   @@unique([tenantId, code])
   @@index([tenantId])
   @@map("carriers")
@@ -449,6 +465,18 @@ model Carrier {
 enum CarrierStatus {
   ACTIVE
   INACTIVE
+}
+
+/// How a carrier's outbound legs choose their caller ID.
+enum CarrierCallerIdStrategy {
+  /// Keep whatever caller ID the call already carries. Correct for inbound
+  /// forwarding, where the number presented is the original caller's and
+  /// rewriting it would destroy buyer-side reporting.
+  PRESERVE
+  /// Rotate a DID this carrier issued, so it can attest to the call.
+  POOL
+  /// Always present one specific number.
+  FIXED
 }
 
 model Trunk {

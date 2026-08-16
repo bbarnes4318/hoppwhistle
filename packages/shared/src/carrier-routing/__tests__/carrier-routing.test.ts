@@ -220,6 +220,160 @@ describe('buildBridgeString', () => {
   });
 });
 
+describe('per-carrier caller ID', () => {
+  const fractelPool = ['12816991120', '18656000124'];
+
+  function chainWith(overrides: Partial<StepRow>[] = []) {
+    return resolveChain(
+      route([
+        step('FRACTEL', 0, [gw('fractel1')], {
+          callerIdStrategy: 'POOL',
+          callerIdPool: fractelPool,
+          ...overrides[0],
+        }),
+        step('BULKVS', 1, [gw('bulkvs')], {
+          callerIdStrategy: 'POOL',
+          callerIdPool: ['12816991121'],
+          ...overrides[1],
+        }),
+      ]),
+      'SOFTPHONE_MANUAL',
+      NOW
+    );
+  }
+
+  it('gives each carrier a caller ID it issued', () => {
+    const chain = chainWith();
+    expect(chain.gateways.map(g => g.callerId)).toEqual(['12816991120', '12816991121']);
+  });
+
+  it("keeps the agent's own DID when the carrier already issued it, and swaps only on failover", () => {
+    // The exact regression this guards: an agent dialing manually presents the
+    // number assigned to them. FracTEL issued it, so FracTEL must keep it — a
+    // pool rotation here would replace the agent's number on every call.
+    const chain = resolveChain(
+      route([
+        step('FRACTEL', 0, [gw('fractel1')], {
+          callerIdStrategy: 'POOL',
+          callerIdPool: ['12816991120', '18656000124'],
+        }),
+        step('BULKVS', 1, [gw('bulkvs')], {
+          callerIdStrategy: 'POOL',
+          callerIdPool: ['12816991121'],
+        }),
+      ]),
+      'SOFTPHONE_MANUAL',
+      NOW,
+      { currentCallerId: '18656000124', callerIdRotation: 0 }
+    );
+
+    expect(chain.gateways[0].callerId).toBeNull(); // FracTEL keeps the agent's DID
+    expect(chain.gateways[1].callerId).toBe('12816991121'); // BulkVS must swap
+
+    const s = buildBridgeString(chain, '8005551212', {
+      channelVariables: { origination_caller_id_number: '18656000124' },
+    })!;
+    expect(s).toContain('{origination_caller_id_number=18656000124');
+    expect(s).not.toContain('[origination_caller_id_number=12816991120');
+    expect(s).toContain('[origination_caller_id_number=12816991121');
+  });
+
+  it('accepts the current caller ID in any format when deciding whether to keep it', () => {
+    for (const cid of ['2816991120', '12816991120', '+1 (281) 699-1120']) {
+      const chain = resolveChain(
+        route([
+          step('FRACTEL', 0, [gw('fractel1')], {
+            callerIdStrategy: 'POOL',
+            callerIdPool: ['12816991120'],
+          }),
+        ]),
+        'SOFTPHONE_MANUAL',
+        NOW,
+        { currentCallerId: cid }
+      );
+      expect(chain.gateways[0].callerId).toBeNull();
+    }
+  });
+
+  it('emits the swap as a per-leg [] override, not a chain-wide {} one', () => {
+    const s = buildBridgeString(chainWith(), '8005551212', {
+      channelVariables: { origination_caller_id_number: '19138999080' },
+    })!;
+    // The call-wide caller ID stays in {}, and each leg overrides it in [].
+    expect(s).toMatch(/^\{[^}]*origination_caller_id_number=19138999080[^}]*\}/);
+    expect(s).toContain('[origination_caller_id_number=12816991120');
+    expect(s).toContain('[origination_caller_id_number=12816991121');
+    expect(s.indexOf('[origination_caller_id_number=12816991121')).toBeGreaterThan(
+      s.indexOf('sofia/gateway/fractel1/')
+    );
+  });
+
+  it('rewrites From as well as P-Asserted-Identity so the carrier sees one number', () => {
+    const s = buildBridgeString(chainWith(), '8005551212')!;
+    expect(s).toContain('sip_from_user=12816991120');
+    expect(s).toContain('effective_caller_id_number=12816991120');
+  });
+
+  it('PRESERVE leaves the call-wide caller ID untouched — required for inbound legs', () => {
+    const chain = chainWith([{ callerIdStrategy: 'PRESERVE' }]);
+    expect(chain.gateways[0].callerId).toBeNull();
+    const s = buildBridgeString(chain, '8005551212', {
+      channelVariables: { origination_caller_id_number: '19138999080' },
+    })!;
+    expect(s).not.toContain('[origination_caller_id_number=12816991120');
+    expect(s).toContain('sofia/gateway/fractel1/');
+  });
+
+  it('FIXED presents its one configured number', () => {
+    const chain = chainWith([{ callerIdStrategy: 'FIXED', callerIdNumber: '(281) 699-1120' }]);
+    expect(chain.gateways[0].callerId).toBe('12816991120');
+  });
+
+  it('a POOL carrier owning no DIDs falls back to the existing caller ID, never to empty', () => {
+    const chain = chainWith([{ callerIdStrategy: 'POOL', callerIdPool: [] }]);
+    expect(chain.gateways[0].callerId).toBeNull();
+    expect(chain.gateways[0].callerIdUnavailable).toBe(true);
+
+    const s = buildBridgeString(chain, '8005551212', {
+      channelVariables: { origination_caller_id_number: '19138999080' },
+    })!;
+    // No empty override — an anonymous caller ID is rejected outright.
+    expect(s).not.toMatch(/\[[^\]]*origination_caller_id_number=(,|\])/);
+    expect(s).toContain('origination_caller_id_number=19138999080');
+  });
+
+  it('flags an unusable configured number rather than presenting garbage', () => {
+    const chain = chainWith([{ callerIdStrategy: 'FIXED', callerIdNumber: 'not-a-number' }]);
+    expect(chain.gateways[0].callerId).toBeNull();
+    expect(chain.gateways[0].callerIdUnavailable).toBe(true);
+  });
+
+  it('holds one number for the whole of one call, and spreads across calls', () => {
+    const first = resolveChain(
+      route([step('FRACTEL', 0, [gw('fractel1'), gw('fractel2', { priority: 1 })], {
+        callerIdStrategy: 'POOL',
+        callerIdPool: fractelPool,
+      })]),
+      'SOFTPHONE_MANUAL',
+      NOW,
+      { callerIdRotation: 0 }
+    );
+    // Every leg of a single call presents the same number.
+    expect(new Set(first.gateways.map(g => g.callerId)).size).toBe(1);
+
+    const second = resolveChain(
+      route([step('FRACTEL', 0, [gw('fractel1')], {
+        callerIdStrategy: 'POOL',
+        callerIdPool: fractelPool,
+      })]),
+      'SOFTPHONE_MANUAL',
+      NOW,
+      { callerIdRotation: 1 }
+    );
+    expect(second.gateways[0].callerId).not.toBe(first.gateways[0].callerId);
+  });
+});
+
 describe('rotatePrimaryGateways', () => {
   const chain = resolveChain(
     route([
