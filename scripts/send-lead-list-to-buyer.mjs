@@ -43,9 +43,22 @@ if (!Number.isFinite(stopAfter) || stopAfter < 0) {
   process.exit(1);
 }
 
+/**
+ * Stop after this many leads total. The point of a small --max is to answer a
+ * question cheaply: post twenty and read what comes back, rather than commit
+ * thousands to a theory about what the buyer will do.
+ */
+const maxArg = process.argv.indexOf('--max');
+const maxLeads = maxArg > -1 ? Number(process.argv[maxArg + 1]) : Infinity;
+
+if (!(maxLeads > 0)) {
+  console.error('--max needs a positive number');
+  process.exit(1);
+}
+
 if (!listName) {
   console.error(
-    'usage: node send-leads.mjs <list name> [--dry-run] [--force] [--stop-after-unmatched <n>]'
+    'usage: node send-leads.mjs <list name> [--dry-run] [--force] [--max <n>] [--stop-after-unmatched <n>]'
   );
   process.exit(1);
 }
@@ -115,7 +128,7 @@ async function main() {
       console.log(`    ${String(r.count).padStart(6)}  ${r.message}`);
   }
 
-  const willSend = force ? pre.sendable : pre.ready;
+  const willSend = Math.min(force ? pre.sendable : pre.ready, maxLeads);
   if (!willSend) {
     console.log('\nNothing to send. Stopping.');
     return;
@@ -149,9 +162,15 @@ async function main() {
   let stoppedOnWall = false;
 
   for (;;) {
+    const room = maxLeads - totals.attempted;
     const batch = await api(
       '/api/v1/insurance-leads/delivery/send',
-      { listId: list.id, limit: BATCH, force, ...(cursor ? { cursor } : {}) },
+      {
+        listId: list.id,
+        limit: Math.max(1, Math.min(BATCH, room)),
+        force,
+        ...(cursor ? { cursor } : {}),
+      },
       list.tenantId
     );
 
@@ -184,6 +203,11 @@ async function main() {
 
     if (stopAfter > 0 && sinceLastMatch >= stopAfter) {
       stoppedOnWall = true;
+      break;
+    }
+
+    if (totals.attempted >= maxLeads) {
+      console.log(`\n  Reached --max ${maxLeads}. Everything else is untouched.`);
       break;
     }
 
