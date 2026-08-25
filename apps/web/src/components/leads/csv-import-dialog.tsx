@@ -15,6 +15,8 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 
 import { apiClient, type ApiResponse } from '@/lib/api';
 
+import { BUYER_FIELD, BUYER_TEMPLATE_KEYS } from './buyer-fields';
+
 interface CsvImportDialogProps {
   onClose: () => void;
   onSuccess: () => void;
@@ -46,6 +48,7 @@ interface TargetField {
   /**
    * Extra header spellings to auto-map. Vendors ship "DOB", "Zip", and
    * "Date_Posted" far more often than they ship our camelCase field names.
+   * The buyer's own field name is added automatically — see BUYER_FIELD.
    */
   aliases?: string[];
 }
@@ -693,72 +696,34 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
     return !f.vertical || f.vertical === vertical;
   });
 
-  // Template Download
-  const downloadTemplate = () => {
-    const commonHeaders = [
-      'firstName',
-      'lastName',
-      'phone',
-      'email',
-      'address',
-      'city',
-      'state',
-      'zipCode',
-      'birthDate',
-      // Buyer-required / compliance columns. Leaving these out of the template
-      // is how a batch ends up posting with a loopback IP and no consent proof.
-      'ipAddress',
-      'trustedFormUrl',
-      'leadidToken',
-      'datePosted',
-      'notes',
-      'priority',
-      'source',
-      'leadStage',
-      'nextFollowUpAt',
-      'requestedEffectiveDate',
-      'ssn',
-      'primaryBeneficiaryName',
-      'primaryBeneficiaryRelationship',
-      'primaryBeneficiaryShare',
-      'secondPrimaryBeneficiaryName',
-      'secondPrimaryBeneficiaryRelationship',
-      'currentPolicyInForce',
-      'replacementReductionModification',
-      'replacementCompanyName',
-      'replacementFaceAmount',
-      'bankName',
-      'accountType',
-      'routingNumber',
-      'accountNumber',
-      'agentName',
-    ];
-    const acaHeaders = [
-      'heightFeet',
-      'heightInches',
-      'weight',
-      'smoker',
-      'householdIncome',
-      'peopleInHousehold',
-    ];
-    const feHeaders = [
-      'gender',
-      'smoker',
-      'carrier',
-      'product',
-      'monthlyPremium',
-      'coverageAmount',
-      'height',
-      'weight',
-      'burialCremation',
-      'firstPremiumDate',
-      'monthlyRecurringDueDate',
-      'driversLicense',
-      'health',
-      'medications',
-      'doctorName',
-    ];
+  // Fields the buyer actually receives lead the list. The internal-CRM extras
+  // still appear below — they are stored, just never posted — but they should
+  // not be the first thing you scroll past when preparing a batch to sell.
+  const orderedTargetFields =
+    vertical === 'B2B'
+      ? activeTargetFields
+      : [
+          ...activeTargetFields.filter(f => BUYER_FIELD[f.key]),
+          ...activeTargetFields.filter(f => !BUYER_FIELD[f.key]),
+        ];
 
+  const buyerFieldCount = orderedTargetFields.filter(f => BUYER_FIELD[f.key]).length;
+
+  // Preview only the columns actually mapped — a table of 40 unmapped dashes
+  // hides the handful of values worth checking before committing the batch.
+  const previewFields = orderedTargetFields.filter(f => mappings[f.key] !== undefined);
+
+  /**
+   * Template Download.
+   *
+   * For ACA and FE the columns are the buyer's field names, because the file is
+   * going to the buyer. Internal CRM fields (beneficiaries, banking, health
+   * notes) are not in it — they are never posted, and asking a lead vendor to
+   * fill in a routing number is not something this template should do.
+   *
+   * B2B has no buyer mapping, so it keeps our own field names.
+   */
+  const downloadTemplate = () => {
     const b2bHeaders = [
       'company',
       'repName',
@@ -771,58 +736,54 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
       'yearEstablished',
     ];
 
-    const hdrs =
-      vertical === 'B2B'
-        ? b2bHeaders
-        : vertical === 'ACA'
-          ? [...commonHeaders, ...acaHeaders]
-          : [...commonHeaders, ...feHeaders];
-
-    // Built by header name rather than as one positional string: the previous
-    // hard-coded rows had silently drifted out of alignment with the columns,
-    // which is a very expensive thing to copy into a real import.
+    // Sample values keyed by our field key, so a header rename can never leave
+    // the example row misaligned with its columns.
     const sample: Record<string, string> = {
       firstName: 'Jane',
       lastName: 'Doe',
       phone: '3125556085',
       email: 'jane.doe@example.com',
       address: '123 Main St',
+      address2: 'Apt 4B',
       city: 'Chicago',
+      county: 'Cook',
       state: 'IL',
       zipCode: '60610',
       birthDate: '09/16/1980',
+      gender: 'Female',
+      smoker: 'No',
       ipAddress: '75.2.92.149',
+      landingPage: 'hopwhistle.com',
       trustedFormUrl: 'https://cert.trustedform.com/example',
       leadidToken: '',
-      datePosted: '2026-07-14 09:12:00',
-      notes: 'Interested in coverage',
-      priority: 'NORMAL',
+      consentLanguage: 'By clicking Submit you agree to be contacted.',
+      datePosted: '07/14/2026 09:12:00',
       source: 'Facebook',
-      leadStage: 'NEW',
+      heightFeet: '5',
+      heightInches: '10',
+      weight: '175',
+      householdIncome: '45000',
+      peopleInHousehold: '2',
       company: 'Acme Corp',
       repName: 'John Smith',
       industry: 'Software',
       revenue: '10000000',
       yearEstablished: '1995',
-      heightFeet: '5',
-      heightInches: '10',
-      weight: '175',
-      smoker: 'No',
-      householdIncome: '45000',
-      peopleInHousehold: '2',
-      gender: 'Female',
-      carrier: 'Mutual of Omaha',
-      product: 'Living Promise',
-      monthlyPremium: '54.20',
-      coverageAmount: '10000',
     };
 
-    const csvContent = hdrs.join(',') + '\n' + hdrs.map(h => sample[h] ?? '').join(',');
+    const keys = vertical === 'B2B' ? b2bHeaders : BUYER_TEMPLATE_KEYS[vertical];
+    const hdrs = keys.map(key => (vertical === 'B2B' ? key : BUYER_FIELD[key] || key));
+
+    const csvContent = hdrs.join(',') + '\n' + keys.map(key => sample[key] ?? '').join(',');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `crm_import_template_${vertical.toLowerCase()}.csv`);
+    const name =
+      vertical === 'B2B'
+        ? 'b2b_import_template.csv'
+        : `ameriquote_${vertical.toLowerCase()}_lead_template.csv`;
+    link.setAttribute('download', name);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -852,9 +813,13 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
           const clean = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
           const initialMappings: Record<string, string> = {};
           activeTargetFields.forEach(target => {
+            const buyerName = BUYER_FIELD[target.key];
             const candidates = new Set([
               clean(target.key),
               clean(target.label),
+              // A file built from our template — or handed over by the buyer —
+              // uses their column names, so those must map with no clicks.
+              ...(buyerName ? [clean(buyerName)] : []),
               ...(target.aliases || []).map(clean),
             ]);
 
@@ -1128,9 +1093,13 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
                 <div className="flex items-start gap-3">
                   <FileText className="h-5 w-5 text-emerald-400 mt-0.5" />
                   <div>
-                    <h3 className="text-sm font-medium">Download Import Template</h3>
+                    <h3 className="text-sm font-medium">
+                      {vertical === 'B2B' ? 'Download Import Template' : 'Download Buyer Template'}
+                    </h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Start with a pre-formatted CSV template tailored for {vertical}
+                      {vertical === 'B2B'
+                        ? 'Pre-formatted CSV template for B2B prospects'
+                        : `Columns are Ameriquote's ${vertical} (TYPE=${vertical === 'FE' ? '19' : '31'}) field names — send this to your lead vendor`}
                     </p>
                   </div>
                 </div>
@@ -1236,15 +1205,21 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
           {step === 2 && (
             <div className="space-y-4">
               <div className="flex items-center justify-between border-b border-white/5 pb-3">
-                <span className="text-xs font-medium text-slate-400">
-                  Map CSV headers to CRM Database fields
-                </span>
+                <div>
+                  <span className="text-xs font-medium text-slate-400">Map your CSV columns</span>
+                  {vertical !== 'B2B' && (
+                    <span className="mt-0.5 block text-[10px] text-slate-500">
+                      The first {buyerFieldCount} are posted to the buyer — the blue tag is the
+                      field name they receive. Fields below those are stored in the CRM only.
+                    </span>
+                  )}
+                </div>
                 <span className="text-[11px] bg-slate-900 border border-white/5 text-slate-400 px-2 py-0.5 rounded">
                   File: {fileName} · Rows: {parsedRows.length}
                 </span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                {activeTargetFields.map(field => {
+                {orderedTargetFields.map(field => {
                   const mappedIdx = mappings[field.key];
                   const isMapped = mappedIdx !== undefined;
 
@@ -1262,6 +1237,14 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
                             {field.required && (
                               <span className="text-[9px] font-bold text-red-400 uppercase tracking-widest border border-red-500/20 bg-red-500/10 px-1 rounded">
                                 Required
+                              </span>
+                            )}
+                            {BUYER_FIELD[field.key] && (
+                              <span
+                                className="text-[9px] font-mono text-sky-300/80 border border-sky-500/20 bg-sky-500/10 px-1 rounded"
+                                title="Field name the buyer receives"
+                              >
+                                → {BUYER_FIELD[field.key]}
                               </span>
                             )}
                           </div>
@@ -1312,9 +1295,9 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
                     <thead>
                       <tr className="border-b border-white/5 bg-slate-900/60 font-semibold uppercase text-slate-500">
                         <th className="px-4 py-2.5 text-left">Record</th>
-                        {activeTargetFields.map(f => (
+                        {previewFields.map(f => (
                           <th key={f.key} className="px-4 py-2.5 text-left">
-                            {f.label}
+                            {BUYER_FIELD[f.key] || f.label}
                           </th>
                         ))}
                       </tr>
@@ -1325,7 +1308,7 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
                           <td className="px-4 py-3 whitespace-nowrap font-medium text-slate-500">
                             Row {idx + 2}
                           </td>
-                          {activeTargetFields.map(f => (
+                          {previewFields.map(f => (
                             <td key={f.key} className="px-4 py-3 whitespace-nowrap">
                               {getMappedValue(row, f.key)}
                             </td>

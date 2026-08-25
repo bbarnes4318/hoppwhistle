@@ -15,33 +15,70 @@ Importing and selling are deliberately separate steps.
 2. **Delivery** is an explicit action. It posts the mapped payload to the
    Ameriquote/Boberdoo gateway and records what came back.
 
-So a completed import does *not* mean the buyer has the leads. If you are
+So a completed import does _not_ mean the buyer has the leads. If you are
 looking at "1,000 valid ingested" and wondering where the money is, the leads
 are sitting on `HOLD` waiting for step 2.
 
-## Column mapping
+## The template is in the buyer's vocabulary
 
-The importer maps CSV headers to lead fields. These are the fields that matter
-for a buyer post; headers are matched case- and punctuation-insensitively, and
-the listed aliases auto-map too.
+**Download Buyer Template** on the import screen produces a CSV whose columns
+are Ameriquote's own field names, taken from `api-fe-fields.txt` (TYPE=19) and
+`api-aca-fields.txt` (TYPE=31). Required columns come first. Hand this file to
+your lead vendor as-is.
 
-| CSV column | Lead field | Posted as | Buyer requires |
-| --- | --- | --- | --- |
-| `Date_Posted` | `datePosted` | `Origin_Lead_Date` | No — but see below |
-| `First_Name` | `firstName` | `FirstName` | Yes |
-| `Last_Name` | `lastName` | `LastName` | Yes |
-| `Address` | `address` | `Address` | Yes |
-| `City` | `city` | `City` | Yes |
-| `State` | `state` | `State` | Yes |
-| `Zip` | `zipCode` (alias `zip`) | `ZipCode` | Yes |
-| `Phone` | `phone` | `Primary_Phone` | Yes |
-| `Email` | `email` | `Email` | Yes |
-| `DOB` | `birthDate` (alias `dob`) | `Birth_Date` | Yes |
-| `IP_Address` | `ipAddress` | `IP_Address` | Yes |
-| `Trusted_Form_URL` | `trustedFormUrl` | `Trusted_Form_URL` | No — but see below |
+Final Expense — `ameriquote_fe_lead_template.csv`:
 
-`Age` is required by the buyer and is not a column in most vendor files. It is
-computed from `DOB` during validation, so a good `DOB` covers it.
+```
+FirstName,LastName,Primary_Phone,Email,Address,City,State,ZipCode,Birth_Date,
+Gender,IP_Address,Landing_Page,Trusted_Form_URL,leadid_token,consent_language,
+Origin_Lead_Date,Address_2,County,Smoker,SubSource
+```
+
+ACA — `ameriquote_aca_lead_template.csv`:
+
+```
+FirstName,LastName,Primary_Phone,Email,Address,City,State,ZipCode,Birth_Date,
+Height_Feet,Height_Inches,Weight,IP_Address,Landing_Page,Trusted_Form_URL,
+leadid_token,consent_language,Origin_Lead_Date,Address_2,County,Gender,Smoker,
+Household_Income,People_In_Household,SubSource
+```
+
+Internal CRM fields — beneficiaries, banking, SSN, medications, follow-up
+dates — are deliberately **not** in these templates. None of them are ever
+posted to the buyer, and a template that asks a lead vendor for a bank routing
+number is a liability, not a convenience. Those fields still exist on the lead
+and can still be mapped during import; they just sit below the buyer's fields
+in the mapping step, where the blue `→ Field_Name` tag marks everything that
+actually gets posted.
+
+`Age` is intentionally absent. The buyer requires it, but it is derived from
+`Birth_Date` on ingest — a hand-filled Age column can only ever disagree with
+the DOB.
+
+`buyer-fields.ts` holds this mapping, and `__tests__/buyer-template.test.ts`
+asserts it against the spec files on every run, so the template cannot drift
+back toward our internal names.
+
+### If your vendor file already exists
+
+Headers are matched case- and punctuation-insensitively, and both the buyer's
+names and common vendor spellings auto-map. A typical aged-lead file needs no
+manual mapping:
+
+| Vendor column      | Posted as          | Buyer requires     |
+| ------------------ | ------------------ | ------------------ |
+| `Date_Posted`      | `Origin_Lead_Date` | No — but see below |
+| `First_Name`       | `FirstName`        | Yes                |
+| `Last_Name`        | `LastName`         | Yes                |
+| `Address`          | `Address`          | Yes                |
+| `City`             | `City`             | Yes                |
+| `State`            | `State`            | Yes                |
+| `Zip`              | `ZipCode`          | Yes                |
+| `Phone`            | `Primary_Phone`    | Yes                |
+| `Email`            | `Email`            | Yes                |
+| `DOB`              | `Birth_Date`       | Yes                |
+| `IP_Address`       | `IP_Address`       | Yes                |
+| `Trusted_Form_URL` | `Trusted_Form_URL` | No — but see below |
 
 ### What that column list does not cover
 
@@ -133,12 +170,12 @@ is no "send everything held" call, by design.
 
 Per submission, on the lead's detail sheet and in the send response:
 
-| Outcome | Meaning |
-| --- | --- |
-| `MATCHED` | Bought. `ameriquoteLeadId` and `ameriquotePrice` are recorded. |
-| `UNMATCHED` | Reached the buyer, no buyer wanted it. Not an error. |
-| `ERROR` | The post failed — see `ameriquoteErrorMessage`. Re-sendable. |
-| `NOT_READY` | Held back locally; never left the building. |
+| Outcome     | Meaning                                                        |
+| ----------- | -------------------------------------------------------------- |
+| `MATCHED`   | Bought. `ameriquoteLeadId` and `ameriquotePrice` are recorded. |
+| `UNMATCHED` | Reached the buyer, no buyer wanted it. Not an error.           |
+| `ERROR`     | The post failed — see `ameriquoteErrorMessage`. Re-sendable.   |
+| `NOT_READY` | Held back locally; never left the building.                    |
 
 Every attempt writes an `InsuranceLeadSubmission` row with the raw inbound
 payload, the normalized payload, the mapped outbound payload (API key redacted),
