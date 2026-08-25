@@ -285,6 +285,10 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
             ...lead,
             customFields,
             ...(targetListId ? { listId: targetListId } : {}),
+            // SubSource is how a matched lead is traced back to the batch it
+            // came from. No CSV carries a column for it, so it defaults to the
+            // list name — a mapped Source column still wins.
+            ...(lead.source || !listRecord ? {} : { source: listRecord.name }),
           };
           const result = await ingestLead(tenantId, vertical as 'ACA' | 'FE' | 'B2B', payload);
           results.push({

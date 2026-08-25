@@ -4,8 +4,9 @@ services:
       # External buyer/cell-phone routing must use the same full FracTEL
       # gateway chain as normal outbound PSTN calls.
       INBOUND_EXTERNAL_GATEWAYS: ${INBOUND_EXTERNAL_GATEWAYS:-fractel1,fractel2,fractel3,fractel4,fractel5,fractel6}
-      # TEST is the safe default and adds Test_Lead=1 to Ameriquote payloads.
-      INSURANCE_LEAD_MODE: ${INSURANCE_LEAD_MODE:-test}
+      # LIVE unless explicitly overridden. TEST stamps Test_Lead=1 and is never
+      # bought, so defaulting to it silently discards a batch.
+      INSURANCE_LEAD_MODE: ${INSURANCE_LEAD_MODE:-live}
       # Required. Kept in /opt/hopwhistle/.env and never committed.
       AMERIQUOTE_API_KEY: ${AMERIQUOTE_API_KEY:?AMERIQUOTE_API_KEY must be set in the Hopwhistle env file}
       AMERIQUOTE_ACA_SRC: ${AMERIQUOTE_ACA_SRC:-PVNACA_aged}
