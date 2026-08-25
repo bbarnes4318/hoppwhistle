@@ -82,3 +82,35 @@ describe('datePosted through the pipeline', () => {
     expect(redactedPayload.Key).toBe('[REDACTED]');
   });
 });
+
+describe('Landing_Page', () => {
+  beforeEach(() => {
+    process.env.AMERIQUOTE_API_KEY = 'test-key';
+  });
+
+  // Landing_Page is Post Required and is the same page for every lead we sell,
+  // so no CSV carries a column for it. Pinned here because a silent change to
+  // the default would misattribute every future post.
+  const OPT_IN_PAGE = 'https://quotes.nationallifecoverage.org';
+
+  it('is supplied on every post without the lead carrying one', () => {
+    const { fullPayload } = mapToAmeriquote('FE', { phone: '3125556085' });
+
+    expect(fullPayload.Landing_Page).toBe(OPT_IN_PAGE);
+  });
+
+  it('is the same for ACA', () => {
+    const { fullPayload } = mapToAmeriquote('ACA', { phone: '3125556085' });
+
+    expect(fullPayload.Landing_Page).toBe(OPT_IN_PAGE);
+  });
+
+  it('yields to a landing page the lead actually carries', () => {
+    const { fullPayload } = mapToAmeriquote('FE', {
+      phone: '3125556085',
+      landingPage: 'https://other.example.com/form',
+    });
+
+    expect(fullPayload.Landing_Page).toBe('https://other.example.com/form');
+  });
+});

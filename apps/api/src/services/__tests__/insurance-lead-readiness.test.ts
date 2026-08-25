@@ -1,10 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  checkDeliveryReadiness,
-  PLACEHOLDER_IP,
-  PLACEHOLDER_LANDING_PAGE,
-} from '../insurance-lead-readiness.js';
+import { checkDeliveryReadiness, PLACEHOLDER_IP } from '../insurance-lead-readiness.js';
 
 vi.mock('../../lib/logger.js', () => ({
   createServiceLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
@@ -175,26 +171,13 @@ describe('checkDeliveryReadiness', () => {
     expect(report.warnings.map(w => w.outboundField)).toEqual(['Origin_Lead_Date']);
   });
 
-  it('warns when the landing page falls back to our own domain', () => {
+  it('says nothing about a lead with no landing page — the mapper supplies ours', () => {
     const lead = completeCommonLead();
     delete lead.landingPage;
 
-    const missing = checkDeliveryReadiness('FE', { ...lead, gender: 'Female' });
-    expect(missing.ready).toBe(true);
-    expect(missing.warnings.map(w => w.outboundField)).toEqual(['Landing_Page']);
+    const report = checkDeliveryReadiness('FE', { ...lead, gender: 'Female' });
 
-    // The substituted default reads the same as having supplied it by hand.
-    const substituted = checkDeliveryReadiness('FE', {
-      ...lead,
-      gender: 'Female',
-      landingPage: PLACEHOLDER_LANDING_PAGE,
-    });
-    expect(substituted.warnings.map(w => w.outboundField)).toEqual(['Landing_Page']);
-  });
-
-  it("accepts the vendor's own landing page without complaint", () => {
-    const report = checkDeliveryReadiness('FE', { ...completeCommonLead(), gender: 'Female' });
-
+    expect(report.ready).toBe(true);
     expect(report.warnings).toEqual([]);
   });
   it('reports B2B as undeliverable — it has no Ameriquote mapping', () => {
@@ -206,11 +189,9 @@ describe('checkDeliveryReadiness', () => {
 });
 
 describe('placeholder constants', () => {
-  it('stay in step with the values the mapper actually substitutes', async () => {
-    const { DEFAULTS } = await import('../insurance-lead-config.js');
-
-    expect(PLACEHOLDER_LANDING_PAGE).toBe(DEFAULTS.LANDING_PAGE);
-    // The mapper inlines the IP fallback rather than reading it from config.
+  it('stays in step with the fallback the mapper actually substitutes', () => {
+    // The mapper inlines this rather than reading it from config, so the two
+    // copies can only be kept honest by asserting on it.
     expect(PLACEHOLDER_IP).toBe('127.0.0.1');
   });
 });
