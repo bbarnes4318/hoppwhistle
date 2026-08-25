@@ -42,6 +42,12 @@ interface RequiredField {
   outboundField: string;
   /** Extra check beyond "is non-empty". */
   validate?: (value: string) => string | null;
+  /**
+   * A second field that satisfies this requirement on its own. Used where two
+   * different artifacts prove the same thing — TrustedForm or LeadiD both
+   * evidence consent, and a lead needs one of them, not both.
+   */
+  alternative?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -89,8 +95,34 @@ const COMMON_REQUIRED: RequiredField[] = [
   {
     field: 'ipAddress',
     outboundField: 'IP_Address',
+    validate: v => {
+      if (v === PLACEHOLDER_IP) {
+        // The mapper substitutes loopback when a lead has no IP at all. It
+        // satisfies the buyer's format check while proving nothing about where
+        // the consumer actually opted in, so it is not a real value.
+        return "is the loopback placeholder, not the consumer's captured IP";
+      }
+      return IPV4_PATTERN.test(v) || IPV6_PATTERN.test(v) ? null : 'must be a valid IP address';
+    },
+  },
+];
+
+/**
+ * Consent proof. The buyer's spec marks these `Post Required: NO`, which only
+ * means Boberdoo will not reject a post that omits them — it says nothing
+ * about whether we may sell a lead with no evidence the consumer consented.
+ * That is our rule, and it is stricter than theirs, so it lives here as a
+ * blocker rather than a warning.
+ *
+ * Either a TrustedForm certificate or a LeadiD token satisfies it.
+ */
+const CONSENT_PROOF: RequiredField[] = [
+  {
+    field: 'trustedFormUrl',
+    outboundField: 'Trusted_Form_URL',
+    alternative: 'leadidToken',
     validate: v =>
-      IPV4_PATTERN.test(v) || IPV6_PATTERN.test(v) ? null : 'must be a valid IP address',
+      /^https?:\/\//i.test(v) ? null : 'must be a certificate URL starting with http(s)://',
   },
 ];
 
@@ -153,7 +185,11 @@ export function checkDeliveryReadiness(
     };
   }
 
-  const required = [...COMMON_REQUIRED, ...(vertical === 'FE' ? FE_REQUIRED : ACA_REQUIRED)];
+  const required = [
+    ...COMMON_REQUIRED,
+    ...(vertical === 'FE' ? FE_REQUIRED : ACA_REQUIRED),
+    ...CONSENT_PROOF,
+  ];
 
   const blockers: ReadinessIssue[] = [];
 
@@ -161,10 +197,15 @@ export function checkDeliveryReadiness(
     const value = readString(normalized, spec.field);
 
     if (!value) {
+      // An alternative artifact satisfies the requirement outright.
+      if (spec.alternative && readString(normalized, spec.alternative)) continue;
+
       blockers.push({
         field: spec.field,
         outboundField: spec.outboundField,
-        message: `${spec.outboundField} is required by the buyer but the lead has no value`,
+        message: spec.alternative
+          ? `${spec.outboundField} is missing and so is ${spec.alternative} — the lead has no consent proof`
+          : `${spec.outboundField} is required by the buyer but the lead has no value`,
       });
       continue;
     }
@@ -183,26 +224,26 @@ export function checkDeliveryReadiness(
 }
 
 /**
- * Values that pass the buyer's format checks but cost money or compliance
- * cover when they are wrong. These never block a send.
+ * Values that pass every hard check but still cost money when they are wrong.
+ * These never block a send.
+ *
+ * Consent proof and a real IP used to live here. They are blockers now — a
+ * warning is something you can decide to ignore a thousand times in a row,
+ * which is not the right shape for "this lead has no evidence of consent".
  */
 function collectWarnings(normalized: Record<string, unknown>): ReadinessIssue[] {
   const warnings: ReadinessIssue[] = [];
 
-  if (readString(normalized, 'ipAddress') === PLACEHOLDER_IP) {
+  if (
+    !readString(normalized, 'trustedFormUrl') &&
+    readString(normalized, 'leadidToken') &&
+    !readString(normalized, 'consentLanguage')
+  ) {
     warnings.push({
-      field: 'ipAddress',
-      outboundField: 'IP_Address',
+      field: 'consentLanguage',
+      outboundField: 'consent_language',
       message:
-        "IP is the loopback placeholder, not the consumer's real IP — buyers commonly scrub these",
-    });
-  }
-
-  if (!readString(normalized, 'trustedFormUrl') && !readString(normalized, 'leadidToken')) {
-    warnings.push({
-      field: 'trustedFormUrl',
-      outboundField: 'Trusted_Form_URL',
-      message: 'No TrustedForm certificate or LeadiD token — the lead ships with no consent proof',
+        'LeadiD token but no TrustedForm certificate and no consent language — thinner proof than a cert',
     });
   }
 

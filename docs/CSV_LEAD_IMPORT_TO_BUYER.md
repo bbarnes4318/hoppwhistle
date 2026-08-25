@@ -65,20 +65,42 @@ Headers are matched case- and punctuation-insensitively, and both the buyer's
 names and common vendor spellings auto-map. A typical aged-lead file needs no
 manual mapping:
 
-| Vendor column      | Posted as          | Buyer requires     |
-| ------------------ | ------------------ | ------------------ |
-| `Date_Posted`      | `Origin_Lead_Date` | No — but see below |
-| `First_Name`       | `FirstName`        | Yes                |
-| `Last_Name`        | `LastName`         | Yes                |
-| `Address`          | `Address`          | Yes                |
-| `City`             | `City`             | Yes                |
-| `State`            | `State`            | Yes                |
-| `Zip`              | `ZipCode`          | Yes                |
-| `Phone`            | `Primary_Phone`    | Yes                |
-| `Email`            | `Email`            | Yes                |
-| `DOB`              | `Birth_Date`       | Yes                |
-| `IP_Address`       | `IP_Address`       | Yes                |
-| `Trusted_Form_URL` | `Trusted_Form_URL` | No — but see below |
+Every one of these is posted on every send. The last column is whether a lead
+is allowed to go out **without** it.
+
+| Vendor column      | Posted as          | Required to send       |
+| ------------------ | ------------------ | ---------------------- |
+| `First_Name`       | `FirstName`        | Yes — buyer            |
+| `Last_Name`        | `LastName`         | Yes — buyer            |
+| `Address`          | `Address`          | Yes — buyer            |
+| `City`             | `City`             | Yes — buyer            |
+| `State`            | `State`            | Yes — buyer            |
+| `Zip`              | `ZipCode`          | Yes — buyer            |
+| `Phone`            | `Primary_Phone`    | Yes — buyer            |
+| `Email`            | `Email`            | Yes — buyer            |
+| `DOB`              | `Birth_Date`       | Yes — buyer            |
+| `IP_Address`       | `IP_Address`       | Yes — buyer, real IP   |
+| `Trusted_Form_URL` | `Trusted_Form_URL` | Yes — our rule         |
+| `Date_Posted`      | `Origin_Lead_Date` | No — warned, see below |
+
+### Consent proof and IP are hard requirements here
+
+Ameriquote's spec marks `Trusted_Form_URL` as `Post Required: NO`. That means
+only that **Boberdoo will not reject a post that omits it** — it is not
+permission to sell a lead with no evidence the consumer consented. Readiness
+treats it as a blocker regardless of what their gate enforces:
+
+- **No `Trusted_Form_URL` and no `leadid_token` → blocked.** Either artifact
+  satisfies it; a lead with neither never goes out. A `Trusted_Form_URL` that
+  is not an `http(s)://` certificate URL (`n/a`, `none`, a bare token) is
+  blocked the same way.
+- **`IP_Address` of `127.0.0.1` → blocked.** That is the placeholder the mapper
+  substitutes when a lead has no IP at all. It passes the buyer's format check
+  while proving nothing about where the opt-in happened, so it does not count
+  as a value.
+
+`force: true` on the send endpoint overrides both, deliberately and per call.
+It is not a default anyone should reach for.
 
 ### What that column list does not cover
 
@@ -93,15 +115,12 @@ amount of mapping conjures them:
 Get the vendor to include the column, or the batch is not sellable as-is. The
 preflight below tells you the exact count before you spend a post on it.
 
-### Fields that are not required but are worth having
+### What only warns
 
-- `Trusted_Form_URL` (or `leadidToken`) is the consent proof. A lead posted
-  without either still matches, but a TCPA complaint has nothing behind it.
-- `Date_Posted` becomes `Origin_Lead_Date`. Aged leads sent without it can be
-  priced — and later disputed — as fresh.
-- `IP_Address` falls back to `127.0.0.1` when absent. That is a valid-looking
-  value that buyers routinely scrub, so a missing IP is worse than it looks.
-  Preflight flags it as a warning rather than letting it pass silently.
+- `Date_Posted` → `Origin_Lead_Date`. Aged leads sent without it can be priced —
+  and later disputed — as fresh. Warned, not blocked.
+- A `leadid_token` with no TrustedForm certificate and no `consent_language`.
+  It clears the consent requirement, but it is thinner proof than a cert.
 
 ## Step by step
 

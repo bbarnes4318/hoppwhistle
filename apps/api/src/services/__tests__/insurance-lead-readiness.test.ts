@@ -73,6 +73,7 @@ describe('checkDeliveryReadiness', () => {
       'Birth_Date',
       'Age',
       'IP_Address',
+      'Trusted_Form_URL',
     ]);
   });
 
@@ -110,29 +111,25 @@ describe('checkDeliveryReadiness', () => {
     ]);
   });
 
-  it('warns on the loopback placeholder IP without blocking the send', () => {
+  it('blocks the loopback placeholder IP — it proves nothing about the opt-in', () => {
     const report = checkDeliveryReadiness('FE', {
       ...completeCommonLead(),
       gender: 'Female',
       ipAddress: PLACEHOLDER_IP,
     });
 
-    expect(report.ready).toBe(true);
-    expect(report.warnings.map(w => w.outboundField)).toContain('IP_Address');
+    expect(report.ready).toBe(false);
+    expect(report.blockers.map(b => b.outboundField)).toEqual(['IP_Address']);
   });
 
-  it('warns when a lead ships with no consent proof and no original date', () => {
+  it('blocks a lead carrying no consent proof at all', () => {
     const lead = completeCommonLead();
     delete lead.trustedFormUrl;
-    delete lead.datePosted;
 
     const report = checkDeliveryReadiness('FE', { ...lead, gender: 'Female' });
 
-    expect(report.ready).toBe(true);
-    expect(report.warnings.map(w => w.outboundField)).toEqual([
-      'Trusted_Form_URL',
-      'Origin_Lead_Date',
-    ]);
+    expect(report.ready).toBe(false);
+    expect(report.blockers.map(b => b.outboundField)).toEqual(['Trusted_Form_URL']);
   });
 
   it('accepts a LeadiD token as consent proof in place of TrustedForm', () => {
@@ -145,7 +142,28 @@ describe('checkDeliveryReadiness', () => {
       leadidToken: 'abc-123',
     });
 
-    expect(report.warnings.map(w => w.outboundField)).not.toContain('Trusted_Form_URL');
+    expect(report.ready).toBe(true);
+    expect(report.blockers).toEqual([]);
+  });
+
+  it('blocks a TrustedForm value that is not a certificate URL', () => {
+    const report = checkDeliveryReadiness('FE', {
+      ...completeCommonLead(),
+      gender: 'Female',
+      trustedFormUrl: 'n/a',
+    });
+
+    expect(report.blockers.map(b => b.outboundField)).toEqual(['Trusted_Form_URL']);
+  });
+
+  it('still only warns about a missing original lead date', () => {
+    const lead = completeCommonLead();
+    delete lead.datePosted;
+
+    const report = checkDeliveryReadiness('FE', { ...lead, gender: 'Female' });
+
+    expect(report.ready).toBe(true);
+    expect(report.warnings.map(w => w.outboundField)).toEqual(['Origin_Lead_Date']);
   });
 
   it('reports B2B as undeliverable — it has no Ameriquote mapping', () => {
