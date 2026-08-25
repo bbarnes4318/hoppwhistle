@@ -11,21 +11,43 @@ import {
   Sparkles,
   X,
 } from 'lucide-react';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 
-import { apiClient } from '@/lib/api';
+import { apiClient, type ApiResponse } from '@/lib/api';
 
 interface CsvImportDialogProps {
   onClose: () => void;
   onSuccess: () => void;
 }
 
+/** Rows per import request — small enough that a 1,000-lead file can't time out. */
+const IMPORT_BATCH_SIZE = 100;
+
+interface ImportResultDetail {
+  success: boolean;
+  name: string;
+  phone: string;
+  errors: Array<{ path: string; message: string }> | null;
+}
+
+interface ImportResult {
+  total: number;
+  successCount: number;
+  failCount: number;
+  details: ImportResultDetail[];
+}
+
 interface TargetField {
   key: string;
   label: string;
   required: boolean;
-  vertical?: 'ACA' | 'FE';
+  vertical?: 'ACA' | 'FE' | 'B2B';
   description: string;
+  /**
+   * Extra header spellings to auto-map. Vendors ship "DOB", "Zip", and
+   * "Date_Posted" far more often than they ship our camelCase field names.
+   */
+  aliases?: string[];
 }
 
 const TARGET_FIELDS: TargetField[] = [
@@ -41,12 +63,61 @@ const TARGET_FIELDS: TargetField[] = [
   { key: 'address', label: 'Street Address', required: false, description: 'Home street address' },
   { key: 'city', label: 'City', required: false, description: 'City name' },
   { key: 'state', label: 'State', required: false, description: '2-letter state code' },
-  { key: 'zipCode', label: 'Zip Code', required: false, description: '5-digit zip code' },
+  {
+    key: 'zipCode',
+    label: 'Zip Code',
+    required: false,
+    description: '5-digit zip code',
+    aliases: ['zip', 'postalCode'],
+  },
   {
     key: 'birthDate',
     label: 'Birth Date',
     required: false,
     description: 'Birthdate (MM/DD/YYYY or YYYY-MM-DD)',
+    aliases: ['dob', 'dateOfBirth'],
+  },
+
+  // Compliance & provenance — the buyer requires IP_Address on every post,
+  // and TrustedForm is the consent proof that survives a TCPA complaint.
+  {
+    key: 'ipAddress',
+    label: 'IP Address',
+    required: false,
+    description: 'Consumer IP captured at opt-in — required by the buyer on every post',
+  },
+  {
+    key: 'trustedFormUrl',
+    label: 'TrustedForm URL',
+    required: false,
+    description: 'TrustedForm certificate URL',
+    aliases: ['trustedFormCertUrl', 'trustedForm'],
+  },
+  {
+    key: 'leadidToken',
+    label: 'LeadiD Token',
+    required: false,
+    description: 'Jornaya LeadiD token',
+    aliases: ['leadId', 'jornayaLeadId'],
+  },
+  {
+    key: 'consentLanguage',
+    label: 'Consent Language',
+    required: false,
+    description: 'Exact TCPA consent text the consumer agreed to',
+  },
+  {
+    key: 'datePosted',
+    label: 'Date Posted',
+    required: false,
+    description: 'Date the lead was originally generated — sent as Origin_Lead_Date',
+    aliases: ['originLeadDate', 'leadDate', 'entryDate'],
+  },
+  {
+    key: 'landingPage',
+    label: 'Landing Page',
+    required: false,
+    description: 'Site where the lead form was completed',
   },
 
   // Common Optional
@@ -486,11 +557,41 @@ const TARGET_FIELDS: TargetField[] = [
     vertical: 'FE',
     description: 'Savings vs Current',
   },
-  { key: 'company', label: 'Company', required: false, vertical: 'B2B', description: 'Company name' },
-  { key: 'repName', label: 'Rep Name', required: false, vertical: 'B2B', description: 'Representative name' },
-  { key: 'industry', label: 'Industry', required: false, vertical: 'B2B', description: 'Industry type' },
-  { key: 'revenue', label: 'Revenue', required: false, vertical: 'B2B', description: 'Annual revenue' },
-  { key: 'yearEstablished', label: 'Year Established', required: false, vertical: 'B2B', description: 'Year established' },
+  {
+    key: 'company',
+    label: 'Company',
+    required: false,
+    vertical: 'B2B',
+    description: 'Company name',
+  },
+  {
+    key: 'repName',
+    label: 'Rep Name',
+    required: false,
+    vertical: 'B2B',
+    description: 'Representative name',
+  },
+  {
+    key: 'industry',
+    label: 'Industry',
+    required: false,
+    vertical: 'B2B',
+    description: 'Industry type',
+  },
+  {
+    key: 'revenue',
+    label: 'Revenue',
+    required: false,
+    vertical: 'B2B',
+    description: 'Annual revenue',
+  },
+  {
+    key: 'yearEstablished',
+    label: 'Year Established',
+    required: false,
+    vertical: 'B2B',
+    description: 'Year established',
+  },
 ];
 
 function parseCSV(text: string): string[][] {
@@ -565,23 +666,27 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
   const [headers, setHeaders] = useState<string[]>([]);
   const [mappings, setMappings] = useState<Record<string, string>>({}); // TargetKey -> CSV Header Index (string representation)
   const [importing, setImporting] = useState<boolean>(false);
-  const [importResult, setImportResult] = useState<{
-    total: number;
-    successCount: number;
-    failCount: number;
-    details: Array<{
-      success: boolean;
-      name: string;
-      phone: string;
-      errors: Array<{ path: string; message: string }> | null;
-    }>;
-  } | null>(null);
+  const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(
+    null
+  );
+  const [importedListId, setImportedListId] = useState<string | null>(null);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const activeTargetFields = TARGET_FIELDS.filter(f => {
     if (vertical === 'B2B') {
-      const b2bFields = ['company', 'repName', 'phone', 'email', 'city', 'state', 'industry', 'revenue', 'yearEstablished'];
+      const b2bFields = [
+        'company',
+        'repName',
+        'phone',
+        'email',
+        'city',
+        'state',
+        'industry',
+        'revenue',
+        'yearEstablished',
+      ];
       return b2bFields.includes(f.key) && (f.vertical === 'B2B' || !f.vertical);
     }
     if (f.vertical === 'B2B') return false;
@@ -600,6 +705,12 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
       'state',
       'zipCode',
       'birthDate',
+      // Buyer-required / compliance columns. Leaving these out of the template
+      // is how a batch ends up posting with a loopback IP and no consent proof.
+      'ipAddress',
+      'trustedFormUrl',
+      'leadidToken',
+      'datePosted',
       'notes',
       'priority',
       'source',
@@ -664,21 +775,49 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
       vertical === 'B2B'
         ? b2bHeaders
         : vertical === 'ACA'
-        ? [...commonHeaders, ...acaHeaders]
-        : [...commonHeaders, ...feHeaders];
+          ? [...commonHeaders, ...acaHeaders]
+          : [...commonHeaders, ...feHeaders];
 
-    let templateData = '';
-    if (vertical === 'B2B') {
-      templateData = 'Acme Corp,John Smith,1234567890,john@acme.com,Austin,TX,Software,10000000,1995';
-    } else if (vertical === 'ACA') {
-      templateData =
-        'John,Doe,1234567890,john.doe@example.com,123 Main St,Austin,TX,78701,1980-05-15,Needs callback next week,HIGH,Facebook,NEW,2026-06-28T09:00:00Z,5,10,175,No,45000,2';
-    } else {
-      templateData =
-        'Jane,Doe,0987654321,jane.doe@example.com,456 Oak Rd,Miami,FL,33101,1965-11-20,Interested in Whole Life,NORMAL,Google,CONTACTED,2026-06-29T14:30:00Z,Female,Yes,Mutual of Omaha,Living Promise,54.20,10000';
-    }
+    // Built by header name rather than as one positional string: the previous
+    // hard-coded rows had silently drifted out of alignment with the columns,
+    // which is a very expensive thing to copy into a real import.
+    const sample: Record<string, string> = {
+      firstName: 'Jane',
+      lastName: 'Doe',
+      phone: '3125556085',
+      email: 'jane.doe@example.com',
+      address: '123 Main St',
+      city: 'Chicago',
+      state: 'IL',
+      zipCode: '60610',
+      birthDate: '09/16/1980',
+      ipAddress: '75.2.92.149',
+      trustedFormUrl: 'https://cert.trustedform.com/example',
+      leadidToken: '',
+      datePosted: '2026-07-14 09:12:00',
+      notes: 'Interested in coverage',
+      priority: 'NORMAL',
+      source: 'Facebook',
+      leadStage: 'NEW',
+      company: 'Acme Corp',
+      repName: 'John Smith',
+      industry: 'Software',
+      revenue: '10000000',
+      yearEstablished: '1995',
+      heightFeet: '5',
+      heightInches: '10',
+      weight: '175',
+      smoker: 'No',
+      householdIncome: '45000',
+      peopleInHousehold: '2',
+      gender: 'Female',
+      carrier: 'Mutual of Omaha',
+      product: 'Living Promise',
+      monthlyPremium: '54.20',
+      coverageAmount: '10000',
+    };
 
-    const csvContent = hdrs.join(',') + '\n' + templateData;
+    const csvContent = hdrs.join(',') + '\n' + hdrs.map(h => sample[h] ?? '').join(',');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -710,15 +849,16 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
           setParsedRows(rows.slice(1));
 
           // Auto-mapping logic based on name matches
+          const clean = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
           const initialMappings: Record<string, string> = {};
           activeTargetFields.forEach(target => {
-            const targetNameClean = target.key.toLowerCase().replace(/[^a-z0-9]/g, '');
-            const targetLabelClean = target.label.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const candidates = new Set([
+              clean(target.key),
+              clean(target.label),
+              ...(target.aliases || []).map(clean),
+            ]);
 
-            const matchIndex = csvHeaders.findIndex(h => {
-              const hClean = h.toLowerCase().replace(/[^a-z0-9]/g, '');
-              return hClean === targetNameClean || hClean === targetLabelClean;
-            });
+            const matchIndex = csvHeaders.findIndex(h => candidates.has(clean(h)));
 
             if (matchIndex !== -1) {
               initialMappings[target.key] = String(matchIndex);
@@ -817,28 +957,54 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
 
     if (isCreateNewList && (!newListName || !newListName.trim())) {
       alert('Please enter a name for the new lead list.');
+      setImporting(false);
       return;
     }
 
     try {
-      const response = await apiClient.post('/api/v1/insurance-leads/import', {
-        vertical,
-        leads: payloadLeads,
-        listId: isCreateNewList ? undefined : selectedListId,
-        listName: isCreateNewList ? newListName : undefined,
-      });
-
-      if (response.error) {
-        throw new Error(response.error.message || 'Import API request failed');
+      // The API ingests each lead with several round trips, so a thousand-row
+      // file in one request times out. Send it in chunks and stitch the
+      // per-batch summaries back into one result.
+      const batches: Array<Record<string, unknown>[]> = [];
+      for (let i = 0; i < payloadLeads.length; i += IMPORT_BATCH_SIZE) {
+        batches.push(payloadLeads.slice(i, i + IMPORT_BATCH_SIZE));
       }
 
-      const data = response.data as any;
-      setImportResult({
-        total: data.total ?? payloadLeads.length,
-        successCount: data.successCount ?? 0,
-        failCount: data.failCount ?? 0,
-        details: data.details ?? [],
-      });
+      const combined = {
+        total: 0,
+        successCount: 0,
+        failCount: 0,
+        details: [] as ImportResultDetail[],
+      };
+      // The first batch resolves (or creates) the list; later batches pin to
+      // its id so a retried name lookup can't fan out into duplicate lists.
+      let resolvedListId = isCreateNewList ? undefined : selectedListId || undefined;
+
+      for (const [index, batch] of batches.entries()) {
+        setImportProgress({ done: index * IMPORT_BATCH_SIZE, total: payloadLeads.length });
+
+        const response = await apiClient.post('/api/v1/insurance-leads/import', {
+          vertical,
+          leads: batch,
+          listId: resolvedListId,
+          listName: resolvedListId ? undefined : newListName,
+        });
+
+        if (response.error) {
+          throw new Error(response.error.message || 'Import API request failed');
+        }
+
+        const data = response.data as any;
+        resolvedListId = data.listId || resolvedListId;
+        combined.total += data.total ?? batch.length;
+        combined.successCount += data.successCount ?? 0;
+        combined.failCount += data.failCount ?? 0;
+        combined.details.push(...((data.details ?? []) as ImportResultDetail[]));
+      }
+
+      setImportProgress({ done: payloadLeads.length, total: payloadLeads.length });
+      setImportedListId(resolvedListId ?? null);
+      setImportResult(combined);
       setStep(4);
     } catch (err: any) {
       alert(err.message || 'Import API request failed');
@@ -1237,6 +1403,10 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
                   </div>
                 </div>
               )}
+
+              {importedListId && vertical !== 'B2B' && (
+                <BuyerDeliveryPanel listId={importedListId} vertical={vertical} />
+              )}
             </div>
           )}
         </div>
@@ -1291,7 +1461,9 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
                 {importing ? (
                   <>
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Ingesting Prospects...
+                    {importProgress
+                      ? `Ingesting ${importProgress.done}/${importProgress.total}...`
+                      : 'Ingesting Prospects...'}
                   </>
                 ) : (
                   <>
@@ -1315,6 +1487,250 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Buyer delivery
+//
+// Importing a lead never posts it — ingest parks every valid submission on
+// HOLD on purpose. This panel is the explicit release: preflight first so the
+// operator sees what the buyer would reject, then send in cursor-paged batches.
+// ---------------------------------------------------------------------------
+
+interface PreflightReason {
+  message: string;
+  field: string;
+  count: number;
+}
+
+interface PreflightResponse {
+  sendable: number;
+  ready: number;
+  blocked: { count: number; reasons: PreflightReason[] };
+  warnings: { count: number; reasons: PreflightReason[] };
+  alreadyMatched: number;
+  invalid: number;
+  mode: 'TEST' | 'LIVE';
+}
+
+interface SendResponse {
+  attempted: number;
+  matched: number;
+  unmatched: number;
+  errored: number;
+  notReady: number;
+  remaining: number;
+  nextCursor: string | null;
+}
+
+const SEND_BATCH_SIZE = 100;
+
+function BuyerDeliveryPanel({
+  listId,
+  vertical,
+}: {
+  listId: string;
+  vertical: 'ACA' | 'FE' | 'B2B';
+}) {
+  const [preflight, setPreflight] = useState<PreflightResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [totals, setTotals] = useState<SendResponse | null>(null);
+  const [sentSoFar, setSentSoFar] = useState(0);
+
+  const loadPreflight = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await apiClient.post<PreflightResponse>(
+        '/api/v1/insurance-leads/delivery/preflight',
+        { listId, vertical }
+      );
+      if (!response.error && response.data) {
+        setPreflight(response.data);
+      }
+    } catch (err) {
+      console.error('Delivery preflight failed:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [listId, vertical]);
+
+  useEffect(() => {
+    void loadPreflight();
+  }, [loadPreflight]);
+
+  const send = async () => {
+    setSending(true);
+    setSendError(null);
+    setSentSoFar(0);
+
+    const running: SendResponse = {
+      attempted: 0,
+      matched: 0,
+      unmatched: 0,
+      errored: 0,
+      notReady: 0,
+      remaining: 0,
+      nextCursor: null,
+    };
+
+    try {
+      let cursor: string | null = null;
+      // Each batch is one HTTP request; loop until the API says it has walked
+      // past the last sendable submission in the list.
+      for (;;) {
+        const response: ApiResponse<SendResponse> = await apiClient.post<SendResponse>(
+          '/api/v1/insurance-leads/delivery/send',
+          { listId, vertical, limit: SEND_BATCH_SIZE, cursor: cursor ?? undefined }
+        );
+
+        if (response.error || !response.data) {
+          throw new Error(response.error?.message || 'Delivery request failed');
+        }
+
+        const batch: SendResponse = response.data;
+        running.attempted += batch.attempted;
+        running.matched += batch.matched;
+        running.unmatched += batch.unmatched;
+        running.errored += batch.errored;
+        running.notReady += batch.notReady;
+        running.remaining = batch.remaining;
+        setSentSoFar(running.attempted);
+        setTotals({ ...running });
+
+        cursor = batch.nextCursor;
+        if (!cursor) break;
+      }
+    } catch (err: any) {
+      setSendError(err?.message || 'Delivery request failed');
+    } finally {
+      setSending(false);
+      void loadPreflight();
+    }
+  };
+
+  if (loading && !preflight) {
+    return (
+      <div className="flex items-center gap-2 rounded-xl border border-white/5 bg-slate-950/40 p-4 text-xs text-slate-400">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        Checking what the buyer will accept...
+      </div>
+    );
+  }
+
+  if (!preflight) return null;
+
+  return (
+    <div className="space-y-3 rounded-xl border border-white/5 bg-slate-950/40 p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-slate-200">Send to buyer</h3>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">
+            Imported leads are held until you send them. Nothing was posted yet.
+          </p>
+        </div>
+        <span
+          className={`shrink-0 rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+            preflight.mode === 'LIVE'
+              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+              : 'border-amber-500/30 bg-amber-500/10 text-amber-400'
+          }`}
+        >
+          {preflight.mode} mode
+        </span>
+      </div>
+
+      {preflight.mode === 'TEST' && (
+        <p className="rounded-md border border-amber-500/20 bg-amber-500/5 p-2.5 text-[11px] text-amber-300/90">
+          Posts go out flagged <span className="font-mono">Test_Lead=1</span> and will not be
+          bought. Set <span className="font-mono">INSURANCE_LEAD_MODE=LIVE</span> on the API to sell
+          for real.
+        </p>
+      )}
+
+      <div className="grid grid-cols-3 gap-3 border-y border-white/5 py-3 text-center">
+        <div>
+          <span className="text-xl font-bold text-emerald-400">{preflight.ready}</span>
+          <span className="mt-0.5 block text-[10px] font-semibold uppercase text-slate-500">
+            Ready to send
+          </span>
+        </div>
+        <div>
+          <span className="text-xl font-bold text-amber-400">{preflight.blocked.count}</span>
+          <span className="mt-0.5 block text-[10px] font-semibold uppercase text-slate-500">
+            Missing buyer fields
+          </span>
+        </div>
+        <div>
+          <span className="text-xl font-bold text-slate-400">{preflight.alreadyMatched}</span>
+          <span className="mt-0.5 block text-[10px] font-semibold uppercase text-slate-500">
+            Already sold
+          </span>
+        </div>
+      </div>
+
+      {preflight.blocked.reasons.length > 0 && (
+        <div className="space-y-1">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+            Why leads are blocked
+          </div>
+          <ul className="space-y-1 text-[11px] text-slate-400">
+            {preflight.blocked.reasons.map(reason => (
+              <li key={reason.field} className="flex items-start gap-2">
+                <span className="shrink-0 font-mono text-amber-400">{reason.count}×</span>
+                <span>{reason.message}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {preflight.warnings.reasons.length > 0 && (
+        <div className="space-y-1">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+            Sends anyway, but worth fixing
+          </div>
+          <ul className="space-y-1 text-[11px] text-slate-500">
+            {preflight.warnings.reasons.map(reason => (
+              <li key={reason.field} className="flex items-start gap-2">
+                <span className="shrink-0 font-mono text-slate-400">{reason.count}×</span>
+                <span>{reason.message}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {totals && (
+        <div className="rounded-md border border-white/5 bg-slate-900/60 p-2.5 text-[11px] text-slate-300">
+          Sent {totals.attempted} — {totals.matched} matched, {totals.unmatched} unmatched,{' '}
+          {totals.errored} errored, {totals.notReady} held back.
+        </div>
+      )}
+
+      {sendError && (
+        <div className="rounded-md border border-red-500/20 bg-red-500/5 p-2.5 text-[11px] text-red-400">
+          {sendError}
+        </div>
+      )}
+
+      <button
+        onClick={() => void send()}
+        disabled={sending || preflight.ready === 0}
+        className="flex w-full items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-5 py-2 text-xs font-medium text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        {sending ? (
+          <>
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Sending {sentSoFar}/{preflight.ready}...
+          </>
+        ) : (
+          `Send ${preflight.ready} lead${preflight.ready === 1 ? '' : 's'} to buyer`
+        )}
+      </button>
     </div>
   );
 }

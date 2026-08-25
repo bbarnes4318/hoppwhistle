@@ -26,6 +26,45 @@ function getTenantId(request: FastifyRequest): string | null {
   return demoTenantId || user?.tenantId || null;
 }
 
+interface DeliverySelector {
+  listId?: string;
+  vertical?: 'ACA' | 'FE' | 'B2B';
+  submissionIds?: string[];
+}
+
+/**
+ * Bulk delivery must always be scoped. Without a listId or an explicit set of
+ * submissions, one call would release every held lead the tenant has ever
+ * imported, which is not something anyone means to do by accident.
+ */
+function parseDeliverySelector(body: {
+  listId?: string;
+  vertical?: string;
+  submissionIds?: string[];
+}): { value: DeliverySelector } | { error: string } {
+  const listId =
+    typeof body.listId === 'string' && body.listId.trim() ? body.listId.trim() : undefined;
+  const submissionIds =
+    Array.isArray(body.submissionIds) && body.submissionIds.length
+      ? body.submissionIds.filter(id => typeof id === 'string' && id.trim()).map(id => id.trim())
+      : undefined;
+
+  if (!listId && !submissionIds?.length) {
+    return { error: 'Provide a listId or submissionIds — a bulk send must be scoped to a batch' };
+  }
+
+  let vertical: DeliverySelector['vertical'];
+  if (body.vertical) {
+    const upper = String(body.vertical).toUpperCase();
+    if (upper !== 'ACA' && upper !== 'FE' && upper !== 'B2B') {
+      return { error: `Invalid vertical "${body.vertical}". Must be "aca", "fe", or "b2b".` };
+    }
+    vertical = upper;
+  }
+
+  return { value: { listId, submissionIds, vertical } };
+}
+
 function runPreClosedPython(leads: any[]): Promise<any[]> {
   return new Promise((resolve, reject) => {
     const scriptPath = 'scripts/process-preclosed.py';
@@ -270,6 +309,9 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
         total: leads.length,
         successCount: results.filter(r => r.success).length,
         failCount: results.filter(r => !r.success).length,
+        // Returned so a chunked import can pin every later batch to the list
+        // the first batch created, and so the caller can preflight delivery.
+        listId: targetListId,
         details: results,
       };
     } catch (error: unknown) {
@@ -397,7 +439,6 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     return { success: true };
   });
 
-
   // -----------------------------------------------------------------------
   // GET /api/v1/insurance-leads/stats — Aggregate stats
   // -----------------------------------------------------------------------
@@ -482,6 +523,98 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
     }
 
     return result;
+  });
+
+  // -----------------------------------------------------------------------
+  // POST /api/v1/insurance-leads/delivery/preflight
+  //
+  // Read-only. Reports how many held leads the buyer would accept, and why
+  // the rest would bounce, so a 1,000-lead batch can be checked before a
+  // single post is spent on it.
+  // -----------------------------------------------------------------------
+  fastify.post<{
+    Body: { listId?: string; vertical?: string; submissionIds?: string[] };
+  }>('/api/v1/insurance-leads/delivery/preflight', async (request, reply) => {
+    const tenantId = getTenantId(request);
+    if (!tenantId) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+    }
+
+    const selector = parseDeliverySelector(request.body || {});
+    if ('error' in selector) {
+      void reply.code(400);
+      return { error: { code: 'INVALID_BODY', message: selector.error } };
+    }
+
+    try {
+      const { preflightBulkDelivery } = await import('../services/insurance-lead-bulk-delivery.js');
+      return await preflightBulkDelivery(tenantId, selector.value);
+    } catch (error: unknown) {
+      void reply.code(500);
+      return {
+        error: {
+          code: 'PREFLIGHT_FAILED',
+          message: (error as Error).message || 'Failed to run delivery preflight',
+        },
+      };
+    }
+  });
+
+  // -----------------------------------------------------------------------
+  // POST /api/v1/insurance-leads/delivery/send
+  //
+  // The explicit bulk release. Ingest never posts on its own, so this is the
+  // only path that sends imported leads to the buyer in bulk. Batched by
+  // cursor: keep calling with the returned nextCursor until it comes back null.
+  // -----------------------------------------------------------------------
+  fastify.post<{
+    Body: {
+      listId?: string;
+      vertical?: string;
+      submissionIds?: string[];
+      limit?: number;
+      force?: boolean;
+      cursor?: string;
+    };
+  }>('/api/v1/insurance-leads/delivery/send', async (request, reply) => {
+    const tenantId = getTenantId(request);
+    if (!tenantId) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+    }
+
+    const body = request.body || {};
+    const selector = parseDeliverySelector(body);
+    if ('error' in selector) {
+      void reply.code(400);
+      return { error: { code: 'INVALID_BODY', message: selector.error } };
+    }
+
+    if (body.limit !== undefined && (typeof body.limit !== 'number' || body.limit < 1)) {
+      void reply.code(400);
+      return { error: { code: 'INVALID_BODY', message: 'limit must be a positive number' } };
+    }
+
+    try {
+      const { bulkDeliverInsuranceLeads } = await import(
+        '../services/insurance-lead-bulk-delivery.js'
+      );
+      return await bulkDeliverInsuranceLeads(tenantId, {
+        ...selector.value,
+        limit: body.limit,
+        force: body.force === true,
+        cursor: typeof body.cursor === 'string' && body.cursor ? body.cursor : undefined,
+      });
+    } catch (error: unknown) {
+      void reply.code(500);
+      return {
+        error: {
+          code: 'DELIVERY_FAILED',
+          message: (error as Error).message || 'Failed to deliver leads',
+        },
+      };
+    }
   });
 
   // -----------------------------------------------------------------------
