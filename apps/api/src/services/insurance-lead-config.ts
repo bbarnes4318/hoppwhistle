@@ -15,10 +15,22 @@ const log = createServiceLogger('insurance-lead-config');
 
 export type InsuranceMode = 'TEST' | 'LIVE';
 
+/**
+ * LIVE unless something explicitly asks for TEST.
+ *
+ * This used to default to TEST "for safety", which had the failure backwards.
+ * A TEST post stamps Test_Lead=1, is never bought, and looks identical to a
+ * real one in every log and response — so the unset-env case silently threw
+ * away a whole batch. An unintended LIVE post, by contrast, is loud and
+ * recoverable: it has to clear readiness, it only happens on an explicit bulk
+ * send, and the buyer's response says exactly what it did.
+ *
+ * Test runs set INSURANCE_LEAD_MODE=test deliberately.
+ */
 export function getInsuranceLeadMode(): InsuranceMode {
-  const raw = (process.env.INSURANCE_LEAD_MODE || 'test').trim().toUpperCase();
-  if (raw === 'LIVE') return 'LIVE';
-  return 'TEST'; // default to TEST for safety
+  const raw = (process.env.INSURANCE_LEAD_MODE || 'live').trim().toUpperCase();
+  if (raw === 'TEST') return 'TEST';
+  return 'LIVE';
 }
 
 export function isTestMode(): boolean {
