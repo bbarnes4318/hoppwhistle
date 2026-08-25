@@ -67,3 +67,29 @@ describe('Test_Lead on the outbound payload', () => {
     expect(fullPayload.Test_Lead).toBe('1');
   });
 });
+
+describe('a post the buyer holds for manual approval', () => {
+  // Verbatim from a live send on 2026-08-25. Boberdoo answers with a status
+  // that is neither Matched nor Error; the lead has an id and is accepted.
+  const RAW = '{"response":{"status":"Lead ID 326229333 has to be manually approved."}}';
+
+  it('is an acceptance, not an error, and keeps the lead id', async () => {
+    const { parseAmeriquoteResponseForTest } = await import('../insurance-lead-poster.js');
+    const parsed = parseAmeriquoteResponseForTest(RAW);
+
+    expect(parsed.status).toBe('ManualReview');
+    expect(parsed.success).toBe(true);
+    expect(parsed.leadId).toBe('326229333');
+    expect(parsed.errorMessage).toBeUndefined();
+  });
+
+  it('still reads a genuine duplicate rejection as an error', async () => {
+    const { parseAmeriquoteResponseForTest } = await import('../insurance-lead-poster.js');
+    const parsed = parseAmeriquoteResponseForTest(
+      '{"response":{"status":"Error","error":"Insert Error #0: Insert Error: Duplicate lead value - the lead (TYPE 31) with the: Primary_Phone: 6605538620 has been submitted within the past 90 days"}}'
+    );
+
+    expect(parsed.status).toBe('Error');
+    expect(parsed.errorMessage).toContain('Duplicate lead value');
+  });
+});
