@@ -35,7 +35,7 @@ export interface MapResult {
 
 export function mapToAmeriquote(
   vertical: 'ACA' | 'FE' | 'B2B',
-  normalized: Record<string, unknown>,
+  normalized: Record<string, unknown>
 ): MapResult {
   if (vertical === 'B2B') {
     return { fullPayload: {}, redactedPayload: {} };
@@ -119,6 +119,9 @@ export function mapToAmeriquote(
     ['leadidToken', 'leadid_token'],
     ['trustedFormUrl', 'Trusted_Form_URL'],
     ['consentLanguage', 'consent_language'],
+    // Aged leads must carry the date they were originally generated, or the
+    // buyer prices them as fresh and disputes them later.
+    ['datePosted', 'Origin_Lead_Date'],
 
     // Insurance-specific optional
     ['coverageType', 'Coverage_Type'],

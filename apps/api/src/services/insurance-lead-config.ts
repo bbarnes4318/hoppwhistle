@@ -70,7 +70,14 @@ export const DEFAULTS = {
   MODE: 'full',
   API_ACTION: 'pingPostLead',
   FORMAT: 'JSON',
-  LANDING_PAGE: 'hopwhistle.com',
+  /**
+   * The opt-in page every lead we sell is attributed to. Landing_Page is Post
+   * Required, and this is the correct value for our leads, so no CSV needs a
+   * column for it — the mapper supplies it. A lead that carries its own
+   * landingPage still overrides, which is the only way a different opt-in page
+   * ever reaches the buyer.
+   */
+  LANDING_PAGE: 'https://quotes.nationallifecoverage.org',
 } as const;
 
 // ---------------------------------------------------------------------------

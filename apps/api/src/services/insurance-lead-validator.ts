@@ -67,6 +67,24 @@ export function normalizeBirthDate(raw: string): string {
   return raw; // Return as-is, validation will catch it
 }
 
+/**
+ * Convert a lead's original post date to the `m/d/Y H:i:s` Ameriquote wants for
+ * Origin_Lead_Date. Aged-lead files usually carry a date only, so a missing
+ * time component becomes midnight rather than being dropped.
+ */
+export function normalizeDatePosted(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+
+  const parsed = new Date(/^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? `${trimmed}T00:00:00` : trimmed);
+  if (isNaN(parsed.getTime())) return trimmed; // Return as-is; validation will catch it
+
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const date = `${parsed.getMonth() + 1}/${parsed.getDate()}/${parsed.getFullYear()}`;
+  const time = `${pad(parsed.getHours())}:${pad(parsed.getMinutes())}:${pad(parsed.getSeconds())}`;
+  return `${date} ${time}`;
+}
+
 /** Normalize gender to Title Case matching Ameriquote allowed values */
 export function normalizeGender(raw: string): string {
   const lower = raw.trim().toLowerCase();
@@ -216,7 +234,17 @@ const baseInboundSchema = z.object({
     .transform(v => (v ? normalizePhone(v) : undefined)),
   source: z.string().optional(),
   landingPage: z.string().optional(),
-  ipAddress: z.string().optional(),
+  // Kept permissive so a malformed IP never fails an inbound lead outright.
+  // Delivery readiness (insurance-lead-readiness) is where a missing or
+  // placeholder IP gets flagged, because that is the buyer's requirement.
+  ipAddress: optionalString.transform(v => v?.trim()),
+  /** Original date the lead was generated — becomes Origin_Lead_Date. */
+  datePosted: optionalString
+    .transform(v => (v ? normalizeDatePosted(v) : undefined))
+    .refine(
+      v => !v || /^\d{1,2}\/\d{1,2}\/\d{4} \d{2}:\d{2}:\d{2}$/.test(v),
+      'datePosted must be a parseable date (e.g. 2026-07-14 or 07/14/2026)'
+    ),
 
   // Compliance / tracking
   leadidToken: z.string().optional(),
@@ -301,15 +329,24 @@ const baseInboundSchema = z.object({
 export const acaInboundSchema = baseInboundSchema.extend({
   // ACA-specific fields (optional)
   heightFeet: z
-    .preprocess(v => (v === '' || v === null ? undefined : v), z.union([z.number(), z.string().transform(v => parseInt(v, 10))]))
+    .preprocess(
+      v => (v === '' || v === null ? undefined : v),
+      z.union([z.number(), z.string().transform(v => parseInt(v, 10))])
+    )
     .optional()
     .refine(v => v === undefined || (!isNaN(v) && v > 0), 'heightFeet must be positive'),
   heightInches: z
-    .preprocess(v => (v === '' || v === null ? undefined : v), z.union([z.number(), z.string().transform(v => parseInt(v, 10))]))
+    .preprocess(
+      v => (v === '' || v === null ? undefined : v),
+      z.union([z.number(), z.string().transform(v => parseInt(v, 10))])
+    )
     .optional()
     .refine(v => v === undefined || (!isNaN(v) && v >= 0), 'heightInches must be >= 0'),
   weight: z
-    .preprocess(v => (v === '' || v === null ? undefined : v), z.union([z.number().transform(v => String(v)), z.string()]))
+    .preprocess(
+      v => (v === '' || v === null ? undefined : v),
+      z.union([z.number().transform(v => String(v)), z.string()])
+    )
     .optional(),
 
   // Optional ACA fields
