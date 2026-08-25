@@ -27,9 +27,10 @@ const BATCH = 100;
 
 const listName = process.argv[2];
 const force = process.argv.includes('--force');
+const dryRun = process.argv.includes('--dry-run');
 
 if (!listName) {
-  console.error('usage: node send-leads.mjs "<list name>" [--force]');
+  console.error('usage: node send-leads.mjs <list name> [--dry-run] [--force]');
   process.exit(1);
 }
 
@@ -71,10 +72,16 @@ async function main() {
 
   console.log(`List "${list.name}"  vertical=${list.vertical}  id=${list.id}`);
 
-  const pre = await api('/api/v1/insurance-leads/delivery/preflight', { listId: list.id }, list.tenantId);
+  const pre = await api(
+    '/api/v1/insurance-leads/delivery/preflight',
+    { listId: list.id },
+    list.tenantId
+  );
 
   console.log('');
-  console.log(`  mode            ${pre.mode}${pre.mode === 'TEST' ? '   <-- Test_Lead=1, these will NOT be bought' : ''}`);
+  console.log(
+    `  mode            ${pre.mode}${pre.mode === 'TEST' ? '   <-- Test_Lead=1, these will NOT be bought' : ''}`
+  );
   console.log(`  sendable        ${pre.sendable}`);
   console.log(`  ready           ${pre.ready}  (${pct(pre.ready, pre.sendable)})`);
   console.log(`  blocked         ${pre.blocked.count}`);
@@ -83,16 +90,24 @@ async function main() {
 
   if (pre.blocked.reasons.length) {
     console.log('\n  why leads are blocked:');
-    for (const r of pre.blocked.reasons) console.log(`    ${String(r.count).padStart(6)}  ${r.message}`);
+    for (const r of pre.blocked.reasons)
+      console.log(`    ${String(r.count).padStart(6)}  ${r.message}`);
   }
   if (pre.warnings.reasons.length) {
     console.log('\n  warnings (still sent):');
-    for (const r of pre.warnings.reasons) console.log(`    ${String(r.count).padStart(6)}  ${r.message}`);
+    for (const r of pre.warnings.reasons)
+      console.log(`    ${String(r.count).padStart(6)}  ${r.message}`);
   }
 
   const willSend = force ? pre.sendable : pre.ready;
   if (!willSend) {
     console.log('\nNothing to send. Stopping.');
+    return;
+  }
+
+  if (dryRun) {
+    console.log(`\n--dry-run: would send ${willSend} lead(s)${force ? ' WITH --force' : ''}.`);
+    console.log('Nothing was posted. Re-run without --dry-run to send.');
     return;
   }
 
@@ -116,7 +131,8 @@ async function main() {
     totals.notReady += batch.notReady;
 
     for (const r of batch.results || []) {
-      if (r.outcome === 'ERROR') failures.push(`${r.phone} ${r.name}: ${r.message || 'unknown error'}`);
+      if (r.outcome === 'ERROR')
+        failures.push(`${r.phone} ${r.name}: ${r.message || 'unknown error'}`);
     }
 
     console.log(
