@@ -236,8 +236,23 @@ async function main() {
     for (const f of failures.slice(0, 20)) console.log(`  ${f}`);
   }
 
+  // A duplicate or a blocked number never becomes sendable by trying again:
+  // Boberdoo registers a lead the moment it is posted, sold or not, and the
+  // 90-day window runs from then. Telling anyone to retry those is telling
+  // them to spend time on leads that are gone until the window lapses.
+  const permanent = failures.filter(f => /Duplicate lead value|Blocked value/i.test(f)).length;
   if (totals.errored) {
-    console.log('\nRe-run this same command to retry the errored leads. Sold leads are skipped.');
+    if (permanent) {
+      console.log(
+        `\n${permanent} of ${totals.errored} error(s) are permanent for now — duplicates or`
+      );
+      console.log('blocked numbers. Re-running will not change them; the buyer registered');
+      console.log('these on their first post and the 90-day window runs from then.');
+    }
+    const transient = totals.errored - permanent;
+    if (transient) {
+      console.log(`\n${transient} error(s) may be transient. Re-run to retry just those.`);
+    }
   }
 }
 
