@@ -2490,6 +2490,11 @@ enum InsurancePostStatus {
   MATCHED
   UNMATCHED
   ERROR
+  /// Accepted by the buyer and holding for their manual approval. The lead
+  /// reached them and has a lead id; it is not a failure and must never be
+  /// re-sent, or the second post comes back as a 90-day duplicate and the
+  /// lead is burned.
+  MANUAL_REVIEW
 }
 
 enum InsuranceLeadMode {
