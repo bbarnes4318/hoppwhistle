@@ -30,17 +30,15 @@ Final Expense — `ameriquote_fe_lead_template.csv`:
 
 ```
 FirstName,LastName,Primary_Phone,Email,Address,City,State,ZipCode,Birth_Date,
-Gender,IP_Address,Trusted_Form_URL,leadid_token,consent_language,
-Origin_Lead_Date,Address_2,County,Smoker,SubSource
+Gender,IP_Address,Trusted_Form_URL,Origin_Lead_Date
 ```
 
 ACA — `ameriquote_aca_lead_template.csv`:
 
 ```
 FirstName,LastName,Primary_Phone,Email,Address,City,State,ZipCode,Birth_Date,
-Height_Feet,Height_Inches,Weight,IP_Address,Trusted_Form_URL,leadid_token,
-consent_language,Origin_Lead_Date,Address_2,County,Gender,Smoker,
-Household_Income,People_In_Household,SubSource
+Height_Feet,Height_Inches,Weight,IP_Address,Trusted_Form_URL,Origin_Lead_Date,
+Gender,Household_Income,People_In_Household
 ```
 
 Internal CRM fields — beneficiaries, banking, SSN, medications, follow-up
@@ -58,6 +56,12 @@ fill them in:
   can only ever disagree with the DOB. If a file does carry one, the supplied
   value wins — so drop the column on an aged file, where the age captured at
   generation time is now stale.
+- **`SRC`** is `PVNFE_aged` / `PVNACA_aged` from config, and **`SubSource`**
+  defaults to the lead-list name of the import, so a matched lead traces back
+  to its batch. A mapped Source column still wins.
+- **`leadid_token`, `consent_language`, `Address_2`, `County`, `Smoker`** are
+  optional to the buyer and not in our vendor files. They stay mappable in the
+  import step for a file that happens to carry them.
 - **`Landing_Page`** is the same page for every lead we sell —
   `https://quotes.nationallifecoverage.org` — so the mapper supplies it on
   every post (`DEFAULTS.LANDING_PAGE` in `insurance-lead-config.ts`, pinned by
@@ -164,10 +168,12 @@ The UI runs this automatically on the import result screen.
 
 ### 3. Check the mode
 
-`INSURANCE_LEAD_MODE` defaults to `TEST`, which flags every post with
-`Test_Lead=1`. Test posts are not bought. Set `INSURANCE_LEAD_MODE=LIVE` on the
-API before a real send; the preflight response and the UI badge both show which
-mode you are in.
+`INSURANCE_LEAD_MODE` defaults to **`live`**. Set it to `test` only for a
+deliberate test run — that stamps `Test_Lead=1`, and those posts are never
+bought. The default used to be `test` "for safety", which had the failure
+backwards: a test post is indistinguishable from a real one in the logs, so an
+unset variable silently discarded a whole batch. The preflight response and the
+UI badge both show the mode before you send.
 
 `AMERIQUOTE_API_KEY` must be set or delivery throws. `AMERIQUOTE_FE_SRC` /
 `AMERIQUOTE_ACA_SRC` default to the aged-lead source values.

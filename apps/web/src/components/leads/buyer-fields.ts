@@ -67,12 +67,17 @@ export const BUYER_FIELD: Record<string, string> = {
 /**
  * The template's columns, in the buyer's names, ordered required-first.
  *
- * Deliberately excludes every internal-CRM field (beneficiaries, bank details,
- * medications, follow-up dates). None of that is ever posted to the buyer, and
- * a template that asks a vendor for a routing number is asking for trouble.
+ * Only what a lead vendor actually fills in. Everything omitted here is either
+ * never posted, or posted from somewhere other than the CSV:
  *
- * `Age` is excluded on purpose too — it is derived from Birth_Date on ingest,
- * so a hand-filled Age column can only ever disagree with the DOB.
+ * - Internal CRM fields (beneficiaries, banking, SSN, medications) never reach
+ *   the buyer at all.
+ * - `Age` is derived from Birth_Date on ingest.
+ * - `Landing_Page` and `SRC` come from config, the same for every lead.
+ * - `SubSource` is filled from the import's lead-list name.
+ * - `leadid_token`, `consent_language`, `Address_2`, `County` and `Smoker` are
+ *   optional to the buyer and not in our files. All of them stay mappable in
+ *   the import step for a vendor file that happens to carry them.
  */
 export const BUYER_TEMPLATE_KEYS: Record<'ACA' | 'FE', string[]> = {
   // TYPE=19. Post Required: name, phone, email, address, city, state, zip,
@@ -90,13 +95,7 @@ export const BUYER_TEMPLATE_KEYS: Record<'ACA' | 'FE', string[]> = {
     'gender',
     'ipAddress',
     'trustedFormUrl',
-    'leadidToken',
-    'consentLanguage',
     'datePosted',
-    'address2',
-    'county',
-    'smoker',
-    'source',
   ],
   // TYPE=31. Same, but height/weight are Post Required and Gender is optional.
   ACA: [
@@ -114,15 +113,9 @@ export const BUYER_TEMPLATE_KEYS: Record<'ACA' | 'FE', string[]> = {
     'weight',
     'ipAddress',
     'trustedFormUrl',
-    'leadidToken',
-    'consentLanguage',
     'datePosted',
-    'address2',
-    'county',
     'gender',
-    'smoker',
     'householdIncome',
     'peopleInHousehold',
-    'source',
   ],
 };
