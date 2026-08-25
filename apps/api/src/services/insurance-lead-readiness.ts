@@ -14,6 +14,14 @@
 /** Placeholder the mapper substitutes when a lead carries no IP at all. */
 export const PLACEHOLDER_IP = '127.0.0.1';
 
+/**
+ * Placeholder the mapper substitutes when a lead carries no landing page.
+ * Mirrors DEFAULTS.LANDING_PAGE in insurance-lead-config; kept as a local
+ * constant so readiness stays free of config's env and logger dependencies,
+ * and asserted equal to it in the tests.
+ */
+export const PLACEHOLDER_LANDING_PAGE = 'hopwhistle.com';
+
 const IPV4_PATTERN = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
 // Loose on purpose — it only has to tell an address apart from junk, not
 // canonicalize it. The colon groups are what keep a bare hex word like "beef"
@@ -253,6 +261,20 @@ function collectWarnings(normalized: Record<string, unknown>): ReadinessIssue[] 
       outboundField: 'Origin_Lead_Date',
       message:
         'No original lead date — an aged lead sent without one can be priced or disputed as fresh',
+    });
+  }
+
+  const landingPage = readString(normalized, 'landingPage');
+  if (!landingPage || landingPage === PLACEHOLDER_LANDING_PAGE) {
+    // Deliberately a warning, not a blocker like the loopback IP: unlike
+    // 127.0.0.1, this default is the truth for a lead generated on our own
+    // site. It is only a misstatement for a lead bought from a vendor, and
+    // readiness cannot tell those apart from the payload alone.
+    warnings.push({
+      field: 'landingPage',
+      outboundField: 'Landing_Page',
+      message:
+        'Landing page falls back to our own domain — for a vendor-sourced lead that misstates where the consumer opted in',
     });
   }
 

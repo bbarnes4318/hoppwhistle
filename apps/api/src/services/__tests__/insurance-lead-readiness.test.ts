@@ -1,6 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { checkDeliveryReadiness, PLACEHOLDER_IP } from '../insurance-lead-readiness.js';
+import {
+  checkDeliveryReadiness,
+  PLACEHOLDER_IP,
+  PLACEHOLDER_LANDING_PAGE,
+} from '../insurance-lead-readiness.js';
+
+vi.mock('../../lib/logger.js', () => ({
+  createServiceLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
+}));
 
 /** A lead carrying every field both verticals require in common. */
 function completeCommonLead(): Record<string, unknown> {
@@ -18,6 +26,7 @@ function completeCommonLead(): Record<string, unknown> {
     ipAddress: '75.2.92.149',
     trustedFormUrl: 'https://cert.trustedform.com/abc',
     datePosted: '7/14/2026 09:12:00',
+    landingPage: 'vendor-quotes.example.com/final-expense',
   };
 }
 
@@ -166,10 +175,42 @@ describe('checkDeliveryReadiness', () => {
     expect(report.warnings.map(w => w.outboundField)).toEqual(['Origin_Lead_Date']);
   });
 
+  it('warns when the landing page falls back to our own domain', () => {
+    const lead = completeCommonLead();
+    delete lead.landingPage;
+
+    const missing = checkDeliveryReadiness('FE', { ...lead, gender: 'Female' });
+    expect(missing.ready).toBe(true);
+    expect(missing.warnings.map(w => w.outboundField)).toEqual(['Landing_Page']);
+
+    // The substituted default reads the same as having supplied it by hand.
+    const substituted = checkDeliveryReadiness('FE', {
+      ...lead,
+      gender: 'Female',
+      landingPage: PLACEHOLDER_LANDING_PAGE,
+    });
+    expect(substituted.warnings.map(w => w.outboundField)).toEqual(['Landing_Page']);
+  });
+
+  it("accepts the vendor's own landing page without complaint", () => {
+    const report = checkDeliveryReadiness('FE', { ...completeCommonLead(), gender: 'Female' });
+
+    expect(report.warnings).toEqual([]);
+  });
   it('reports B2B as undeliverable — it has no Ameriquote mapping', () => {
     const report = checkDeliveryReadiness('B2B', completeCommonLead());
 
     expect(report.ready).toBe(false);
     expect(report.blockers[0].outboundField).toBe('TYPE');
+  });
+});
+
+describe('placeholder constants', () => {
+  it('stay in step with the values the mapper actually substitutes', async () => {
+    const { DEFAULTS } = await import('../insurance-lead-config.js');
+
+    expect(PLACEHOLDER_LANDING_PAGE).toBe(DEFAULTS.LANDING_PAGE);
+    // The mapper inlines the IP fallback rather than reading it from config.
+    expect(PLACEHOLDER_IP).toBe('127.0.0.1');
   });
 });

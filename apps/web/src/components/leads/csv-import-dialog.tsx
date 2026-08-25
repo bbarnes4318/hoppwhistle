@@ -120,7 +120,8 @@ const TARGET_FIELDS: TargetField[] = [
     key: 'landingPage',
     label: 'Landing Page',
     required: false,
-    description: 'Site where the lead form was completed',
+    description: 'Site where the consumer actually completed the lead form',
+    aliases: ['originalLandingPage', 'landingPageUrl', 'originalLandingPageUrl', 'sourceUrl'],
   },
 
   // Common Optional

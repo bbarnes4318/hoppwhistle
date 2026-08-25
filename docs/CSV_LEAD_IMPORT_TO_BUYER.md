@@ -82,6 +82,11 @@ is allowed to go out **without** it.
 | `IP_Address`       | `IP_Address`       | Yes — buyer, real IP   |
 | `Trusted_Form_URL` | `Trusted_Form_URL` | Yes — our rule         |
 | `Date_Posted`      | `Origin_Lead_Date` | No — warned, see below |
+| `Landing_Page`     | `Landing_Page`     | No — warned, see below |
+
+`Landing_Page` is worth adding to a vendor file even though it only warns.
+Header spellings like `Original Landing Page`, `Landing_Page_URL`, and
+`Source_URL` all auto-map to it.
 
 ### Consent proof and IP are hard requirements here
 
@@ -121,6 +126,13 @@ preflight below tells you the exact count before you spend a post on it.
   and later disputed — as fresh. Warned, not blocked.
 - A `leadid_token` with no TrustedForm certificate and no `consent_language`.
   It clears the consent requirement, but it is thinner proof than a cert.
+- **`Landing_Page` falling back to `hopwhistle.com`.** `Landing_Page` is Post
+  Required, so the mapper always sends something; with no value on the lead it
+  sends our own domain. For a lead generated on our site that is simply true,
+  which is why this warns rather than blocking like the loopback IP does —
+  readiness cannot tell an owned lead from a bought one by its payload. For a
+  vendor-sourced lead it misstates where the consumer opted in, so supply the
+  real one. Say the word if you want it blocked outright for imports.
 
 ## Step by step
 
