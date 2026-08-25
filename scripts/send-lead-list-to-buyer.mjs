@@ -29,8 +29,24 @@ const listName = process.argv[2];
 const force = process.argv.includes('--force');
 const dryRun = process.argv.includes('--dry-run');
 
+/**
+ * Halt once this many leads in a row come back unmatched. A healthy file
+ * matches steadily; a flat zero means the buyer stopped buying, and every
+ * further post spends a lead for nothing while still entering their 90-day
+ * duplicate window. 0 disables the guard.
+ */
+const stopAfterArg = process.argv.indexOf('--stop-after-unmatched');
+const stopAfter = stopAfterArg > -1 ? Number(process.argv[stopAfterArg + 1]) : 50;
+
+if (!Number.isFinite(stopAfter) || stopAfter < 0) {
+  console.error('--stop-after-unmatched needs a non-negative number');
+  process.exit(1);
+}
+
 if (!listName) {
-  console.error('usage: node send-leads.mjs <list name> [--dry-run] [--force]');
+  console.error(
+    'usage: node send-leads.mjs <list name> [--dry-run] [--force] [--stop-after-unmatched <n>]'
+  );
   process.exit(1);
 }
 
@@ -113,9 +129,24 @@ async function main() {
 
   console.log(`\nSending ${willSend} lead(s)${force ? ' WITH --force' : ''}...\n`);
 
-  const totals = { attempted: 0, matched: 0, unmatched: 0, errored: 0, notReady: 0 };
+  const totals = {
+    attempted: 0,
+    matched: 0,
+    unmatched: 0,
+    manualReview: 0,
+    errored: 0,
+    notReady: 0,
+  };
   const failures = [];
   let cursor = null;
+
+  // Buyers cap. On 2026-08-25 this list matched at 67% for 1,475 leads, hit a
+  // ceiling at exactly 1,000 sold, and the next 3,417 posts all came back
+  // Unmatched — each one still registered with the buyer and so locked out of
+  // their 90-day duplicate window. A run that stops matching entirely is not a
+  // run to keep feeding: stop and let the rest stay sellable tomorrow.
+  let sinceLastMatch = 0;
+  let stoppedOnWall = false;
 
   for (;;) {
     const batch = await api(
@@ -130,9 +161,16 @@ async function main() {
     totals.errored += batch.errored;
     totals.notReady += batch.notReady;
 
+    totals.manualReview += batch.manualReview || 0;
+
     for (const r of batch.results || []) {
       if (r.outcome === 'ERROR')
         failures.push(`${r.phone} ${r.name}: ${r.message || 'unknown error'}`);
+
+      // Count in posting order so the streak is real, not a per-batch average.
+      // MANUAL_REVIEW is an acceptance, so it breaks the streak like a match.
+      if (r.outcome === 'MATCHED' || r.outcome === 'MANUAL_REVIEW') sinceLastMatch = 0;
+      else if (r.outcome === 'UNMATCHED') sinceLastMatch += 1;
     }
 
     console.log(
@@ -144,12 +182,26 @@ async function main() {
         `remaining ${batch.remaining}`
     );
 
+    if (stopAfter > 0 && sinceLastMatch >= stopAfter) {
+      stoppedOnWall = true;
+      break;
+    }
+
     cursor = batch.nextCursor;
     if (!cursor) break;
   }
 
+  if (stoppedOnWall) {
+    console.log(`\n  STOPPED: ${sinceLastMatch} leads in a row went unmatched.`);
+    console.log('  That is a buyer-side ceiling, not bad data — the rate does not');
+    console.log('  fall to zero and stay there on its own. Everything not yet sent');
+    console.log('  is untouched and still sellable. Re-run when the cap resets, or');
+    console.log(`  pass --stop-after-unmatched <n> to change the threshold (now ${stopAfter}).`);
+  }
+
   console.log('\n' + '='.repeat(60));
   console.log(`MATCHED (sold)   ${totals.matched}`);
+  console.log(`MANUAL_REVIEW    ${totals.manualReview}   accepted, awaiting the buyer's approval`);
   console.log(`UNMATCHED        ${totals.unmatched}   reached the buyer, nobody bought`);
   console.log(`ERROR            ${totals.errored}   re-runnable`);
   console.log(`held back        ${totals.notReady}   failed readiness, never sent`);
