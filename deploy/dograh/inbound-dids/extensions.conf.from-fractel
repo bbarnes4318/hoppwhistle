@@ -1,0 +1,34 @@
+; ---------------------------------------------------------------------------
+; [from-fractel] — inbound context for the dograh-asterisk container.
+;
+; Reference copy of the context that must exist in
+;   /opt/dograh-asterisk/etc/extensions.conf
+; on hopwhistle-prod-ash (178.156.223.97), bind-mounted into `dograh-asterisk`.
+;
+; This file is NOT loaded from the repo. It is the source of truth for review;
+; apply it by replacing the [from-fractel] context in the file on the box, then
+;   docker exec dograh-asterisk asterisk -rx "dialplan reload"
+; Do NOT restart the container — the Stasis app `dograh` is live and a restart
+; drops the ARI websocket.
+;
+; WHY: Dograh's inbound lookup calls normalize_telephony_address() with no
+; country hint, so a bare 10-digit DNIS normalizes to +<NPA as country code>
+; and never matches a stored +1XXXXXXXXXX row:
+;     +19138999080 -> +19138999080   match
+;      19138999080 -> +19138999080   match
+;       9138999080 -> +9138999080    NO match  ("913" eaten as country code)
+; Every format is therefore folded to 11-digit 1NXXNXXXXXX before Stasis sees
+; it, so `channel["dialplan"]["exten"]` is always normalizable to E.164.
+; ---------------------------------------------------------------------------
+
+[from-fractel]
+; force 10-digit DNIS up to 11-digit before Stasis sees it
+exten => _NXXNXXXXXX,1,Goto(from-fractel,1${EXTEN},1)
+
+exten => _1NXXNXXXXXX,1,NoOp(Inbound from FracTEL to ${EXTEN})
+ same => n,Stasis(dograh)
+ same => n,Hangup()
+
+; +E.164 (and any punctuated form): strip to digits, re-enter above.
+exten => _+X.,1,Set(E=${FILTER(0-9,${EXTEN})})
+ same => n,Goto(from-fractel,${E},1)
