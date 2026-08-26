@@ -25,8 +25,12 @@ Safety / idempotence:
   state-CID reporting and rollback path. Inbound membership is tracked under a
   separate ``inbound_pool`` key.
 - A number already owned by another organization or sitting under a different
-  telephony configuration is reported as a conflict and skipped, not retried:
-  ``(provider, account_id, address_normalized)`` is globally unique.
+  telephony configuration is reported as a conflict and skipped, not retried.
+  The live constraint is ``uq_phone_numbers_org_address UNIQUE
+  (organization_id, address_normalized)`` — verified on the box 2026-08-26, and
+  narrower than the ``(provider, account_id, address_normalized)`` this was
+  originally specified against. It is per-organization, not per-config, so one
+  number cannot sit under two telephony configurations of the same org at all.
 - ``--batch live-since-aug22`` and ``--limit`` support the canary-first rollout.
 
 Caller-ID pool guard: Dograh seeds the outbound caller-ID rotation pool from
@@ -283,8 +287,10 @@ async def main() -> int:
                         "telephony_configuration_id": other_cfg[0][
                             "telephony_configuration_id"
                         ],
-                        "detail": "(provider, account_id, address_normalized) is "
-                        "globally unique; move or retire that row first.",
+                        "detail": "uq_phone_numbers_org_address UNIQUE "
+                        "(organization_id, address_normalized) permits one row "
+                        "per number per organization; move or retire that row "
+                        "first.",
                     }
                 )
                 continue

@@ -19,15 +19,34 @@ hardened outbound-only SBC with ARI/Stasis deliberately noloaded.
 
 Read out of the live database, so the runbook does not have to re-derive them:
 
-| Thing                                 | Value                                       |
-| ------------------------------------- | ------------------------------------------- |
-| `workflows.id` (exact name match)     | **1** (organization 1)                      |
-| ARI `telephony_configurations.id`     | **1** — `provider='ari'`, name `hopwhistle` |
-| Other config present                  | 2 — `provider='telnyx'`, not used here      |
-| `telephony_phone_numbers` on config 1 | **295 rows, all active**                    |
-| Campaigns dialing on config 1         | **82**                                      |
+| Thing                                 | Value                                           |
+| ------------------------------------- | ----------------------------------------------- |
+| `workflows.id` (exact name match)     | **1** (organization 1)                          |
+| ARI `telephony_configurations.id`     | **1** — `provider='ari'`, name `hopwhistle`     |
+| Other config present                  | 2 — `provider='telnyx'`, not used here          |
+| `telephony_phone_numbers` on config 1 | **295 rows, all active** (296 after the canary) |
+| Campaigns dialing on config 1         | **82**                                          |
+| `DOGRAH_STATE_CID_POLICY`             | `off`                                           |
+| Unique constraint                     | `(organization_id, address_normalized)`         |
 
-That last row is what makes the collision below real rather than hypothetical.
+The campaign count is what makes the collision below real rather than
+hypothetical. Two further findings from the same read:
+
+- **The unique constraint is per-organization, not per-config.** It is
+  `uq_phone_numbers_org_address (organization_id, address_normalized)`, narrower
+  than the `(provider, account_id, address_normalized)` this kit was specified
+  against. The importer's conflict handling is unaffected, but its stated reason
+  was wrong and is corrected.
+- **`DOGRAH_STATE_CID_POLICY=off`**, so state-matched caller-ID selection is not
+  running and rotation is whole-pool. Existing rows also carry empty
+  `extra_metadata` and the label `AI Voice pool`, so the 264-number `state_cid`
+  pool appears never to have been imported on this box.
+
+### Canary status
+
+`+12067586569` was mapped on 2026-08-26 — row id 298, active,
+`inbound_workflow_id = 1`, `extra_metadata.inbound_pool = fe_inbound`. Config 1
+went from 295 to 296 active rows. The bulk load has **not** been run.
 
 ## How inbound routing works
 
@@ -95,10 +114,13 @@ Options, best first:
 
 1. Give inbound its own `provider='ari'` telephony configuration. Pools are keyed
    per (org, config) (`_from_number_pool_key`), so a distinct config isolates
-   inbound rows from outbound rotation completely. **Verify first** how Dograh
-   resolves an ARI connection to a config id — the 82 campaigns are bound to
-   config 1, so this is only clean if the inbound connection can resolve to a
-   different config without moving them.
+   inbound rows from outbound rotation completely. Two things to check first:
+   how Dograh resolves an ARI connection to a config id (the 82 campaigns are
+   bound to config 1, so this is only clean if the inbound connection can resolve
+   elsewhere without moving them); and note the unique constraint is
+   per-organization, so a number can exist under exactly one config — a DID
+   already serving as an outbound caller ID on config 1 would have to be **moved**
+   to the inbound config, not duplicated into it.
 2. Load only the `live-since-aug22` batch and hold `book207-new` until the SBC
    cutover. Smaller blast radius, but per the paragraph above, not zero.
 3. Accept the caller-ID impact explicitly and pass `--ack-shared-config`.
@@ -228,7 +250,10 @@ impact has been accepted. Omit `--batch` to do all 2777 in one pass.
 The importer is re-runnable: rows already correct are counted and skipped, rows
 missing `inbound_workflow_id` are updated in place, and numbers owned by another
 org or sitting under another telephony config are reported as conflicts rather
-than retried (`(provider, account_id, address_normalized)` is globally unique).
+than retried. The live constraint is `uq_phone_numbers_org_address UNIQUE
+(organization_id, address_normalized)` — per-organization, not per-config, and
+narrower than the `(provider, account_id, address_normalized)` this kit was
+originally specified against.
 
 ## Why direct SQL rather than the REST endpoint
 
