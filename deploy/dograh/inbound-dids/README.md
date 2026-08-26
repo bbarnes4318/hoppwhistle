@@ -15,6 +15,20 @@ Target: `hopwhistle-prod-ash` / `178.156.223.97`, containers `dograh-asterisk`
 and `dograh-api-1`. **Do not touch `167.235.206.206`** — that is the separate
 hardened outbound-only SBC with ARI/Stasis deliberately noloaded.
 
+## Resolved on the box (2026-08-26)
+
+Read out of the live database, so the runbook does not have to re-derive them:
+
+| Thing                                 | Value                                       |
+| ------------------------------------- | ------------------------------------------- |
+| `workflows.id` (exact name match)     | **1** (organization 1)                      |
+| ARI `telephony_configurations.id`     | **1** — `provider='ari'`, name `hopwhistle` |
+| Other config present                  | 2 — `provider='telnyx'`, not used here      |
+| `telephony_phone_numbers` on config 1 | **295 rows, all active**                    |
+| Campaigns dialing on config 1         | **82**                                      |
+
+That last row is what makes the collision below real rather than hypothetical.
+
 ## How inbound routing works
 
 Asterisk sends every inbound number to the same `Stasis(dograh)`; Dograh picks
@@ -46,7 +60,7 @@ python deploy/dograh/inbound-dids/tests/test_inbound_dids.py
 
 ## Before loading anything
 
-### 1. Caller-ID pool collision (blocking — verify on the box)
+### 1. Caller-ID pool collision (CONFIRMED — blocks the bulk load, not the canary)
 
 Dograh seeds the **outbound caller-ID rotation pool** from _every active row_ in
 `telephony_phone_numbers` for an (`organization_id`, `telephony_configuration_id`)
@@ -64,31 +78,37 @@ pair. There is no pool-tag filter anywhere in the selection path:
 Inbound lookup requires `is_active = true`, so inbound rows **cannot** be hidden
 from that pool by deactivating them. The two features collide on one flag.
 
-So: **if the ARI config that answers inbound is also a config the campaigns dial
-out on, loading 2777 inbound DIDs also adds 2777 outbound caller IDs.** That would
+On this deployment the ARI config that answers inbound (**1**) is also the config
+**82 campaigns dial out on**. Its 295 active rows are the outbound caller-ID
+rotation pool. So loading all 2777 inbound DIDs takes that pool from **295 to
+3072**, and puts the 1723 `book207-new` numbers — not warmed, not in the SBC's
+`/opt/sbc/dids.csv` (still dated Aug 22) — into outbound rotation.
 
-- dilute the state-matched caller-ID pool from 264 numbers to ~3041, wrecking the
-  `prefer`/`strict` state-match rate, and
-- start presenting the 1723 cold `book207-new` DIDs as outbound caller ID — numbers
-  that are not warmed and are not in the SBC's `/opt/sbc/dids.csv` (still dated
-  Aug 22).
+Do not assume the 1054 `live-since-aug22` numbers are a free pass. They carry
+outbound traffic through the SBC, which is a different system: only 295 rows exist
+on config 1 in total, so most of them are **not** in Dograh's rotation today and
+loading that batch would newly add up to 1054 caller IDs. The importer's dry run
+prints the real overlap (`already_correct` vs `inserted`) — read it before
+deciding, rather than estimating.
 
-`resolve_inbound_ids.py` reports this as `shared_config_check.verdict`:
+Options, best first:
 
-- **CLEAR** — the ARI inbound config is not a campaign dialing config. No
-  collision; proceed with the runbook as written.
-- **COLLISION** — do not bulk-load yet. Options, best first:
-  1. Give inbound its own `provider='ari'` telephony configuration and point the
-     ARI connection at it. Pools are keyed per (org, config)
-     (`_from_number_pool_key`), so a distinct config isolates inbound rows from
-     outbound rotation completely. This is the clean fix.
-  2. Load only the 1054 `live-since-aug22` numbers (already warmed and already in
-     the outbound pool, so the caller-ID blast radius is far smaller) and hold the
-     1723 `book207-new` until the SBC cutover.
-  3. Accept the caller-ID impact explicitly and pass `--ack-shared-config`.
+1. Give inbound its own `provider='ari'` telephony configuration. Pools are keyed
+   per (org, config) (`_from_number_pool_key`), so a distinct config isolates
+   inbound rows from outbound rotation completely. **Verify first** how Dograh
+   resolves an ARI connection to a config id — the 82 campaigns are bound to
+   config 1, so this is only clean if the inbound connection can resolve to a
+   different config without moving them.
+2. Load only the `live-since-aug22` batch and hold `book207-new` until the SBC
+   cutover. Smaller blast radius, but per the paragraph above, not zero.
+3. Accept the caller-ID impact explicitly and pass `--ack-shared-config`.
 
-The importer refuses to apply more than `--canary-max` (default 1) rows into a
-shared config without `--ack-shared-config`, so this cannot be tripped by accident.
+**The canary is unaffected by all of this.** One row against a 295-number pool is
+a 0.3% change, which is why `--canary-max` defaults to 1: the end-to-end inbound
+path can be proven now and the bulk decision made afterwards, on evidence.
+
+The importer refuses to apply more than `--canary-max` rows into a shared config
+without `--ack-shared-config`, so this cannot be tripped by accident.
 
 ### 2. The workflow is an outbound script (asked and answered — not a blocker)
 
@@ -102,6 +122,12 @@ changed.
 content is being adjusted separately for inbound callers. Nothing here needs to
 wait on that — the mapping is by workflow id, so editing the script's opening turn
 does not touch these rows.
+
+**But note what workflow 1 is.** It is the workflow the 82 campaigns on config 1
+run. Editing its opening turn to greet inbound callers changes the opening of
+every outbound call those campaigns place — the edit is not scoped to inbound.
+If inbound and outbound need different openings, they need different workflows,
+and the importer should be pointed at the inbound one with `--workflow-id`.
 
 Recorded because it is a live footgun for whoever reads this next: if a different
 inbound-authored workflow is ever substituted, that is a re-run of the importer
@@ -120,7 +146,7 @@ docker cp deploy/dograh/inbound-dids/. dograh-api-1:/tmp/inbound-dids/
 docker exec dograh-api-1 python /tmp/inbound-dids/resolve_inbound_ids.py
 ```
 
-Record `resolved_inbound_workflow_id`, `resolved_ari_config_id`,
+Confirms `resolved_inbound_workflow_id`, `resolved_ari_config_id`,
 `phone_number_counts_by_config`, and read `shared_config_check.verdict` before
 going further.
 
@@ -156,7 +182,7 @@ Expect all three patterns (`_NXXNXXXXXX`, `_1NXXNXXXXXX`, `_+X.`) in the output.
 ```bash
 docker exec dograh-api-1 python /tmp/inbound-dids/import_inbound_dids.py \
     --csv /tmp/inbound-dids/dograh-inbound-numbers.csv \
-    --org-id 1 --tcid <ARI_CONFIG_ID> --workflow-id <WORKFLOW_ID> \
+    --org-id 1 --tcid 1 --workflow-id 1 \
     --batch live-since-aug22 --limit 1            # dry run, prints the plan
 ```
 
@@ -186,13 +212,13 @@ Only after a test call is answered.
 # live numbers first
 docker exec dograh-api-1 python /tmp/inbound-dids/import_inbound_dids.py \
     --csv /tmp/inbound-dids/dograh-inbound-numbers.csv \
-    --org-id 1 --tcid <ARI_CONFIG_ID> --workflow-id <WORKFLOW_ID> \
+    --org-id 1 --tcid 1 --workflow-id 1 \
     --batch live-since-aug22 --apply
 
 # then the not-yet-live book207 numbers (harmless, future-proofs the cutover)
 docker exec dograh-api-1 python /tmp/inbound-dids/import_inbound_dids.py \
     --csv /tmp/inbound-dids/dograh-inbound-numbers.csv \
-    --org-id 1 --tcid <ARI_CONFIG_ID> --workflow-id <WORKFLOW_ID> \
+    --org-id 1 --tcid 1 --workflow-id 1 \
     --batch book207-new --apply
 ```
 
