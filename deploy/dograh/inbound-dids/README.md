@@ -32,13 +32,13 @@ There is **no catch-all**. Every DID needs its own row.
 
 ## Files
 
-| File | Role |
-| --- | --- |
-| `resolve_inbound_ids.py` | Read-only preflight: resolves the workflow id, the ARI telephony config id, current row counts, and the **shared-config check** below. Writes nothing. |
-| `import_inbound_dids.py` | Idempotent, dry-run-first importer. Batch ordering, canary `--limit`, conflict handling, shared-config guard. |
-| `extensions.conf.from-fractel` | Reference copy of the `[from-fractel]` context that must exist on the box. |
-| `dograh-inbound-numbers.csv` | 2777 DIDs (`address,npa,batch`), already E.164. |
-| `tests/test_inbound_dids.py` | Pure-python tests (no DB/Redis). Also validate the shipped CSV. |
+| File                           | Role                                                                                                                                                   |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `resolve_inbound_ids.py`       | Read-only preflight: resolves the workflow id, the ARI telephony config id, current row counts, and the **shared-config check** below. Writes nothing. |
+| `import_inbound_dids.py`       | Idempotent, dry-run-first importer. Batch ordering, canary `--limit`, conflict handling, shared-config guard.                                          |
+| `extensions.conf.from-fractel` | Reference copy of the `[from-fractel]` context that must exist on the box.                                                                             |
+| `dograh-inbound-numbers.csv`   | 2777 DIDs (`address,npa,batch`), already E.164.                                                                                                        |
+| `tests/test_inbound_dids.py`   | Pure-python tests (no DB/Redis). Also validate the shipped CSV.                                                                                        |
 
 ```bash
 python deploy/dograh/inbound-dids/tests/test_inbound_dids.py
@@ -48,13 +48,13 @@ python deploy/dograh/inbound-dids/tests/test_inbound_dids.py
 
 ### 1. Caller-ID pool collision (blocking — verify on the box)
 
-Dograh seeds the **outbound caller-ID rotation pool** from *every active row* in
+Dograh seeds the **outbound caller-ID rotation pool** from _every active row_ in
 `telephony_phone_numbers` for an (`organization_id`, `telephony_configuration_id`)
 pair. There is no pool-tag filter anywhere in the selection path:
 
-- `import_state_caller_ids.py` (docstring): *"Numbers become part of the Dograh
+- `import_state_caller_ids.py` (docstring): _"Numbers become part of the Dograh
   from-number rotation pool automatically (the telephony factory loads all active
-  numbers for the config on each campaign batch)."*
+  numbers for the config on each campaign batch)."_
 - `pool_state_inventory.py` counts `total_active_caller_ids` across **all** active
   rows; `extra_metadata.pool = "state_cid"` is read only for reporting, never for
   selection.
@@ -166,12 +166,12 @@ docker logs -f dograh-asterisk 2>&1 | grep -E "from-fractel|Stasis"
 docker logs -f dograh-api-1    2>&1 | grep -i inbound
 ```
 
-| What you see | What it means |
-| --- | --- |
-| nothing at all | FracTEL is not routing to `178.156.223.97:5062` — carrier-side, not ours |
-| `from-fractel` NoOp but no StasisStart | dialplan / Stasis problem |
+| What you see                              | What it means                                                                                                                     |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| nothing at all                            | FracTEL is not routing to `178.156.223.97:5062` — carrier-side, not ours                                                          |
+| `from-fractel` NoOp but no StasisStart    | dialplan / Stasis problem                                                                                                         |
 | `no matching phone number` in the api log | compare the printed `called_number` against the stored `address_normalized` — usually the 10-digit trap, i.e. step 2 did not take |
-| StasisStart → workflow starts | working; proceed to step 5 |
+| StasisStart → workflow starts             | working; proceed to step 5                                                                                                        |
 
 ### Step 5 — bulk load
 
