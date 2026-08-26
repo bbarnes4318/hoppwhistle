@@ -44,7 +44,7 @@ There is **no catch-all**. Every DID needs its own row.
 python deploy/dograh/inbound-dids/tests/test_inbound_dids.py
 ```
 
-## Two things to decide before loading anything
+## Before loading anything
 
 ### 1. Caller-ID pool collision (blocking — verify on the box)
 
@@ -90,18 +90,23 @@ out on, loading 2777 inbound DIDs also adds 2777 outbound caller IDs.** That wou
 The importer refuses to apply more than `--canary-max` (default 1) rows into a
 shared config without `--ack-shared-config`, so this cannot be tripped by accident.
 
-### 2. The workflow is an outbound script (confirm intent)
+### 2. The workflow is an outbound script (asked and answered — not a blocker)
 
 The named workflow ends in **`- outbound`** and was authored as an outbound script.
 Dograh does not validate direction — `_ensure_workflow_belongs_to_org` checks org
-ownership only — so it will be accepted as `inbound_workflow_id` without error and
-will **run its outbound opening turn on an inbound caller**. Someone returning our
-missed call gets greeted as though we dialed them.
+ownership only — so it is accepted as `inbound_workflow_id` without error and will
+run its outbound opening turn on an inbound caller unless the script itself is
+changed.
 
-The mapping is mechanically correct either way; this is a script-content question.
-Confirm this is intended, or supply an inbound-authored variant and re-run the
-importer with `--workflow-id <new id>` (it will update the existing rows in place,
-no delete needed).
+**Confirmed intended (2026-08-26):** this is the workflow to map, and the script
+content is being adjusted separately for inbound callers. Nothing here needs to
+wait on that — the mapping is by workflow id, so editing the script's opening turn
+does not touch these rows.
+
+Recorded because it is a live footgun for whoever reads this next: if a different
+inbound-authored workflow is ever substituted, that is a re-run of the importer
+with `--workflow-id <new id>`, which updates the existing rows in place. No delete,
+no re-insert.
 
 ## Runbook
 
