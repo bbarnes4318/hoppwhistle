@@ -27,6 +27,18 @@ const prisma = new PrismaClient();
 
 const PATTERN = /Lead ID\s+(\d+)\s+has to be manually approved/i;
 
+function findLeadId(row) {
+  for (const source of [
+    row.ameriquoteResponseRaw,
+    row.ameriquoteErrorMessage,
+    row.ameriquoteResponseStatus,
+  ]) {
+    const hit = source ? PATTERN.exec(String(source)) : null;
+    if (hit) return hit[1];
+  }
+  return null;
+}
+
 async function main() {
   const candidates = await prisma.insuranceLeadSubmission.findMany({
     where: {
@@ -58,9 +70,10 @@ async function main() {
   const updates = [];
 
   for (const row of candidates) {
-    const source =
-      row.ameriquoteResponseStatus || row.ameriquoteErrorMessage || row.ameriquoteResponseRaw || '';
-    const leadId = row.ameriquoteLeadId || PATTERN.exec(source)?.[1] || null;
+    // Search every field that could carry it. Picking the first non-empty one
+    // reads "Unknown" out of the status column and misses the id sitting in
+    // the error message — and the update below then blanks that message.
+    const leadId = row.ameriquoteLeadId || findLeadId(row);
     if (leadId) withId += 1;
     updates.push({ id: row.id, leadId });
   }
@@ -84,8 +97,9 @@ async function main() {
       data: {
         postStatus: 'MANUAL_REVIEW',
         ameriquoteResponseStatus: 'ManualReview',
-        ameriquoteErrorMessage: null,
-        ...(u.leadId ? { ameriquoteLeadId: u.leadId } : {}),
+        // Only clear the message once its lead id is safely stored. Blanking
+        // it first destroys the only copy when extraction has failed.
+        ...(u.leadId ? { ameriquoteLeadId: u.leadId, ameriquoteErrorMessage: null } : {}),
       },
     });
     done += 1;
