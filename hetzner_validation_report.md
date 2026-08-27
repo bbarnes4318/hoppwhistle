@@ -1,5 +1,11 @@
 # Hetzner Server Validation Report
 
+> **STALE — 2026-08-27.** The Hetzner host is `178.156.223.97`, confirmed from
+> `PUBLIC_IP` / `SIP_PUBLIC_IP` in `/opt/hopwhistle/.env` on the box itself, which is
+> what FreeSWITCH binds `ext-sip-ip` / `ext-rtp-ip` to. The `37.27.189.145` below is
+> from an earlier provisioning attempt and does not serve traffic. The branch
+> production runs is `deploy-sip-fix`, not `edit-campaign-buyer-fix`.
+
 This report documents the status of the Hetzner server validation checks executed as part of the AWS-to-Hetzner migration for Hoppwhistle on the branch `edit-campaign-buyer-fix`.
 
 ---
