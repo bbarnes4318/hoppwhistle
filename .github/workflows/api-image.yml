@@ -1,19 +1,26 @@
-name: API image boots
+name: App images boot
 
-# Builds the API image and starts it. The point is not the build succeeding —
+# Builds the API and WEB images and starts each one. The point is not the build
+# succeeding —
 # it is the container reaching a healthy /health, because everything that has
 # gone wrong in this area went wrong at import time, after a green build:
 # workspace packages whose exports maps pointed at files the image does not
 # contain, and a missing Prisma client. A build-only check would have passed
 # through all of it.
 #
-# Runs only when something that can affect the image changes.
+# WEB is here because it was not, and that is exactly how a broken web image
+# reached a production deploy: this workflow built only the api image, so
+# apps/web/Dockerfile never building the workspace packages was invisible to
+# CI. Any image this repo ships belongs in this file.
+#
+# Runs only when something that can affect either image changes.
 
 on:
   pull_request:
     branches: [main, develop]
     paths:
       - 'apps/api/**'
+      - 'apps/web/**'
       - 'packages/**'
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
@@ -21,8 +28,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  boot:
-    name: Build image and reach /health
+  api:
+    name: Build API image and reach /health
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
@@ -106,3 +113,73 @@ jobs:
       - name: Stop
         if: always()
         run: docker rm -f api || true
+
+  web:
+    name: Build web image and reach /
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # `dist` is gitignored, so this checkout has none — the same state the
+      # production box is in after a clean pull, and the state in which the
+      # image build was broken. The build must produce what it needs itself.
+      - name: Assert the workspace packages are NOT prebuilt
+        run: |
+          set -euo pipefail
+          for p in shared routing-dsl sdk; do
+            if [ -d "packages/$p/dist" ]; then
+              echo "::error::packages/$p/dist exists in a fresh checkout; this job can no longer prove the image builds without it"
+              exit 1
+            fi
+          done
+          echo "no packages/*/dist present, as expected"
+
+      - name: Build the web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: false
+          load: true
+          tags: hopwhistle-web:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Start the container
+        run: |
+          docker run -d --name web -p 3000:3000 \
+            -e NODE_ENV=production \
+            -e PORT=3000 \
+            -e HOSTNAME=0.0.0.0 \
+            hopwhistle-web:ci
+
+      # The web container serves Next's own output and does not talk to the API
+      # to render its shell, so a 200 on / is the honest liveness signal here.
+      - name: Wait for /
+        run: |
+          for i in $(seq 1 90); do
+            code=$(curl -s -o /tmp/web.html -w '%{http_code}' http://localhost:3000/ || true)
+            if [ "$code" = "200" ] || [ "$code" = "307" ] || [ "$code" = "302" ]; then
+              echo "web answered ${code} after ${i}s"; exit 0
+            fi
+            if [ -z "$(docker ps -q -f name=web)" ]; then
+              echo "::error::container exited before answering"; break
+            fi
+            sleep 1
+          done
+          echo "::error::web did not answer on /"
+          docker logs web 2>&1 | tail -60
+          exit 1
+
+      - name: Container logs on failure
+        if: failure()
+        run: docker logs web 2>&1 | tail -100
+
+      - name: Stop
+        if: always()
+        run: docker rm -f web || true
