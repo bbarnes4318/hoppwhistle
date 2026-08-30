@@ -54,6 +54,19 @@ function fakeDelegate(opts: {
   return { delegate: delegate as any, recorded };
 }
 
+/** Fake BuyerEndpoint delegate. `cap` of null means no active DAY-period cap. */
+function fakeEndpoints(cap: number | null) {
+  const recorded: { where: Record<string, unknown> }[] = [];
+  const delegate = {
+    aggregate: (args: { where: Record<string, unknown> }) => {
+      recorded.push(args);
+      return Promise.resolve({ _sum: { maxCap: cap } });
+    },
+  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return { endpoints: delegate as any, recorded };
+}
+
 const ADMIN = { isAdminOrOwner: true, publisherId: null, buyerId: null };
 const PUBLISHER = { isAdminOrOwner: false, publisherId: 'pub_1', buyerId: null };
 const BUYER = { isAdminOrOwner: false, publisherId: null, buyerId: 'buy_1' };
@@ -255,24 +268,49 @@ describe('publisher metrics', () => {
 });
 
 describe('buyer metrics', () => {
-  it('sums spend and reports no cap rather than a wrong one', async () => {
-    const { delegate } = fakeDelegate({
-      groups: [
-        { billable: true, count: 30, money: '900.0000' },
-        { billable: false, count: 10, money: null },
-      ],
-    });
+  const buyerGroups = [
+    { billable: true, count: 30, money: '900.0000' },
+    { billable: false, count: 10, money: null },
+  ];
+
+  it('counts calls against the cap, summed over active DAY endpoints', async () => {
+    const { delegate } = fakeDelegate({ groups: buyerGroups });
+    const { endpoints, recorded } = fakeEndpoints(500);
     const res = await computeLiveMetrics(delegate, {
       tenantId: 't1',
       role: 'buyer',
       profile: BUYER,
+      buyerEndpoints: endpoints,
     });
 
     expect(res.spendToday).toBe('900.0000');
     expect(res.billableRate).toBeCloseTo(30 / 40, 10);
-    // BuyerEndpoint.maxCap is a call count, not money — it cannot bound spend.
-    expect(res.capToday).toBeNull();
-    expect(res.unavailable.capToday).toMatch(/maxCap/);
+    // Calls against cap, not spend against cap — maxCap is a call count.
+    expect(res.callsTowardCapToday).toBe(40);
+    expect(res.callCapToday).toBe(500);
+
+    // Only this buyer's own active daily-cap endpoints are summed.
+    expect(recorded[0].where).toEqual({
+      buyerId: 'buy_1',
+      status: 'ACTIVE',
+      capPeriod: 'DAY',
+    });
+  });
+
+  it('treats a zero cap as no cap, not a cap of zero', async () => {
+    const { delegate } = fakeDelegate({ groups: buyerGroups });
+    const { endpoints } = fakeEndpoints(0);
+    const res = await computeLiveMetrics(delegate, {
+      tenantId: 't1',
+      role: 'buyer',
+      profile: BUYER,
+      buyerEndpoints: endpoints,
+    });
+
+    // maxCap defaults to 0 in the schema, so 0 means unconfigured. Reporting
+    // "40 of 0" would read as massively over cap when nothing is capped.
+    expect(res.callCapToday).toBeNull();
+    expect(res.unavailable.callCapToday).toMatch(/No daily call cap/);
   });
 });
 

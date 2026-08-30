@@ -49,7 +49,8 @@ interface LiveMetricsPayload {
   billableToday?: number | null;
   earningsToday?: string | null;
   spendToday?: string | null;
-  capToday?: string | null;
+  callsTowardCapToday?: number | null;
+  callCapToday?: number | null;
   billableRate?: number | null;
   unavailable: Record<string, string>;
 }
@@ -116,9 +117,18 @@ function buildSlots(role: Role, d: LiveMetricsPayload | null): LiveMetricSlot[] 
           id: 'spend',
           label: 'Spend today',
           value: money(d?.spendToday),
-          sub: d?.capToday ? `of ${money(d.capToday)} cap` : undefined,
           tone: 'money',
           unavailableReason: why('spendToday'),
+        },
+        {
+          // Calls against cap, not spend against cap: the cap in the schema is
+          // BuyerEndpoint.maxCap, a call count, so pairing it with money would
+          // put two different units either side of the word "of".
+          id: 'cap',
+          label: 'Calls vs cap',
+          value: count(d?.callsTowardCapToday),
+          sub: d?.callCapToday != null ? `of ${count(d.callCapToday)} cap` : 'no cap set',
+          unavailableReason: why('callCapToday'),
         },
         {
           id: 'billable-rate',

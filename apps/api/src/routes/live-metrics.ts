@@ -41,6 +41,13 @@ type AuthRequest = FastifyRequest & { user?: AuthenticatedUser };
  */
 export type CallDelegate = Pick<PrismaClient['call'], 'count' | 'aggregate' | 'groupBy'>;
 
+/**
+ * The cap is a CALL COUNT, not money: BuyerEndpoint.maxCap per CapPeriod. Summed
+ * across the buyer's active DAY-period endpoints, which is the number of calls
+ * they have agreed to take today.
+ */
+export type BuyerEndpointDelegate = Pick<PrismaClient['buyerEndpoint'], 'aggregate'>;
+
 /** Rates are fractions in [0,1], not percentages. Named so at the call site. */
 type Fraction = number;
 
@@ -55,7 +62,9 @@ interface LiveMetricsResponse {
   billableToday?: number | null;
   earningsToday?: string | null;
   spendToday?: string | null;
-  capToday?: string | null;
+  /** Calls counted against the cap today, and the cap itself. */
+  callsTowardCapToday?: number | null;
+  callCapToday?: number | null;
   billableRate?: Fraction | null;
   /** field -> why it is null. Present only for fields that are actually null. */
   unavailable: Record<string, string>;
@@ -91,12 +100,10 @@ const ABANDON_UNAVAILABLE =
   'rather than Call, because a call has several legs and it is the inbound one whose ' +
   'termination defines an abandon.';
 
-const CAP_UNAVAILABLE =
-  'No per-buyer spend cap exists. The only cap in the schema is ' +
-  'BuyerEndpoint.maxCap, which is a CALL COUNT per endpoint per CapPeriod, not a ' +
-  'money limit, so it cannot bound spendToday. Either add a money cap ' +
-  '(e.g. Buyer.dailySpendCap Decimal?) or change the metric to calls-against-cap, ' +
-  'which is computable today from BuyerEndpoint.maxCap where capPeriod = DAY.';
+const NO_CAP_CONFIGURED =
+  'No daily call cap is set. A cap comes from BuyerEndpoint.maxCap on endpoints ' +
+  'with capPeriod = DAY; this buyer has none active, so there is nothing to ' +
+  'count against.';
 
 /** Prisma Decimal | null -> fixed string | null, never a float. */
 function decimalToString(value: Prisma.Decimal | null, places = 4): string | null {
@@ -141,7 +148,14 @@ export function resolveRole(profile: LiveScopeProfile): LiveRole | null {
  */
 export async function computeLiveMetrics(
   calls: CallDelegate,
-  opts: { tenantId: string; role: LiveRole; profile: LiveScopeProfile; now?: Date }
+  opts: {
+    tenantId: string;
+    role: LiveRole;
+    profile: LiveScopeProfile;
+    now?: Date;
+    /** Required for the buyer role, which needs the daily call cap. */
+    buyerEndpoints?: BuyerEndpointDelegate;
+  }
 ): Promise<LiveMetricsResponse> {
   const { tenantId, role, profile } = opts;
   const now = opts.now ?? new Date();
@@ -273,14 +287,32 @@ export async function computeLiveMetrics(
     };
   }
 
-  unavailable.capToday = CAP_UNAVAILABLE;
+  /*
+   * The cap is a call count, so the metric is calls against cap — not spend
+   * against cap. BuyerEndpoint.maxCap is per endpoint per period, so the
+   * buyer's daily cap is the sum over their active DAY-period endpoints. One
+   * extra aggregate, buyer-only, and it is indexed on buyerId.
+   */
+  let callCapToday: number | null = null;
+  if (opts.buyerEndpoints && profile.buyerId) {
+    const capAgg = await opts.buyerEndpoints.aggregate({
+      where: { buyerId: profile.buyerId, status: 'ACTIVE', capPeriod: 'DAY' },
+      _sum: { maxCap: true },
+    });
+    // maxCap defaults to 0, which means "no cap" rather than "cap of zero".
+    const summed = capAgg._sum.maxCap ?? 0;
+    callCapToday = summed > 0 ? summed : null;
+  }
+  if (callCapToday === null) unavailable.callCapToday = NO_CAP_CONFIGURED;
+
   return {
     role: 'buyer',
     generatedAt: now.toISOString(),
     window,
     callsInFlight,
     spendToday: money.toFixed(4),
-    capToday: null,
+    callsTowardCapToday: total,
+    callCapToday,
     billableRate,
     unavailable,
     cached: false,
@@ -325,7 +357,12 @@ export async function registerLiveMetricsRoutes(fastify: FastifyInstance) {
       // fall through and compute
     }
 
-    const body = await computeLiveMetrics(prisma.call, { tenantId, role, profile });
+    const body = await computeLiveMetrics(prisma.call, {
+      tenantId,
+      role,
+      profile,
+      buyerEndpoints: prisma.buyerEndpoint,
+    });
 
     try {
       await getRedisClient().set(cacheKey, JSON.stringify(body), 'EX', CACHE_TTL_SECONDS);
