@@ -877,6 +877,20 @@ jobs:
       - name: Generate the Prisma client
         run: pnpm --filter @hopwhistle/api exec prisma generate
 
+      # Required before the worker typechecks: apps/worker/tsconfig.json does not
+      # extend the root config, so it has no `paths` mapping for the workspace
+      # packages and resolves `@hopwhistle/shared` through the node_modules
+      # symlink to that package's `types` field. That field used to point at
+      # `src/index.ts` — always on disk, so a build was never needed. It now
+      # points at `dist/index.d.ts`, which only exists once the package is built,
+      # so an unbuilt `shared` fails the worker typecheck with TS2307 across
+      # files this job has nothing to do with.
+      #
+      # `shared` is the worker's ONLY workspace dependency, so building it alone
+      # is sufficient.
+      - name: Build the workspace packages the worker resolves
+        run: pnpm --filter @hopwhistle/shared build
+
       # The worker's full lint has ~309 pre-existing problems across files this
       # branch never touched, so it is scoped to the gate rather than run whole.
       # A job that is red for unrelated reasons teaches everyone to ignore it.
