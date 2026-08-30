@@ -41,6 +41,8 @@ lerna-debug.log*
 
 # TypeScript
 *.tsbuildinfo
+# Scoped tsconfigs write a suffixed build-info file next to themselves.
+.tsbuildinfo-*
 next-env.d.ts
 
 # IDE

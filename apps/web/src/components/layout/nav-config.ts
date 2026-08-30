@@ -161,17 +161,16 @@ export function publisherNav(canViewRecordings: boolean): NavGroup[] {
 
 /**
  * Relabelled per the brief: Costs -> Spend, Targets -> Targeting,
- * Wallet / Billing -> Billing. The HREFS ARE UNCHANGED — prompt 4 moves the
- * routes themselves. Renaming the label before the route keeps the nav honest
- * without breaking every existing link and bookmark in the same commit.
+ * Wallet / Billing -> Billing. The routes now match the labels; the old paths
+ * redirect (see next.config.js), so existing links and bookmarks still land.
  */
 export function buyerNav(canViewRecordings: boolean): NavGroup[] {
   const items: NavItem[] = [
     { name: 'Dashboard', href: '/buyer/dashboard', icon: LayoutDashboard },
     { name: 'Calls', href: '/buyer/calls', icon: AudioLines },
-    { name: 'Spend', href: '/buyer/costs', icon: BarChart3 },
-    { name: 'Targeting', href: '/buyer/targets', icon: Globe },
-    { name: 'Billing', href: '/buyer/wallet', icon: Receipt },
+    { name: 'Spend', href: '/buyer/spend', icon: BarChart3 },
+    { name: 'Targeting', href: '/buyer/targeting', icon: Globe },
+    { name: 'Billing', href: '/buyer/billing', icon: Receipt },
     { name: 'Disputes', href: '/buyer/disputes', icon: Shield },
   ];
   if (canViewRecordings) {

@@ -11,6 +11,8 @@ export default defineConfig({
       'src/app/**/dialer-v2-shadow/**/*.test.ts',
       // Guards the CSV template's columns against the buyer's spec files.
       'src/components/leads/__tests__/**/*.test.ts',
+      // The buyer pages' pure logic: dispute evidence, bar scale, date range.
+      'src/app/**/buyer/_lib/*.test.ts',
     ],
   },
 });

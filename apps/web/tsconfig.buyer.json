@@ -1,0 +1,24 @@
+{
+  // Scoped compile check for the rebuilt buyer pages and the server layer they
+  // sit on. Same reason as tsconfig.dialer-v2.json: apps/web does not typecheck
+  // as a whole (pre-existing errors in unrelated components), so a whole-app
+  // check would be red for reasons this work did not cause.
+  //
+  // `next-env.d.ts` is deliberately NOT in `include`: Next generates it and the
+  // repo gitignores it, so it does not exist on a fresh CI checkout.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "tsBuildInfoFile": "./.tsbuildinfo-buyer"
+  },
+  "include": [
+    "src/app/(dashboard)/buyer/**/*.ts",
+    "src/app/(dashboard)/buyer/**/*.tsx",
+    "src/lib/server/**/*.ts",
+    "src/lib/session-token.ts",
+    "src/components/auth/session-cookie-sync.tsx",
+    "src/components/domain/**/*.ts",
+    "src/components/domain/**/*.tsx"
+  ],
+  "exclude": ["node_modules", ".next"]
+}

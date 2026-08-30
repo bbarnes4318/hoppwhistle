@@ -221,6 +221,18 @@
     color: var(--ink);
   }
 
+  /* Native controls follow color-scheme, not our tokens. While <html> still
+     carries the legacy `dark` class, a light scope would render its radios,
+     checkboxes, date pickers and scrollbars in the browser's dark chrome —
+     an unchecked radio comes out as a filled dark disc. Each scope therefore
+     declares which scheme its controls belong to. */
+  [data-theme='light'] {
+    color-scheme: light;
+  }
+  [data-theme='dark'] {
+    color-scheme: dark;
+  }
+
   /* One focus treatment for the whole product. */
   :focus-visible {
     outline: 2px solid var(--money);

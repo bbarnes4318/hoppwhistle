@@ -1,3 +1,5 @@
+import { clearSessionToken, persistSessionToken } from './session-token';
+
 // Use window.location.origin in the browser so requests always match the
 // current protocol/domain (avoids Mixed Content blocks when the build-time
 // NEXT_PUBLIC_API_URL was baked with an http:// address).
@@ -5,8 +7,6 @@ const API_URL =
   typeof window !== 'undefined'
     ? window.location.origin
     : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-
-
 
 export interface ApiResponse<T> {
   data?: T;
@@ -48,18 +48,16 @@ class ApiClient {
     return this.token;
   }
 
+  // Both setters go through session-token so the cookie the server render
+  // reads never drifts from the localStorage copy the browser client uses.
   setToken(token: string) {
     this.token = token;
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('token', token);
-    }
+    persistSessionToken(token);
   }
 
   clearToken() {
     this.token = undefined;
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('token');
-    }
+    clearSessionToken();
   }
 
   setApiKey(apiKey: string) {
@@ -95,8 +93,6 @@ class ApiClient {
         Object.assign(headers, options.headers);
       }
     }
-
-
 
     // Get the current auth token (checks localStorage for freshest value)
     const authToken = this.getAuthToken();

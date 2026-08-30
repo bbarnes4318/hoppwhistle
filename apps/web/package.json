@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc -p tsconfig.dialer-v2.json",
+    "typecheck:buyer": "tsc -p tsconfig.buyer.json",
     "typecheck:all": "tsc --noEmit",
     "test": "vitest run",
     "check:status-tones": "node scripts/check-status-tones.mjs"

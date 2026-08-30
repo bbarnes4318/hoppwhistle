@@ -77,7 +77,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
    4-6 wrap each converted page in <ThemeScope theme="light">; once none are
    left, the class comes off <html> and both scopes are deleted.
  */}
-        <ThemeScope theme="light" className="flex h-full shrink-0 bg-transparent">
+        {/* The rail is 208px wide and does not shrink, so below md it is
+            replaced by MobileNav's drawer in the topbar. */}
+        <ThemeScope theme="light" className="hidden h-full shrink-0 bg-transparent md:flex">
           <Sidebar />
         </ThemeScope>
         <div className="flex flex-1 flex-col h-screen overflow-hidden">
