@@ -14,6 +14,7 @@
 import { Prisma } from '@prisma/client';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 
+import { deriveTerminationParty, normalizeHangupCause } from '../lib/hangup-cause.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { getInboundExternalGateways, sanitizeDestinationString } from '../lib/route-destination.js';
 import { numberPoolService } from '../services/number-pool-service.js';
@@ -356,6 +357,12 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
                 status: 'FAILED',
                 blocked: true,
                 blockReason: 'TCPA_LITIGATOR',
+                // We refused the INVITE. Recording the party here keeps blocked
+                // calls out of the abandon numerator while still counting them
+                // as instrumented, so a tenant that blocks a lot of traffic does
+                // not look uninstrumented.
+                terminationParty: 'SYSTEM',
+                terminationCause: 'TCPA_LITIGATOR_BLOCK',
                 startedAt: new Date(),
                 endedAt: new Date(),
                 metadata: { tcpaResult, source: 'freeswitch' } as Record<string, unknown>,
@@ -579,6 +586,10 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
       connectedDuration?: number;
       billDuration?: number;
       hangupCause: string;
+      // FreeSWITCH sip_hangup_disposition, e.g. "recv_bye". Optional: it is only
+      // sent by deployments that have the current inbound_route.lua. Without it
+      // a NORMAL_CLEARING call records terminationParty = UNKNOWN.
+      sipHangupDisposition?: string;
       startedAt: string; // ISO timestamp
       answeredAt?: string;
       endedAt: string;
@@ -600,6 +611,13 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
         ORIGINATOR_CANCEL: 'CANCELLED',
       };
       const callStatus = statusMap[body.hangupCause] || 'COMPLETED';
+
+      // The status map collapses five causes into a CallStatus and throws the
+      // rest away, which is why abandon rate was never sourceable: CANCELLED
+      // and NO_ANSWER both mean "not answered" but only one is a caller giving
+      // up. Keep the raw cause and the party we derive from it.
+      const terminationCause = normalizeHangupCause(body.hangupCause);
+      const terminationParty = deriveTerminationParty(body.hangupCause, body.sipHangupDisposition);
 
       // Sanitize FK fields — Lua sends "null" / "" for missing IDs which would
       // violate foreign-key constraints if passed through.
@@ -780,6 +798,8 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
           buyerName: buyerName,
           recordingStatus: body.recordingPath ? 'PENDING' : null,
           callSource: callSource,
+          terminationCause: terminationCause,
+          terminationParty: terminationParty,
           cost:
             body.carrierCost !== undefined && body.carrierCost !== null
               ? new Prisma.Decimal(body.carrierCost)
