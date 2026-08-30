@@ -9,7 +9,8 @@
     "lint": "next lint",
     "typecheck": "tsc -p tsconfig.dialer-v2.json",
     "typecheck:all": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "check:status-tones": "node scripts/check-status-tones.mjs"
   },
   "dependencies": {
     "@deck.gl/core": "^8.9.34",

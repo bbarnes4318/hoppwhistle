@@ -3,8 +3,10 @@
 import Link from 'next/link';
 import * as React from 'react';
 
+import { ThemeScope } from '@/components/domain/theme-scope';
 import { useAuth } from '@/hooks/use-auth';
 
+import { ComponentGallery } from './component-gallery';
 import { ThemePane } from './preview-content';
 
 /**
@@ -66,15 +68,38 @@ export default function DesignPreviewPage() {
         </p>
       </header>
 
-      <div className="p-6">
+      <div className="space-y-8 p-6">
         {/*
-          Side by side above 1280px, stacked below. Both panes are the identical
-          component — only the data-theme attribute differs.
+          Tokens and type, side by side above 1280px, stacked below. Both panes
+          are the identical component — only the data-theme attribute differs.
         */}
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-          <ThemePane theme="light" />
-          <ThemePane theme="dark" />
-        </div>
+        <section>
+          <h2 className="t-title mb-3 text-ink">Tokens and type</h2>
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <ThemePane theme="light" />
+            <ThemePane theme="dark" />
+          </div>
+        </section>
+
+        {/*
+          The component layer, in light only. These are the publisher and buyer
+          surfaces, which are light-only by design; the admin live board is the
+          single dark screen and it reuses the same components through the
+          [data-theme='dark'] scope proved above.
+        */}
+        <section>
+          <h2 className="t-title mb-1 text-ink">Components</h2>
+          <p className="t-body mb-3 max-w-3xl text-ink-2">
+            Every component in <code className="t-data">src/components/domain</code>, in every
+            state. This is the living style guide — if a page needs something that is not here, it
+            belongs here first.
+          </p>
+          {/* Explicit scope so the gallery's drawers and menus, which portal to
+              document.body, resolve light rather than inheriting <html class="dark">. */}
+          <ThemeScope theme="light" className="bg-transparent">
+            <ComponentGallery />
+          </ThemeScope>
+        </section>
       </div>
     </main>
   );

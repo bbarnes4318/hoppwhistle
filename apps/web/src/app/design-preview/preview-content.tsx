@@ -1,6 +1,7 @@
 import * as React from 'react';
 
 import { DurationBar } from '@/components/domain/duration-bar';
+import { ThemeScope } from '@/components/domain/theme-scope';
 import { cn } from '@/lib/utils';
 
 import {
@@ -246,7 +247,7 @@ function DurationStates() {
  */
 export function ThemePane({ theme }: { theme: Theme }) {
   return (
-    <div data-theme={theme} className="rounded-card border border-rule bg-paper">
+    <ThemeScope theme={theme} className="rounded-card border border-rule bg-paper">
       <header className="flex items-baseline justify-between border-b border-rule px-4 py-3">
         <h2 className="t-title text-ink">{theme === 'light' ? 'Light' : 'Dark'}</h2>
         <code className="t-meta text-ink-3">
@@ -324,6 +325,6 @@ export function ThemePane({ theme }: { theme: Theme }) {
           <DurationStates />
         </Panel>
       </div>
-    </div>
+    </ThemeScope>
   );
 }
