@@ -4,6 +4,7 @@ import { Inbox, PhoneOff, SearchX, ServerCrash } from 'lucide-react';
 import * as React from 'react';
 
 import {
+  ComplianceOverrideBanner,
   DataTable,
   DurationBar,
   EmptyState,
@@ -607,6 +608,116 @@ function FilterGallery() {
   );
 }
 
+/* --------------------------- compliance overrides -------------------------- */
+
+function OverrideBannerGallery() {
+  const hour = 3600_000;
+  const now = Date.now();
+
+  return (
+    <div className="space-y-4">
+      <p className="t-body text-ink-2">
+        Persistent and undismissable for as long as a gate is off. An override is not a blocked call
+        — violet would say the system stopped something on purpose, when in fact the check is off
+        and calls are flowing without it. Nothing is blocked; the protection is.
+      </p>
+
+      <div>
+        <StateLabel>One override, bounded — amber</StateLabel>
+        <ComplianceOverrideBanner
+          href="#"
+          overrides={[
+            {
+              id: '1',
+              gate: 'DNC check',
+              scope: 'Campaign: ACA Tier-1 — Florida',
+              expiresAt: new Date(now + 2 * hour + 14 * 60_000),
+              createdBy: 'j.reyes',
+            },
+          ]}
+        />
+      </div>
+
+      <div>
+        <StateLabel>No expiry — escalates to red</StateLabel>
+        <p className="t-meta mb-2 text-ink-3">
+          The one set during an outage and forgotten. Nothing will turn it back on except someone
+          remembering, so it does not get to sit quietly in amber.
+        </p>
+        <ComplianceOverrideBanner
+          href="#"
+          overrides={[
+            {
+              id: '2',
+              gate: 'Litigator scrub',
+              scope: 'All campaigns',
+              expiresAt: null,
+              createdBy: 'ops-oncall',
+            },
+          ]}
+        />
+      </div>
+
+      <div>
+        <StateLabel>Past its expiry but still active — also red</StateLabel>
+        <p className="t-meta mb-2 text-ink-3">Whatever was meant to clean this up did not run.</p>
+        <ComplianceOverrideBanner
+          href="#"
+          overrides={[
+            {
+              id: '3',
+              gate: 'Duplicate window',
+              scope: 'Publisher: Northstar Media',
+              expiresAt: new Date(now - 5 * hour),
+              createdBy: 'm.okonkwo',
+            },
+          ]}
+        />
+      </div>
+
+      <div>
+        <StateLabel>Several at once — worst severity wins</StateLabel>
+        <ComplianceOverrideBanner
+          href="#"
+          onReview={() => {}}
+          overrides={[
+            {
+              id: '4',
+              gate: 'DNC check',
+              scope: 'Campaign: FE Nationwide',
+              expiresAt: new Date(now + 45 * 60_000),
+              createdBy: 'j.reyes',
+            },
+            {
+              id: '5',
+              gate: 'Litigator scrub',
+              scope: 'All campaigns',
+              expiresAt: null,
+              createdBy: 'ops-oncall',
+            },
+            {
+              id: '6',
+              gate: 'State eligibility',
+              scope: 'Buyer: Meridian Health',
+              expiresAt: new Date(now + 12 * hour),
+            },
+          ]}
+        />
+      </div>
+
+      <div>
+        <StateLabel>No overrides — renders nothing at all</StateLabel>
+        <div className="rounded-control border border-dashed border-rule p-3">
+          <ComplianceOverrideBanner overrides={[]} />
+          <span className="t-meta text-ink-3">
+            (empty by design — the banner never occupies space when every gate is on)
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* --------------------------------- gallery --------------------------------- */
 
 export function ComponentGallery() {
@@ -616,6 +727,13 @@ export function ComponentGallery() {
 
   return (
     <div className="space-y-6">
+      <Section
+        title="ComplianceOverrideBanner"
+        sub="Persistent topbar banner while any compliance gate is switched off."
+      >
+        <OverrideBannerGallery />
+      </Section>
+
       <Section
         title="StatusChip"
         sub="One variant per enum value in apps/api/prisma/schema.prisma — 266 values, 68 enums."

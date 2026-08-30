@@ -6,6 +6,11 @@
  * an empty state, that is the bug this layer exists to prevent.
  */
 
+export {
+  ComplianceOverrideBanner,
+  type ComplianceOverride,
+  type ComplianceOverrideBannerProps,
+} from './compliance-override-banner';
 export { DataTable, type Column, type DataTableProps } from './data-table';
 export {
   DurationBar,

@@ -205,9 +205,18 @@ export const DEFAULT_TONE: Record<string, StatusTone> = {
  * several are taken straight from the comments in schema.prisma.
  */
 export const ENUM_TONE: Record<string, Record<string, StatusTone>> = {
-  // An ACTIVE compliance override is a gate someone deliberately bypassed.
-  // It belongs in the compliance colour, not the healthy one.
-  ComplianceOverrideStatus: { ACTIVE: 'blocked', PENDING_APPROVAL: 'ringing' },
+  // An ACTIVE compliance override is NOT blocked, and this is the one place the
+  // violet would actively mislead. Violet means "the system stopped this on
+  // purpose". An active override is the inverse: the gate is switched off and
+  // calls are flowing WITHOUT the check. Nothing is blocked — the protection
+  // is. That is a live risk, so it reads amber, and ComplianceOverrideBanner
+  // keeps it on screen for as long as it lasts.
+  ComplianceOverrideStatus: {
+    ACTIVE: 'ringing',
+    PENDING_APPROVAL: 'ringing',
+    EXPIRED: 'neutral', // an override that lapsed is the gate back on: normal
+    REVOKED: 'neutral', // likewise — someone turned the protection back on
+  },
 
   // Storage tier is a cost bucket, not a health signal — all neutral.
   RecordingStorageTier: { HOT: 'neutral', WARM: 'neutral', COLD: 'neutral' },
