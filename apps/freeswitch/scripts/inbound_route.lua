@@ -42,6 +42,119 @@ local function json_value(json_str, key)
   return val
 end
 
+-- ── Agent busy check ────────────────────────────────────────────────────────
+-- An agent already on a call must never have a second call rung at them.
+-- FreeSWITCH's live channel table is the only real-time truth for this: the
+-- API's DB/Redis concurrency gate cannot see an in-progress inbound call (the
+-- Call row is written from the CDR *after* hangup), and static DID→extension
+-- routes never reach that gate at all. So busy endpoints are dropped from the
+-- ring group here, at bridge time.
+--
+-- Kill switch, effective on the very next call, no restart, no deploy:
+--     fs_cli -x "global_setvar agent_busy_check=false"     (disable)
+--     fs_cli -x "global_setvar agent_busy_check=true"      (re-enable)
+-- Falls back to env AGENT_BUSY_CHECK, default enabled.
+-- Per-agent limit: global var agent_max_concurrent_calls, or env
+-- AGENT_MAX_CONCURRENT_CALLS. Default 1 — one call at a time per agent.
+--
+-- The markers below delimit the block that tests/test_agent_busy.lua loads and
+-- exercises directly — keep them in place.
+-- ##AGENT_BUSY_BEGIN##
+local function fs_global(name)
+    local ok, val = pcall(function() return api:execute("global_getvar", name) or "" end)
+    if not ok or type(val) ~= "string" then return "" end
+    val = string.gsub(val, "^%s*(.-)%s*$", "%1")
+    if val == "" or val == "_undef_" or string.match(val, "^%-ERR") then return "" end
+    return val
+end
+
+local busy_check_setting = fs_global("agent_busy_check")
+if busy_check_setting == "" then
+    busy_check_setting = os.getenv("AGENT_BUSY_CHECK") or "true"
+end
+local AGENT_BUSY_CHECK = busy_check_setting ~= "false"
+
+local limit_setting = fs_global("agent_max_concurrent_calls")
+if limit_setting == "" then
+    limit_setting = os.getenv("AGENT_MAX_CONCURRENT_CALLS") or "1"
+end
+local AGENT_MAX_CONCURRENT = tonumber(limit_setting) or 1
+if AGENT_MAX_CONCURRENT < 1 then AGENT_MAX_CONCURRENT = 1 end
+
+-- Channel states that mean "this call is already going away". A call that just
+-- ended can sit in these for a moment; counting them would wrongly hold an
+-- agent busy and leave the next caller unanswered.
+local CHANNEL_TEARDOWN_STATES = {
+    CS_HANGUP = true,
+    CS_REPORTING = true,
+    CS_DESTROY = true,
+    CS_NONE = true,
+}
+
+-- Snapshot the live channel table as rows of fields.
+-- `show channels as delim |` emits a header row plus one row per channel.
+-- application_data (field 12) can itself contain the delimiter, so only fields
+-- 1-11 are trustworthy — we read uuid (1), direction (2), name (5), state (6)
+-- and cid_num (8), all of which sit safely before it.
+local function live_channel_rows()
+    local rows = {}
+    local ok, out = pcall(function()
+        return api:execute("show", "channels as delim |") or ""
+    end)
+    if not ok or type(out) ~= "string" or out == "" or string.match(out, "^%-ERR") then
+        return rows
+    end
+    for line in string.gmatch(out, "[^\r\n]+") do
+        if string.find(line, "|", 1, true) then
+            local fields = {}
+            for field in string.gmatch(line .. "|", "(.-)|") do
+                table.insert(fields, field)
+                if #fields >= 11 then break end
+            end
+            -- Skip the header row and the trailing "N total." summary.
+            if fields[1] and fields[1] ~= "uuid" and fields[1] ~= "" then
+                table.insert(rows, fields)
+            end
+        end
+    end
+    return rows
+end
+
+local function starts_with(s, prefix)
+    return string.sub(s or "", 1, string.len(prefix)) == prefix
+end
+
+-- Live channels belonging to one agent's softphone. Counts calls TO the phone
+-- (b-leg named after its registered contact, e.g. a WebRTC contact token) and
+-- calls FROM it (a-leg named after / identified by the extension). Our own
+-- A-leg is excluded so a call can never mark its own destination busy.
+local function agent_channel_count(extension, contact_uri, rows, self_uuid)
+    local contact_prefix = nil
+    local user_host = string.match(contact_uri or "", "^sofia/internal/sip:([^;>]+)")
+    if user_host and user_host ~= "" then
+        contact_prefix = "sofia/internal/" .. user_host
+    end
+    local ext_prefix = "sofia/internal/" .. extension .. "@"
+
+    local count = 0
+    for _, f in ipairs(rows) do
+        if f[1] ~= self_uuid and not CHANNEL_TEARDOWN_STATES[f[6] or ""] then
+            local name = f[5] or ""
+            local matched = false
+            if contact_prefix and starts_with(name, contact_prefix) then
+                matched = true
+            elseif starts_with(name, ext_prefix) then
+                matched = true
+            elseif starts_with(name, "sofia/internal/") and f[2] == "inbound" and f[8] == extension then
+                matched = true
+            end
+            if matched then count = count + 1 end
+        end
+    end
+    return count
+end
+-- ##AGENT_BUSY_END##
+
 -- ── Main Logic ──────────────────────────────────────────────────────────────
 local caller_number = session:getVariable("caller_id_number") or "unknown"
 local did_number    = session:getVariable("destination_number") or ""
@@ -128,6 +241,13 @@ local no_eligible     = json_value(response_body, "noEligibleDestination")
 -- current carrier chain (env INBOUND_EXTERNAL_GATEWAYS); default matches the
 -- outbound FracTEL trunk. BulkVS/SignalWire/Telnyx were retired for egress
 -- after the July 2026 incident — do not hardcode them here.
+-- `externalBridgeTemplate` is the whole leg list with `{DEST}` standing in for
+-- the 10-digit destination, and is preferred because it is the only one that
+-- carries each carrier's number format — a chain that falls from FracTEL
+-- (1XXXXXXXXXX) to SignalWire (+1XXXXXXXXXX) cannot be expressed as a list of
+-- gateway names. `externalGateways` is the older field, kept so this script
+-- still works against an API that predates the template.
+local external_bridge_template = json_value(response_body, "externalBridgeTemplate")
 local external_gateways_csv = json_value(response_body, "externalGateways") or "fractel1,fractel2,fractel3"
 local external_gateways = {}
 for gw in string.gmatch(external_gateways_csv, "[^,%s]+") do
@@ -135,6 +255,23 @@ for gw in string.gmatch(external_gateways_csv, "[^,%s]+") do
 end
 if #external_gateways == 0 then
     external_gateways = { "fractel1" }
+end
+
+-- Render the template for one destination, or nil when there is no template.
+local function carrier_legs_for(dest_digits)
+    if not external_bridge_template or external_bridge_template == "" then
+        return nil
+    end
+    local ten = string.gsub(dest_digits, "%D", "")
+    if string.len(ten) == 11 and string.sub(ten, 1, 1) == "1" then
+        ten = string.sub(ten, 2)
+    end
+    if string.len(ten) ~= 10 then
+        return nil
+    end
+    -- Replacement passed as a function so `%` in the digits stays literal.
+    local rendered = string.gsub(external_bridge_template, "%{DEST%}", function() return ten end)
+    return rendered
 end
 
 -- ── TCPA Litigator Check ──────────────────────────────────────────────────
@@ -169,7 +306,23 @@ log("INFO", "Route found: " .. did_normalized .. " → " .. destination .. " (ro
 -- ── Step 2: Set up call ─────────────────────────────────────────────────────
 session:execute("ring_ready")
 session:setVariable("call_direction", "inbound")
-session:setVariable("hangup_after_bridge", "true")
+
+-- Agent-leg rescue. A softphone whose browser or network dies mid-call stops
+-- answering FreeSWITCH's routine re-INVITE, so that leg is torn down with
+-- RECOVERY_ON_TIMER_EXPIRE (SIP 408 -> Q.850 cause 102). With
+-- hangup_after_bridge=true that tore down the CUSTOMER too, mid-sentence.
+-- Disable it so we own the teardown and can re-ring instead of dropping them.
+-- Kill switch: AGENT_LEG_RESCUE=false restores the previous behaviour exactly.
+local rescue_enabled = (os.getenv("AGENT_LEG_RESCUE") or "true") ~= "false"
+local hangup_after_bridge_value = rescue_enabled and "false" or "true"
+-- Causes meaning "the agent leg vanished", never "the agent hung up".
+local AGENT_LEG_DIED = {
+    RECOVERY_ON_TIMER_EXPIRE = true,
+    MEDIA_TIMEOUT = true,
+    NETWORK_OUT_OF_ORDER = true,
+    NETWORK_ERROR = true,
+}
+session:setVariable("hangup_after_bridge", hangup_after_bridge_value)
 session:setVariable("continue_on_fail", "false")
 session:setVariable("call_timeout", "120")
 
@@ -230,7 +383,7 @@ local function split(s, delimiter)
 end
 
 session:setVariable("continue_on_fail", "true")
-session:setVariable("hangup_after_bridge", "true")
+session:setVariable("hangup_after_bridge", hangup_after_bridge_value)
 
 -- Clear any incoming Identity/STIR-SHAKEN headers from the A-leg to prevent
 -- downstream carrier (BulkVS) rejection due to mismatched destination TN
@@ -245,7 +398,16 @@ for i, step in ipairs(failover_steps) do
     if step and step ~= "" then
         local parallel_destinations = split(step, ",")
         local bridge_components = {}
-        
+
+        -- Channel snapshot for this step only. Failover steps run seconds or
+        -- minutes apart, so it is refreshed per step, and only fetched at all
+        -- when the step actually contains an internal extension.
+        local channel_rows = nil
+        local function step_channel_rows()
+            if channel_rows == nil then channel_rows = live_channel_rows() end
+            return channel_rows
+        end
+
         for j, p_dest in ipairs(parallel_destinations) do
             -- Strip whitespace
             p_dest = string.gsub(p_dest, "^%s*(.-)%s*$", "%1")
@@ -283,7 +445,22 @@ for i, step in ipairs(failover_steps) do
                         end
                     end
 
-                    if contact ~= "" then
+                    -- Never ring an agent who is already on a call.
+                    local busy_calls = 0
+                    if AGENT_BUSY_CHECK then
+                        busy_calls = agent_channel_count(
+                            p_dest,
+                            (contact ~= "" and contact or nil),
+                            step_channel_rows(),
+                            call_uuid
+                        )
+                    end
+
+                    if busy_calls >= AGENT_MAX_CONCURRENT then
+                        log("WARNING", "[AGENT-BUSY] Extension " .. p_dest .. " already on " ..
+                            tostring(busy_calls) .. " call(s) (limit " .. tostring(AGENT_MAX_CONCURRENT) ..
+                            ") — NOT ringing; leaving their call undisturbed")
+                    elseif contact ~= "" then
                         log("INFO", "Internal extension " .. p_dest .. " registered: " .. contact)
                         table.insert(bridge_components, contact)
                     else
@@ -316,15 +493,25 @@ for i, step in ipairs(failover_steps) do
             -- Carriers reject anonymous/"restricted" caller IDs on the outbound buyer
             -- leg (NORMAL_TEMPORARY_FAILURE). If the A-leg caller ID isn't a real
             -- number, stamp the dialed DID so the buyer leg is an acceptable call.
-            local cid = caller_number
-            if cid == nil or cid == "" or not string.match(tostring(cid), "%d%d%d%d%d%d%d") then
-                cid = session:getVariable("destination_number") or "4233398241"
-                cid = string.gsub(tostring(cid), "^%+", "")
-                log("INFO", "[INBOUND-ROUTE] anonymous/restricted caller ID; using DID " .. cid .. " for buyer leg")
+            -- campaign_external_cid_fix_v1: PSTN buyer legs must present a
+            -- Hopwhistle/FracTEL DID as caller ID. Forwarding the original callers ANI
+            -- can be rejected or silently time out even while local ringback continues.
+            local outbound_cid = session:getVariable("destination_number") or ""
+            outbound_cid = string.gsub(tostring(outbound_cid), "%D", "")
+            if string.len(outbound_cid) == 10 then
+                outbound_cid = "1" .. outbound_cid
             end
+            if string.len(outbound_cid) ~= 11 or string.sub(outbound_cid, 1, 1) ~= "1" then
+                outbound_cid = os.getenv("FRACTEL_DEFAULT_CALLER_ID") or "12294222208"
+                outbound_cid = string.gsub(tostring(outbound_cid), "%D", "")
+                if string.len(outbound_cid) == 10 then
+                    outbound_cid = "1" .. outbound_cid
+                end
+            end
+            log("INFO", "External buyer leg using verified FracTEL caller ID " .. outbound_cid .. "; original caller=" .. tostring(caller_number))
             local bridge_vars = string.format(
-                "{origination_caller_id_number=%s,origination_caller_id_name=%s,effective_caller_id_number=%s,effective_caller_id_name=%s}",
-                cid, cid, cid, cid
+                "{sip_cid_type=pid,sip_from_user=%s,origination_caller_id_number=%s,origination_caller_id_name=Hopwhistle,effective_caller_id_number=%s,effective_caller_id_name=Hopwhistle}",
+                outbound_cid, outbound_cid, outbound_cid
             )
             -- Single external destination: retry the same number across the
             -- whole carrier gateway chain (mirrors the outbound dialplan's
@@ -332,7 +519,12 @@ for i, step in ipairs(failover_steps) do
             local bridge_body
             if #bridge_components == 1 then
                 local gw_dest = string.match(bridge_components[1], "^sofia/gateway/[^/]+/(.+)$")
-                if gw_dest and #external_gateways > 1 then
+                local templated = gw_dest and carrier_legs_for(gw_dest) or nil
+                if templated then
+                    -- Preferred: the API's rendered waterfall, which carries
+                    -- each carrier's own number format.
+                    bridge_body = templated
+                elseif gw_dest and #external_gateways > 1 then
                     local alts = {}
                     for _, gw in ipairs(external_gateways) do
                         table.insert(alts, "sofia/gateway/" .. gw .. "/" .. gw_dest)
@@ -347,9 +539,27 @@ for i, step in ipairs(failover_steps) do
             local bridge_string = bridge_vars .. bridge_body
             log("INFO", "Bridging to failover step " .. tostring(i) .. ": " .. bridge_string)
             session:execute("bridge", bridge_string)
-            
+
+            -- The customer outlives a dead agent leg: re-ring this same group
+            -- once rather than hanging up on a live conversation. Bounded to a
+            -- single retry per step, and only when the bridge had actually
+            -- connected and the customer is still on the line.
+            if rescue_enabled and session:answered() and session:ready() then
+                local bcause = session:getVariable("bridge_hangup_cause")
+                    or session:getVariable("last_bridge_hangup_cause") or ""
+                if AGENT_LEG_DIED[bcause] then
+                    log("WARNING", "[AGENT-LEG-RESCUE] agent leg died (" .. bcause ..
+                        ") with caller still connected — re-ringing step " .. tostring(i))
+                    session:execute("bridge", bridge_string)
+                end
+            end
+
             if session:answered() then
                 log("INFO", "Call answered on step " .. tostring(i) .. ", exiting failover loop")
+                -- hangup_after_bridge is off, so release the caller here.
+                if rescue_enabled and session:ready() then
+                    session:hangup("NORMAL_CLEARING")
+                end
                 break
             else
                 local cause = session:getVariable("originate_disposition") or session:getVariable("endpoint_disposition") or "UNKNOWN"

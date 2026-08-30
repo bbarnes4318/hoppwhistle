@@ -136,29 +136,52 @@ export class BillingWorker {
     await this.pool.end();
   }
 
-  private async consumeEvents(): Promise<void> {
-    while (this.isRunning && this.redis && this.redisEnabled) {
-      try {
-        // Read from stream
-        const messages = await this.redis.xreadgroup(
-          'GROUP',
-          'billing-group',
-          'billing-worker',
-          'COUNT',
-          '10',
-          'BLOCK',
-          '1000',
-          'STREAMS',
-          'events:stream',
-          '>'
-        );
+  /** Cursor for xautoclaim; '0-0' restarts the scan from the oldest pending entry. */
+  private reclaimCursor = '0-0';
 
-        if (!messages || messages.length === 0) {
-          continue;
-        }
+  /**
+   * Retry entries that were delivered but never acked.
+   *
+   * xreadgroup with '>' only ever returns entries nobody has seen. Because
+   * processCallCompleted deliberately skips the ack on failure, a failed
+   * billing event would otherwise sit in the pending list forever and the
+   * accrual for that call would never be written. Reprocessing is safe: the
+   * accrual insert is keyed on "idempotencyKey" and does nothing on conflict.
+   */
+  private async reclaimPending(): Promise<void> {
+    if (!this.redis) return;
+    try {
+      const res = (await this.redis.xautoclaim(
+        'events:stream',
+        'billing-group',
+        'billing-worker',
+        60000,
+        this.reclaimCursor,
+        'COUNT',
+        10
+      )) as [string, Array<[string, string[]] | null>];
 
-        const [, streamMessages] = messages[0] as [string, Array<[string, string[]]>];
+      const [nextCursor, claimed] = res;
+      this.reclaimCursor = nextCursor || '0-0';
 
+      // xautoclaim yields nulls for entries trimmed out of the stream; those
+      // are already gone, so drop them rather than trying to parse them.
+      const usable = (claimed || []).filter(
+        (m): m is [string, string[]] => Array.isArray(m) && Array.isArray(m[1])
+      );
+      if (usable.length > 0) {
+        logger.info(`Reclaimed ${usable.length} pending billing event(s) for retry`);
+        await this.dispatchMessages(usable);
+      }
+    } catch (error) {
+      logger.error('Error reclaiming pending billing events:', error);
+    }
+  }
+
+  private async dispatchMessages(
+    streamMessages: Array<[string, string[]]>
+  ): Promise<void> {
+    if (!this.redis) return;
         for (const [messageId, fields] of streamMessages) {
           const fieldMap: Record<string, string> = {};
           for (let i = 0; i < fields.length; i += 2) {
@@ -206,6 +229,35 @@ export class BillingWorker {
             await this.redis.xack('events:stream', 'billing-group', messageId);
           }
         }
+  }
+
+  private async consumeEvents(): Promise<void> {
+    while (this.isRunning && this.redis && this.redisEnabled) {
+      try {
+        // Pick up anything an earlier pass failed on before taking new work.
+        await this.reclaimPending();
+
+        // Read from stream
+        const messages = await this.redis.xreadgroup(
+          'GROUP',
+          'billing-group',
+          'billing-worker',
+          'COUNT',
+          '10',
+          'BLOCK',
+          '1000',
+          'STREAMS',
+          'events:stream',
+          '>'
+        );
+
+        if (!messages || messages.length === 0) {
+          continue;
+        }
+
+        const [, streamMessages] = messages[0] as [string, Array<[string, string[]]>];
+
+        await this.dispatchMessages(streamMessages);
       } catch (error: any) {
         logger.error('Error consuming events:', error);
         // If Redis connection is lost, disable Redis and exit loop
@@ -228,7 +280,7 @@ export class BillingWorker {
 
       // Get billing account for tenant
       const accountResult = await this.pool.query(
-        `SELECT id FROM billing_accounts WHERE tenant_id = $1 AND status = 'ACTIVE' LIMIT 1`,
+        `SELECT id FROM billing_accounts WHERE "tenantId" = $1 AND status = 'ACTIVE' LIMIT 1`,
         [event.tenantId]
       );
 
@@ -243,11 +295,11 @@ export class BillingWorker {
       // Get active rate card
       const rateCardResult = await this.pool.query(
         `SELECT rates FROM rate_cards
-         WHERE billing_account_id = $1
+         WHERE "billingAccountId" = $1
            AND status = 'ACTIVE'
-           AND effective_from <= NOW()
-           AND (effective_to IS NULL OR effective_to >= NOW())
-         ORDER BY effective_from DESC
+           AND "effectiveFrom" <= NOW()
+           AND ("effectiveTo" IS NULL OR "effectiveTo" >= NOW())
+         ORDER BY "effectiveFrom" DESC
          LIMIT 1`,
         [billingAccountId]
       );
@@ -340,7 +392,7 @@ export class BillingWorker {
         `UPDATE calls
          SET cost = $1,
              profit = COALESCE(revenue, 0) - COALESCE(payout, 0) - $1,
-             updated_at = NOW()
+             "updatedAt" = NOW()
          WHERE id = $2`,
         [rating.total.toFixed(4), event.data.callId]
       );
@@ -364,7 +416,7 @@ export class BillingWorker {
 
       // Get billing account
       const accountResult = await this.pool.query(
-        `SELECT id FROM billing_accounts WHERE tenant_id = $1 AND status = 'ACTIVE' LIMIT 1`,
+        `SELECT id FROM billing_accounts WHERE "tenantId" = $1 AND status = 'ACTIVE' LIMIT 1`,
         [event.tenantId]
       );
 
@@ -379,11 +431,11 @@ export class BillingWorker {
       // Get active rate card
       const rateCardResult = await this.pool.query(
         `SELECT rates FROM rate_cards
-         WHERE billing_account_id = $1
+         WHERE "billingAccountId" = $1
            AND status = 'ACTIVE'
-           AND effective_from <= NOW()
-           AND (effective_to IS NULL OR effective_to >= NOW())
-         ORDER BY effective_from DESC
+           AND "effectiveFrom" <= NOW()
+           AND ("effectiveTo" IS NULL OR "effectiveTo" >= NOW())
+         ORDER BY "effectiveFrom" DESC
          LIMIT 1`,
         [billingAccountId]
       );

@@ -1,3 +1,4 @@
+name: docker  # pinned: project name must never drift, or compose invents empty volumes
 services:
   # ============================================================================
   # Database & Cache
@@ -100,6 +101,8 @@ services:
     container_name: hopwhistle-api-dev
     ports:
       - '3001:3001'
+    env_file:
+      - ../../.env
     environment:
       NODE_ENV: development
       PORT: 3001
@@ -115,6 +118,10 @@ services:
       FONESTORM_BASE_URL: ${FONESTORM_BASE_URL:-https://api.fonestorm.com/v2}
       FONESTORM_USERNAME: ${FONESTORM_USERNAME:-}
       FONESTORM_PASSWORD: ${FONESTORM_PASSWORD:-}
+      # Fish Audio (Voice Studio). Server-side only - never pass to web.
+      FISH_API_KEY: ${FISH_API_KEY:-}
+      FISH_DEFAULT_MODEL: ${FISH_DEFAULT_MODEL:-s2.1-pro-free}
+      FISH_API_BASE: ${FISH_API_BASE:-https://api.fish.audio}
       S3_ENDPOINT: http://minio:9000
       S3_BUCKET: ${S3_BUCKET:-recordings}
       S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
@@ -198,6 +205,8 @@ services:
     container_name: hopwhistle-worker-dev
     ports:
       - '9091:9091'
+    env_file:
+      - ../../.env
     environment:
       NODE_ENV: development
       DATABASE_URL: postgresql://${POSTGRES_USER:-callfabric}:${POSTGRES_PASSWORD:-callfabric_dev}@postgres:5432/${POSTGRES_DB:-callfabric}

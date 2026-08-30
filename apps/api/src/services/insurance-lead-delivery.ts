@@ -13,7 +13,7 @@ type DeliveryVertical = 'ACA' | 'FE';
 
 export interface InsuranceLeadDeliveryResult {
   success: true;
-  postStatus: 'MATCHED' | 'UNMATCHED' | 'ERROR';
+  postStatus: 'MATCHED' | 'UNMATCHED' | 'MANUAL_REVIEW' | 'ERROR';
   postMode: 'TEST' | 'LIVE';
   ameriquoteStatus: string;
   ameriquoteLeadId?: string;
@@ -60,12 +60,17 @@ export async function deliverInsuranceLeadSubmission(
     return { error: 'B2B submissions do not have an Ameriquote delivery mapping' };
   }
 
-  if (submission.postStatus === 'MATCHED') {
+  // Both are terminal: the buyer has the lead. Re-posting either one comes
+  // back as a 90-day duplicate and burns it, so report the recorded outcome
+  // rather than sending again.
+  if (submission.postStatus === 'MATCHED' || submission.postStatus === 'MANUAL_REVIEW') {
     return {
       success: true,
-      postStatus: 'MATCHED',
+      postStatus: submission.postStatus,
       postMode: submission.postMode,
-      ameriquoteStatus: submission.ameriquoteResponseStatus || 'Matched',
+      ameriquoteStatus:
+        submission.ameriquoteResponseStatus ||
+        (submission.postStatus === 'MATCHED' ? 'Matched' : 'ManualReview'),
       ameriquoteLeadId: submission.ameriquoteLeadId || undefined,
       ameriquotePrice: submission.ameriquotePrice || undefined,
       errorMessage: submission.ameriquoteErrorMessage || undefined,
@@ -97,9 +102,12 @@ export async function deliverInsuranceLeadSubmission(
 
     const result = await postToAmeriquote(fullPayload);
 
-    let postStatus: 'MATCHED' | 'UNMATCHED' | 'ERROR' = 'ERROR';
+    let postStatus: 'MATCHED' | 'UNMATCHED' | 'MANUAL_REVIEW' | 'ERROR' = 'ERROR';
     if (result.status === 'Matched') postStatus = 'MATCHED';
     else if (result.status === 'Unmatched') postStatus = 'UNMATCHED';
+    // Accepted and holding for the buyer's review. Terminal for our purposes:
+    // the lead is with them and must not be posted a second time.
+    else if (result.status === 'ManualReview') postStatus = 'MANUAL_REVIEW';
 
     await prisma.insuranceLeadSubmission.update({
       where: { id: submissionId },

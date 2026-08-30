@@ -50,6 +50,12 @@ export type Permission =
   | 'payroll:read'
   | 'payroll:write'
   | 'payroll:admin'
+  // Tenant settings. The ADMIN rows already in the `roles` table grant these
+  // two in their permissions JSON, and getUserPermissions() merges that JSON
+  // into a user's effective set — but the union never declared them, so no
+  // route could name them without a cast.
+  | 'settings:read'
+  | 'settings:write'
   // Admin
   | 'admin:*';
 

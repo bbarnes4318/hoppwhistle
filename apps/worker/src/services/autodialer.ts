@@ -2,6 +2,8 @@ import { Socket } from 'net';
 
 import { PrismaClient, Lead, Campaign, PhoneNumber } from '@prisma/client';
 
+import { getOutboundDialString } from './carrier-routing.js';
+
 const prisma = new PrismaClient();
 
 // CONFIGURATION
@@ -82,8 +84,34 @@ export class Autodialer {
       campaign.phoneNumbers[0]?.number || DID_POOL[Math.floor(Math.random() * DID_POOL.length)];
 
     // 1. Send the Call Command
-    const destDigits = lead.phoneNumber.replace(/\D/g, '').slice(-10);
-    const fsCommand = `bgapi originate {origination_caller_id_number=${callerId},origination_caller_id_name=${callerId},ignore_early_media=true}sofia/gateway/didcentral/1${destDigits} &transfer(execute-flow XML default)`;
+    //
+    // This used to be hardcoded to `sofia/gateway/didcentral`. No gateway of
+    // that name exists in apps/freeswitch/conf/sip_profiles/external/ and none
+    // ever has, so every call this class placed was guaranteed to fail. The
+    // class is currently disabled in index.ts, but leaving a dead gateway
+    // literal in it makes re-enabling it a trap; it now resolves the same
+    // configurable waterfall as every other outbound path.
+    const { dialString, chain } = await getOutboundDialString(
+      prisma,
+      lead.tenantId,
+      'PREDICTIVE_DIALER',
+      lead.phoneNumber,
+      {
+        channelVariables: {
+          origination_caller_id_number: callerId,
+          origination_caller_id_name: callerId,
+          ignore_early_media: 'true',
+        },
+      }
+    );
+
+    if (!dialString) {
+      console.error(`Refusing to dial ${lead.phoneNumber}: not a routable destination`);
+      return;
+    }
+
+    console.log(`   via ${chain.carrierOrder.join(' → ')}`);
+    const fsCommand = `bgapi originate ${dialString} &transfer(execute-flow XML default)`;
     await this.sendToFreeSwitch(fsCommand);
 
     // 2. Update Status (Use 'CONTACTED' instead of 'DIALING' to prevent crash)

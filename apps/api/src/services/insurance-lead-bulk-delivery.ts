@@ -22,8 +22,12 @@ import { checkDeliveryReadiness, type ReadinessIssue } from './insurance-lead-re
 const log = createServiceLogger('insurance-lead-bulk-delivery');
 
 /**
- * Post statuses that are still worth sending. MATCHED is excluded so a re-run
- * never double-sells a lead; SKIPPED belongs to submissions that failed
+ * Post statuses that are still worth sending.
+ *
+ * MATCHED and MANUAL_REVIEW are both excluded because the buyer already has
+ * the lead: the first is sold, the second is accepted and holding for their
+ * review. Posting either a second time comes back as a 90-day duplicate and
+ * burns the lead permanently. SKIPPED belongs to submissions that failed
  * validation and have no normalized payload to map.
  */
 const SENDABLE_POST_STATUSES = ['HOLD', 'PENDING', 'ERROR', 'UNMATCHED'] as const;
@@ -67,7 +71,7 @@ export interface BulkDeliveryLeadResult {
   submissionId: string;
   phone: string;
   name: string;
-  outcome: 'MATCHED' | 'UNMATCHED' | 'ERROR' | 'NOT_READY';
+  outcome: 'MATCHED' | 'UNMATCHED' | 'MANUAL_REVIEW' | 'ERROR' | 'NOT_READY';
   ameriquoteLeadId?: string;
   ameriquotePrice?: string;
   message?: string;
@@ -78,6 +82,8 @@ export interface BulkDeliveryResult {
   attempted: number;
   matched: number;
   unmatched: number;
+  /** Accepted by the buyer, holding for their manual approval. Not a failure. */
+  manualReview: number;
   errored: number;
   notReady: number;
   /** Sendable submissions still queued after this batch's cursor. */
@@ -200,7 +206,9 @@ export async function preflightBulkDelivery(
       },
       select: SUBMISSION_SELECT,
     }) as unknown as Promise<SubmissionRow[]>,
-    prisma.insuranceLeadSubmission.count({ where: { ...where, postStatus: 'MATCHED' } }),
+    prisma.insuranceLeadSubmission.count({
+      where: { ...where, postStatus: { in: ['MATCHED', 'MANUAL_REVIEW'] } },
+    }),
     prisma.insuranceLeadSubmission.count({
       where: { ...where, validationStatus: { not: 'VALID' } },
     }),
@@ -339,6 +347,7 @@ export async function bulkDeliverInsuranceLeads(
     attempted: results.length,
     matched: results.filter(r => r.outcome === 'MATCHED').length,
     unmatched: results.filter(r => r.outcome === 'UNMATCHED').length,
+    manualReview: results.filter(r => r.outcome === 'MANUAL_REVIEW').length,
     errored: results.filter(r => r.outcome === 'ERROR').length,
     notReady: results.filter(r => r.outcome === 'NOT_READY').length,
     remaining,
@@ -352,6 +361,6 @@ export async function bulkDeliverInsuranceLeads(
 }
 
 function summaryCounts(summary: BulkDeliveryResult) {
-  const { attempted, matched, unmatched, errored, notReady, remaining } = summary;
-  return { attempted, matched, unmatched, errored, notReady, remaining };
+  const { attempted, matched, unmatched, manualReview, errored, notReady, remaining } = summary;
+  return { attempted, matched, unmatched, manualReview, errored, notReady, remaining };
 }

@@ -25,26 +25,33 @@
     </extension>
 
     <!-- ================================================================ -->
-    <!-- DEFAULT CARRIER: FracTEL -->
-    <!-- Routes to the FracTEL gateways when X-Carrier is empty/not set. -->
-    <!-- Presents a FracTEL DID so calls sign A attestation. BulkVS and -->
-    <!-- SignalWire are disabled/unreliable; FracTEL is the live carrier. -->
+    <!-- DEFAULT: the configured DOGRAH_AI carrier waterfall.              -->
+    <!--                                                                  -->
+    <!-- Used when X-Carrier is empty/not set, which is the normal case.   -->
+    <!-- This used to be a hardcoded fractel1..6 chain; the carrier order  -->
+    <!-- is now configurable per tenant in the settings UI, and a carrier  -->
+    <!-- that stops connecting calls is demoted automatically. The         -->
+    <!-- explicit per-carrier extensions below still override it when a    -->
+    <!-- caller sets X-Carrier by hand.                                    -->
     <!-- ================================================================ -->
-    <extension name="vapi-outbound-default-fractel">
+    <extension name="vapi-outbound-default-waterfall">
       <condition field="destination_number" expression="^\+?1?(\d{10})$">
         <action application="set" data="vapi_dest=$1" inline="true"/>
       </condition>
       <condition field="${sip_h_X-Carrier}" expression="^$" break="never">
-        <action application="log" data="INFO [VAPI] FracTEL (default) outbound to 1${vapi_dest}"/>
+        <action application="log" data="INFO [VAPI] waterfall outbound to 1${vapi_dest}"/>
 
         <action application="set" data="accountcode=vapi"/>
         <action application="set" data="sip_h_X-Provider=Vapi"/>
-        <action application="set" data="sip_h_X-Carrier=fractel"/>
 
         <action application="set" data="hangup_after_bridge=true"/>
         <action application="set" data="ignore_early_media=true"/>
         <action application="set" data="progress_timeout=30"/>
         <action application="set" data="originate_timeout=60"/>
+        <!-- Walk the whole chain rather than hanging up on the first reject —
+             without these the fallback carriers are unreachable. -->
+        <action application="set" data="continue_on_fail=true"/>
+        <action application="set" data="fail_on_single_reject=false"/>
 
         <action application="set" data="absolute_codec_string=PCMU,PCMA"/>
         <action application="export" data="nolocal:absolute_codec_string=PCMU,PCMA"/>
@@ -53,8 +60,23 @@
         <action application="set" data="effective_caller_id_number=19138999080"/>
         <action application="set" data="origination_caller_id_number=19138999080"/>
 
-        <!-- Bridge to FracTEL — load-balanced across all 6 SBCs -->
-        <action application="bridge" data="{sip_cid_type=pid,origination_caller_id_name=PVN LLC,origination_caller_id_number=19138999080,sip_from_user=19138999080}sofia/gateway/fractel1/1${vapi_dest}|sofia/gateway/fractel2/1${vapi_dest}|sofia/gateway/fractel3/1${vapi_dest}|sofia/gateway/fractel4/1${vapi_dest}|sofia/gateway/fractel5/1${vapi_dest}|sofia/gateway/fractel6/1${vapi_dest}"/>
+        <action application="set" data="curl_connect_timeout=2" inline="true"/>
+        <action application="set" data="curl_timeout=4" inline="true"/>
+        <action application="set" data="carrier_bridge=${curl(http://api:3001/api/v1/freeswitch/carrier-route?type=DOGRAH_AI&amp;dest=${vapi_dest}&amp;cid=19138999080&amp;cid_name=PVN%20LLC)}" inline="true"/>
+      </condition>
+
+      <!-- Static fallback for an API that is down, slow, or answered with an
+           error body. Identical to the chain this extension used to hardcode. -->
+      <condition field="${carrier_bridge}" expression="sofia/gateway/" break="never">
+        <anti-action application="log" data="WARNING [VAPI] carrier-route lookup returned no chain; using static FracTEL fallback"/>
+        <anti-action application="set" data="carrier_bridge={sip_cid_type=pid,origination_caller_id_name=PVN LLC,origination_caller_id_number=19138999080,sip_from_user=19138999080}sofia/gateway/fractel1/1${vapi_dest}|sofia/gateway/fractel2/1${vapi_dest}|sofia/gateway/fractel3/1${vapi_dest}|sofia/gateway/fractel4/1${vapi_dest}|sofia/gateway/fractel5/1${vapi_dest}|sofia/gateway/fractel6/1${vapi_dest}" inline="true"/>
+      </condition>
+
+      <condition field="${sip_h_X-Carrier}" expression="^$" break="never">
+        <action application="bridge" data="${carrier_bridge}"/>
+        <!-- Only reached when every gateway in the chain refused. -->
+        <action application="log" data="ERR [VAPI] entire carrier waterfall failed for 1${vapi_dest}: ${originate_disposition}"/>
+        <action application="set" data="carrier_report=${curl(http://api:3001/api/v1/freeswitch/carrier-result?chain=${carrier_bridge}&amp;cause=${originate_disposition}&amp;answered=false)}" inline="true"/>
       </condition>
     </extension>
 

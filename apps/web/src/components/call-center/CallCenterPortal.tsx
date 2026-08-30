@@ -1078,7 +1078,10 @@ export function CallCenterPortal(): JSX.Element {
       const cleanPhone = phoneNum.replace(/\D/g, '');
       void fetchCrmData(cleanPhone);
       try {
-        await makeCall(cleanPhone, 'ROTATE');
+        // The power dialer and a hand-dialed application call reach the same
+        // function; `isAutoDialing` is what separates them, and they are
+        // separately configurable carrier waterfalls.
+        await makeCall(cleanPhone, 'ROTATE', isAutoDialing ? 'CC_POWER_DIALER' : 'CC_MANUAL');
       } catch (error) {
         console.error('Failed to dial:', error);
       }

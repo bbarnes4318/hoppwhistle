@@ -11,6 +11,7 @@ import {
   Megaphone,
   MonitorPlay,
   PhoneCall,
+  PhoneForwarded,
   Receipt,
   Settings,
   Shield,
@@ -92,6 +93,12 @@ export const ADMIN_NAV: NavGroup[] = [
     items: [
       { name: 'Flows', href: '/flows', icon: GitBranch },
       { name: 'Voice agents', href: '/voice-agents', icon: Bot },
+      {
+        name: 'Voice studio',
+        href: '/voice-studio',
+        icon: AudioLines,
+        title: 'Clone Fish Audio voices, preview scripts, tune delivery',
+      },
       { name: 'Settings', href: '/settings', icon: Settings },
     ],
   },
@@ -120,6 +127,7 @@ export const ADMIN_NAV: NavGroup[] = [
       { name: 'Users', href: '/settings/users', icon: Users },
       { name: 'Webhooks', href: '/settings/webhooks', icon: FileText },
       { name: 'DNC lists', href: '/settings/dnc', icon: Shield },
+      { name: 'Carrier routing', href: '/settings/carriers', icon: PhoneForwarded },
       { name: 'Quotas & budgets', href: '/settings/quotas', icon: Wallet },
       { name: 'Payroll admin', href: '/admin/payroll', icon: Receipt },
     ],

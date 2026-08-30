@@ -98,7 +98,7 @@ export class InvoiceGeneratorService {
 
       // Get billing account info
       const accountResult = await client.query(
-        'SELECT tenant_id, currency FROM billing_accounts WHERE id = $1',
+        'SELECT "tenantId" AS tenant_id, currency FROM billing_accounts WHERE id = $1',
         [billingAccountId]
       );
 
@@ -140,9 +140,9 @@ export class InvoiceGeneratorService {
 
       await client.query(
         `INSERT INTO invoices (
-          id, billing_account_id, invoice_number, status, period_start, period_end,
-          subtotal, tax, total, due_date, created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())`,
+          id, "billingAccountId", "invoiceNumber", status, "periodStart", "periodEnd",
+          subtotal, tax, total, "dueDate", "createdAt", "updatedAt"
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())`,
         [
           invoiceId,
           billingAccountId,
@@ -161,7 +161,7 @@ export class InvoiceGeneratorService {
       for (const line of lines) {
         await client.query(
           `INSERT INTO invoice_lines (
-            id, invoice_id, description, quantity, unit_price, total, metadata, created_at
+            id, "invoiceId", description, quantity, "unitPrice", total, metadata, "createdAt"
           ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
           [
             `line_${invoiceId}_${Math.random().toString(36).substr(2, 9)}`,
@@ -218,10 +218,18 @@ export class InvoiceGeneratorService {
     try {
       // Get invoice data
       const invoiceResult = await client.query(
-        `SELECT i.*, ba.name as account_name, ba.currency, t.name as tenant_name
+        `SELECT i.id,
+                i."invoiceNumber" AS invoice_number,
+                i.status,
+                i."periodStart"   AS period_start,
+                i."periodEnd"     AS period_end,
+                i."dueDate"       AS due_date,
+                i.subtotal, i.tax, i.total,
+                ba.name AS account_name, ba.currency,
+                t.name  AS tenant_name
          FROM invoices i
-         JOIN billing_accounts ba ON ba.id = i.billing_account_id
-         JOIN tenants t ON t.id = ba.tenant_id
+         JOIN billing_accounts ba ON ba.id = i."billingAccountId"
+         JOIN tenants t ON t.id = ba."tenantId"
          WHERE i.id = $1`,
         [invoiceId]
       );
@@ -234,7 +242,7 @@ export class InvoiceGeneratorService {
 
       // Get invoice lines
       const linesResult = await client.query(
-        'SELECT * FROM invoice_lines WHERE invoice_id = $1 ORDER BY created_at',
+        'SELECT description, quantity, "unitPrice" AS unit_price, total FROM invoice_lines WHERE "invoiceId" = $1 ORDER BY "createdAt"',
         [invoiceId]
       );
 

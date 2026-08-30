@@ -363,6 +363,11 @@ async function buildServer() {
   const { registerAiVoiceRoutes } = await import('./routes/aivoice.js');
   await server.register(registerAiVoiceRoutes);
 
+  // Register Fish Audio voice routes (Voice Studio: clone, manage, preview).
+  // Proxies api.fish.audio so FISH_API_KEY stays server-side.
+  const { registerFishRoutes } = await import('./routes/fish.js');
+  await server.register(registerFishRoutes);
+
   // Register AI Campaign routes (AI outbound calling - Vapi integration hidden from UI)
   const { registerAICampaignRoutes, registerVapiWebhookRoutes } = await import(
     './routes/ai-campaigns.js'
@@ -384,6 +389,11 @@ async function buildServer() {
 
   const { registerCallerIdInventoryRoutes } = await import('./routes/caller-id-inventory.js');
   await server.register(registerCallerIdInventoryRoutes);
+
+  // Register carrier waterfall routing (admin settings + the dialplan's
+  // per-call carrier lookup and outcome feedback)
+  const { registerCarrierRoutingRoutes } = await import('./routes/carrier-routing.js');
+  await server.register(registerCarrierRoutingRoutes);
 
   // Register Insurance Lead Pipeline routes (inbound ingestion, CRM, Ameriquote routing)
   const { registerInsuranceLeadRoutes } = await import('./routes/insurance-leads.js');

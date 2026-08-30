@@ -38,13 +38,26 @@ export class AccrualLedgerService {
   async createEntry(entry: AccrualEntry): Promise<string> {
     const client = await this.pool.connect();
     const entryId = `acc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Same shape as the keys already in accrual_ledger, and the table has a
+    // unique index on "idempotencyKey". processCallCompleted does not ack the
+    // stream message on failure, so a retry re-derives an identical key and the
+    // ON CONFLICT below makes the duplicate insert a no-op instead of an error.
+    const idempotencyKey = [
+      entry.tenantId,
+      entry.callId || 'none',
+      entry.type,
+      entry.publisherId || 'none',
+      entry.buyerId || 'none',
+    ].join(':');
 
     try {
       await client.query(
         `INSERT INTO accrual_ledger (
-          id, tenant_id, billing_account_id, publisher_id, buyer_id, call_id,
-          type, amount, currency, description, period_date, metadata, created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())`,
+          id, "tenantId", "billingAccountId", "publisherId", "buyerId", "callId",
+          type, amount, currency, description, "periodDate", metadata,
+          "idempotencyKey", "createdAt", "updatedAt"
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
+        ON CONFLICT ("idempotencyKey") DO NOTHING`,
         [
           entryId,
           entry.tenantId,
@@ -58,6 +71,7 @@ export class AccrualLedgerService {
           entry.description,
           entry.periodDate,
           entry.metadata ? JSON.stringify(entry.metadata) : null,
+          idempotencyKey,
         ]
       );
 
@@ -87,10 +101,10 @@ export class AccrualLedgerService {
     callId?: string;
   }>> {
     let sql = `
-      SELECT id, type, amount, description, call_id
+      SELECT id, type, amount, description, "callId" AS call_id
       FROM accrual_ledger
-      WHERE billing_account_id = $1
-        AND period_date = $2
+      WHERE "billingAccountId" = $1
+        AND "periodDate" = $2
         AND closed = false
     `;
 
@@ -98,18 +112,18 @@ export class AccrualLedgerService {
     let paramIndex = 3;
 
     if (publisherId) {
-      sql += ` AND publisher_id = $${paramIndex}`;
+      sql += ` AND "publisherId" = $${paramIndex}`;
       params.push(publisherId);
       paramIndex++;
     }
 
     if (buyerId) {
-      sql += ` AND buyer_id = $${paramIndex}`;
+      sql += ` AND "buyerId" = $${paramIndex}`;
       params.push(buyerId);
       paramIndex++;
     }
 
-    sql += ` ORDER BY created_at ASC`;
+    sql += ` ORDER BY "createdAt" ASC`;
 
     const result = await this.pool.query(sql, params);
     interface AccrualRow {
@@ -140,9 +154,9 @@ export class AccrualLedgerService {
   ): Promise<number> {
     let sql = `
       UPDATE accrual_ledger
-      SET closed = true, closed_at = NOW(), invoice_id = $1, updated_at = NOW()
-      WHERE billing_account_id = $2
-        AND period_date = $3
+      SET closed = true, "closedAt" = NOW(), "invoiceId" = $1, "updatedAt" = NOW()
+      WHERE "billingAccountId" = $2
+        AND "periodDate" = $3
         AND closed = false
     `;
 
@@ -150,13 +164,13 @@ export class AccrualLedgerService {
     let paramIndex = 4;
 
     if (publisherId) {
-      sql += ` AND publisher_id = $${paramIndex}`;
+      sql += ` AND "publisherId" = $${paramIndex}`;
       params.push(publisherId);
       paramIndex++;
     }
 
     if (buyerId) {
-      sql += ` AND buyer_id = $${paramIndex}`;
+      sql += ` AND "buyerId" = $${paramIndex}`;
       params.push(buyerId);
       paramIndex++;
     }
@@ -182,8 +196,8 @@ export class AccrualLedgerService {
     let sql = `
       SELECT type, SUM(amount::numeric) as total_amount, COUNT(*) as count
       FROM accrual_ledger
-      WHERE billing_account_id = $1
-        AND period_date = $2
+      WHERE "billingAccountId" = $1
+        AND "periodDate" = $2
         AND closed = false
     `;
 
@@ -191,13 +205,13 @@ export class AccrualLedgerService {
     let paramIndex = 3;
 
     if (publisherId) {
-      sql += ` AND publisher_id = $${paramIndex}`;
+      sql += ` AND "publisherId" = $${paramIndex}`;
       params.push(publisherId);
       paramIndex++;
     }
 
     if (buyerId) {
-      sql += ` AND buyer_id = $${paramIndex}`;
+      sql += ` AND "buyerId" = $${paramIndex}`;
       params.push(buyerId);
       paramIndex++;
     }
