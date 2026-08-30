@@ -6,7 +6,7 @@ import {
   computeXaiCost,
   XAI_PRICING,
   type CostBasis,
-} from '../cost';
+} from '../cost.js';
 
 describe('xAI cost accounting — every component + calculated_partial basis', () => {
   it('sums input + cached-input + output token charges AND web/X/code tool-call charges', () => {

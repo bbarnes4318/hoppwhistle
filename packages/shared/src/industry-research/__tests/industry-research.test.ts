@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import * as sharedIndex from '../index';
+import * as sharedIndex from '../index.js';
 import {
   SCHEMA_VERSION,
   buildProviderRegistry,
@@ -19,7 +19,7 @@ import {
   RESEARCH_MODES,
   type ResearchBriefInput,
   type StructuredReport,
-} from '../index';
+} from '../index.js';
 
 const LIVE = {
   GEMINI_API_KEY: 'k',

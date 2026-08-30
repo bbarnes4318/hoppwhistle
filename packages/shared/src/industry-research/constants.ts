@@ -1,4 +1,4 @@
-import type { ResearchMode, StageKey, ProviderRole, SourceTargets } from './types';
+import type { ResearchMode, StageKey, ProviderRole, SourceTargets } from './types.js';
 
 export const SCHEMA_VERSION = '2.0.0';
 

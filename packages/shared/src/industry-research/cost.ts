@@ -1,4 +1,4 @@
-import { RESEARCH_MODES } from './constants';
+import { RESEARCH_MODES } from './constants.js';
 import type {
   CostEstimate,
   CostLine,
@@ -6,7 +6,7 @@ import type {
   ProviderId,
   ProviderRole,
   ResearchMode,
-} from './types';
+} from './types.js';
 
 // Date-stamped, configurable pricing assumptions. These are deliberately kept
 // out of the UI components (per spec) and are ROUGH per-run estimates for a
