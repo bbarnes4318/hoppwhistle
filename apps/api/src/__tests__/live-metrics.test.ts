@@ -42,7 +42,7 @@ function fakeDelegate(opts: {
     groupBy: (args: { where: Record<string, unknown> }) => {
       recorded.groupBy.push(args);
       return Promise.resolve(
-        (opts.groups ?? []).map((g) => ({
+        (opts.groups ?? []).map(g => ({
           billable: g.billable,
           _count: { _all: g.count },
           _sum: { publisherPayoutAmount: dec(g.money), buyerBillableAmount: dec(g.money) },
@@ -85,7 +85,7 @@ describe('scoping', () => {
       profile: PUBLISHER,
     });
 
-    const wheres = [...recorded.count, ...recorded.groupBy].map((c) => c.where);
+    const wheres = [...recorded.count, ...recorded.groupBy].map(c => c.where);
     expect(wheres).toHaveLength(2);
     for (const w of wheres) {
       expect(w.tenantId).toBe('t1');
@@ -98,7 +98,7 @@ describe('scoping', () => {
     const { delegate, recorded } = fakeDelegate({ groups: [] });
     await computeLiveMetrics(delegate, { tenantId: 't1', role: 'buyer', profile: BUYER });
 
-    const wheres = [...recorded.count, ...recorded.groupBy].map((c) => c.where);
+    const wheres = [...recorded.count, ...recorded.groupBy].map(c => c.where);
     expect(wheres).toHaveLength(2);
     for (const w of wheres) {
       expect(w.tenantId).toBe('t1');
@@ -111,7 +111,7 @@ describe('scoping', () => {
     const { delegate, recorded } = fakeDelegate({});
     await computeLiveMetrics(delegate, { tenantId: 't1', role: 'admin', profile: ADMIN });
 
-    const wheres = [...recorded.count, ...recorded.aggregate].map((c) => c.where);
+    const wheres = [...recorded.count, ...recorded.aggregate].map(c => c.where);
     for (const w of wheres) {
       expect(w.tenantId).toBe('t1');
       expect(w).not.toHaveProperty('publisherId');
@@ -134,8 +134,7 @@ describe('query cost', () => {
         ],
       });
       await computeLiveMetrics(delegate, { tenantId: 't1', role, profile });
-      const total =
-        recorded.count.length + recorded.aggregate.length + recorded.groupBy.length;
+      const total = recorded.count.length + recorded.aggregate.length + recorded.groupBy.length;
       expect(total, `${role} should issue 2 queries`).toBe(2);
     }
   });

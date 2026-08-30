@@ -2,7 +2,6 @@ import { Prisma } from '@prisma/client';
 import type { PrismaClient } from '@prisma/client';
 import { FastifyInstance, FastifyRequest } from 'fastify';
 
-
 import { getPrismaClient } from '../lib/prisma.js';
 import type { AuthenticatedUser } from '../middleware/auth.js';
 import { getRedisClient } from '../services/redis.js';
@@ -169,7 +168,11 @@ export async function computeLiveMetrics(
   };
 
   const windowSince = role === 'admin' ? hourSince : todaySince;
-  const windowWhere: Prisma.CallWhereInput = { tenantId, ...scope, createdAt: { gte: windowSince } };
+  const windowWhere: Prisma.CallWhereInput = {
+    tenantId,
+    ...scope,
+    createdAt: { gte: windowSince },
+  };
 
   const window = {
     inFlightSince: inFlightSince.toISOString(),
@@ -227,10 +230,7 @@ export async function computeLiveMetrics(
       by: ['billable'],
       where: windowWhere,
       _count: { _all: true },
-      _sum:
-        role === 'publisher'
-          ? { publisherPayoutAmount: true }
-          : { buyerBillableAmount: true },
+      _sum: role === 'publisher' ? { publisherPayoutAmount: true } : { buyerBillableAmount: true },
     }),
   ]);
 
@@ -252,9 +252,7 @@ export async function computeLiveMetrics(
      * would silently yield undefined.
      */
     const sum =
-      'publisherPayoutAmount' in g._sum
-        ? g._sum.publisherPayoutAmount
-        : g._sum.buyerBillableAmount;
+      'publisherPayoutAmount' in g._sum ? g._sum.publisherPayoutAmount : g._sum.buyerBillableAmount;
     if (sum !== null) money = money.add(sum);
   }
 
