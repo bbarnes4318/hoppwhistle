@@ -85,6 +85,19 @@ on:
       - 'docs/dialer-v2/**'
       - '.gitignore'
 
+  # The path filter above is necessary but not sufficient. It answers "did this
+  # push touch something the interlock reads", and a push can leave every one of
+  # those paths alone while still landing on a main nobody has run the interlock
+  # against — #40 merged apps/api routes and apps/web only, so this workflow
+  # correctly did not fire, and main's newest commit carried no result for the
+  # one job that gates production dialing.
+  #
+  # A filter cannot close that: widening it to catch every such case means
+  # running on every push, which is what the filter exists to avoid. What was
+  # missing is the ability to ASK for the job on a ref of your choosing, so a
+  # green result on main can be produced on demand rather than waited for.
+  workflow_dispatch:
+
 concurrency:
   group: dialer-v2-${{ github.ref }}
   cancel-in-progress: true
