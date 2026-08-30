@@ -36,11 +36,19 @@ export function pageTitleFor(pathname: string | null): string {
   if (!pathname) return '';
   if (EXPLICIT[pathname]) return EXPLICIT[pathname];
 
-  // Longest matching nav href wins, so /publisher/calls beats /publisher.
+  // Longest matching nav PATH wins, so /publisher/calls beats /publisher.
+  // Sorting by the raw href instead would let a filtered variant of a page win
+  // on the strength of its query string alone — "Recordings"
+  // (/buyer/calls?hasRecording=true) titling the plain /buyer/calls page.
   const match = ALL_ITEMS.filter(i => {
     const href = i.href.split('?')[0];
     return pathname === href || pathname.startsWith(`${href}/`);
-  }).sort((a, b) => b.href.length - a.href.length)[0];
+  }).sort((a, b) => {
+    const byPath = b.href.split('?')[0].length - a.href.split('?')[0].length;
+    if (byPath !== 0) return byPath;
+    // Same page, one of them filtered: the unfiltered item names it.
+    return Number(a.href.includes('?')) - Number(b.href.includes('?'));
+  })[0];
 
   if (match) return match.name;
 

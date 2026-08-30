@@ -9,6 +9,7 @@ import { useState, useCallback, useEffect, type ChangeEvent, type FormEvent } fr
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { persistSessionToken } from '@/lib/session-token';
 
 const GOOGLE_CLIENT_ID = '196207148120-2navmspp2renu5cnvr06679jvhm5h12h.apps.googleusercontent.com';
 const API_BASE =
@@ -93,7 +94,7 @@ export default function AuthPage() {
 
         // Store token
         const authData = data as AuthResponse;
-        localStorage.setItem('token', authData.token);
+        persistSessionToken(authData.token);
 
         // Redirect based on role - BUYER goes to buyer portal
         const redirectPath = getRedirectPath(authData.user.roles);
@@ -180,7 +181,7 @@ export default function AuthPage() {
       }
 
       const authData = data as AuthResponse;
-      localStorage.setItem('token', authData.token);
+      persistSessionToken(authData.token);
 
       // Redirect based on role - BUYER goes to buyer portal
       const redirectPath = getRedirectPath(authData.user.roles);
@@ -219,7 +220,7 @@ export default function AuthPage() {
       }
 
       const authData = data as AuthResponse;
-      localStorage.setItem('token', authData.token);
+      persistSessionToken(authData.token);
 
       // Redirect based on role - BUYER goes to buyer portal
       const redirectPath = getRedirectPath(authData.user.roles);

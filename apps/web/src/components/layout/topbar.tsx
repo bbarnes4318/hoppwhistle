@@ -20,6 +20,8 @@ import { cn } from '@/lib/utils';
 import { CommandPalette, useCommandPalette } from './command-palette';
 import { pageTitleFor } from './page-title';
 
+import { MobileNav } from './mobile-nav';
+
 /**
  * Topbar: page title in the display face, the command palette trigger,
  * notifications and the account menu.
@@ -59,6 +61,7 @@ export function Topbar() {
   return (
     <>
       <header className="flex h-12 shrink-0 items-center gap-3 border-b border-rule bg-surface px-4">
+        <MobileNav />
         <h1 className="t-title min-w-0 flex-1 truncate text-ink">{title}</h1>
 
         <button

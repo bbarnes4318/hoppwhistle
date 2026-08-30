@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react';
 
+import { clearSessionToken } from '@/lib/session-token';
+
 interface UserData {
   id: string;
   email: string;
@@ -73,7 +75,9 @@ export function useAuth(): UseAuthReturn {
 
       if (!res.ok) {
         if (res.status === 401) {
-          localStorage.removeItem('token');
+          // Clear both stores: a dead token left in the cookie would keep the
+          // server render trying to authenticate with it on every navigation.
+          clearSessionToken();
         }
         setError('Failed to fetch user data');
         setLoading(false);

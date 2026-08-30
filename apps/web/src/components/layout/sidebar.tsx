@@ -81,7 +81,12 @@ function PortalBadge({ label }: { label: string }) {
   );
 }
 
-export function Sidebar() {
+/**
+ * `rail` is the fixed column beside the page. `drawer` is the same nav rendered
+ * inside the mobile panel, where the surrounding drawer already supplies the
+ * header and the width.
+ */
+export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = {}) {
   const pathname = usePathname();
   const {
     hasFullAccess,
@@ -120,20 +125,31 @@ export function Sidebar() {
     canViewReports,
   ]);
 
+  const drawer = variant === 'drawer';
+
   return (
-    <div className="flex h-full w-52 shrink-0 flex-col border-r border-rule bg-surface">
-      <div className="flex h-12 shrink-0 items-center border-b border-rule px-4">
-        <Link href="/dashboard" className="rounded-control">
-          <Image
-            src="/hopwhistle.png"
-            alt="Hopwhistle"
-            width={100}
-            height={32}
-            className="h-6 w-auto"
-            priority
-          />
-        </Link>
-      </div>
+    <div
+      className={cn(
+        'flex h-full flex-col bg-surface',
+        drawer ? 'w-full' : 'w-52 shrink-0 border-r border-rule'
+      )}
+    >
+      {/* In the drawer the panel already has a header, so the brand row would
+          be a second one. */}
+      {drawer ? null : (
+        <div className="flex h-12 shrink-0 items-center border-b border-rule px-4">
+          <Link href="/dashboard" className="rounded-control">
+            <Image
+              src="/hopwhistle.png"
+              alt="Hopwhistle"
+              width={100}
+              height={32}
+              className="h-6 w-auto"
+              priority
+            />
+          </Link>
+        </div>
+      )}
 
       <nav aria-label="Main" className="custom-scrollbar flex-1 overflow-y-auto p-2">
         {isPublisherOnly ? <PortalBadge label="Publisher portal" /> : null}
