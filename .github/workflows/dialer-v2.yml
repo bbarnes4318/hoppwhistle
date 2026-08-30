@@ -44,10 +44,6 @@ on:
       - 'apps/worker/src/services/hopper-supervisor.ts'
       - 'apps/worker/src/services/dialer-worker.ts'
       - 'apps/worker/package.json'
-      # The worker typechecks against @hopwhistle/shared, so this workflow's
-      # result depends on how those packages resolve. Without this the exports
-      # change in #41 landed on main with nothing re-running the job it broke.
-      - 'packages/*/package.json'
       - 'docs/dialer-v2/**'
       - '.gitignore'
   pull_request:
@@ -78,10 +74,6 @@ on:
       - 'apps/worker/src/services/hopper-supervisor.ts'
       - 'apps/worker/src/services/dialer-worker.ts'
       - 'apps/worker/package.json'
-      # The worker typechecks against @hopwhistle/shared, so this workflow's
-      # result depends on how those packages resolve. Without this the exports
-      # change in #41 landed on main with nothing re-running the job it broke.
-      - 'packages/*/package.json'
       - 'docs/dialer-v2/**'
       - '.gitignore'
 
