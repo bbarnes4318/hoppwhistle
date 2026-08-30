@@ -31,6 +31,16 @@ export interface LiveMetric {
   value: string;
   /** Secondary context: "of $5,000 cap", "target 65%". */
   sub?: string;
+  /**
+   * Tooltip. Used to explain a value the strip cannot show — an em dash with no
+   * explanation reads as a bug rather than as a known gap.
+   */
+  title?: string;
+  /**
+   * No value is available. Renders muted and skips the flash — a coloured em
+   * dash reads as a meaningful value, and a red one reads as a bad number.
+   */
+  unavailable?: boolean;
   /** Tone for the value. Defaults to ink. */
   tone?: 'ink' | 'live' | 'ringing' | 'dropped' | 'money';
 }
@@ -45,6 +55,12 @@ export interface LiveStripProps {
   connection?: LiveConnectionState;
   /** When the values were last confirmed. Shown in degraded and offline. */
   lastUpdated?: Date | null;
+  /**
+   * Overrides the default degraded/offline copy. The default assumes the socket
+   * dropped; pass this when the real reason is something else, so the strip
+   * never asserts a cause it does not know.
+   */
+  note?: string;
   className?: string;
 }
 
@@ -67,10 +83,12 @@ function LiveValue({
   value,
   tone = 'ink',
   reducedMotion,
+  unavailable = false,
 }: {
   value: string;
   tone: NonNullable<LiveMetric['tone']>;
   reducedMotion: boolean;
+  unavailable?: boolean;
 }) {
   const [flash, setFlash] = React.useState(false);
   const [changed, setChanged] = React.useState(false);
@@ -79,6 +97,8 @@ function LiveValue({
   React.useEffect(() => {
     if (previous.current === value) return;
     previous.current = value;
+    // Nothing changed in a meaningful sense if there is no value to change to.
+    if (unavailable) return;
 
     if (reducedMotion) {
       setChanged(true);
@@ -89,12 +109,15 @@ function LiveValue({
     setFlash(true);
     const t = setTimeout(() => setFlash(false), 600);
     return () => clearTimeout(t);
-  }, [value, reducedMotion]);
+  }, [value, reducedMotion, unavailable]);
 
   return (
     <span className="inline-flex items-baseline gap-1">
       <span
-        className={cn('t-figure tabular transition-colors', flash ? 'text-live' : TONE_CLASS[tone])}
+        className={cn(
+          't-figure tabular transition-colors',
+          unavailable ? 'text-ink-3' : flash ? 'text-live' : TONE_CLASS[tone]
+        )}
         style={flash ? { transitionDuration: '600ms' } : undefined}
       >
         {value}
@@ -114,6 +137,7 @@ export function LiveStrip({
   metrics,
   connection = 'live',
   lastUpdated,
+  note,
   className,
 }: LiveStripProps) {
   const [reducedMotion, setReducedMotion] = React.useState(false);
@@ -142,10 +166,16 @@ export function LiveStrip({
       {metrics.map(m => (
         <div
           key={m.id}
+          title={m.title}
           className="flex min-w-[132px] shrink-0 flex-col justify-center border-r border-rule px-3 py-1.5"
         >
           <span className="t-label text-ink-3">{m.label}</span>
-          <LiveValue value={m.value} tone={m.tone ?? 'ink'} reducedMotion={reducedMotion} />
+          <LiveValue
+            value={m.value}
+            tone={m.tone ?? 'ink'}
+            reducedMotion={reducedMotion}
+            unavailable={m.unavailable}
+          />
           {m.sub ? <span className="t-meta truncate text-ink-3">{m.sub}</span> : null}
         </div>
       ))}
@@ -154,7 +184,17 @@ export function LiveStrip({
         <div className="flex min-w-0 shrink items-center gap-1.5 px-3 py-1.5">
           <WifiOff aria-hidden className="h-3.5 w-3.5 shrink-0 text-ringing" />
           <span className="t-meta min-w-0 text-ringing-ink">
-            {connection === 'degraded' ? (
+            {note ? (
+              <>
+                {note}
+                {lastUpdated ? (
+                  <span className="text-ink-3">
+                    {' '}
+                    · updated {lastUpdated.toLocaleTimeString('en-US')}
+                  </span>
+                ) : null}
+              </>
+            ) : connection === 'degraded' ? (
               <>
                 Live feed dropped — polling every 5s
                 {lastUpdated ? (
