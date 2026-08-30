@@ -373,6 +373,12 @@ end
 -- ── Step 5: Call ended — collect CDR and report ─────────────────────────────
 local end_epoch = os.time()
 local hangup_cause = session:getVariable("hangup_cause") or "NORMAL_CLEARING"
+-- Who sent the BYE/CANCEL, from our point of view on this leg. NORMAL_CLEARING
+-- alone cannot tell a caller hanging up from the buyer hanging up, and that
+-- difference is the whole of the abandon-rate metric. recv_* means the caller
+-- acted; send_* means we did, which on a bridged call means the buyer leg went
+-- away first. Empty on non-SIP legs, and the API records UNKNOWN for those.
+local hangup_disposition = session:getVariable("sip_hangup_disposition") or ""
 local billsec = session:getVariable("billsec") or "0"
 local duration_val = session:getVariable("duration") or tostring(end_epoch - start_epoch)
 local answered_epoch = session:getVariable("answered_time") or ""
@@ -395,7 +401,7 @@ if answered_epoch and answered_epoch ~= "" and answered_epoch ~= "0" then
 end
 
 local cdr_json = string.format(
-  '{"callId":"%s","routeId":"%s","tenantId":"%s","callerNumber":"%s","did":"%s","destination":"%s","buyerId":"%s","targetId":"%s","campaignId":"%s","duration":%s,"connectedDuration":%s,"hangupCause":"%s","startedAt":"%s","answeredAt":"%s","endedAt":"%s","recordingPath":"%s","recordingDuration":%s}',
+  '{"callId":"%s","routeId":"%s","tenantId":"%s","callerNumber":"%s","did":"%s","destination":"%s","buyerId":"%s","targetId":"%s","campaignId":"%s","duration":%s,"connectedDuration":%s,"hangupCause":"%s","sipHangupDisposition":"%s","startedAt":"%s","answeredAt":"%s","endedAt":"%s","recordingPath":"%s","recordingDuration":%s}',
   call_uuid,
   route_id or "",
   tenant_id or "",
@@ -408,6 +414,7 @@ local cdr_json = string.format(
   duration_val,
   billsec,
   hangup_cause,
+  hangup_disposition,
   os.date("!%Y-%m-%dT%H:%M:%SZ", start_epoch),
   answered_at_iso,
   os.date("!%Y-%m-%dT%H:%M:%SZ", end_epoch),

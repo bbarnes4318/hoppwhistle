@@ -945,6 +945,12 @@ model Call {
   connectedDurationFormatted String? // Connected duration as hh:mm:ss
   recordingUrl               String? // URL to call recording (populated when recording is READY)
 
+  // Who ended the call, and the raw cause we derived it from. Populated on the
+  // inbound leg by the FreeSWITCH CDR webhook; null on every row written before
+  // that webhook learned to send it, and on rows from any other source.
+  terminationParty CallTerminationParty?
+  terminationCause String? // Verbatim FreeSWITCH hangup_cause, e.g. ORIGINATOR_CANCEL
+
   // ============================================================================
   // Recording Lifecycle Fields
   // ============================================================================
@@ -1037,6 +1043,7 @@ model Call {
   @@index([tenantId, publisherId, createdAt])
   @@index([tenantId, buyerId, createdAt])
   @@index([tenantId, billable, createdAt])
+  @@index([tenantId, terminationParty, createdAt])
   @@map("calls")
 }
 
@@ -1054,6 +1061,15 @@ enum CallStatus {
 enum CallDirection {
   INBOUND
   OUTBOUND
+}
+
+/// Which side hung up. Derived from the FreeSWITCH hangup cause and, when the
+/// cause is ambiguous (NORMAL_CLEARING), from sip_hangup_disposition.
+enum CallTerminationParty {
+  CALLER // The inbound caller hung up
+  CALLEE // The buyer/target end hung up, rejected, or never picked up
+  SYSTEM // We tore the call down: no route, no eligible destination, timer expiry
+  UNKNOWN // A cause we have no mapping for, or an ambiguous one with no disposition
 }
 
 model CallLeg {
