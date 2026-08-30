@@ -77,7 +77,7 @@ export function DialerControls({
  const handleDial = async () => {
  if (!phoneNumber.trim()) return;
  try {
- await makeCall(phoneNumber);
+ await makeCall(phoneNumber, undefined, 'CC_MANUAL');
  } catch (error) {
  console.error('Failed to initiate call:', error);
  }

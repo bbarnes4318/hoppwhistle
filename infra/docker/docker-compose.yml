@@ -233,6 +233,12 @@ services:
       # Vapi AI Voice Integration
       - VAPI_API_KEY=${VAPI_API_KEY}
       - API_PUBLIC_URL=${API_PUBLIC_URL:-https://hopwhistle.com}
+      # Fish Audio (Voice Studio: cloning, voice management, script preview).
+      # Server-side only - this key can clone voices, delete them, and spend
+      # credit, so it must never be exposed to the web container.
+      - FISH_API_KEY=${FISH_API_KEY}
+      - FISH_DEFAULT_MODEL=${FISH_DEFAULT_MODEL:-s2.1-pro-free}
+      - FISH_API_BASE=${FISH_API_BASE:-https://api.fish.audio}
       # FronterBot Binding
       - SOCKET_LISTENER_HOST=0.0.0.0
       - SOCKET_LISTENER_PORT=8021

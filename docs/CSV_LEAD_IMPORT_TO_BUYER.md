@@ -214,3 +214,80 @@ Per submission, on the lead's detail sheet and in the send response:
 Every attempt writes an `InsuranceLeadSubmission` row with the raw inbound
 payload, the normalized payload, the mapped outbound payload (API key redacted),
 and the buyer's raw response, plus an activity entry on the lead.
+
+## What a live run of 5,000 leads taught us
+
+From 2026-08-25. Recorded because none of it is visible in the buyer's spec.
+
+### A post spends the lead, sold or not
+
+Boberdoo registers a lead the moment it is posted and the 90-day duplicate
+window runs from then — not from the sale. A lead that comes back `Unmatched`
+is just as locked as one that sold.
+
+Measured, not assumed: re-sending 20 previously-unmatched leads returned
+**20/20** `Duplicate lead value ... within the past 90 days`, including one
+that had been accepted for manual approval on the first pass.
+
+This is the single most expensive fact about the pipeline. Posting a lead
+nobody buys does not cost nothing — it costs the lead.
+
+### Demand stops without warning
+
+That run matched 65-70% across its first 1,475 leads, then returned zero
+matches for 3,417 consecutive posts, in the two minutes it took to drain the
+rest of the list. Exactly 1,000 sold.
+
+A match rate does not fall from 67% to 0% and stay there on its own. That is
+the buyer's ceiling — their daily volume, or their own downstream buyers
+filling up. The sender now halts after 50 consecutive unmatched
+(`--stop-after-unmatched`), which on that run would have stopped near lead
+1,525 and left ~3,350 still sellable the next day.
+
+**Ask the buyer what the ceiling is and when it resets, and pace to it.**
+Feeding a list faster than they buy converts inventory into locked rows.
+
+### Not every non-Matched answer is a failure
+
+Boberdoo answers some posts with a status that is neither Matched, Unmatched
+nor Error:
+
+```json
+{ "response": { "status": "Lead ID 326229333 has to be manually approved." } }
+```
+
+The lead is accepted and holding for their review. It has an id. It is
+recorded as `MANUAL_REVIEW` and is never re-sent — a second post of an
+accepted lead comes back as a duplicate and destroys it.
+
+### Operational scripts
+
+All run inside the api container: `docker cp scripts/<file> hopwhistle-api-dev:/app/<file>`
+then `docker exec -u root hopwhistle-api-dev node /app/<file> <args>`.
+
+| Script                                 | What it does                                                                                                     |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `send-lead-list-to-buyer.mjs`          | Sends a named list to completion. `--dry-run`, `--max <n>`, `--stop-after-unmatched <n>`, `--force`.             |
+| `lead-acceptance-report.mjs`           | Splits a list into accepted / refused / recoverable; exports the recoverable to CSV in the buyer's column names. |
+| `analyze-send-run.mjs`                 | Match rate in blocks in posting order — shows a wall as a cliff.                                                 |
+| `why-are-leads-erroring.mjs`           | Groups the buyer's error responses, most common first.                                                           |
+| `repair-manual-review-submissions.mjs` | Reclassifies accepted-for-review rows written as ERROR by an older parser.                                       |
+| `recover-manual-review-lead-ids.mjs`   | Recovers buyer lead ids from the retained raw response.                                                          |
+
+Every one is dry-run or read-only by default. Use `--max 20` to answer a
+question about the buyer for the price of twenty leads rather than a batch.
+
+### Deploying a schema change
+
+This database has no Prisma migration history — it was built with `db push`,
+so `prisma migrate deploy` fails with **P3005** on a non-empty schema. Apply a
+migration by piping its SQL:
+
+```bash
+cat apps/api/prisma/migrations/<name>/migration.sql \
+  | docker exec -i hopwhistle-postgres-dev psql -U callfabric -d callfabric
+```
+
+`db push --accept-data-loss` is not an acceptable substitute on a database
+holding sold leads. Baselining against `prisma/migrations` would fix this
+properly.

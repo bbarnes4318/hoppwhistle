@@ -15,6 +15,7 @@ const { Connection: ESLConnection } = modesl;
 import type { HopperScope } from '../config/hopper-gate.js';
 import { logger } from '../lib/logger.js';
 
+import { getOutboundDialString } from './carrier-routing.js';
 import { LeadReservationStore } from './lead-reservation-store.js';
 import {
   AttemptOutcome,
@@ -76,15 +77,16 @@ const DIALER_BATCH_SIZE = parseInt(process.env.DIALER_BATCH_SIZE || '50', 10);
 const SOCKET_LISTENER_HOST = process.env.SOCKET_LISTENER_HOST || '127.0.0.1';
 const SOCKET_LISTENER_PORT = process.env.SOCKET_LISTENER_PORT || '8021';
 
-/** FracTEL outbound gateways — round-robined so calls load-balance across all 6 IPs. */
-const FRACTEL_GATEWAYS = ['fractel1', 'fractel2', 'fractel3', 'fractel4', 'fractel5', 'fractel6'];
-let gatewayRotationIndex = 0;
-
-function getNextGateway(): string {
-  const gw = FRACTEL_GATEWAYS[gatewayRotationIndex % FRACTEL_GATEWAYS.length];
-  gatewayRotationIndex++;
-  return gw;
-}
+// The hardcoded FRACTEL_GATEWAYS round-robin that used to live here has been
+// replaced by the configurable PREDICTIVE_DIALER waterfall — see
+// services/carrier-routing.ts.
+//
+// It picked exactly ONE gateway per call. That spread load across FracTEL's six
+// IPs but gave each individual call no failover at all: a call handed to a
+// gateway that was refusing INVITEs simply failed, and nothing tried anywhere
+// else. The replacement dials the whole chain in order and rotates only the
+// starting point within the primary carrier, so load still spreads and a bad
+// leg now falls through to the next one.
 
 /** Fallback caller ID if the tenant's rotation pool is empty. */
 const FALLBACK_CALLER_ID = process.env.OUTBOUND_CALLER_ID || '+18656000124';
@@ -531,13 +533,13 @@ export class DialerWorker {
     // Build originate command with &socket() to hand off to FlowEngine
     // Format: originate {vars}sofia/gateway/external/+1XXXXXXXXXX &socket(host:port async full)
     const callerId = await this.getNextCallerId(lead.tenantId);
-    const originateVars = [
-      `ignore_early_media=true`,
-      `origination_caller_id_number=${callerId}`,
-      `origination_caller_id_name=Hopwhistle`,
-      `hopwhistle_lead_id=${lead.id}`,
-      `hopwhistle_campaign_id=${lead.campaignId}`,
-      `hopwhistle_tenant_id=${lead.tenantId}`,
+    const originateVars = {
+      ignore_early_media: 'true',
+      origination_caller_id_number: callerId,
+      origination_caller_id_name: 'Hopwhistle',
+      hopwhistle_lead_id: lead.id,
+      hopwhistle_campaign_id: lead.campaignId,
+      hopwhistle_tenant_id: lead.tenantId,
       // The correlation id, carried on the channel.
       //
       // This is what makes the uncertain case answerable at all. If this process
@@ -548,15 +550,43 @@ export class DialerWorker {
       // carrying this id — without it there is no way to tell an abandoned
       // reservation from a live call, and the only safe action would be to leave
       // the lead stuck forever.
-      `hopwhistle_attempt_id=${attemptId}`,
-    ].join(',');
+      hopwhistle_attempt_id: attemptId,
+    };
 
-    const dialString = `sofia/gateway/${getNextGateway()}/${phoneNumber}`;
+    // The carrier waterfall for this tenant's predictive dialer, resolved per
+    // call so an admin changing carriers in the settings UI takes effect on the
+    // next origination without a worker restart.
+    //
+    // The channel variables are handed to the builder rather than wrapped
+    // around its output: it emits its own `{...}` prefix carrying the per-leg
+    // timeout, and two adjacent brace groups is not valid originate syntax.
+    const { dialString, chain } = await getOutboundDialString(
+      this.prisma,
+      lead.tenantId,
+      'PREDICTIVE_DIALER',
+      phoneNumber,
+      { channelVariables: originateVars }
+    );
+
+    if (!dialString) {
+      // Not a routable number. Refusing is the only safe answer — building
+      // `sofia/gateway/<gw>/<garbage>` would burn an attempt, and the
+      // reservation, on a call that cannot connect.
+      throw new Error(`refusing to originate: ${lead.phoneNumber} is not a routable destination`);
+    }
+
     const application = `&socket(${SOCKET_LISTENER_HOST}:${SOCKET_LISTENER_PORT} async full)`;
 
-    const originateCmd = `originate {${originateVars}}${dialString} ${application}`;
+    const originateCmd = `originate ${dialString} ${application}`;
 
-    logger.info({ msg: 'Originating call', leadId: lead.id, phone: phoneNumber });
+    logger.info({
+      msg: 'Originating call',
+      leadId: lead.id,
+      phone: phoneNumber,
+      carrierOrder: chain.carrierOrder,
+      gateways: chain.gateways.map(g => g.gateway),
+      routeSource: chain.source,
+    });
 
     return new Promise((resolve, reject) => {
       this.eslConnection!.bgapi(originateCmd, (res: ApiResponse) => {

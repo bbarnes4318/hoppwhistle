@@ -17,12 +17,22 @@ const log = createServiceLogger('insurance-lead-poster');
 
 export interface AmeriquoteResponse {
   success: boolean;
-  status: 'Matched' | 'Unmatched' | 'Error' | 'Unknown';
+  status: 'Matched' | 'Unmatched' | 'ManualReview' | 'Error' | 'Unknown';
   leadId?: string;
   price?: string;
   errorMessage?: string;
   rawBody: string;
 }
+
+/**
+ * Boberdoo answers some posts with a status of the form
+ *   "Lead ID 326229333 has to be manually approved."
+ * rather than Matched/Unmatched/Error. The lead reached the buyer and has an
+ * id — it is accepted and holding for their review, not a failure. Recording
+ * it as an error made it re-sendable, and a second post of an accepted lead
+ * comes back as a 90-day duplicate, which burns it for good.
+ */
+const MANUAL_REVIEW_PATTERN = /Lead ID\s+(\d+)\s+has to be manually approved/i;
 
 interface BoberdooResponseBody {
   response?: BoberdooResponseData;
@@ -99,6 +109,10 @@ export async function postToAmeriquote(
 // Response Parser
 // ---------------------------------------------------------------------------
 
+export function parseAmeriquoteResponseForTest(rawBody: string): AmeriquoteResponse {
+  return parseAmeriquoteResponse(rawBody);
+}
+
 function parseAmeriquoteResponse(rawBody: string): AmeriquoteResponse {
   try {
     const parsed = JSON.parse(rawBody) as BoberdooResponseBody;
@@ -131,6 +145,16 @@ function parseAmeriquoteResponse(rawBody: string): AmeriquoteResponse {
         success: false,
         status: 'Error',
         errorMessage: resp.error || 'Unknown Ameriquote error',
+        rawBody,
+      };
+    }
+
+    const manualReview = MANUAL_REVIEW_PATTERN.exec(status) || MANUAL_REVIEW_PATTERN.exec(rawBody);
+    if (manualReview) {
+      return {
+        success: true,
+        status: 'ManualReview',
+        leadId: manualReview[1],
         rawBody,
       };
     }

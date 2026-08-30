@@ -6,11 +6,13 @@
 # Docker compose file paths
 COMPOSE_DEV := infra/docker/docker-compose.dev.yml
 COMPOSE_PROD := infra/docker/docker-compose.prod.yml
-COMPOSE_FILES := -f $(COMPOSE_DEV)
+MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+ENV_FILE := $(MAKEFILE_DIR).env
+COMPOSE_FILES := --env-file $(ENV_FILE) -f $(COMPOSE_DEV)
 
 # Detect if production mode
 ifeq ($(ENV),prod)
-	COMPOSE_FILES := -f $(COMPOSE_DEV) -f $(COMPOSE_PROD)
+	COMPOSE_FILES := --env-file $(ENV_FILE) -f $(COMPOSE_DEV) -f $(COMPOSE_PROD)
 endif
 
 # Colors for output
@@ -105,7 +107,7 @@ health: ## Check service health
 
 clean: ## Remove all containers, volumes, and networks (use clean-force to skip confirmation)
 	@echo "$(RED)WARNING: This will remove all containers, volumes, and networks!$(NC)"
-	@echo "Run 'make clean-force' to skip confirmation"
+	@printf "Type DESTROY to delete ALL volumes incl. the callfabric production database: " && read ans && [ "$$ans" = "DESTROY" ] || { echo "aborted - nothing removed"; exit 1; }
 	@docker compose $(COMPOSE_FILES) down -v --remove-orphans
 	@echo "$(GREEN)✓ Cleanup complete$(NC)"
 

@@ -20,6 +20,8 @@ import {
   UserAgentOptions,
 } from 'sip.js';
 
+import type { CallRouteType as CallRouteTypeName } from '@hopwhistle/shared';
+
 // Helper to extract the actual SIP Call-ID header from a SIP.js Session object
 function getSipCallId(session: any): string {
   if (!session) return '';
@@ -138,7 +140,17 @@ export interface PhoneContextType {
   closePhonePanel: () => void;
   togglePhonePanel: () => void;
   setDialerNumber: (number: string) => void; // Pre-fill dialer
-  makeCall: (phoneNumber: string, callerIdOverride?: string) => Promise<void>;
+  /**
+   * `routeType` selects which configurable carrier waterfall FreeSWITCH uses
+   * for this call. It travels as the X-Hopwhistle-Route-Type SIP header; the
+   * dialplan hands it to the API, which answers with that waterfall's gateway
+   * chain. Defaults to the agent softphone's own waterfall.
+   */
+  makeCall: (
+    phoneNumber: string,
+    callerIdOverride?: string,
+    routeType?: CallRouteTypeName
+  ) => Promise<void>;
   answerCall: () => void;
   hangupCall: () => void;
   toggleMute: () => void;
@@ -870,7 +882,11 @@ export function PhoneProvider({ children, apiUrl }: PhoneProviderProps): JSX.Ele
   const togglePhonePanel = useCallback(() => setIsPhonePanelOpen(prev => !prev), []);
 
   const makeCall = useCallback(
-    async (phoneNumber: string, callerIdOverride?: string) => {
+    async (
+      phoneNumber: string,
+      callerIdOverride?: string,
+      routeType: CallRouteTypeName = 'SOFTPHONE_MANUAL'
+    ) => {
       if (!userAgentRef.current) {
         setError('Phone not connected');
         throw new Error('Phone not connected');
@@ -937,6 +953,10 @@ export function PhoneProvider({ children, apiUrl }: PhoneProviderProps): JSX.Ele
         if (apiCallId) {
           extraHeaders.push(`X-Hopwhistle-Call-Id: ${apiCallId}`);
         }
+        // Selects the carrier waterfall in the dialplan. Always sent: an absent
+        // header makes the API fall back to SOFTPHONE_MANUAL, which would
+        // silently route power-dialer traffic through the softphone's carrier.
+        extraHeaders.push(`X-Hopwhistle-Route-Type: ${routeType}`);
 
         console.log('[Phone] Creating Inviter with extraHeaders:', extraHeaders);
 
