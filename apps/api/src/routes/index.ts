@@ -172,7 +172,13 @@ function buildCallWhere(params: {
 }
 
 // Helper to get authenticated user profile (role, buyerId, publisherId, accessToRecordings)
-async function getUserProfile(request: any, prisma: any) {
+/**
+ * Derives the caller's effective scope — admin / publisher / buyer — from their
+ * JWT and their linked records. Exported so every scoped endpoint resolves
+ * access the same way; this is a security boundary and a second copy of it
+ * would be a second thing to get wrong.
+ */
+export async function getUserProfile(request: any, prisma: any) {
   const user = request.user;
   let userRoles: string[] = [];
   let buyerId: string | null = null;

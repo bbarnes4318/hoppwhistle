@@ -2,66 +2,196 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ==========================================================================
+   HOPPWHISTLE DESIGN SYSTEM
+   Source of truth: /hoppwhistle-redesign.md
+   --------------------------------------------------------------------------
+   Two token groups live here.
+
+   1. DESIGN TOKENS (--paper, --ink, --live ...) are the new system. Hex, so
+      they read the way the brief writes them. New code uses these, via the
+      Tailwind names `paper`, `ink`, `live`, `dropped`, `blocked`, `money` etc.
+
+   2. SHADCN ALIASES (--background, --foreground ...) are a COMPATIBILITY
+      LAYER, kept so the 68 existing pages keep rendering while they are
+      converted. They are HSL triplets because Tailwind wraps them in hsl().
+      Every one is derived from a group-1 token — no independent values.
+      New code must not use them. They are scheduled for removal in prompt 6.
+
+   Light is the default: :root carries the light palette. Dark is opt-in per
+   subtree via [data-theme='dark'] and is intended only for the admin live
+   board. `.dark` is retained as a transitional alias for that same block
+   because the root layout still sets <html class="dark">; dropping that class
+   is prompt 3's job, and until then it is what keeps unconverted pages
+   readable. Remove `.dark` from this selector list once no page depends on it.
+   ========================================================================== */
+
 @layer base {
-  /*
-   * INSTITUTIONAL DESIGN SYSTEM — Phase 1
-   * Bloomberg-terminal aesthetic: permanent deep-slate dark mode.
-   * Both :root and .dark carry identical tokens so the app is dark
-   * regardless of the ThemeProvider class.
-   */
-  :root {
-    --background: 224 35% 8%;
-    --foreground: 215 20% 90%;
-    --card: 224 35% 11%;
-    --card-foreground: 215 20% 92%;
-    --popover: 224 35% 11%;
-    --popover-foreground: 215 20% 92%;
-    --primary: 156 72% 40%;
-    --primary-foreground: 224 35% 8%;
-    --secondary: 224 30% 16%;
-    --secondary-foreground: 215 20% 90%;
-    --muted: 224 30% 15%;
-    --muted-foreground: 215 20% 65%;
-    --accent: 156 72% 40%;
-    --accent-foreground: 224 35% 8%;
-    --destructive: 0 70% 50%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 224 30% 20%;
-    --input: 224 30% 20%;
-    --ring: 156 72% 40%;
-    --radius: 0.25rem;
-    --chart-1: 156 72% 40%;
-    --chart-2: 199 89% 48%;
-    --chart-3: 14 100% 60%;
-    --chart-4: 262 83% 58%;
-    --chart-5: 47 96% 53%;
+  :root,
+  [data-theme='light'] {
+    /* --- surfaces ------------------------------------------------------- */
+    --paper: #fbfaf8;
+    --surface: #ffffff;
+    --sunken: #f3f1ec;
+
+    /* --- ink ------------------------------------------------------------ */
+    --ink: #171614;
+    --ink-2: #55524b;
+    --ink-3: #8a867c;
+
+    /* --- rules ---------------------------------------------------------- */
+    --rule: #e4e0d8;
+    --rule-strong: #cfc9bd;
+
+    /* --- signals -------------------------------------------------------- */
+    --live: #0f7a5a;
+    --ringing: #c8801a;
+    --dropped: #a8452c;
+    --blocked: #6b4e9e;
+    --money: #1b4d8f;
+
+    /*
+     * Signal tints — 14% of the signal over --surface, precomputed rather
+     * than an alpha modifier so the result is stable on any backdrop and
+     * needs no color-mix() support. Chip and lane backgrounds use these.
+     */
+    --live-tint: #ddece8;
+    --ringing-tint: #f7eddf;
+    --dropped-tint: #f3e5e1;
+    --blocked-tint: #eae6f1;
+    --money-tint: #dfe6ef;
+
+    /*
+     * Signal text variants. Used for signal-coloured TEXT on a tint or on
+     * paper, where the raw signal does not clear 4.5:1. live and ringing are
+     * darkened; the other three are the signal itself and are aliased so
+     * callers can use one consistent name.
+     *   live-ink    on live-tint    4.79:1
+     *   ringing-ink on ringing-tint 4.87:1   (raw --ringing is 2.76:1)
+     *   dropped     on dropped-tint 4.82:1
+     *   blocked     on blocked-tint 5.33:1
+     *   money       on money-tint   6.67:1
+     */
+    --live-ink: #0e7355;
+    --ringing-ink: #905c13;
+    --dropped-ink: #a8452c;
+    --blocked-ink: #6b4e9e;
+    --money-ink: #1b4d8f;
+
+    /*
+     * Overage. DurationBar paints the portion past the billable tick in this,
+     * so time beyond the threshold is visible as a second value in the bar.
+     */
+    --live-deep: #0c644a;
+
+    /* --- geometry ------------------------------------------------------- */
+    --radius-card: 6px;
+    --radius-control: 4px;
+    --row-height: 40px;
+
+    /* ------------------------------------------------------------------ *
+     * shadcn compatibility aliases — derived, do not use in new code
+     * ------------------------------------------------------------------ */
+    --background: 40 27% 98%; /* paper */
+    --foreground: 40 7% 8%; /* ink */
+    --card: 0 0% 100%; /* surface */
+    --card-foreground: 40 7% 8%; /* ink */
+    --popover: 0 0% 100%; /* surface */
+    --popover-foreground: 40 7% 8%; /* ink */
+    --primary: 214 68% 33%; /* money */
+    --primary-foreground: 0 0% 100%; /* surface */
+    --secondary: 43 23% 94%; /* sunken */
+    --secondary-foreground: 40 7% 8%; /* ink */
+    --muted: 43 23% 94%; /* sunken */
+    --muted-foreground: 43 6% 51%; /* ink-3 */
+    --accent: 43 23% 94%; /* sunken */
+    --accent-foreground: 40 7% 8%; /* ink */
+    --destructive: 12 58% 42%; /* dropped */
+    --destructive-foreground: 0 0% 100%; /* surface */
+    --border: 40 18% 87%; /* rule */
+    --input: 40 18% 87%; /* rule */
+    --ring: 214 68% 33%; /* money */
+    --radius: 0.375rem; /* 6px card; md=4px control, sm=2px */
+    --chart-1: 162 78% 27%; /* live */
+    --chart-2: 214 68% 33%; /* money */
+    --chart-3: 35 77% 44%; /* ringing */
+    --chart-4: 262 34% 46%; /* blocked */
+    --chart-5: 12 58% 42%; /* dropped */
   }
 
+  /*
+   * Dark. Scoped, not global — intended for the admin live board only.
+   * `.dark` is the transitional alias described at the top of this file.
+   */
+  [data-theme='dark'],
   .dark {
-    --background: 224 35% 8%;
-    --foreground: 215 20% 90%;
-    --card: 224 35% 11%;
-    --card-foreground: 215 20% 92%;
-    --popover: 224 35% 11%;
-    --popover-foreground: 215 20% 92%;
-    --primary: 156 72% 40%;
-    --primary-foreground: 224 35% 8%;
-    --secondary: 224 30% 16%;
-    --secondary-foreground: 215 20% 90%;
-    --muted: 224 30% 15%;
-    --muted-foreground: 215 20% 65%;
-    --accent: 156 72% 40%;
-    --accent-foreground: 224 35% 8%;
-    --destructive: 0 70% 50%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 224 30% 20%;
-    --input: 224 30% 20%;
-    --ring: 156 72% 40%;
-    --chart-1: 156 72% 40%;
-    --chart-2: 199 89% 48%;
-    --chart-3: 14 100% 60%;
-    --chart-4: 262 83% 58%;
-    --chart-5: 47 96% 53%;
+    --paper: #121110;
+    --surface: #1b1a18;
+    --sunken: #232120;
+
+    --ink: #f0eee9;
+    --ink-2: #a8a49b;
+    --ink-3: #75716a;
+
+    --rule: #2e2c29;
+    /* The brief does not specify a dark --rule-strong. Derived: --rule lifted
+       10% toward --ink, which reads as an emphasized divider at 1.66:1 against
+       --surface without becoming a visible line of its own. */
+    --rule-strong: #413f3c;
+
+    --live: #3dbf93;
+    --ringing: #e8a742;
+    --dropped: #d9705a;
+    --blocked: #a48bd6;
+    --money: #6fa3e0;
+
+    /* 22% of the signal over --surface — dark needs a heavier mix than light
+       to separate the tint from the panel it sits on. */
+    --live-tint: #223e33;
+    --ringing-tint: #483921;
+    --dropped-tint: #452d27;
+    --blocked-tint: #393342;
+    --money-tint: #2d3844;
+
+    /* Every dark signal already clears 5:1 on --surface, so the text variants
+       are the signals themselves. Named for parity with light. */
+    --live-ink: #3dbf93;
+    --ringing-ink: #e8a742;
+    --dropped-ink: #d9705a;
+    --blocked-ink: #a48bd6;
+    --money-ink: #6fa3e0;
+
+    /* Darker than --live by a wider step than light mode needs: on a dark
+       ground the deep segment must separate from --live AND stay clearly above
+       the track, or the boundary at the tick dissolves and a long call reads as
+       one flat bar. 1.83:1 against --live, 3.78:1 against --sunken. */
+    --live-deep: #2c8a6a;
+
+    /* ---- shadcn compatibility aliases ---- */
+    --background: 30 6% 7%;
+    --foreground: 43 19% 93%;
+    --card: 40 6% 10%;
+    --card-foreground: 43 19% 93%;
+    --popover: 40 6% 10%;
+    --popover-foreground: 43 19% 93%;
+    --primary: 212 65% 66%;
+    --primary-foreground: 30 6% 7%;
+    --secondary: 20 4% 13%;
+    --secondary-foreground: 43 19% 93%;
+    --muted: 20 4% 13%;
+    --muted-foreground: 38 5% 44%;
+    --accent: 20 4% 13%;
+    --accent-foreground: 43 19% 93%;
+    --destructive: 10 63% 60%;
+    --destructive-foreground: 30 6% 7%;
+    --border: 36 6% 17%;
+    --input: 36 6% 17%;
+    --ring: 212 65% 66%;
+    --chart-1: 160 52% 49%;
+    --chart-2: 212 65% 66%;
+    --chart-3: 37 78% 58%;
+    --chart-4: 260 48% 69%;
+    --chart-5: 10 63% 60%;
   }
 }
 
@@ -74,21 +204,130 @@
   }
   body {
     @apply bg-background text-foreground h-full;
+    font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
   #__next {
     @apply h-full;
   }
+
+  /* A theme scope must paint its own ground, otherwise a [data-theme] subtree
+     inherits the surrounding page's background and only its text changes. */
+  [data-theme] {
+    background-color: var(--paper);
+    color: var(--ink);
+  }
+
+  /* One focus treatment for the whole product. */
+  :focus-visible {
+    outline: 2px solid var(--money);
+    outline-offset: 2px;
+    border-radius: var(--radius-control);
+  }
+}
+
+/* ==========================================================================
+   TYPE SCALE
+   Eight steps, three faces, from the brief. Each class sets family, size,
+   line-height and weight together — a step is not a size, it is all four.
+   ========================================================================== */
+
+@layer components {
+  .t-hero {
+    font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+    font-size: 34px;
+    line-height: 1.05;
+    font-weight: 500;
+    letter-spacing: -0.015em;
+  }
+  .t-title {
+    font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+    font-size: 20px;
+    line-height: 1.2;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+  .t-section {
+    font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.3;
+    font-weight: 500;
+  }
+  .t-body {
+    font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    font-weight: 400;
+  }
+  .t-label {
+    font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+    font-size: 12px;
+    line-height: 1.3;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .t-meta {
+    font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+    font-size: 12px;
+    line-height: 1.4;
+    font-weight: 400;
+  }
+  .t-figure {
+    font-family: var(--font-mono), ui-monospace, monospace;
+    font-size: 19px;
+    line-height: 1;
+    font-weight: 500;
+    font-feature-settings:
+      'tnum' 1,
+      'zero' 1,
+      'ss02' 1;
+    font-variant-numeric: tabular-nums slashed-zero;
+  }
+  .t-data {
+    font-family: var(--font-mono), ui-monospace, monospace;
+    font-size: 13px;
+    line-height: 1.4;
+    font-weight: 400;
+    font-feature-settings:
+      'tnum' 1,
+      'zero' 1,
+      'ss02' 1;
+    font-variant-numeric: tabular-nums slashed-zero;
+  }
 }
 
 @layer utilities {
-  /* High row density for data ledgers */
+  /*
+   * Every number in the product is tabular. Applied by .t-figure and .t-data
+   * already; this is for the cases that need the figures without the step.
+   */
+  .tabular {
+    font-feature-settings:
+      'tnum' 1,
+      'zero' 1;
+    font-variant-numeric: tabular-nums slashed-zero;
+  }
+
+  /* Hairline separators. Never a shadow to divide two flat surfaces. */
+  .rule-t {
+    border-top: 1px solid var(--rule);
+  }
+  .rule-b {
+    border-bottom: 1px solid var(--rule);
+  }
+
+  /* High row density for data ledgers — legacy, kept for unconverted pages. */
   .table-dense th {
     @apply py-1.5 px-2 text-xs font-semibold text-muted-foreground uppercase tracking-widest border-b border-border/10;
   }
   .table-dense td {
     @apply py-1.5 px-2 text-xs text-foreground border-b border-border/10;
   }
-  
+
   /* Compact custom scrollbar styling */
   .custom-scrollbar::-webkit-scrollbar {
     width: 6px;
@@ -105,4 +344,3 @@
     background: hsl(var(--muted-foreground));
   }
 }
-

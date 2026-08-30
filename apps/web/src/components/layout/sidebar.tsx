@@ -1,292 +1,157 @@
 'use client';
 
-import {
-  AudioLines,
-  BarChart3,
-  Bot,
-  Clock,
-  Disc3,
-  DollarSign,
-  FileText,
-  GitBranch,
-  Globe,
-  Headphones,
-  LayoutDashboard,
-  Megaphone,
-  PhoneCall,
-  Receipt,
-  Settings,
-  Shield,
-  Telescope,
-  Users,
-} from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import * as React from 'react';
 
 import { useAuth } from '@/hooks/use-auth';
 import { cn } from '@/lib/utils';
 
-interface NavItem {
-  name: string;
-  href: string;
-  icon: React.ComponentType<{ className?: string }>;
-  title?: string;
+import {
+  ADMIN_NAV,
+  AGENT_NAV,
+  buyerNav,
+  publisherNav,
+  type NavGroup,
+  type NavItem,
+} from './nav-config';
+
+/**
+ * Sidebar.
+ *
+ * Admin's flat column of 14 becomes the brief's four groups. The group headers
+ * are labels and nothing else — not buttons, not disclosure triangles. A new
+ * person should be able to read the product's shape off this list in one look,
+ * and a section they have to open first cannot do that.
+ */
+
+function isItemActive(pathname: string | null, href: string): boolean {
+  if (!pathname) return false;
+  // Strip the query so /publisher/calls?hasRecording=true matches its page.
+  const path = href.split('?')[0];
+  if (pathname === path) return true;
+  // Guard against /calls matching /calls-something.
+  return pathname.startsWith(`${path}/`);
+}
+
+function NavLink({ item, active }: { item: NavItem; active: boolean }) {
+  const Icon = item.icon;
+
+  if (item.pending) {
+    return (
+      <span
+        className="flex items-center gap-2 rounded-control px-2 py-1.5 t-body text-ink-3"
+        title={`${item.name} — not built yet`}
+        aria-disabled="true"
+      >
+        <Icon className="h-4 w-4 shrink-0 opacity-60" />
+        <span className="truncate">{item.name}</span>
+        <span className="ml-auto t-meta shrink-0 rounded-control bg-sunken px-1 text-ink-3">
+          Soon
+        </span>
+      </span>
+    );
+  }
+
+  return (
+    <Link
+      href={item.href}
+      title={item.title}
+      aria-current={active ? 'page' : undefined}
+      className={cn(
+        'flex items-center gap-2 rounded-control px-2 py-1.5 t-body transition-colors',
+        active
+          ? 'bg-money-tint font-medium text-money-ink'
+          : 'text-ink-2 hover:bg-sunken hover:text-ink'
+      )}
+    >
+      <Icon className={cn('h-4 w-4 shrink-0', active ? 'text-money' : 'text-ink-3')} />
+      <span className="truncate">{item.name}</span>
+    </Link>
+  );
+}
+
+/** Role banner. Publishers and buyers should never be unsure whose data this is. */
+function PortalBadge({ label }: { label: string }) {
+  return (
+    <div className="mb-2 rounded-control border border-rule bg-sunken px-2 py-1 text-center t-label text-ink-2">
+      {label}
+    </div>
+  );
 }
 
 export function Sidebar() {
   const pathname = usePathname();
-  const auth = useAuth();
   const {
     hasFullAccess,
     isBuyerOnly,
     isPublisherOnly,
     isAgentOnly,
     isReadonlyOnly,
-    isNewUser,
     canViewRecordings,
     canViewReports,
-  } = auth;
+  } = useAuth();
 
-  // Build the navigation items dynamically based on roles
-  let navItems: NavItem[] = [];
-
-  if (hasFullAccess) {
-    // Admin/Owner full navigation
-    navItems = [
-      { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-      {
-        name: 'Music Console',
-        href: '/music-console',
-        icon: Disc3,
-        title: 'AI-Powered Direct-to-Fan Voice Console',
-      },
-      {
-        name: 'AI Voice',
-        href: '/voice-agents',
-        icon: Bot,
-        title: 'AI voice agents & outbound campaigns',
-      },
-      { name: 'Call Center', href: '/call-center', icon: Headphones },
-      { name: 'CRM', href: '/insurance-leads', icon: Users },
-      { name: 'Numbers', href: '/numbers', icon: PhoneCall },
-      { name: 'Campaigns', href: '/campaigns', icon: Megaphone },
-      { name: 'Publishers', href: '/publishers', icon: Users },
-      { name: 'Buyers', href: '/buyers', icon: Users },
-      { name: 'Flows', href: '/flows', icon: GitBranch },
-      { name: 'Call Logs', href: '/calls', icon: AudioLines },
-      { name: 'Reports', href: '/reports', icon: BarChart3 },
-      {
-        name: 'Industry Research',
-        href: '/tools/industry-research',
-        icon: Telescope,
-        title: 'Multi-provider forensic industry-entry research',
-      },
-      { name: 'Billing', href: '/billing', icon: Receipt },
-      { name: 'Settings', href: '/settings', icon: Settings },
-    ];
-  } else if (isPublisherOnly) {
-    // Publisher Portal navigation
-    navItems = [
-      { name: 'Publisher Dashboard', href: '/publisher/dashboard', icon: LayoutDashboard },
-      { name: 'API Setup', href: '/publisher/api-setup', icon: Shield },
-      { name: 'Calls', href: '/publisher/calls', icon: AudioLines },
-      { name: 'Earnings', href: '/publisher/earnings', icon: Receipt },
-    ];
-    if (canViewRecordings) {
-      navItems.push({
-        name: 'Recordings',
-        href: '/publisher/calls?hasRecording=true',
-        icon: Disc3,
-      });
+  const groups: NavGroup[] = React.useMemo(() => {
+    if (hasFullAccess) return ADMIN_NAV;
+    if (isPublisherOnly) return publisherNav(canViewRecordings);
+    if (isBuyerOnly) return buyerNav(canViewRecordings);
+    if (isAgentOnly) return AGENT_NAV;
+    if (isReadonlyOnly) {
+      const items: NavItem[] = [ADMIN_NAV[0].items[0]];
+      if (canViewReports) {
+        const reports = ADMIN_NAV.find(g => g.label === 'Money')?.items.find(
+          i => i.href === '/reports'
+        );
+        if (reports) items.push(reports);
+      }
+      return [{ items }];
     }
-    navItems.push(
-      { name: 'Payouts', href: '/publisher/payouts', icon: DollarSign },
-      { name: 'Support / Docs', href: '/publisher/docs', icon: FileText }
-    );
-  } else if (isBuyerOnly) {
-    // Buyer Portal navigation
-    navItems = [
-      { name: 'Buyer Dashboard', href: '/buyer/dashboard', icon: LayoutDashboard },
-      { name: 'Calls', href: '/buyer/calls', icon: AudioLines },
-      { name: 'Costs', href: '/buyer/costs', icon: BarChart3 },
-      { name: 'Targets', href: '/buyer/targets', icon: Globe },
-      { name: 'Wallet / Billing', href: '/buyer/wallet', icon: Receipt },
-      { name: 'Disputes', href: '/buyer/disputes', icon: Shield },
-    ];
-    if (canViewRecordings) {
-      navItems.push({ name: 'Recordings', href: '/buyer/calls?hasRecording=true', icon: Disc3 });
-    }
-  } else if (isAgentOnly) {
-    // Agent Portal navigation
-    navItems = [
-      { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-      { name: 'Call Center', href: '/call-center', icon: Headphones },
-      { name: 'My Calls', href: '/calls/my', icon: AudioLines },
-      { name: 'CRM', href: '/insurance-leads', icon: Users },
-      { name: 'Numbers', href: '/numbers', icon: PhoneCall },
-      { name: 'Campaigns', href: '/campaigns', icon: Megaphone },
-      { name: 'Publishers', href: '/publishers', icon: Users },
-      { name: 'Buyers', href: '/buyers', icon: Users },
-      { name: 'Call Logs', href: '/calls', icon: AudioLines },
-      { name: 'Reports', href: '/reports', icon: BarChart3 },
-      { name: 'My Payroll', href: '/payroll', icon: Clock },
-      { name: 'Billing', href: '/billing', icon: Receipt },
-      { name: 'Settings', href: '/settings', icon: Settings },
-    ];
-  } else if (isReadonlyOnly) {
-    // Readonly navigation
-    navItems = [{ name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard }];
-    if (canViewReports) {
-      navItems.push({ name: 'Reports', href: '/reports', icon: BarChart3 });
-    }
-  } else if (isNewUser) {
-    // New user with no assigned role
-    navItems = [{ name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard }];
-  } else {
-    // Fallback default
-    navItems = [{ name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard }];
-  }
-
-  // Tools Navigation - Admin/Owner Only
-  const toolsNav = hasFullAccess
-    ? [
-        {
-          name: 'Recording Analyzer',
-          href: '/tools/recording-analyzer',
-          icon: AudioLines,
-        },
-        {
-          name: 'Campaign Map',
-          href: '/tools/campaign-map',
-          icon: Globe,
-        },
-        {
-          name: 'Industry Research',
-          href: '/tools/industry-research',
-          icon: Telescope,
-          title: 'Multi-provider forensic industry-entry research',
-        },
-      ]
-    : [];
-
-  // Admin Navigation - Admin/Owner Only
-  const adminNav = hasFullAccess
-    ? [
-        { name: 'Users', href: '/settings/users', icon: Users },
-        { name: 'Webhooks', href: '/settings/webhooks', icon: FileText },
-        { name: 'DNC Lists', href: '/settings/dnc', icon: Shield },
-        { name: 'Quotas & Budgets', href: '/settings/quotas', icon: DollarSign },
-        { name: 'Payroll Admin', href: '/admin/payroll', icon: Receipt },
-      ]
-    : [];
+    // New user with no role yet, and the catch-all: one safe destination.
+    return [{ items: [ADMIN_NAV[0].items[0]] }];
+  }, [
+    hasFullAccess,
+    isPublisherOnly,
+    isBuyerOnly,
+    isAgentOnly,
+    isReadonlyOnly,
+    canViewRecordings,
+    canViewReports,
+  ]);
 
   return (
-    <div className="flex h-full w-52 flex-col border-r border-border bg-card flex-shrink-0">
-      <div className="flex h-11 items-center border-b border-border px-4 flex-shrink-0">
-        <Image
-          src="/hopwhistle.png"
-          alt="Hopwhistle"
-          width={100}
-          height={32}
-          className="h-6 w-auto"
-          priority
-        />
+    <div className="flex h-full w-52 shrink-0 flex-col border-r border-rule bg-surface">
+      <div className="flex h-12 shrink-0 items-center border-b border-rule px-4">
+        <Link href="/dashboard" className="rounded-control">
+          <Image
+            src="/hopwhistle.png"
+            alt="Hopwhistle"
+            width={100}
+            height={32}
+            className="h-6 w-auto"
+            priority
+          />
+        </Link>
       </div>
-      <nav className="flex-1 space-y-0.5 overflow-y-auto p-2.5 custom-scrollbar">
-        {/* Buyer Portal indicator */}
-        {isBuyerOnly && (
-          <div className="mb-2.5 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-primary bg-primary/10 rounded border border-primary/20 text-center">
-            Buyer Portal
-          </div>
-        )}
 
-        {/* Publisher Portal indicator */}
-        {isPublisherOnly && (
-          <div className="mb-2.5 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-emerald-400 bg-emerald-500/10 rounded border border-emerald-500/20 text-center">
-            Publisher Portal
-          </div>
-        )}
+      <nav aria-label="Main" className="custom-scrollbar flex-1 overflow-y-auto p-2">
+        {isPublisherOnly ? <PortalBadge label="Publisher portal" /> : null}
+        {isBuyerOnly ? <PortalBadge label="Buyer portal" /> : null}
+        {isAgentOnly ? <PortalBadge label="Agent portal" /> : null}
 
-        {/* Agent Portal indicator */}
-        {isAgentOnly && (
-          <div className="mb-2.5 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-blue-400 bg-blue-500/10 rounded border border-blue-500/20 text-center">
-            Agent Portal
+        {groups.map((group, gi) => (
+          <div key={group.label ?? `group-${gi}`} className={cn(gi > 0 && 'mt-4')}>
+            {group.label ? <h2 className="px-2 pb-1 t-label text-ink-3">{group.label}</h2> : null}
+            <ul className="space-y-0.5">
+              {group.items.map(item => (
+                <li key={`${item.name}-${item.href}`}>
+                  <NavLink item={item} active={isItemActive(pathname, item.href)} />
+                </li>
+              ))}
+            </ul>
           </div>
-        )}
-
-        {navItems.map(item => {
-          const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
-          return (
-            <Link
-              key={item.name}
-              href={item.href}
-              title={item.title}
-              className={cn(
-                'flex items-center gap-2 rounded px-2 py-1.5 text-xs font-semibold transition-all duration-150',
-                isActive
-                  ? 'bg-muted text-primary border-l-2 border-primary'
-                  : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-              )}
-            >
-              <item.icon className="h-4 w-4 flex-shrink-0" />
-              {item.name}
-            </Link>
-          );
-        })}
-
-        {toolsNav.length > 0 && (
-          <div className="pt-3">
-            <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
-              Tools
-            </div>
-            {toolsNav.map(item => {
-              const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
-              return (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  className={cn(
-                    'flex items-center gap-2 rounded px-2 py-1.5 text-xs font-semibold transition-all duration-150',
-                    isActive
-                      ? 'bg-muted text-primary border-l-2 border-primary'
-                      : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-                  )}
-                >
-                  <item.icon className="h-4 w-4 flex-shrink-0" />
-                  {item.name}
-                </Link>
-              );
-            })}
-          </div>
-        )}
-
-        {adminNav.length > 0 && (
-          <div className="pt-3">
-            <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
-              Admin
-            </div>
-            {adminNav.map(item => {
-              const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
-              return (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  title={item.title}
-                  className={cn(
-                    'flex items-center gap-2 rounded px-2 py-1.5 text-xs font-semibold transition-all duration-150',
-                    isActive
-                      ? 'bg-muted text-primary border-l-2 border-primary'
-                      : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-                  )}
-                >
-                  <item.icon className="h-4 w-4 flex-shrink-0" />
-                  {item.name}
-                </Link>
-              );
-            })}
-          </div>
-        )}
+        ))}
       </nav>
     </div>
   );
