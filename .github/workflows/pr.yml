@@ -76,6 +76,18 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # The workspace packages resolve through their exports maps to ./dist,
+      # which exists only after a build, so every step below that typechecks or
+      # runs code importing them needs this first. Without it `pnpm test` cannot
+      # collect apps/api's flow-store suite at all — and because that step is
+      # continue-on-error it reports the failure and stays green, so a whole test
+      # file silently stops running.
+      #
+      # Globbed rather than named: a package added later needs building too, and
+      # the failure mode for forgetting is a suite that quietly does not run.
+      - name: Build the workspace packages
+        run: pnpm --filter "./packages/*" build
+
       # NOTE: lint/format/typecheck/full-test/build are advisory
       # (continue-on-error) due to pre-existing repo-wide debt that predates
       # this gate ever passing. The carrier-automation & call-center tests
