@@ -103,3 +103,38 @@ export async function requireBuyerScope(): Promise<BuyerScope> {
     canViewRecordings: isAdminOrOwner || session.user.buyerAccessToRecordings,
   };
 }
+
+export interface PublisherScope extends Session {
+  /**
+   * Null for an admin or owner not attached to a publisher record. They are
+   * allowed through for support purposes, exactly as `requireBuyerScope` allows
+   * them onto the buyer pages.
+   */
+  publisherId: string | null;
+}
+
+/**
+ * Gate for every page under /publisher, mirroring `requireBuyerScope`.
+ *
+ * Until this existed the publisher section had no access control at all: the
+ * only thing sending a buyer away from /publisher/* was the redirect in the
+ * dashboard layout's effect, which runs in the browser after the page has
+ * already mounted and started fetching. That is chrome, not a guard. A redirect
+ * at login is not access control either -- it decides where someone lands, not
+ * where they are allowed to go afterwards -- so the check has to live here,
+ * before any publisher data is fetched.
+ */
+export async function requirePublisherScope(): Promise<PublisherScope> {
+  const session = await getSession();
+  if (!session) redirect('/login');
+
+  const { roles } = session.user;
+  const isAdminOrOwner = roles.includes('ADMIN') || roles.includes('OWNER');
+  const isPublisher = roles.includes('PUBLISHER');
+
+  if (!isAdminOrOwner && !isPublisher) {
+    redirect(roles.includes('BUYER') ? '/buyer/dashboard' : '/dashboard');
+  }
+
+  return { ...session, publisherId: session.user.publisherId };
+}

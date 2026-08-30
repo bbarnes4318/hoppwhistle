@@ -9,9 +9,14 @@ import { useState, useCallback, useEffect, type ChangeEvent, type FormEvent } fr
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { getRedirectPath } from '@/lib/roles';
 import { persistSessionToken } from '@/lib/session-token';
 
-const GOOGLE_CLIENT_ID = '196207148120-2navmspp2renu5cnvr06679jvhm5h12h.apps.googleusercontent.com';
+// Public OAuth client identifier, not a secret, but it still differs per
+// environment, so it comes from the environment rather than from source.
+// Next.js inlines NEXT_PUBLIC_* at build time; an unset value disables the
+// Google buttons instead of initialising the library with an empty client_id.
+const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? '';
 const API_BASE =
   typeof window !== 'undefined'
     ? window.location.origin
@@ -30,13 +35,6 @@ interface AuthResponse {
   };
 }
 
-// Determine redirect path based on user roles
-// With unified dashboard, all users go to /dashboard
-function getRedirectPath(_roles: string[]): string {
-  // Buyer portal removed - all users use unified dashboard with RBAC
-  return '/dashboard';
-}
-
 interface PasswordStrength {
   score: number;
   hasLength: boolean;
@@ -50,6 +48,74 @@ function validatePasswordStrength(password: string): PasswordStrength {
   const hasNumber = /\d/.test(password);
   const score = [hasLength, hasUppercase, hasNumber].filter(Boolean).length;
   return { score, hasLength, hasUppercase, hasNumber };
+}
+
+interface GoogleAccountsWindow extends Window {
+  google?: {
+    accounts: {
+      id: {
+        initialize: (config: Record<string, unknown>) => void;
+        renderButton: (el: HTMLElement | null, config: Record<string, unknown>) => void;
+      };
+    };
+  };
+}
+
+/**
+ * A slot that Google renders its own button into.
+ *
+ * WHY THIS IS NOT AN EFFECT DOING getElementById.
+ *
+ * It used to be, and that is why the button never appeared on the signup tab.
+ * The two panels are Radix `TabsContent`, which does not render an inactive
+ * panel's children at all -- and when a panel becomes active, Radix mounts the
+ * children a render LATER than the tab state changes: `Presence` keeps its own
+ * state machine, starts at "unmounted", and only sends MOUNT from a layout
+ * effect, so on the commit where `activeTab` first becomes 'signup' the panel
+ * div exists but is still rendering `present && children`, i.e. nothing. The
+ * page's effect ran on that commit, looked up `#google-signup-button`, got
+ * null, and returned -- and because the follow-up render that finally mounts
+ * the children does not change `activeTab`, the effect never ran again. The
+ * sign-in button worked only because its panel is the one selected on first
+ * mount, where Presence initialises straight to "mounted".
+ *
+ * A ref callback has no such ordering to get wrong: React invokes it with the
+ * node at the moment the node is attached, whenever that turns out to be, and
+ * invokes it again if `ready` flips afterwards. That covers both orders -- tab
+ * opened before the Google script loaded, and after.
+ */
+function GoogleButton({
+  ready,
+  text,
+  id,
+}: {
+  ready: boolean;
+  text: 'continue_with' | 'signup_with';
+  id: string;
+}): JSX.Element {
+  const mount = useCallback(
+    (node: HTMLDivElement | null) => {
+      if (!node || !ready) return;
+      const googleWindow = window as unknown as GoogleAccountsWindow;
+      if (!googleWindow.google) return;
+
+      // React re-invokes this ref when `ready` changes, handing back the same
+      // node; clearing first stops a second call stacking a duplicate button.
+      node.replaceChildren();
+      googleWindow.google.accounts.id.renderButton(node, {
+        type: 'standard',
+        theme: 'outline',
+        size: 'large',
+        text,
+        shape: 'rectangular',
+        logo_alignment: 'left',
+        width: 300,
+      });
+    },
+    [ready, text]
+  );
+
+  return <div id={id} ref={mount} className="w-full flex justify-center" />;
 }
 
 export default function AuthPage() {
@@ -68,6 +134,8 @@ export default function AuthPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [googleLoaded, setGoogleLoaded] = useState(false);
+  // Set once accounts.id.initialize() has run; the buttons cannot render before it.
+  const [googleReady, setGoogleReady] = useState(false);
 
   // Password strength for signup
   const passwordStrength = validatePasswordStrength(password);
@@ -108,57 +176,21 @@ export default function AuthPage() {
     [router]
   );
 
-  interface GoogleAccountsWindow extends Window {
-    google?: {
-      accounts: {
-        id: {
-          initialize: (config: Record<string, unknown>) => void;
-          renderButton: (el: HTMLElement | null, config: Record<string, unknown>) => void;
-        };
-      };
-    };
-  }
-
-  // Initialize Google One Tap
+  // Initialize the Google client once the script is in. Rendering the buttons is
+  // deliberately NOT done here -- see GoogleButton below for why.
   useEffect(() => {
+    if (!googleLoaded || !GOOGLE_CLIENT_ID) return;
     const googleWindow = window as unknown as GoogleAccountsWindow;
-    if (googleLoaded && typeof window !== 'undefined' && googleWindow.google) {
-      googleWindow.google.accounts.id.initialize({
-        client_id: GOOGLE_CLIENT_ID,
-        callback: handleGoogleResponse as unknown as (res: unknown) => void,
-        auto_select: false,
-        cancel_on_tap_outside: true,
-      });
+    if (!googleWindow.google) return;
 
-      if (activeTab === 'signin') {
-        const btn = document.getElementById('google-signin-button');
-        if (btn) {
-          googleWindow.google.accounts.id.renderButton(btn, {
-            type: 'standard',
-            theme: 'outline',
-            size: 'large',
-            text: 'continue_with',
-            shape: 'rectangular',
-            logo_alignment: 'left',
-            width: 300,
-          });
-        }
-      } else {
-        const btn = document.getElementById('google-signup-button');
-        if (btn) {
-          googleWindow.google.accounts.id.renderButton(btn, {
-            type: 'standard',
-            theme: 'outline',
-            size: 'large',
-            text: 'signup_with',
-            shape: 'rectangular',
-            logo_alignment: 'left',
-            width: 300,
-          });
-        }
-      }
-    }
-  }, [googleLoaded, handleGoogleResponse, activeTab]);
+    googleWindow.google.accounts.id.initialize({
+      client_id: GOOGLE_CLIENT_ID,
+      callback: handleGoogleResponse as unknown as (res: unknown) => void,
+      auto_select: false,
+      cancel_on_tap_outside: true,
+    });
+    setGoogleReady(true);
+  }, [googleLoaded, handleGoogleResponse]);
 
   // Email/Password Login
   const handleLogin = async (e: FormEvent<HTMLFormElement>) => {
@@ -258,15 +290,15 @@ export default function AuthPage() {
             <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-sm">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
               <span className="text-[10px] font-mono text-zinc-400 font-semibold tracking-widest uppercase">
-                System Operational
+                All systems operational
               </span>
             </div>
             <h1 className="text-4xl font-semibold tracking-tight text-zinc-50">
-              Secure Authentication Gateway
+              Welcome to Hopwhistle
             </h1>
             <p className="text-lg text-zinc-400 max-w-md leading-relaxed">
-              Access the institutional telephony command center. Real-time media routing,
-              deterministic node orchestration, and multi-tenant ledger management.
+              Buy and sell calls in one place. Route every call in real time, track spend and
+              earnings as they happen, and settle up without spreadsheets.
             </p>
           </div>
 
@@ -274,27 +306,27 @@ export default function AuthPage() {
           <div className="relative z-10 border-t border-zinc-800/50 pt-8 mt-12 grid grid-cols-2 gap-6 w-full max-w-md">
             <div className="space-y-1.5">
               <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-semibold">
-                Network Status
+                Calls
               </p>
-              <p className="text-sm font-medium text-zinc-300">Optimal (0ms jitter)</p>
+              <p className="text-sm font-medium text-zinc-300">Routed in real time</p>
             </div>
             <div className="space-y-1.5">
               <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-semibold">
-                Authentication
+                Reporting
               </p>
-              <p className="text-sm font-medium text-zinc-300">Zero-Trust Enforced</p>
+              <p className="text-sm font-medium text-zinc-300">Live calls and spend</p>
             </div>
             <div className="space-y-1.5">
               <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-semibold">
-                Active Nodes
+                Buyers and publishers
               </p>
-              <p className="text-sm font-medium text-zinc-300">14 (us-east-1)</p>
+              <p className="text-sm font-medium text-zinc-300">Managed side by side</p>
             </div>
             <div className="space-y-1.5">
               <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-semibold">
-                Protocol
+                Payouts
               </p>
-              <p className="text-sm font-medium text-zinc-300">SIP/TLS Active</p>
+              <p className="text-sm font-medium text-zinc-300">Tracked per campaign</p>
             </div>
           </div>
         </div>
@@ -310,12 +342,12 @@ export default function AuthPage() {
             <div className="space-y-8">
               <div className="space-y-2">
                 <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-                  {activeTab === 'signin' ? 'Portal Access' : 'Provision Identity'}
+                  {activeTab === 'signin' ? 'Sign in' : 'Create account'}
                 </h2>
                 <p className="text-sm text-muted-foreground">
                   {activeTab === 'signin'
-                    ? 'Enter your operational credentials to access the secure command center.'
-                    : 'Register a new institutional identity to access the network.'}
+                    ? 'Enter your email and password to sign in to your account.'
+                    : 'Create an account to start buying or sending calls.'}
                 </p>
               </div>
 
@@ -343,17 +375,20 @@ export default function AuthPage() {
               >
                 <TabsList className="grid w-full grid-cols-2 h-10 mb-8 bg-muted/50 rounded-md">
                   <TabsTrigger value="signin" className="text-xs font-medium">
-                    Authenticate
+                    Sign in
                   </TabsTrigger>
                   <TabsTrigger value="signup" className="text-xs font-medium">
-                    Provision
+                    Create account
                   </TabsTrigger>
                 </TabsList>
 
                 {/* Sign In Form */}
                 <TabsContent value="signin" className="space-y-6 outline-none">
-                  {/* Google Sign In Button */}
-                  <div id="google-signin-button" className="w-full flex justify-center" />
+                  <GoogleButton
+                    ready={googleReady}
+                    text="continue_with"
+                    id="google-signin-button"
+                  />
 
                   {/* Divider */}
                   <div className="relative my-8">
@@ -362,7 +397,7 @@ export default function AuthPage() {
                     </div>
                     <div className="relative flex justify-center">
                       <span className="bg-background px-3 text-[10px] uppercase tracking-widest font-mono text-muted-foreground font-semibold">
-                        Or authenticate via email
+                        Or sign in with email
                       </span>
                     </div>
                   </div>
@@ -378,7 +413,7 @@ export default function AuthPage() {
                       <Input
                         id="signin-email"
                         type="email"
-                        placeholder="operator@domain.com"
+                        placeholder="you@company.com"
                         value={email}
                         onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
                         required
@@ -392,7 +427,7 @@ export default function AuthPage() {
                           htmlFor="signin-password"
                           className="text-[10px] font-mono font-semibold tracking-widest text-muted-foreground uppercase"
                         >
-                          Passphrase
+                          Password
                         </label>
                       </div>
                       <div className="relative">
@@ -426,15 +461,14 @@ export default function AuthPage() {
                       disabled={isLoading}
                     >
                       {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                      Authenticate Session
+                      Sign in
                     </Button>
                   </form>
                 </TabsContent>
 
                 {/* Sign Up Form */}
                 <TabsContent value="signup" className="space-y-6 outline-none">
-                  {/* Google Sign Up Button */}
-                  <div id="google-signup-button" className="w-full flex justify-center" />
+                  <GoogleButton ready={googleReady} text="signup_with" id="google-signup-button" />
 
                   {/* Divider */}
                   <div className="relative my-8">
@@ -443,7 +477,7 @@ export default function AuthPage() {
                     </div>
                     <div className="relative flex justify-center">
                       <span className="bg-background px-3 text-[10px] uppercase tracking-widest font-mono text-muted-foreground font-semibold">
-                        Or register via email
+                        Or sign up with email
                       </span>
                     </div>
                   </div>
@@ -460,7 +494,7 @@ export default function AuthPage() {
                         <Input
                           id="signup-firstname"
                           type="text"
-                          placeholder="Node"
+                          placeholder="Jane"
                           value={firstName}
                           onChange={(e: ChangeEvent<HTMLInputElement>) =>
                             setFirstName(e.target.value)
@@ -479,7 +513,7 @@ export default function AuthPage() {
                         <Input
                           id="signup-lastname"
                           type="text"
-                          placeholder="Operator"
+                          placeholder="Smith"
                           value={lastName}
                           onChange={(e: ChangeEvent<HTMLInputElement>) =>
                             setLastName(e.target.value)
@@ -499,7 +533,7 @@ export default function AuthPage() {
                       <Input
                         id="signup-email"
                         type="email"
-                        placeholder="operator@domain.com"
+                        placeholder="you@company.com"
                         value={email}
                         onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
                         required
@@ -512,12 +546,12 @@ export default function AuthPage() {
                         htmlFor="signup-position"
                         className="text-[10px] font-mono font-semibold tracking-widest text-muted-foreground uppercase"
                       >
-                        Position / Role
+                        Position
                       </label>
                       <select
                         id="signup-position"
                         value={position}
-                        onChange={(e) => setPosition(e.target.value)}
+                        onChange={e => setPosition(e.target.value)}
                         required
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                       >
@@ -532,7 +566,7 @@ export default function AuthPage() {
                         htmlFor="signup-password"
                         className="text-[10px] font-mono font-semibold tracking-widest text-muted-foreground uppercase"
                       >
-                        Passphrase
+                        Password
                       </label>
                       <div className="relative">
                         <Input
@@ -611,7 +645,7 @@ export default function AuthPage() {
                       disabled={isLoading || passwordStrength.score < 3}
                     >
                       {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                      Provision Identity
+                      Create account
                     </Button>
                   </form>
                 </TabsContent>
@@ -619,12 +653,12 @@ export default function AuthPage() {
 
               {/* Terms */}
               <p className="text-[10px] uppercase tracking-widest font-mono text-muted-foreground text-center pt-8">
-                By continuing, you enforce our{' '}
+                By continuing, you agree to our{' '}
                 <a
                   href="/legal/terms"
                   className="underline underline-offset-2 hover:text-foreground transition-colors"
                 >
-                  Security Protocol
+                  Terms of Service
                 </a>
               </p>
             </div>
