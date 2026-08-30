@@ -28,6 +28,7 @@ import {
   registerAdminTrunkRoutes,
   registerAdminRateCardRoutes,
 } from './routes/index.js';
+import { registerLiveMetricsRoutes } from './routes/live-metrics.js';
 import { registerQuotaRoutes } from './routes/quotas.js';
 import { registerTranscriptRoutes } from './routes/transcripts.js';
 import { registerWebSocketRoutes } from './routes/websocket.js';
@@ -251,6 +252,8 @@ async function buildServer() {
   await server.register(registerAdminTrunkRoutes);
   await server.register(registerAdminRateCardRoutes);
   await server.register(registerQuotaRoutes);
+  // Single aggregate endpoint powering the LiveStrip for every role.
+  await server.register(registerLiveMetricsRoutes);
 
   // Register WebSocket and demo event routes
   await server.register(registerWebSocketRoutes);

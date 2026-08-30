@@ -7,127 +7,99 @@ import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
 
 /**
- * Data layer for the LiveStrip.
+ * Data layer for the LiveStrip, backed by GET /api/v1/live/metrics.
  *
- * ── Why this polls rather than using the websocket ─────────────────────────
+ * That endpoint scopes itself from the JWT — a publisher can only ever get
+ * their own calls — and returns null for any figure it cannot source
+ * correctly, with the reason in an `unavailable` map. This hook renders those
+ * nulls as muted em dashes with the server's reason as the tooltip. Nothing is
+ * estimated, derived from an unrelated number, or carried over from an earlier
+ * poll: a fabricated live number on a screen where someone watches their own
+ * earnings is worse than an absent one.
  *
- * The brief says the strip reads from the existing socket at
- * apps/api/src/routes/websocket.ts. It cannot, yet, and connecting anyway would
- * be a data leak rather than a feature:
+ * ── Still polling, not socketed ───────────────────────────────────────────
  *
- *   - /ws/events authenticates with an `apiKey` query param or x-api-key
- *     header. The web app has no API key; it holds a JWT. There is no JWT path.
- *   - VALID_API_KEYS is unset everywhere in this repo, and the handler treats an
- *     empty list as "accept anything", so ANY non-empty string authenticates.
- *   - Every connection is then mapped to process.env.DEFAULT_TENANT_ID (also
- *     unset, defaulting to the all-zeros UUID) rather than to the caller's own
- *     tenant, and is subscribed to call.*, billing.* and recording.* for it.
- *
- * The strip renders on every page for every role, so wiring it to that socket
- * would stream one tenant's live call and billing events into every browser,
- * including publishers' and buyers'. So the socket transport is written but
- * gated off until the endpoint can authenticate a specific user; see
- * `SOCKET_ENABLED` below. Until then this polls an authenticated REST endpoint
- * every five seconds, which is the fallback the brief already specifies.
- *
- * ── Why some metrics have no value ────────────────────────────────────────
- *
- * /api/v1/dashboard/stats is the only endpoint that is both correctly scoped to
- * the caller (it derives publisherId / buyerId / admin from the JWT) and takes a
- * date range. It returns totalCalls and connectedCalls, and nothing else the
- * strip needs — no in-flight count, no billable count, no money.
- *
- * Metrics without a source return `value: null` and render as an em dash. They
- * are never estimated, never derived from an unrelated number, and never
- * carried over from an earlier poll. A fabricated live number on a screen where
- * someone watches their own earnings is worse than an empty one.
+ * The brief wants this on the websocket at apps/api/src/routes/websocket.ts.
+ * That endpoint still cannot authenticate a specific user: it takes an
+ * `apiKey` query param (never a JWT), treats an empty VALID_API_KEYS as
+ * "accept anything", and maps every connection to DEFAULT_TENANT_ID rather
+ * than the caller's own tenant. Since the strip renders on every page for
+ * every role, connecting to it would stream one tenant's call and billing
+ * events into every browser. So the socket stays gated behind SOCKET_ENABLED
+ * and this polls every five seconds — the fallback the brief already
+ * specifies. The API caches for 3s, so a fleet of pollers collapses onto
+ * roughly one query pair per tenant per 3s.
  */
 
-/**
- * Flip to true once /ws/events can authenticate an individual user with their
- * JWT and scope events to their tenant AND their publisher/buyer. Until then
- * the socket must not be connected — see the note above.
- */
+/** Flip once /ws/events can authenticate a user with their JWT and scope to them. */
 const SOCKET_ENABLED = false;
 
 const POLL_MS = 5000;
 
 type Role = 'admin' | 'publisher' | 'buyer' | 'other';
 
-interface DashboardStats {
-  totalCalls?: number;
-  connectedCalls?: number;
+/** Mirrors the response of GET /api/v1/live/metrics. */
+interface LiveMetricsPayload {
+  role: 'admin' | 'publisher' | 'buyer';
+  generatedAt: string;
+  callsInFlight: number | null;
+  answerRateHour?: number | null;
+  abandonRateHour?: number | null;
+  revenueRunRateHour?: string | null;
+  billableToday?: number | null;
+  earningsToday?: string | null;
+  spendToday?: string | null;
+  capToday?: string | null;
+  billableRate?: number | null;
+  unavailable: Record<string, string>;
 }
 
-/** A metric that knows whether it actually has a source. */
 export interface LiveMetricSlot extends Omit<LiveMetric, 'value'> {
   value: string | null;
-  /**
-   * Why there is no value. Shown as a tooltip. Named for the reason rather than
-   * the state because LiveMetric already carries `unavailable` as a boolean.
-   */
+  /** Why there is no value — the server's own explanation. */
   unavailableReason?: string;
 }
 
-function startOfToday(): Date {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
+const money = (v: string | null | undefined): string | null => {
+  if (v === null || v === undefined) return null;
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n);
+};
 
-function startOfHour(): Date {
-  const d = new Date();
-  d.setMinutes(0, 0, 0);
-  return d;
-}
+/** The API returns rates as fractions in [0,1]; the strip shows percentages. */
+const percent = (v: number | null | undefined): string | null =>
+  v === null || v === undefined ? null : `${Math.round(v * 100)}%`;
 
-async function fetchStats(from: Date, to: Date): Promise<DashboardStats | null> {
-  const res = await apiClient.get<DashboardStats>(
-    `/api/v1/dashboard/stats?startDate=${from.toISOString()}&endDate=${to.toISOString()}`
-  );
-  // apiClient resolves with { data } on success and { error } on failure.
-  const body = res as { data?: DashboardStats; error?: unknown };
-  if (body?.error || !body?.data) return null;
-  return body.data;
-}
+const count = (v: number | null | undefined): string | null =>
+  v === null || v === undefined ? null : v.toLocaleString('en-US');
 
-function pct(numerator: number, denominator: number): string {
-  if (denominator <= 0) return '0%';
-  return `${Math.round((numerator / denominator) * 100)}%`;
-}
+function buildSlots(role: Role, d: LiveMetricsPayload | null): LiveMetricSlot[] {
+  const why = (field: string) => d?.unavailable?.[field];
 
-const NO_SOURCE =
-  'Not available yet — no API endpoint exposes this. See useLiveMetrics for the contract.';
-
-/** The brief's metric set per role, in the brief's order. */
-function buildSlots(
-  role: Role,
-  today: DashboardStats | null,
-  thisHour: DashboardStats | null
-): LiveMetricSlot[] {
   switch (role) {
     case 'publisher':
       return [
         {
           id: 'live',
           label: 'Calls live',
-          value: null,
-          unavailableReason: NO_SOURCE,
+          value: count(d?.callsInFlight),
           tone: 'live',
+          unavailableReason: why('callsInFlight'),
         },
         {
           id: 'billable',
           label: 'Billable today',
-          value: null,
-          sub: today ? `${today.totalCalls ?? 0} calls today` : undefined,
-          unavailableReason: NO_SOURCE,
+          value: count(d?.billableToday),
+          sub: d?.billableRate != null ? `${percent(d.billableRate)} of calls` : undefined,
+          unavailableReason: why('billableToday'),
         },
         {
           id: 'earnings',
           label: 'Earnings today',
-          value: null,
-          unavailableReason: NO_SOURCE,
+          value: money(d?.earningsToday),
           tone: 'money',
+          unavailableReason: why('earningsToday'),
         },
       ];
 
@@ -136,23 +108,23 @@ function buildSlots(
         {
           id: 'live',
           label: 'Calls live',
-          value: null,
-          unavailableReason: NO_SOURCE,
+          value: count(d?.callsInFlight),
           tone: 'live',
+          unavailableReason: why('callsInFlight'),
         },
         {
           id: 'spend',
           label: 'Spend today',
-          value: null,
-          unavailableReason: NO_SOURCE,
+          value: money(d?.spendToday),
+          sub: d?.capToday ? `of ${money(d.capToday)} cap` : undefined,
           tone: 'money',
+          unavailableReason: why('spendToday'),
         },
         {
           id: 'billable-rate',
           label: 'Billable rate',
-          value: null,
-          sub: today ? `${today.totalCalls ?? 0} calls today` : undefined,
-          unavailableReason: NO_SOURCE,
+          value: percent(d?.billableRate),
+          unavailableReason: why('billableRate'),
         },
       ];
 
@@ -161,41 +133,32 @@ function buildSlots(
         {
           id: 'in-flight',
           label: 'In flight',
-          value: null,
-          unavailableReason: NO_SOURCE,
+          value: count(d?.callsInFlight),
           tone: 'live',
+          unavailableReason: why('callsInFlight'),
         },
         {
           id: 'answer-rate',
           label: 'Answer rate',
-          // The one metric with a real, correctly scoped source today.
-          value:
-            thisHour && (thisHour.totalCalls ?? 0) > 0
-              ? pct(thisHour.connectedCalls ?? 0, thisHour.totalCalls ?? 0)
-              : thisHour
-                ? '—'
-                : null,
-          sub: thisHour ? `${thisHour.totalCalls ?? 0} calls this hour` : undefined,
-          unavailableReason: thisHour ? undefined : NO_SOURCE,
+          value: percent(d?.answerRateHour),
+          sub: 'last 60 min',
+          unavailableReason: why('answerRateHour'),
         },
         {
           id: 'abandon-rate',
           label: 'Abandon rate',
-          value: null,
-          // Deliberately not 100% minus the answer rate: a call that did not
-          // connect is not necessarily one the caller abandoned, and labelling
-          // it so would put a number next to the word "abandon" that no one
-          // could act on.
-          unavailableReason:
-            'Not available yet — an unconnected call is not the same as an abandoned one, so this cannot be derived from the answer rate.',
+          value: percent(d?.abandonRateHour),
+          sub: 'last 60 min',
           tone: 'dropped',
+          unavailableReason: why('abandonRateHour'),
         },
         {
           id: 'run-rate',
           label: 'Revenue run rate',
-          value: null,
-          unavailableReason: NO_SOURCE,
+          value: money(d?.revenueRunRateHour),
+          sub: 'per hour',
           tone: 'money',
+          unavailableReason: why('revenueRunRateHour'),
         },
       ];
 
@@ -216,8 +179,7 @@ export interface UseLiveMetricsResult {
 
 export function useLiveMetrics(): UseLiveMetricsResult {
   const auth = useAuth();
-  const [today, setToday] = React.useState<DashboardStats | null>(null);
-  const [thisHour, setThisHour] = React.useState<DashboardStats | null>(null);
+  const [data, setData] = React.useState<LiveMetricsPayload | null>(null);
   const [lastUpdated, setLastUpdated] = React.useState<Date | null>(null);
   const [reachable, setReachable] = React.useState<boolean | null>(null);
 
@@ -235,25 +197,20 @@ export function useLiveMetrics(): UseLiveMetricsResult {
     let cancelled = false;
 
     const tick = async () => {
-      const now = new Date();
-      const [dayRes, hourRes] = await Promise.all([
-        fetchStats(startOfToday(), now).catch(() => null),
-        role === 'admin' ? fetchStats(startOfHour(), now).catch(() => null) : Promise.resolve(null),
-      ]);
+      const res = await apiClient.get<LiveMetricsPayload>('/api/v1/live/metrics').catch(() => null);
       if (cancelled) return;
 
-      const ok = dayRes !== null || hourRes !== null;
-      setReachable(ok);
-
-      if (ok) {
-        setToday(dayRes);
-        setThisHour(hourRes);
-        setLastUpdated(new Date());
-      } else {
-        // Never keep showing the previous poll's numbers as if they were live.
-        setToday(null);
-        setThisHour(null);
+      const body = res as { data?: LiveMetricsPayload; error?: unknown } | null;
+      if (!body || body.error || !body.data) {
+        setReachable(false);
+        // Never keep showing the last poll's numbers as if they were live.
+        setData(null);
+        return;
       }
+
+      setReachable(true);
+      setData(body.data);
+      setLastUpdated(new Date());
     };
 
     void tick();
@@ -264,8 +221,7 @@ export function useLiveMetrics(): UseLiveMetricsResult {
     };
   }, [auth.loading, auth.user, role]);
 
-  const slots = React.useMemo(() => buildSlots(role, today, thisHour), [role, today, thisHour]);
-
+  const slots = React.useMemo(() => buildSlots(role, data), [role, data]);
   const withValues = slots.filter(s => s.value !== null);
 
   const connection: LiveConnectionState = SOCKET_ENABLED
