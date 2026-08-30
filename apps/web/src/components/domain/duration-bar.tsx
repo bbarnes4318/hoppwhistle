@@ -113,10 +113,7 @@ export function DurationBar({
   const state = resolveDurationState(seconds, thresholdSeconds, inProgress);
   const hasThreshold = thresholdSeconds != null && thresholdSeconds > 0;
 
-  const scale = Math.max(
-    1,
-    scaleSeconds ?? (hasThreshold ? thresholdSeconds * 3 : 300)
-  );
+  const scale = Math.max(1, scaleSeconds ?? (hasThreshold ? thresholdSeconds * 3 : 300));
 
   const pct = (v: number) => `${Math.min(100, Math.max(0, (v / scale) * 100))}%`;
 
@@ -132,13 +129,9 @@ export function DurationBar({
   // Fill geometry. `billable` splits into two segments so the time past the
   // tick is visibly a different quantity from the time that earned the call.
   const upToThreshold =
-    state === 'billable' && hasThreshold
-      ? Math.min(safeSeconds, thresholdSeconds)
-      : safeSeconds;
+    state === 'billable' && hasThreshold ? Math.min(safeSeconds, thresholdSeconds) : safeSeconds;
   const overage =
-    state === 'billable' && hasThreshold
-      ? Math.max(0, safeSeconds - thresholdSeconds)
-      : 0;
+    state === 'billable' && hasThreshold ? Math.max(0, safeSeconds - thresholdSeconds) : 0;
 
   const fillColor =
     state === 'short'

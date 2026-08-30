@@ -205,24 +205,24 @@ Publisher and buyer navs are already short enough. They need better labels, not 
 
 ### Pages, and the one job each
 
-| Page | Its single job |
-| --- | --- |
-| `/publisher/dashboard` | Did today make money, and which source made it |
-| `/publisher/calls` | Which of my calls paid, and why the others didn't |
-| `/publisher/earnings` | What am I owed and when do I get it |
-| `/publisher/payouts` | Payment history, no surprises |
-| `/buyer/dashboard` | Am I getting what I'm paying for |
-| `/buyer/calls` | Review, accept, dispute, in that order of speed |
-| `/buyer/spend` | Where the money went, by campaign and by hour |
-| `/buyer/targeting` | Change what I receive and see the price and volume move |
-| `/buyer/billing` | Balance, burn rate, runway, top up |
-| `/buyer/disputes` | File it in ten seconds, track the outcome |
-| `/admin/live` | Is this hour healthy |
-| `/calls` | Find any call and see everything about it |
-| `/campaigns` | What is running and what is capped |
-| `/publishers`, `/buyers` | Who is performing, who is a problem |
-| `/numbers` | What inventory exists and what it's doing |
-| `/billing`, `/reports` | Margin, by every dimension |
+| Page                     | Its single job                                          |
+| ------------------------ | ------------------------------------------------------- |
+| `/publisher/dashboard`   | Did today make money, and which source made it          |
+| `/publisher/calls`       | Which of my calls paid, and why the others didn't       |
+| `/publisher/earnings`    | What am I owed and when do I get it                     |
+| `/publisher/payouts`     | Payment history, no surprises                           |
+| `/buyer/dashboard`       | Am I getting what I'm paying for                        |
+| `/buyer/calls`           | Review, accept, dispute, in that order of speed         |
+| `/buyer/spend`           | Where the money went, by campaign and by hour           |
+| `/buyer/targeting`       | Change what I receive and see the price and volume move |
+| `/buyer/billing`         | Balance, burn rate, runway, top up                      |
+| `/buyer/disputes`        | File it in ten seconds, track the outcome               |
+| `/admin/live`            | Is this hour healthy                                    |
+| `/calls`                 | Find any call and see everything about it               |
+| `/campaigns`             | What is running and what is capped                      |
+| `/publishers`, `/buyers` | Who is performing, who is a problem                     |
+| `/numbers`               | What inventory exists and what it's doing               |
+| `/billing`, `/reports`   | Margin, by every dimension                              |
 
 ---
 

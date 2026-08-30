@@ -281,7 +281,10 @@
     font-size: 19px;
     line-height: 1;
     font-weight: 500;
-    font-feature-settings: 'tnum' 1, 'zero' 1, 'ss02' 1;
+    font-feature-settings:
+      'tnum' 1,
+      'zero' 1,
+      'ss02' 1;
     font-variant-numeric: tabular-nums slashed-zero;
   }
   .t-data {
@@ -289,7 +292,10 @@
     font-size: 13px;
     line-height: 1.4;
     font-weight: 400;
-    font-feature-settings: 'tnum' 1, 'zero' 1, 'ss02' 1;
+    font-feature-settings:
+      'tnum' 1,
+      'zero' 1,
+      'ss02' 1;
     font-variant-numeric: tabular-nums slashed-zero;
   }
 }
@@ -300,7 +306,9 @@
    * already; this is for the cases that need the figures without the step.
    */
   .tabular {
-    font-feature-settings: 'tnum' 1, 'zero' 1;
+    font-feature-settings:
+      'tnum' 1,
+      'zero' 1;
     font-variant-numeric: tabular-nums slashed-zero;
   }
 

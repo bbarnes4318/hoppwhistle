@@ -87,7 +87,7 @@ function ColourGroup({
     <div>
       <SectionHeading sub={sub}>{title}</SectionHeading>
       <div className="divide-y divide-rule">
-        {tokens.map((t) => (
+        {tokens.map(t => (
           <SwatchRow key={t.name} token={t} theme={theme} />
         ))}
       </div>
@@ -100,7 +100,7 @@ function ColourGroup({
 function TypeScale() {
   return (
     <div className="space-y-5">
-      {TYPE_STEPS.map((step) => (
+      {TYPE_STEPS.map(step => (
         <div key={step.cls} className="border-b border-rule pb-5 last:border-0 last:pb-0">
           <div className="mb-2 flex flex-wrap items-baseline gap-x-3">
             <code className="t-data text-ink">{step.name}</code>
@@ -162,7 +162,7 @@ function DurationStates() {
         billable threshold at 60s.
       </p>
       <div className="divide-y divide-rule">
-        {DURATION_CASES.map((c) => (
+        {DURATION_CASES.map(c => (
           <div key={c.title} className="grid grid-cols-1 gap-2 py-3 sm:grid-cols-[200px_1fr]">
             <div className="min-w-0">
               <div className="t-body font-medium text-ink">{c.title}</div>
@@ -209,7 +209,7 @@ function DurationStates() {
               { from: '+1 (312) 555-8827', s: 41, t: 60, pay: '—' },
               { from: '+1 (786) 555-3390', s: 152, t: 60, pay: '$22.15' },
               { from: '+1 (602) 555-1174', s: 12, t: 60, pay: '—' },
-            ].map((r) => (
+            ].map(r => (
               <tr key={r.from} className="h-row border-b border-rule last:border-0">
                 <td className="t-data pr-3 text-ink">{r.from}</td>
                 <td className="w-[45%] py-0 pr-3">
@@ -301,14 +301,10 @@ export function ThemePane({ theme }: { theme: Theme }) {
               { label: 'Abandoned', tint: 'bg-dropped-tint', ink: 'text-dropped-ink' },
               { label: 'DNC block', tint: 'bg-blocked-tint', ink: 'text-blocked-ink' },
               { label: 'Paid $18.40', tint: 'bg-money-tint', ink: 'text-money-ink' },
-            ].map((c) => (
+            ].map(c => (
               <span
                 key={c.label}
-                className={cn(
-                  't-meta rounded-control px-2 py-1 font-medium',
-                  c.tint,
-                  c.ink
-                )}
+                className={cn('t-meta rounded-control px-2 py-1 font-medium', c.tint, c.ink)}
               >
                 {c.label}
               </span>

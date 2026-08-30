@@ -45,6 +45,4 @@ export const fontMono = IBM_Plex_Mono({
 });
 
 /** Convenience: every font variable, for the <body> class. */
-export const fontVariables = [fontDisplay.variable, fontSans.variable, fontMono.variable].join(
-  ' '
-);
+export const fontVariables = [fontDisplay.variable, fontSans.variable, fontMono.variable].join(' ');
