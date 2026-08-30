@@ -11,6 +11,7 @@ This directory contains operational runbooks for common incidents and procedures
 - [RTP Media Issues](#rtp-media-issues)
 - [Worker Job Failures](#worker-job-failures)
 - [ClickHouse ETL Lag](#clickhouse-etl-lag)
+- [Dograh Asterisk Config Edits (Bind-Mounted Files)](#dograh-asterisk-config-edits-bind-mounted-files)
 
 ## High API Error Rate
 
@@ -437,6 +438,46 @@ This directory contains operational runbooks for common incidents and procedures
 - Set up alerts for ETL lag > 1 hour
 - Monitor processing duration
 - Regular ClickHouse maintenance
+
+---
+
+## Dograh Asterisk Config Edits (Bind-Mounted Files)
+
+**Applies to:** the dograh-asterisk container on both Asterisk boxes fronting the Dograh AI voice agent (currently 178.156.223.97, and any other host running the same container).
+
+### Operational Gotcha
+
+The `dograh-asterisk` container mounts individual config files as **single-file bind mounts**, e.g.:
+
+```
+/opt/dograh-asterisk/etc/pjsip.conf → /etc/asterisk/pjsip.conf
+```
+
+`sed -i` breaks single-file bind mounts. It writes a temp file and renames it over the original, which creates a **new inode**. The container keeps the old inode, so the host file shows your edit but the container still reads the old content.
+
+**Symptom:** you edit the file, reload, and the change never takes. The reload reports success every time. (Cost us an hour to track down.)
+
+**Detection:** `md5sum` the file on the host and inside the container — matching paths, different hashes means the container is still reading the old inode.
+
+### Rules
+
+- **Never use `sed -i` on a bind-mounted config file.** Instead:
+  ```bash
+  cp f /tmp/x
+  # edit /tmp/x
+  cat /tmp/x > f   # redirect writes in place, keeps the inode
+  ```
+- **Always verify with `md5sum`** on the host and inside the container before concluding a config change is live:
+  ```bash
+  md5sum /opt/dograh-asterisk/etc/pjsip.conf
+  docker exec dograh-asterisk md5sum /etc/asterisk/pjsip.conf
+  ```
+- **`pjsip reload` does not reliably apply `identify` object changes on this box.** Four reloads did nothing; a `docker restart` was what actually applied it. Plan for a restart when changing `identify`/ACL config, and note that it **drops calls in progress**.
+
+### Prevention
+
+- Treat any pjsip.conf (or other bind-mounted config) edit as: edit via `cat > f`, verify md5sum host vs. container, then restart the container rather than relying on reload for `identify` changes.
+- Schedule identify/ACL changes for a low-traffic window since the restart drops in-progress calls.
 
 ---
 
