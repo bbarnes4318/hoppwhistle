@@ -7,6 +7,7 @@ import {
  ChevronDown,
  ClipboardCheck,
  Headphones,
+ MapPinOff,
  Phone,
  PhoneIncoming,
  Play,
@@ -43,6 +44,7 @@ interface DashboardStats {
  appointmentRate: number;
  dispositions: Record<string, number>;
  dateRange: { startDate: string; endDate: string };
+ callerStateUnresolved?: { ringTree: number; rtbPing: number; total: number };
 }
 
 import {
@@ -411,6 +413,15 @@ export default function DashboardPage() {
           loading={loading}
           className="py-2.5"
         />
+        {stats?.callerStateUnresolved && (
+          <KPICard
+            title="Unresolved Caller State"
+            value={stats.callerStateUnresolved.total}
+            icon={MapPinOff}
+            loading={loading}
+            className="py-2.5"
+          />
+        )}
       </div>
 
       {/* Main Grid: Left Side (Chart & Dispositions) & Right Side (Call History) */}

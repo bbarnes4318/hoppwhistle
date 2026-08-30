@@ -7,6 +7,8 @@
 import { Decimal } from '@prisma/client/runtime/library';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 
+import { callerStateUnresolvedTotal } from '../../lib/metrics.js';
+
 // Mock data must be defined before vi.mock calls
 const mockPrisma = {
   buyerEndpoint: {
@@ -50,15 +52,6 @@ vi.mock('../../lib/logger.js', () => ({
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
-  },
-}));
-
-vi.mock('../../lib/geo.js', () => ({
-  isCallerStateAccepted: (callerState: string | null, acceptedStates: string[]) => {
-    // Empty array means national (accept all)
-    if (acceptedStates.length === 0) return true;
-    if (!callerState) return false;
-    return acceptedStates.includes(callerState);
   },
 }));
 
@@ -127,6 +120,7 @@ describe('AuctionService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    callerStateUnresolvedTotal.reset();
     auctionService = new AuctionService();
 
     // Default mock implementations
@@ -208,6 +202,69 @@ describe('AuctionService', () => {
 
       // National buyer should win (accepts all states)
       expect(result.bid).toBe(25); // National buyer's base price
+    });
+
+    it('resolves the state from ZIP when the publisher did not supply one', async () => {
+      mockPrisma.buyerEndpoint.findMany.mockResolvedValue([tnBuyer, flBuyer]);
+
+      const payload: PingPayload = {
+        caller: { zip: '37901' }, // Knoxville, TN - no explicit state
+        source: 'test',
+      };
+
+      const result = await auctionService.processPing('publisher-1', payload);
+
+      expect(result.bid).toBe(30); // TN buyer wins via ZIP resolution
+    });
+
+    it('excludes a state-restricted buyer when the caller state cannot be resolved at all (fail-closed)', async () => {
+      mockPrisma.buyerEndpoint.findMany.mockResolvedValue([tnBuyer, flBuyer]);
+
+      const payload: PingPayload = {
+        caller: {}, // no state, no zip, no phone
+        source: 'test',
+      };
+
+      const result = await auctionService.processPing('publisher-1', payload);
+
+      expect(result.bid).toBe(0);
+      expect(result.message).toBe('No matching buyers after filtering');
+
+      // The rejection reason must be distinguishable from an ordinary geo mismatch.
+      const savedBids = mockPrisma.buyerBid.createMany.mock.calls[0][0].data as Array<{
+        rejectionReason: string | null;
+      }>;
+      expect(savedBids.every(b => b.rejectionReason?.startsWith('STATE_UNRESOLVED'))).toBe(true);
+    });
+
+    it('still admits a National buyer when the caller state is unresolved', async () => {
+      mockPrisma.buyerEndpoint.findMany.mockResolvedValue([tnBuyer, flBuyer, nationalBuyer]);
+
+      const payload: PingPayload = {
+        caller: {},
+        source: 'test',
+      };
+
+      const result = await auctionService.processPing('publisher-1', payload);
+
+      expect(result.bid).toBe(25); // National buyer, unaffected by unresolved state
+    });
+
+    it('emits the unresolved-state counter tagged with the rtb_ping ingress path', async () => {
+      mockPrisma.buyerEndpoint.findMany.mockResolvedValue([nationalBuyer]);
+
+      await auctionService.processPing('publisher-1', { caller: {}, source: 'test' });
+      const afterUnresolved = await callerStateUnresolvedTotal.get();
+      expect(afterUnresolved.values).toContainEqual(
+        expect.objectContaining({ labels: { ingress_path: 'rtb_ping' }, value: 1 })
+      );
+
+      // A resolved caller state must not increment it further.
+      await auctionService.processPing('publisher-1', { caller: { state: 'TN' }, source: 'test' });
+      const afterResolved = await callerStateUnresolvedTotal.get();
+      expect(afterResolved.values).toContainEqual(
+        expect.objectContaining({ labels: { ingress_path: 'rtb_ping' }, value: 1 })
+      );
     });
   });
 

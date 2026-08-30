@@ -12,12 +12,6 @@ vi.mock('../../lib/logger.js', () => ({
   },
 }));
 
-vi.mock('../../lib/geo.js', () => ({
-  extractAreaCode: vi.fn(() => null),
-  getStateFromAreaCode: vi.fn(() => null),
-  isCallerStateAccepted: vi.fn(() => true),
-}));
-
 import { RoutingService, type EligibleEndpoint } from '../routing.js';
 
 function endpoint(

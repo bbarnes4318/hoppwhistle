@@ -15,8 +15,13 @@
 import { Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 
-import { isCallerStateAccepted } from '../lib/geo.js';
+import {
+  checkCallerStateEligibility,
+  resolveCallerState as resolveStateFromSources,
+  type StateResolutionSource,
+} from '../lib/geo.js';
 import { logger } from '../lib/logger.js';
+import { callerStateUnresolvedTotal } from '../lib/metrics.js';
 import { getPrismaClient } from '../lib/prisma.js';
 
 import { getRedisClient } from './redis.js';
@@ -114,7 +119,16 @@ export class AuctionService {
     }
 
     // Resolve caller state from payload
-    const callerState = this.resolveCallerState(payload);
+    const { state: callerState, source: callerStateSource } = this.resolveCallerState(payload);
+    logger.info({
+      msg: 'RTB ping: Resolved caller state',
+      requestId: payload.request_id,
+      resolvedState: callerState,
+      resolvedStateSource: callerStateSource,
+    });
+    if (callerStateSource === 'UNRESOLVED') {
+      callerStateUnresolvedTotal.inc({ ingress_path: 'rtb_ping' });
+    }
 
     // Fetch eligible buyer endpoints
     const endpoints = await this.fetchEligibleEndpoints(publisherId, payload.vertical);
@@ -263,21 +277,11 @@ export class AuctionService {
   // State Resolution
   // ============================================================================
 
-  private resolveCallerState(payload: PingPayload): string | null {
-    // Prefer explicit state
-    if (payload.caller?.state) {
-      return payload.caller.state.toUpperCase();
-    }
-
-    // Derive from ZIP area code (first 3 digits can map to area codes)
-    if (payload.caller?.zip) {
-      // For now, use a simplified approach - real implementation would use ZIP-to-state mapping
-      // The zip code first 3 digits don't directly map to area codes
-      // This would require a ZIP code database
-      return null;
-    }
-
-    return null;
+  private resolveCallerState(payload: PingPayload): { state: string | null; source: StateResolutionSource } {
+    return resolveStateFromSources({
+      suppliedState: payload.caller?.state,
+      zip: payload.caller?.zip,
+    });
   }
 
   // ============================================================================
@@ -330,8 +334,16 @@ export class AuctionService {
   // ============================================================================
 
   private checkGeo(callerState: string | null, acceptedStates: string[]): FilterResult {
-    const accepted = isCallerStateAccepted(callerState, acceptedStates);
+    const { accepted, reason } = checkCallerStateEligibility(callerState, acceptedStates);
     if (!accepted) {
+      // Distinct rejection reason for unresolved state vs. an ordinary geo
+      // mismatch, so the two don't look identical in BuyerBid.rejectionReason.
+      if (reason === 'STATE_UNRESOLVED') {
+        return {
+          pass: false,
+          reason: `STATE_UNRESOLVED: caller state could not be determined, buyer requires one of [${acceptedStates.join(', ')}]`,
+        };
+      }
       return { pass: false, reason: `State ${callerState} not in accepted states` };
     }
     return { pass: true };

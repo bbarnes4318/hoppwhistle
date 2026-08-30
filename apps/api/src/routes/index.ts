@@ -5021,6 +5021,7 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
   await Promise.resolve();
   const { analyticsService } = await import('../services/analytics.js');
   const { getPrismaClient } = await import('../lib/prisma.js');
+  const { getCallerStateUnresolvedCounts } = await import('../lib/metrics.js');
   const { createHash } = await import('crypto');
 
   // Optional authentication hook - try to authenticate but don't fail if it doesn't work
@@ -5404,6 +5405,13 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
       }
     }
 
+    // Unresolved-caller-state volume (geo-routing observability). Admin/owner
+    // only - it's an ops signal, not a per-tenant KPI, and it's a live
+    // in-process counter (resets on deploy/restart), not a date-ranged query.
+    const callerStateUnresolved = profile.isAdminOrOwner
+      ? await getCallerStateUnresolvedCounts()
+      : undefined;
+
     return {
       totalCalls,
       connectedCalls,
@@ -5416,6 +5424,7 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
       },
+      ...(callerStateUnresolved ? { callerStateUnresolved } : {}),
     };
   });
 

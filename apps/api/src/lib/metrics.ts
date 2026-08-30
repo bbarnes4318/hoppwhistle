@@ -74,6 +74,30 @@ export const callsActive = new Gauge({
   registers: [register],
 });
 
+// Geo-Routing Metrics
+export const callerStateUnresolvedTotal = new Counter({
+  name: 'caller_state_unresolved_total',
+  help: 'Total number of calls/pings where caller state could not be resolved from supplied state, ZIP, or area code',
+  labelNames: ['ingress_path'],
+  registers: [register],
+});
+
+/** Current unresolved-caller-state counts by ingress path, for the admin dashboard. */
+export async function getCallerStateUnresolvedCounts(): Promise<{
+  ringTree: number;
+  rtbPing: number;
+  total: number;
+}> {
+  const metric = await callerStateUnresolvedTotal.get();
+  let ringTree = 0;
+  let rtbPing = 0;
+  for (const v of metric.values) {
+    if (v.labels.ingress_path === 'ring_tree') ringTree += v.value;
+    else if (v.labels.ingress_path === 'rtb_ping') rtbPing += v.value;
+  }
+  return { ringTree, rtbPing, total: ringTree + rtbPing };
+}
+
 // SIP Metrics
 export const sipMessagesTotal = new Counter({
   name: 'sip_messages_total',

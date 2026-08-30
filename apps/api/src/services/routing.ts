@@ -1,5 +1,10 @@
-import { extractAreaCode, getStateFromAreaCode, isCallerStateAccepted } from '../lib/geo.js';
+import {
+  checkCallerStateEligibility,
+  resolveCallerState as resolveStateFromSources,
+  type StateResolutionSource,
+} from '../lib/geo.js';
 import { logger } from '../lib/logger.js';
+import { callerStateUnresolvedTotal } from '../lib/metrics.js';
 import { getPrismaClient } from '../lib/prisma.js';
 
 const INTERNAL_EXTENSION_RE = /^\d{4}$/;
@@ -57,27 +62,26 @@ export class RoutingService {
   private prisma = getPrismaClient();
 
   /**
-   * Resolve caller's state from available call data.
-   * Uses pre-resolved state if available, otherwise extracts from callerId.
+   * Resolve caller's state from available call data, in priority order:
+   * IVR/pre-resolved state, then ZIP, then area code (least reliable, due
+   * to number portability). Returns which source won so callers can record
+   * and audit the decision.
+   */
+  resolveCallerStateWithSource(callData: CallData): { state: string | null; source: StateResolutionSource } {
+    return resolveStateFromSources({
+      suppliedState: callData.callerState,
+      zip: callData.callerZipCode,
+      areaCode: callData.callerAreaCode,
+      phoneNumber: callData.callerId,
+    });
+  }
+
+  /**
+   * Resolve caller's state from available call data. See resolveCallerStateWithSource
+   * for the resolution order and source tracking.
    */
   resolveCallerState(callData: CallData): string | null {
-    if (callData.callerState) {
-      return callData.callerState.toUpperCase().trim();
-    }
-
-    if (callData.callerAreaCode) {
-      const state = getStateFromAreaCode(callData.callerAreaCode);
-      if (state) return state;
-    }
-
-    if (callData.callerId) {
-      const areaCode = extractAreaCode(callData.callerId);
-      if (areaCode) {
-        return getStateFromAreaCode(areaCode);
-      }
-    }
-
-    return null;
+    return this.resolveCallerStateWithSource(callData).state;
   }
 
   /**
@@ -89,14 +93,21 @@ export class RoutingService {
     campaignId: string,
     callData: CallData
   ): Promise<EligibleEndpoint[]> {
-    const callerState = this.resolveCallerState(callData);
+    const { state: callerState, source: callerStateSource } =
+      this.resolveCallerStateWithSource(callData);
 
     logger.info({
       msg: 'Geo-routing: Resolving caller state',
       callerId: callData.callerId,
       callerAreaCode: callData.callerAreaCode,
+      callerZipCode: callData.callerZipCode,
       resolvedState: callerState,
+      resolvedStateSource: callerStateSource,
     });
+
+    if (callerStateSource === 'UNRESOLVED') {
+      callerStateUnresolvedTotal.inc({ ingress_path: 'ring_tree' });
+    }
 
     const campaignBuyers = await this.prisma.campaignBuyer.findMany({
       where: {
@@ -152,20 +163,28 @@ export class RoutingService {
     }
 
     let eligibleEndpoints = allEndpoints.filter(ep => {
-      const isAccepted = isCallerStateAccepted(callerState, ep.acceptedStates);
+      const { accepted, reason } = checkCallerStateEligibility(callerState, ep.acceptedStates);
 
-      if (!isAccepted) {
+      if (!accepted) {
+        // A distinct message/reason for the unresolved-state case: it must
+        // not read the same as an ordinary state mismatch in the routing
+        // logs, since the fix and the volume we're watching for differ.
         logger.info({
-          msg: 'Geo-routing: Endpoint EXCLUDED (state not accepted)',
+          msg:
+            reason === 'STATE_UNRESOLVED'
+              ? 'Geo-routing: Endpoint EXCLUDED (caller state unresolved)'
+              : 'Geo-routing: Endpoint EXCLUDED (state not accepted)',
+          exclusionReason: reason,
           buyerId: ep.buyerId,
           buyerName: ep.buyerName,
           endpointId: ep.endpointId,
           callerState,
+          callerStateSource,
           acceptedStates: ep.acceptedStates,
         });
       }
 
-      return isAccepted;
+      return accepted;
     });
 
     const activeTargetIds = eligibleEndpoints
@@ -432,16 +451,19 @@ export class RoutingService {
     endpoint: string;
     targetId?: string | null;
     callerState?: string | null;
+    callerStateSource?: StateResolutionSource;
   } | null> {
     try {
       const eligibleEndpoints = await this.getEligibleEndpoints(tenantId, campaignId, callData);
 
       if (eligibleEndpoints.length === 0) {
-        const callerState = this.resolveCallerState(callData);
+        const { state: callerState, source: callerStateSource } =
+          this.resolveCallerStateWithSource(callData);
         logger.warn({
           msg: 'No eligible buyers after dynamic filtering',
           campaignId,
           callerState,
+          callerStateSource,
           callerId: callData.callerId,
         });
         return null;
@@ -613,11 +635,15 @@ export class RoutingService {
         callerState: this.resolveCallerState(callData),
       });
 
+      const { state: callerState, source: callerStateSource } =
+        this.resolveCallerStateWithSource(callData);
+
       return {
         buyerId: primaryEndpoint.buyerId,
         endpoint: routePlan,
         targetId: primaryEndpoint.endpointId,
-        callerState: this.resolveCallerState(callData),
+        callerState,
+        callerStateSource,
       };
     } catch (error) {
       logger.error('Error selecting best buyer:', error);
