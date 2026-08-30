@@ -10,7 +10,7 @@ import {
   aggregateByState,
   aggregateByAreaCode,
   GeoMetricPoint,
-} from '../phone-geo';
+} from '../phone-geo.js';
 
 describe('Phone Geography Utilities', () => {
   describe('normalizePhoneNumber', () => {

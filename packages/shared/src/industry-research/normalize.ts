@@ -1,6 +1,6 @@
-import { resolveCapabilityLabels } from './capabilities';
-import { REQUIRED_REPORT_SECTIONS, RESEARCH_MODES } from './constants';
-import type { Assumption, CanonicalBrief, ResearchBriefInput } from './types';
+import { resolveCapabilityLabels } from './capabilities.js';
+import { REQUIRED_REPORT_SECTIONS, RESEARCH_MODES } from './constants.js';
+import type { Assumption, CanonicalBrief, ResearchBriefInput } from './types.js';
 
 interface NormalizeOptions {
   researchBriefId: string;

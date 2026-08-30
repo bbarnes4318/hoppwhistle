@@ -1,4 +1,4 @@
-import type { CanonicalBrief, ResearchPlan } from './types';
+import type { CanonicalBrief, ResearchPlan } from './types.js';
 
 /**
  * Deterministically decompose the assignment into research workstreams from the
