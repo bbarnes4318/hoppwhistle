@@ -43,6 +43,28 @@ RUN node /app/scripts/apply-softphone-ringback-dtmf-source.mjs \
 RUN node /app/scripts/apply-campaign-routing-ui-source.mjs \
   '/app/apps/web/src/app/(dashboard)/campaigns/[id]/page.tsx'
 
+# Build the workspace packages the web build resolves at bundle time.
+#
+# apps/web has no tsup config, so unlike api/worker/dialer-v2 it gets no
+# `noExternal` bundling of @hopwhistle/*: Next resolves those imports through
+# node_modules like any other dependency. `@hopwhistle/shared` used to export
+# ./src/index.ts — checked-in source, always on disk — so nothing had to be
+# built first. It now exports ./dist/index.js, which exists only after a build,
+# and `dist` is gitignored, so a clean checkout has none.
+#
+# Without this step `next build` fails with
+# `Module not found: Can't resolve '@hopwhistle/shared'` across every consumer.
+# It survived locally only on machines that happened to have built the packages
+# already, and `COPY . .` above carried that stale dist into the image.
+#
+# `shared` is the only one built here, deliberately. It is the sole package web
+# imports for values (25 call sites). `@hopwhistle/sdk` is declared in
+# apps/web/package.json but imported nowhere in src, and the single
+# `@hopwhistle/routing-dsl` reference is an erased `import type` with no
+# node_modules link to resolve through — building either would be inert.
+# See the PR for both, they want fixing on their own terms, not here.
+RUN pnpm --filter @hopwhistle/shared exec tsup --no-dts
+
 WORKDIR /app/apps/web
 
 ENV NEXT_TELEMETRY_DISABLED=1
