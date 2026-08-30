@@ -1,17 +1,19 @@
 {
   "name": "@hopwhistle/sdk",
   "version": "0.1.0",
+  "type": "module",
   "private": false,
   "publishConfig": {
     "access": "restricted",
     "registry": "https://registry.npmjs.org"
   },
-  "main": "./dist/index.mjs",
+  "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/index.mjs",
-      "types": "./dist/index.d.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     }
   },
   "scripts": {

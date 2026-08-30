@@ -45,21 +45,14 @@ RUN pnpm --filter @hopwhistle/shared exec tsup --no-dts
 RUN pnpm --filter @hopwhistle/routing-dsl exec tsup --no-dts
 RUN pnpm --filter @hopwhistle/sdk exec tsup --no-dts
 
-# FIX: Ensure built artifacts are in node_modules
-RUN rm -rf node_modules/@hopwhistle/shared && \
-    mkdir -p node_modules/@hopwhistle/shared && \
-    cp -r packages/shared/dist node_modules/@hopwhistle/shared/ && \
-    cp packages/shared/package.json node_modules/@hopwhistle/shared/
-
-RUN rm -rf node_modules/@hopwhistle/routing-dsl && \
-    mkdir -p node_modules/@hopwhistle/routing-dsl && \
-    cp -r packages/routing-dsl/dist node_modules/@hopwhistle/routing-dsl/ && \
-    cp packages/routing-dsl/package.json node_modules/@hopwhistle/routing-dsl/
-
-RUN rm -rf node_modules/@hopwhistle/sdk && \
-    mkdir -p node_modules/@hopwhistle/sdk && \
-    cp -r packages/sdk/dist node_modules/@hopwhistle/sdk/ && \
-    cp packages/sdk/package.json node_modules/@hopwhistle/sdk/
+# The three workspace packages used to be hand-copied into node_modules here,
+# replacing pnpm's symlinks with dist-only directories. That was working around
+# their package.json files pointing `main`/`exports` at ./src/index.ts, which
+# does not exist in a built package. Those maps now point at ./dist/index.js,
+# so pnpm's ordinary symlink resolves correctly and the copies are redundant.
+#
+# apps/api/tsup.config.ts sets noExternal: [/@hopwhistle\/.*/], so all three are
+# inlined into dist/index.js and nothing resolves them at runtime anyway.
 
 WORKDIR /app/apps/api
 

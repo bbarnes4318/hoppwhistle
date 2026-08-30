@@ -1,4 +1,4 @@
-import { RESEARCH_MODES } from './constants';
+import { RESEARCH_MODES } from './constants.js';
 import type {
   ProviderAssignments,
   ProviderConfig,
@@ -6,7 +6,7 @@ import type {
   ProviderRole,
   ResearchBriefInput,
   ResearchMode,
-} from './types';
+} from './types.js';
 
 type Env = Record<string, string | undefined>;
 

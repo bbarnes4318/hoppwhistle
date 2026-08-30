@@ -1,4 +1,4 @@
-import type { CanonicalBrief, ProviderRole } from './types';
+import type { CanonicalBrief, ProviderRole } from './types.js';
 
 /**
  * The non-negotiable source-handling rule injected into every provider
