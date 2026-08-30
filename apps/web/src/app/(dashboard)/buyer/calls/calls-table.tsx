@@ -17,6 +17,7 @@ import {
 } from '@/components/domain';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
+import { readSessionToken } from '@/lib/session-token';
 import { cn } from '@/lib/utils';
 
 import { DisputeDrawer, type DisputableCall } from '../_components/dispute-drawer';
@@ -156,9 +157,16 @@ export function CallsTable({
   // Wrapped rather than passed as an async handler: an onClick that returns a
   // promise is a floating promise nobody awaits, so the await lives in here.
   const onAccept = React.useCallback((row: CallRowView) => {
+    // The token is read here, in the handler, and handed to the action: the
+    // action authenticates from what it is passed, never from the cookie.
+    const token = readSessionToken();
+    if (!token) {
+      toast.error('Your session has expired', 'Sign in again to accept calls.');
+      return;
+    }
     void (async () => {
       setAccepting(row.id);
-      const result = await acceptCall(row.id);
+      const result = await acceptCall(token, row.id);
       setAccepting(null);
       if (result.ok) toast.success('Call accepted');
       else toast.error('Could not accept this call', result.error);

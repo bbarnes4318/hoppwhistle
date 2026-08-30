@@ -7,6 +7,7 @@ import { DrawerSection, DurationBar, MoneyCell, SheetDrawer } from '@/components
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/use-toast';
+import { readSessionToken } from '@/lib/session-token';
 import { cn } from '@/lib/utils';
 
 import { DISPUTE_REASONS, type DisputeEvidence, type DisputeReason } from '../_lib/dispute';
@@ -84,8 +85,15 @@ export function DisputeDrawer({
 
   async function submit() {
     if (!reason || !call) return;
+    // Read in the handler and passed explicitly — the action never reads the
+    // session cookie, so only a real click from this page can file anything.
+    const token = readSessionToken();
+    if (!token) {
+      toast.error('Your session has expired', 'Sign in again to file this dispute.');
+      return;
+    }
     setSubmitting(true);
-    const result = await disputeCall({
+    const result = await disputeCall(token, {
       callId: call.id,
       reason,
       note,

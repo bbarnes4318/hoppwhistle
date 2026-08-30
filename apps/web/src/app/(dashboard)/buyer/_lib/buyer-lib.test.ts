@@ -3,12 +3,37 @@ import { describe, expect, it } from 'vitest';
 import { durationScale } from './calls';
 import { composeDisputeReason } from './dispute';
 import { resolveRange } from './range';
+import { normalizeToken } from './token';
 
 /**
- * The three pieces of buyer-page logic that are wrong silently rather than
- * loudly: a dispute that files without its evidence, a bar scale that makes
- * every row look the same, and a date range that quietly reads the wrong days.
+ * The pieces of buyer-page logic that are wrong silently rather than loudly: a
+ * dispute that files without its evidence, a bar scale that makes every row
+ * look the same, a date range that quietly reads the wrong days, and the guard
+ * that keeps a write from proceeding on a token that is not one.
  */
+
+describe('normalizeToken', () => {
+  it('accepts a token and trims it', () => {
+    expect(normalizeToken('  abc.def.ghi  ')).toBe('abc.def.ghi');
+  });
+
+  it('rejects everything that is not a usable token', () => {
+    // Each of these would otherwise reach an Authorization header.
+    for (const value of [null, undefined, '', '   ', 42, {}, [], true]) {
+      expect(normalizeToken(value)).toBeNull();
+    }
+  });
+
+  it('rejects a value carrying CR or LF, which could inject a header', () => {
+    expect(normalizeToken('abc\r\nX-Admin: true')).toBeNull();
+    expect(normalizeToken('abc\ndef')).toBeNull();
+  });
+
+  it('rejects a value too long to be a token', () => {
+    expect(normalizeToken('a'.repeat(8192))).toBe('a'.repeat(8192));
+    expect(normalizeToken('a'.repeat(8193))).toBeNull();
+  });
+});
 
 describe('composeDisputeReason', () => {
   const evidence = {

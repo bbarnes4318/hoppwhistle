@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { toast } from '@/components/ui/use-toast';
+import { readSessionToken } from '@/lib/session-token';
 import { cn } from '@/lib/utils';
 
 import { updateTarget } from '../actions';
@@ -131,8 +132,14 @@ export function TargetingConsole({
   async function save(target: TargetView) {
     const draft = drafts[target.id];
     if (!draft) return;
+    // Passed explicitly; the action does not read the session cookie.
+    const token = readSessionToken();
+    if (!token) {
+      toast.error('Your session has expired', 'Sign in again to save this change.');
+      return;
+    }
     setSaving(target.id);
-    const result = await updateTarget(buyerId, target.id, {
+    const result = await updateTarget(token, buyerId, target.id, {
       status: draft.status === 'FAILED' ? 'INACTIVE' : draft.status,
       maxCap: draft.maxCap,
       maxConcurrency: draft.maxConcurrency,

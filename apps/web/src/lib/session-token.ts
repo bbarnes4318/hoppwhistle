@@ -7,11 +7,19 @@
  * effect. Mirroring the same token into a cookie is what lets a page render on
  * the server with the user's own scope already applied.
  *
+ * THE COOKIE AUTHENTICATES READS ONLY. Server components resolve it to fetch
+ * the page's data; no write does. Every buyer server action takes the token as
+ * an explicit argument instead, so a request that merely arrives carrying the
+ * cookie cannot change anything — see
+ * src/app/(dashboard)/buyer/_lib/token.ts.
+ *
  * The cookie is deliberately NOT HttpOnly — it cannot be, because the value is
  * written by client JavaScript from localStorage. That means it carries exactly
  * the same exposure the localStorage copy already had and no more; it is not a
  * new attack surface, and it is not a substitute for one. SameSite=Lax keeps it
- * off cross-site requests, and it is marked Secure whenever the page is HTTPS.
+ * off every cross-site POST (Strict would add nothing there, and would cost the
+ * cookie on an inbound link), and it is marked Secure whenever the page is
+ * HTTPS.
  */
 
 export const SESSION_COOKIE = 'hw_session';
@@ -22,6 +30,25 @@ const MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
 function cookieAttributes(): string {
   const secure = typeof window !== 'undefined' && window.location.protocol === 'https:';
   return `Path=/; Max-Age=${MAX_AGE_SECONDS}; SameSite=Lax${secure ? '; Secure' : ''}`;
+}
+
+/**
+ * The token, for a client component about to call a server action.
+ *
+ * localStorage first: it is where login writes and where the API client reads,
+ * so it is the copy that is current. The cookie is the fallback for a tab that
+ * somehow has one without the other. Call this in the event handler rather than
+ * during render — it touches browser storage, which the server cannot.
+ */
+export function readSessionToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const stored = window.localStorage.getItem('token');
+    if (stored) return stored;
+  } catch {
+    // Storage can throw in a locked-down context; fall through to the cookie.
+  }
+  return readSessionCookie();
 }
 
 export function readSessionCookie(): string | null {
