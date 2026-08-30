@@ -4,6 +4,7 @@ import { FastifyInstance, FastifyRequest } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
 import type { AuthenticatedUser } from '../middleware/auth.js';
+import { computeAbandonRate } from '../services/abandon-rate.js';
 import { getRedisClient } from '../services/redis.js';
 
 import { getUserProfile } from './index.js';
@@ -88,17 +89,6 @@ const IN_FLIGHT_MAX_AGE_MS = 4 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
 
 const CACHE_TTL_SECONDS = 3;
-
-const ABANDON_UNAVAILABLE =
-  'No hangup party is recorded. Abandon rate is defined as the caller hanging up ' +
-  'before answer over total offered, and nothing in the schema says who ended a ' +
-  'call: Call has status/answeredAt/endedAt/missedCall but no hangup cause, and ' +
-  'neither CallLeg nor Cdr carries one either. Deriving it as 100 minus the answer ' +
-  'rate would count every busy, failed and no-answer call as an abandon. To source ' +
-  'it, CallLeg needs a termination party and cause (e.g. hangupParty ' +
-  "'CALLER'|'CALLEE'|'SYSTEM' plus a SIP cause code) on the inbound leg — CallLeg " +
-  'rather than Call, because a call has several legs and it is the inbound one whose ' +
-  'termination defines an abandon.';
 
 const NO_CAP_CONFIGURED =
   'No daily call cap is set. A cap comes from BuyerEndpoint.maxCap on endpoints ' +
@@ -216,7 +206,8 @@ export async function computeLiveMetrics(
     if (answerRateHour === null) {
       unavailable.answerRateHour = 'No calls offered in the last 60 minutes.';
     }
-    unavailable.abandonRateHour = ABANDON_UNAVAILABLE;
+    const abandon = await computeAbandonRate({ calls, where: windowWhere, offered });
+    if (abandon.unavailable) unavailable.abandonRateHour = abandon.unavailable;
 
     return {
       role: 'admin',
@@ -224,7 +215,7 @@ export async function computeLiveMetrics(
       window,
       callsInFlight,
       answerRateHour,
-      abandonRateHour: null,
+      abandonRateHour: abandon.rate,
       // The trailing 60 minutes of revenue IS the hourly run rate, so nothing
       // is extrapolated and a thin partial hour cannot spike it.
       revenueRunRateHour: decimalToString(agg._sum.revenue) ?? '0.0000',

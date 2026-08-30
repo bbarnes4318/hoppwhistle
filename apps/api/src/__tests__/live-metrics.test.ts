@@ -204,16 +204,32 @@ describe('admin metrics', () => {
   });
 
   it('never derives abandon rate from the answer rate', async () => {
-    const { delegate } = fakeDelegate({ offered: 100, answered: 70 });
+    const { delegate, recorded } = fakeDelegate({ offered: 100, answered: 70 });
     const res = await computeLiveMetrics(delegate, {
       tenantId: 't1',
       role: 'admin',
       profile: ADMIN,
     });
 
+    // The fake counts every query as 0, so no call in the window is classified
+    // and the rate is unavailable rather than a number. 0.3 is what deriving it
+    // as `1 - answerRate` would have produced.
     expect(res.abandonRateHour).toBeNull();
     expect(res.abandonRateHour).not.toBe(0.3);
-    expect(res.unavailable.abandonRateHour).toMatch(/hangup party/i);
+    expect(res.unavailable.abandonRateHour).toMatch(/records who hung up/i);
+
+    /*
+     * The rate being null is also what the old hardcoded stub produced, so it
+     * cannot on its own show the metric is wired. These assert the route
+     * actually asked the database about Call.terminationParty — the numerator
+     * is the CALLER hanging up BEFORE answer, so the abandon count must carry
+     * both conditions or it would include answered caller-hangups.
+     */
+    const wheres = recorded.count.map(c => c.where);
+    expect(wheres).toContainEqual(expect.objectContaining({ terminationParty: { not: null } }));
+    expect(wheres).toContainEqual(
+      expect.objectContaining({ terminationParty: 'CALLER', answeredAt: null })
+    );
   });
 
   it('uses a trailing 60 minutes, not the clock hour', async () => {
