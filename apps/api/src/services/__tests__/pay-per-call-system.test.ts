@@ -754,10 +754,6 @@ vi.mock('../audit.js', () => ({
   auditLog: vi.fn().mockResolvedValue({ success: true }),
 }));
 
-vi.mock('../../lib/geo.js', () => ({
-  isCallerStateAccepted: () => true,
-}));
-
 vi.mock('../tcpa-validation-service.js', () => ({
   tcpaValidationService: {
     validateNumber: vi.fn().mockResolvedValue({ isLitigator: false }),

@@ -449,6 +449,191 @@ export function getStateFromPhoneNumber(phoneNumber: string): string | null {
 }
 
 /**
+ * 5-digit ZIP code ranges to US state, sorted by range start.
+ *
+ * This is the standard best-effort ZIP-range table (the same shape used
+ * across most open ZIP-to-state datasets), not an authoritative per-ZIP
+ * database. It is more reliable than area-code lookup because ZIP
+ * assignment doesn't move with number portability, but it is still an
+ * approximation at range boundaries and does not cover PO-box-only or
+ * unique ZIPs assigned outside their state's normal range. Replace with a
+ * real ZIP database if per-ZIP precision is ever required.
+ */
+const ZIP_RANGES_TO_STATE: ReadonlyArray<readonly [number, number, string]> = [
+  [501, 501, 'NY'],
+  [544, 544, 'NY'],
+  [1001, 2791, 'MA'],
+  [1401, 1401, 'MA'],
+  [2801, 2940, 'RI'],
+  [3031, 3897, 'NH'],
+  [3901, 4992, 'ME'],
+  [5001, 5907, 'VT'],
+  [6001, 6928, 'CT'],
+  [6390, 6390, 'NY'],
+  [7001, 8989, 'NJ'],
+  [10001, 14975, 'NY'],
+  [15001, 19640, 'PA'],
+  [19701, 19980, 'DE'],
+  [20001, 20039, 'DC'],
+  [20042, 20599, 'DC'],
+  [20101, 20198, 'VA'],
+  [20601, 21930, 'MD'],
+  [22001, 24658, 'VA'],
+  [24701, 26886, 'WV'],
+  [27006, 28909, 'NC'],
+  [29001, 29945, 'SC'],
+  [30002, 31999, 'GA'],
+  [32003, 34997, 'FL'],
+  [35004, 36925, 'AL'],
+  [37010, 38589, 'TN'],
+  [38601, 39776, 'MS'],
+  [39813, 39901, 'GA'],
+  [40003, 42788, 'KY'],
+  [43001, 45999, 'OH'],
+  [46001, 47997, 'IN'],
+  [48001, 49971, 'MI'],
+  [50001, 52809, 'IA'],
+  [53001, 54990, 'WI'],
+  [55001, 56763, 'MN'],
+  [57001, 57799, 'SD'],
+  [58001, 58856, 'ND'],
+  [59001, 59937, 'MT'],
+  [60002, 62999, 'IL'],
+  [63001, 65899, 'MO'],
+  [66002, 67954, 'KS'],
+  [68001, 69367, 'NE'],
+  [70001, 71497, 'LA'],
+  [71601, 72959, 'AR'],
+  [73001, 74966, 'OK'],
+  [73301, 73301, 'TX'],
+  [73344, 73344, 'TX'],
+  [75001, 79999, 'TX'],
+  [80001, 81658, 'CO'],
+  [82001, 83128, 'WY'],
+  [83201, 83876, 'ID'],
+  [84001, 84784, 'UT'],
+  [85001, 86556, 'AZ'],
+  [87001, 88441, 'NM'],
+  [88510, 88595, 'TX'],
+  [88901, 89883, 'NV'],
+  [90001, 96162, 'CA'],
+  [96701, 96898, 'HI'],
+  [97001, 97920, 'OR'],
+  [98001, 99403, 'WA'],
+  [99501, 99950, 'AK'],
+];
+
+/**
+ * Get the US state code from a 5-digit ZIP code, via range lookup.
+ * See ZIP_RANGES_TO_STATE for accuracy caveats.
+ */
+export function getStateFromZip(zip: string | null | undefined): string | null {
+  if (!zip) return null;
+
+  const digits = zip.replace(/\D/g, '');
+  if (digits.length < 5) return null;
+
+  const zipNum = parseInt(digits.substring(0, 5), 10);
+  if (!Number.isFinite(zipNum)) return null;
+
+  for (const [min, max, state] of ZIP_RANGES_TO_STATE) {
+    if (zipNum >= min && zipNum <= max) {
+      return state;
+    }
+  }
+
+  return null;
+}
+
+/** Which signal resolved the caller's state (or that none did). */
+export type StateResolutionSource = 'CALLER_SUPPLIED' | 'ZIP' | 'AREA_CODE' | 'UNRESOLVED';
+
+export interface StateResolutionInput {
+  /** State captured in the IVR, or supplied on the ping payload. Highest priority. */
+  suppliedState?: string | null;
+  /** Caller's ZIP code, if present. Second priority. */
+  zip?: string | null;
+  /** Pre-extracted 3-digit area code. Used if phoneNumber is not given. */
+  areaCode?: string | null;
+  /** Caller's phone number (ANI), used to derive an area code if areaCode is not given. */
+  phoneNumber?: string | null;
+}
+
+export interface StateResolution {
+  state: string | null;
+  source: StateResolutionSource;
+}
+
+/**
+ * Resolve a caller's state from the available signals, in priority order:
+ * IVR/ping-supplied state, then ZIP, then area code. Area code is last
+ * because number portability makes it unreliable - a caller can keep an
+ * old area code after moving states.
+ */
+export function resolveCallerState(input: StateResolutionInput): StateResolution {
+  const supplied = input.suppliedState?.toUpperCase().trim();
+  if (supplied && isValidStateCode(supplied)) {
+    return { state: supplied, source: 'CALLER_SUPPLIED' };
+  }
+
+  const zipState = getStateFromZip(input.zip);
+  if (zipState) {
+    return { state: zipState, source: 'ZIP' };
+  }
+
+  const areaCode = input.areaCode || (input.phoneNumber ? extractAreaCode(input.phoneNumber) : null);
+  const areaCodeState = areaCode ? getStateFromAreaCode(areaCode) : null;
+  if (areaCodeState) {
+    return { state: areaCodeState, source: 'AREA_CODE' };
+  }
+
+  return { state: null, source: 'UNRESOLVED' };
+}
+
+/** Why a state-eligibility check came out the way it did. */
+export type StateEligibilityReason =
+  | 'NATIONAL' // acceptedStates is empty; every state is accepted
+  | 'ACCEPTED' // caller's resolved state is in acceptedStates
+  | 'STATE_UNRESOLVED' // acceptedStates is a licensing boundary, caller's state is unknown
+  | 'STATE_NOT_ACCEPTED'; // caller's resolved state is not in acceptedStates
+
+export interface StateEligibilityResult {
+  accepted: boolean;
+  reason: StateEligibilityReason;
+}
+
+/**
+ * Check whether a caller's state is accepted by a buyer endpoint, and why.
+ * @param callerState The 2-letter state code of the caller, or null/undefined if unresolved
+ * @param acceptedStates Array of accepted state codes (empty = National, accepts all)
+ */
+export function checkCallerStateEligibility(
+  callerState: string | null | undefined,
+  acceptedStates: string[]
+): StateEligibilityResult {
+  // Empty array means "National" - accepts all states
+  if (!acceptedStates || acceptedStates.length === 0) {
+    return { accepted: true, reason: 'NATIONAL' };
+  }
+
+  // A non-empty acceptedStates list is the buyer telling us where they are
+  // licensed to take calls. If we couldn't resolve the caller's state, we
+  // cannot prove the call is in bounds - guessing on the buyer's behalf
+  // would make their regulatory exposure our routing convenience. Fail
+  // closed: exclude the buyer.
+  if (!callerState) {
+    return { accepted: false, reason: 'STATE_UNRESOLVED' };
+  }
+
+  // Normalize and check
+  const normalizedCallerState = callerState.toUpperCase().trim();
+  const accepted = acceptedStates.some(
+    state => state.toUpperCase().trim() === normalizedCallerState
+  );
+  return { accepted, reason: accepted ? 'ACCEPTED' : 'STATE_NOT_ACCEPTED' };
+}
+
+/**
  * Check if a caller's state is accepted by a buyer endpoint
  * @param callerState The 2-letter state code of the caller
  * @param acceptedStates Array of accepted state codes (empty = National, accepts all)
@@ -458,19 +643,7 @@ export function isCallerStateAccepted(
   callerState: string | null | undefined,
   acceptedStates: string[]
 ): boolean {
-  // Empty array means "National" - accepts all states
-  if (!acceptedStates || acceptedStates.length === 0) {
-    return true;
-  }
-
-  // If we don't know the caller's state, fail-open (allow the call)
-  if (!callerState) {
-    return true;
-  }
-
-  // Normalize and check
-  const normalizedCallerState = callerState.toUpperCase().trim();
-  return acceptedStates.some(state => state.toUpperCase().trim() === normalizedCallerState);
+  return checkCallerStateEligibility(callerState, acceptedStates).accepted;
 }
 
 /**
