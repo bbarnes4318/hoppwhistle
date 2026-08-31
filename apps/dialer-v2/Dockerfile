@@ -6,7 +6,11 @@ RUN apk add --no-cache libc6-compat
 RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
 
 COPY . .
-RUN pnpm install --no-frozen-lockfile
+# --ignore-scripts here too: the workspace packages' "prepare": "tsup" hook
+# would build them with type declarations, which the explicit --no-dts build
+# below deliberately skips for image size and speed. Keeping the hook out of
+# image builds leaves their behaviour exactly as it was.
+RUN pnpm install --no-frozen-lockfile --ignore-scripts
 
 # Generate the Prisma client BEFORE the build.
 #
@@ -22,7 +26,10 @@ RUN pnpm install --no-frozen-lockfile
 RUN pnpm --filter @hopwhistle/api exec prisma generate
 
 # Build the one workspace dependency this service uses.
-RUN pnpm --filter @hopwhistle/shared exec tsup --no-dts
+# Globbed, not named: a package added later needs building too, and the failure
+# mode for forgetting is a suite or a runtime import that quietly breaks. This
+# stage has the source, so it does the real build the deps stage skipped.
+RUN pnpm --filter "./packages/*" exec tsup --no-dts
 RUN rm -rf node_modules/@hopwhistle/shared && \
     mkdir -p node_modules/@hopwhistle/shared && \
     cp -r packages/shared/dist node_modules/@hopwhistle/shared/ && \
