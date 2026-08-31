@@ -71,11 +71,17 @@ jobs:
       # The schema has to exist before the container starts, and migrate deploy
       # cannot replay from scratch (see docs/MIGRATION_DIVERGENCE.md), so this
       # uses db push for the same reason the main workflow does.
+      #
+      # `exec` is load-bearing: without it pnpm treats `prisma` as a package
+      # script name, finds none, prints "None of the selected packages has a
+      # 'prisma' script" and exits 0. This step therefore pushed nothing, on
+      # every run, while reading as green -- the container has been starting
+      # against an empty database the whole time.
       - name: Push schema
         run: |
           corepack enable
           pnpm install --frozen-lockfile
-          pnpm --filter @hopwhistle/api prisma db push --skip-generate --accept-data-loss
+          pnpm --filter @hopwhistle/api exec prisma db push --skip-generate --accept-data-loss
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/test
 
