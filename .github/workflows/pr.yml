@@ -93,8 +93,14 @@ jobs:
         run: pnpm --filter "!@callfabric/transcriber" --filter "!@callfabric/media" typecheck
         continue-on-error: true
 
+      # `exec`, not a bare `prisma`: without it pnpm looks for a package script
+      # by that name, finds none, prints "None of the selected packages has a
+      # 'prisma' script" and exits 0. This step has therefore been pushing
+      # nothing, silently, on every run -- which went unnoticed because the only
+      # suites that needed the schema were in the advisory step below, where
+      # their failures were swallowed. dialer-v2.yml already uses `exec`.
       - name: Push Prisma Schema
-        run: pnpm --filter @hopwhistle/api prisma db push --skip-generate
+        run: pnpm --filter @hopwhistle/api exec prisma db push --skip-generate
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/test
 
