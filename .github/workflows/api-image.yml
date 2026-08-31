@@ -82,6 +82,11 @@ jobs:
           corepack enable
           pnpm install --frozen-lockfile
           pnpm --filter @hopwhistle/api exec prisma db push --skip-generate --accept-data-loss
+          # Constraints db push cannot create. Prisma's schema language cannot express a
+          # partial unique index, so lead_dial_reservations' one-active-reservation-per-lead
+          # guarantee lives in SQL and has to be applied separately. Without it concurrent
+          # workers each claim the same lead and several agents dial the same person.
+          pnpm --filter @hopwhistle/api db:constraints
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/test
 

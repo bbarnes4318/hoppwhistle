@@ -403,7 +403,14 @@ jobs:
       - name: Create the schema in the throwaway database
         env:
           DATABASE_URL: postgresql://dialer:dialer@127.0.0.1:5432/dialer_v2_test?schema=public
-        run: pnpm --filter @hopwhistle/api exec prisma db push --skip-generate --accept-data-loss
+        run: |
+          pnpm --filter @hopwhistle/api exec prisma db push --skip-generate --accept-data-loss
+          # Constraints db push cannot create. Prisma's schema language cannot
+          # express a partial unique index, so lead_dial_reservations'
+          # one-active-reservation-per-lead guarantee lives in SQL and has to be
+          # applied separately. Without it concurrent workers each claim the same
+          # lead and several agents dial the same person.
+          pnpm --filter @hopwhistle/api db:constraints
 
       - name: Prove both services are actually reachable
         run: |
@@ -644,6 +651,11 @@ jobs:
           psql "$PSQL_URL" -v ON_ERROR_STOP=1 \
             -c 'DROP SCHEMA public CASCADE' -c 'CREATE SCHEMA public'
           pnpm --filter @hopwhistle/api exec prisma db push --skip-generate --accept-data-loss
+          # Constraints db push cannot create. Prisma's schema language cannot express a
+          # partial unique index, so lead_dial_reservations' one-active-reservation-per-lead
+          # guarantee lives in SQL and has to be applied separately. Without it concurrent
+          # workers each claim the same lead and several agents dial the same person.
+          pnpm --filter @hopwhistle/api db:constraints
 
       # `db push` creates campaign_agents too, because it is in schema.prisma.
       # Running down.sql removes exactly the objects this migration owns, which

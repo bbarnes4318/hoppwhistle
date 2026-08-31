@@ -112,7 +112,14 @@ jobs:
       # suites that needed the schema were in the advisory step below, where
       # their failures were swallowed. dialer-v2.yml already uses `exec`.
       - name: Push Prisma Schema
-        run: pnpm --filter @hopwhistle/api exec prisma db push --skip-generate
+        run: |
+          pnpm --filter @hopwhistle/api exec prisma db push --skip-generate
+          # Constraints db push cannot create. Prisma's schema language cannot
+          # express a partial unique index, so lead_dial_reservations'
+          # one-active-reservation-per-lead guarantee lives in SQL and has to be
+          # applied separately. Without it concurrent workers each claim the same
+          # lead and several agents dial the same person.
+          pnpm --filter @hopwhistle/api db:constraints
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/test
 
@@ -159,6 +166,7 @@ jobs:
           src/__tests__/security.test.ts
           src/__tests__/admin-role-drift.test.ts
           src/__tests__/workflow-pnpm-invocations.test.ts
+          src/__tests__/db-push-constraints.test.ts
         env:
           NODE_ENV: test
           DATABASE_URL: postgresql://test:test@localhost:5432/test

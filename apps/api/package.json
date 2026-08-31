@@ -18,6 +18,7 @@
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist node_modules",
     "db:migrate": "prisma migrate dev",
+    "db:constraints": "prisma db execute --file prisma/sql/db-push-constraints.sql --schema prisma/schema.prisma",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:migrate:reset": "prisma migrate reset",
     "db:seed": "tsx prisma/seed.ts",
