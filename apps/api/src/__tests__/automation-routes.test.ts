@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-call -- tests assert over parsed JSON responses and vi.fn mock call records, which are dynamically typed */
 import Fastify, { FastifyInstance } from 'fastify';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 const mockPrisma = {
@@ -60,6 +60,11 @@ async function buildApp(): Promise<FastifyInstance> {
 
 describe('Automation routes (American Amicable RPA)', () => {
   beforeEach(() => {
+    // These cases use the demo-tenant header purely as a way to assert tenant
+    // scoping. That header is an authentication bypass and is off by default
+    // now, so the suite opts in explicitly -- and the block at the bottom
+    // pins the default, so opting in here cannot quietly hide a regression.
+    process.env.ALLOW_DEMO_TENANT_AUTH = 'true';
     vi.clearAllMocks();
     mockPrisma.insuranceCarrierApplication.create.mockResolvedValue({ id: 'app-1' });
     mockPrisma.insuranceCarrierApplication.update.mockResolvedValue({ id: 'app-1' });
@@ -67,6 +72,10 @@ describe('Automation routes (American Amicable RPA)', () => {
       success: true,
       applicationNumber: 'M001234567',
     });
+  });
+
+  afterEach(() => {
+    delete process.env.ALLOW_DEMO_TENANT_AUTH;
   });
 
   it('rejects unauthenticated requests with 401 and does not start the RPA', async () => {
@@ -327,5 +336,55 @@ describe('Automation routes (American Amicable RPA)', () => {
     });
     expect(resultResponse.body).not.toContain('123456789');
     expect(resultResponse.body).not.toContain('071000013');
+  });
+});
+
+describe('Automation routes: demo-tenant header is off by default', () => {
+  beforeEach(() => {
+    delete process.env.ALLOW_DEMO_TENANT_AUTH;
+    vi.clearAllMocks();
+    mockRunAutomation.mockResolvedValue({ success: true, applicationNumber: 'M001234567' });
+  });
+
+  // These aliases are registered outside the global /api/v1 auth hook, so the
+  // hook that strips the demo inputs never runs for them. Before this was
+  // gated, the header alone was enough to drive a carrier RPA submission
+  // carrying an SSN and bank details, with no credential at all.
+  it('refuses to start an RPA run for a caller carrying only the demo header', async () => {
+    const app = await buildApp();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/automation/run-carrier-app',
+      headers: TENANT_HEADER,
+      payload: validPayload,
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(mockRunAutomation).not.toHaveBeenCalled();
+  });
+
+  it('refuses to read a job for a caller carrying only the demo header', async () => {
+    const app = await buildApp();
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/automation/result/job_whatever',
+      headers: TENANT_HEADER,
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('accepts the demo header again once the environment opts in', async () => {
+    process.env.ALLOW_DEMO_TENANT_AUTH = 'true';
+    const app = await buildApp();
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/automation/result/job_whatever',
+      headers: TENANT_HEADER,
+    });
+
+    // Authenticated now, so the miss is the unknown job rather than the caller.
+    expect(response.statusCode).toBe(404);
+    delete process.env.ALLOW_DEMO_TENANT_AUTH;
   });
 });
