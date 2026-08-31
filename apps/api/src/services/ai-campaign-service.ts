@@ -1139,18 +1139,26 @@ export async function executeRestartUnreached(
   const prisma = getPrismaClient();
 
   return await prisma.$transaction(async (tx) => {
-    const campaigns = await tx.$queryRaw<Array<{ id: string; status: string; archivedAt: Date | null }>>`
-      SELECT id, status, "archivedAt" FROM ai_campaigns 
-      WHERE id = ${campaignId}::uuid AND "tenantId" = ${tenantId}
+    // No "archivedAt": AI campaigns have never had one. The column is not on
+    // ai_campaigns, the field is not on any model in the Prisma schema, and
+    // AICampaignStatus has no ARCHIVED member -- archiving an AI campaign is
+    // not a feature that exists. Selecting it made this whole transaction fail
+    // with `column "archivedAt" does not exist`, so POST
+    // /api/v1/ai-campaigns/:id/restart-unreached returned 400 on every call.
+    // The guard below it could never have fired, because nothing ever set it.
+    // ai_campaigns.id is a text column -- Prisma maps String @id to text unless
+    // it is annotated @db.Uuid, and it is not. Casting the parameter to ::uuid
+    // asked Postgres for a text = uuid comparison, which has no operator, so
+    // this failed with 42883 whenever it got past the archivedAt error above.
+    const campaigns = await tx.$queryRaw<Array<{ id: string; status: string }>>`
+      SELECT id, status FROM ai_campaigns 
+      WHERE id = ${campaignId} AND "tenantId" = ${tenantId}
       FOR UPDATE
     `;
     if (campaigns.length === 0) {
       throw new Error('Campaign not found or unauthorized');
     }
     const campaign = campaigns[0];
-    if (campaign.archivedAt) {
-      throw new Error('Cannot restart archived campaign');
-    }
     if (campaign.status !== 'PAUSED' && campaign.status !== 'COMPLETED') {
       throw new Error('Campaign must be PAUSED or COMPLETED to restart');
     }
