@@ -4679,6 +4679,26 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
       return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
     }
 
+    const prismaForAuthz = (await import('../lib/prisma.js')).getPrismaClient();
+
+    // This endpoint creates a user and grants it whatever role the body names,
+    // ADMIN included. It never checked who was asking: any authenticated
+    // caller -- a self-serve signup with READONLY, a buyer, an agent -- could
+    // mint themselves a second account with full administrative access. The
+    // roles are not in the JWT, so they are read from the database by the same
+    // helper the rest of this file gates on.
+    const inviterProfile = await getUserProfile(request, prismaForAuthz);
+
+    if (!inviterProfile.isAdminOrOwner) {
+      void reply.code(403);
+      return {
+        error: {
+          code: 'FORBIDDEN',
+          message: 'Only an administrator or owner can invite users',
+        },
+      };
+    }
+
     const body = request.body;
 
     if (!body.email || !body.email.trim()) {
@@ -4762,6 +4782,18 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
       }
     }
 
+    // An ADMIN escalating to OWNER by inviting one is the same privilege jump
+    // this endpoint was already handing out, one step further up.
+    if (requestedRole === 'OWNER' && !inviterProfile.userRoles.includes('OWNER')) {
+      void reply.code(403);
+      return {
+        error: {
+          code: 'FORBIDDEN',
+          message: 'Only an owner can grant the OWNER role',
+        },
+      };
+    }
+
     // Constraint: Cannot have ADMIN role with buyerId (internal vs external user)
     if ((requestedRole === 'ADMIN' || requestedRole === 'OWNER') && body.buyerId) {
       void reply.code(400);
@@ -4789,8 +4821,13 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
     // Generate temporary password
     const { randomBytes } = await import('crypto');
     const tempPassword = randomBytes(16).toString('hex');
-    const { hash } = await import('bcryptjs');
-    const passwordHash = await hash(tempPassword, 10);
+    // bcryptjs is CommonJS: `await import()` yields the module namespace, so
+    // the functions hang off .default. Destructuring `hash` gave undefined and
+    // every call to this endpoint died with "hash is not a function". That bug
+    // is why nobody had exploited the missing check above -- a jammed door, not
+    // a locked one, so it is fixed here rather than left load-bearing.
+    const bcrypt = (await import('bcryptjs')).default;
+    const passwordHash = await bcrypt.hash(tempPassword, 10);
 
     // Get role ID for the requested role
     const roleRecord = await prisma.role.findUnique({
@@ -4902,6 +4939,31 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
       const { userId } = request.params;
       const body = request.body;
       const prisma = (await import('../lib/prisma.js')).getPrismaClient();
+
+      // This endpoint edits any user in the tenant -- status, and the buyer or
+      // publisher they are scoped to -- and it only ever checked that the
+      // caller belonged to the tenant. Any authenticated account could:
+      //
+      //   * flip a PENDING signup to ACTIVE, which is the whole of the approval
+      //     gate that self-serve registration now depends on;
+      //   * SUSPEND an administrator, locking out the people who would notice;
+      //   * set its own buyerId to somebody else's buyer and read that buyer's
+      //     calls, spend and billing through the buyer portal.
+      //
+      // Approving and re-scoping users is administrative work, so it needs an
+      // administrator. Self-service profile edits are a different endpoint
+      // (/api/auth/me/settings) and are unaffected.
+      const editorProfile = await getUserProfile(request, prisma);
+
+      if (!editorProfile.isAdminOrOwner) {
+        void reply.code(403);
+        return {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'Only an administrator or owner can modify users',
+          },
+        };
+      }
 
       // Verify user exists and belongs to tenant
       const existingUser = await prisma.user.findFirst({
