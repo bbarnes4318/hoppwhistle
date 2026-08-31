@@ -6,6 +6,23 @@
  * then calls Vapi API to provision a unique assistant per campaign.
  *
  * IMPORTANT: Vapi branding is NEVER exposed in the UI.
+ *
+ * A note on raw SQL in this file: do not cast id parameters to ::uuid.
+ * Prisma maps `String @id` to a text column unless it is annotated @db.Uuid,
+ * and nothing in this schema is -- there is not one uuid-typed column in the
+ * database. `WHERE id = ${x}::uuid` therefore asks Postgres for a text = uuid
+ * comparison, which has no operator, and the query fails with 42883 every
+ * time. Every raw-SQL function below carried that cast, so none of them had
+ * ever executed successfully; see ai-campaign-service.raw-sql.test.ts, which
+ * drives each one against a real database.
+ *
+ * The same care applies to the status columns, which are Postgres enums
+ * (AICampaignStatus, ContactStatus, AICallStatus). A bare string literal is
+ * fine -- Postgres resolves an unknown-typed literal to the enum -- but a bound
+ * parameter arrives as text and needs an explicit cast, or the query fails with
+ * 42883 on a comparison or 42804 on an assignment. Those failures were
+ * invisible until the ::uuid casts came off, because the query never got that
+ * far.
  */
 
 import type { Prisma } from '@prisma/client';
@@ -312,7 +329,7 @@ async function createVapiAssistant(campaign: AICampaign): Promise<string> {
   const prisma = getPrismaClient();
   await prisma.$executeRaw`
     UPDATE ai_campaigns SET "vapiAssistantId" = ${result.id}, "updatedAt" = NOW()
-    WHERE id = ${campaign.id}::uuid
+    WHERE id = ${campaign.id}
   `;
 
   return result.id;
@@ -385,7 +402,7 @@ export async function getCampaign(
   const prisma = getPrismaClient();
   const results = await prisma.$queryRaw<AICampaign[]>`
     SELECT * FROM ai_campaigns
-    WHERE id = ${campaignId}::uuid AND "tenantId" = ${tenantId}
+    WHERE id = ${campaignId} AND "tenantId" = ${tenantId}
   `;
   return results[0] || null;
 }
@@ -451,7 +468,7 @@ export async function updateCampaign(
       name = COALESCE(${updates.name ?? null}, name),
       description = COALESCE(${updates.description ?? null}, description),
       "updatedAt" = NOW()
-    WHERE id = ${campaignId}::uuid AND "tenantId" = ${tenantId}
+    WHERE id = ${campaignId} AND "tenantId" = ${tenantId}
     RETURNING *
   `;
 
@@ -478,7 +495,7 @@ export async function deleteCampaign(campaignId: string, tenantId: string): Prom
   }
 
   await prisma.$executeRaw`
-    DELETE FROM ai_campaigns WHERE id = ${campaignId}::uuid AND "tenantId" = ${tenantId}
+    DELETE FROM ai_campaigns WHERE id = ${campaignId} AND "tenantId" = ${tenantId}
   `;
 }
 
@@ -507,7 +524,7 @@ export async function uploadContacts(input: UploadContactsInput): Promise<{
     // Check for duplicates
     const existing = await prisma.$queryRaw<[{ count: bigint }]>`
       SELECT COUNT(*) as count FROM ai_campaign_contacts
-      WHERE "campaignId" = ${input.campaignId}::uuid AND "phoneNumber" = ${normalized}
+      WHERE "campaignId" = ${input.campaignId} AND "phoneNumber" = ${normalized}
     `;
 
     if (Number(existing[0].count) > 0) {
@@ -520,7 +537,7 @@ export async function uploadContacts(input: UploadContactsInput): Promise<{
       INSERT INTO ai_campaign_contacts (
         id, "campaignId", "phoneNumber", "firstName", "lastName", metadata, status, "createdAt"
       ) VALUES (
-        gen_random_uuid(), ${input.campaignId}::uuid, ${normalized},
+        gen_random_uuid(), ${input.campaignId}, ${normalized},
         ${contact.firstName ?? null}, ${contact.lastName ?? null},
         ${metadata}::jsonb, 'PENDING', NOW()
       )
@@ -532,7 +549,7 @@ export async function uploadContacts(input: UploadContactsInput): Promise<{
   if (imported > 0) {
     await prisma.$executeRaw`
       UPDATE ai_campaigns SET status = 'READY', "updatedAt" = NOW()
-      WHERE id = ${input.campaignId}::uuid AND status = 'DRAFT'
+      WHERE id = ${input.campaignId} AND status = 'DRAFT'
     `;
   }
 
@@ -555,13 +572,13 @@ export async function getContacts(
     const [contacts, countResult] = await Promise.all([
       prisma.$queryRaw<AICampaignContact[]>`
         SELECT * FROM ai_campaign_contacts
-        WHERE "campaignId" = ${campaignId}::uuid AND status = ${status}
+        WHERE "campaignId" = ${campaignId} AND status = ${status}::"ContactStatus"
         ORDER BY "createdAt" ASC
         LIMIT ${limit} OFFSET ${offset}
       `,
       prisma.$queryRaw<[{ count: bigint }]>`
         SELECT COUNT(*) as count FROM ai_campaign_contacts
-        WHERE "campaignId" = ${campaignId}::uuid AND status = ${status}
+        WHERE "campaignId" = ${campaignId} AND status = ${status}::"ContactStatus"
       `,
     ]);
 
@@ -572,13 +589,13 @@ export async function getContacts(
   const [contacts, countResult] = await Promise.all([
     prisma.$queryRaw<AICampaignContact[]>`
       SELECT * FROM ai_campaign_contacts
-      WHERE "campaignId" = ${campaignId}::uuid
+      WHERE "campaignId" = ${campaignId}
       ORDER BY "createdAt" ASC
       LIMIT ${limit} OFFSET ${offset}
     `,
     prisma.$queryRaw<[{ count: bigint }]>`
       SELECT COUNT(*) as count FROM ai_campaign_contacts
-      WHERE "campaignId" = ${campaignId}::uuid
+      WHERE "campaignId" = ${campaignId}
     `,
   ]);
 
@@ -600,7 +617,7 @@ export async function startCampaign(campaignId: string, tenantId: string): Promi
   // Check for pending contacts
   const pendingCheck = await prisma.$queryRaw<[{ count: bigint }]>`
     SELECT COUNT(*) as count FROM ai_campaign_contacts
-    WHERE "campaignId" = ${campaignId}::uuid AND status = 'PENDING'
+    WHERE "campaignId" = ${campaignId} AND status = 'PENDING'
   `;
 
   if (Number(pendingCheck[0].count) === 0) {
@@ -624,7 +641,7 @@ export async function startCampaign(campaignId: string, tenantId: string): Promi
 
   const result = await prisma.$queryRaw<AICampaign[]>`
     UPDATE ai_campaigns SET status = 'RUNNING', "updatedAt" = NOW()
-    WHERE id = ${campaignId}::uuid AND "tenantId" = ${tenantId}
+    WHERE id = ${campaignId} AND "tenantId" = ${tenantId}
     RETURNING *
   `;
 
@@ -639,7 +656,7 @@ export async function pauseCampaign(campaignId: string, tenantId: string): Promi
 
   const result = await prisma.$queryRaw<AICampaign[]>`
     UPDATE ai_campaigns SET status = 'PAUSED', "updatedAt" = NOW()
-    WHERE id = ${campaignId}::uuid AND "tenantId" = ${tenantId}
+    WHERE id = ${campaignId} AND "tenantId" = ${tenantId}
     RETURNING *
   `;
 
@@ -686,7 +703,7 @@ export async function handleVapiWebhook(payload: VapiWebhookPayload): Promise<vo
     case 'call-started':
       await prisma.$executeRaw`
         UPDATE ai_campaign_calls SET status = 'IN_PROGRESS'
-        WHERE id = ${callRecordId}::uuid
+        WHERE id = ${callRecordId}
       `;
       break;
 
@@ -720,7 +737,7 @@ async function handleCallEnded(
     SELECT c."contactId", c."campaignId", camp."tenantId"
     FROM ai_campaign_calls c
     JOIN ai_campaigns camp ON c."campaignId" = camp.id
-    WHERE c.id = ${callRecordId}::uuid
+    WHERE c.id = ${callRecordId}
   `;
 
   if (callRecords.length === 0) return;
@@ -735,7 +752,7 @@ async function handleCallEnded(
   if (vapiCost === 0 && durationMinutes > 0) {
     // Fetch the campaign's vertical to get the rate
     const campaigns = await prisma.$queryRaw<Array<{ vertical: string }>>`
-      SELECT vertical FROM ai_campaigns WHERE id = ${callRecord.campaignId}::uuid
+      SELECT vertical FROM ai_campaigns WHERE id = ${callRecord.campaignId}
     `;
     let costPerMinute = DEFAULT_COST_PER_MINUTE;
     if (campaigns.length > 0) {
@@ -754,7 +771,7 @@ async function handleCallEnded(
   // Update call record
   await prisma.$executeRaw`
     UPDATE ai_campaign_calls SET
-      status = ${status},
+      status = ${status}::"AICallStatus",
       outcome = ${call.endedReason ?? null},
       duration = ${call.duration ?? null},
       "recordingUrl" = ${call.recordingUrl ?? null},
@@ -764,7 +781,7 @@ async function handleCallEnded(
       cost = ${vapiCost},
       billable = ${billableAmount},
       "endedAt" = NOW()
-    WHERE id = ${callRecordId}::uuid
+    WHERE id = ${callRecordId}
   `;
 
   // Update contact status
@@ -772,8 +789,8 @@ async function handleCallEnded(
     status === 'COMPLETED' ? 'COMPLETED' : status === 'NO_ANSWER' ? 'NO_ANSWER' : 'FAILED';
 
   await prisma.$executeRaw`
-    UPDATE ai_campaign_contacts SET status = ${contactStatus}
-    WHERE id = ${callRecord.contactId}::uuid
+    UPDATE ai_campaign_contacts SET status = ${contactStatus}::"ContactStatus"
+    WHERE id = ${callRecord.contactId}
   `;
 
   // Deduct from wallet
@@ -860,14 +877,14 @@ export async function getCampaignStats(campaignId: string): Promise<CampaignStat
   const contactStats = await prisma.$queryRaw<Array<{ status: string; count: bigint }>>`
     SELECT status, COUNT(*) as count
     FROM ai_campaign_contacts
-    WHERE "campaignId" = ${campaignId}::uuid
+    WHERE "campaignId" = ${campaignId}
     GROUP BY status
   `;
 
   const callStats = await prisma.$queryRaw<Array<{ status: string; count: bigint }>>`
     SELECT status, COUNT(*) as count
     FROM ai_campaign_calls
-    WHERE "campaignId" = ${campaignId}::uuid
+    WHERE "campaignId" = ${campaignId}
     GROUP BY status
   `;
 
@@ -887,7 +904,7 @@ export async function getCampaignStats(campaignId: string): Promise<CampaignStat
       AVG(duration) as avg_duration,
       COUNT(*) as total_calls
     FROM ai_campaign_calls
-    WHERE "campaignId" = ${campaignId}::uuid
+    WHERE "campaignId" = ${campaignId}
   `;
 
   const contactCounts = contactStats.reduce(
@@ -940,13 +957,13 @@ export async function getCalls(
   const [calls, countResult] = await Promise.all([
     prisma.$queryRaw<AICampaignCall[]>`
       SELECT * FROM ai_campaign_calls
-      WHERE "campaignId" = ${campaignId}::uuid
+      WHERE "campaignId" = ${campaignId}
       ORDER BY "startedAt" DESC
       LIMIT ${limit} OFFSET ${offset}
     `,
     prisma.$queryRaw<[{ count: bigint }]>`
       SELECT COUNT(*) as count FROM ai_campaign_calls
-      WHERE "campaignId" = ${campaignId}::uuid
+      WHERE "campaignId" = ${campaignId}
     `,
   ]);
 
@@ -1146,10 +1163,9 @@ export async function executeRestartUnreached(
     // with `column "archivedAt" does not exist`, so POST
     // /api/v1/ai-campaigns/:id/restart-unreached returned 400 on every call.
     // The guard below it could never have fired, because nothing ever set it.
-    // ai_campaigns.id is a text column -- Prisma maps String @id to text unless
-    // it is annotated @db.Uuid, and it is not. Casting the parameter to ::uuid
-    // asked Postgres for a text = uuid comparison, which has no operator, so
-    // this failed with 42883 whenever it got past the archivedAt error above.
+    // The id is compared as text, not cast to ::uuid -- see the note at the top
+    // of this file. That cast was the second of the two reasons this endpoint
+    // could never succeed, hidden behind the archivedAt error above.
     const campaigns = await tx.$queryRaw<Array<{ id: string; status: string }>>`
       SELECT id, status FROM ai_campaigns 
       WHERE id = ${campaignId} AND "tenantId" = ${tenantId}
