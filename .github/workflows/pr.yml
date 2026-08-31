@@ -93,8 +93,14 @@ jobs:
         run: pnpm --filter "!@callfabric/transcriber" --filter "!@callfabric/media" typecheck
         continue-on-error: true
 
+      # `exec`, not a bare `prisma`: without it pnpm looks for a package script
+      # by that name, finds none, prints "None of the selected packages has a
+      # 'prisma' script" and exits 0. This step has therefore been pushing
+      # nothing, silently, on every run -- which went unnoticed because the only
+      # suites that needed the schema were in the advisory step below, where
+      # their failures were swallowed. dialer-v2.yml already uses `exec`.
       - name: Push Prisma Schema
-        run: pnpm --filter @hopwhistle/api prisma db push --skip-generate
+        run: pnpm --filter @hopwhistle/api exec prisma db push --skip-generate
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/test
 
@@ -112,7 +118,7 @@ jobs:
           TEST_DATABASE_URL: postgresql://test:test@localhost:5432/test
           TEST_REDIS_URL: redis://localhost:6379
 
-      - name: Run carrier automation & call-center tests (blocking)
+      - name: Run carrier automation, call-center & security tests (blocking)
         run: >-
           pnpm --filter @hopwhistle/api exec vitest run
           src/__tests__/carrier-rpa-normalization.test.ts
@@ -122,10 +128,19 @@ jobs:
           src/__tests__/automation-routes.test.ts
           src/__tests__/call-center.test.ts
           src/__tests__/quota.test.ts
+          src/__tests__/security.test.ts
+          src/__tests__/admin-role-drift.test.ts
         env:
           NODE_ENV: test
           DATABASE_URL: postgresql://test:test@localhost:5432/test
           REDIS_URL: redis://localhost:6379
+          # security.test.ts drives the real endpoints against a real database,
+          # so it needs one nominated as disposable. Without this it would skip,
+          # and a skipped suite inside a blocking job is a green tick that means
+          # nothing -- which is how its predecessor sat broken for so long. The
+          # suite asserts this is set whenever CI is, so a missing database
+          # fails the build rather than quietly removing the coverage.
+          TEST_DATABASE_URL: postgresql://test:test@localhost:5432/test
 
       - name: Build
         run: pnpm build
