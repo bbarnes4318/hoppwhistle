@@ -159,6 +159,13 @@ describe.skipIf(!gate.available)('Pay-Per-Call Real Database/Redis Integration T
           code: 'buyeraprepaid',
           status: 'ACTIVE',
           tenantId,
+          // The auction only considers endpoints whose buyer is managed by the
+          // pinging publisher (fetchEligibleEndpoints filters on
+          // buyer.publisherId). Without this the RTB ping matched nothing and
+          // came back bid: 0, 'No matching buyers'. Buyer B is deliberately
+          // left unmanaged: it bids 20 and would outbid A, and this test is
+          // about A winning at 15.
+          publisherId: 'pub-a-int',
           billingType: 'UPFRONT',
           walletBalance: new Prisma.Decimal('100.00'),
           leadsRemaining: 100,
@@ -232,6 +239,11 @@ describe.skipIf(!gate.available)('Pay-Per-Call Real Database/Redis Integration T
       data: {
         id: 'camp-int-1',
         tenantId,
+        // Campaign requires a publisher. Omitting it made Prisma fall back to
+        // the checked create variant and report the confusing `Argument
+        // \`tenant\` is missing`, which killed beforeAll and took the whole
+        // suite with it before a single test body ran.
+        publisherId: 'pub-a-int',
         name: 'Integration Campaign',
         status: 'ACTIVE',
         billableDurationSeconds: 60,
@@ -267,6 +279,10 @@ describe.skipIf(!gate.available)('Pay-Per-Call Real Database/Redis Integration T
 
     await prisma.campaignBuyer.createMany({
       data: [
+        // Distinct priorities, because selectBestBuyer picks within a priority
+        // group with a weighted Math.random(). Seeded at the same priority and
+        // weight, these two were a coin flip and the static-DID assertion below
+        // passed about half the time.
         {
           id: 'cb-a-int',
           tenantId,
@@ -275,6 +291,7 @@ describe.skipIf(!gate.available)('Pay-Per-Call Real Database/Redis Integration T
           buyerEndpointId: 'ep-a-int',
           destinationNumber: '+18005559999',
           pricePerBillableCall: new Prisma.Decimal('25.00'),
+          priority: 0,
           status: 'ACTIVE',
         },
         {
@@ -285,6 +302,7 @@ describe.skipIf(!gate.available)('Pay-Per-Call Real Database/Redis Integration T
           buyerEndpointId: 'ep-b-int',
           destinationNumber: '+18005558888',
           pricePerBillableCall: new Prisma.Decimal('25.00'),
+          priority: 1,
           status: 'ACTIVE',
         },
       ],
@@ -327,6 +345,9 @@ describe.skipIf(!gate.available)('Pay-Per-Call Real Database/Redis Integration T
         id: 'route-static-int',
         tenantId,
         phoneNumberId: 'num-static-int',
+        // Denormalised copy of the tracking DID's number, which FreeSWITCH
+        // looks routes up by. Must match num-static-int above.
+        did: '+18005550400',
         destination: '+18005559999',
         campaignId: 'camp-int-1',
         buyerId: 'buyer-a-int',
@@ -425,7 +446,10 @@ describe.skipIf(!gate.available)('Pay-Per-Call Real Database/Redis Integration T
     });
     expect(lookupResponse.statusCode).toBe(200);
     const lookupData = JSON.parse(lookupResponse.body);
-    expect(lookupData.destination).toBe('+18005559999');
+    // route-static-int carries a campaignId, so the lookup takes the dynamic
+    // path: it returns a sequential failover chain across the campaign's
+    // priority steps, highest priority first, not the route's own destination.
+    expect(lookupData.destination.split('|')).toEqual(['+18005559999', '+18005558888']);
 
     // 2. FreeSWITCH CDR posting
     const callSid = `sid-integration-${Date.now()}`;
@@ -448,9 +472,11 @@ describe.skipIf(!gate.available)('Pay-Per-Call Real Database/Redis Integration T
     });
     expect(cdrResponse.statusCode).toBe(201);
 
-    // Get call record from actual DB
+    // Get call record from actual DB. The CDR handler namespaces the
+    // FreeSWITCH UUID as `fs-<callId>` when it writes the row, so querying the
+    // bare id found nothing.
     const dbCall = await prisma.call.findFirst({
-      where: { tenantId, callSid },
+      where: { tenantId, callSid: `fs-${callSid}` },
     });
     expect(dbCall).not.toBeNull();
     expect(dbCall.billable).toBe(true);
