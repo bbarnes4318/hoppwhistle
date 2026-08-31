@@ -32,7 +32,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       if (!host && request.headers.host) {
         host = request.headers.host.split(':')[0];
       }
-      
+
       const referer = request.headers.referer;
       if (referer) {
         try {
@@ -42,7 +42,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
           }
         } catch {}
       }
-      
+
       const origin = request.headers.origin;
       if (origin) {
         try {
@@ -124,27 +124,39 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     return defaultTenant.id;
   }
 
-  // Helper to automatically assign the ADMIN role to newly registered users
+  /**
+   * The role a self-serve signup gets: the least privileged one there is.
+   *
+   * This used to ask for ADMIN, fall back to OWNER, and fall back again to
+   * `findFirst()` -- whatever role row the database happened to return. Every
+   * account created through the public signup page, by email or through Google,
+   * came out a platform administrator, active immediately, with nobody asked.
+   *
+   * READONLY is now the only role this function will ever grant, and it grants
+   * nothing at all if READONLY is missing: a signup with no role can be given
+   * one deliberately, whereas a signup with a guessed role is exactly what went
+   * wrong here. Privilege is granted by an existing admin through
+   * /api/v1/users/invite or PATCH /api/v1/users/:userId, never by signing up.
+   */
   async function assignDefaultRole(userId: string): Promise<void> {
-    let role = await prisma.role.findFirst({
-      where: { name: 'ADMIN' },
+    const role = await prisma.role.findFirst({
+      where: { name: 'READONLY' },
     });
+
     if (!role) {
-      role = await prisma.role.findFirst({
-        where: { name: 'OWNER' },
-      });
+      fastify.log.error(
+        { userId },
+        'READONLY role missing; self-serve signup left with no role rather than a guessed one'
+      );
+      return;
     }
-    if (!role) {
-      role = await prisma.role.findFirst();
-    }
-    if (role) {
-      await prisma.userRole.create({
-        data: {
-          userId,
-          roleId: role.id,
-        },
-      });
-    }
+
+    await prisma.userRole.create({
+      data: {
+        userId,
+        roleId: role.id,
+      },
+    });
   }
 
   // ============================================================================
@@ -223,8 +235,11 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     if (user.status !== 'ACTIVE') {
       return reply.code(403).send({
         error: {
-          code: 'FORBIDDEN',
-          message: 'User account is not active',
+          code: user.status === 'PENDING' ? 'ACCOUNT_PENDING_APPROVAL' : 'FORBIDDEN',
+          message:
+            user.status === 'PENDING'
+              ? 'Your account is awaiting approval by an administrator.'
+              : 'User account is not active',
         },
       });
     }
@@ -371,7 +386,10 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         authMethod: 'EMAIL',
         firstName: firstName?.trim() || null,
         lastName: lastName?.trim() || null,
-        status: 'ACTIVE',
+        // Awaiting approval, not live. Login, the Google path and the auth
+        // middleware all refuse a user who is not ACTIVE, so this account can
+        // obtain no session until an admin approves it.
+        status: 'PENDING',
         metadata: {
           position: userPosition,
           defaultScript: defaultScript,
@@ -395,27 +413,15 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       success: true,
     });
 
-    // Create JWT token
-    const token = await reply.jwtSign({
-      tenantId: user.tenantId,
-      userId: user.id,
-      email: user.email,
-    });
-
-    // Create session
-    const sessionId = await createSession(reply, {
-      userId: user.id,
-      tenantId: user.tenantId || undefined,
-      email: user.email,
-    });
-
-    // Generate CSRF token
-    const csrfToken = generateCsrfToken(sessionId);
-
-    void reply.code(201);
+    // Deliberately no token and no session: registering must not sign you in
+    // while the account is still waiting on approval. Handing back a JWT here
+    // is what made the public signup page a way onto the platform.
+    void reply.code(202);
     return reply.send({
-      token,
-      csrfToken,
+      status: 'PENDING_APPROVAL',
+      message:
+        'Your account has been created and is awaiting approval. ' +
+        'You will be able to sign in once an administrator approves it.',
       user: {
         id: user.id,
         email: user.email,
@@ -538,7 +544,10 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
             authMethod: 'GOOGLE',
             firstName: googleUser.firstName,
             lastName: googleUser.lastName,
-            status: 'ACTIVE',
+            // Same rule as email signup: a brand new Google account is a
+            // self-serve signup and waits for approval. The status check below
+            // turns this into a 403 before any token is issued.
+            status: 'PENDING',
             lastLoginAt: new Date(),
           },
         });
@@ -587,8 +596,11 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     if (user.status !== 'ACTIVE') {
       return reply.code(403).send({
         error: {
-          code: 'FORBIDDEN',
-          message: 'User account is not active',
+          code: user.status === 'PENDING' ? 'ACCOUNT_PENDING_APPROVAL' : 'FORBIDDEN',
+          message:
+            user.status === 'PENDING'
+              ? 'Your account is awaiting approval by an administrator.'
+              : 'User account is not active',
         },
       });
     }
@@ -788,7 +800,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       if (defaultScript !== undefined) newMetadata.defaultScript = defaultScript;
       if (customScripts !== undefined) {
         newMetadata.customScripts = {
-          ...(currentMetadata.customScripts as Record<string, string> || {}),
+          ...((currentMetadata.customScripts as Record<string, string>) || {}),
           ...customScripts,
         };
       }

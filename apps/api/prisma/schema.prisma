@@ -220,6 +220,11 @@ model User {
 }
 
 enum UserStatus {
+  /// Signed up through the public page and waiting on an admin. Every
+  /// authentication path requires ACTIVE, so a PENDING account can obtain no
+  /// session and reach nothing until someone approves it with
+  /// PATCH /api/v1/users/:userId { "status": "ACTIVE" }.
+  PENDING
   ACTIVE
   INACTIVE
   SUSPENDED
