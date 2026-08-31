@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join, relative, sep } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -48,6 +48,8 @@ const PNPM_BUILTINS = new Set([
 interface PackageManifest {
   name: string;
   path: string;
+  /** Directory relative to the repo root, posix-separated, e.g. "packages/sdk". */
+  dir: string;
   scripts: Set<string>;
 }
 
@@ -87,6 +89,7 @@ function readManifests(): Map<string, PackageManifest> {
     found.set(parsed.name, {
       name: parsed.name,
       path,
+      dir: relative(REPO_ROOT, dirname(path)).split(sep).join('/'),
       scripts: new Set(Object.keys(parsed.scripts ?? {})),
     });
   }
@@ -119,6 +122,41 @@ function filteredInvocations(): Invocation[] {
   return out;
 }
 
+/**
+ * Resolve a --filter selector to the packages it selects.
+ *
+ * pnpm accepts a package name, but also a path glob such as `./packages/*`,
+ * which selects every workspace package under that directory. Treating a glob
+ * as a package name reports a false "unknown package", so both forms are
+ * handled here.
+ */
+function select(selector: string, manifests: Map<string, PackageManifest>): PackageManifest[] {
+  const cleaned = selector.replace(/^["']|["']$/g, '');
+
+  const looksLikePath =
+    cleaned.startsWith('./') || cleaned.startsWith('../') || cleaned.includes('/*');
+  if (!looksLikePath) {
+    const byName = manifests.get(cleaned);
+    return byName ? [byName] : [];
+  }
+
+  const normalized = cleaned.replace(/^\.\//, '').replace(/\/$/, '');
+  const asRegex = new RegExp(
+    `^${normalized
+      .split('/')
+      .map(part =>
+        part
+          .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+          .replace(/\*\*/g, '\u0000')
+          .replace(/\*/g, '[^/]*')
+          .replace(/\u0000/g, '.*')
+      )
+      .join('/')}$`
+  );
+
+  return [...manifests.values()].filter(m => asRegex.test(m.dir));
+}
+
 describe('CI workflows do not contain steps that silently do nothing', () => {
   it('finds the invocations it is meant to be checking', () => {
     // Guards the guard: a regex that matches nothing would pass every case
@@ -131,17 +169,24 @@ describe('CI workflows do not contain steps that silently do nothing', () => {
     const offenders: string[] = [];
 
     for (const { workflow, line, pkg, word } of filteredInvocations()) {
-      const manifest = manifests.get(pkg);
+      const selected = select(pkg, manifests);
 
-      if (!manifest) {
-        offenders.push(`${workflow}:${line} filters to unknown package "${pkg}"`);
+      if (selected.length === 0) {
+        offenders.push(
+          `${workflow}:${line} filters to "${pkg}", which selects no workspace package`
+        );
         continue;
       }
 
-      if (!manifest.scripts.has(word)) {
+      // pnpm only errors when *none* of the selected packages has the script,
+      // so that is the condition worth failing on. A glob that legitimately
+      // spans packages where only some define the script still does work.
+      if (!selected.some(m => m.scripts.has(word))) {
+        const where =
+          selected.length === 1 ? selected[0].path : `${selected.length} packages matching ${pkg}`;
         offenders.push(
-          `${workflow}:${line} runs "pnpm --filter ${pkg} ${word}", but ${pkg} has no "${word}" ` +
-            `script (${manifest.path}). pnpm will print 'None of the selected packages has a ` +
+          `${workflow}:${line} runs "pnpm --filter ${pkg} ${word}", but no selected package has a ` +
+            `"${word}" script (${where}). pnpm will print 'None of the selected packages has a ` +
             `"${word}" script' and exit 0, so the step passes without doing anything. ` +
             `If "${word}" is a binary, use "pnpm --filter ${pkg} exec ${word} ...".`
         );
