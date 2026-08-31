@@ -76,11 +76,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # NOTE: lint/format/typecheck/full-test/build are advisory
-      # (continue-on-error) due to pre-existing repo-wide debt that predates
-      # this gate ever passing. The carrier-automation & call-center tests
-      # below are the real blocking gate. Flip these back to blocking once the
-      # existing debt is paid down.
+      # NOTE: lint/format/typecheck/build are advisory (continue-on-error) due
+      # to pre-existing repo-wide debt that predates this gate ever passing.
+      # Flip these back to blocking once the existing debt is paid down.
+      #
+      # `pnpm test` is no longer among them -- see the step below.
       - name: Lint
         run: pnpm --filter "!@callfabric/transcriber" --filter "!@callfabric/media" --filter "!@hopwhistle/worker" lint
         continue-on-error: true
@@ -104,9 +104,25 @@ jobs:
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/test
 
+      # Blocking. While it was advisory it hid 19 failing tests in apps/api
+      # and apps/media, a third apps/api suite that died in beforeAll before
+      # either of its tests ran, and packages/sdk exiting 1 for containing no
+      # tests at all. Chasing those down turned up three defects in shipped
+      # code: an event-bus subscriber blocking the shared Redis connection, and
+      # two in the AI campaign restart endpoint that meant it had never once
+      # succeeded.
+      #
+      # All of it is now fixed, or -- for apps/media's integration test, which
+      # targeted a database table and a Python entrypoint that exist nowhere in
+      # this repository -- deleted with the reasoning recorded in its commit.
+      # The full workspace passes with no failures.
+      #
+      # Do not put continue-on-error back to get a red build through. A failure
+      # here is a real failure; the suites that need a database or Redis refuse
+      # to run unless pointed at one nominated as disposable, so they skip
+      # loudly rather than passing vacuously.
       - name: Run Tests (Unit & Integration)
         run: pnpm test
-        continue-on-error: true
         env:
           NODE_ENV: test
           DATABASE_URL: postgresql://test:test@localhost:5432/test
