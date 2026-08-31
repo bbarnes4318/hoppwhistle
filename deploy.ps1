@@ -10,10 +10,14 @@ Write-Host "=============================================" -ForegroundColor Cyan
 $ip = "178.156.223.97"
 $keyPath = "C:\Users\jimbo\.ssh\hetzner_pvn"
 
-# The branch production actually runs. This said edit-campaign-buyer-fix until
-# 2026-08-27, long after the server had moved on, so running this script would
-# have quietly rolled the box back to a stale branch.
-$branch = "deploy-sip-fix"
+# The branch production actually runs. This has now gone stale twice — it said
+# edit-campaign-buyer-fix until 2026-08-27, then deploy-sip-fix until that
+# branch was merged into main and auto-deleted on 2026-08-31, at which point
+# `git pull origin deploy-sip-fix` below would have failed outright.
+#
+# Pointing at the default branch is what stops this recurring: main cannot be
+# deleted out from under the script.
+$branch = "main"
 
 $remoteCommands = @(
     "cd /opt/hopwhistle",
