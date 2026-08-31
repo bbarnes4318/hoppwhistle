@@ -4940,6 +4940,31 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
       const body = request.body;
       const prisma = (await import('../lib/prisma.js')).getPrismaClient();
 
+      // This endpoint edits any user in the tenant -- status, and the buyer or
+      // publisher they are scoped to -- and it only ever checked that the
+      // caller belonged to the tenant. Any authenticated account could:
+      //
+      //   * flip a PENDING signup to ACTIVE, which is the whole of the approval
+      //     gate that self-serve registration now depends on;
+      //   * SUSPEND an administrator, locking out the people who would notice;
+      //   * set its own buyerId to somebody else's buyer and read that buyer's
+      //     calls, spend and billing through the buyer portal.
+      //
+      // Approving and re-scoping users is administrative work, so it needs an
+      // administrator. Self-service profile edits are a different endpoint
+      // (/api/auth/me/settings) and are unaffected.
+      const editorProfile = await getUserProfile(request, prisma);
+
+      if (!editorProfile.isAdminOrOwner) {
+        void reply.code(403);
+        return {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'Only an administrator or owner can modify users',
+          },
+        };
+      }
+
       // Verify user exists and belongs to tenant
       const existingUser = await prisma.user.findFirst({
         where: {
