@@ -19,6 +19,7 @@
   "scripts": {
     "generate:types": "tsx scripts/generate-types.ts",
     "build": "tsup",
+    "prepare": "tsup",
     "dev": "tsup --watch",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -76,23 +76,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # The workspace packages resolve through their exports maps to ./dist,
-      # which exists only after a build. Every step below that runs code
-      # importing them needs this first, and `pnpm build` further down is too
-      # late -- it runs after the tests.
+      # No build step for the workspace packages: they carry a "prepare": "tsup"
+      # hook, which pnpm runs for workspace projects during the install above,
+      # so ./dist and its declarations already exist by this point. That covers
+      # a fresh clone as well, which no CI step could.
       #
-      # Without it six test files never even get collected: four in apps/api
-      # (@hopwhistle/shared and @hopwhistle/routing-dsl) and two in apps/worker
-      # (@hopwhistle/shared), taking 57 tests with them. They report as
-      # "Failed to resolve entry for package", which while this step was
-      # continue-on-error was logged and then discarded, so those suites had
-      # simply never run in CI. Working locally hides it: a developer who has
-      # built once has the dist directories lying around.
-      #
-      # Globbed rather than named: a package added later needs building too, and
-      # the failure mode for forgetting is a suite that quietly does not run.
-      - name: Build the workspace packages
-        run: pnpm --filter "./packages/*" build
+      # It replaced a step here that built them explicitly. Without one or the
+      # other, six test files are never collected -- four in apps/api
+      # (@hopwhistle/shared, @hopwhistle/routing-dsl) and two in apps/worker
+      # (@hopwhistle/shared) -- taking 57 tests with them, reported as
+      # "Failed to resolve entry for package" and, while this job's test step
+      # was continue-on-error, discarded.
 
       # NOTE: lint/format/typecheck/build are advisory (continue-on-error) due
       # to pre-existing repo-wide debt that predates this gate ever passing.

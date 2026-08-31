@@ -20,7 +20,11 @@ COPY packages/routing-dsl/package.json ./packages/routing-dsl/
 
 # Fix: Allow updating lockfile
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-RUN pnpm install --no-frozen-lockfile
+# --ignore-scripts: this stage copies package.json files only, no source. The
+# workspace packages carry a "prepare": "tsup" hook, which would run here and
+# fail with nothing to compile. The builder stage below has the source and
+# builds them properly.
+RUN pnpm install --no-frozen-lockfile --ignore-scripts
 
 FROM base AS builder
 WORKDIR /app
@@ -63,14 +67,19 @@ RUN node /app/scripts/apply-campaign-routing-ui-source.mjs \
 # `@hopwhistle/routing-dsl` reference is an erased `import type` with no
 # node_modules link to resolve through — building either would be inert.
 # See the PR for both, they want fixing on their own terms, not here.
-RUN pnpm --filter @hopwhistle/shared exec tsup --no-dts
+# Globbed, not named: a package added later needs building too, and the failure
+# mode for forgetting is a suite or a runtime import that quietly breaks. This
+# stage has the source, so it does the real build the deps stage skipped.
+RUN pnpm --filter "./packages/*" exec tsup --no-dts
 
 WORKDIR /app/apps/web
 
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 # Install dependencies
-RUN pnpm add next @xyflow/react next-themes html2canvas react-markdown @tailwindcss/typography
+# --ignore-scripts for the same reason as the deps stage above: this must not
+# trigger the workspace packages' prepare hook mid-build.
+RUN pnpm add --ignore-scripts next @xyflow/react next-themes html2canvas react-markdown @tailwindcss/typography
 
 # Config is now in next.config.js
 
