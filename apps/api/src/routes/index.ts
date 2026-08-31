@@ -4679,6 +4679,26 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
       return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
     }
 
+    const prismaForAuthz = (await import('../lib/prisma.js')).getPrismaClient();
+
+    // This endpoint creates a user and grants it whatever role the body names,
+    // ADMIN included. It never checked who was asking: any authenticated
+    // caller -- a self-serve signup with READONLY, a buyer, an agent -- could
+    // mint themselves a second account with full administrative access. The
+    // roles are not in the JWT, so they are read from the database by the same
+    // helper the rest of this file gates on.
+    const inviterProfile = await getUserProfile(request, prismaForAuthz);
+
+    if (!inviterProfile.isAdminOrOwner) {
+      void reply.code(403);
+      return {
+        error: {
+          code: 'FORBIDDEN',
+          message: 'Only an administrator or owner can invite users',
+        },
+      };
+    }
+
     const body = request.body;
 
     if (!body.email || !body.email.trim()) {
@@ -4762,6 +4782,18 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
       }
     }
 
+    // An ADMIN escalating to OWNER by inviting one is the same privilege jump
+    // this endpoint was already handing out, one step further up.
+    if (requestedRole === 'OWNER' && !inviterProfile.userRoles.includes('OWNER')) {
+      void reply.code(403);
+      return {
+        error: {
+          code: 'FORBIDDEN',
+          message: 'Only an owner can grant the OWNER role',
+        },
+      };
+    }
+
     // Constraint: Cannot have ADMIN role with buyerId (internal vs external user)
     if ((requestedRole === 'ADMIN' || requestedRole === 'OWNER') && body.buyerId) {
       void reply.code(400);
@@ -4789,8 +4821,13 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
     // Generate temporary password
     const { randomBytes } = await import('crypto');
     const tempPassword = randomBytes(16).toString('hex');
-    const { hash } = await import('bcryptjs');
-    const passwordHash = await hash(tempPassword, 10);
+    // bcryptjs is CommonJS: `await import()` yields the module namespace, so
+    // the functions hang off .default. Destructuring `hash` gave undefined and
+    // every call to this endpoint died with "hash is not a function". That bug
+    // is why nobody had exploited the missing check above -- a jammed door, not
+    // a locked one, so it is fixed here rather than left load-bearing.
+    const bcrypt = (await import('bcryptjs')).default;
+    const passwordHash = await bcrypt.hash(tempPassword, 10);
 
     // Get role ID for the requested role
     const roleRecord = await prisma.role.findUnique({
