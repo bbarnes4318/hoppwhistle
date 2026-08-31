@@ -15,6 +15,8 @@ import {
  TableRow,
 } from '@/components/ui/table';
 import { InviteUserDialog } from '@/components/users/invite-user-dialog';
+import { PendingApprovals } from '@/components/users/pending-approvals';
+import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
 
 interface User {
@@ -35,6 +37,12 @@ export default function UsersPage() {
  const [users, setUsers] = useState<User[]>([]);
  const [loading, setLoading] = useState(true);
  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+ const { hasFullAccess } = useAuth();
+
+ // The API returns status lowercased. Approving is admin-only on the server,
+ // so a non-admin is not offered buttons that would come back 403.
+ const pendingUsers = users.filter(u => u.status?.toLowerCase() === 'pending');
+ const activeUsers = users.filter(u => u.status?.toLowerCase() !== 'pending');
 
  useEffect(() => {
  loadUsers();
@@ -79,6 +87,8 @@ export default function UsersPage() {
  </Button>
  </div>
 
+ {hasFullAccess && <PendingApprovals users={pendingUsers} onDecided={loadUsers} />}
+
  <Card className="flex-1 flex flex-col overflow-hidden min-h-0">
  <CardHeader className="flex-shrink-0">
  <CardTitle>Team Members</CardTitle>
@@ -89,7 +99,7 @@ export default function UsersPage() {
  <div className="flex items-center justify-center py-12">
  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
  </div>
- ) : users.length === 0 ? (
+ ) : activeUsers.length === 0 ? (
  <div className="text-center py-12 text-muted-foreground">No users found</div>
  ) : (
  <Table>
@@ -104,7 +114,7 @@ export default function UsersPage() {
  </TableRow>
  </TableHeader>
  <TableBody>
- {users.map(user => (
+ {activeUsers.map(user => (
  <TableRow key={user.id}>
  <TableCell className="flex items-center gap-2">
  <Mail className="h-4 w-4 text-muted-foreground" />
