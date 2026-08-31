@@ -96,6 +96,9 @@ describe.skipIf(!gate.available)('EventBus', () => {
 
     it('should filter events by channel pattern', async () => {
       const receivedEvents: EventPayload[] = [];
+      // The stream outlives the test run, so tag this run's own events and
+      // assert on those -- otherwise a leftover message decides the result.
+      const runTag = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
       const unsubscribe = await eventBus.subscribe(
         'call.*',
@@ -108,13 +111,13 @@ describe.skipIf(!gate.available)('EventBus', () => {
       // Publish to different channels
       await eventBus.publish('call.*', {
         event: 'call.started',
-        tenantId: 'test-tenant',
+        tenantId: runTag,
         data: { callId: 'call-1' },
       });
 
       await eventBus.publish('billing.*', {
         event: 'billing.charged',
-        tenantId: 'test-tenant',
+        tenantId: runTag,
         data: { invoiceId: 'inv-1' },
       });
 
@@ -123,9 +126,10 @@ describe.skipIf(!gate.available)('EventBus', () => {
 
       await unsubscribe();
 
-      // Should only receive call events
-      const callEvents = receivedEvents.filter(e => e.event.startsWith('call.'));
-      expect(callEvents.length).toBeGreaterThan(0);
+      // The call event arrives and the billing event does not. Asserting only
+      // that some call event arrived would pass with the filter torn out.
+      const mine = receivedEvents.filter(e => e.tenantId === runTag);
+      expect(mine.map(e => e.event)).toEqual(['call.started']);
     }, 10000);
   });
 
@@ -158,12 +162,16 @@ describe.skipIf(!gate.available)('EventBus', () => {
   });
 
   describe('getEvents', () => {
-    it('should retrieve recent events from stream', async () => {
+    it('should retrieve recent events from stream, oldest first', async () => {
+      // The stream is shared and never truncated, so identify this run's own
+      // events rather than indexing into whatever else is already in there.
+      const runTag = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
       // Publish a few events
       for (let i = 0; i < 3; i++) {
         await eventBus.publish('call.*', {
           event: `call.event${i}`,
-          tenantId: 'test-tenant',
+          tenantId: runTag,
           data: { index: i },
         });
       }
@@ -172,10 +180,11 @@ describe.skipIf(!gate.available)('EventBus', () => {
       await new Promise(resolve => setTimeout(resolve, 200));
 
       const events = await eventBus.getEvents(10);
+      const mine = events.filter(e => e.tenantId === runTag);
 
-      expect(events.length).toBeGreaterThanOrEqual(3);
-      expect(events[events.length - 1].event).toBe('call.event0');
-      expect(events[events.length - 3].event).toBe('call.event2');
+      // getEvents reads newest-first with XREVRANGE and then reverses, so the
+      // contract is oldest-first: the order they were published in.
+      expect(mine.map(e => e.event)).toEqual(['call.event0', 'call.event1', 'call.event2']);
     });
   });
 });

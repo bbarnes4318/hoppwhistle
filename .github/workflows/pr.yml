@@ -146,6 +146,7 @@ jobs:
           src/__tests__/quota.test.ts
           src/__tests__/security.test.ts
           src/__tests__/admin-role-drift.test.ts
+          src/__tests__/workflow-pnpm-invocations.test.ts
         env:
           NODE_ENV: test
           DATABASE_URL: postgresql://test:test@localhost:5432/test

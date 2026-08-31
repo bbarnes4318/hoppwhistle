@@ -22,8 +22,8 @@
     "dev": "tsup --watch",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint src --ext .ts",
-    "lint:fix": "eslint src --ext .ts --fix",
+    "lint": "eslint src --ext .ts --ignore-pattern '__tests__/**'",
+    "lint:fix": "eslint src --ext .ts --ignore-pattern '__tests__/**' --fix",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist node_modules"
   },

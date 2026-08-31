@@ -74,13 +74,28 @@ export class EventBus {
   ): Promise<() => Promise<void>> {
     await this.initialize();
 
+    // A blocking read needs its own connection. ioredis serialises commands on
+    // a single socket, so XREADGROUP ... BLOCK on the shared client holds that
+    // socket for the whole block and everything else in the process -- rate
+    // limiting, sessions, caches, this bus's own publish() -- queues behind it.
+    // The shared client also carries commandTimeout: 500, which is shorter than
+    // the BLOCK, so the read could never return empty: it timed out, logged,
+    // slept a second and retried, taking any command queued behind it with it.
+    // subscribePubSub() already duplicates for the same reason.
+    const reader = getRedisClient().duplicate({ commandTimeout: undefined });
+    // duplicate() copies options, not listeners. An ioredis 'error' with no
+    // listener is an unhandled 'error' event, which takes the process down.
+    reader.on('error', (err) => {
+      console.error('[EventBus] Subscriber connection error:', err.message);
+    });
+
     let isRunning = true;
 
     const processMessages = async () => {
       while (isRunning) {
         try {
           // Read from stream with consumer group
-          const messages = await this.redis.xreadgroup(
+          const messages = await reader.xreadgroup(
             'GROUP',
             this.consumerGroupName,
             consumerName,
@@ -95,7 +110,7 @@ export class EventBus {
 
           if (messages && messages.length > 0) {
             const [, streamMessages] = messages[0] as [string, Array<[string, string[]]>];
-            
+
             for (const [messageId, fields] of streamMessages) {
               const fieldMap: Record<string, string> = {};
               for (let i = 0; i < fields.length; i += 2) {
@@ -108,11 +123,7 @@ export class EventBus {
                 try {
                   await handler(payload);
                   // Acknowledge message
-                  await this.redis.xack(
-                    this.streamKey,
-                    this.consumerGroupName,
-                    messageId
-                  );
+                  await reader.xack(this.streamKey, this.consumerGroupName, messageId);
                 } catch (err) {
                   console.error('Error handling event:', err);
                   // In production, you might want to handle failures differently
@@ -130,13 +141,18 @@ export class EventBus {
     };
 
     // Start processing in background
-    processMessages().catch((err) => {
+    const loop = processMessages().catch((err) => {
       console.error('Fatal error in event subscription:', err);
     });
 
     // Return unsubscribe function
     return async () => {
       isRunning = false;
+      // Aborts the in-flight blocking read rather than leaving the loop alive
+      // for the rest of the BLOCK window. The rejection it causes lands in the
+      // catch above, which stays quiet once isRunning is false.
+      reader.disconnect();
+      await loop;
     };
   }
 
