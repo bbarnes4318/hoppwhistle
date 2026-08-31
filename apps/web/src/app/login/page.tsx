@@ -1,6 +1,6 @@
 'use client';
 
-import { Eye, EyeOff, Loader2, XCircle, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, Loader2, XCircle, AlertCircle, CheckCircle2 } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import Script from 'next/script';
@@ -67,6 +67,9 @@ export default function AuthPage() {
   // UI state
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Registration no longer signs you in, so it needs somewhere to say so that
+  // is not the error banner -- the signup succeeded, it just isn't a session.
+  const [notice, setNotice] = useState<string | null>(null);
   const [googleLoaded, setGoogleLoaded] = useState(false);
 
   // Password strength for signup
@@ -219,12 +222,14 @@ export default function AuthPage() {
         throw new Error(data.error?.message || 'Registration failed');
       }
 
-      const authData = data as AuthResponse;
-      persistSessionToken(authData.token);
-
-      // Redirect based on role - BUYER goes to buyer portal
-      const redirectPath = getRedirectPath(authData.user.roles);
-      router.push(redirectPath);
+      // The API answers 202 with no token: the account exists but is PENDING
+      // until an administrator approves it. There is nothing to sign in with,
+      // so say so and leave them on the page rather than redirecting.
+      setNotice(
+        (data as { message?: string }).message ??
+          'Your account has been created and is awaiting approval.'
+      );
+      setPassword('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');
     } finally {
@@ -232,7 +237,10 @@ export default function AuthPage() {
     }
   };
 
-  const clearError = () => setError(null);
+  const clearError = () => {
+    setError(null);
+    setNotice(null);
+  };
 
   return (
     <>
@@ -318,6 +326,21 @@ export default function AuthPage() {
                     : 'Register a new institutional identity to access the network.'}
                 </p>
               </div>
+
+              {/* Awaiting-approval notice: a completed signup, not a failure */}
+              {notice && (
+                <div className="flex items-center gap-3 p-4 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-sm font-medium shadow-sm">
+                  <CheckCircle2 className="h-5 w-5 flex-shrink-0" />
+                  <span className="flex-1">{notice}</span>
+                  <button
+                    onClick={() => setNotice(null)}
+                    className="flex-shrink-0 hover:opacity-70 transition-opacity"
+                    aria-label="Dismiss"
+                  >
+                    <XCircle className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
 
               {/* Error Alert */}
               {error && (
@@ -517,7 +540,7 @@ export default function AuthPage() {
                       <select
                         id="signup-position"
                         value={position}
-                        onChange={(e) => setPosition(e.target.value)}
+                        onChange={e => setPosition(e.target.value)}
                         required
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                       >

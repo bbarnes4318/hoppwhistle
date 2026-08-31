@@ -4883,7 +4883,7 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
     Body: {
       firstName?: string;
       lastName?: string;
-      status?: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
+      status?: 'PENDING' | 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
       buyerId?: string | null;
       publisherId?: string | null;
       metadata?: Record<string, unknown>;
