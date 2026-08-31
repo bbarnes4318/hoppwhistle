@@ -9,11 +9,19 @@ import { Sidebar } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
 import { AgentPhonePanel, GlobalDispositionModal, PhoneProvider } from '@/components/phone';
 import { useAuth } from '@/hooks/use-auth';
+import { getRedirectPath } from '@/lib/roles';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }): JSX.Element {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, isPublisherOnly, isBuyerOnly, isAgentOnly, loading: authLoading } = useAuth();
+  const {
+    user,
+    userRoles,
+    isPublisherOnly,
+    isBuyerOnly,
+    isAgentOnly,
+    loading: authLoading,
+  } = useAuth();
 
   useEffect(() => {
     if (authLoading) return;
@@ -24,11 +32,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
 
     const path = pathname || '';
+    const home = getRedirectPath(userRoles);
 
-    if (isPublisherOnly && !path.startsWith('/publisher')) {
-      router.replace('/publisher/dashboard');
-    } else if (isBuyerOnly && !path.startsWith('/buyer')) {
-      router.replace('/buyer/dashboard');
+    // A section user is sent home unless the page they are on is a section they
+    // are entitled to. This is deliberately one decision rather than a branch
+    // per role: `isBuyerOnly` and `isPublisherOnly` both mean "holds the role
+    // and is not staff", so a user holding BUYER *and* PUBLISHER satisfied both
+    // of the old branches -- /publisher bounced them to /buyer, /buyer bounced
+    // them straight back, and the pair looped until the tab was closed.
+    if (isPublisherOnly || isBuyerOnly) {
+      const inAllowedSection =
+        (isPublisherOnly && path.startsWith('/publisher')) ||
+        (isBuyerOnly && path.startsWith('/buyer'));
+
+      if (!inAllowedSection && path !== home) {
+        router.replace(home);
+      }
     } else if (
       isAgentOnly &&
       (path.startsWith('/music-console') ||
@@ -39,7 +58,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     ) {
       router.replace('/dashboard');
     }
-  }, [user, isPublisherOnly, isBuyerOnly, isAgentOnly, authLoading, pathname, router]);
+  }, [user, userRoles, isPublisherOnly, isBuyerOnly, isAgentOnly, authLoading, pathname, router]);
 
   // Check if we're on the call center page (fullscreen mode)
   const isCallCenterPage = pathname?.startsWith('/call-center');
