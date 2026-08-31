@@ -29,6 +29,7 @@ import { createHash } from 'crypto';
 
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
+import { isDemoTenantAuthEnabled } from '../lib/demo-auth.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { runAmericanAmicableAutomation } from '../services/carrier-rpa/american-amicable.js';
 import {
@@ -131,12 +132,21 @@ async function resolveTenantContext(
     }
   }
 
-  // Demo tenant (same fallback the global /api/v1 hook allows)
-  const demoTenantId =
-    (request.headers['x-demo-tenant-id'] as string | undefined) ||
-    (request.query as Record<string, string | undefined>)?.demoTenantId;
-  if (demoTenantId) {
-    return { tenantId: demoTenantId };
+  // Demo tenant, and only where an environment has explicitly opted in.
+  //
+  // This used to run unconditionally, which mattered more here than anywhere
+  // else: the /api/automation/* aliases below are registered outside the global
+  // /api/v1 auth hook, so the hook that now strips these inputs never runs for
+  // them. Gating the hook alone left this path answering with no credential at
+  // all -- enough to drive a carrier RPA submission carrying somebody's SSN and
+  // bank details, and to read back any job whose id and tenant were known.
+  if (isDemoTenantAuthEnabled()) {
+    const demoTenantId =
+      (request.headers['x-demo-tenant-id'] as string | undefined) ||
+      (request.query as Record<string, string | undefined>)?.demoTenantId;
+    if (demoTenantId) {
+      return { tenantId: demoTenantId };
+    }
   }
 
   return null;

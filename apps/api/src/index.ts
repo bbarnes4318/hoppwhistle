@@ -6,6 +6,7 @@ import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import Fastify from 'fastify';
 
+import { isDemoTenantAuthEnabled, warnIfDemoTenantAuthEnabled } from './lib/demo-auth.js';
 import { logger } from './lib/logger.js';
 import { register } from './lib/metrics.js';
 import { closePrismaClient } from './lib/prisma.js';
@@ -75,21 +76,11 @@ async function buildServer() {
   const { createHash } = await import('crypto');
   const { getPrismaClient } = await import('./lib/prisma.js');
 
-  // Opt-in, and only ever opt-in: an unset or malformed value leaves the
-  // demo-tenant bypass disabled.
-  const DEMO_TENANT_AUTH_ENABLED = process.env.ALLOW_DEMO_TENANT_AUTH === 'true';
-
-  if (DEMO_TENANT_AUTH_ENABLED) {
-    // console rather than server.log: this banner is emitted during boot, and
-    // pino's transport is not reliably up yet -- the same warning through
-    // server.log.warn never reached the output. A warning nobody sees is worse
-    // than no warning, because it reads as reassurance in review.
-    console.warn(
-      '[SECURITY] ALLOW_DEMO_TENANT_AUTH is enabled: any request carrying ' +
-        'X-Demo-Tenant-Id is treated as ADMIN and OWNER of that tenant without ' +
-        'credentials. This must never be set in production.'
-    );
-  }
+  // One source for this policy -- see lib/demo-auth.ts. It used to be decided
+  // here and again inside the automation routes' own tenant resolver, and the
+  // two drifted: gating this one left /api/automation/* accepting the header.
+  const DEMO_TENANT_AUTH_ENABLED = isDemoTenantAuthEnabled();
+  warnIfDemoTenantAuthEnabled();
 
   server.addHook('onRequest', async (request, _reply) => {
     // Only authenticate /api/v1/* routes
