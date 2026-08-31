@@ -14,6 +14,7 @@ import { defineConfig } from 'vitest/config';
 const DATABASE_BACKED = [
   '**/src/__tests__/security.test.ts',
   '**/src/services/__tests__/ai-campaign-service.db.test.ts',
+  '**/src/services/__tests__/ai-campaign-service.raw-sql.test.ts',
   '**/src/services/__tests__/flow-store.test.ts',
   '**/src/services/__tests__/pay-per-call-integration.test.ts',
   '**/src/services/provisioning/__tests__/provisioning-service.test.ts',
