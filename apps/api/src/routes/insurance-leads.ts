@@ -65,6 +65,16 @@ function parseDeliverySelector(body: {
   return { value: { listId, submissionIds, vertical } };
 }
 
+/**
+ * Query-string booleans arrive as strings, and `Boolean('false')` is true. Only
+ * an affirmative spelling counts, so `?deliver=false` does not post a lead.
+ */
+export function isTruthyFlag(value: string | undefined): boolean {
+  if (!value) return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === 'true' || normalized === '1' || normalized === 'yes';
+}
+
 function runPreClosedPython(leads: any[]): Promise<any[]> {
   return new Promise((resolve, reject) => {
     const scriptPath = 'scripts/process-preclosed.py';
@@ -132,6 +142,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
   // -----------------------------------------------------------------------
   fastify.post<{
     Params: { vertical: string };
+    Querystring: { deliver?: string; force?: string };
     Body: Record<string, unknown>;
   }>('/api/v1/insurance-leads/inbound/:vertical', async (request, reply) => {
     const tenantId = getTenantId(request);
@@ -163,15 +174,38 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
       const { ingestLead } = await import('../services/insurance-lead-service.js');
       const result = await ingestLead(tenantId, vertical as 'ACA' | 'FE' | 'B2B', body);
 
+      // Ingest parks every lead on HOLD and never posts as a side effect. That
+      // default stays: ?deliver=true is the caller saying "and send it", so a
+      // system that means to post one lead per request can do it in one call
+      // without every other importer silently gaining the same behaviour.
+      let delivery = null;
+      if (isTruthyFlag(request.query?.deliver) && result.validationStatus === 'VALID') {
+        const { bulkDeliverInsuranceLeads } = await import(
+          '../services/insurance-lead-bulk-delivery.js'
+        );
+        delivery = await bulkDeliverInsuranceLeads(tenantId, {
+          submissionIds: [result.submissionId],
+          force: isTruthyFlag(request.query?.force),
+        });
+      }
+
+      const outcome = delivery?.results[0];
       void reply.code(result.validationStatus === 'VALID' ? 200 : 422);
       return {
         success: result.validationStatus === 'VALID',
         insuranceLeadId: result.insuranceLeadId,
         submissionId: result.submissionId,
         validationStatus: result.validationStatus,
-        postStatus: result.postStatus,
+        // The post status after delivery, when one was asked for — reporting
+        // the pre-send HOLD here would tell the caller the opposite of what
+        // just happened.
+        postStatus: outcome ? outcome.outcome : result.postStatus,
         postMode: result.postMode,
-        ameriquoteStatus: result.ameriquoteStatus || null,
+        ameriquoteStatus: outcome ? outcome.outcome : result.ameriquoteStatus || null,
+        ameriquoteLeadId: outcome?.ameriquoteLeadId ?? null,
+        ameriquotePrice: outcome?.ameriquotePrice ?? null,
+        deliveryMessage: outcome?.message ?? null,
+        deliveryBlockers: outcome?.blockers ?? null,
         errors: result.errors || null,
       };
     } catch (error: unknown) {
@@ -194,6 +228,8 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
       leads: Array<Record<string, unknown>>;
       listName?: string;
       listId?: string;
+      deliver?: boolean;
+      force?: boolean;
     };
   }>('/api/v1/insurance-leads/import', async (request, reply) => {
     const tenantId = getTenantId(request);
@@ -202,10 +238,33 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
       return { error: { code: 'UNAUTHORIZED', message: 'Valid API key required' } };
     }
 
-    const { vertical: rawVertical, leads, listName, listId: reqListId } = request.body;
+    const {
+      vertical: rawVertical,
+      leads,
+      listName,
+      listId: reqListId,
+      deliver,
+      force,
+    } = request.body;
     if (!rawVertical || !Array.isArray(leads)) {
       void reply.code(400);
       return { error: { code: 'INVALID_BODY', message: 'Must provide vertical and leads array' } };
+    }
+
+    // A delivering import posts to the buyer inside the request, so the batch
+    // has to fit in one HTTP timeout. Import without `deliver` stays unbounded.
+    const { MAX_BATCH_SIZE } = await import('../services/insurance-lead-bulk-delivery.js');
+    if (deliver === true && leads.length > MAX_BATCH_SIZE) {
+      void reply.code(400);
+      return {
+        error: {
+          code: 'BATCH_TOO_LARGE',
+          message:
+            `A delivering import is capped at ${MAX_BATCH_SIZE} leads per call (got ${leads.length}). ` +
+            'Send it in chunks, or import without `deliver` and release the list with ' +
+            'POST /api/v1/insurance-leads/delivery/send.',
+        },
+      };
     }
 
     const vertical = rawVertical.toUpperCase();
@@ -295,6 +354,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
             success: result.validationStatus === 'VALID',
             phone: String(lead.phone || ''),
             name: `${String(lead.firstName || '')} ${String(lead.lastName || '')}`.trim(),
+            submissionId: result.submissionId,
             errors: result.errors || null,
           });
         } catch (err: unknown) {
@@ -302,9 +362,32 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
             success: false,
             phone: String(lead.phone || ''),
             name: `${String(lead.firstName || '')} ${String(lead.lastName || '')}`.trim(),
+            submissionId: null,
             errors: [
               { path: 'system', message: (err as Error).message || 'System ingestion failure' },
             ],
+          });
+        }
+      }
+
+      // Import parks every lead on HOLD by default — nothing reaches the buyer
+      // as a side effect of storing it. `deliver: true` is the caller asking
+      // for the send as well, scoped to exactly the submissions this call
+      // created so it can never release the rest of the list.
+      let delivery = null;
+      if (deliver === true) {
+        const ids = results
+          .map(r => r.submissionId)
+          .filter((id): id is string => typeof id === 'string' && id.length > 0);
+
+        if (ids.length) {
+          const { bulkDeliverInsuranceLeads } = await import(
+            '../services/insurance-lead-bulk-delivery.js'
+          );
+          delivery = await bulkDeliverInsuranceLeads(tenantId, {
+            submissionIds: ids,
+            limit: ids.length,
+            force: force === true,
           });
         }
       }
@@ -313,6 +396,9 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
         total: leads.length,
         successCount: results.filter(r => r.success).length,
         failCount: results.filter(r => !r.success).length,
+        // Null when the caller did not ask to deliver, so "we sent nothing"
+        // and "we sent and everything bounced" stay tellable apart.
+        delivery,
         // Returned so a chunked import can pin every later batch to the list
         // the first batch created, and so the caller can preflight delivery.
         listId: targetListId,
