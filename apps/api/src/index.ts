@@ -75,10 +75,44 @@ async function buildServer() {
   const { createHash } = await import('crypto');
   const { getPrismaClient } = await import('./lib/prisma.js');
 
+  // Opt-in, and only ever opt-in: an unset or malformed value leaves the
+  // demo-tenant bypass disabled.
+  const DEMO_TENANT_AUTH_ENABLED = process.env.ALLOW_DEMO_TENANT_AUTH === 'true';
+
+  if (DEMO_TENANT_AUTH_ENABLED) {
+    // console rather than server.log: this banner is emitted during boot, and
+    // pino's transport is not reliably up yet -- the same warning through
+    // server.log.warn never reached the output. A warning nobody sees is worse
+    // than no warning, because it reads as reassurance in review.
+    console.warn(
+      '[SECURITY] ALLOW_DEMO_TENANT_AUTH is enabled: any request carrying ' +
+        'X-Demo-Tenant-Id is treated as ADMIN and OWNER of that tenant without ' +
+        'credentials. This must never be set in production.'
+    );
+  }
+
   server.addHook('onRequest', async (request, _reply) => {
     // Only authenticate /api/v1/* routes
     if (!request.url.startsWith('/api/v1/')) {
       return;
+    }
+
+    // With demo auth disabled the demo inputs carry no meaning here, so drop
+    // them before anything else looks at them.
+    //
+    // This has to happen before the JWT branch below, which returns as soon as
+    // a token verifies. Handlers under /api/v1 read the header directly as
+    // `demoTenantId || user.tenantId` in ~200 places, so a request that
+    // authenticated perfectly well as one tenant could still name another and
+    // be served its data. Dropping the inputs here makes every one of those
+    // fall back to the tenant the caller actually authenticated as, without
+    // touching them.
+    if (!DEMO_TENANT_AUTH_ENABLED) {
+      delete request.headers['x-demo-tenant-id'];
+      const query = request.query as { demoTenantId?: string } | undefined;
+      if (query && query.demoTenantId !== undefined) {
+        delete query.demoTenantId;
+      }
     }
 
     const authHeader = request.headers.authorization;
@@ -104,17 +138,29 @@ async function buildServer() {
       }
     }
 
-    // Fallback to Demo Tenant ID if present and JWT failed/absent
-    const demoTenantId =
-      (request.headers['x-demo-tenant-id'] as string | undefined) ||
-      (request.query as { demoTenantId?: string } | undefined)?.demoTenantId;
+    // Demo-tenant fallback, off unless an environment explicitly opts in.
+    //
+    // This branch used to run unconditionally, and it is an authentication
+    // bypass: an `X-Demo-Tenant-Id` header (or ?demoTenantId=) with no
+    // credential of any kind was answered as ADMIN and OWNER of the named
+    // tenant. `GET /api/v1/users` returned 401 without the header and the full
+    // user list with it. Nothing about the caller was ever checked.
+    //
+    // The demo toggle in the web app is the legitimate user of this, so the
+    // path is kept and gated rather than deleted: set ALLOW_DEMO_TENANT_AUTH
+    // to 'true' in an environment that is genuinely a demo, and nowhere else.
+    if (DEMO_TENANT_AUTH_ENABLED) {
+      const demoTenantId =
+        (request.headers['x-demo-tenant-id'] as string | undefined) ||
+        (request.query as { demoTenantId?: string } | undefined)?.demoTenantId;
 
-    if (demoTenantId) {
-      request.user = {
-        tenantId: demoTenantId,
-        roles: ['ADMIN', 'OWNER'],
-      };
-      return;
+      if (demoTenantId) {
+        request.user = {
+          tenantId: demoTenantId,
+          roles: ['ADMIN', 'OWNER'],
+        };
+        return;
+      }
     }
 
     const apiKey = request.headers['x-api-key'] as string;
