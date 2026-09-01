@@ -13,9 +13,10 @@ import {
 } from 'lucide-react';
 import { useState, useRef, useEffect, useCallback } from 'react';
 
-import { apiClient, type ApiResponse } from '@/lib/api';
-
 import { BUYER_FIELD, BUYER_TEMPLATE_KEYS } from './buyer-fields';
+import { parseCSV } from './parse-csv';
+
+import { apiClient, type ApiResponse } from '@/lib/api';
 
 interface CsvImportDialogProps {
   onClose: () => void;
@@ -597,47 +598,6 @@ const TARGET_FIELDS: TargetField[] = [
     description: 'Year established',
   },
 ];
-
-function parseCSV(text: string): string[][] {
-  const lines: string[][] = [];
-  let row: string[] = [];
-  let inQuotes = false;
-  let currentValue = '';
-
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
-    const nextChar = text[i + 1];
-
-    if (char === '"') {
-      if (inQuotes && nextChar === '"') {
-        currentValue += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (char === ',' && !inQuotes) {
-      row.push(currentValue.trim());
-      currentValue = '';
-    } else if ((char === '\r' || char === '\n') && !inQuotes) {
-      if (char === '\r' && nextChar === '\n') {
-        i++;
-      }
-      row.push(currentValue.trim());
-      if (row.length > 1 || row[0] !== '') {
-        lines.push(row);
-      }
-      row = [];
-      currentValue = '';
-    } else {
-      currentValue += char;
-    }
-  }
-  if (currentValue !== '' || row.length > 0) {
-    row.push(currentValue.trim());
-    lines.push(row);
-  }
-  return lines;
-}
 
 export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
