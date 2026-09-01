@@ -127,6 +127,11 @@ export interface PreflightResult {
   /** Submissions excluded because they never passed validation. */
   invalid: number;
   mode: 'TEST' | 'LIVE';
+  /**
+   * Set when nothing can be delivered regardless of the leads themselves —
+   * today, a missing API key. Callers must refuse to send while this is set.
+   */
+  configError?: string;
 }
 
 interface SubmissionRow {
@@ -211,7 +216,9 @@ export async function preflightBulkDelivery(
   selector: BulkDeliverySelector
 ): Promise<PreflightResult> {
   const prisma = getPrismaClient();
-  const { getInsuranceLeadMode } = await import('./insurance-lead-config.js');
+  const { getInsuranceLeadMode, getAmeriquoteConfigProblem } = await import(
+    './insurance-lead-config.js'
+  );
 
   const where = buildWhere(tenantId, selector);
 
@@ -244,6 +251,7 @@ export async function preflightBulkDelivery(
   }
 
   return {
+    configError: getAmeriquoteConfigProblem() ?? undefined,
     sendable: rows.length,
     ready,
     blocked: { count: blockedIssues.length, reasons: tallyIssues(blockedIssues) },
@@ -284,6 +292,29 @@ export async function bulkDeliverInsuranceLeads(
   options: BulkDeliveryOptions = {}
 ): Promise<BulkDeliveryResult> {
   const prisma = getPrismaClient();
+
+  // Checked before a single row is read. Posting under a broken config cannot
+  // succeed for any lead, and every attempt still increments attemptCount and
+  // rewrites postStatus — so the run stops here rather than marking the batch
+  // ERROR one lead at a time.
+  const { getAmeriquoteConfigProblem } = await import('./insurance-lead-config.js');
+  const configError = getAmeriquoteConfigProblem();
+  if (configError) {
+    log.error({ msg: 'Bulk insurance lead delivery refused', tenantId, configError });
+    return {
+      attempted: 0,
+      matched: 0,
+      unmatched: 0,
+      manualReview: 0,
+      errored: 0,
+      notReady: 0,
+      remaining: 0,
+      nextCursor: null,
+      failureReasons: [{ outcome: 'ERROR', message: configError, count: 0, examples: [] }],
+      results: [],
+    };
+  }
+
   const where = buildWhere(tenantId, options);
 
   const requested = options.limit ?? DEFAULT_BATCH_SIZE;

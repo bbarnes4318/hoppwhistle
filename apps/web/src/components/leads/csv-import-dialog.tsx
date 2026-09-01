@@ -1497,6 +1497,8 @@ interface PreflightResponse {
   alreadyMatched: number;
   invalid: number;
   mode: 'TEST' | 'LIVE';
+  /** Set when nothing can be sent at all — e.g. the API key is not configured. */
+  configError?: string;
 }
 
 interface SendFailureReason {
@@ -1683,6 +1685,14 @@ function BuyerDeliveryPanel({
         </span>
       </div>
 
+      {preflight.configError && (
+        <div className="rounded-md border border-red-500/30 bg-red-500/10 p-2.5 text-[11px] text-red-300">
+          <span className="font-semibold">Delivery is not configured. </span>
+          {preflight.configError} Nothing will be sent, and no lead is spent while this is
+          unresolved.
+        </div>
+      )}
+
       {preflight.mode === 'TEST' && (
         <p className="rounded-md border border-amber-500/20 bg-amber-500/5 p-2.5 text-[11px] text-amber-300/90">
           Posts go out flagged <span className="font-mono">Test_Lead=1</span> and will not be
@@ -1795,7 +1805,7 @@ function BuyerDeliveryPanel({
 
       <button
         onClick={() => void send()}
-        disabled={sending || preflight.ready === 0}
+        disabled={sending || preflight.ready === 0 || Boolean(preflight.configError)}
         className="flex w-full items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-5 py-2 text-xs font-medium text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
       >
         {sending ? (
@@ -1803,6 +1813,8 @@ function BuyerDeliveryPanel({
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
             Sending {sentSoFar}/{preflight.ready}...
           </>
+        ) : preflight.configError ? (
+          'Cannot send — delivery is not configured'
         ) : (
           `Send ${preflight.ready} lead${preflight.ready === 1 ? '' : 's'} to buyer`
         )}
