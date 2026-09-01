@@ -38,30 +38,96 @@ export function normalizeZip(raw: string): string {
   return digits.slice(0, 5).padStart(5, '0');
 }
 
-/** Convert various date formats to MM/DD/YYYY (Ameriquote requirement) */
+/**
+ * Excel writes a date as a day count from 1899-12-30, and a CSV exported from
+ * it carries that number rather than anything date-shaped: a real vendor file
+ * arrived with birthDate "21724" for a lead born 1959-06-23. The epoch is
+ * 1899-12-30 rather than 1900-01-01 because Excel counts a 1900-02-29 that
+ * never existed; that offset is correct for every serial past 60, which any
+ * plausible birth date is by four orders of magnitude.
+ */
+const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
+const MS_PER_DAY = 86_400_000;
+
+/** Is this a date that exists — rejects 16/09/1980, 02/30/2001, year 3 BC. */
+function isRealCalendarDate(month: number, day: number, year: number): boolean {
+  if (year < 1900 || year > new Date().getFullYear()) return false;
+  if (month < 1 || month > 12) return false;
+  if (day < 1) return false;
+  // Day 0 of the next month is the last day of this one.
+  return day <= new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+/**
+ * Shape *and* calendar. The schema used to test the shape alone, which let a
+ * day-first "16/09/1980" through as month sixteen — the normalizer declines to
+ * convert it and hands back the input, and the input is already MM/DD-shaped.
+ */
+export function isValidBirthDate(value: string): boolean {
+  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value);
+  if (!match) return false;
+  return isRealCalendarDate(Number(match[1]), Number(match[2]), Number(match[3]));
+}
+
+function format(month: number, day: number, year: number): string | null {
+  if (!isRealCalendarDate(month, day, year)) return null;
+  return `${String(month).padStart(2, '0')}/${String(day).padStart(2, '0')}/${year}`;
+}
+
+/**
+ * Convert various date formats to MM/DD/YYYY (Ameriquote requirement).
+ *
+ * Anything it cannot convert comes back untouched, so the schema's refine
+ * rejects it. That is deliberate for the two shapes that used to slip through:
+ * a day-first "16/09/1980" was passed along as written and posted month 16,
+ * and a bare "1980" became 01/01/1980 — a birthday we invented, on a field the
+ * buyer prices against. Neither is recoverable downstream, so both now fail
+ * here where the row still names the lead.
+ */
 export function normalizeBirthDate(raw: string): string {
-  // If already MM/DD/YYYY
-  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) return raw;
+  const trimmed = raw.trim();
+  if (!trimmed) return raw;
 
-  // YYYY-MM-DD
-  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (isoMatch) return `${isoMatch[2]}/${isoMatch[3]}/${isoMatch[1]}`;
-
-  // M/D/YYYY or MM/D/YYYY etc
-  const slashMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (slashMatch) {
-    const m = slashMatch[1].padStart(2, '0');
-    const d = slashMatch[2].padStart(2, '0');
-    return `${m}/${d}/${slashMatch[3]}`;
+  // MM/DD/YYYY and M/D/YYYY — already the target shape, but still checked:
+  // this is where a day-first date is caught.
+  const slash = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (slash) {
+    return format(Number(slash[1]), Number(slash[2]), Number(slash[3])) ?? raw;
   }
 
-  // Fallback — try Date parsing
-  const parsed = new Date(raw);
+  // YYYY-MM-DD, with or without a time component.
+  const iso = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (iso) {
+    return format(Number(iso[2]), Number(iso[3]), Number(iso[1])) ?? raw;
+  }
+
+  if (/^\d+$/.test(trimmed)) {
+    const n = Number(trimmed);
+
+    // A bare year carries no day, and guessing one puts a wrong birthday in
+    // front of the buyer. It is also ambiguous with a serial: read as a day
+    // count, "1980" is 1905-06-02.
+    if (/^\d{4}$/.test(trimmed) && n >= 1900 && n <= new Date().getFullYear()) {
+      return raw;
+    }
+
+    // Excel serial. Bounded to dates a living person could be born on, so an
+    // unrelated number in the column is rejected rather than turned into one.
+    const asDate = new Date(EXCEL_EPOCH_MS + n * MS_PER_DAY);
+    if (!isNaN(asDate.getTime())) {
+      const year = asDate.getUTCFullYear();
+      if (year >= 1900 && asDate.getTime() <= Date.now()) {
+        return format(asDate.getUTCMonth() + 1, asDate.getUTCDate(), year) ?? raw;
+      }
+    }
+
+    return raw;
+  }
+
+  // Anything else a Date can read — "Sep 16 1980", "16-Sep-1980", "09.16.1980".
+  const parsed = new Date(trimmed);
   if (!isNaN(parsed.getTime())) {
-    const m = String(parsed.getMonth() + 1).padStart(2, '0');
-    const d = String(parsed.getDate()).padStart(2, '0');
-    const y = String(parsed.getFullYear());
-    return `${m}/${d}/${y}`;
+    return format(parsed.getMonth() + 1, parsed.getDate(), parsed.getFullYear()) ?? raw;
   }
 
   return raw; // Return as-is, validation will catch it
@@ -216,7 +282,12 @@ const baseInboundSchema = z.object({
   // Demographics
   birthDate: optionalString
     .transform(v => (v ? normalizeBirthDate(v) : undefined))
-    .refine(v => !v || /^\d{2}\/\d{2}\/\d{4}$/.test(v), 'birthDate must be MM/DD/YYYY'),
+    .refine(
+      v => !v || isValidBirthDate(v),
+      // Quoting the value is what makes this fixable: "must be MM/DD/YYYY" on
+      // 18 rows never said the column held Excel serials.
+      v => ({ message: `birthDate must be a real date in MM/DD/YYYY (got "${v}")` })
+    ),
   age: z.union([z.number(), z.string().transform(v => parseInt(v, 10))]).optional(),
 
   // Optional common fields

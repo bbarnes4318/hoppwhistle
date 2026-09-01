@@ -44,6 +44,26 @@ export function isTestMode(): boolean {
 /** Live gateway — query-string params carry the payload via GET/POST */
 const AMERIQUOTE_GATEWAY = 'https://ameriquote.leadportal.com/new_api/api.php';
 
+/**
+ * Why a send cannot run at all, or null when it can.
+ *
+ * getAmeriquoteApiKey throws, and it is only reached inside the mapper —
+ * mid-post, once per lead. An empty AMERIQUOTE_API_KEY therefore surfaced as
+ * 18 identical ERROR rows on a real run, each having spent a delivery attempt,
+ * for one thing wrong in one env file. This is the same question asked before
+ * the first post instead of during every one.
+ *
+ * Empty counts as missing: docker-compose.dev.yml passes the key through as
+ * `${AMERIQUOTE_API_KEY:-}`, so a container started without it gets the
+ * variable set to an empty string rather than left unset.
+ */
+export function getAmeriquoteConfigProblem(): string | null {
+  if (!process.env.AMERIQUOTE_API_KEY?.trim()) {
+    return 'AMERIQUOTE_API_KEY is not set on the API. No lead can be delivered until it is.';
+  }
+  return null;
+}
+
 export function getAmeriquoteApiKey(): string {
   const key = process.env.AMERIQUOTE_API_KEY;
   if (!key) {

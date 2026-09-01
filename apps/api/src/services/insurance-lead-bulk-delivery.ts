@@ -74,8 +74,20 @@ export interface BulkDeliveryLeadResult {
   outcome: 'MATCHED' | 'UNMATCHED' | 'MANUAL_REVIEW' | 'ERROR' | 'NOT_READY';
   ameriquoteLeadId?: string;
   ameriquotePrice?: string;
+  /** What the buyer said, verbatim where we have it. */
   message?: string;
+  /** Matched / Unmatched / Error / Unknown, as the gateway reported it. */
+  ameriquoteStatus?: string;
   blockers?: ReadinessIssue[];
+}
+
+/** One distinct failure reason and how many leads in the batch hit it. */
+export interface BulkDeliveryFailureReason {
+  outcome: 'UNMATCHED' | 'ERROR' | 'NOT_READY';
+  message: string;
+  count: number;
+  /** A few leads carrying this reason, so it can be chased down by phone. */
+  examples: Array<{ name: string; phone: string; submissionId: string }>;
 }
 
 export interface BulkDeliveryResult {
@@ -90,6 +102,12 @@ export interface BulkDeliveryResult {
   remaining: number;
   /** Pass back as `cursor` to send the next batch; null when the run is done. */
   nextCursor: string | null;
+  /**
+   * Every non-delivery in this batch, grouped by what the buyer actually said,
+   * worst first. The counts alone never explained a failed run — this is the
+   * part a human reads.
+   */
+  failureReasons: BulkDeliveryFailureReason[];
   results: BulkDeliveryLeadResult[];
 }
 
@@ -109,6 +127,11 @@ export interface PreflightResult {
   /** Submissions excluded because they never passed validation. */
   invalid: number;
   mode: 'TEST' | 'LIVE';
+  /**
+   * Set when nothing can be delivered regardless of the leads themselves —
+   * today, a missing API key. Callers must refuse to send while this is set.
+   */
+  configError?: string;
 }
 
 interface SubmissionRow {
@@ -193,7 +216,9 @@ export async function preflightBulkDelivery(
   selector: BulkDeliverySelector
 ): Promise<PreflightResult> {
   const prisma = getPrismaClient();
-  const { getInsuranceLeadMode } = await import('./insurance-lead-config.js');
+  const { getInsuranceLeadMode, getAmeriquoteConfigProblem } = await import(
+    './insurance-lead-config.js'
+  );
 
   const where = buildWhere(tenantId, selector);
 
@@ -226,6 +251,7 @@ export async function preflightBulkDelivery(
   }
 
   return {
+    configError: getAmeriquoteConfigProblem() ?? undefined,
     sendable: rows.length,
     ready,
     blocked: { count: blockedIssues.length, reasons: tallyIssues(blockedIssues) },
@@ -266,6 +292,29 @@ export async function bulkDeliverInsuranceLeads(
   options: BulkDeliveryOptions = {}
 ): Promise<BulkDeliveryResult> {
   const prisma = getPrismaClient();
+
+  // Checked before a single row is read. Posting under a broken config cannot
+  // succeed for any lead, and every attempt still increments attemptCount and
+  // rewrites postStatus — so the run stops here rather than marking the batch
+  // ERROR one lead at a time.
+  const { getAmeriquoteConfigProblem } = await import('./insurance-lead-config.js');
+  const configError = getAmeriquoteConfigProblem();
+  if (configError) {
+    log.error({ msg: 'Bulk insurance lead delivery refused', tenantId, configError });
+    return {
+      attempted: 0,
+      matched: 0,
+      unmatched: 0,
+      manualReview: 0,
+      errored: 0,
+      notReady: 0,
+      remaining: 0,
+      nextCursor: null,
+      failureReasons: [{ outcome: 'ERROR', message: configError, count: 0, examples: [] }],
+      results: [],
+    };
+  }
+
   const where = buildWhere(tenantId, options);
 
   const requested = options.limit ?? DEFAULT_BATCH_SIZE;
@@ -329,6 +378,7 @@ export async function bulkDeliverInsuranceLeads(
         ameriquoteLeadId: delivery.ameriquoteLeadId,
         ameriquotePrice: delivery.ameriquotePrice,
         message: delivery.errorMessage,
+        ameriquoteStatus: delivery.ameriquoteStatus,
       };
     }
   );
@@ -352,12 +402,82 @@ export async function bulkDeliverInsuranceLeads(
     notReady: results.filter(r => r.outcome === 'NOT_READY').length,
     remaining,
     nextCursor,
+    failureReasons: groupFailureReasons(results),
     results,
   };
 
-  log.info({ msg: 'Bulk insurance lead delivery finished', tenantId, ...summaryCounts(summary) });
+  log.info({
+    msg: 'Bulk insurance lead delivery finished',
+    tenantId,
+    ...summaryCounts(summary),
+    // Logged so a failing run can be diagnosed from the API logs alone,
+    // without re-reading every submission row.
+    failureReasons: summary.failureReasons.map(r => `${r.count}x ${r.outcome}: ${r.message}`),
+  });
 
   return summary;
+}
+
+/**
+ * Collapse per-lead failures into distinct reasons. Ids, phone numbers and
+ * timestamps are masked so the same complaint about twenty different leads
+ * groups as one line instead of twenty.
+ */
+function shapeReason(message: string): string {
+  return message
+    .replace(/\b\d{10,}\b/g, '<number>')
+    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, '<id>')
+    .replace(/\b\d{4}-\d{2}-\d{2}[T ][\d:.]+/g, '<timestamp>')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 300);
+}
+
+const MAX_REASON_EXAMPLES = 5;
+
+export function groupFailureReasons(
+  results: BulkDeliveryLeadResult[]
+): BulkDeliveryFailureReason[] {
+  const groups = new Map<string, BulkDeliveryFailureReason>();
+
+  for (const result of results) {
+    if (result.outcome === 'MATCHED' || result.outcome === 'MANUAL_REVIEW') continue;
+
+    // A NOT_READY lead never left the building; its blockers are the reason.
+    const messages =
+      result.outcome === 'NOT_READY' && result.blockers?.length
+        ? result.blockers.map(blocker => blocker.message)
+        : [result.message || `${result.outcome} with no reason recorded`];
+
+    // One lead can be blocked on several fields; count it under each so the
+    // list shows every field that needs fixing.
+    for (const raw of new Set(messages)) {
+      const message = shapeReason(raw);
+      const key = `${result.outcome}::${message}`;
+      const existing = groups.get(key);
+
+      if (existing) {
+        existing.count += 1;
+        if (existing.examples.length < MAX_REASON_EXAMPLES) {
+          existing.examples.push({
+            name: result.name,
+            phone: result.phone,
+            submissionId: result.submissionId,
+          });
+        }
+        continue;
+      }
+
+      groups.set(key, {
+        outcome: result.outcome,
+        message,
+        count: 1,
+        examples: [{ name: result.name, phone: result.phone, submissionId: result.submissionId }],
+      });
+    }
+  }
+
+  return [...groups.values()].sort((a, b) => b.count - a.count);
 }
 
 function summaryCounts(summary: BulkDeliveryResult) {

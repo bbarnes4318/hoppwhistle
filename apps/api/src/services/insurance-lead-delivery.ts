@@ -9,6 +9,13 @@ import { postToAmeriquote } from './insurance-lead-poster.js';
 
 const log = createServiceLogger('insurance-lead-delivery');
 
+const ACTIVITY_TITLES: Record<'MATCHED' | 'UNMATCHED' | 'MANUAL_REVIEW' | 'ERROR', string> = {
+  MATCHED: 'Ameriquote Delivery Matched',
+  UNMATCHED: 'Ameriquote Delivery Unmatched',
+  MANUAL_REVIEW: 'Ameriquote Delivery Awaiting Buyer Approval',
+  ERROR: 'Ameriquote Delivery Failed',
+};
+
 type DeliveryVertical = 'ACA' | 'FE';
 
 export interface InsuranceLeadDeliveryResult {
@@ -130,14 +137,14 @@ export async function deliverInsuranceLeadSubmission(
         tenantId,
         insuranceLeadId,
         type: 'SUBMISSION',
-        title:
-          postStatus === 'ERROR'
-            ? 'Ameriquote Delivery Failed'
-            : `Ameriquote Delivery ${postStatus === 'MATCHED' ? 'Matched' : 'Unmatched'}`,
+        // MANUAL_REVIEW used to be logged as "Unmatched" here, and an UNMATCHED
+        // logged no reason at all. Both now say what actually happened.
+        title: ACTIVITY_TITLES[postStatus],
         description:
-          postStatus === 'ERROR'
-            ? result.errorMessage || 'Ameriquote returned an error.'
-            : `Lead delivery completed in ${mode} mode with status ${result.status}.`,
+          postStatus === 'MATCHED'
+            ? `Lead delivery completed in ${mode} mode with status ${result.status}.`
+            : result.errorMessage ||
+              `Lead delivery completed in ${mode} mode with status ${result.status}.`,
         metadata: {
           submissionId,
           trigger: options.trigger || 'AUTO',

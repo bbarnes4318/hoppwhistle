@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 // Same allowance the sibling delivery suite makes: vitest types mock call
 // records as `any`, so asserting on them trips the unsafe-any rules.
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockPrisma, mockDeliver } = vi.hoisted(() => ({
   mockPrisma: {
@@ -21,9 +21,17 @@ vi.mock('../../lib/logger.js', () => ({
   createServiceLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
 }));
 
-vi.mock('../insurance-lead-config.js', () => ({
+// Only the mode is faked. getAmeriquoteConfigProblem has to be the real one:
+// what it reads from the environment is the thing under test below.
+vi.mock('../insurance-lead-config.js', async () => ({
+  ...(await vi.importActual<typeof import('../insurance-lead-config.js')>(
+    '../insurance-lead-config.js'
+  )),
   getInsuranceLeadMode: () => 'TEST',
 }));
+
+// Every case except the config suite assumes delivery is configured.
+process.env.AMERIQUOTE_API_KEY = process.env.AMERIQUOTE_API_KEY || 'test-key';
 
 vi.mock('../insurance-lead-delivery.js', () => ({
   deliverInsuranceLeadSubmission: mockDeliver,
@@ -228,5 +236,52 @@ describe('preflightBulkDelivery', () => {
     const result = await preflightBulkDelivery('tenant-1', { listId: 'list-1' });
 
     expect(result.mode).toBe('TEST');
+  });
+});
+
+describe('a broken config stops the run before it starts', () => {
+  // A real send marked 18 leads ERROR, one per lead, for one empty env var.
+  // Each had spent an attempt on a post that could not have worked.
+  const KEY = 'AMERIQUOTE_API_KEY';
+  const original = process.env[KEY];
+
+  beforeEach(() => {
+    mockPrisma.insuranceLeadSubmission.findMany.mockClear();
+    mockDeliver.mockClear();
+  });
+
+  afterEach(() => {
+    if (original === undefined) delete process.env[KEY];
+    else process.env[KEY] = original;
+  });
+
+  it.each([
+    ['unset', undefined],
+    ['empty', ''],
+    // docker-compose.dev.yml passes ${AMERIQUOTE_API_KEY:-}, so a container
+    // started without it holds an empty string, not an absent variable.
+    ['whitespace', '   '],
+  ])('refuses to post when the key is %s', async (_label, value) => {
+    if (value === undefined) delete process.env[KEY];
+    else process.env[KEY] = value;
+
+    const result = await bulkDeliverInsuranceLeads('tenant-1');
+
+    expect(result.attempted).toBe(0);
+    expect(mockDeliver).not.toHaveBeenCalled();
+    // Not a single row read: no attemptCount incremented, no postStatus rewritten.
+    expect(mockPrisma.insuranceLeadSubmission.findMany).not.toHaveBeenCalled();
+    expect(result.failureReasons[0].message).toContain(KEY);
+  });
+
+  it('sends normally once the key is there', async () => {
+    process.env[KEY] = 'a-real-key';
+    mockPrisma.insuranceLeadSubmission.findMany.mockResolvedValue([]);
+    mockPrisma.insuranceLeadSubmission.count.mockResolvedValue(0);
+
+    const result = await bulkDeliverInsuranceLeads('tenant-1');
+
+    expect(mockPrisma.insuranceLeadSubmission.findMany).toHaveBeenCalled();
+    expect(result.failureReasons).toEqual([]);
   });
 });
