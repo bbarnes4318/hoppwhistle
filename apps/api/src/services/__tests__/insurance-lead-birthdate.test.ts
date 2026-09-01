@@ -7,11 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import {
-  calculateAge,
-  isValidBirthDate,
-  normalizeBirthDate,
-} from '../insurance-lead-validator.js';
+import { calculateAge, isValidBirthDate, normalizeBirthDate } from '../insurance-lead-validator.js';
 
 /** What the schema does: normalize, then accept only a real calendar date. */
 const accepted = (raw: string) => {
