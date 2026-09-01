@@ -167,6 +167,22 @@ async function main() {
       ? `imported in the last ${since.label} (since ${since.at.toISOString()})\n`
       : 'every submission ever imported into this list — pass --since 2h for just this run\n'
   );
+  // An empty window is not "everything sold" — it is the wrong list or the
+  // wrong window, and saying so beats reporting nothing to explain.
+  if (!byStatus.length) {
+    console.log(
+      since
+        ? `No leads were imported into this list in the last ${since.label}.`
+        : 'This list has no submissions at all.'
+    );
+    if (since) {
+      console.log('\nThe run you are looking for is in another list, or further back.');
+      console.log('Run with no arguments to see your lists and when each was created,');
+      console.log('or widen the window: --since 12h, --since 3d.');
+    }
+    return;
+  }
+
   console.log('current status:');
   for (const row of byStatus.sort((a, b) => b._count - a._count)) {
     console.log(`  ${String(row._count).padStart(6)}  ${row.postStatus}`);
@@ -188,7 +204,7 @@ async function main() {
   });
 
   if (!failed.length) {
-    console.log('\nEvery submission reached the buyer. Nothing to explain.');
+    console.log('\nEvery one of these reached the buyer. Nothing to explain.');
     return;
   }
 
