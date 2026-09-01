@@ -215,6 +215,28 @@ Every attempt writes an `InsuranceLeadSubmission` row with the raw inbound
 payload, the normalized payload, the mapped outbound payload (API key redacted),
 and the buyer's raw response, plus an activity entry on the lead.
 
+### Why a lead failed
+
+The send panel groups every non-delivery in the run by what the buyer actually
+said, worst first, with a few example leads under each reason — so "18 errored"
+now reads as "14× duplicate within 90 days, 4× missing DOB" without opening a
+single lead. The same grouping is on the API response as `failureReasons`, and
+in the API log line at the end of each batch.
+
+A reason is never blank. Where Boberdoo answers with XML, an HTML error page,
+a non-2xx, an unrecognized status, or nothing at all, the message carries the
+HTTP status and a snippet of the body rather than a generic parse failure. An
+`UNMATCHED` says what it means instead of leaving the column empty.
+
+For a run that already happened, `why-are-leads-erroring.mjs` reads the same
+thing back out of the submission rows, per lead as well as grouped:
+
+```
+docker cp scripts/why-are-leads-erroring.mjs hopwhistle-api-dev:/app/why.mjs
+docker exec -u root hopwhistle-api-dev node /app/why.mjs                 # lists your lists
+docker exec -u root hopwhistle-api-dev node /app/why.mjs "FE August 2026" --all
+```
+
 ## What a live run of 5,000 leads taught us
 
 From 2026-08-25. Recorded because none of it is visible in the buyer's spec.
@@ -270,7 +292,7 @@ then `docker exec -u root hopwhistle-api-dev node /app/<file> <args>`.
 | `send-lead-list-to-buyer.mjs`          | Sends a named list to completion. `--dry-run`, `--max <n>`, `--stop-after-unmatched <n>`, `--force`.             |
 | `lead-acceptance-report.mjs`           | Splits a list into accepted / refused / recoverable; exports the recoverable to CSV in the buyer's column names. |
 | `analyze-send-run.mjs`                 | Match rate in blocks in posting order — shows a wall as a cliff.                                                 |
-| `why-are-leads-erroring.mjs`           | Groups the buyer's error responses, most common first.                                                           |
+| `why-are-leads-erroring.mjs`           | Why every undelivered lead failed — grouped and per lead. No args lists your lists; `--all` shows every lead.    |
 | `repair-manual-review-submissions.mjs` | Reclassifies accepted-for-review rows written as ERROR by an older parser.                                       |
 | `recover-manual-review-lead-ids.mjs`   | Recovers buyer lead ids from the retained raw response.                                                          |
 

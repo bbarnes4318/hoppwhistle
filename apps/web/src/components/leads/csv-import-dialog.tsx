@@ -1499,14 +1499,63 @@ interface PreflightResponse {
   mode: 'TEST' | 'LIVE';
 }
 
+interface SendFailureReason {
+  outcome: 'UNMATCHED' | 'ERROR' | 'NOT_READY';
+  message: string;
+  count: number;
+  examples: Array<{ name: string; phone: string; submissionId: string }>;
+}
+
 interface SendResponse {
   attempted: number;
   matched: number;
   unmatched: number;
+  /** Accepted by the buyer and holding for their approval — not a failure. */
+  manualReview: number;
   errored: number;
   notReady: number;
   remaining: number;
   nextCursor: string | null;
+  failureReasons: SendFailureReason[];
+}
+
+const FAILURE_LABELS: Record<SendFailureReason['outcome'], string> = {
+  ERROR: 'Rejected',
+  UNMATCHED: 'Unmatched',
+  NOT_READY: 'Held back',
+};
+
+const FAILURE_STYLES: Record<SendFailureReason['outcome'], string> = {
+  ERROR: 'border-red-500/30 bg-red-500/10 text-red-400',
+  UNMATCHED: 'border-slate-500/30 bg-slate-500/10 text-slate-400',
+  NOT_READY: 'border-amber-500/30 bg-amber-500/10 text-amber-400',
+};
+
+/**
+ * Batches are separate requests, so the same rejection arrives once per batch.
+ * Merge on outcome+message to keep one line per distinct reason for the run.
+ */
+function mergeFailureReasons(
+  running: SendFailureReason[],
+  incoming: SendFailureReason[]
+): SendFailureReason[] {
+  const merged = new Map(running.map(reason => [`${reason.outcome}::${reason.message}`, reason]));
+
+  for (const reason of incoming) {
+    const key = `${reason.outcome}::${reason.message}`;
+    const existing = merged.get(key);
+    if (existing) {
+      merged.set(key, {
+        ...existing,
+        count: existing.count + reason.count,
+        examples: [...existing.examples, ...reason.examples].slice(0, 5),
+      });
+    } else {
+      merged.set(key, { ...reason });
+    }
+  }
+
+  return [...merged.values()].sort((a, b) => b.count - a.count);
 }
 
 const SEND_BATCH_SIZE = 100;
@@ -1555,10 +1604,12 @@ function BuyerDeliveryPanel({
       attempted: 0,
       matched: 0,
       unmatched: 0,
+      manualReview: 0,
       errored: 0,
       notReady: 0,
       remaining: 0,
       nextCursor: null,
+      failureReasons: [],
     };
 
     try {
@@ -1579,9 +1630,14 @@ function BuyerDeliveryPanel({
         running.attempted += batch.attempted;
         running.matched += batch.matched;
         running.unmatched += batch.unmatched;
+        running.manualReview += batch.manualReview ?? 0;
         running.errored += batch.errored;
         running.notReady += batch.notReady;
         running.remaining = batch.remaining;
+        running.failureReasons = mergeFailureReasons(
+          running.failureReasons,
+          batch.failureReasons ?? []
+        );
         setSentSoFar(running.attempted);
         setTotals({ ...running });
 
@@ -1689,9 +1745,45 @@ function BuyerDeliveryPanel({
       )}
 
       {totals && (
-        <div className="rounded-md border border-white/5 bg-slate-900/60 p-2.5 text-[11px] text-slate-300">
-          Sent {totals.attempted} — {totals.matched} matched, {totals.unmatched} unmatched,{' '}
-          {totals.errored} errored, {totals.notReady} held back.
+        <div className="space-y-2 rounded-md border border-white/5 bg-slate-900/60 p-2.5 text-[11px] text-slate-300">
+          <div>
+            Sent {totals.attempted} — {totals.matched} matched, {totals.manualReview} awaiting buyer
+            approval, {totals.unmatched} unmatched, {totals.errored} errored, {totals.notReady} held
+            back.
+          </div>
+
+          {totals.failureReasons.length > 0 && (
+            <div className="space-y-1.5 border-t border-white/5 pt-2">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                What the buyer said
+              </div>
+              <ul className="space-y-1.5">
+                {totals.failureReasons.map(reason => (
+                  <li
+                    key={`${reason.outcome}-${reason.message}`}
+                    className="flex items-start gap-2"
+                  >
+                    <span
+                      className={`mt-px shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${FAILURE_STYLES[reason.outcome]}`}
+                    >
+                      {reason.count}× {FAILURE_LABELS[reason.outcome]}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block break-words text-slate-300">{reason.message}</span>
+                      {reason.examples.length > 0 && (
+                        <span className="block text-[10px] text-slate-500">
+                          e.g.{' '}
+                          {reason.examples
+                            .map(example => `${example.name || 'Unnamed'} ${example.phone}`)
+                            .join(', ')}
+                        </span>
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
 
