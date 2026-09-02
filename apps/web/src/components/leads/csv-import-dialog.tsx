@@ -1366,11 +1366,7 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
               )}
 
               {importedListId && vertical !== 'B2B' && (
-                <BuyerDeliveryPanel
-                  listId={importedListId}
-                  submissionIds={importedSubmissionIds}
-                  vertical={vertical}
-                />
+                <BuyerDeliveryPanel submissionIds={importedSubmissionIds} vertical={vertical} />
               )}
             </div>
           )}
@@ -1544,16 +1540,21 @@ function mergeFailureReasons(
 const SEND_BATCH_SIZE = 100;
 
 function BuyerDeliveryPanel({
-  listId,
   submissionIds,
   vertical,
 }: {
-  listId: string;
   /**
-   * The submissions this import created. Both calls below are scoped to these
-   * rather than to the list, so the panel counts and sends what was just
-   * imported and nothing else. Falls back to the list only when an import
-   * returned no ids at all, which means there is nothing new to scope to.
+   * The submissions this import created. This panel sends these and nothing
+   * else — there is deliberately no fallback to the list.
+   *
+   * A fallback used to live here: "scope to the list when the import returned
+   * no ids". It fired whenever the API did not return submissionId — an older
+   * API container is enough — and silently turned "send the 170 I just
+   * imported" into "send every held lead in the list", 12,000 of them. A post
+   * is spent whether or not the lead sells, so that is 12,000 leads burned
+   * through their 90-day duplicate window on one click.
+   *
+   * Sending nothing is always recoverable. Sending the wrong leads is not.
    */
   submissionIds: string[];
   vertical: 'ACA' | 'FE' | 'B2B';
@@ -1567,12 +1568,17 @@ function BuyerDeliveryPanel({
 
   // One selector for both calls, so what the panel counts is exactly what the
   // button sends. Two different scopes here is how "send 17" becomes "send 74".
-  const selector = useMemo(
-    () => (submissionIds.length ? { submissionIds, vertical } : { listId, vertical }),
-    [submissionIds, listId, vertical]
-  );
+  const selector = useMemo(() => ({ submissionIds, vertical }), [submissionIds, vertical]);
 
   const loadPreflight = useCallback(async () => {
+    // No ids means the import told us nothing about what it stored, and this
+    // panel has no safe way to guess. Do not call preflight, do not offer a
+    // button: an unscoped send here costs thousands of leads.
+    if (!submissionIds.length) {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
       const response = await apiClient.post<PreflightResponse>(
@@ -1587,7 +1593,7 @@ function BuyerDeliveryPanel({
     } finally {
       setLoading(false);
     }
-  }, [selector]);
+  }, [selector, submissionIds.length]);
 
   useEffect(() => {
     void loadPreflight();
@@ -1650,6 +1656,22 @@ function BuyerDeliveryPanel({
     }
   };
 
+  // Say so loudly rather than rendering nothing. A missing panel reads as
+  // "already sent" and is how the previous silent fallback went unnoticed.
+  if (!submissionIds.length) {
+    return (
+      <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-200">
+        <p className="font-semibold">Nothing to send from this import.</p>
+        <p className="mt-1 text-amber-200/80">
+          The import did not report which leads it stored, so this panel cannot tell your leads
+          apart from the rest of the list and will not send anything. The leads are saved and held —
+          nothing is lost. If the API container is older than the web one, rebuild it with{' '}
+          <span className="font-mono">./deploy.sh api web</span> and import again.
+        </p>
+      </div>
+    );
+  }
+
   if (loading && !preflight) {
     return (
       <div className="flex items-center gap-2 rounded-xl border border-white/5 bg-slate-950/40 p-4 text-xs text-slate-400">
@@ -1698,9 +1720,8 @@ function BuyerDeliveryPanel({
       )}
 
       <p className="text-[11px] text-slate-400">
-        {submissionIds.length
-          ? `Scoped to the ${submissionIds.length} lead${submissionIds.length === 1 ? '' : 's'} you just imported. Leads already held in this list are not included.`
-          : 'Scoped to every held lead in this list.'}
+        Only the {submissionIds.length} lead{submissionIds.length === 1 ? '' : 's'} you just
+        imported. Leads already held in this list are never included.
       </p>
 
       <div className="grid grid-cols-3 gap-3 border-y border-white/5 py-3 text-center">
