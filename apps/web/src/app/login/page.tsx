@@ -12,11 +12,24 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { getRedirectPath } from '@/lib/roles';
 import { persistSessionToken } from '@/lib/session-token';
 
-// Public OAuth client identifier, not a secret, but it still differs per
-// environment, so it comes from the environment rather than from source.
-// Next.js inlines NEXT_PUBLIC_* at build time; an unset value disables the
-// Google buttons instead of initialising the library with an empty client_id.
-const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? '';
+/**
+ * Public OAuth client identifier — not a secret; it ships in the page HTML.
+ *
+ * The API hardcodes this same id (apps/api/src/services/google-auth.ts) and
+ * verifies every token against it, so a sign-in only works when the two match.
+ * They are not independently configurable in practice, and treating this as
+ * environment-specific is what broke it: the value came only from
+ * NEXT_PUBLIC_GOOGLE_CLIENT_ID, nothing set it, and because Next.js inlines
+ * NEXT_PUBLIC_* at build time the buttons silently vanished on the next
+ * rebuild with no error anywhere.
+ *
+ * The default is the working id. The env var still overrides it for anyone
+ * pointing a build at a different Google project — and `||`, not `??`, because
+ * compose passes an empty string rather than leaving it undefined.
+ */
+const DEFAULT_GOOGLE_CLIENT_ID =
+  '196207148120-2navmspp2renu5cnvr06679jvhm5h12h.apps.googleusercontent.com';
+const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || DEFAULT_GOOGLE_CLIENT_ID;
 const API_BASE =
   typeof window !== 'undefined'
     ? window.location.origin
