@@ -11,7 +11,7 @@ import {
   Sparkles,
   X,
 } from 'lucide-react';
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 
 import { BUYER_FIELD, BUYER_TEMPLATE_KEYS } from './buyer-fields';
 import { parseCSV } from './parse-csv';
@@ -30,6 +30,8 @@ interface ImportResultDetail {
   success: boolean;
   name: string;
   phone: string;
+  /** Set for every lead the import stored — this is what scopes the send. */
+  submissionId?: string | null;
   errors: Array<{ path: string; message: string }> | null;
 }
 
@@ -634,6 +636,16 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
     null
   );
   const [importedListId, setImportedListId] = useState<string | null>(null);
+  /**
+   * The submissions this import created — not the list they went into.
+   *
+   * Scoping the send by listId instead swept up every held lead already in the
+   * list: importing 17 into a list holding 57 offered to send 74, and pressing
+   * the button would have posted all of them. A post is spent whether or not
+   * the lead sells, so those 57 would have burned their 90-day duplicate window
+   * for nothing.
+   */
+  const [importedSubmissionIds, setImportedSubmissionIds] = useState<string[]>([]);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -930,6 +942,11 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
 
       setImportProgress({ done: payloadLeads.length, total: payloadLeads.length });
       setImportedListId(resolvedListId ?? null);
+      setImportedSubmissionIds(
+        combined.details
+          .map(d => d.submissionId)
+          .filter((id): id is string => typeof id === 'string' && id.length > 0)
+      );
       setImportResult(combined);
       setStep(4);
     } catch (err: any) {
@@ -1349,7 +1366,11 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
               )}
 
               {importedListId && vertical !== 'B2B' && (
-                <BuyerDeliveryPanel listId={importedListId} vertical={vertical} />
+                <BuyerDeliveryPanel
+                  listId={importedListId}
+                  submissionIds={importedSubmissionIds}
+                  vertical={vertical}
+                />
               )}
             </div>
           )}
@@ -1524,9 +1545,17 @@ const SEND_BATCH_SIZE = 100;
 
 function BuyerDeliveryPanel({
   listId,
+  submissionIds,
   vertical,
 }: {
   listId: string;
+  /**
+   * The submissions this import created. Both calls below are scoped to these
+   * rather than to the list, so the panel counts and sends what was just
+   * imported and nothing else. Falls back to the list only when an import
+   * returned no ids at all, which means there is nothing new to scope to.
+   */
+  submissionIds: string[];
   vertical: 'ACA' | 'FE' | 'B2B';
 }) {
   const [preflight, setPreflight] = useState<PreflightResponse | null>(null);
@@ -1536,12 +1565,19 @@ function BuyerDeliveryPanel({
   const [totals, setTotals] = useState<SendResponse | null>(null);
   const [sentSoFar, setSentSoFar] = useState(0);
 
+  // One selector for both calls, so what the panel counts is exactly what the
+  // button sends. Two different scopes here is how "send 17" becomes "send 74".
+  const selector = useMemo(
+    () => (submissionIds.length ? { submissionIds, vertical } : { listId, vertical }),
+    [submissionIds, listId, vertical]
+  );
+
   const loadPreflight = useCallback(async () => {
     setLoading(true);
     try {
       const response = await apiClient.post<PreflightResponse>(
         '/api/v1/insurance-leads/delivery/preflight',
-        { listId, vertical }
+        selector
       );
       if (!response.error && response.data) {
         setPreflight(response.data);
@@ -1551,7 +1587,7 @@ function BuyerDeliveryPanel({
     } finally {
       setLoading(false);
     }
-  }, [listId, vertical]);
+  }, [selector]);
 
   useEffect(() => {
     void loadPreflight();
@@ -1581,7 +1617,7 @@ function BuyerDeliveryPanel({
       for (;;) {
         const response: ApiResponse<SendResponse> = await apiClient.post<SendResponse>(
           '/api/v1/insurance-leads/delivery/send',
-          { listId, vertical, limit: SEND_BATCH_SIZE, cursor: cursor ?? undefined }
+          { ...selector, limit: SEND_BATCH_SIZE, cursor: cursor ?? undefined }
         );
 
         if (response.error || !response.data) {
@@ -1660,6 +1696,12 @@ function BuyerDeliveryPanel({
           for real.
         </p>
       )}
+
+      <p className="text-[11px] text-slate-400">
+        {submissionIds.length
+          ? `Scoped to the ${submissionIds.length} lead${submissionIds.length === 1 ? '' : 's'} you just imported. Leads already held in this list are not included.`
+          : 'Scoped to every held lead in this list.'}
+      </p>
 
       <div className="grid grid-cols-3 gap-3 border-y border-white/5 py-3 text-center">
         <div>
