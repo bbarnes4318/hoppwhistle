@@ -23,7 +23,58 @@ CallerIdPool "Dograh State Caller IDs") via
 | `patches/campaign_call_dispatcher.py` | Full copy of the (already-patched) dispatcher from `/opt/dograh-patches` adding destination-state resolution, policy handling, fail-closed error, and per-run persistence of the selection decision. |
 | `import_state_caller_ids.py`          | Idempotent, dry-run-first importer into `telephony_phone_numbers`.                                                                                                                                   |
 | `pool_state_inventory.py`             | Ops report: pool by state, zero-inventory states, live in-use counts.                                                                                                                                |
+| `export_recordings.py`                | Export every recorded call in a date window: manifest CSV + the audio. Run in the container; `get-dograh-recordings.sh` in the repo root drives it.                                                  |
 | `tests/test_state_caller_id.py`       | Pure-python tests (also runnable in the container).                                                                                                                                                  |
+| `tests/test_export_recordings.py`     | Pure-python tests for the export's date window, discovery and location handling.                                                                                                                     |
+
+## Pulling recordings for a date window
+
+The AI voice calls are Dograh's, not Hopwhistle's: its own Postgres, its own
+recording storage. Nothing about them reaches the Hopwhistle DB, so a recording
+pull has to run where Dograh is.
+
+From your PC (does everything, leaves the archive in Downloads):
+
+```powershell
+.\get-dograh-recordings.ps1                          # 8/25/2026 - 9/1/2026
+.\get-dograh-recordings.ps1 2026-09-02 2026-09-08    # any other window
+```
+
+On the box:
+
+```bash
+cd /opt/hopwhistle
+./get-dograh-recordings.sh 2026-08-25 2026-09-01     # -> /root/dograh-recordings-*.tar.gz
+```
+
+Both dates are inclusive and are read as US Eastern (`DOGRAH_TZ=utc` / `-Tz utc`
+to change that). You get `manifest.csv` — one row per call with time, numbers,
+duration, outcome and the audio file it maps to — plus `audio/`.
+
+Directly, inside the container:
+
+```bash
+docker cp deploy/dograh/export_recordings.py dograh-api-1:/tmp/dograh-rec/
+docker exec dograh-api-1 python /tmp/dograh-rec/export_recordings.py \
+    --from 2026-08-25 --to 2026-09-01 --tz=-04:00 --out /tmp/dograh-rec/out
+```
+
+`--manifest-only` lists the calls without downloading; `--limit N` takes a
+sample. Exit 2 means the window matched no calls at all — the output then says
+which days Dograh does have runs for, rather than reporting a clean empty run.
+
+Recording columns move between Dograh releases, so the export discovers them:
+it takes the table carrying both a timestamp and a recording reference
+(`workflow_runs` today), and reads the location out of a text column, a JSON
+context, or a nested `{"recording": {"url": ...}}`. A location can be an http
+URL, `s3://bucket/key`, a bare key in the configured bucket, or a path on the
+container — all four are fetched. Stored presigned URLs that have since expired
+are retried against the bucket. Rows that fail carry the reason in the manifest's
+`note` column; the run exits non-zero so a partial pull is never read as a clean
+one.
+
+It only reads the database and downloads what it points at — it writes nothing
+back to Dograh.
 
 ## Policy model (kill-switchable, off by default)
 
