@@ -21,6 +21,9 @@ export default defineConfig({
       'src/app/**/buyer/_lib/*.test.ts',
       // Report helpers and story assembly for the industry-research feature.
       'src/features/industry-research/ui/__tests__/**/*.test.ts',
+      // Keeps the login page's Google client id equal to the API's. A mismatch
+      // removes the sign-in buttons with no error anywhere.
+      'src/app/login/__tests__/**/*.test.ts',
     ],
   },
 });
