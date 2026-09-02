@@ -91,9 +91,14 @@ RUN rm -rf e2e
 ARG NEXT_PUBLIC_API_URL=http://localhost:3001
 ARG NEXT_PUBLIC_WS_URL=ws://localhost:3001
 ARG NEXT_PUBLIC_API_KEY=demo-key
+# Next.js inlines NEXT_PUBLIC_* at build time, so a value that is not passed
+# through here never reaches the app however it is set at runtime. Without this
+# the login page reads an empty client id and disables the Google buttons.
+ARG NEXT_PUBLIC_GOOGLE_CLIENT_ID=
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ENV NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
 ENV NEXT_PUBLIC_API_KEY=${NEXT_PUBLIC_API_KEY}
+ENV NEXT_PUBLIC_GOOGLE_CLIENT_ID=${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
 
 # Run build
 RUN pnpm exec next build

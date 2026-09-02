@@ -184,6 +184,7 @@ services:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://hopwhistle.com}
         NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-wss://hopwhistle.com}
         NEXT_PUBLIC_API_KEY: ${API_KEY:-demo-key}
+        NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}
     container_name: hopwhistle-web-dev
     ports:
       - '3000:3000'
@@ -192,6 +193,7 @@ services:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://hopwhistle.com}
       NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-wss://hopwhistle.com}
       NEXT_PUBLIC_API_KEY: ${API_KEY:-demo-key}
+      NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}
       NEXT_PUBLIC_APP_NAME: Hopwhistle
     depends_on:
       - api

@@ -325,6 +325,7 @@ services:
         - NEXT_PUBLIC_API_URL=https://hopwhistle.com
         - NEXT_PUBLIC_WS_URL=wss://hopwhistle.com
         - NEXT_PUBLIC_API_KEY=${API_KEY:-demo-key}
+        - NEXT_PUBLIC_GOOGLE_CLIENT_ID=${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}
     ports:
       - '3000:3000'
     environment:
@@ -332,6 +333,7 @@ services:
       - NEXT_PUBLIC_API_URL=https://hopwhistle.com
       - NEXT_PUBLIC_WS_URL=wss://hopwhistle.com
       - NEXT_PUBLIC_API_KEY=${API_KEY:-demo-key}
+      - NEXT_PUBLIC_GOOGLE_CLIENT_ID=${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}
       - NEXTAUTH_URL=https://hopwhistle.com
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-change-me}
       - VAPI_API_KEY=${VAPI_API_KEY}
