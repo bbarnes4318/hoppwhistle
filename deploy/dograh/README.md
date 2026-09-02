@@ -63,6 +63,18 @@ docker exec dograh-api-1 python /tmp/dograh-rec/export_recordings.py \
 sample. Exit 2 means the window matched no calls at all — the output then says
 which days Dograh does have runs for, rather than reporting a clean empty run.
 
+Storage: Dograh keeps the audio in MinIO and stores bare keys
+(`recordings/94845.wav`) on the run. The export reads the bucket and endpoint
+from the container's env — `MINIO_ENDPOINT` there is `minio:9000`, which boto3
+rejects without a scheme, so the export adds one and addresses the bucket
+path-style; MinIO credentials are read from the `MINIO_*` names as well as the
+`AWS_*` ones. `--s3-bucket` / `--s3-endpoint` override both.
+
+A week of dialing is a few thousand calls, so the pull prints progress as it
+goes, and `get-dograh-recordings.sh` skips the tar.gz when the result is over
+4GB (`DOGRAH_ARCHIVE_LIMIT_MB`) rather than putting a second copy of it on
+`/root` — it tells you to `scp -r` the directory instead.
+
 Recording columns move between Dograh releases, so the export discovers them:
 it takes the table carrying both a timestamp and a recording reference
 (`workflow_runs` today), and reads the location out of a text column, a JSON

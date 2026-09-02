@@ -22,6 +22,7 @@ from export_recordings import (  # noqa: E402
     dig_recording,
     key_from_url,
     normalize_argv,
+    normalize_endpoint,
     parse_day,
     pick_time_column,
     rank_tables,
@@ -181,6 +182,16 @@ def test_recording_is_found_on_the_column_then_in_context():
     column, kind, location = find_recording(nested, ["recording_url"])
     assert (kind, location) == ("s3", "s3://b/r.wav")
     assert find_recording({"id": 1}, []) == (None, None, "")
+
+
+def test_bare_host_port_endpoint_gets_a_scheme():
+    # Dograh configures MinIO as host:port; boto3 rejects that outright.
+    assert normalize_endpoint("minio:9000") == "http://minio:9000"
+    assert normalize_endpoint("s3.example.com:443") == "https://s3.example.com:443"
+    # An endpoint that already has a scheme is left alone, bar a trailing slash.
+    assert normalize_endpoint("https://s3.eu.example.com") == "https://s3.eu.example.com"
+    assert normalize_endpoint("http://minio:9000/") == "http://minio:9000"
+    assert normalize_endpoint("") == ""
 
 
 def test_negative_tz_offset_survives_argparse():
