@@ -172,8 +172,11 @@ describe('bulkDeliverInsuranceLeads', () => {
       cursor: first.nextCursor!,
     });
 
+    // Asserted by content rather than by position: the cursor is AND-ed with
+    // the selector now, so a top-level `where.id` would mean the selector had
+    // been overwritten — which is the bug that posted 12,000 leads.
     const where = mockPrisma.insuranceLeadSubmission.findMany.mock.calls[1][0].where;
-    expect(where.id).toEqual({ gt: 'a' });
+    expect(JSON.stringify(where)).toContain('"gt":"a"');
   });
 
   it('caps an oversized limit rather than trying to post the whole backlog at once', async () => {
@@ -283,5 +286,83 @@ describe('a broken config stops the run before it starts', () => {
 
     expect(mockPrisma.insuranceLeadSubmission.findMany).toHaveBeenCalled();
     expect(result.failureReasons).toEqual([]);
+  });
+});
+
+/**
+ * A caller loops on `nextCursor` until it comes back null. Every request after
+ * the first carries a cursor — so if the cursor drops the caller's scope, the
+ * scope only holds for batch one and every batch after it is unbounded.
+ *
+ * That is what happened in production: a send of 241 leads posted 12,000. The
+ * object spread `{ ...sendableWhere, id: { gt: cursor } }` replaced the
+ * `id: { in: submissionIds }` filter instead of narrowing it. A post is spent
+ * whether or not the lead sells, so this destroyed leads rather than merely
+ * paginating badly.
+ */
+describe('cursor paging keeps the caller scope', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPrisma.insuranceLeadSubmission.count.mockResolvedValue(0);
+    mockPrisma.insuranceLeadSubmission.findMany.mockResolvedValue([]);
+    mockDeliver.mockResolvedValue({
+      success: true,
+      postStatus: 'MATCHED',
+      postMode: 'TEST',
+      ameriquoteStatus: 'Matched',
+      ameriquoteLeadId: '9001',
+    });
+  });
+
+  /** Every `id` constraint anywhere in a where clause, however nested. */
+  function idFilters(where: unknown): unknown[] {
+    if (!where || typeof where !== 'object') return [];
+    const node = where as Record<string, unknown>;
+    const found: unknown[] = [];
+    if (node.id !== undefined) found.push(node.id);
+    for (const value of Object.values(node)) {
+      if (Array.isArray(value)) value.forEach(v => found.push(...idFilters(v)));
+      else if (value && typeof value === 'object') found.push(...idFilters(value));
+    }
+    return found;
+  }
+
+  it('still restricts to the requested submissions on a later batch', async () => {
+    await bulkDeliverInsuranceLeads('tenant-1', {
+      submissionIds: ['s1', 's2', 's3'],
+      cursor: 's1',
+    });
+
+    const { where } = mockPrisma.insuranceLeadSubmission.findMany.mock.calls[0][0];
+    const filters = idFilters(where);
+
+    // The `in` list must survive alongside the cursor, not be replaced by it.
+    expect(filters).toContainEqual({ in: ['s1', 's2', 's3'] });
+    expect(filters).toContainEqual({ gt: 's1' });
+  });
+
+  it('counts what remains within the caller scope, not the whole tenant', async () => {
+    // A full batch is what produces a nextCursor, and therefore a count.
+    mockPrisma.insuranceLeadSubmission.findMany.mockResolvedValue([submission('s2')]);
+
+    await bulkDeliverInsuranceLeads('tenant-1', {
+      submissionIds: ['s1', 's2', 's3'],
+      limit: 1,
+    });
+
+    const { where } = mockPrisma.insuranceLeadSubmission.count.mock.calls[0][0];
+    const filters = idFilters(where);
+
+    // An overstated remaining count is what keeps a looping caller going long
+    // after its own leads are exhausted.
+    expect(filters).toContainEqual({ in: ['s1', 's2', 's3'] });
+    expect(filters).toContainEqual({ gt: 's2' });
+  });
+
+  it('scopes by tenant on every batch', async () => {
+    await bulkDeliverInsuranceLeads('tenant-1', { submissionIds: ['s1'], cursor: 's0' });
+
+    const { where } = mockPrisma.insuranceLeadSubmission.findMany.mock.calls[0][0];
+    expect(JSON.stringify(where)).toContain('tenant-1');
   });
 });
