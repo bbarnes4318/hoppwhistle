@@ -328,8 +328,19 @@ export async function bulkDeliverInsuranceLeads(
 
   // Ordered by id so the cursor is stable: ids are uuids, so `id > cursor`
   // selects exactly the rows that sort after it.
+  //
+  // The cursor is AND-ed rather than spread in. `{ ...sendableWhere, id: {...} }`
+  // *replaces* the `id: { in: submissionIds }` that buildWhere put there, so
+  // the first batch was scoped to the caller's submissions and every batch
+  // after it silently had no scope at all — a send of 241 walked the whole
+  // tenant and posted 12,000 leads. A post is spent whether or not the lead
+  // sells, so that is not a paging bug, it is a lead-destroying one.
+  const pagedWhere: Prisma.InsuranceLeadSubmissionWhereInput = options.cursor
+    ? { AND: [sendableWhere, { id: { gt: options.cursor } }] }
+    : sendableWhere;
+
   const rows = (await prisma.insuranceLeadSubmission.findMany({
-    where: options.cursor ? { ...sendableWhere, id: { gt: options.cursor } } : sendableWhere,
+    where: pagedWhere,
     select: SUBMISSION_SELECT,
     orderBy: { id: 'asc' },
     take: batchSize,
@@ -387,9 +398,13 @@ export async function bulkDeliverInsuranceLeads(
 
   // Counted past the cursor so a caller looping on `remaining` converges even
   // when every lead in the batch was held back as NOT_READY.
+  // AND-ed for the same reason as pagedWhere above: spreading the cursor in
+  // drops the caller's submission-id filter, and this count is what a looping
+  // caller trusts to decide whether to ask for another batch. Overstated here,
+  // it keeps the loop running long after the caller's own leads are exhausted.
   const remaining = nextCursor
     ? await prisma.insuranceLeadSubmission.count({
-        where: { ...sendableWhere, id: { gt: nextCursor } },
+        where: { AND: [sendableWhere, { id: { gt: nextCursor } }] },
       })
     : 0;
 
