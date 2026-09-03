@@ -94,6 +94,8 @@ export interface GatewayRow {
   priority: number;
   enabled: boolean;
   numberFormat: CarrierNumberFormat;
+  /** Digits dialed in front of the destination to identify this trunk. */
+  techPrefix?: string | null;
   circuitOpenUntil?: Date | string | null;
   consecutiveFailures?: number;
 }
@@ -143,6 +145,8 @@ export interface ResolvedGateway {
    * misconfiguration degrades to "wrong attestation" rather than "no call".
    */
   callerId: string | null;
+  /** Digits dialed in front of the destination to identify this trunk, or null. */
+  techPrefix: string | null;
   /** Set when the carrier wanted its own caller ID but had none to give. */
   callerIdUnavailable?: boolean;
   /**
@@ -178,6 +182,8 @@ function fallbackChain(callType: CallRouteType, reason: string): ResolvedChain {
       carrierCode: 'FRACTEL',
       carrierName: 'FracTEL',
       numberFormat: 'NANP11' as const,
+      // FracTEL takes the bare number; the legacy chain never prefixed one.
+      techPrefix: null,
       demoted: false,
       callerId: null,
       // FracTEL signs from its own records; the legacy chain never asserted an
@@ -294,6 +300,7 @@ export function resolveChain(
         carrierCode: step.carrierCode,
         carrierName: step.carrierName,
         numberFormat: g.numberFormat,
+        techPrefix: g.techPrefix ?? null,
         demoted: isOpen,
         callerId,
         attestation: step.attestation ?? null,
@@ -366,16 +373,29 @@ export function normalizeNanp(raw: string): string | null {
   return null;
 }
 
-export function formatForGateway(tenDigits: string, format: CarrierNumberFormat): string {
-  switch (format) {
-    case 'E164':
-      return `+1${tenDigits}`;
-    case 'NANP10':
-      return tenDigits;
-    case 'NANP11':
-    default:
-      return `1${tenDigits}`;
-  }
+/**
+ * The destination as one gateway wants it dialed.
+ *
+ * `techPrefix` goes in front of the formatted number, not in place of it: it
+ * identifies the trunk to the carrier and the country code still has to be
+ * there, so Anveo's "012345" over NANP11 produces 0123451XXXXXXXXXX — the same
+ * string the hardcoded Anveo dialplan sent. Non-digits are stripped because
+ * this lands in a SIP URI user part.
+ */
+export function formatForGateway(
+  tenDigits: string,
+  format: CarrierNumberFormat,
+  techPrefix?: string | null
+): string {
+  const number =
+    format === 'E164' ? `+1${tenDigits}` : format === 'NANP10' ? tenDigits : `1${tenDigits}`;
+
+  const prefix = (techPrefix ?? '').replace(/\D/g, '');
+  if (!prefix) return number;
+
+  // A prefixed E.164 number is not E.164 — the `+` would sit in the middle of
+  // the dial string. Carriers that want a prefix take bare digits.
+  return `${prefix}${number.replace(/^\+/, '')}`;
 }
 
 export interface BridgeOptions {
@@ -449,7 +469,7 @@ export function buildBridgeString(
       ...(g.callerId || g.attestation ? { hopwhistle_carrier: g.carrierCode } : {}),
     });
     const legPrefix = legVars ? `[${legVars}]` : '';
-    return `${legPrefix}sofia/gateway/${g.gateway}/${formatForGateway(tenDigits, g.numberFormat)}`;
+    return `${legPrefix}sofia/gateway/${g.gateway}/${formatForGateway(tenDigits, g.numberFormat, g.techPrefix)}`;
   });
 
   return `${prefix}${legs.join('|')}`;

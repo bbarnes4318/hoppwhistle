@@ -22,17 +22,43 @@ migration still name it; they carry a stale banner and are historical.
 
 ## What each carrier needs
 
-| Carrier      | Authorization                   | Where                                      |
-| ------------ | ------------------------------- | ------------------------------------------ |
-| FracTEL      | Source IP on the STATIC device  | FracTEL portal, device `576613142989`      |
-| Anveo Direct | Source IP on the outbound trunk | Anveo **Direct** portal → Configure Trunks |
-| SignalWire   | SIP credentials (registers)     | SignalWire Console → SIP credentials       |
+| Carrier      | Authorization                                | Where                                      |
+| ------------ | -------------------------------------------- | ------------------------------------------ |
+| FracTEL      | Source IP on the STATIC device               | FracTEL portal, device `576613142989`      |
+| Anveo Direct | Source IP **and** a tech prefix on each call | Anveo **Direct** portal → Configure Trunks |
+| SignalWire   | SIP credentials (registers)                  | SignalWire Console → SIP credentials       |
 
 Anveo Direct is a separate product and a separate account from the retail Anveo
 service that `anveo-adapter.ts` uses for DID provisioning
 (`https://www.anveo.com/api`). Holding retail DIDs does not give you a Direct
 termination trunk; the retail API marks Direct-only features explicitly (see
 `ANVEO.DIRECT.TRUNK.UPDATE` and the `TRUNK` call-forward type).
+
+### Tech prefixes
+
+An authorized IP is not sufficient on its own for a carrier that identifies the
+trunk by a **tech prefix** — digits dialed ahead of the destination. Anveo
+Direct does: the prefix is what selects which of your outbound trunks a call
+belongs to, so an INVITE from an authorized IP without the prefix still matches
+nothing and is refused.
+
+The prefix lives on the gateway, in `carrier_gateways.techPrefix`, and is
+prepended to whatever `numberFormat` produces:
+
+```
+techPrefix "012345" + NANP11  →  sofia/gateway/anveo/0123451XXXXXXXXXX
+techPrefix null     + NANP11  →  sofia/gateway/fractel1/1XXXXXXXXXX
+```
+
+Delete the prefix in the carrier's portal and every call on that trunk stops
+routing, so it is not a leftover to clean up. Change it there and it has to
+change here too:
+
+```
+PATCH /api/v1/carrier-routing/gateways/:gatewayId  { "techPrefix": "012345" }
+```
+
+Digits only; send `""` to clear it for a carrier that does not use one.
 
 ## Recognizing an authorization failure
 

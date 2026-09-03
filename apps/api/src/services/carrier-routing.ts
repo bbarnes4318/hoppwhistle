@@ -166,6 +166,7 @@ async function loadRoute(tenantId: string, callType: CallRouteType): Promise<Rou
       priority: true,
       enabled: true,
       numberFormat: true,
+      techPrefix: true,
       circuitOpenUntil: true,
       consecutiveFailures: true,
     },
@@ -199,6 +200,7 @@ async function loadRoute(tenantId: string, callType: CallRouteType): Promise<Rou
         priority: g.priority,
         enabled: g.enabled,
         numberFormat: g.numberFormat,
+        techPrefix: g.techPrefix,
         circuitOpenUntil: g.circuitOpenUntil,
         consecutiveFailures: g.consecutiveFailures,
       })),
@@ -370,7 +372,7 @@ export async function getInboundCarrierChain(tenantId: string | null | undefined
     bridgeTemplate: chain.gateways
       .map(
         g =>
-          `sofia/gateway/${g.gateway}/${formatForGateway(INBOUND_DEST_PLACEHOLDER, g.numberFormat)}`
+          `sofia/gateway/${g.gateway}/${formatForGateway(INBOUND_DEST_PLACEHOLDER, g.numberFormat, g.techPrefix)}`
       )
       .join('|'),
     source: chain.source,
@@ -492,6 +494,8 @@ export interface CarrierRouteView {
       priority: number;
       enabled: boolean;
       numberFormat: string;
+      /** Digits dialed ahead of the destination to identify this trunk, or null. */
+      techPrefix: string | null;
       circuitOpen: boolean;
       circuitOpenUntil: string | null;
       consecutiveFailures: number;
@@ -588,6 +592,7 @@ export async function listCarrierRoutes(tenantId: string): Promise<CarrierRouteV
               priority: g.priority,
               enabled: g.enabled,
               numberFormat: g.numberFormat as string,
+              techPrefix: g.techPrefix,
               circuitOpen: !!g.circuitOpenUntil && g.circuitOpenUntil.getTime() > now,
               circuitOpenUntil: g.circuitOpenUntil?.toISOString() ?? null,
               consecutiveFailures: g.consecutiveFailures,

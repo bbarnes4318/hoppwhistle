@@ -522,3 +522,61 @@ describe('per-carrier attestation', () => {
     expect(buildBridgeString(chain, '8005551212')).not.toContain('P-Attestation-Indicator');
   });
 });
+
+describe('tech prefix', () => {
+  it('prepends the prefix to the formatted number, keeping the country code', () => {
+    // The historical Anveo dial string was 0123451XXXXXXXXXX: prefix, then the
+    // NANP11 number. The trailing 1 is the country code, not part of the prefix.
+    expect(formatForGateway('8653173943', 'NANP11', '012345')).toBe('01234518653173943');
+  });
+
+  it('drops the plus when a prefixed carrier uses E164', () => {
+    // A `+` in the middle of a dial string is not a number any carrier parses.
+    expect(formatForGateway('8653173943', 'E164', '012345')).toBe('01234518653173943');
+  });
+
+  it('leaves the number alone when no prefix is configured', () => {
+    expect(formatForGateway('8653173943', 'NANP11', null)).toBe('18653173943');
+    expect(formatForGateway('8653173943', 'NANP11', '')).toBe('18653173943');
+    expect(formatForGateway('8653173943', 'NANP11')).toBe('18653173943');
+  });
+
+  it('dials the prefix on that gateway only', () => {
+    const chain = resolveChain(
+      route([
+        step('ANVEO', 0, [gw('anveo', { techPrefix: '012345' })]),
+        step('FRACTEL', 1, [gw('fractel1')]),
+      ]),
+      'SOFTPHONE_MANUAL',
+      NOW
+    );
+
+    const legs = buildBridgeString(chain, '8653173943')!.split('|');
+    expect(legs[0]).toContain('sofia/gateway/anveo/01234518653173943');
+    expect(legs[1]).toContain('sofia/gateway/fractel1/18653173943');
+  });
+
+  it('never prefixes the legacy fallback chain', () => {
+    const bridge = buildBridgeString(resolveChain(null, 'SOFTPHONE_MANUAL', NOW), '8653173943')!;
+
+    expect(bridge).toContain('sofia/gateway/fractel1/18653173943');
+    expect(bridge).not.toContain('012345');
+  });
+
+  it('does not put the prefix on the caller ID', () => {
+    const chain = resolveChain(
+      route([
+        step('ANVEO', 0, [gw('anveo', { techPrefix: '012345' })], {
+          callerIdStrategy: 'FIXED',
+          callerIdNumber: '18652809893',
+        }),
+      ]),
+      'SOFTPHONE_MANUAL',
+      NOW
+    );
+
+    const bridge = buildBridgeString(chain, '8653173943')!;
+    expect(bridge).toContain('origination_caller_id_number=18652809893');
+    expect(bridge).toContain('sofia/gateway/anveo/01234518653173943');
+  });
+});
