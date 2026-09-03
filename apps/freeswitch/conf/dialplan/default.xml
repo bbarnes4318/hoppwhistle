@@ -140,7 +140,7 @@
         <!-- Save the clean 10-digit number to clean_dest -->
         <action application="set" data="clean_dest=$1" inline="true"/>
         <!-- Lookup via HTTP GET API using mod_curl -->
-        <action application="set" data="lookup_response=${curl(http://api:3001/api/v1/freeswitch/lookup?did=%2b1$1)}" inline="true"/>
+        <action application="set" data="lookup_response=${curl(http://api:3001/api/v1/freeswitch/lookup?did=%2b1$1 connect-timeout 2 timeout 5)}" inline="true"/>
         <!-- Extract the destination extension if it's a 4-digit number -->
         <action application="set" data="local_ext=${regex(${lookup_response}|&quot;destination&quot;:&quot;(\d{4})&quot;|%1)}" inline="true"/>
         <action application="log" data="INFO [OUTBOUND-LOOKUP] response=${lookup_response} local_ext=${local_ext}"/>
@@ -168,10 +168,14 @@
       </condition>
       <condition field="destination_number" expression="^\+?1?([2-9]\d{9})$" break="never">
         <!-- Bounded so a slow or hung API cannot hold the caller in silence;
-             the static chain below covers the timeout. -->
-        <action application="set" data="curl_connect_timeout=2" inline="true"/>
-        <action application="set" data="curl_timeout=4" inline="true"/>
-        <action application="set" data="carrier_bridge=${curl(http://api:3001/api/v1/freeswitch/carrier-route?type=${hopwhistle_route_type}&amp;dest=$1&amp;cid=${clean_caller_id}&amp;cid_name=Hopwhistle)}" inline="true"/>
+             the static chain below covers the timeout.
+
+             mod_curl takes its bounds as arguments to the curl expansion. This
+             used to set `curl_connect_timeout` and `curl_timeout` as channel
+             variables, which mod_curl does not read — so the call was in fact
+             unbounded and this comment was describing a guard that did not
+             exist. Every blocking curl in this file now passes them inline. -->
+        <action application="set" data="carrier_bridge=${curl(http://api:3001/api/v1/freeswitch/carrier-route?type=${hopwhistle_route_type}&amp;dest=$1&amp;cid=${clean_caller_id}&amp;cid_name=Hopwhistle connect-timeout 2 timeout 4)}" inline="true"/>
       </condition>
 
       <!-- If the API did not return a usable chain — down, timed out, or
@@ -213,7 +217,11 @@
              value — a second `set` would silently replace it and stop every
              outbound recording from being uploaded. -->
         <anti-action application="log" data="ERR [OUTBOUND-PSTN] entire carrier waterfall failed for 1${clean_dest}: ${originate_disposition}"/>
-        <anti-action application="set" data="carrier_report=${curl(http://api:3001/api/v1/freeswitch/carrier-result?chain=${carrier_bridge}&amp;cause=${originate_disposition}&amp;answered=false)}" inline="true"/>
+        <!-- `carrier_bridge` is url-encoded because it is not URI-safe: it
+             carries `{}`, `[]`, `,` and `|`, none of which are legal raw in a
+             query string. Interpolated bare, curl rejects the URL outright and
+             the outcome that demotes a failing carrier is never reported. -->
+        <anti-action application="set" data="carrier_report=${curl(http://api:3001/api/v1/freeswitch/carrier-result?chain=${url_encode(${carrier_bridge})}&amp;cause=${originate_disposition}&amp;answered=false connect-timeout 2 timeout 4)}" inline="true"/>
         <anti-action application="hangup" data="NORMAL_CLEARING"/>
       </condition>
     </extension>

@@ -31,7 +31,7 @@ cd /opt/hopwhistle && git pull origin main && cd infra/docker && docker stop doc
 
 | Task                 | Command                                  |
 | -------------------- | ---------------------------------------- |
-| **SSH to server**    | `ssh root@45.32.213.201`                 |
+| **SSH to server**    | `ssh root@178.156.223.97`                |
 | **Pull latest code** | `cd /opt/hopwhistle && git pull`         |
 | **API logs**         | `docker logs docker-api-1 --tail 50`     |
 | **Web logs**         | `docker logs hopwhistle-web-1 --tail 50` |

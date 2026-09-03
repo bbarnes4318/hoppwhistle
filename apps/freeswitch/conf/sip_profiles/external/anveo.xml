@@ -1,6 +1,31 @@
 <include>
+    <!--
+      Anveo Direct outbound trunk.
+
+      Anveo authenticates this trunk by source IP, by credentials, or by both,
+      depending on how the outbound trunk is provisioned in the Anveo Direct
+      portal. Until 2026-09 this gateway carried no identity at all — no
+      username, no password, no realm — so mod_sofia substituted its built-in
+      default and every INVITE reached Anveo as user `FreeSWITCH`. Anveo's SBC
+      answered `404 Not Found ipp`: no matching IP peer, no account it could
+      attribute the call to.
+
+      The values now come from vars.xml, which the entrypoint fills from the
+      environment. Leave ANVEO_SIP_USERNAME and ANVEO_SIP_PASSWORD unset and
+      the gateway resolves to exactly what it did before; set them and the
+      trunk identifies as us and can answer a digest challenge.
+
+      register MUST stay false: Anveo Direct trunks are terminated against, not
+      registered to. That also means the source IP of this host has to be
+      authorized in the Anveo Direct portal — no gateway config substitutes
+      for that.
+    -->
     <gateway name="anveo">
-        <param name="proxy" value="sbc.anveo.com"/>
+        <param name="proxy" value="$${anveo_proxy}"/>
+        <param name="realm" value="$${anveo_realm}"/>
+        <param name="username" value="$${anveo_user}"/>
+        <param name="password" value="$${anveo_pass}"/>
+        <param name="from-domain" value="$${anveo_realm}"/>
         <param name="register" value="false"/>
         <param name="caller-id-in-from" value="true"/>
     </gateway>

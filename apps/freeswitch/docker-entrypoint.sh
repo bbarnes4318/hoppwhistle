@@ -44,6 +44,23 @@ if [ -f "$VANILLA_CONF/vars.xml" ]; then
     sed -i "s|\${OUTBOUND_CALLER_ID}|${OUTBOUND_CALLER_ID:-}|g" "$VANILLA_CONF/vars.xml"
     sed -i "s|\${FRACTEL_DEFAULT_CALLER_ID}|${FRACTEL_DEFAULT_CALLER_ID:-${OUTBOUND_CALLER_ID:-12816991120}}|g" "$VANILLA_CONF/vars.xml"
     sed -i "s|\${FREESWITCH_ESL_PASSWORD}|${FREESWITCH_ESL_PASSWORD:-ClueCon}|g" "$VANILLA_CONF/vars.xml"
+
+    # Anveo Direct. The username default reproduces what mod_sofia substituted
+    # when the gateway carried no credentials, so an unset .env leaves the
+    # trunk behaving exactly as it did before these variables existed.
+    sed -i "s|\${ANVEO_SIP_PROXY}|${ANVEO_SIP_PROXY:-sbc.anveo.com}|g" "$VANILLA_CONF/vars.xml"
+    sed -i "s|\${ANVEO_SIP_REALM}|${ANVEO_SIP_REALM:-sbc.anveo.com}|g" "$VANILLA_CONF/vars.xml"
+    sed -i "s|\${ANVEO_SIP_USERNAME}|${ANVEO_SIP_USERNAME:-FreeSWITCH}|g" "$VANILLA_CONF/vars.xml"
+    sed -i "s|\${ANVEO_SIP_PASSWORD}|${ANVEO_SIP_PASSWORD:-}|g" "$VANILLA_CONF/vars.xml"
+
+    # SignalWire. vars.xml has referenced these since the gateway was added but
+    # nothing ever substituted them, so the placeholders survived into the
+    # running config as literal text — which is why signalwire.xml carried its
+    # credentials inline instead.
+    sed -i "s|\${SIGNALWIRE_SIP_DOMAIN}|${SIGNALWIRE_SIP_DOMAIN:-pvn-shanevici.sip.signalwire.com}|g" "$VANILLA_CONF/vars.xml"
+    sed -i "s|\${SIGNALWIRE_OUTBOUND_PROXY}|${SIGNALWIRE_OUTBOUND_PROXY:-${SIGNALWIRE_SIP_DOMAIN:-}}|g" "$VANILLA_CONF/vars.xml"
+    sed -i "s|\${SIGNALWIRE_SIP_USERNAME}|${SIGNALWIRE_SIP_USERNAME:-fe}|g" "$VANILLA_CONF/vars.xml"
+    sed -i "s|\${SIGNALWIRE_SIP_PASSWORD}|${SIGNALWIRE_SIP_PASSWORD:-}|g" "$VANILLA_CONF/vars.xml"
 fi
 
 # Patch switch.conf.xml to restrict RTP ports to Docker-exposed range (16384-16484)

@@ -94,6 +94,8 @@ export interface GatewayRow {
   priority: number;
   enabled: boolean;
   numberFormat: CarrierNumberFormat;
+  /** Digits dialed in front of the destination to identify this trunk. */
+  techPrefix?: string | null;
   circuitOpenUntil?: Date | string | null;
   consecutiveFailures?: number;
 }
@@ -113,6 +115,8 @@ export interface StepRow {
   callerIdNumber?: string | null;
   /** DIDs this carrier issued, for the POOL strategy. */
   callerIdPool?: string[];
+  /** STIR/SHAKEN attestation to claim on this carrier's legs, or null for none. */
+  attestation?: string | null;
 }
 
 export interface RouteRow {
@@ -141,8 +145,15 @@ export interface ResolvedGateway {
    * misconfiguration degrades to "wrong attestation" rather than "no call".
    */
   callerId: string | null;
+  /** Digits dialed in front of the destination to identify this trunk, or null. */
+  techPrefix: string | null;
   /** Set when the carrier wanted its own caller ID but had none to give. */
   callerIdUnavailable?: boolean;
+  /**
+   * Attestation to claim on this leg via `P-Attestation-Indicator`, or null to
+   * send no header and let the carrier sign from its own records.
+   */
+  attestation: string | null;
 }
 
 export interface ResolvedChain {
@@ -171,8 +182,13 @@ function fallbackChain(callType: CallRouteType, reason: string): ResolvedChain {
       carrierCode: 'FRACTEL',
       carrierName: 'FracTEL',
       numberFormat: 'NANP11' as const,
+      // FracTEL takes the bare number; the legacy chain never prefixed one.
+      techPrefix: null,
       demoted: false,
       callerId: null,
+      // FracTEL signs from its own records; the legacy chain never asserted an
+      // attestation and this fallback must not start.
+      attestation: null,
     })),
     legTimeoutSeconds: DEFAULT_LEG_TIMEOUT_SECONDS,
     source: 'fallback',
@@ -284,8 +300,10 @@ export function resolveChain(
         carrierCode: step.carrierCode,
         carrierName: step.carrierName,
         numberFormat: g.numberFormat,
+        techPrefix: g.techPrefix ?? null,
         demoted: isOpen,
         callerId,
+        attestation: step.attestation ?? null,
         ...(unavailable ? { callerIdUnavailable: true } : {}),
       };
       (isOpen ? demoted : healthy).push(entry);
@@ -355,16 +373,29 @@ export function normalizeNanp(raw: string): string | null {
   return null;
 }
 
-export function formatForGateway(tenDigits: string, format: CarrierNumberFormat): string {
-  switch (format) {
-    case 'E164':
-      return `+1${tenDigits}`;
-    case 'NANP10':
-      return tenDigits;
-    case 'NANP11':
-    default:
-      return `1${tenDigits}`;
-  }
+/**
+ * The destination as one gateway wants it dialed.
+ *
+ * `techPrefix` goes in front of the formatted number, not in place of it: it
+ * identifies the trunk to the carrier and the country code still has to be
+ * there, so Anveo's "012345" over NANP11 produces 0123451XXXXXXXXXX — the same
+ * string the hardcoded Anveo dialplan sent. Non-digits are stripped because
+ * this lands in a SIP URI user part.
+ */
+export function formatForGateway(
+  tenDigits: string,
+  format: CarrierNumberFormat,
+  techPrefix?: string | null
+): string {
+  const number =
+    format === 'E164' ? `+1${tenDigits}` : format === 'NANP10' ? tenDigits : `1${tenDigits}`;
+
+  const prefix = (techPrefix ?? '').replace(/\D/g, '');
+  if (!prefix) return number;
+
+  // A prefixed E.164 number is not E.164 — the `+` would sit in the middle of
+  // the dial string. Carriers that want a prefix take bare digits.
+  return `${prefix}${number.replace(/^\+/, '')}`;
 }
 
 export interface BridgeOptions {
@@ -421,16 +452,24 @@ export function buildBridgeString(
     // to a number it issued, so when the call falls to the next carrier its
     // caller ID has to change with it — that is what the per-leg block is for.
     // Legs with no override inherit the `{}` caller ID unchanged.
-    const legVars = g.callerId
-      ? encodeChannelVariables({
-          origination_caller_id_number: g.callerId,
-          effective_caller_id_number: g.callerId,
-          sip_from_user: g.callerId,
-          hopwhistle_carrier: g.carrierCode,
-        })
-      : '';
+    //
+    // The attestation claim is per-leg for the same reason: it is a statement
+    // to one carrier about how to sign, and a chain that falls from a carrier
+    // that reads the header to one that signs from its own records must stop
+    // sending it rather than carry it along.
+    const legVars = encodeChannelVariables({
+      ...(g.callerId
+        ? {
+            origination_caller_id_number: g.callerId,
+            effective_caller_id_number: g.callerId,
+            sip_from_user: g.callerId,
+          }
+        : {}),
+      ...(g.attestation ? { 'sip_h_P-Attestation-Indicator': g.attestation } : {}),
+      ...(g.callerId || g.attestation ? { hopwhistle_carrier: g.carrierCode } : {}),
+    });
     const legPrefix = legVars ? `[${legVars}]` : '';
-    return `${legPrefix}sofia/gateway/${g.gateway}/${formatForGateway(tenDigits, g.numberFormat)}`;
+    return `${legPrefix}sofia/gateway/${g.gateway}/${formatForGateway(tenDigits, g.numberFormat, g.techPrefix)}`;
   });
 
   return `${prefix}${legs.join('|')}`;

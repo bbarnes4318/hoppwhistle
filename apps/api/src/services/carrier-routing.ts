@@ -111,6 +111,7 @@ async function loadRoute(tenantId: string, callType: CallRouteType): Promise<Rou
               callerIdStrategy: true,
               callerIdNumber: true,
               numberProvider: true,
+              attestation: true,
             },
           },
         },
@@ -125,9 +126,14 @@ async function loadRoute(tenantId: string, callType: CallRouteType): Promise<Rou
   // DID, so it is the authority for "can this carrier attest to this number".
   // Only ACTIVE numbers qualify — presenting a released or suspended DID is
   // exactly the kind of thing that gets traffic labeled.
+  // Only POOL carriers search for a number to present, so only their providers
+  // need loading. The predicate used to ask whether *any* step in the route was
+  // POOL, which pulled a pool for every carrier as soon as one of them wanted
+  // one.
   const poolProviders = route.steps
+    .filter(s => s.carrier.callerIdStrategy === 'POOL')
     .map(s => s.carrier.numberProvider)
-    .filter((p): p is string => !!p && route.steps.some(s => s.carrier.callerIdStrategy === 'POOL'));
+    .filter((p): p is string => !!p);
 
   const callerIdsByProvider = new Map<string, string[]>();
   if (poolProviders.length > 0) {
@@ -160,6 +166,7 @@ async function loadRoute(tenantId: string, callType: CallRouteType): Promise<Rou
       priority: true,
       enabled: true,
       numberFormat: true,
+      techPrefix: true,
       circuitOpenUntil: true,
       consecutiveFailures: true,
     },
@@ -187,11 +194,13 @@ async function loadRoute(tenantId: string, callType: CallRouteType): Promise<Rou
       callerIdPool: s.carrier.numberProvider
         ? (callerIdsByProvider.get(s.carrier.numberProvider) ?? [])
         : [],
+      attestation: s.carrier.attestation,
       gateways: (byCarrier.get(s.carrierId) ?? []).map(g => ({
         name: g.name,
         priority: g.priority,
         enabled: g.enabled,
         numberFormat: g.numberFormat,
+        techPrefix: g.techPrefix,
         circuitOpenUntil: g.circuitOpenUntil,
         consecutiveFailures: g.consecutiveFailures,
       })),
@@ -363,7 +372,7 @@ export async function getInboundCarrierChain(tenantId: string | null | undefined
     bridgeTemplate: chain.gateways
       .map(
         g =>
-          `sofia/gateway/${g.gateway}/${formatForGateway(INBOUND_DEST_PLACEHOLDER, g.numberFormat)}`
+          `sofia/gateway/${g.gateway}/${formatForGateway(INBOUND_DEST_PLACEHOLDER, g.numberFormat, g.techPrefix)}`
       )
       .join('|'),
     source: chain.source,
@@ -485,6 +494,8 @@ export interface CarrierRouteView {
       priority: number;
       enabled: boolean;
       numberFormat: string;
+      /** Digits dialed ahead of the destination to identify this trunk, or null. */
+      techPrefix: string | null;
       circuitOpen: boolean;
       circuitOpenUntil: string | null;
       consecutiveFailures: number;
@@ -581,6 +592,7 @@ export async function listCarrierRoutes(tenantId: string): Promise<CarrierRouteV
               priority: g.priority,
               enabled: g.enabled,
               numberFormat: g.numberFormat as string,
+              techPrefix: g.techPrefix,
               circuitOpen: !!g.circuitOpenUntil && g.circuitOpenUntil.getTime() > now,
               circuitOpenUntil: g.circuitOpenUntil?.toISOString() ?? null,
               consecutiveFailures: g.consecutiveFailures,

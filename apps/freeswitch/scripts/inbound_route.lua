@@ -195,12 +195,13 @@ if encoded_caller ~= "" and encoded_caller ~= "unknown" then
     lookup_url = lookup_url .. "&caller=" .. encoded_caller
 end
 
-session:setVariable("curl_connect_timeout", "3")
-session:setVariable("curl_timeout", "15")
-
+-- Bounds are passed as mod_curl arguments. Setting `curl_connect_timeout` and
+-- `curl_timeout` as channel variables, as this did before, has no effect —
+-- mod_curl does not read them — which left an inbound call blocked on this
+-- lookup for as long as the API cared to take.
 log("INFO", "Looking up route: " .. lookup_url)
 
-session:execute("curl", lookup_url)
+session:execute("curl", lookup_url .. " connect-timeout 3 timeout 15")
 
 local response_code = session:getVariable("curl_response_code") or ""
 local response_body = session:getVariable("curl_response_data") or ""

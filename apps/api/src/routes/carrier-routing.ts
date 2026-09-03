@@ -51,6 +51,11 @@ interface UpdateGatewayBody {
   enabled?: boolean;
   priority?: number;
   numberFormat?: 'E164' | 'NANP11' | 'NANP10';
+  /**
+   * Digits dialed ahead of the destination to identify this trunk to the
+   * carrier. Empty string clears it; omitting the field leaves it alone.
+   */
+  techPrefix?: string | null;
 }
 
 // An OWNER carries `admin:*`. An ADMIN reaches these two different ways —
@@ -258,13 +263,33 @@ export async function registerCarrierRoutingRoutes(server: FastifyInstance) {
           .send({ error: { code: 'NOT_FOUND', message: 'Gateway not found' } });
       }
 
-      const { enabled, priority, numberFormat } = request.body ?? {};
+      const { enabled, priority, numberFormat, techPrefix } = request.body ?? {};
+
+      // The prefix is interpolated into a SIP URI user part, so anything that is
+      // not a digit is rejected rather than silently stripped — a prefix that
+      // was accepted but altered would fail every call on this trunk and look
+      // like a carrier problem.
+      let normalizedPrefix: string | null | undefined;
+      if (techPrefix !== undefined) {
+        const raw = (techPrefix ?? '').trim();
+        if (raw !== '' && !/^\d{1,20}$/.test(raw)) {
+          return reply.code(400).send({
+            error: {
+              code: 'INVALID_TECH_PREFIX',
+              message: 'techPrefix must be 1-20 digits, or empty to clear it',
+            },
+          });
+        }
+        normalizedPrefix = raw === '' ? null : raw;
+      }
+
       const updated = await prisma.carrierGateway.update({
         where: { id: gateway.id },
         data: {
           ...(enabled !== undefined ? { enabled } : {}),
           ...(priority !== undefined ? { priority } : {}),
           ...(numberFormat !== undefined ? { numberFormat } : {}),
+          ...(normalizedPrefix !== undefined ? { techPrefix: normalizedPrefix } : {}),
         },
       });
 
@@ -275,6 +300,7 @@ export async function registerCarrierRoutingRoutes(server: FastifyInstance) {
         enabled: updated.enabled,
         priority: updated.priority,
         numberFormat: updated.numberFormat,
+        techPrefix: updated.techPrefix,
       };
     }
   );
