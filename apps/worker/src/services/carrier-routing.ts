@@ -62,6 +62,7 @@ async function loadRoute(
               callerIdStrategy: true,
               callerIdNumber: true,
               numberProvider: true,
+              attestation: true,
             },
           },
         },
@@ -133,6 +134,7 @@ async function loadRoute(
       callerIdPool: s.carrier.numberProvider
         ? (callerIdsByProvider.get(s.carrier.numberProvider) ?? [])
         : [],
+      attestation: s.carrier.attestation,
       gateways: (byCarrier.get(s.carrierId) ?? []).map(g => ({
         name: g.name,
         priority: g.priority,

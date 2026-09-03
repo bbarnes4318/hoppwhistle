@@ -467,6 +467,19 @@ model Carrier {
   /// legitimately attest to. Null means we own no numbers here.
   numberProvider String?
 
+  /// STIR/SHAKEN attestation to claim on this carrier's legs, as the value of a
+  /// `P-Attestation-Indicator` header ("A", "B" or "C").
+  ///
+  /// Some carriers sign from their own records and ignore the header; others —
+  /// Anveo Direct among them — read it to decide how to sign. The old
+  /// Anveo-only dialplan set it unconditionally, and that was lost when carrier
+  /// choice moved into the waterfall, so calls went out unattested.
+  ///
+  /// Null means send no header, which is the right default: asserting an
+  /// attestation to a carrier that derives its own is at best ignored and at
+  /// worst a claim we cannot back.
+  attestation String?
+
   @@unique([tenantId, code])
   @@index([tenantId])
   @@map("carriers")

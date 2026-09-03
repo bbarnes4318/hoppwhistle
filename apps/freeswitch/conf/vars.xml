@@ -22,6 +22,22 @@
   <X-PRE-PROCESS cmd="set" data="telnyx_user=${OUTBOUND_SIP_USER}"/>
   <X-PRE-PROCESS cmd="set" data="telnyx_pass=${OUTBOUND_SIP_PASS}"/>
 
+  <!--
+    Anveo Direct. The trunk authenticates by source IP, by credentials, or by
+    both, depending on how the outbound trunk is provisioned in the Anveo
+    Direct portal — so the gateway needs somewhere to put a username and
+    password that is not the image.
+
+    Defaults reproduce what the gateway resolved to when it carried no
+    credentials at all: mod_sofia substitutes the literal string `FreeSWITCH`
+    for a missing username, which is what Anveo saw. Setting ANVEO_SIP_USERNAME
+    and ANVEO_SIP_PASSWORD in .env is what makes the trunk identify as us.
+  -->
+  <X-PRE-PROCESS cmd="set" data="anveo_proxy=${ANVEO_SIP_PROXY}"/>
+  <X-PRE-PROCESS cmd="set" data="anveo_realm=${ANVEO_SIP_REALM}"/>
+  <X-PRE-PROCESS cmd="set" data="anveo_user=${ANVEO_SIP_USERNAME}"/>
+  <X-PRE-PROCESS cmd="set" data="anveo_pass=${ANVEO_SIP_PASSWORD}"/>
+
   <X-PRE-PROCESS cmd="set" data="outbound_caller_id=${OUTBOUND_CALLER_ID}"/>
   <X-PRE-PROCESS cmd="set" data="FRACTEL_DEFAULT_CALLER_ID=${FRACTEL_DEFAULT_CALLER_ID}"/>
   <X-PRE-PROCESS cmd="set" data="esl_password=${FREESWITCH_ESL_PASSWORD}"/>

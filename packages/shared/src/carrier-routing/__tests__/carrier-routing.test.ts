@@ -476,3 +476,49 @@ describe('health folding', () => {
     expect(u.lastSuccessAt).toEqual(NOW);
   });
 });
+
+describe('per-carrier attestation', () => {
+  it('sends no header for a carrier that has no attestation configured', () => {
+    const chain = resolveChain(route([step('FRACTEL', 0, [gw('fractel1')])]), 'SOFTPHONE_MANUAL', NOW);
+
+    expect(chain.gateways[0].attestation).toBeNull();
+    expect(buildBridgeString(chain, '8005551212')).not.toContain('P-Attestation-Indicator');
+  });
+
+  it('claims the configured attestation on that carrier only', () => {
+    const chain = resolveChain(
+      route([
+        step('ANVEO', 0, [gw('anveo')], { attestation: 'A' }),
+        step('FRACTEL', 1, [gw('fractel1')]),
+      ]),
+      'SOFTPHONE_MANUAL',
+      NOW
+    );
+
+    const legs = buildBridgeString(chain, '8005551212')!.split('|');
+    expect(legs[0]).toContain('sip_h_P-Attestation-Indicator=A');
+    // FracTEL signs from its own records; carrying the claim down the waterfall
+    // would assert an attestation to a carrier that never asked for one.
+    expect(legs[1]).not.toContain('P-Attestation-Indicator');
+  });
+
+  it('emits the attestation even when the carrier preserves the existing caller ID', () => {
+    // The per-leg block used to exist only to carry a caller-ID override, so a
+    // PRESERVE carrier had nowhere to put a header.
+    const chain = resolveChain(
+      route([step('ANVEO', 0, [gw('anveo')], { attestation: 'A', callerIdStrategy: 'PRESERVE' })]),
+      'SOFTPHONE_MANUAL',
+      NOW
+    );
+
+    expect(chain.gateways[0].callerId).toBeNull();
+    expect(buildBridgeString(chain, '8005551212')).toContain('sip_h_P-Attestation-Indicator=A');
+  });
+
+  it('never asserts an attestation on the legacy fallback chain', () => {
+    const chain = resolveChain(null, 'SOFTPHONE_MANUAL', NOW);
+
+    expect(chain.gateways.every(g => g.attestation === null)).toBe(true);
+    expect(buildBridgeString(chain, '8005551212')).not.toContain('P-Attestation-Indicator');
+  });
+});

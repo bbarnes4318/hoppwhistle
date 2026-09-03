@@ -111,6 +111,7 @@ async function loadRoute(tenantId: string, callType: CallRouteType): Promise<Rou
               callerIdStrategy: true,
               callerIdNumber: true,
               numberProvider: true,
+              attestation: true,
             },
           },
         },
@@ -125,9 +126,14 @@ async function loadRoute(tenantId: string, callType: CallRouteType): Promise<Rou
   // DID, so it is the authority for "can this carrier attest to this number".
   // Only ACTIVE numbers qualify — presenting a released or suspended DID is
   // exactly the kind of thing that gets traffic labeled.
+  // Only POOL carriers search for a number to present, so only their providers
+  // need loading. The predicate used to ask whether *any* step in the route was
+  // POOL, which pulled a pool for every carrier as soon as one of them wanted
+  // one.
   const poolProviders = route.steps
+    .filter(s => s.carrier.callerIdStrategy === 'POOL')
     .map(s => s.carrier.numberProvider)
-    .filter((p): p is string => !!p && route.steps.some(s => s.carrier.callerIdStrategy === 'POOL'));
+    .filter((p): p is string => !!p);
 
   const callerIdsByProvider = new Map<string, string[]>();
   if (poolProviders.length > 0) {
@@ -187,6 +193,7 @@ async function loadRoute(tenantId: string, callType: CallRouteType): Promise<Rou
       callerIdPool: s.carrier.numberProvider
         ? (callerIdsByProvider.get(s.carrier.numberProvider) ?? [])
         : [],
+      attestation: s.carrier.attestation,
       gateways: (byCarrier.get(s.carrierId) ?? []).map(g => ({
         name: g.name,
         priority: g.priority,

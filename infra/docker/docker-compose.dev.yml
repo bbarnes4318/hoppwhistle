@@ -309,8 +309,19 @@ services:
       OUTBOUND_CALLER_ID: ${OUTBOUND_CALLER_ID}
       FRACTEL_DEFAULT_CALLER_ID: ${FRACTEL_DEFAULT_CALLER_ID:-${OUTBOUND_CALLER_ID:-12816991120}}
       PUBLIC_IP: ${PUBLIC_IP}
+      SIP_PUBLIC_IP: ${SIP_PUBLIC_IP:-}
       SIP_DOMAIN: ${SIP_DOMAIN:-freeswitch}
       SIP_AGENT_PASSWORD: ${SIP_AGENT_PASSWORD:-1234}
+      # Carrier trunk credentials. vars.xml reads these via the entrypoint;
+      # leaving them unset keeps each gateway at the defaults it shipped with.
+      ANVEO_SIP_PROXY: ${ANVEO_SIP_PROXY:-}
+      ANVEO_SIP_REALM: ${ANVEO_SIP_REALM:-}
+      ANVEO_SIP_USERNAME: ${ANVEO_SIP_USERNAME:-}
+      ANVEO_SIP_PASSWORD: ${ANVEO_SIP_PASSWORD:-}
+      SIGNALWIRE_SIP_DOMAIN: ${SIGNALWIRE_SIP_DOMAIN:-}
+      SIGNALWIRE_OUTBOUND_PROXY: ${SIGNALWIRE_OUTBOUND_PROXY:-}
+      SIGNALWIRE_SIP_USERNAME: ${SIGNALWIRE_SIP_USERNAME:-}
+      SIGNALWIRE_SIP_PASSWORD: ${SIGNALWIRE_SIP_PASSWORD:-}
     volumes:
       - freeswitch_recordings:/recordings
       # Mount Let's Encrypt certs for WSS (on production servers only)

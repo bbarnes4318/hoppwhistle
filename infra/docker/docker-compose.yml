@@ -154,6 +154,16 @@ services:
       - OUTBOUND_CALLER_ID=${OUTBOUND_CALLER_ID}
       - FRACTEL_DEFAULT_CALLER_ID=${FRACTEL_DEFAULT_CALLER_ID:-${OUTBOUND_CALLER_ID:-12816991120}}
       - SIP_DOMAIN=${SIP_DOMAIN:-freeswitch}
+      # Carrier trunk credentials. vars.xml reads these via the entrypoint;
+      # leaving them unset keeps each gateway at the defaults it shipped with.
+      - ANVEO_SIP_PROXY=${ANVEO_SIP_PROXY:-}
+      - ANVEO_SIP_REALM=${ANVEO_SIP_REALM:-}
+      - ANVEO_SIP_USERNAME=${ANVEO_SIP_USERNAME:-}
+      - ANVEO_SIP_PASSWORD=${ANVEO_SIP_PASSWORD:-}
+      - SIGNALWIRE_SIP_DOMAIN=${SIGNALWIRE_SIP_DOMAIN:-}
+      - SIGNALWIRE_OUTBOUND_PROXY=${SIGNALWIRE_OUTBOUND_PROXY:-}
+      - SIGNALWIRE_SIP_USERNAME=${SIGNALWIRE_SIP_USERNAME:-}
+      - SIGNALWIRE_SIP_PASSWORD=${SIGNALWIRE_SIP_PASSWORD:-}
     volumes:
       - freeswitch_recordings:/recordings
       # NOTE: Do NOT mount freeswitch_conf here - config is baked into the image via Dockerfile

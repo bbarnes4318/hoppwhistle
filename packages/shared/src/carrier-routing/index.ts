@@ -113,6 +113,8 @@ export interface StepRow {
   callerIdNumber?: string | null;
   /** DIDs this carrier issued, for the POOL strategy. */
   callerIdPool?: string[];
+  /** STIR/SHAKEN attestation to claim on this carrier's legs, or null for none. */
+  attestation?: string | null;
 }
 
 export interface RouteRow {
@@ -143,6 +145,11 @@ export interface ResolvedGateway {
   callerId: string | null;
   /** Set when the carrier wanted its own caller ID but had none to give. */
   callerIdUnavailable?: boolean;
+  /**
+   * Attestation to claim on this leg via `P-Attestation-Indicator`, or null to
+   * send no header and let the carrier sign from its own records.
+   */
+  attestation: string | null;
 }
 
 export interface ResolvedChain {
@@ -173,6 +180,9 @@ function fallbackChain(callType: CallRouteType, reason: string): ResolvedChain {
       numberFormat: 'NANP11' as const,
       demoted: false,
       callerId: null,
+      // FracTEL signs from its own records; the legacy chain never asserted an
+      // attestation and this fallback must not start.
+      attestation: null,
     })),
     legTimeoutSeconds: DEFAULT_LEG_TIMEOUT_SECONDS,
     source: 'fallback',
@@ -286,6 +296,7 @@ export function resolveChain(
         numberFormat: g.numberFormat,
         demoted: isOpen,
         callerId,
+        attestation: step.attestation ?? null,
         ...(unavailable ? { callerIdUnavailable: true } : {}),
       };
       (isOpen ? demoted : healthy).push(entry);
@@ -421,14 +432,22 @@ export function buildBridgeString(
     // to a number it issued, so when the call falls to the next carrier its
     // caller ID has to change with it — that is what the per-leg block is for.
     // Legs with no override inherit the `{}` caller ID unchanged.
-    const legVars = g.callerId
-      ? encodeChannelVariables({
-          origination_caller_id_number: g.callerId,
-          effective_caller_id_number: g.callerId,
-          sip_from_user: g.callerId,
-          hopwhistle_carrier: g.carrierCode,
-        })
-      : '';
+    //
+    // The attestation claim is per-leg for the same reason: it is a statement
+    // to one carrier about how to sign, and a chain that falls from a carrier
+    // that reads the header to one that signs from its own records must stop
+    // sending it rather than carry it along.
+    const legVars = encodeChannelVariables({
+      ...(g.callerId
+        ? {
+            origination_caller_id_number: g.callerId,
+            effective_caller_id_number: g.callerId,
+            sip_from_user: g.callerId,
+          }
+        : {}),
+      ...(g.attestation ? { 'sip_h_P-Attestation-Indicator': g.attestation } : {}),
+      ...(g.callerId || g.attestation ? { hopwhistle_carrier: g.carrierCode } : {}),
+    });
     const legPrefix = legVars ? `[${legVars}]` : '';
     return `${legPrefix}sofia/gateway/${g.gateway}/${formatForGateway(tenDigits, g.numberFormat)}`;
   });

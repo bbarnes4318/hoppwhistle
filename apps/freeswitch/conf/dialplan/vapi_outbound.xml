@@ -60,9 +60,10 @@
         <action application="set" data="effective_caller_id_number=19138999080"/>
         <action application="set" data="origination_caller_id_number=19138999080"/>
 
-        <action application="set" data="curl_connect_timeout=2" inline="true"/>
-        <action application="set" data="curl_timeout=4" inline="true"/>
-        <action application="set" data="carrier_bridge=${curl(http://api:3001/api/v1/freeswitch/carrier-route?type=DOGRAH_AI&amp;dest=${vapi_dest}&amp;cid=19138999080&amp;cid_name=PVN%20LLC)}" inline="true"/>
+        <!-- Bounds are mod_curl arguments; the `curl_connect_timeout` /
+             `curl_timeout` channel variables set here previously are not read
+             by mod_curl, so this call was unbounded. -->
+        <action application="set" data="carrier_bridge=${curl(http://api:3001/api/v1/freeswitch/carrier-route?type=DOGRAH_AI&amp;dest=${vapi_dest}&amp;cid=19138999080&amp;cid_name=PVN%20LLC connect-timeout 2 timeout 4)}" inline="true"/>
       </condition>
 
       <!-- Static fallback for an API that is down, slow, or answered with an
@@ -76,7 +77,9 @@
         <action application="bridge" data="${carrier_bridge}"/>
         <!-- Only reached when every gateway in the chain refused. -->
         <action application="log" data="ERR [VAPI] entire carrier waterfall failed for 1${vapi_dest}: ${originate_disposition}"/>
-        <action application="set" data="carrier_report=${curl(http://api:3001/api/v1/freeswitch/carrier-result?chain=${carrier_bridge}&amp;cause=${originate_disposition}&amp;answered=false)}" inline="true"/>
+        <!-- url-encoded: the bridge string carries `{}`, `[]`, `,` and `|`,
+             which curl rejects raw in a query string. -->
+        <action application="set" data="carrier_report=${curl(http://api:3001/api/v1/freeswitch/carrier-result?chain=${url_encode(${carrier_bridge})}&amp;cause=${originate_disposition}&amp;answered=false connect-timeout 2 timeout 4)}" inline="true"/>
       </condition>
     </extension>
 
