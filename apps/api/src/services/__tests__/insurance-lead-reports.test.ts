@@ -173,7 +173,9 @@ describe('the delivery report', () => {
         }),
       ])
       // The accepted-price read.
-      .mockResolvedValueOnce([{ ameriquotePrice: '18.50' }, { ameriquotePrice: '12.00' }]);
+      .mockResolvedValueOnce([{ ameriquotePrice: '18.50' }, { ameriquotePrice: '12.00' }])
+      // The reason-grouping read over the whole range.
+      .mockResolvedValueOnce([]);
     mockPrisma.insuranceLeadSubmission.count.mockResolvedValue(2);
     mockPrisma.insuranceLeadSubmission.groupBy.mockResolvedValue([
       { postStatus: 'MATCHED', _count: { _all: 40 } },
@@ -205,6 +207,7 @@ describe('the delivery report', () => {
           ameriquotePrice: null,
         }),
       ])
+      .mockResolvedValueOnce([])
       .mockResolvedValueOnce([]);
     mockPrisma.insuranceLeadSubmission.count.mockResolvedValue(1);
     mockPrisma.insuranceLeadSubmission.groupBy.mockResolvedValue([
@@ -221,23 +224,53 @@ describe('the delivery report', () => {
     expect(report.rows[0].reason).toBeTruthy();
   });
 
-  it('groups the refusals by reason, worst first', async () => {
+  it('groups the refusals by reason over the whole range, not just the page', async () => {
+    // A page-scoped breakdown put a "105 not accepted" tile above a list of
+    // reasons summing to 59 — two numbers on one screen that cannot both be
+    // right. The page here holds one row; the range holds four.
     mockPrisma.insuranceLeadSubmission.findMany
+      .mockResolvedValueOnce([submissionRow({ id: 'a', postStatus: 'ERROR' })])
+      .mockResolvedValueOnce([])
       .mockResolvedValueOnce([
         submissionRow({ id: 'a', postStatus: 'ERROR', ameriquoteErrorMessage: 'On the DNC list' }),
         submissionRow({ id: 'b', postStatus: 'ERROR', ameriquoteErrorMessage: 'On the DNC list' }),
         submissionRow({ id: 'c', postStatus: 'ERROR', ameriquoteErrorMessage: 'Duplicate lead' }),
         submissionRow({ id: 'd', postStatus: 'MATCHED' }),
-      ])
-      .mockResolvedValueOnce([]);
+      ]);
     mockPrisma.insuranceLeadSubmission.count.mockResolvedValue(4);
     mockPrisma.insuranceLeadSubmission.groupBy.mockResolvedValue([]);
 
-    const report = await getDeliveryReport('tenant-1', {});
+    const report = await getDeliveryReport('tenant-1', { limit: 1 });
 
+    expect(report.rows).toHaveLength(1);
     expect(report.reasons[0].reason).toBe('On the DNC list');
     expect(report.reasons[0].count).toBe(2);
+    // An acceptance is never a "reason not accepted".
     expect(report.reasons.map(r => r.reason)).not.toContain('Accepted — Ameriquote lead id 987654');
+    // Three refusals in the range; only one of them is on the page.
+    expect(report.reasons.reduce((sum, r) => sum + r.count, 0)).toBe(3);
+  });
+
+  it('does not report accepted revenue when narrowed to the refusals', async () => {
+    // `{ ...where, postStatus }` REPLACES the outcome filter's postStatus
+    // instead of narrowing it, so "Accepted 0" sat beside a four-figure
+    // accepted value. The accepted-price read has to be ANDed.
+    mockPrisma.insuranceLeadSubmission.findMany.mockResolvedValue([]);
+    mockPrisma.insuranceLeadSubmission.count.mockResolvedValue(0);
+    mockPrisma.insuranceLeadSubmission.groupBy.mockResolvedValue([]);
+
+    const report = await getDeliveryReport('tenant-1', { outcome: 'NOT_ACCEPTED' });
+
+    const priceRead = mockPrisma.insuranceLeadSubmission.findMany.mock.calls[1] as unknown as [
+      { where: { AND: Array<{ postStatus?: unknown }> } },
+    ];
+    const clauses = priceRead[0].where.AND;
+    // Both survive: the caller's refusal filter AND the accepted-only filter.
+    // Together they match nothing, which is the correct $0.00.
+    expect(clauses).toHaveLength(2);
+    expect(clauses[0].postStatus).toEqual({ in: ['UNMATCHED', 'ERROR'] });
+    expect(clauses[1].postStatus).toEqual({ in: ['MATCHED', 'MANUAL_REVIEW'] });
+    expect(report.summary.acceptedRevenue).toBe('0.00');
   });
 
   it('reads a bare end date as the end of that day', async () => {

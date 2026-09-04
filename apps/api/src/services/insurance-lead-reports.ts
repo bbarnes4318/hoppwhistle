@@ -304,37 +304,51 @@ function buildWhere(
 
 const MAX_REASON_EXAMPLES = 5;
 
+interface ReasonRow extends ReasonSource {
+  id: string;
+  insuranceLead: {
+    firstName: string | null;
+    lastName: string | null;
+    fullName: string | null;
+    phone: string;
+  };
+}
+
 /**
  * Group the non-acceptances by the reason given, worst first. A run that
  * reports "412 not accepted" and nothing else cannot be acted on; this is the
  * part that says *why*, and how many leads each cause cost.
+ *
+ * Counts the whole filtered range so it reconciles with the tiles above it.
  */
-function groupReasons(rows: DeliveryReportRow[]): DeliveryReportReason[] {
+export function groupReasons(rows: ReasonRow[]): DeliveryReportReason[] {
   const groups = new Map<string, DeliveryReportReason>();
 
   for (const row of rows) {
-    if (row.outcome === 'ACCEPTED') continue;
+    const outcome = outcomeForPostStatus(row.postStatus);
+    if (outcome === 'ACCEPTED') continue;
 
-    const key = `${row.postStatus}::${row.reason}`;
+    const reason = reasonForSubmission(row);
+    const key = `${row.postStatus}::${reason}`;
+    const example = {
+      name: displayName(row.insuranceLead),
+      phone: row.insuranceLead.phone,
+      submissionId: row.id,
+    };
+
     const existing = groups.get(key);
     if (existing) {
       existing.count += 1;
-      if (existing.examples.length < MAX_REASON_EXAMPLES) {
-        existing.examples.push({
-          name: row.leadName,
-          phone: row.phone,
-          submissionId: row.submissionId,
-        });
-      }
+      if (existing.examples.length < MAX_REASON_EXAMPLES) existing.examples.push(example);
       continue;
     }
 
     groups.set(key, {
-      outcome: row.outcome,
+      outcome,
       postStatus: row.postStatus,
-      reason: row.reason,
+      reason,
       count: 1,
-      examples: [{ name: row.leadName, phone: row.phone, submissionId: row.submissionId }],
+      examples: [example],
     });
   }
 
@@ -374,7 +388,7 @@ export async function getDeliveryReport(
   const limit = Math.min(Math.max(1, filters.limit || 100), MAX_REPORT_ROWS);
   const skip = (page - 1) * limit;
 
-  const [submissions, total, statusGroups, acceptedPrices] = await Promise.all([
+  const [submissions, total, statusGroups, acceptedPrices, reasonRows] = await Promise.all([
     prisma.insuranceLeadSubmission.findMany({
       where,
       orderBy: [{ receivedAt: 'desc' }],
@@ -418,8 +432,33 @@ export async function getDeliveryReport(
       _count: { _all: true },
     }),
     prisma.insuranceLeadSubmission.findMany({
-      where: { ...where, postStatus: { in: [...ACCEPTED_STATUSES] } },
+      // AND, never spread. `{ ...where, postStatus }` REPLACES the postStatus
+      // the outcome filter put there, so a report narrowed to the refusals
+      // still reported every accepted lead's revenue — "Accepted 0" sitting
+      // next to a four-figure accepted value.
+      where: { AND: [where, { postStatus: { in: [...ACCEPTED_STATUSES] } }] },
       select: { ameriquotePrice: true },
+    }),
+    // Reason grouping reads the whole filtered range, not the page. The tiles
+    // count the range, so a page-scoped breakdown put two numbers on screen
+    // that could not be reconciled — 105 refusals above a list summing to 59.
+    prisma.insuranceLeadSubmission.findMany({
+      where,
+      orderBy: [{ receivedAt: 'desc' }],
+      take: MAX_REPORT_ROWS,
+      select: {
+        id: true,
+        postStatus: true,
+        validationStatus: true,
+        validationErrors: true,
+        ameriquoteResponseStatus: true,
+        ameriquoteErrorMessage: true,
+        ameriquoteLeadId: true,
+        attemptCount: true,
+        insuranceLead: {
+          select: { firstName: true, lastName: true, fullName: true, phone: true },
+        },
+      },
     }),
   ]);
 
@@ -489,7 +528,7 @@ export async function getDeliveryReport(
         .toFixed(2),
       acceptanceRate: sent > 0 ? accepted / sent : null,
     },
-    reasons: groupReasons(rows),
+    reasons: groupReasons(reasonRows),
     rows,
     meta: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
   };

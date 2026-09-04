@@ -37,6 +37,9 @@ import { cn } from '@/lib/utils';
 
 const PAGE_SIZE = 100;
 
+/** How many distinct reasons the panel lists before it summarises the tail. */
+const TOP_REASONS = 8;
+
 function pastDate(daysAgo: number): string {
   const d = new Date();
   d.setDate(d.getDate() - daysAgo);
@@ -419,10 +422,10 @@ export default function CrmReportsPage() {
       {report && report.reasons.length > 0 && (
         <div className="rounded-lg border border-border/40 bg-card">
           <div className="border-b border-border/20 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Why leads were not accepted — this page, most common first
+            Why leads were not accepted — whole date range, most common first
           </div>
           <div className="divide-y divide-border/20">
-            {report.reasons.slice(0, 8).map(reason => (
+            {report.reasons.slice(0, TOP_REASONS).map(reason => (
               <div
                 key={`${reason.postStatus}-${reason.reason}`}
                 className="flex items-start gap-3 px-3 py-2"
@@ -447,6 +450,19 @@ export default function CrmReportsPage() {
               </div>
             ))}
           </div>
+          {report.reasons.length > TOP_REASONS && (
+            /* Without this the visible counts sum to less than the tiles and
+               the arithmetic looks broken. Say what is not shown. */
+            <div className="border-t border-border/20 px-3 py-2 text-[11px] text-muted-foreground">
+              +{report.reasons.length - TOP_REASONS} more{' '}
+              {report.reasons.length - TOP_REASONS === 1 ? 'reason' : 'reasons'} covering{' '}
+              {report.reasons
+                .slice(TOP_REASONS)
+                .reduce((sum, r) => sum + r.count, 0)
+                .toLocaleString()}{' '}
+              more leads — all of them are in the CSV export.
+            </div>
+          )}
         </div>
       )}
 
