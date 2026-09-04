@@ -334,18 +334,30 @@ describe('CSV rendering', () => {
         ameriquoteStatus: 'Unmatched',
         ameriquoteLeadId: null,
         ameriquotePrice: null,
+        trustedFormUrl: 'https://cert.trustedform.com/xyz',
+        leadidToken: 'LEADID-1',
+        recordingUrl: null,
         reason: 'Unmatched — no buyer filter matched',
       },
     ]);
 
     const [header, row] = csv.split('\r\n');
     expect(header.startsWith('Outcome,Reason,')).toBe(true);
+    // A refusal you cannot tie back to a consent certificate is hard to dispute.
+    expect(header).toContain('TrustedForm Cert URL');
+    expect(row).toContain('https://cert.trustedform.com/xyz');
     expect(row.startsWith('Not accepted,Unmatched — no buyer filter matched,Dana Reyes,')).toBe(
       true
     );
   });
 
-  it('carries the last delivery outcome onto a CRM lead export', () => {
+  it('carries the whole record, the compliance artifacts and the rejection reason', () => {
+    // This export was originally built from the CRM grid's own read, so it
+    // shipped the dozen columns the grid renders and silently dropped the ones
+    // people export FOR — the TrustedForm certificate that proves consent, and
+    // the reason Ameriquote refused the lead. A compliance artifact missing
+    // from a compliance export is invisible until someone needs it in a
+    // dispute, which is exactly the wrong moment to find out.
     const csv = leadsToCsv([
       {
         id: 'lead-1',
@@ -354,24 +366,91 @@ describe('CSV rendering', () => {
         lastName: 'Reyes',
         fullName: null,
         phone: '5551234567',
-        email: null,
+        email: 'dana@example.com',
+        address: '12 Oak St',
+        city: 'Miami',
+        county: 'Miami-Dade',
         state: 'FL',
         zipCode: '33101',
-        source: null,
+        birthDate: '04/12/1958',
+        age: 68,
+        gender: 'F',
+        source: 'csv-import',
         status: 'NEW',
-        leadStage: null,
+        leadStage: 'Working',
+        priority: 'HIGH',
+        doNotCall: false,
+        lastContactedAt: null,
         nextFollowUpAt: null,
-        createdAt: '2026-09-01T12:00:00.000Z',
-        latestSubmission: {
-          id: 'sub-1',
-          receivedAt: '2026-09-01T12:00:00.000Z',
-          validationStatus: 'VALID',
-          postStatus: 'MANUAL_REVIEW',
-          postMode: 'LIVE',
-          ameriquoteResponseStatus: 'ManualReview',
-          source: null,
-        },
+        createdAt: new Date('2026-09-01T12:00:00.000Z'),
+        updatedAt: new Date('2026-09-02T12:00:00.000Z'),
+        trustedFormUrl: 'https://cert.trustedform.com/abc123def456',
+        leadidToken: 'LEADID-9F2A',
+        consentLanguage: 'By clicking you agree to be contacted...',
+        recordingUrl: 'https://recordings.example.com/r/1.wav',
+        smoker: 'N',
+        faceAmount: '10000',
+        lifeType: 'Whole',
+        riskType: 'Standard',
+        carrier: 'Mutual',
+        product: 'FE Level',
+        monthlyPremium: '48.20',
+        coverageAmount: '10000',
+        company: null,
+        repName: null,
+        industry: null,
+        revenue: null,
+        yearEstablished: null,
+        notes: 'Call after 5pm',
+        tags: ['warm', 'callback'],
+        list: { name: 'FE Aged 30-60' },
+        assignedTo: { firstName: 'Sam', lastName: 'Vega', email: 'sam@example.com' },
+        submissions: [
+          {
+            postStatus: 'ERROR',
+            postMode: 'LIVE',
+            validationStatus: 'VALID',
+            validationErrors: null,
+            ameriquoteResponseStatus: 'Error',
+            ameriquoteLeadId: null,
+            ameriquotePrice: null,
+            ameriquoteErrorMessage: 'Filter failure: Primary_Phone is on the DNC list',
+            attemptCount: 1,
+            postedAt: new Date('2026-09-01T12:00:05.000Z'),
+            receivedAt: new Date('2026-09-01T12:00:00.000Z'),
+          },
+        ],
       },
+    ] as unknown as Parameters<typeof leadsToCsv>[0]);
+
+    const [header, row] = csv.split('\r\n');
+
+    for (const column of [
+      'TrustedForm Cert URL',
+      'LeadiD Token',
+      'Consent Language',
+      'Recording URL',
+      'Delivery Reason',
+      'County',
+      'Birth Date',
+      'Face Amount',
+      'Monthly Premium',
+      'Notes',
+      'Tags',
+    ]) {
+      expect(header).toContain(column);
+    }
+
+    expect(row).toContain('https://cert.trustedform.com/abc123def456');
+    expect(row).toContain('LEADID-9F2A');
+    expect(row).toContain('Filter failure: Primary_Phone is on the DNC list');
+    expect(row).toContain('Not accepted');
+    expect(row).toContain('Sam Vega');
+    expect(row).toContain('warm; callback');
+  });
+
+  it('says a lead was never sent rather than leaving the reason blank', () => {
+    const csv = leadsToCsv([
       {
         id: 'lead-2',
         vertical: 'ACA',
@@ -380,20 +459,53 @@ describe('CSV rendering', () => {
         fullName: 'Never Sent',
         phone: '5559876543',
         email: null,
+        address: null,
+        city: null,
+        county: null,
         state: null,
         zipCode: null,
+        birthDate: null,
+        age: null,
+        gender: null,
         source: null,
         status: 'NEW',
         leadStage: null,
+        priority: null,
+        doNotCall: true,
+        lastContactedAt: null,
         nextFollowUpAt: null,
-        createdAt: '2026-09-02T12:00:00.000Z',
-        latestSubmission: null,
+        createdAt: new Date('2026-09-02T12:00:00.000Z'),
+        updatedAt: new Date('2026-09-02T12:00:00.000Z'),
+        trustedFormUrl: null,
+        leadidToken: null,
+        consentLanguage: null,
+        recordingUrl: null,
+        smoker: null,
+        faceAmount: null,
+        lifeType: null,
+        riskType: null,
+        carrier: null,
+        product: null,
+        monthlyPremium: null,
+        coverageAmount: null,
+        company: null,
+        repName: null,
+        industry: null,
+        revenue: null,
+        yearEstablished: null,
+        notes: null,
+        tags: [],
+        list: null,
+        assignedTo: null,
+        submissions: [],
       },
-    ]);
+    ] as unknown as Parameters<typeof leadsToCsv>[0]);
 
-    const rows = csv.split('\r\n');
-    expect(rows[1]).toContain('Accepted');
-    expect(rows[2]).toContain('Not sent');
+    const row = csv.split('\r\n')[1];
+    expect(row).toContain('Not sent');
+    expect(row).toContain('Never sent — no delivery attempt recorded');
+    // doNotCall has to read as a word, not "true"/"false" in a spreadsheet.
+    expect(row).toContain('YES');
   });
 });
 

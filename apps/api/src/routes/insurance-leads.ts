@@ -69,13 +69,6 @@ function parseDeliverySelector(body: {
  * Query-string booleans arrive as strings, and `Boolean('false')` is true. Only
  * an affirmative spelling counts, so `?deliver=false` does not post a lead.
  */
-/**
- * A CSV export covers the whole filtered set, so it deliberately skips the
- * page size the grid uses. This ceiling is what keeps "export everything" from
- * meaning "stream the entire tenant into one response".
- */
-const MAX_EXPORT_ROWS = 50000;
-
 type ReportOutcome = 'ACCEPTED' | 'NOT_ACCEPTED' | 'NOT_SENT';
 
 /**
@@ -480,14 +473,45 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
       return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
     }
 
-    const { getLeads } = await import('../services/insurance-lead-service.js');
     const q = request.query;
     const wantsCsv = q.format?.toLowerCase() === 'csv';
 
+    // An export reads the FULL record, not the grid's narrow projection. The
+    // grid selects the dozen columns it renders; exporting from that read is
+    // what dropped the TrustedForm certificate and the rejection reason.
+    if (wantsCsv) {
+      const { getLeadExportRows, leadsToCsv, reportFilename } = await import(
+        '../services/insurance-lead-reports.js'
+      );
+
+      const rows = await getLeadExportRows(tenantId, {
+        vertical: q.vertical?.toUpperCase() as 'ACA' | 'FE' | 'B2B' | undefined,
+        validationStatus: q.validationStatus?.toUpperCase() as 'VALID' | 'INVALID' | undefined,
+        postStatus: q.postStatus?.toUpperCase(),
+        postMode: q.postMode?.toUpperCase() as 'TEST' | 'LIVE' | undefined,
+        search: q.search,
+        startDate: q.startDate,
+        endDate: q.endDate,
+        status: q.status,
+        leadStage: q.leadStage,
+        followUp: q.followUp,
+        listId: q.listId,
+      });
+
+      return reply
+        .type('text/csv; charset=utf-8')
+        .header(
+          'Content-Disposition',
+          `attachment; filename="${reportFilename('crm_leads', q.startDate, q.endDate)}"`
+        )
+        .send(leadsToCsv(rows));
+    }
+
+    const { getLeads } = await import('../services/insurance-lead-service.js');
+
     const result = await getLeads(tenantId, {
-      // An export covers the whole filtered set, not the page on screen.
-      page: wantsCsv ? 1 : q.page ? parseInt(q.page) : undefined,
-      limit: wantsCsv ? MAX_EXPORT_ROWS : q.limit ? parseInt(q.limit) : undefined,
+      page: q.page ? parseInt(q.page) : undefined,
+      limit: q.limit ? parseInt(q.limit) : undefined,
       vertical: q.vertical?.toUpperCase() as 'ACA' | 'FE' | 'B2B' | undefined,
       validationStatus: q.validationStatus?.toUpperCase() as 'VALID' | 'INVALID' | undefined,
       postStatus: q.postStatus?.toUpperCase(),
@@ -500,17 +524,6 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
       followUp: q.followUp,
       listId: q.listId,
     });
-
-    if (wantsCsv) {
-      const { leadsToCsv, reportFilename } = await import('../services/insurance-lead-reports.js');
-      return reply
-        .type('text/csv; charset=utf-8')
-        .header(
-          'Content-Disposition',
-          `attachment; filename="${reportFilename('crm_leads', q.startDate, q.endDate)}"`
-        )
-        .send(leadsToCsv(result.data));
-    }
 
     return result;
   });
