@@ -22,6 +22,15 @@ export interface ApiResponse<T> {
   };
 }
 
+export interface RequestOptions {
+  /**
+   * `text` hands back the raw body untouched. CSV exports need this: a file
+   * whose first cell happens to be a number would otherwise be JSON-parsed
+   * into a number and the rest of the download thrown away.
+   */
+  responseType?: 'json' | 'text';
+}
+
 class ApiClient {
   private baseUrl: string;
   private token?: string;
@@ -64,7 +73,11 @@ class ApiClient {
     this.apiKey = apiKey;
   }
 
-  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<ApiResponse<T>> {
+  private async request<T>(
+    endpoint: string,
+    options: RequestInit = {},
+    requestOptions: RequestOptions = {}
+  ): Promise<ApiResponse<T>> {
     // Check for demo mode
     const demoMode = localStorage.getItem('demoMode') === 'true';
     const demoTenantId = localStorage.getItem('demoTenantId');
@@ -114,10 +127,14 @@ class ApiClient {
       let data: any = null;
       const text = await response.text();
       if (text) {
-        try {
-          data = JSON.parse(text);
-        } catch (e) {
+        if (requestOptions.responseType === 'text' && response.ok) {
           data = text;
+        } else {
+          try {
+            data = JSON.parse(text);
+          } catch (e) {
+            data = text;
+          }
         }
       }
 
@@ -149,8 +166,8 @@ class ApiClient {
     }
   }
 
-  async get<T>(endpoint: string): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, { method: 'GET' });
+  async get<T>(endpoint: string, requestOptions?: RequestOptions): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, { method: 'GET' }, requestOptions);
   }
 
   async post<T>(endpoint: string, body?: unknown): Promise<ApiResponse<T>> {

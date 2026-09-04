@@ -335,3 +335,164 @@ export async function deleteLeadList(id: string): Promise<{ success: boolean }> 
   if (res.error) throw new Error(res.error.message);
   return res.data as unknown as { success: boolean };
 }
+// ---------------------------------------------------------------------------
+// CRM Reports — Ameriquote delivery outcomes
+// ---------------------------------------------------------------------------
+
+export type DeliveryOutcome = 'ACCEPTED' | 'NOT_ACCEPTED' | 'NOT_SENT';
+
+export interface DeliveryReportRow {
+  submissionId: string;
+  insuranceLeadId: string;
+  leadName: string;
+  phone: string;
+  email: string | null;
+  state: string | null;
+  zipCode: string | null;
+  vertical: string;
+  listName: string | null;
+  source: string | null;
+  sentAt: string | null;
+  receivedAt: string;
+  lastAttemptAt: string | null;
+  attemptCount: number;
+  postMode: string;
+  postStatus: string;
+  validationStatus: string;
+  outcome: DeliveryOutcome;
+  outcomeLabel: string;
+  ameriquoteStatus: string | null;
+  ameriquoteLeadId: string | null;
+  ameriquotePrice: string | null;
+  reason: string;
+}
+
+export interface DeliveryReportSummary {
+  totalSubmissions: number;
+  accepted: number;
+  notAccepted: number;
+  notSent: number;
+  matched: number;
+  manualReview: number;
+  unmatched: number;
+  errored: number;
+  acceptedRevenue: string;
+  acceptanceRate: number | null;
+}
+
+export interface DeliveryReportReason {
+  outcome: DeliveryOutcome;
+  postStatus: string;
+  reason: string;
+  count: number;
+  examples: Array<{ name: string; phone: string; submissionId: string }>;
+}
+
+export interface DeliveryReport {
+  summary: DeliveryReportSummary;
+  reasons: DeliveryReportReason[];
+  rows: DeliveryReportRow[];
+  meta: { page: number; limit: number; total: number; totalPages: number };
+}
+
+export interface DeliveryReportParams {
+  startDate?: string;
+  endDate?: string;
+  vertical?: string;
+  listId?: string;
+  postStatus?: string;
+  postMode?: string;
+  outcome?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+}
+
+function deliveryReportQuery(params: DeliveryReportParams): URLSearchParams {
+  const query = new URLSearchParams();
+  if (params.startDate) query.set('startDate', params.startDate);
+  if (params.endDate) query.set('endDate', params.endDate);
+  if (params.vertical) query.set('vertical', params.vertical);
+  if (params.listId) query.set('listId', params.listId);
+  if (params.postStatus) query.set('postStatus', params.postStatus);
+  if (params.postMode) query.set('postMode', params.postMode);
+  if (params.outcome) query.set('outcome', params.outcome);
+  if (params.search) query.set('search', params.search);
+  if (params.page) query.set('page', String(params.page));
+  if (params.limit) query.set('limit', String(params.limit));
+  return query;
+}
+
+export async function fetchDeliveryReport(params: DeliveryReportParams): Promise<DeliveryReport> {
+  const query = deliveryReportQuery(params);
+  const res = await apiClient.get<DeliveryReport>(
+    `/api/v1/insurance-leads/delivery-report?${query.toString()}`
+  );
+  if (res.error) throw new Error(res.error.message);
+  return res.data as unknown as DeliveryReport;
+}
+
+/**
+ * Hand the browser a file. The CSV is built server-side from the same rows the
+ * screen renders, so this only has to move bytes — it never re-derives a
+ * column, and an export can never disagree with the report above it.
+ */
+function downloadCsvText(csv: string, filename: string): void {
+  // A BOM is what makes Excel read the é in a buyer's rejection text.
+  const blob = new Blob(['﻿', csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  // Revoking synchronously can cancel the download in Safari.
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function csvRangeSuffix(startDate?: string, endDate?: string): string {
+  const range = [startDate, endDate].filter(Boolean).join('_to_');
+  return range || new Date().toISOString().slice(0, 10);
+}
+
+export async function exportDeliveryReportCsv(params: DeliveryReportParams): Promise<void> {
+  const query = deliveryReportQuery(params);
+  query.set('format', 'csv');
+  const res = await apiClient.get<string>(
+    `/api/v1/insurance-leads/delivery-report?${query.toString()}`,
+    { responseType: 'text' }
+  );
+  if (res.error) throw new Error(res.error.message);
+  if (!res.data) throw new Error('The export came back empty');
+  downloadCsvText(
+    res.data,
+    `ameriquote_delivery_report_${csvRangeSuffix(params.startDate, params.endDate)}.csv`
+  );
+}
+
+export async function exportInsuranceLeadsCsv(params: {
+  vertical?: string;
+  validationStatus?: string;
+  postStatus?: string;
+  postMode?: string;
+  search?: string;
+  startDate?: string;
+  endDate?: string;
+  status?: string;
+  leadStage?: string;
+  followUp?: string;
+  listId?: string;
+}): Promise<void> {
+  const query = new URLSearchParams({ format: 'csv' });
+  for (const [key, value] of Object.entries(params)) {
+    if (value) query.set(key, String(value));
+  }
+  const res = await apiClient.get<string>(`/api/v1/insurance-leads?${query.toString()}`, {
+    responseType: 'text',
+  });
+  if (res.error) throw new Error(res.error.message);
+  if (!res.data) throw new Error('The export came back empty');
+  downloadCsvText(res.data, `crm_leads_${csvRangeSuffix(params.startDate, params.endDate)}.csv`);
+}
