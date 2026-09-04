@@ -21,6 +21,7 @@ vi.mock('../../lib/prisma.js', () => ({
 
 import {
   deliveryReportToCsv,
+  resolveIpAddress,
   getDeliveryReport,
   leadsToCsv,
   outcomeForPostStatus,
@@ -337,6 +338,7 @@ describe('CSV rendering', () => {
         trustedFormUrl: 'https://cert.trustedform.com/xyz',
         leadidToken: 'LEADID-1',
         recordingUrl: null,
+        ipAddress: '75.2.92.149',
         reason: 'Unmatched — no buyer filter matched',
       },
     ]);
@@ -345,7 +347,9 @@ describe('CSV rendering', () => {
     expect(header.startsWith('Outcome,Reason,')).toBe(true);
     // A refusal you cannot tie back to a consent certificate is hard to dispute.
     expect(header).toContain('TrustedForm Cert URL');
+    expect(header).toContain('IP Address');
     expect(row).toContain('https://cert.trustedform.com/xyz');
+    expect(row).toContain('75.2.92.149');
     expect(row.startsWith('Not accepted,Unmatched — no buyer filter matched,Dana Reyes,')).toBe(
       true
     );
@@ -403,6 +407,7 @@ describe('CSV rendering', () => {
         yearEstablished: null,
         notes: 'Call after 5pm',
         tags: ['warm', 'callback'],
+        customFields: { ipAddress: '75.2.92.149', subId: 'pub-42' },
         list: { name: 'FE Aged 30-60' },
         assignedTo: { firstName: 'Sam', lastName: 'Vega', email: 'sam@example.com' },
         submissions: [
@@ -431,6 +436,8 @@ describe('CSV rendering', () => {
       'Consent Language',
       'Recording URL',
       'Delivery Reason',
+      'IP Address',
+      'Custom Fields (JSON)',
       'County',
       'Birth Date',
       'Face Amount',
@@ -447,6 +454,9 @@ describe('CSV rendering', () => {
     expect(row).toContain('Not accepted');
     expect(row).toContain('Sam Vega');
     expect(row).toContain('warm; callback');
+    // The IP the mapper posts to Ameriquote, and the catch-all it lives in.
+    expect(row).toContain('75.2.92.149');
+    expect(row).toContain('pub-42');
   });
 
   it('says a lead was never sent rather than leaving the reason blank', () => {
@@ -495,6 +505,7 @@ describe('CSV rendering', () => {
         yearEstablished: null,
         notes: null,
         tags: [],
+        customFields: null,
         list: null,
         assignedTo: null,
         submissions: [],
@@ -506,6 +517,39 @@ describe('CSV rendering', () => {
     expect(row).toContain('Never sent — no delivery attempt recorded');
     // doNotCall has to read as a word, not "true"/"false" in a spreadsheet.
     expect(row).toContain('YES');
+  });
+});
+
+describe('resolving the consumer IP', () => {
+  // `InsuranceLead` has no IP column. The mapper still posts one to Ameriquote
+  // as `IP_Address`, so the value exists — in a different place depending on
+  // how the lead arrived. Reading only one place blanks the column for half a
+  // tenant's leads, which is how it went missing from the export entirely.
+  it('finds a CSV-imported IP in customFields', () => {
+    expect(resolveIpAddress({ ipAddress: '75.2.92.149' }, null)).toBe('75.2.92.149');
+  });
+
+  it('finds a webhook IP in the submission payload', () => {
+    expect(resolveIpAddress(null, { ipAddress: '203.0.113.7' })).toBe('203.0.113.7');
+  });
+
+  it('prefers the lead record over the payload when both carry one', () => {
+    expect(resolveIpAddress({ ipAddress: '75.2.92.149' }, { ipAddress: '203.0.113.7' })).toBe(
+      '75.2.92.149'
+    );
+  });
+
+  it('reports a missing IP as empty, never as the mapper placeholder', () => {
+    // 127.0.0.1 is what the mapper SENDS when the record has nothing. Printing
+    // it in an export would turn a gap in the evidence into a fact.
+    expect(resolveIpAddress(null, null)).toBe('');
+    expect(resolveIpAddress({}, {})).toBe('');
+    expect(resolveIpAddress({ ipAddress: '   ' }, null)).toBe('');
+    expect(resolveIpAddress(null, null)).not.toBe('127.0.0.1');
+  });
+
+  it('ignores a non-string IP rather than exporting "[object Object]"', () => {
+    expect(resolveIpAddress({ ipAddress: { v: 1 } }, { ipAddress: 42 })).toBe('');
   });
 });
 

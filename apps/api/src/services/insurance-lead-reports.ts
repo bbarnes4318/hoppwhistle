@@ -185,6 +185,8 @@ export interface DeliveryReportRow {
   trustedFormUrl: string | null;
   leadidToken: string | null;
   recordingUrl: string | null;
+  /** What we actually posted as IP_Address, resolved from the stored payload. */
+  ipAddress: string;
   sentAt: string | null;
   receivedAt: string;
   lastAttemptAt: string | null;
@@ -415,6 +417,7 @@ export async function getDeliveryReport(
         ameriquoteLeadId: true,
         ameriquotePrice: true,
         ameriquoteErrorMessage: true,
+        normalizedPayload: true,
         insuranceLead: {
           select: {
             firstName: true,
@@ -427,6 +430,7 @@ export async function getDeliveryReport(
             trustedFormUrl: true,
             leadidToken: true,
             recordingUrl: true,
+            customFields: true,
             list: { select: { name: true } },
           },
         },
@@ -499,6 +503,7 @@ export async function getDeliveryReport(
       trustedFormUrl: lead.trustedFormUrl,
       leadidToken: lead.leadidToken,
       recordingUrl: lead.recordingUrl,
+      ipAddress: resolveIpAddress(lead.customFields, submission.normalizedPayload),
       sentAt: submission.postedAt ? submission.postedAt.toISOString() : null,
       receivedAt: submission.receivedAt.toISOString(),
       lastAttemptAt: submission.lastAttemptAt ? submission.lastAttemptAt.toISOString() : null,
@@ -568,6 +573,7 @@ export const DELIVERY_REPORT_CSV_HEADERS = [
   'TrustedForm Cert URL',
   'LeadiD Token',
   'Recording URL',
+  'IP Address',
   'Submission ID',
   'Lead ID',
 ];
@@ -599,6 +605,7 @@ export function deliveryReportToCsv(rows: DeliveryReportRow[]): string {
       row.trustedFormUrl,
       row.leadidToken,
       row.recordingUrl,
+      row.ipAddress,
       row.submissionId,
       row.insuranceLeadId,
     ])
@@ -657,6 +664,7 @@ export const LEADS_CSV_HEADERS = [
   'Vertical',
   'Lead List',
   'Source',
+  'IP Address',
   'CRM Status',
   'Stage',
   'Priority',
@@ -700,7 +708,44 @@ export const LEADS_CSV_HEADERS = [
   'Last Submitted At (UTC)',
   'Notes',
   'Tags',
+  'Custom Fields (JSON)',
 ];
+
+/**
+ * The consumer's IP address is TCPA evidence and it is what the mapper posts to
+ * Ameriquote as `IP_Address` — but `InsuranceLead` has no column for it, so it
+ * survives in a different place depending on how the lead arrived:
+ *
+ *   CSV import  -> `customFields.ipAddress` (bulkImportLeads routes anything
+ *                  outside its allow-list into the catch-all JSON)
+ *   Webhook     -> the submission's `normalizedPayload.ipAddress`
+ *
+ * Reading only one of them exports a blank column for half the tenant's leads,
+ * so this checks both. A missing IP stays empty rather than becoming the
+ * mapper's `127.0.0.1` fallback: the placeholder is what we SENT, not the
+ * consumer's address, and printing it as fact would launder a gap in the
+ * record into evidence.
+ */
+export function resolveIpAddress(customFields: unknown, ...payloads: unknown[]): string {
+  const read = (source: unknown): string => {
+    if (!source || typeof source !== 'object') return '';
+    const value = (source as Record<string, unknown>).ipAddress;
+    return typeof value === 'string' ? value.trim() : '';
+  };
+
+  for (const source of [customFields, ...payloads]) {
+    const found = read(source);
+    if (found) return found;
+  }
+  return '';
+}
+
+/** customFields is a catch-all; rendering it stops a column going missing again. */
+function customFieldsJson(value: unknown): string {
+  if (!value || typeof value !== 'object') return '';
+  if (Object.keys(value as Record<string, unknown>).length === 0) return '';
+  return JSON.stringify(value);
+}
 
 const LEAD_EXPORT_SELECT = {
   id: true,
@@ -746,6 +791,7 @@ const LEAD_EXPORT_SELECT = {
   yearEstablished: true,
   notes: true,
   tags: true,
+  customFields: true,
   list: { select: { name: true } },
   assignedTo: { select: { firstName: true, lastName: true, email: true } },
   submissions: {
@@ -763,6 +809,7 @@ const LEAD_EXPORT_SELECT = {
       attemptCount: true,
       postedAt: true,
       receivedAt: true,
+      normalizedPayload: true,
     },
   },
 } as const;
@@ -883,6 +930,7 @@ export function leadsToCsv(leads: LeadExportRecord[]): string {
         lead.vertical,
         lead.list?.name ?? '',
         lead.source,
+        resolveIpAddress(lead.customFields, submission?.normalizedPayload),
         lead.status,
         lead.leadStage,
         lead.priority,
@@ -922,6 +970,7 @@ export function leadsToCsv(leads: LeadExportRecord[]): string {
         iso(submission?.receivedAt),
         lead.notes,
         lead.tags?.join('; ') ?? '',
+        customFieldsJson(lead.customFields),
       ];
     })
   );
