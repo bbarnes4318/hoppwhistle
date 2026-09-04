@@ -69,6 +69,44 @@ function parseDeliverySelector(body: {
  * Query-string booleans arrive as strings, and `Boolean('false')` is true. Only
  * an affirmative spelling counts, so `?deliver=false` does not post a lead.
  */
+/**
+ * A CSV export covers the whole filtered set, so it deliberately skips the
+ * page size the grid uses. This ceiling is what keeps "export everything" from
+ * meaning "stream the entire tenant into one response".
+ */
+const MAX_EXPORT_ROWS = 50000;
+
+type ReportOutcome = 'ACCEPTED' | 'NOT_ACCEPTED' | 'NOT_SENT';
+
+/**
+ * `?outcome=` is the filter a human reaches for first — "show me the ones that
+ * were not accepted". A typo must not silently widen that to every row, so an
+ * unrecognised value is a 400 rather than an ignored filter.
+ */
+function parseOutcome(
+  value: string | undefined
+): { value: ReportOutcome | undefined } | { error: string } {
+  if (!value || !value.trim()) return { value: undefined };
+  const normalized = value
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, '_');
+  const aliases: Record<string, ReportOutcome> = {
+    ACCEPTED: 'ACCEPTED',
+    NOT_ACCEPTED: 'NOT_ACCEPTED',
+    REJECTED: 'NOT_ACCEPTED',
+    NOT_SENT: 'NOT_SENT',
+    UNSENT: 'NOT_SENT',
+  };
+  const match = aliases[normalized];
+  if (!match) {
+    return {
+      error: `Invalid outcome "${value}". Must be "accepted", "not_accepted", or "not_sent".`,
+    };
+  }
+  return { value: match };
+}
+
 export function isTruthyFlag(value: string | undefined): boolean {
   if (!value) return false;
   const normalized = value.trim().toLowerCase();
@@ -433,6 +471,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
       leadStage?: string;
       followUp?: string;
       listId?: string;
+      format?: string;
     };
   }>('/api/v1/insurance-leads', async (request, reply) => {
     const tenantId = getTenantId(request);
@@ -443,10 +482,12 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
 
     const { getLeads } = await import('../services/insurance-lead-service.js');
     const q = request.query;
+    const wantsCsv = q.format?.toLowerCase() === 'csv';
 
     const result = await getLeads(tenantId, {
-      page: q.page ? parseInt(q.page) : undefined,
-      limit: q.limit ? parseInt(q.limit) : undefined,
+      // An export covers the whole filtered set, not the page on screen.
+      page: wantsCsv ? 1 : q.page ? parseInt(q.page) : undefined,
+      limit: wantsCsv ? MAX_EXPORT_ROWS : q.limit ? parseInt(q.limit) : undefined,
       vertical: q.vertical?.toUpperCase() as 'ACA' | 'FE' | 'B2B' | undefined,
       validationStatus: q.validationStatus?.toUpperCase() as 'VALID' | 'INVALID' | undefined,
       postStatus: q.postStatus?.toUpperCase(),
@@ -460,7 +501,95 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
       listId: q.listId,
     });
 
+    if (wantsCsv) {
+      const { leadsToCsv, reportFilename } = await import('../services/insurance-lead-reports.js');
+      return reply
+        .type('text/csv; charset=utf-8')
+        .header(
+          'Content-Disposition',
+          `attachment; filename="${reportFilename('crm_leads', q.startDate, q.endDate)}"`
+        )
+        .send(leadsToCsv(result.data));
+    }
+
     return result;
+  });
+
+  // -----------------------------------------------------------------------
+  // GET /api/v1/insurance-leads/delivery-report
+  //
+  // Which leads Ameriquote accepted, which it did not, and the reason it gave
+  // for each. Renders as JSON, or as a CSV with `?format=csv` — the export is
+  // built from the same rows the screen shows, so the two cannot disagree.
+  // -----------------------------------------------------------------------
+  fastify.get<{
+    Querystring: {
+      startDate?: string;
+      endDate?: string;
+      vertical?: string;
+      listId?: string;
+      postStatus?: string;
+      postMode?: string;
+      outcome?: string;
+      search?: string;
+      page?: string;
+      limit?: string;
+      format?: string;
+    };
+  }>('/api/v1/insurance-leads/delivery-report', async (request, reply) => {
+    const tenantId = getTenantId(request);
+    if (!tenantId) {
+      void reply.code(401);
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+    }
+
+    const q = request.query;
+    const wantsCsv = q.format?.toLowerCase() === 'csv';
+
+    const outcome = parseOutcome(q.outcome);
+    if ('error' in outcome) {
+      void reply.code(400);
+      return { error: { code: 'INVALID_OUTCOME', message: outcome.error } };
+    }
+
+    const vertical = q.vertical?.toUpperCase();
+    if (vertical && vertical !== 'ACA' && vertical !== 'FE' && vertical !== 'B2B') {
+      void reply.code(400);
+      return {
+        error: {
+          code: 'INVALID_VERTICAL',
+          message: `Invalid vertical "${q.vertical}". Must be "aca", "fe", or "b2b".`,
+        },
+      };
+    }
+
+    const { getDeliveryReport, deliveryReportToCsv, reportFilename, MAX_REPORT_ROWS } =
+      await import('../services/insurance-lead-reports.js');
+
+    const report = await getDeliveryReport(tenantId, {
+      startDate: q.startDate,
+      endDate: q.endDate,
+      vertical: vertical as 'ACA' | 'FE' | 'B2B' | undefined,
+      listId: q.listId,
+      postStatus: q.postStatus?.toUpperCase(),
+      postMode: q.postMode?.toUpperCase() as 'TEST' | 'LIVE' | undefined,
+      outcome: outcome.value,
+      search: q.search,
+      page: wantsCsv ? 1 : q.page ? parseInt(q.page) : undefined,
+      limit: wantsCsv ? MAX_REPORT_ROWS : q.limit ? parseInt(q.limit) : undefined,
+    });
+
+    if (wantsCsv) {
+      return reply
+        .type('text/csv; charset=utf-8')
+        .header(
+          'Content-Disposition',
+          `attachment; filename="${reportFilename('ameriquote_delivery_report', q.startDate, q.endDate)}"`
+        )
+        .send(deliveryReportToCsv(report.rows));
+    }
+
+    return report;
   });
 
   // -----------------------------------------------------------------------

@@ -1,7 +1,7 @@
 /* eslint-disable */
 'use client';
 
-import { Search, X, Plus, Upload, Trash2 } from 'lucide-react';
+import { Search, X, Plus, Upload, Trash2, Download, BarChart3, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -17,6 +17,7 @@ import {
   fetchInsuranceLeadStats,
   deleteInsuranceLeads,
   deleteLeadList,
+  exportInsuranceLeadsCsv,
 } from '@/lib/api/leads';
 import type {
   InsuranceLeadSummary,
@@ -99,6 +100,7 @@ export default function InsuranceLeadsPage() {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
   const [leadLists, setLeadLists] = useState<any[]>([]);
+  const [exporting, setExporting] = useState(false);
 
   // Detail sheet
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
@@ -233,6 +235,30 @@ export default function InsuranceLeadsPage() {
     if (selectedLeadId) void loadLeadDetail(selectedLeadId);
   };
 
+  /**
+   * Exports what the filters currently describe, not the 25 rows on screen —
+   * a paged export is the one thing nobody wants from an export button.
+   */
+  const handleExportCsv = async () => {
+    setExporting(true);
+    try {
+      await exportInsuranceLeadsCsv({
+        vertical: filters.vertical || undefined,
+        validationStatus: filters.validationStatus || undefined,
+        postStatus: filters.postStatus || undefined,
+        postMode: filters.postMode || undefined,
+        search: filters.search || undefined,
+        status: filters.status || undefined,
+        followUp: filters.followUp || undefined,
+        listId: filters.listId || undefined,
+      });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to export leads');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const handleDeleteSelected = async () => {
     if (selectedLeadIds.length === 0) return;
     const confirmMsg = `Are you sure you want to delete ${selectedLeadIds.length} selected lead${
@@ -269,6 +295,27 @@ export default function InsuranceLeadsPage() {
               Delete Selected ({selectedLeadIds.length})
             </Button>
           )}
+          <Button
+            asChild
+            className="flex items-center gap-1.5 border border-white/10 bg-slate-900 hover:bg-slate-800 text-slate-200"
+          >
+            <Link href="/insurance-leads/reports">
+              <BarChart3 className="h-4.5 w-4.5" />
+              Reports
+            </Link>
+          </Button>
+          <Button
+            onClick={handleExportCsv}
+            disabled={exporting || loading}
+            className="flex items-center gap-1.5 border border-white/10 bg-slate-900 hover:bg-slate-800 text-slate-200"
+          >
+            {exporting ? (
+              <Loader2 className="h-4.5 w-4.5 animate-spin" />
+            ) : (
+              <Download className="h-4.5 w-4.5" />
+            )}
+            {exporting ? 'Exporting…' : 'Export CSV'}
+          </Button>
           <Button
             onClick={() => setIsImportOpen(true)}
             className="flex items-center gap-1.5 border border-white/10 bg-slate-900 hover:bg-slate-800 text-slate-200"

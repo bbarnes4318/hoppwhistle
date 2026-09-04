@@ -67,6 +67,12 @@ export const ADMIN_NAV: NavGroup[] = [
       // Judgement call: CRM sits here rather than in MARKET because it is
       // worked in real time by the same agents who live in the call center.
       { name: 'CRM', href: '/insurance-leads', icon: Users },
+      {
+        name: 'CRM reports',
+        href: '/insurance-leads/reports',
+        icon: BarChart3,
+        title: 'Which leads Ameriquote accepted, which it refused, and why',
+      },
     ],
   },
   {
@@ -192,6 +198,12 @@ export const AGENT_NAV: NavGroup[] = [
       { name: 'My calls', href: '/calls/my', icon: AudioLines },
       { name: 'Calls', href: '/calls', icon: AudioLines },
       { name: 'CRM', href: '/insurance-leads', icon: Users },
+      {
+        name: 'CRM reports',
+        href: '/insurance-leads/reports',
+        icon: BarChart3,
+        title: 'Which leads Ameriquote accepted, which it refused, and why',
+      },
     ],
   },
   {
