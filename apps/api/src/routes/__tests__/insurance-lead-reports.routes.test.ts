@@ -185,50 +185,105 @@ describe('GET /api/v1/insurance-leads/delivery-report', () => {
 });
 
 describe('GET /api/v1/insurance-leads?format=csv', () => {
-  it('exports the CRM grid as a CSV carrying the last delivery outcome', async () => {
+  it('exports the full record, including the TrustedForm cert and the refusal reason', async () => {
     mockPrisma.insuranceLead.findMany.mockResolvedValue([
       {
         id: 'lead-1',
-        vertical: 'ACA',
+        vertical: 'FE',
         firstName: 'Dana',
         lastName: 'Reyes',
         fullName: null,
         phone: '5551234567',
         email: 'dana@example.com',
+        address: '12 Oak St',
+        city: 'Miami',
+        county: 'Miami-Dade',
         state: 'FL',
         zipCode: '33101',
+        birthDate: '04/12/1958',
+        age: 68,
+        gender: 'F',
         source: 'csv-import',
         status: 'NEW',
         leadStage: null,
+        priority: null,
+        doNotCall: false,
+        lastContactedAt: null,
         nextFollowUpAt: null,
         createdAt: new Date('2026-09-01T12:00:00.000Z'),
+        updatedAt: new Date('2026-09-01T12:00:00.000Z'),
+        trustedFormUrl: 'https://cert.trustedform.com/abc123',
+        leadidToken: 'LEADID-9F2A',
+        consentLanguage: 'By clicking you agree...',
+        recordingUrl: null,
+        smoker: 'N',
+        faceAmount: '10000',
+        lifeType: null,
+        riskType: null,
+        carrier: null,
+        product: null,
+        monthlyPremium: '48.20',
+        coverageAmount: '10000',
+        company: null,
+        repName: null,
+        industry: null,
+        revenue: null,
+        yearEstablished: null,
+        notes: null,
+        tags: [],
+        list: { name: 'FE Aged 30-60' },
+        assignedTo: null,
         submissions: [
           {
-            id: 'sub-1',
-            receivedAt: new Date('2026-09-01T12:00:00.000Z'),
-            validationStatus: 'VALID',
-            postStatus: 'MATCHED',
+            postStatus: 'ERROR',
             postMode: 'LIVE',
-            ameriquoteResponseStatus: 'Matched',
-            source: 'csv-import',
+            validationStatus: 'VALID',
+            validationErrors: null,
+            ameriquoteResponseStatus: 'Error',
+            ameriquoteLeadId: null,
+            ameriquotePrice: null,
+            ameriquoteErrorMessage: 'Filter failure: Primary_Phone is on the DNC list',
+            attemptCount: 1,
+            postedAt: new Date('2026-09-01T12:00:05.000Z'),
+            receivedAt: new Date('2026-09-01T12:00:00.000Z'),
           },
         ],
       },
     ]);
-    mockPrisma.insuranceLead.count.mockResolvedValue(1);
 
     const response = await app.inject({
       method: 'GET',
-      url: '/api/v1/insurance-leads?format=csv&vertical=aca',
+      url: '/api/v1/insurance-leads?format=csv&vertical=fe',
       headers: { 'x-demo-tenant-id': TENANT },
     });
 
     expect(response.statusCode).toBe(200);
     expect(response.headers['content-type']).toContain('text/csv');
     expect(response.headers['content-disposition']).toContain('crm_leads_');
+
     const [header, row] = response.body.split('\r\n');
-    expect(header).toContain('Last Delivery Outcome');
-    expect(row).toContain('Dana');
-    expect(row).toContain('Accepted');
+    expect(header).toContain('TrustedForm Cert URL');
+    expect(header).toContain('Delivery Reason');
+    expect(row).toContain('https://cert.trustedform.com/abc123');
+    expect(row).toContain('Filter failure: Primary_Phone is on the DNC list');
+    expect(row).toContain('Miami-Dade');
+  });
+
+  it('reads the full lead record rather than the grid projection', async () => {
+    mockPrisma.insuranceLead.findMany.mockResolvedValue([]);
+
+    await app.inject({
+      method: 'GET',
+      url: '/api/v1/insurance-leads?format=csv',
+      headers: { 'x-demo-tenant-id': TENANT },
+    });
+
+    // The grid's read is what dropped these columns. The export must not use it.
+    const call = mockPrisma.insuranceLead.findMany.mock.calls[0] as unknown as [
+      { select: Record<string, unknown> },
+    ];
+    for (const field of ['trustedFormUrl', 'leadidToken', 'consentLanguage', 'recordingUrl']) {
+      expect(call[0].select[field]).toBe(true);
+    }
   });
 });

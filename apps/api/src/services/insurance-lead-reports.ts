@@ -181,6 +181,10 @@ export interface DeliveryReportRow {
   vertical: string;
   listName: string | null;
   source: string | null;
+  /** TCPA evidence. A refusal you cannot tie to a certificate is hard to dispute. */
+  trustedFormUrl: string | null;
+  leadidToken: string | null;
+  recordingUrl: string | null;
   sentAt: string | null;
   receivedAt: string;
   lastAttemptAt: string | null;
@@ -420,6 +424,9 @@ export async function getDeliveryReport(
             email: true,
             state: true,
             zipCode: true,
+            trustedFormUrl: true,
+            leadidToken: true,
+            recordingUrl: true,
             list: { select: { name: true } },
           },
         },
@@ -489,6 +496,9 @@ export async function getDeliveryReport(
       vertical: submission.vertical,
       listName: lead.list?.name ?? null,
       source: submission.source,
+      trustedFormUrl: lead.trustedFormUrl,
+      leadidToken: lead.leadidToken,
+      recordingUrl: lead.recordingUrl,
       sentAt: submission.postedAt ? submission.postedAt.toISOString() : null,
       receivedAt: submission.receivedAt.toISOString(),
       lastAttemptAt: submission.lastAttemptAt ? submission.lastAttemptAt.toISOString() : null,
@@ -555,6 +565,9 @@ export const DELIVERY_REPORT_CSV_HEADERS = [
   'Ameriquote Status',
   'Ameriquote Lead ID',
   'Price ($)',
+  'TrustedForm Cert URL',
+  'LeadiD Token',
+  'Recording URL',
   'Submission ID',
   'Lead ID',
 ];
@@ -583,6 +596,9 @@ export function deliveryReportToCsv(rows: DeliveryReportRow[]): string {
       row.ameriquoteStatus,
       row.ameriquoteLeadId,
       row.ameriquotePrice,
+      row.trustedFormUrl,
+      row.leadidToken,
+      row.recordingUrl,
       row.submissionId,
       row.insuranceLeadId,
     ])
@@ -593,63 +609,262 @@ export function deliveryReportToCsv(rows: DeliveryReportRow[]): string {
 // CRM lead list export
 // ---------------------------------------------------------------------------
 
-export interface LeadCsvRow {
-  id: string;
-  vertical: string;
-  firstName: string | null;
-  lastName: string | null;
-  fullName: string | null;
-  phone: string;
-  email: string | null;
-  state: string | null;
-  zipCode: string | null;
-  source: string | null;
-  status: string;
-  leadStage: string | null;
-  nextFollowUpAt: string | null;
-  createdAt: string;
-  latestSubmission: {
-    id: string;
-    receivedAt: string;
-    validationStatus: string;
-    postStatus: string;
-    postMode: string;
-    ameriquoteResponseStatus: string | null;
-    source: string | null;
-  } | null;
+/**
+ * A lead export exists to get data OUT of the CRM, so it carries the whole
+ * record — not the columns the grid happens to show.
+ *
+ * This was originally shaped from the grid's own read, which meant the export
+ * silently dropped the fields people actually export FOR: the TrustedForm
+ * certificate URL and the LeadiD token (the TCPA evidence for a lead), the
+ * consent language, the recording URL, the full address, the demographics,
+ * every Final Expense field, and the reason Ameriquote gave for a refusal.
+ * A compliance artifact missing from a compliance export is worse than no
+ * export at all, because the gap is invisible until someone needs it.
+ */
+export interface LeadCsvFilters {
+  vertical?: 'ACA' | 'FE' | 'B2B';
+  validationStatus?: 'VALID' | 'INVALID';
+  postStatus?: string;
+  postMode?: 'TEST' | 'LIVE';
+  search?: string;
+  startDate?: string;
+  endDate?: string;
+  status?: string;
+  leadStage?: string;
+  followUp?: string;
+  listId?: string;
 }
 
 export const LEADS_CSV_HEADERS = [
+  // Identity
   'Lead ID',
   'First Name',
   'Last Name',
   'Full Name',
   'Phone',
   'Email',
+  // Address
+  'Address',
+  'City',
+  'County',
   'State',
   'Zip',
+  // Demographics
+  'Birth Date',
+  'Age',
+  'Gender',
+  // Lead metadata
   'Vertical',
+  'Lead List',
   'Source',
   'CRM Status',
   'Stage',
+  'Priority',
+  'Do Not Call',
+  'Assigned To',
+  'Last Contacted (UTC)',
   'Next Follow-Up (UTC)',
   'Created At (UTC)',
-  'Last Delivery Outcome',
-  'Last Post Status',
-  'Last Ameriquote Status',
-  'Last Post Mode',
+  'Updated At (UTC)',
+  // Compliance — the reason most people export at all.
+  'TrustedForm Cert URL',
+  'LeadiD Token',
+  'Consent Language',
+  'Recording URL',
+  // Final Expense
+  'Smoker',
+  'Face Amount',
+  'Life Type',
+  'Risk Type',
+  'Carrier',
+  'Product',
+  'Monthly Premium',
+  'Coverage Amount',
+  // B2B
+  'Company',
+  'Rep Name',
+  'Industry',
+  'Revenue',
+  'Year Established',
+  // Latest Ameriquote delivery
+  'Delivery Outcome',
+  'Delivery Reason',
+  'Post Status',
+  'Validation',
+  'Ameriquote Status',
+  'Ameriquote Lead ID',
+  'Price ($)',
+  'Post Mode',
+  'Attempts',
+  'Sent At (UTC)',
   'Last Submitted At (UTC)',
+  'Notes',
+  'Tags',
 ];
 
+const LEAD_EXPORT_SELECT = {
+  id: true,
+  vertical: true,
+  firstName: true,
+  lastName: true,
+  fullName: true,
+  phone: true,
+  email: true,
+  address: true,
+  city: true,
+  county: true,
+  state: true,
+  zipCode: true,
+  birthDate: true,
+  age: true,
+  gender: true,
+  source: true,
+  status: true,
+  leadStage: true,
+  priority: true,
+  doNotCall: true,
+  lastContactedAt: true,
+  nextFollowUpAt: true,
+  createdAt: true,
+  updatedAt: true,
+  trustedFormUrl: true,
+  leadidToken: true,
+  consentLanguage: true,
+  recordingUrl: true,
+  smoker: true,
+  faceAmount: true,
+  lifeType: true,
+  riskType: true,
+  carrier: true,
+  product: true,
+  monthlyPremium: true,
+  coverageAmount: true,
+  company: true,
+  repName: true,
+  industry: true,
+  revenue: true,
+  yearEstablished: true,
+  notes: true,
+  tags: true,
+  list: { select: { name: true } },
+  assignedTo: { select: { firstName: true, lastName: true, email: true } },
+  submissions: {
+    orderBy: { receivedAt: 'desc' as const },
+    take: 1,
+    select: {
+      postStatus: true,
+      postMode: true,
+      validationStatus: true,
+      validationErrors: true,
+      ameriquoteResponseStatus: true,
+      ameriquoteLeadId: true,
+      ameriquotePrice: true,
+      ameriquoteErrorMessage: true,
+      attemptCount: true,
+      postedAt: true,
+      receivedAt: true,
+    },
+  },
+} as const;
+
+type LeadExportRecord = Prisma.InsuranceLeadGetPayload<{ select: typeof LEAD_EXPORT_SELECT }>;
+
 /**
- * The CRM grid, exported exactly as filtered. Rows come straight from the same
- * `getLeads` shape the table renders, so the file cannot drift from the screen.
+ * Reads the full lead record for an export, under the same filters the CRM
+ * grid uses. Deliberately a separate read from `getLeads`: the grid stays a
+ * narrow, fast query, and the export is free to carry everything.
  */
-export function leadsToCsv(leads: LeadCsvRow[]): string {
+export async function getLeadExportRows(
+  tenantId: string,
+  filters: LeadCsvFilters = {}
+): Promise<LeadExportRecord[]> {
+  const prisma = getPrismaClient();
+  const where = buildLeadWhere(tenantId, filters);
+
+  return prisma.insuranceLead.findMany({
+    where,
+    orderBy: { createdAt: 'desc' },
+    take: MAX_REPORT_ROWS,
+    select: LEAD_EXPORT_SELECT,
+  });
+}
+
+function buildLeadWhere(tenantId: string, filters: LeadCsvFilters): Prisma.InsuranceLeadWhereInput {
+  const where: Prisma.InsuranceLeadWhereInput = { tenantId };
+
+  if (filters.vertical) where.vertical = filters.vertical;
+  if (filters.status) where.status = filters.status as Prisma.InsuranceLeadWhereInput['status'];
+  if (filters.leadStage) where.leadStage = filters.leadStage;
+  if (filters.listId) where.listId = filters.listId;
+
+  if (filters.search) {
+    const term = filters.search.trim();
+    const digits = term.replace(/\D/g, '');
+    const or: Prisma.InsuranceLeadWhereInput[] = [
+      { firstName: { contains: term, mode: 'insensitive' } },
+      { lastName: { contains: term, mode: 'insensitive' } },
+      { fullName: { contains: term, mode: 'insensitive' } },
+      { email: { contains: term, mode: 'insensitive' } },
+      { zipCode: { contains: term } },
+      { city: { contains: term, mode: 'insensitive' } },
+      { state: { contains: term, mode: 'insensitive' } },
+    ];
+    if (digits.length > 0) {
+      or.push({ phone: { contains: digits.length > 10 ? digits.slice(-10) : digits } });
+    }
+    where.OR = or;
+  }
+
+  if (filters.startDate || filters.endDate) {
+    const range: Prisma.DateTimeFilter = {};
+    if (filters.startDate) {
+      const start = parseRangeBoundary(filters.startDate, 'start');
+      if (start) range.gte = start;
+    }
+    if (filters.endDate) {
+      const end = parseRangeBoundary(filters.endDate, 'end');
+      if (end) range.lte = end;
+    }
+    if (range.gte || range.lte) where.createdAt = range;
+  }
+
+  if (filters.validationStatus || filters.postStatus || filters.postMode) {
+    const sub: Prisma.InsuranceLeadSubmissionWhereInput = {};
+    if (filters.validationStatus) {
+      sub.validationStatus =
+        filters.validationStatus as Prisma.InsuranceLeadSubmissionWhereInput['validationStatus'];
+    }
+    if (filters.postStatus) {
+      sub.postStatus = filters.postStatus as Prisma.InsuranceLeadSubmissionWhereInput['postStatus'];
+    }
+    if (filters.postMode) {
+      sub.postMode = filters.postMode as Prisma.InsuranceLeadSubmissionWhereInput['postMode'];
+    }
+    where.submissions = { some: sub };
+  }
+
+  return where;
+}
+
+function iso(value: Date | null | undefined): string {
+  return value ? value.toISOString() : '';
+}
+
+/**
+ * The CRM grid, exported whole. Every column the record carries, plus the
+ * outcome and reason from its most recent Ameriquote delivery.
+ */
+export function leadsToCsv(leads: LeadExportRecord[]): string {
   return toCsv(
     LEADS_CSV_HEADERS,
     leads.map(lead => {
-      const submission = lead.latestSubmission;
+      const submission = lead.submissions[0];
+      const outcome = submission ? outcomeForPostStatus(submission.postStatus) : null;
+      const assignee = lead.assignedTo
+        ? [lead.assignedTo.firstName, lead.assignedTo.lastName].filter(Boolean).join(' ').trim() ||
+          lead.assignedTo.email
+        : '';
+
       return [
         lead.id,
         lead.firstName,
@@ -657,21 +872,56 @@ export function leadsToCsv(leads: LeadCsvRow[]): string {
         lead.fullName,
         lead.phone,
         lead.email,
+        lead.address,
+        lead.city,
+        lead.county,
         lead.state,
         lead.zipCode,
+        lead.birthDate,
+        lead.age,
+        lead.gender,
         lead.vertical,
+        lead.list?.name ?? '',
         lead.source,
         lead.status,
         lead.leadStage,
-        lead.nextFollowUpAt,
-        lead.createdAt,
-        submission
-          ? DELIVERY_OUTCOME_LABELS[outcomeForPostStatus(submission.postStatus)]
-          : 'Not sent',
+        lead.priority,
+        lead.doNotCall ? 'YES' : 'NO',
+        assignee,
+        iso(lead.lastContactedAt),
+        iso(lead.nextFollowUpAt),
+        iso(lead.createdAt),
+        iso(lead.updatedAt),
+        lead.trustedFormUrl,
+        lead.leadidToken,
+        lead.consentLanguage,
+        lead.recordingUrl,
+        lead.smoker,
+        lead.faceAmount,
+        lead.lifeType,
+        lead.riskType,
+        lead.carrier,
+        lead.product,
+        lead.monthlyPremium,
+        lead.coverageAmount,
+        lead.company,
+        lead.repName,
+        lead.industry,
+        lead.revenue,
+        lead.yearEstablished,
+        outcome ? DELIVERY_OUTCOME_LABELS[outcome] : 'Not sent',
+        submission ? reasonForSubmission(submission) : 'Never sent — no delivery attempt recorded',
         submission?.postStatus ?? '',
+        submission?.validationStatus ?? '',
         submission?.ameriquoteResponseStatus ?? '',
+        submission?.ameriquoteLeadId ?? '',
+        submission?.ameriquotePrice ?? '',
         submission?.postMode ?? '',
-        submission?.receivedAt ?? '',
+        submission?.attemptCount ?? '',
+        iso(submission?.postedAt),
+        iso(submission?.receivedAt),
+        lead.notes,
+        lead.tags?.join('; ') ?? '',
       ];
     })
   );
