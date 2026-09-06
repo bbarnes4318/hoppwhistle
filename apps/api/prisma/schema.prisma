@@ -69,10 +69,88 @@ model Tenant {
   voiceAgents              VoiceAgent[]
   carrierGateways          CarrierGateway[]
   carrierRoutes            CarrierRoute[]
+  activationGrants         TenantActivationGrant[]
 
   @@index([slug])
   @@index([status])
   @@map("tenants")
+}
+
+/// How a `TenantActivationGrant` came to exist. Both values name something that
+/// was verified server-side before the grant was written; there is no value
+/// here for "the browser said so", because that is the thing grants exist to
+/// prevent.
+enum TenantActivationSource {
+  /// A completed Stripe Checkout session, verified against Stripe's API. The
+  /// tenant is the one the session was created for.
+  STRIPE_CHECKOUT
+  /// An existing OWNER or ADMIN of the tenant invited this address. The tenant
+  /// is the inviter's own, taken from their authenticated session.
+  ADMIN_INVITE
+}
+
+/// A single-use permission to create a user inside one named tenant.
+///
+/// ── Why registration needs this ──────────────────────────────────────────────
+///
+/// `POST /api/auth/register` used to answer "which tenant does this new account
+/// belong to?" by looking at the request: the `Host` header, then `Referer`,
+/// then `Origin`, then the slug `test-org`, then `default`, then the first
+/// active tenant row in the database, and finally by creating a tenant of its
+/// own. Every one of those is chosen by the caller or by row order. The signup
+/// page put strangers inside a paying agency.
+///
+/// Registration now names no tenant at all. It presents a token, and the token
+/// is what carries the tenant — issued by the server at the moment a payment or
+/// an invitation was verified, and never derived from anything on the wire.
+///
+/// ── Shape ────────────────────────────────────────────────────────────────────
+///
+/// Only the SHA-256 of the token is stored, so a database dump does not contain
+/// working activation links, the same treatment `ApiKey.keyHash` gets.
+///
+/// A grant is single-use (`redeemedAt`) and time-boxed (`expiresAt`). Both are
+/// enforced in the redemption path rather than by a sweep, so an expired grant
+/// stays readable for support and audit instead of disappearing.
+///
+/// Note this is about *account creation*, not about anything the agency bought:
+/// applications purchased under the plan never expire. The expiry here is on
+/// the invitation link only.
+model TenantActivationGrant {
+  id       String @id @default(uuid())
+  tenantId String
+
+  /// SHA-256 hex digest of the single-use activation token. The token itself is
+  /// shown once, to whoever the grant was issued for, and never stored.
+  tokenHash String @unique
+
+  /// The address the grant is for, lowercased. Registration refuses a token
+  /// presented with any other address, so an intercepted link cannot be used to
+  /// create an account under an attacker's own email.
+  email String
+
+  /// The role the redeeming user is given. An agency principal gets OWNER;
+  /// their staff get AGENT.
+  roleName RoleName @default(AGENT)
+
+  source TenantActivationSource
+
+  /// The Stripe Checkout session this grant was minted from, when it came from
+  /// one. Unique, so replaying a webhook mints no second grant.
+  stripeSessionId String? @unique
+
+  expiresAt        DateTime
+  redeemedAt       DateTime?
+  redeemedByUserId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([email])
+  @@map("tenant_activation_grants")
 }
 
 model TenantQuota {

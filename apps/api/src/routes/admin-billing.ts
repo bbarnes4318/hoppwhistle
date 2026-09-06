@@ -6,8 +6,11 @@
 // billing code alongside it would make that fix unreviewable. Worth clearing
 // separately.
 import { Decimal } from 'decimal.js';
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { Pool } from 'pg';
+
+import { isDemoTenantAuthEnabled } from '../lib/demo-auth.js';
+import { resolveTenant } from '../lib/tenant-context.js';
 
 // Inline services to avoid path issues
 import puppeteer from 'puppeteer';
@@ -269,6 +272,51 @@ const pool = new Pool({
   max: 10,
 });
 
+/**
+ * Does this billing account belong to the caller's agency?
+ *
+ * Every route in this file takes a `billingAccountId` straight from the request
+ * and runs raw SQL against it. None of them checked whose account it was, and
+ * the preHandler only asks whether the caller is *an* administrator -- ADMIN
+ * and OWNER are per-tenant roles, so "an administrator" is not "this account's
+ * administrator". An owner of one agency could read another agency's rate
+ * cards, close their billing period, pull their invoice PDF, and send a Stripe
+ * Connect payout against their account.
+ *
+ * Returns null and sends the reply when the account is not the caller's. A
+ * 404 rather than a 403: whether some other agency's billing account exists is
+ * not something this endpoint should confirm.
+ */
+async function requireOwnBillingAccount(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  billingAccountId: string | undefined
+): Promise<string | null> {
+  const tenantId = resolveTenant(request, reply);
+  if (!tenantId) return null;
+
+  if (!billingAccountId) {
+    void reply.code(400).send({
+      error: { code: 'MISSING_PARAMS', message: 'billingAccountId is required' },
+    });
+    return null;
+  }
+
+  const owned = await pool.query(
+    'SELECT id FROM billing_accounts WHERE id = $1 AND "tenantId" = $2',
+    [billingAccountId, tenantId]
+  );
+
+  if (owned.rows.length === 0) {
+    void reply.code(404).send({
+      error: { code: 'NOT_FOUND', message: 'Billing account not found' },
+    });
+    return null;
+  }
+
+  return tenantId;
+}
+
 export async function registerAdminBillingRoutes(fastify: FastifyInstance) {
   // Enforce ADMIN/OWNER only access to all administrative billing routes
   fastify.addHook('preHandler', async (request, reply) => {
@@ -278,8 +326,12 @@ export async function registerAdminBillingRoutes(fastify: FastifyInstance) {
       return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
     }
 
-    const demoTenantId = request.headers['x-demo-tenant-id'] as string;
-    if (demoTenantId) {
+    // The demo bypass, and only where an environment has explicitly opted in.
+    //
+    // This used to run unconditionally: any request carrying an
+    // X-Demo-Tenant-Id header skipped the ADMIN/OWNER check below outright, on
+    // the surface that issues invoices and sends Stripe payouts.
+    if (isDemoTenantAuthEnabled() && request.headers['x-demo-tenant-id']) {
       return; // Allow demo request bypass
     }
 
@@ -320,6 +372,8 @@ export async function registerAdminBillingRoutes(fastify: FastifyInstance) {
     try {
       const { billingAccountId, name, rates, effectiveFrom, effectiveTo } = request.body;
 
+      if (!(await requireOwnBillingAccount(request, reply, billingAccountId))) return;
+
       const result = await pool.query(
         `INSERT INTO rate_cards (
           id, "billingAccountId", name, rates, "effectiveFrom", "effectiveTo", status, "createdAt"
@@ -354,18 +408,26 @@ export async function registerAdminBillingRoutes(fastify: FastifyInstance) {
   fastify.get('/api/v1/admin/billing/rate-cards', async (request, reply) => {
     const { billingAccountId } = request.query as { billingAccountId?: string };
 
+    // Unlike the other handlers, billingAccountId is optional here: without it
+    // this returned every rate card on the platform. The tenant join makes the
+    // unfiltered case mean "all of MY agency's rate cards" instead.
+    const tenantId = resolveTenant(request, reply);
+    if (!tenantId) return;
+
     let sql =
-      'SELECT id, "billingAccountId", name, rates, "effectiveFrom", "effectiveTo", status, "createdAt", "updatedAt" FROM rate_cards WHERE 1=1';
-    const params: any[] = [];
-    let paramIndex = 1;
+      'SELECT rc.id, rc."billingAccountId", rc.name, rc.rates, rc."effectiveFrom", rc."effectiveTo", rc.status, rc."createdAt", rc."updatedAt" ' +
+      'FROM rate_cards rc JOIN billing_accounts ba ON ba.id = rc."billingAccountId" ' +
+      'WHERE ba."tenantId" = $1';
+    const params: any[] = [tenantId];
+    let paramIndex = 2;
 
     if (billingAccountId) {
-      sql += ` AND "billingAccountId" = $${paramIndex}`;
+      sql += ` AND rc."billingAccountId" = $${paramIndex}`;
       params.push(billingAccountId);
       paramIndex++;
     }
 
-    sql += ' ORDER BY "effectiveFrom" DESC';
+    sql += ' ORDER BY rc."effectiveFrom" DESC';
 
     const result = await pool.query(sql, params);
     return {
@@ -385,6 +447,8 @@ export async function registerAdminBillingRoutes(fastify: FastifyInstance) {
   }>('/api/v1/admin/billing/close-period', async (request, reply) => {
     try {
       const { billingAccountId, periodDate, dueDate, publisherId, buyerId } = request.body;
+
+      if (!(await requireOwnBillingAccount(request, reply, billingAccountId))) return;
 
       const period = new Date(periodDate);
       const due = new Date(dueDate);
@@ -431,6 +495,8 @@ export async function registerAdminBillingRoutes(fastify: FastifyInstance) {
       };
     }
 
+    if (!(await requireOwnBillingAccount(request, reply, billingAccountId))) return;
+
     const period = new Date(periodDate);
     const summary = await accrualLedger.getPeriodSummary(
       billingAccountId,
@@ -452,6 +518,21 @@ export async function registerAdminBillingRoutes(fastify: FastifyInstance) {
     '/api/v1/admin/billing/invoices/:invoiceId/pdf',
     async (request, reply) => {
       try {
+        // The invoice is addressed by id, so the tenant has to be reached
+        // through its billing account rather than filtered on directly.
+        const tenantId = resolveTenant(request, reply);
+        if (!tenantId) return;
+
+        const owned = await pool.query(
+          'SELECT i.id FROM invoices i JOIN billing_accounts ba ON ba.id = i."billingAccountId" ' +
+            'WHERE i.id = $1 AND ba."tenantId" = $2',
+          [request.params.invoiceId, tenantId]
+        );
+        if (owned.rows.length === 0) {
+          reply.code(404);
+          return { error: { code: 'NOT_FOUND', message: 'Invoice not found' } };
+        }
+
         const pdf = await invoiceGenerator.generatePDF(request.params.invoiceId);
 
         reply.type('application/pdf');
@@ -482,6 +563,8 @@ export async function registerAdminBillingRoutes(fastify: FastifyInstance) {
   }>('/api/v1/admin/billing/payouts', async (request, reply) => {
     try {
       const { billingAccountId, amount, currency = 'USD' } = request.body;
+
+      if (!(await requireOwnBillingAccount(request, reply, billingAccountId))) return;
 
       // Import StripeService dynamically
       const { StripeService } = await import('../../../worker/src/services/stripe-service.js');

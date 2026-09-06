@@ -954,10 +954,17 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
         }, 1000); // 1-second delay
       }
 
-      // Update DID route stats if not an RTB route
+      // Update DID route stats if not an RTB route.
+      //
+      // `updateMany` with the tenant rather than `update` by id: this handler
+      // is the unauthenticated FreeSWITCH CDR webhook, and `routeId` arrives in
+      // its body. Unscoped, anyone who could reach the endpoint could inflate
+      // another agency's per-route call and duration counters -- numbers the
+      // agency is billed and rated on. A mismatched routeId now updates
+      // nothing instead.
       if (!body.routeId.startsWith('rtb-')) {
-        await prisma.didRoute.update({
-          where: { id: body.routeId },
+        await prisma.didRoute.updateMany({
+          where: { id: body.routeId, tenantId },
           data: {
             totalCalls: { increment: 1 },
             totalDuration: { increment: body.duration || 0 },
@@ -979,7 +986,9 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
         // Release the number in database immediately back to pool
         try {
           await prisma.phoneNumber.updateMany({
-            where: { number: rtbMetadata.transferNumber },
+            // Scoped: released by E.164 alone, this would return another
+            // agency's leased transfer number to the pool mid-call.
+            where: { number: rtbMetadata.transferNumber, tenantId },
             data: {
               poolStatus: 'AVAILABLE',
               lastAssignedAt: null,

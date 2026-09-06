@@ -536,7 +536,7 @@ describe.skipIf(!gate.available)('Pay-Per-Call Real Database/Redis Integration T
     expect(pingResult.token).toBeDefined();
 
     // 2. Process Post using postService (leases '+18005550300' and writes to Redis)
-    const postResult = await postService.processPost(pingResult.token!, '+15552223333');
+    const postResult = await postService.processPost(pingResult.token!, 'pub-a-int', '+15552223333');
     expect(postResult.accepted).toBe(true);
     expect(postResult.transfer_number).toBe('+18005550300');
 

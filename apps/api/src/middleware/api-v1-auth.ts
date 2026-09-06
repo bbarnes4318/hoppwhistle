@@ -32,27 +32,31 @@ export function registerApiV1Auth(server: FastifyInstance): void {
   warnIfDemoTenantAuthEnabled();
 
   server.addHook('onRequest', async (request, _reply) => {
-    // Only authenticate /api/v1/* routes
-    if (!request.url.startsWith('/api/v1/')) {
-      return;
-    }
-
-    // With demo auth disabled the demo inputs carry no meaning here, so drop
-    // them before anything else looks at them.
+    // With demo auth disabled the demo inputs carry no meaning anywhere, so
+    // drop them before anything else looks at them.
     //
-    // This has to happen before the JWT branch below, which returns as soon as
-    // a token verifies. Handlers under /api/v1 read the header directly as
-    // `demoTenantId || user.tenantId` in ~200 places, so a request that
-    // authenticated perfectly well as one tenant could still name another and
-    // be served its data. Dropping the inputs here makes every one of those
-    // fall back to the tenant the caller actually authenticated as, without
-    // touching them.
+    // This runs for EVERY request, ahead of the /api/v1 gate below. It used to
+    // sit after it, which meant the routes registered outside /api/v1 -- the
+    // /api/automation/* aliases, /api/bot/*, the retention and call-center
+    // handlers -- still received the header and still read it. Stripping it
+    // here makes every reader in the codebase fall back to the tenant the
+    // caller actually authenticated as, whether or not it was ever converted
+    // to `requireTenantId`.
+    //
+    // It also has to happen before the JWT branch further down, which returns
+    // as soon as a token verifies: a request that authenticated perfectly well
+    // as one tenant could otherwise still name another and be served its data.
     if (!DEMO_TENANT_AUTH_ENABLED) {
       delete request.headers['x-demo-tenant-id'];
       const query = request.query as { demoTenantId?: string } | undefined;
       if (query && query.demoTenantId !== undefined) {
         delete query.demoTenantId;
       }
+    }
+
+    // Only authenticate /api/v1/* routes
+    if (!request.url.startsWith('/api/v1/')) {
+      return;
     }
 
     const authHeader = request.headers.authorization;

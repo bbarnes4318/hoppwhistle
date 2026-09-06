@@ -9,6 +9,8 @@
 import { PrismaClient } from '@prisma/client';
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 
+import { getActingTenantId } from '../lib/tenant-context.js';
+
 const prisma = new PrismaClient();
 
 type InsuranceVertical = 'FE' | 'ACA';
@@ -75,13 +77,6 @@ interface ProspectIntakePayload {
   notes?: string;
 }
 
-interface AuthenticatedUser {
-  tenantId?: string;
-  apiKeyId?: string;
-  userId?: string;
-  scopes?: string[];
-}
-
 interface ManualCrmSyncResult {
   insuranceLeadId: string;
   submissionId: string;
@@ -95,12 +90,18 @@ interface ManualCrmSyncResult {
   message: string;
 }
 
-type AuthRequest = FastifyRequest & { user?: AuthenticatedUser };
 
+/**
+ * The acting tenant, from `lib/tenant-context.ts`.
+ *
+ * This file used to carry its own copy of the rule, and the copy also consulted
+ * the `X-Demo-Tenant-Id` header -- so an authenticated caller could name a
+ * tenant that was not theirs. There is now one implementation, it reads only
+ * the authenticated principal, and this wrapper exists solely so the existing
+ * call sites keep their shape.
+ */
 function getTenantId(request: FastifyRequest): string | null {
-  const user = (request as AuthRequest).user;
-  const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-  return demoTenantId || user?.tenantId || null;
+  return getActingTenantId(request);
 }
 
 function normalizePhone(phone: string): string {

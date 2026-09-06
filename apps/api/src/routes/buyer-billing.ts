@@ -15,6 +15,7 @@ import { AuthenticatedUser } from '../middleware/auth.js';
 import { buyerBillingService } from '../services/buyer-billing-service.js';
 import { liveStatusService } from '../services/buyer-live-status-service.js';
 import { buyerStatsService } from '../services/buyer-stats-service.js';
+import { getActingTenantId } from '../lib/tenant-context.js';
 
 type AuthRequest = FastifyRequest & { user?: AuthenticatedUser };
 
@@ -86,9 +87,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
    * Get all Upfront buyers with their balances for dashboard widget
    */
   fastify.get('/api/v1/buyers/upfront-balances', async (request, reply) => {
-    const user = (request as AuthRequest).user;
-    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
       void reply.code(401);
@@ -137,9 +136,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       endDate?: string;
     };
   }>('/api/v1/buyers/:buyerId/transactions', async (request, reply) => {
-    const user = (request as AuthRequest).user;
-    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
       void reply.code(401);
@@ -221,8 +218,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
     };
   }>('/api/v1/buyers/:buyerId/credits', async (request, reply) => {
     const user = (request as AuthRequest).user;
-    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
       void reply.code(401);
@@ -232,7 +228,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
     // Require admin role for adding credits
     const isAdmin =
       user?.roles?.some(r => r === 'ADMIN' || r === 'OWNER' || r === 'AGENT') ?? false;
-    if (!demoTenantId && !isAdmin) {
+    if (!isAdmin) {
       void reply.code(403);
       return { error: { code: 'FORBIDDEN', message: 'Admin access required' } };
     }
@@ -296,9 +292,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       billingType?: 'TERMS' | 'UPFRONT';
     };
   }>('/api/v1/buyers', async (request, reply) => {
-    const user = (request as AuthRequest).user;
-    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
       void reply.code(401);
@@ -390,8 +384,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
     };
   }>('/api/v1/buyers', async (request, reply) => {
     const user = (request as AuthRequest).user;
-    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
       void reply.code(401);
@@ -518,8 +511,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
   }>('/api/v1/buyers/:buyerId', async (request, reply) => {
     const { buyerId } = request.params;
     const user = (request as AuthRequest).user;
-    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = getActingTenantId(request);
     if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
 
     const userRecord = await prisma.user.findUnique({
@@ -585,8 +577,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
     };
   }>('/api/v1/buyers/:buyerId', async (request, reply) => {
     const user = (request as AuthRequest).user;
-    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
       void reply.code(401);
@@ -692,9 +683,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
    * Get pre-aggregated stats for all buyers (from BuyerStats summary table)
    */
   fastify.get('/api/v1/buyers/stats', async (request, reply) => {
-    const user = (request as AuthRequest).user;
-    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
       void reply.code(401);
@@ -733,9 +722,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
   fastify.get<{
     Params: { buyerId: string };
   }>('/api/v1/buyers/:buyerId/stats', async (request, reply) => {
-    const user = (request as AuthRequest).user;
-    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
       void reply.code(401);
@@ -787,9 +774,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
   fastify.get<{
     Params: { buyerId: string };
   }>('/api/v1/buyers/:buyerId/live-status', async (request, reply) => {
-    const user = (request as AuthRequest).user;
-    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
       void reply.code(401);
@@ -830,9 +815,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
   fastify.get<{
     Params: { buyerId: string };
   }>('/api/v1/buyers/:buyerId/targets', async (request, reply) => {
-    const user = (request as AuthRequest).user;
-    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
       void reply.code(401);
@@ -910,9 +893,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       pricingRules?: Array<{ field: string; op: string; val: unknown; adjustment: string }>;
     };
   }>('/api/v1/buyers/:buyerId/targets', async (request, reply) => {
-    const user = (request as AuthRequest).user;
-    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
       void reply.code(401);
@@ -1034,9 +1015,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
       pricingRules?: Array<{ field: string; op: string; val: unknown; adjustment: string }> | null;
     };
   }>('/api/v1/buyers/:buyerId/targets/:targetId', async (request, reply) => {
-    const user = (request as AuthRequest).user;
-    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
       void reply.code(401);
@@ -1140,9 +1119,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
   fastify.delete<{
     Params: { buyerId: string; targetId: string };
   }>('/api/v1/buyers/:buyerId/targets/:targetId', async (request, reply) => {
-    const user = (request as AuthRequest).user;
-    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
       void reply.code(401);

@@ -479,9 +479,18 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
       const { tenantId, overrideId } = request.params as { tenantId: string; overrideId: string };
       const user = (request as any).user;
 
-      await prisma.quotaOverride.delete({
-        where: { id: overrideId },
+      // Scoped to the tenant named in the path. Deleting by override id alone
+      // let a mismatched path delete another tenant's override while writing
+      // an audit row that named this one.
+      const deleted = await prisma.quotaOverride.deleteMany({
+        where: { id: overrideId, tenantId },
       });
+
+      if (deleted.count === 0) {
+        return reply.code(404).send({
+          error: { code: 'NOT_FOUND', message: 'Quota override not found' },
+        });
+      }
 
       await auditCreate(
         tenantId,

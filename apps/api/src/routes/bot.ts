@@ -1,8 +1,42 @@
+/**
+ * AI Bot routes - Campaign control, TTS preview, lead management.
+ *
+ * ── Tenancy: none, deliberately, and therefore operator-only ────────────────
+ *
+ * Every route here is backed by files and a process, not by the database:
+ * one `dial.py`, one status file, one lead file, one settings file, one
+ * recordings directory, all under $HOPWHISTLE_DIR. There is no tenantId
+ * anywhere and nowhere to put one -- the resource is a single platform-wide
+ * dialer, not a per-agency one.
+ *
+ * That makes exposing these routes to an agency a cross-tenant leak in itself:
+ * an upload to /api/bot/leads/upload REPLACES the lead file every other agency
+ * would be dialed from, /api/bot/stop kills the run they are in the middle of,
+ * and /api/bot/recordings/:callId serves recordings regardless of who the call
+ * belonged to.
+ *
+ * They had no authentication at all. `/api/bot/*` is outside `/api/v1`, so the
+ * one hook that populates `request.user` never even ran for them: the whole
+ * surface answered anonymous callers over the internet.
+ *
+ * They are therefore an authenticated route, not a webhook, and the shared
+ * resource means the only safe audience is NetEnroll platform staff. Until the
+ * platform-level role exists they are gated on ADMIN/OWNER, which is a
+ * per-tenant role and so still broader than it should be -- but it is a
+ * credential and a role check where there were neither.
+ *
+ * TODO(netenroll): re-gate on PLATFORM_ADMIN once that capability lands, and
+ * decide whether the dialer becomes per-agency or stays a platform service.
+ */
 // AI Bot routes - Campaign control, TTS preview, lead management
 import { ChildProcess, spawn } from 'child_process';
 import { promises as fs } from 'fs';
+import path from 'path';
 
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+
+import { authenticate } from '../middleware/auth.js';
+import { requireRole } from '../middleware/rbac.js';
 
 // Configuration paths (same as dial.py)
 const BASE_DIR = process.env.HOPWHISTLE_DIR || '/opt/hopwhistle';
@@ -42,7 +76,30 @@ function getErrorMessage(e: unknown): string {
   return 'Unknown error';
 }
 
+// eslint-disable-next-line @typescript-eslint/require-await -- plugin signature
 export async function registerBotRoutes(fastify: FastifyInstance): Promise<void> {
+  // Credential first, then role. Applied to every route in this plugin rather
+  // than per handler, so a route added later cannot be added unguarded.
+  fastify.addHook('onRequest', authenticate);
+  fastify.addHook('preHandler', requireRole('ADMIN', 'OWNER'));
+
+  /**
+   * Resolve a caller-supplied recording id to a path inside RECORDINGS_DIR.
+   *
+   * `:callId` was interpolated straight into a filesystem path, so
+   * `/api/bot/recordings/..%2f..%2f..%2fetc%2fpasswd` read whatever the API
+   * process could read. Returns null for anything that escapes the directory
+   * or is not a plain id.
+   */
+  function recordingPath(callId: string, extension: string): string | null {
+    if (!/^[A-Za-z0-9._-]+$/.test(callId) || callId.includes('..')) {
+      return null;
+    }
+    const dir = path.resolve(`${BASE_DIR}/recordings`);
+    const resolved = path.resolve(dir, `${callId}.${extension}`);
+    return resolved.startsWith(`${dir}${path.sep}`) ? resolved : null;
+  }
+
   // Get current bot/dialer status
   fastify.get('/api/bot/status', async () => {
     try {
@@ -404,17 +461,25 @@ Is this a good time to speak for just a moment?`,
     '/api/bot/recordings/:callId',
     async (request: FastifyRequest<{ Params: { callId: string } }>, reply: FastifyReply) => {
       const { callId } = request.params;
-      const RECORDINGS_DIR = `${BASE_DIR}/recordings/`;
 
       try {
-        let filePath = `${RECORDINGS_DIR}${callId}.mp3`;
+        let filePath = recordingPath(callId, 'mp3');
         let contentType = 'audio/mpeg';
+
+        if (!filePath) {
+          void reply.code(404);
+          return { error: 'Recording not found' };
+        }
 
         try {
           await fs.access(filePath);
         } catch {
-          filePath = `${RECORDINGS_DIR}${callId}.wav`;
+          filePath = recordingPath(callId, 'wav');
           contentType = 'audio/wav';
+          if (!filePath) {
+            void reply.code(404);
+            return { error: 'Recording not found' };
+          }
           await fs.access(filePath);
         }
 
@@ -439,14 +504,19 @@ Is this a good time to speak for just a moment?`,
     '/api/bot/recordings/:callId/exists',
     async (request: FastifyRequest<{ Params: { callId: string } }>) => {
       const { callId } = request.params;
-      const RECORDINGS_DIR = `${BASE_DIR}/recordings/`;
+
+      const mp3 = recordingPath(callId, 'mp3');
+      const wav = recordingPath(callId, 'wav');
+      if (!mp3 || !wav) {
+        return { exists: false };
+      }
 
       try {
         try {
-          await fs.access(`${RECORDINGS_DIR}${callId}.mp3`);
+          await fs.access(mp3);
           return { exists: true, format: 'mp3' };
         } catch {
-          await fs.access(`${RECORDINGS_DIR}${callId}.wav`);
+          await fs.access(wav);
           return { exists: true, format: 'wav' };
         }
       } catch {
