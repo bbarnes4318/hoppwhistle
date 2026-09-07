@@ -36,6 +36,7 @@
     "dograh:cid:import": "tsx src/cli/dograh-callerid-import.ts",
     "numbers:assign": "tsx src/cli/numbers-assign.ts",
     "numbers:audit": "tsx src/cli/numbers-audit.ts",
+    "numbers:sync:anveo": "tsx src/cli/numbers-sync-anveo.ts",
     "quota:test": "tsx src/cli/test-quota-overage.ts",
     "migrate": "tsx src/cli/migrate.ts",
     "hopper:preflight": "tsx src/cli/hopper-preflight.ts"

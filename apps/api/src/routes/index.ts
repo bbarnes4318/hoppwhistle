@@ -537,8 +537,12 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
       }
 
       const prisma = (await import('../lib/prisma.js')).getPrismaClient();
-      const page = parseInt(request.query.page || '1');
-      const limit = parseInt(request.query.limit || '20');
+      const page = Math.max(parseInt(request.query.page || '1') || 1, 1);
+      // The page that consumes this asks for every number at once so it can
+      // group them by carrier; a fixed page of 20 silently hid whole carriers
+      // from an inventory that is larger than that. The cap keeps the query
+      // bounded without deciding for the caller that 20 is enough.
+      const limit = Math.min(Math.max(parseInt(request.query.limit || '20') || 20, 1), 500);
       const skip = (page - 1) * limit;
 
       let userRoles: string[] = [];
@@ -577,6 +581,13 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
                 email: true,
               },
             },
+            carrier: {
+              select: {
+                id: true,
+                name: true,
+                code: true,
+              },
+            },
           },
         }),
         prisma.phoneNumber.count({ where }),
@@ -588,6 +599,13 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
           number: n.number,
           status: n.status,
           provider: n.provider,
+          // Who the number is actually with. `carrier` is the linked routing
+          // carrier when there is one; `provider` is the upstream the DID came
+          // from and is the fallback the UI groups by for numbers imported
+          // before a Carrier row existed for them.
+          carrier: n.carrier
+            ? { id: n.carrier.id, name: n.carrier.name, code: n.carrier.code }
+            : null,
           capabilities: n.capabilities,
           poolType: n.poolType,
           poolStatus: n.poolStatus,
