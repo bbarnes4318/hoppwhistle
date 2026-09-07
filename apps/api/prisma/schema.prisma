@@ -70,6 +70,7 @@ model Tenant {
   carrierGateways          CarrierGateway[]
   carrierRoutes            CarrierRoute[]
   activationGrants         TenantActivationGrant[]
+  platformOperators        PlatformActingTenant[]
 
   @@index([slug])
   @@index([status])
@@ -281,6 +282,11 @@ model User {
   assignedInsuranceLeads      InsuranceLead[]     @relation("InsuranceLeadAssignedTo")
   createdInsuranceActivities  InsuranceActivity[] @relation("InsuranceActivityCreatedBy")
   assignedInsuranceTasks      InsuranceTask[]     @relation("InsuranceTaskAssignedTo")
+
+  /// NetEnroll platform staff. Both sit outside the tenant dimension: see
+  /// `PlatformAdmin` below for why they are not roles.
+  platformAdmin      PlatformAdmin?
+  platformActingTenant PlatformActingTenant?
 
   // Payroll relations
   timeEntries    TimeEntry[]
@@ -3355,4 +3361,83 @@ model CarrierRouteStep {
   @@index([routeId])
   @@index([carrierId])
   @@map("carrier_route_steps")
+}
+
+// ============================================================================
+// Platform staff
+// ============================================================================
+
+/// NetEnroll's own staff, who see and act across every agency.
+///
+/// ── Why this is not a role ───────────────────────────────────────────────────
+///
+/// `RoleName` is per-tenant by construction: a `UserRole` row grants a name
+/// inside the tenant its user belongs to, and every check on OWNER or ADMIN
+/// therefore means "an administrator of SOME agency". That is the right shape
+/// for an agency principal and the wrong shape for NetEnroll -- gating a
+/// platform-wide route on OWNER admits the principal of every agency on the
+/// platform the moment the first one is given a login.
+///
+/// It is also deliberately not "OWNER of a special tenant". That would put the
+/// capability back inside the tenant dimension, where a bug in tenant
+/// resolution could confer it, and where "which tenant am I acting in" and "am
+/// I allowed to act across tenants" would be the same question. They are not
+/// the same question, so they are not the same row.
+///
+/// Holding a row here is the whole capability. There is no scope on it, no
+/// tenant on it, and no level: a user either is NetEnroll staff or is not.
+/// Revoking is deleting the row.
+model PlatformAdmin {
+  id     String @id @default(uuid())
+  userId String @unique
+
+  /// Who granted it and when, because a capability this broad should never
+  /// appear in the table without a trail. `grantedBy` is a user id, or null
+  /// when the row came from the provisioning command at install time.
+  grantedAt DateTime @default(now())
+  grantedBy String?
+  note      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("platform_admins")
+}
+
+/// The one agency a platform admin is currently acting inside, if any.
+///
+/// ── Why this is a table ──────────────────────────────────────────────────────
+///
+/// A platform admin's default acting tenant is NONE: they get the cross-agency
+/// view, and agency-scoped routes refuse them, because "no tenant" is not a
+/// wildcard. To act inside one agency they select it, and that selection has to
+/// live somewhere the browser cannot reach.
+///
+/// Not a header, query parameter or body field: Phase 1 removed every one of
+/// those as a tenant input, and re-adding one for privileged users would give
+/// the most powerful accounts on the platform the weakest tenant resolution.
+/// Not the Redis session either -- `middleware/session.ts` swallows its own
+/// errors, so a Redis blip silently drops the selection, and a security-
+/// relevant switch must not be able to fail quietly.
+///
+/// So: a row, written by the enter endpoint, deleted by the leave endpoint,
+/// read by the authentication middleware, which copies it onto
+/// `request.user.tenantId`. `lib/tenant-context.ts` is untouched and still
+/// reads `request.user` and nothing else -- the selection populates the
+/// principal rather than teaching the helper a second rule.
+///
+/// Unique on `userId`: an operator is inside one agency or none, never two.
+model PlatformActingTenant {
+  id       String @id @default(uuid())
+  userId   String @unique
+  tenantId String
+
+  /// Paired with the `platform.tenant.entered` AuditLog row written at the same
+  /// moment. The row is the state; the audit log is the history.
+  enteredAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("platform_acting_tenants")
 }

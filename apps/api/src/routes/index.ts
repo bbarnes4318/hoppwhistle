@@ -3,7 +3,9 @@
 import { FastifyInstance, FastifyRequest } from 'fastify';
 import { Prisma } from '@prisma/client';
 
+import { requirePlatformAdmin } from '../lib/platform-context.js';
 import { getActingTenantId, resolveTenant } from '../lib/tenant-context.js';
+import { authenticate } from '../middleware/auth.js';
 import { AuthenticatedUser } from '../middleware/auth.js';
 
 type AuthRequest = FastifyRequest & { user?: AuthenticatedUser };
@@ -7133,8 +7135,24 @@ export async function registerBillingRoutes(fastify: FastifyInstance) {
 }
 
 // Admin API - Tenants
+/**
+ * The /admin/api/v1 surface: NetEnroll's own console, not an agency's.
+ *
+ * Every route below is platform-shaped -- it lists or creates TENANTS,
+ * carriers, trunks and rate cards across the platform -- and every one of them
+ * was registered with no authentication and no authorization whatsoever. They
+ * are stubs today, returning hardcoded placeholders, which is the only reason
+ * that has not leaked anything; a stub that becomes real behind no gate is how
+ * it would.
+ *
+ * Gated at the plugin level rather than per handler, so filling one of these in
+ * cannot accidentally ship it open.
+ */
 export async function registerAdminTenantRoutes(fastify: FastifyInstance) {
   await Promise.resolve();
+  fastify.addHook('onRequest', authenticate);
+  fastify.addHook('preHandler', requirePlatformAdmin);
+
   fastify.get('/admin/api/v1/tenants', async (_request, _reply) => {
     return {
       data: [],
@@ -7191,6 +7209,10 @@ export async function registerAdminTenantRoutes(fastify: FastifyInstance) {
 // Admin API - Numbers
 export async function registerAdminNumberRoutes(fastify: FastifyInstance) {
   await Promise.resolve();
+  // See the note on registerAdminTenantRoutes: platform console, staff only.
+  fastify.addHook('onRequest', authenticate);
+  fastify.addHook('preHandler', requirePlatformAdmin);
+
   fastify.post('/admin/api/v1/numbers/provision', async (_request, reply) => {
     void reply.code(201);
     return {
@@ -7207,6 +7229,10 @@ export async function registerAdminNumberRoutes(fastify: FastifyInstance) {
 // Admin API - Carriers
 export async function registerAdminCarrierRoutes(fastify: FastifyInstance) {
   await Promise.resolve();
+  // See the note on registerAdminTenantRoutes: platform console, staff only.
+  fastify.addHook('onRequest', authenticate);
+  fastify.addHook('preHandler', requirePlatformAdmin);
+
   fastify.get('/admin/api/v1/carriers', async (_request, _reply) => {
     return {
       data: [],
@@ -7266,6 +7292,10 @@ export async function registerAdminCarrierRoutes(fastify: FastifyInstance) {
 // Admin API - Trunks
 export async function registerAdminTrunkRoutes(fastify: FastifyInstance) {
   await Promise.resolve();
+  // See the note on registerAdminTenantRoutes: platform console, staff only.
+  fastify.addHook('onRequest', authenticate);
+  fastify.addHook('preHandler', requirePlatformAdmin);
+
   fastify.get('/admin/api/v1/trunks', async (_request, _reply) => {
     return {
       data: [],
@@ -7334,6 +7364,10 @@ export async function registerAdminTrunkRoutes(fastify: FastifyInstance) {
 // Admin API - Rate Cards
 export async function registerAdminRateCardRoutes(fastify: FastifyInstance) {
   await Promise.resolve();
+  // See the note on registerAdminTenantRoutes: platform console, staff only.
+  fastify.addHook('onRequest', authenticate);
+  fastify.addHook('preHandler', requirePlatformAdmin);
+
   fastify.get('/admin/api/v1/rate-cards', async (_request, _reply) => {
     return {
       data: [],

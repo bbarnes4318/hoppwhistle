@@ -2,11 +2,20 @@ import { createHash } from 'crypto';
 
 import { FastifyRequest, FastifyReply, FastifyInstance } from 'fastify';
 
+import { loadPlatformContext } from '../lib/platform-admin.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { auditLog } from '../services/audit.js';
 
 export interface AuthenticatedUser {
-  tenantId: string;
+  /**
+   * The agency this request acts as.
+   *
+   * For an agency user this is their own tenant. For NetEnroll staff it is the
+   * agency they have explicitly entered, or undefined for the cross-agency
+   * view -- which is not a wildcard: an agency-scoped route refuses it, because
+   * a query with no tenant is a query we cannot safely answer.
+   */
+  tenantId?: string;
   userId?: string;
   email?: string;
   apiKeyId?: string;
@@ -14,6 +23,15 @@ export interface AuthenticatedUser {
   scopes?: string[];
   buyerId?: string | null;
   publisherId?: string | null;
+
+  /** Holds a `PlatformAdmin` row. Never true for an API-key principal. */
+  isPlatformAdmin?: boolean;
+  /**
+   * The agency a platform operator has entered, mirrored from `tenantId` for
+   * the UI banner and for audit rows. Null means the cross-agency view.
+   */
+  actingTenantId?: string | null;
+  actingTenantName?: string | null;
 }
 
 /**
@@ -58,7 +76,11 @@ export async function authenticateJWT(request: FastifyRequest, reply: FastifyRep
         },
       });
 
-      if (!user || user.tenantId !== decoded.tenantId) {
+      // A platform admin may have no home tenant at all (`User.tenantId` is
+      // nullable), and their token therefore carries none. Compare only when
+      // the token actually claims one, so the check still catches a token whose
+      // tenant has drifted from the user row for an ordinary agency user.
+      if (!user || (decoded.tenantId != null && user.tenantId !== decoded.tenantId)) {
         reply.code(401).send({
           error: {
             code: 'UNAUTHORIZED',
@@ -92,14 +114,31 @@ export async function authenticateJWT(request: FastifyRequest, reply: FastifyRep
       const roles = user.roles.map(ur => ur.role.name);
       const publisherId = user.publisherId || (user.metadata as any)?.publisherId || null;
 
+      // NetEnroll staff, and the agency they have explicitly entered.
+      //
+      // For staff the selection REPLACES the token's tenant rather than
+      // supplementing it. The token is issued at login and cannot know which
+      // agency the operator entered afterwards, and a stale tenant in a
+      // long-lived token must never decide whose data is served. The row is the
+      // authority; the token only says who is asking.
+      const platform = await loadPlatformContext(decoded.userId);
+
       // Construct authenticated user object explicitly
       request.user = {
-        tenantId: decoded.tenantId,
+        tenantId: platform.isPlatformAdmin
+          ? (platform.actingTenantId ?? undefined)
+          : decoded.tenantId,
         userId: decoded.userId,
         email: decoded.email,
-        roles,
+        // Inside an agency, a platform operator carries that agency's
+        // administrator roles; in the cross-agency view they carry none. See
+        // ACTING_TENANT_ROLES for why.
+        roles: [...roles, ...platform.actingRoles.filter(r => !roles.includes(r))],
         buyerId: user.buyerId || null,
         publisherId,
+        isPlatformAdmin: platform.isPlatformAdmin,
+        actingTenantId: platform.actingTenantId,
+        actingTenantName: platform.actingTenantName,
       };
     } else {
       // API-only token without userId

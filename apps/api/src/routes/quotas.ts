@@ -2,19 +2,41 @@ import { createHash, randomBytes } from 'crypto';
 
 import { FastifyInstance } from 'fastify';
 
+import { requirePlatformAdmin } from '../lib/platform-context.js';
 import { getPrismaClient } from '../lib/prisma.js';
-import { requirePermission } from '../middleware/rbac.js';
+import { authenticate } from '../middleware/auth.js';
 import { auditCreate, auditUpdate } from '../services/audit.js';
 import { quotaService } from '../services/quota-service.js';
 
 /**
- * Quota Management Routes
+ * Quota Management Routes.
+ *
+ * ── Why these are platform routes, and why the tenant is in the path ─────────
+ *
+ * Every route here is `/admin/api/v1/tenants/:tenantId/...`: they set another
+ * agency's call ceilings, spend caps and budget override tokens. Nothing here
+ * reads the caller's own tenant, and nothing should -- an agency does not raise
+ * its own quota.
+ *
+ * They were gated on `requirePermission('admin:full')`. Two problems with that.
+ * `'admin:full'` is not in the `Permission` union at all, and `permissionMatches`
+ * treats a user's `admin:*` as matching anything, so the effective gate was
+ * "holds admin:* in SOME tenant" -- which every agency OWNER will. And the
+ * tenant in the path was never checked against the caller's, so it was also
+ * "...and may then administer ANY tenant's quota".
+ *
+ * Now: `requirePlatformAdmin`, a capability that exists outside the tenant
+ * dimension. The `:tenantId` in the path stays, and is not a Phase 1 violation:
+ * it names the OBJECT being administered, not the acting tenant of the caller.
+ * The caller's authority comes from the capability; the path says which agency
+ * they are pointing it at. Those are different things, and conflating them is
+ * what the old gate did.
  */
 export async function registerQuotaRoutes(fastify: FastifyInstance) {
   // Get tenant quota
   fastify.get(
     '/admin/api/v1/tenants/:tenantId/quota',
-    { preHandler: [requirePermission('admin:full')] },
+    { preHandler: [authenticate, requirePlatformAdmin] },
     async (request, reply) => {
       const prisma = getPrismaClient();
       const { tenantId } = request.params as { tenantId: string };
@@ -35,7 +57,7 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
   // Update tenant quota
   fastify.patch(
     '/admin/api/v1/tenants/:tenantId/quota',
-    { preHandler: [requirePermission('admin:full')] },
+    { preHandler: [authenticate, requirePlatformAdmin] },
     async (request, reply) => {
       const prisma = getPrismaClient();
       const { tenantId } = request.params as { tenantId: string };
@@ -107,7 +129,7 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
   // Get tenant budget
   fastify.get(
     '/admin/api/v1/tenants/:tenantId/budget',
-    { preHandler: [requirePermission('admin:full')] },
+    { preHandler: [authenticate, requirePlatformAdmin] },
     async (request, reply) => {
       const prisma = getPrismaClient();
       const { tenantId } = request.params as { tenantId: string };
@@ -134,7 +156,7 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
   // Update tenant budget
   fastify.patch(
     '/admin/api/v1/tenants/:tenantId/budget',
-    { preHandler: [requirePermission('admin:full')] },
+    { preHandler: [authenticate, requirePlatformAdmin] },
     async (request, reply) => {
       const prisma = getPrismaClient();
       const { tenantId } = request.params as { tenantId: string };
@@ -207,7 +229,7 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
   // Generate override token
   fastify.post(
     '/admin/api/v1/tenants/:tenantId/budget/override-token',
-    { preHandler: [requirePermission('admin:full')] },
+    { preHandler: [authenticate, requirePlatformAdmin] },
     async (request, reply) => {
       const prisma = getPrismaClient();
       const { tenantId } = request.params as { tenantId: string };
@@ -263,7 +285,7 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
   // Revoke override token
   fastify.delete(
     '/admin/api/v1/tenants/:tenantId/budget/override-token',
-    { preHandler: [requirePermission('admin:full')] },
+    { preHandler: [authenticate, requirePlatformAdmin] },
     async (request, reply) => {
       const prisma = getPrismaClient();
       const { tenantId } = request.params as { tenantId: string };
@@ -298,7 +320,7 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
   // Get quota status (current usage)
   fastify.get(
     '/admin/api/v1/tenants/:tenantId/quota/status',
-    { preHandler: [requirePermission('admin:full')] },
+    { preHandler: [authenticate, requirePlatformAdmin] },
     async (request, reply) => {
       const prisma = getPrismaClient();
       const { tenantId } = request.params as { tenantId: string };
@@ -403,7 +425,7 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
   // Create quota override
   fastify.post(
     '/admin/api/v1/tenants/:tenantId/quota/overrides',
-    { preHandler: [requirePermission('admin:full')] },
+    { preHandler: [authenticate, requirePlatformAdmin] },
     async (request, reply) => {
       const prisma = getPrismaClient();
       const { tenantId } = request.params as { tenantId: string };
@@ -450,7 +472,7 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
   // List quota overrides
   fastify.get(
     '/admin/api/v1/tenants/:tenantId/quota/overrides',
-    { preHandler: [requirePermission('admin:full')] },
+    { preHandler: [authenticate, requirePlatformAdmin] },
     async (request, reply) => {
       const prisma = getPrismaClient();
       const { tenantId } = request.params as { tenantId: string };
@@ -473,7 +495,7 @@ export async function registerQuotaRoutes(fastify: FastifyInstance) {
   // Delete quota override
   fastify.delete(
     '/admin/api/v1/tenants/:tenantId/quota/overrides/:overrideId',
-    { preHandler: [requirePermission('admin:full')] },
+    { preHandler: [authenticate, requirePlatformAdmin] },
     async (request, reply) => {
       const prisma = getPrismaClient();
       const { tenantId, overrideId } = request.params as { tenantId: string; overrideId: string };

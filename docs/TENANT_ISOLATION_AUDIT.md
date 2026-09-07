@@ -221,11 +221,12 @@ above.
   without consulting the tenant. Every call site reached in this audit now
   carries the tenant on the query instead, which is where it belongs. The helper
   itself is worth tightening so the next call site is safe by default.
-- **`bot.ts` is gated on ADMIN/OWNER**, which are per-tenant roles and therefore
-  still broader than "NetEnroll platform staff". It should move to
-  `PLATFORM_ADMIN` when that capability lands (see the architecture notes:
-  platform-level role plus an explicit, audited acting-tenant switch). Marked
-  `TODO(netenroll)` in the file.
+- ~~**`bot.ts` is gated on ADMIN/OWNER**, which are per-tenant roles and
+  therefore still broader than "NetEnroll platform staff".~~ **Resolved in Phase
+  1b.** The capability now exists outside the tenant dimension and `bot.ts` is
+  gated on it, along with `quotas.ts`, the `/admin/api/v1/*` console and the demo
+  routes. See `docs/PLATFORM_ADMIN.md` for the capability, the audited
+  acting-tenant switch, and the verdict for every route examined.
 - **`auth.ts` audit rows using `tenantId: 'default'` / `'unknown'`** on
   login/logout are pre-existing. `audit_logs.tenantId` is a foreign key, so those
   rows fail to insert and `auditLog()` swallows the error — an audit trail that

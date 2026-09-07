@@ -17,9 +17,10 @@
 
 import { createHash } from 'crypto';
 
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyRequest } from 'fastify';
 
 import { isDemoTenantAuthEnabled, warnIfDemoTenantAuthEnabled } from '../lib/demo-auth.js';
+import { loadPlatformContext } from '../lib/platform-admin.js';
 import { getPrismaClient } from '../lib/prisma.js';
 
 export function registerApiV1Auth(server: FastifyInstance): void {
@@ -66,6 +67,7 @@ export function registerApiV1Auth(server: FastifyInstance): void {
     if (authHeader && authHeader.startsWith('Bearer ')) {
       try {
         await request.jwtVerify();
+        await applyPlatformContext(request);
         return;
       } catch {
         // JWT failed, try API key / demo tenant fallback
@@ -76,6 +78,7 @@ export function registerApiV1Auth(server: FastifyInstance): void {
         const decoded = server.jwt.verify(queryToken);
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         request.user = decoded as any;
+        await applyPlatformContext(request);
         return;
       } catch {
         // JWT failed, try API key / demo tenant fallback
@@ -146,4 +149,45 @@ export function registerApiV1Auth(server: FastifyInstance): void {
       }
     }
   });
+}
+
+/**
+ * Overlay NetEnroll staff state onto a principal this hook just built from a
+ * JWT.
+ *
+ * `request.jwtVerify()` populates `request.user` straight from the token, which
+ * carries the tenant the operator had at login and knows nothing about the
+ * agency they entered afterwards. For platform staff the entered agency
+ * REPLACES it: the `PlatformActingTenant` row is the authority, the token only
+ * says who is asking, and a stale tenant in a long-lived token must never
+ * decide whose data is served.
+ *
+ * For everyone else this is a no-op beyond one indexed lookup that misses.
+ */
+async function applyPlatformContext(request: FastifyRequest): Promise<void> {
+  const principal = request.user as
+    | {
+        userId?: string;
+        tenantId?: string;
+        roles?: string[];
+        isPlatformAdmin?: boolean;
+        actingTenantId?: string | null;
+        actingTenantName?: string | null;
+      }
+    | undefined;
+
+  if (!principal?.userId) return;
+
+  const platform = await loadPlatformContext(principal.userId);
+  if (!platform.isPlatformAdmin) return;
+
+  principal.isPlatformAdmin = true;
+  principal.actingTenantId = platform.actingTenantId;
+  principal.actingTenantName = platform.actingTenantName;
+  principal.tenantId = platform.actingTenantId ?? undefined;
+
+  // Inside an agency, carry that agency's administrator roles; in the
+  // cross-agency view, carry none. See ACTING_TENANT_ROLES.
+  const existing = principal.roles ?? [];
+  principal.roles = [...existing, ...platform.actingRoles.filter(r => !existing.includes(r))];
 }

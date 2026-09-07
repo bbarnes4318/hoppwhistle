@@ -252,6 +252,15 @@ export async function checkPermission(
     return false;
   }
 
+  // Permissions are per-tenant: they are read from role rows inside one agency.
+  // A NetEnroll operator in the cross-agency view has no acting tenant and so
+  // holds no per-tenant permission -- correctly, because the platform surfaces
+  // are gated on `requirePlatformAdmin`, not on these. Refusing here rather
+  // than looking permissions up under `undefined` keeps that explicit.
+  if (!user.tenantId) {
+    return false;
+  }
+
   // API key authentication
   if (user.apiKeyId) {
     const scopes = await getApiKeyScopes(user.tenantId, user.apiKeyId);
@@ -287,21 +296,33 @@ export function requirePermission(requiredPermission: Permission) {
     const hasPermission = await checkPermission(request, requiredPermission);
 
     if (!hasPermission) {
-      // Audit failed authorization attempt
-      await auditLog({
-        tenantId: user.tenantId,
-        userId: user.userId,
-        apiKeyId: user.apiKeyId,
-        action: 'authorization.denied',
-        entityType: 'Permission',
-        resource: request.url,
-        method: request.method,
-        ipAddress: request.ip,
-        userAgent: request.headers['user-agent'],
-        requestId: request.id,
-        success: false,
-        error: `Permission denied: ${requiredPermission}`,
-      });
+      // Audit failed authorization attempt.
+      //
+      // Only when there is a tenant to attribute it to: `audit_logs.tenantId`
+      // is a foreign key, so a row without one fails to insert and `auditLog`
+      // swallows the error -- a trail that reads as present and records
+      // nothing. A tenant-less denial is logged instead.
+      if (user.tenantId) {
+        await auditLog({
+          tenantId: user.tenantId,
+          userId: user.userId,
+          apiKeyId: user.apiKeyId,
+          action: 'authorization.denied',
+          entityType: 'Permission',
+          resource: request.url,
+          method: request.method,
+          ipAddress: request.ip,
+          userAgent: request.headers['user-agent'],
+          requestId: request.id,
+          success: false,
+          error: `Permission denied: ${requiredPermission}`,
+        });
+      } else {
+        request.log.warn(
+          { userId: user.userId, resource: request.url, requiredPermission },
+          'Permission denied for a principal with no acting tenant'
+        );
+      }
 
       reply.code(403).send({
         error: {
@@ -338,21 +359,29 @@ export function requireAnyPermission(...permissions: Permission[]) {
       }
     }
 
-    // Audit failed authorization attempt
-    await auditLog({
-      tenantId: user.tenantId,
-      userId: user.userId,
-      apiKeyId: user.apiKeyId,
-      action: 'authorization.denied',
-      entityType: 'Permission',
-      resource: request.url,
-      method: request.method,
-      ipAddress: request.ip,
-      userAgent: request.headers['user-agent'],
-      requestId: request.id,
-      success: false,
-      error: `Permission denied: requires one of [${permissions.join(', ')}]`,
-    });
+    // Audit failed authorization attempt, when there is a tenant to attribute
+    // it to -- see the note in requirePermission above.
+    if (user.tenantId) {
+      await auditLog({
+        tenantId: user.tenantId,
+        userId: user.userId,
+        apiKeyId: user.apiKeyId,
+        action: 'authorization.denied',
+        entityType: 'Permission',
+        resource: request.url,
+        method: request.method,
+        ipAddress: request.ip,
+        userAgent: request.headers['user-agent'],
+        requestId: request.id,
+        success: false,
+        error: `Permission denied: requires one of [${permissions.join(', ')}]`,
+      });
+    } else {
+      request.log.warn(
+        { userId: user.userId, resource: request.url, permissions },
+        'Permission denied for a principal with no acting tenant'
+      );
+    }
 
     reply.code(403).send({
       error: {

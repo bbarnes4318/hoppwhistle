@@ -92,19 +92,24 @@ export function rateLimit(options: {
         });
 
         if (!result.allowed) {
-          await auditLog({
-            tenantId: user.tenantId,
-            apiKeyId: user.apiKeyId,
-            action: 'rate_limit.exceeded',
-            entityType: 'RateLimit',
-            resource: request.url,
-            method: request.method,
-            ipAddress: request.ip,
-            userAgent: request.headers['user-agent'],
-            requestId: request.id,
-            success: false,
-            error: `Rate limit exceeded: ${apiKey.rateLimit} requests per ${windowMs}ms`,
-          });
+          // The audit row needs a tenant to hang off (`audit_logs.tenantId` is
+          // a foreign key). The 429 does NOT -- it is enforcement, and must be
+          // sent whether or not the denial could be recorded.
+          if (user.tenantId) {
+            await auditLog({
+              tenantId: user.tenantId,
+              apiKeyId: user.apiKeyId,
+              action: 'rate_limit.exceeded',
+              entityType: 'RateLimit',
+              resource: request.url,
+              method: request.method,
+              ipAddress: request.ip,
+              userAgent: request.headers['user-agent'],
+              requestId: request.id,
+              success: false,
+              error: `Rate limit exceeded: ${apiKey.rateLimit} requests per ${windowMs}ms`,
+            });
+          }
 
           reply.code(429).send({
             error: {

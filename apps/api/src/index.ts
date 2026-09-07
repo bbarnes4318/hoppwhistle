@@ -171,6 +171,11 @@ async function buildServer() {
   await server.register(registerAdminTrunkRoutes);
   await server.register(registerAdminRateCardRoutes);
   await server.register(registerQuotaRoutes);
+
+  // NetEnroll platform staff: the acting-tenant switch and the context the UI
+  // banner reads. See lib/platform-admin.ts.
+  const { registerPlatformRoutes } = await import('./routes/platform.js');
+  await server.register(registerPlatformRoutes);
   // Single aggregate endpoint powering the LiveStrip for every role.
   await server.register(registerLiveMetricsRoutes);
 

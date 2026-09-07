@@ -20,13 +20,19 @@
  * surface answered anonymous callers over the internet.
  *
  * They are therefore an authenticated route, not a webhook, and the shared
- * resource means the only safe audience is NetEnroll platform staff. Until the
- * platform-level role exists they are gated on ADMIN/OWNER, which is a
- * per-tenant role and so still broader than it should be -- but it is a
- * credential and a role check where there were neither.
+ * resource means the only safe audience is NetEnroll platform staff.
  *
- * TODO(netenroll): re-gate on PLATFORM_ADMIN once that capability lands, and
- * decide whether the dialer becomes per-agency or stays a platform service.
+ * They are now gated on exactly that. The previous pass gated them on
+ * ADMIN/OWNER as the closest thing available, and said so: those are per-tenant
+ * roles, so "an administrator of SOME agency" would have admitted every agency
+ * principal the moment the first one was given a login. `requirePlatformAdmin`
+ * checks a `PlatformAdmin` row, which exists outside the tenant dimension
+ * entirely.
+ *
+ * Still open, and deliberately not this change: whether the dialer becomes
+ * per-agency or stays a platform service. Until it does, one agency's leads
+ * genuinely are the file every other agency is dialed from, and no gate on this
+ * surface can fix that -- only NetEnroll operating it can.
  */
 // AI Bot routes - Campaign control, TTS preview, lead management
 import { ChildProcess, spawn } from 'child_process';
@@ -35,8 +41,8 @@ import path from 'path';
 
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
+import { requirePlatformAdmin } from '../lib/platform-context.js';
 import { authenticate } from '../middleware/auth.js';
-import { requireRole } from '../middleware/rbac.js';
 
 // Configuration paths (same as dial.py)
 const BASE_DIR = process.env.HOPWHISTLE_DIR || '/opt/hopwhistle';
@@ -78,10 +84,11 @@ function getErrorMessage(e: unknown): string {
 
 // eslint-disable-next-line @typescript-eslint/require-await -- plugin signature
 export async function registerBotRoutes(fastify: FastifyInstance): Promise<void> {
-  // Credential first, then role. Applied to every route in this plugin rather
-  // than per handler, so a route added later cannot be added unguarded.
+  // Credential first, then the platform capability. Applied to every route in
+  // this plugin rather than per handler, so a route added later cannot be added
+  // unguarded.
   fastify.addHook('onRequest', authenticate);
-  fastify.addHook('preHandler', requireRole('ADMIN', 'OWNER'));
+  fastify.addHook('preHandler', requirePlatformAdmin);
 
   /**
    * Resolve a caller-supplied recording id to a path inside RECORDINGS_DIR.
