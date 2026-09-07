@@ -277,3 +277,212 @@ TEST_DATABASE_URL=postgresql://user:pass@localhost:5432/hopwhistle_test pnpm --f
 
 Full suite at the time of writing: **508 passed, 8 skipped**. Typecheck errors
 went from 178 to 146 (none added); lint problems from 1487 to 1413.
+
+---
+
+# Tenant isolation audit — Phase 2: the event bus, Redis and WebSockets
+
+**Scope:** every `eventBus.publish`, every Redis read and write, and every
+WebSocket or SSE broadcast reachable from a request, across `apps/api` and
+`apps/worker`.
+
+**Why this pass exists.** The Phase 1 audit walked Prisma queries. That made it
+structurally blind to anything whose state lives outside Postgres, and Phase 1b
+found the proof by hand: `demo-events.ts` took a `tenantId` **from the request
+body** and published call events onto the bus for it — the payload an agency's
+live board and WebSocket feed render. No per-query check would ever have seen
+it, because there is no query.
+
+Phase 2 computes billing inputs from live call state and Phase 3 charges money
+against them, so the class of hole matters now rather than later. This is the
+systematic pass over that class.
+
+---
+
+## 1. How this pass was done
+
+Three enumerations, each read by hand rather than pattern-matched:
+
+| Surface | How enumerated | Sites |
+| --- | --- | ---: |
+| Event-bus publishes | `eventBus.publish(` across `apps/api` and `apps/worker` | 20 |
+| Redis reads and writes | every module importing `getRedisClient` | 16 files |
+| Broadcast to a client | `@fastify/websocket` routes, `text/event-stream` responses | 3 |
+
+For each, two questions: **where does the tenant come from**, and **can a caller
+influence it?** A key that carries no tenant is not automatically a finding —
+`call:<uuid>` cannot collide — but a key a caller names, holding one agency's
+data, always is.
+
+---
+
+## 2. Findings and fixes
+
+### 2.1 `routes/websocket.ts` — the live feed authenticated against an environment variable
+
+`/ws/events` is the socket an agency's live board subscribes to. It decided who
+was on the other end like this:
+
+```ts
+const validApiKeys = (process.env.VALID_API_KEYS || '').split(',').filter(Boolean);
+if (validApiKeys.length > 0 && !validApiKeys.includes(apiKey)) return null;
+return { tenantId: process.env.DEFAULT_TENANT_ID || '00000000-…-000000000000' };
+```
+
+Three problems, and the third is the one that matters.
+
+1. **The check does not run.** `VALID_API_KEYS` is unset, so `validApiKeys` is
+   empty, so `validApiKeys.length > 0` is false and the comparison is skipped
+   entirely. Any non-empty string in `?apiKey=` opened a socket.
+2. **It has no relationship to the `api_keys` table.** Even with the variable
+   set, a key revoked in the product stayed valid here, and a key issued in the
+   product was rejected.
+3. **The tenant came from configuration, not from the credential.** Every
+   subscriber on the platform was handed the same `DEFAULT_TENANT_ID`. The
+   delivery filter (`payload.tenantId === tenantId`) then compared each event
+   against that one agency — so the feed served whichever agency the environment
+   variable happened to name, to anyone who connected, and served the *other*
+   agency nothing.
+
+The subscription mechanism was decoration on top of that. A `subscribe` message
+recorded its channels in a `Set` that was never read; delivery went out on every
+channel to every socket regardless of what had been asked for.
+
+**Fixed.** The credential is verified against the same stores the HTTP surface
+uses — an `api_keys` row looked up by SHA-256 hash, with status, expiry and
+tenant status all checked, or a JWT verified with the server's own key — and the
+tenant comes from that credential. For a person the database decides, including
+`PlatformActingTenant` for NetEnroll staff, so a stale tenant in a long-lived
+token decides nothing here either. A platform operator in the cross-agency view
+gets **no socket**, rather than a socket spanning every agency: a firehose
+across agencies is one bug away from showing an agency another agency's callers.
+
+Channels are now authorised **at subscribe time** against an allow-list, refused
+by name when they are not on it, and nothing is delivered on a channel the
+socket has not been granted. The tenant comparison stays as the boundary; the
+grant is what the subscriber asked for. Two conditions, both required.
+
+The welcome frame no longer echoes the tenant id back: the client never supplied
+it and does not need it.
+
+### 2.2 `services/event-bus.ts` — one shared connection, unbounded listeners
+
+`subscribePubSub()` kept a single ioredis connection for the whole process and
+attached a fresh `pmessage` listener to it on every call, never removing them.
+With one WebSocket that is invisible. With several:
+
+- closing the **first** socket ran `punsubscribe('call.*')` on the shared
+  connection and silently stopped delivery for every other socket still open;
+- listeners for closed sockets stayed attached and accumulated, tripping Node's
+  max-listeners warning at eleven connections.
+
+**Fixed.** Listeners are attached once; the handlers live in a `Set`; unsubscribe
+removes one handler and only tears down the Redis subscription when the last one
+has gone. The handler is still called for every event of every tenant — that is
+inherent to a shared pub/sub connection — which is why the comment there says in
+so many words that the caller must compare `payload.tenantId` first, and why
+`routes/websocket.ts` is the only caller.
+
+### 2.3 `POST /api/v1/agent/call/:callId/hold` — live call state, keyed by call id alone
+
+Live call state lives in Redis at `call:<callId>`, and the call id arrives as a
+path parameter. `/hold` read that key and wrote it back with **no tenant check
+at all**: an agent of one agency could put another agency's live call on hold,
+and the 404-versus-200 answer told them which call ids existed on the platform.
+
+The neighbouring `/screenpop` route had been given a post-hoc comparison in
+Phase 1 (it returns a lead's name, number and history); `/hold` had not.
+
+**Fixed.** `CallStateService` gained `getCallStateForTenant()` and
+`updateCallStateForTenant()`, which compare the stored `tenantId` against the
+acting tenant and answer `null` for a mismatch — the same answer as "no such
+call", so the route is not an existence oracle. `/hold`, `/answer`, `/hangup`
+and `/screenpop` all go through them, and an update can no longer carry a
+`tenantId` that would move a call between agencies. The unguarded methods remain
+for the flow engine, which created the state and holds the tenant, and for the
+platform-gated demo publisher.
+
+### 2.4 `routes/demo-events.ts` — recorded, fixed in Phase 1b
+
+Took `tenantId` from the request body, unauthenticated, and published call
+events onto the bus for it. Fixed in Phase 1b by gating the plugin on the
+platform capability; the `tenantId` in the body stays, and is not a Phase 1
+violation for the same reason the `:tenantId` in `quotas.ts` is not — it names
+the object being administered, and the authority comes from the capability.
+
+Listed here because it is the finding that defined this pass, and because a
+reader of this document should be able to see the whole class in one place.
+
+---
+
+## 3. Event-bus publishes — where the tenant comes from
+
+Every publish, and what supplies its `tenantId`.
+
+| Site | Tenant from | Caller-influenced? |
+| --- | --- | --- |
+| `services/flow-engine.ts` ×9 | `this.tenantId`, set once from the flow's own execution context when the engine is constructed | No |
+| `services/recording-service.ts` ×2 | `call.tenantId`, read from the Call row the recording belongs to | No |
+| `routes/did-routes.ts` ×2 (FreeSWITCH CDR) | `route.tenantId` on the `DidRoute` row resolved from `body.routeId`, or the RTB route info resolved from the DID | No — the row is the tenant. `body.routeId` names the resource; Phase 1 already scoped the writes beside it |
+| `routes/agent-phone.ts` ×8 | `requireAgent(request).tenantId`, i.e. the authenticated principal through the Phase 1 helper | No |
+| `routes/demo-events.ts` ×2 | the request body | Yes, and deliberately: platform-capability-gated (§2.4) |
+
+No publish takes its tenant from a header, a query parameter, a hostname, or —
+outside the platform-gated demo routes — a request body.
+
+---
+
+## 4. Redis keys — every key, and its tenant dimension
+
+| Key | Written by | Tenant dimension | Verdict |
+| --- | --- | --- | --- |
+| `call:<callId>` | `services/call-state.ts` | In the value, not the key | **Fixed** (§2.3). The key is collision-free (UUID), but the id arrives from the wire, so access is now compared |
+| `agent:status:<userId>` | `routes/agent-phone.ts`, read by `services/routing.ts` | Implicit: a user belongs to exactly one agency, and both sites resolve the user id from within a tenant-scoped query or from the authenticated principal | Safe. A caller cannot name another agency's user id and have it read |
+| `live:metrics:v1:<tenantId>:<role>:<scopeId>` | `routes/live-metrics.ts` | **In the key**, from `getActingTenantId()` | Safe |
+| `route:did:<e164>` | `services/number-pool-service.ts`, `routes/did-routes.ts` | In the value. The key is a DID, which is globally unique and is the *addressed resource* | Safe — the correct shape for a webhook: the tenant is derived from the thing being addressed |
+| `ping:lease:<pingId>`, `ping:result:<requestId>` | `services/number-pool-service.ts`, `services/auction-service.ts` | In the value; keys are server-generated opaque ids | Safe |
+| `ping:cap:reserved:<endpointId>` | `services/auction-service.ts` | A buyer endpoint id, itself tenant-owned | Safe |
+| `lock:number:<e164>` | `services/number-pool-service.ts` | None, and correctly so: it is a lock over a globally unique DID, and per-tenant locks would not exclude each other | Safe |
+| `tcpa:<tenDigit>` | `services/tcpa-validation-service.ts` | None | Safe by nature. The value is a third party's answer about a phone number — federal DNC and litigator status — which is a fact about the number, not about any agency. A per-tenant key would multiply the API bill for identical answers |
+| `session:<sessionId>` | `middleware/session.ts` | In the value; the key is a server-generated session id | Safe |
+| `rate_limit:<type>:<identifier>:<window>` | `middleware/rate-limit.ts` | Identifier is an API key id or an IP | Safe |
+| `events:stream` (+ consumer groups) | `services/event-bus.ts`, both workers | In each entry's payload | Safe. Consumers are server-side; no request reads the stream |
+
+Two workers (`recording-analysis-worker`, `industry-research-worker`) create
+consumer groups on `events:stream` and read entries whose tenant is in the
+payload written by the publisher. Nothing a caller sends reaches those keys.
+
+---
+
+## 5. Broadcast surfaces
+
+| Surface | Tenant at subscribe time | Verdict |
+| --- | --- | --- |
+| `routes/websocket.ts` `/ws/events` | Now from the verified credential; channels authorised on subscribe | **Fixed** (§2.1) |
+| `routes/lead-inject.ts` `/lead-inject/stream` (SSE) | `resolveTenant(request, reply)`; the store and emitter are keyed by tenant (`lead:<tenantId>`) | Safe — fixed in Phase 1 |
+| `routes/automation.ts` `/status/:jobId` (SSE) | `getTenantJob(jobId, tenantId)` compares the job's tenant before the stream opens and 404s on a miss | Safe |
+
+The rule this pass leaves behind: **a subscription is authorised when it is
+made, not filtered when it is delivered.** A delivery-time filter is one
+refactor away from being dropped, and nothing fails loudly when it is.
+
+---
+
+## 6. Left deliberately, with reasons
+
+- **`agent:status:<userId>` is not tenant-prefixed.** Every reader resolves the
+  user id from inside a tenant-scoped query (`routing.ts` builds its map from
+  `phoneNumber.findMany({ where: { tenantId } })`) or from the authenticated
+  principal (`agent-phone.ts` writes only the caller's own status). Prefixing it
+  would be tidier and would change nothing about what is reachable; it would
+  also orphan every live key at deploy time, which on a status flag that gates
+  call routing is a worse trade than the tidiness is worth.
+- **`route:did:<e164>` and the FreeSWITCH endpoints** derive their tenant from
+  the DID being addressed, which is correct for a webhook. The residual risk is
+  unchanged from Phase 1 §4: "internal network only" is a deployment assumption
+  rather than an enforced one, and the shared-secret guard remains the obvious
+  follow-up.
+- **`aivoice.ts` and `fish.ts`** share one third-party workspace across agencies
+  and are gated on "any authenticated user". Flagged in Phase 1b §3 and still
+  out of scope; they are not event-bus or Redis surfaces and this pass did not
+  widen them.
