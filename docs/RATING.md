@@ -75,27 +75,102 @@ Attribution is by submission timestamp, not by the date of the call that
 produced it. An application from a 4pm call submitted at 9am the next day belongs
 to the next day.
 
-### Business day
+### Three kinds of day, and one file each
 
-A calendar day in **America/New_York**, ending 23:59:59.999 local. One
-definition, in `services/rating/business-day.ts`, and no second timezone
-assumption is permitted anywhere in the codebase for rating.
+Phase 2 used one term, "business day", for two incompatible jobs. This is the
+correction, and it matters because the wrong reading is invisible: a shortened
+deadline is not an error message, it is just an earlier date.
 
-Not `toISOString().slice(0,10)` — that is UTC, and for five hours every evening
-it names tomorrow, which would move every application submitted after 8pm
-Eastern onto the following day. Not the server's zone (UTC in production,
-whatever the laptop says otherwise). Not the browser's.
+| Term | Means | Used for | File |
+| --- | --- | --- | --- |
+| **Calendar day** | 00:00:00.000–23:59:59.999 in America/New_York | the day boundary everything else is built from; the day a rate is effective on; the day an application is attributed to | `services/rating/calendar-day.ts` |
+| **Business Day** | Monday–Friday, excluding US federal holidays (observed) | **contractual notice periods only** | `services/rating/business-day.ts` |
+| **Delivery Day** | a calendar day on which NetEnroll delivered at least one call **to that agency** | **the rating window only** | `services/rating/delivery-day.ts` |
 
-"Business day" here means *the day as the business reckons it*, which is the
-thing that ends at 23:59:59 Eastern. It deliberately does **not** mean "weekday":
-both launch agencies take calls at weekends, and skipping Saturday and Sunday
-would price Monday off a window reaching back to the previous Wednesday — a stale
-sample, and one an agency reading its own portal could not reconstruct. The
-trailing window is consecutive calendar days.
+**None of the three may stand in for another.**
+
+#### Calendar day
+
+The timezone. Not `toISOString().slice(0,10)` — that is UTC, and for five hours
+every evening it names tomorrow, which would move every application submitted
+after 8pm Eastern onto the following day. Not the server's zone (UTC in
+production, whatever the laptop says otherwise). Not the browser's.
 
 DST is handled and pinned: the spring-forward day is 23 hours long, the
 fall-back day is 25, and a winter day starts at 05:00Z where a summer day starts
 at 04:00Z.
+
+#### Business Day — contractual periods only
+
+The signed agreement counts four things in Business Days, and every one of them
+is a period the agency is entitled to:
+
+| Period | Length |
+| --- | ---: |
+| Settlement dispute window | 5 Business Days |
+| Delivery window | 30 Business Days |
+| Grace period on failed settlement | 5 Business Days |
+
+Reading these as calendar days **shortens every one**. A five-day dispute window
+opened on a Thursday runs Thu, Fri, Mon, Tue, Wed and expires on the following
+**Wednesday**; read as calendar days it expires on **Monday**, and the agency
+loses two days of a right it was granted in writing.
+
+The eleven US federal holidays are computed, not tabulated, so the definition
+does not quietly expire at the end of a hardcoded list of years. The **observed**
+day is the one that counts (5 U.S.C. 6103(b)): a fixed-date holiday falling on a
+Saturday is observed the preceding Friday, on a Sunday the following Monday. So
+Independence Day 2026 falls on a Saturday and Friday 3 July is not a Business
+Day.
+
+Two functions, deliberately named apart, because both readings appear in
+commercial writing and a single ambiguous helper is how the off-by-one gets in:
+
+- `businessDayPeriodEnd(start, n)` — an *n*-Business-Day period **beginning** on
+  `start`, counting `start` as day 1. Thursday + 5 → the following Wednesday.
+- `addBusinessDays(day, n)` — *n* Business Days **after** `day`, exclusive of it.
+  Thursday + 5 → the following Thursday.
+
+Phase 2 does not enforce any of these periods; Phase 3 does. The definition
+lives here now so Phase 3 cannot reinvent it as calendar days.
+
+#### Delivery Day — the rating window only
+
+A calendar day on which NetEnroll delivered at least one call to **that agency**,
+using the same `deliveredCallWhere` predicate the denominator is counted with —
+one definition, used twice, rather than two that can drift.
+
+The rating window is **the trailing three Delivery Days**. This is right whether
+an agency works five days a week or seven, and — the point — it does not depend
+on knowing which:
+
+| | Monday's window |
+| --- | --- |
+| agency that takes no weekend calls | the prior **Thursday, Friday, Monday** |
+| agency that does take weekend calls | **Saturday, Sunday, Monday** |
+
+Calendar days would price the first agency's Monday off Saturday and Sunday, two
+days on which it was delivered nothing, with a third of its denominator zero for
+reasons unconnected to how it closes. Excluding weekends would be wrong the
+other way for the second. Neither requires asking.
+
+The definition deliberately does **not** read a configured schedule. A schedule
+field is something somebody has to keep true, and a stale one would misprice
+silently; "a day we delivered a call" is observable from the same rows the
+closing percentage is already measured from.
+
+**The window is not contiguous.** Thursday/Friday/Monday spans a weekend, so
+`windowStart`..`windowEndExclusive` covers five days while the counts cover
+three. Anything recomputing from a `rate_changes` row must use `windowDayKeys`;
+both are stored so that is unambiguous rather than inferred, and
+`measureDeliveryDayWindow` sums per day for exactly this reason.
+
+**A short window is recorded short, never padded.** A new agency with two
+Delivery Days is priced on two days of evidence and `windowDaysFound` says 2
+against `windowDeliveryDays` 3. `deliveryDayLookback` (60 calendar days,
+configurable) bounds the search; an agency with no Delivery Days in it is
+`NO_DATA`, keeps its previous rate, and is **not** flagged — an agency that was
+sent no calls has not performed below the floor, it has not performed at all.
 
 ### Per agency, always
 
@@ -181,12 +256,15 @@ block is done; from that point the recorded measurements are already there.
 
 ## 3. The rating engine
 
-After the close of each business day, each agency's closing percentage is
-recomputed over the **trailing 3 business days** and its rate derived from the
-curve. That rate applies to the **next** business day.
+After the close of each calendar day, each agency's closing percentage is
+recomputed over the **trailing 3 Delivery Days** and its rate derived from the
+curve. That rate applies to the **next calendar day** — a rate applies to a
+whole day, including one on which the agency takes no calls; it simply does not
+earn at it then.
 
-The window length is configurable (`rating_settings.windowBusinessDays`),
-defaulting to 3.
+The window length is configurable (`rating_settings.windowDeliveryDays`,
+default 3) as is how far back to look for those days
+(`rating_settings.deliveryDayLookback`, default 60 calendar days).
 
 ### What is deliberately absent
 
@@ -206,8 +284,9 @@ Every run writes one immutable `rate_changes` row:
 
 | Column | |
 | --- | --- |
-| `tenantId`, `effectiveBusinessDay` | the agency and the day the rate applies to |
-| `windowStart`, `windowEndExclusive`, `windowBusinessDays`, `windowDayKeys` | the window, both as instants and as the day keys verbatim |
+| `tenantId`, `effectiveCalendarDay` | the agency and the calendar day the rate applies to |
+| `windowStart`, `windowEndExclusive` | the span, which for a non-contiguous window is wider than the days |
+| `windowDeliveryDays`, `windowDaysFound`, `windowDayKeys` | Delivery Days asked for, found, and which ones |
 | `deliveredCalls`, `submittedApplications` | the two counts |
 | `closingPct` | what they produce; null when there were no delivered calls |
 | `curveVersionId`, `curveVersion` | which curve priced it |
@@ -343,9 +422,10 @@ replay every migration from the beginning.
 
 | Suite | Cases | What it pins |
 | --- | ---: | --- |
-| `services/rating/__tests__/business-day.test.ts` | 13 | Eastern reckoning, the 23:59:59 boundary, both DST transitions, month/year/leap-day walks, window construction, malformed input refused |
+| `services/rating/__tests__/calendar-day.test.ts` | 14 | Eastern reckoning, the 23:59:59 boundary, both DST transitions, month/year/leap-day walks, weekday naming, a non-contiguous window spanning its gap, malformed input refused |
+| `services/rating/__tests__/business-day.test.ts` | 19 | Weekends and all eleven federal holidays including observed days; Thursday + 5 Business Days ending the following Wednesday; a holiday inside a period extending it; the two counting readings kept apart; the three contractual periods |
 | `services/rating/__tests__/rate-curve.test.ts` | 13 | Every anchor exactly; interpolation; flat at and above 15%; no rate below 5% and a rate exactly at 5%; continuity across 10%; monotonicity; a past settlement priced from its own version |
-| `__tests__/rating-engine.test.ts` | 38 | Against a real database: the two counts, day attribution, two agencies rating independently, the immutable record recomputing to the same rate, the review flag, curve versioning, and the portal's four numbers |
+| `__tests__/rating-engine.test.ts` | 45 | Against a real database: the two counts, day attribution, Delivery Day windows for both agency schedules, two agencies rating independently, the immutable record recomputing to the same rate, the review flag, curve versioning, and the portal's four numbers |
 
 The cases the brief names, and where they are:
 
@@ -359,6 +439,10 @@ The cases the brief names, and where they are:
 - a rate change record recomputes to the same rate from its own stored values — `rating-engine.test.ts`
 - an agency crossing below 5% gets the flag and no rate — same file
 - two agencies with different volumes rate independently on the same day — same file, at the launch volumes (450/45 and 150/9)
+- **an agency taking no weekend calls rates Monday off the prior Thu/Fri/Mon** — `rating-engine.test.ts` §4b
+- **an agency taking weekend calls rates Monday off Sat/Sun/Mon** — same file, same section, on the other tenant in the same fixture
+- **a five-Business-Day period starting Thursday ends the following Wednesday, not Monday** — `business-day.test.ts`
+- **a federal holiday inside a Business Day period extends it by one day** — same file
 
 ```
 TEST_DATABASE_URL=postgresql://user:pass@localhost:5432/hopwhistle_test \

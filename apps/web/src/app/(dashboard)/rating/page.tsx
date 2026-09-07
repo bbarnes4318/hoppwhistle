@@ -25,8 +25,13 @@ import { cn } from '@/lib/utils';
  * Two of these are closing percentages and they are not the same number:
  *
  *   Today so far        moves all day and prices nothing.
- *   Rating window       the trailing window that actually set the rate now in
- *                       force. This is what the agency is paid on.
+ *   Rating window       the trailing three DELIVERY DAYS that actually set the
+ *                       rate now in force. This is what the agency is paid on.
+ *
+ * A Delivery Day is a calendar day on which this agency was delivered at least
+ * one call, so a weekday-only agency's Monday window is the prior Thursday,
+ * Friday and Monday. The panel names those days rather than saying "3 days":
+ * an agency that cannot reconstruct its own window cannot check its own price.
  *
  * An agency that reads the first as the second thinks its price changed at
  * 10am. So they are separated, labelled with what each does, and the window one
@@ -46,26 +51,28 @@ import { cn } from '@/lib/utils';
  */
 
 interface RatingSummary {
-  businessDay: string;
+  calendarDay: string;
   timeZone: string;
   status: 'INTRODUCTORY' | 'OPENING_BLOCK' | 'RATED' | 'UNDER_REVIEW';
   today: {
-    businessDay: string;
+    calendarDay: string;
     deliveredCalls: number;
     submittedApplications: number;
     closingPct: number | null;
   };
   ratingWindow: {
-    businessDays: number;
+    deliveryDays: number;
+    daysFound: number;
     dayKeys: string[];
     deliveredCalls: number;
     submittedApplications: number;
     closingPct: number | null;
   };
   currentRate: number | null;
-  currentRateBusinessDay: string | null;
+  currentRateCalendarDay: string | null;
   trackingRate: number | null;
   trackingBelowMinimum: boolean;
+  trackingDayKeys: string[];
   curveVersion: number;
   reviewFlag: {
     id: string;
@@ -80,8 +87,10 @@ interface RatingSummary {
 
 interface RateChangeRow {
   id: string;
-  effectiveBusinessDay: string;
+  effectiveCalendarDay: string;
   windowDayKeys: string[];
+  windowDeliveryDays: number;
+  windowDaysFound: number;
   deliveredCalls: number;
   submittedApplications: number;
   closingPct: number | null;
@@ -146,16 +155,27 @@ export default function RatingPage(): JSX.Element {
     );
   }
 
+  /*
+   * The days themselves, not a count.
+   *
+   * "3 days" does not tell an agency whether its weekend was in the window, and
+   * an agency that cannot reconstruct its own window cannot check its own
+   * price. For a weekday-only agency this reads "Sep 3, Sep 4, Sep 7".
+   */
   const windowLabel =
     summary.ratingWindow.dayKeys.length > 0
-      ? `${summary.ratingWindow.dayKeys[0]} → ${summary.ratingWindow.dayKeys[summary.ratingWindow.dayKeys.length - 1]}`
-      : `${summary.ratingWindow.businessDays} business days`;
+      ? summary.ratingWindow.dayKeys.join(', ')
+      : `${summary.ratingWindow.deliveryDays} delivery days`;
+
+  const windowShort =
+    summary.ratingWindow.dayKeys.length > 0 &&
+    summary.ratingWindow.daysFound < summary.ratingWindow.deliveryDays;
 
   return (
     <CompactPageShell fullHeight={false}>
       <CompactPageHeader
         title="Rate"
-        subtitle={`Business days end 23:59:59 ${summary.timeZone} · curve v${summary.curveVersion}`}
+        subtitle={`Days end 23:59:59 ${summary.timeZone} · curve v${summary.curveVersion}`}
         icon={Gauge}
       >
         <Badge variant={summary.status === 'UNDER_REVIEW' ? 'destructive' : 'secondary'}>
@@ -190,7 +210,7 @@ export default function RatingPage(): JSX.Element {
             <p className="text-3xl font-bold tabular-nums">{dollars(summary.currentRate)}</p>
             <p className="mt-1 text-[11px] text-muted-foreground">
               per submitted application
-              {summary.currentRateBusinessDay ? ` · effective ${summary.currentRateBusinessDay}` : ''}
+              {summary.currentRateCalendarDay ? ` · effective ${summary.currentRateCalendarDay}` : ''}
             </p>
           </CardContent>
         </Card>
@@ -209,7 +229,13 @@ export default function RatingPage(): JSX.Element {
             </p>
             <p className="mt-1 text-[11px] text-muted-foreground">
               {summary.ratingWindow.submittedApplications} of{' '}
-              {summary.ratingWindow.deliveredCalls} delivered · {windowLabel}
+              {summary.ratingWindow.deliveredCalls} delivered
+            </p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              Delivery days: {windowLabel}
+              {windowShort
+                ? ` · ${summary.ratingWindow.daysFound} of ${summary.ratingWindow.deliveryDays} found`
+                : ''}
             </p>
           </CardContent>
         </Card>
@@ -254,6 +280,11 @@ export default function RatingPage(): JSX.Element {
                 ? 'the window ending today is below the curve minimum'
                 : 'what tomorrow would be if today closed now'}
             </p>
+            {summary.trackingDayKeys.length > 0 && (
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                over {summary.trackingDayKeys.join(', ')}
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -294,7 +325,7 @@ export default function RatingPage(): JSX.Element {
                   <TableHead className="text-right">Applications</TableHead>
                   <TableHead className="text-right">Closing</TableHead>
                   <TableHead className="text-right">Rate</TableHead>
-                  <TableHead>Window</TableHead>
+                  <TableHead>Delivery days</TableHead>
                   <TableHead>Curve</TableHead>
                 </TableRow>
               </TableHeader>
@@ -302,7 +333,7 @@ export default function RatingPage(): JSX.Element {
                 {history.map(row => (
                   <TableRow key={row.id}>
                     <TableCell className="font-medium tabular-nums">
-                      {row.effectiveBusinessDay}
+                      {row.effectiveCalendarDay}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{row.deliveredCalls}</TableCell>
                     <TableCell className="text-right tabular-nums">
@@ -324,7 +355,10 @@ export default function RatingPage(): JSX.Element {
                       )}
                     </TableCell>
                     <TableCell className="text-[11px] text-muted-foreground">
-                      {row.windowDayKeys.join(', ')}
+                      {row.windowDayKeys.join(', ') || '—'}
+                      {row.windowDaysFound < row.windowDeliveryDays
+                        ? ` (${row.windowDaysFound}/${row.windowDeliveryDays})`
+                        : ''}
                     </TableCell>
                     <TableCell className="text-[11px] text-muted-foreground">
                       v{row.curveVersion}

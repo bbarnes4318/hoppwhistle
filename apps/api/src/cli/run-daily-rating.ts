@@ -1,13 +1,19 @@
 /**
- * Rate every agency for the business day that just closed.
+ * Rate every agency for the calendar day that just closed.
  *
  *   pnpm --filter @hopwhistle/api rating:run
  *   pnpm --filter @hopwhistle/api rating:run -- --day 2026-09-07
  *   pnpm --filter @hopwhistle/api rating:run -- --dry-run
  *
+ * The window it rates over is the trailing three DELIVERY DAYS ending on that
+ * day -- calendar days on which the agency was delivered at least one call --
+ * so an agency that does not work weekends has Monday priced off the prior
+ * Thursday, Friday and Monday rather than off two empty days. The `--dry-run`
+ * output names those days for each agency.
+ *
  * ── When to run it ───────────────────────────────────────────────────────────
  *
- * After the close of a business day, which is 23:59:59 America/New_York. A cron
+ * After the close of a calendar day, which is 23:59:59 America/New_York. A cron
  * a little after midnight Eastern is the intended shape:
  *
  *   5 0 * * *   (America/New_York)
@@ -32,12 +38,15 @@
  */
 
 import { getPrismaClient } from '../lib/prisma.js';
-import { lastClosedBusinessDay, nextBusinessDay } from '../services/rating/business-day.js';
-import { measureTrailingWindow } from '../services/rating/measurement.js';
+import {
+  lastClosedCalendarDay,
+  nextCalendarDay,
+} from '../services/rating/calendar-day.js';
+import { measureTrailingDeliveryDays } from '../services/rating/delivery-day.js';
 import { rateFor } from '../services/rating/rate-curve.js';
 import {
   loadActiveCurve,
-  loadWindowBusinessDays,
+  loadWindowSettings,
   runDailyRating,
 } from '../services/rating/rating-engine.js';
 
@@ -57,7 +66,7 @@ function pct(value: number | null): string {
 async function main(): Promise<void> {
   const prisma = getPrismaClient();
 
-  const day = argValue('--day') ?? lastClosedBusinessDay();
+  const day = argValue('--day') ?? lastClosedCalendarDay();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
     console.error(`--day must be YYYY-MM-DD (America/New_York), got ${JSON.stringify(day)}`);
     process.exitCode = 1;
@@ -67,14 +76,14 @@ async function main(): Promise<void> {
   const dryRun = process.argv.includes('--dry-run');
 
   console.log(`Rating window closes:  ${day} 23:59:59 America/New_York`);
-  console.log(`Rate applies to:       ${nextBusinessDay(day)}`);
+  console.log(`Rate applies to:       ${nextCalendarDay(day)}`);
 
   if (dryRun) {
     // Computes and prints, writes nothing. For checking what a run WOULD do
     // before letting it write an immutable record.
-    const [curve, windowBusinessDays, tenants] = await Promise.all([
+    const [curve, windowSettings, tenants] = await Promise.all([
       loadActiveCurve(prisma),
-      loadWindowBusinessDays(prisma),
+      loadWindowSettings(prisma),
       prisma.tenant.findMany({
         where: { status: 'ACTIVE' },
         select: { id: true, name: true },
@@ -82,40 +91,45 @@ async function main(): Promise<void> {
       }),
     ]);
 
-    console.log(`Curve v${curve.version}, ${windowBusinessDays}-business-day window (dry run)\n`);
+    console.log(
+      `Curve v${curve.version}, ${windowSettings.windowDeliveryDays}-Delivery-Day window (dry run)\n`
+    );
 
     for (const tenant of tenants) {
-      const measured = await measureTrailingWindow(
+      const measured = await measureTrailingDeliveryDays(
         { calls: prisma.call, applications: prisma.insuranceCarrierApplication },
         tenant.id,
         day,
-        windowBusinessDays
+        windowSettings.windowDeliveryDays,
+        windowSettings.deliveryDayLookback
       );
 
       const verdict =
-        measured.closingPct === null ? null : rateFor(curve, measured.closingPct);
+        measured?.closingPct == null ? null : rateFor(curve, measured.closingPct);
 
       const rate =
         verdict === null ? null : verdict.kind === 'BELOW_MINIMUM' ? null : verdict.rate;
 
       const note =
-        measured.closingPct === null
-          ? 'no delivered calls — previous rate stands'
+        measured === null
+          ? `no Delivery Days in the last ${windowSettings.deliveryDayLookback} days — previous rate stands`
           : verdict?.kind === 'BELOW_MINIMUM'
             ? `below ${curve.minimumClosingPct}% — flagged for review, no rate`
-            : '';
+            : // The days themselves, because "3 days" does not tell an operator
+              // whether the weekend was in the window.
+              measured.window.dayKeys.join(' ');
 
       console.log(
         `  ${tenant.name.padEnd(28)} ` +
-          `${String(measured.deliveredCalls).padStart(6)} calls  ` +
-          `${String(measured.submittedApplications).padStart(5)} apps  ` +
-          `${pct(measured.closingPct).padStart(7)}  ${money(rate)}  ${note}`
+          `${String(measured?.deliveredCalls ?? 0).padStart(6)} calls  ` +
+          `${String(measured?.submittedApplications ?? 0).padStart(5)} apps  ` +
+          `${pct(measured?.closingPct ?? null).padStart(7)}  ${money(rate)}  ${note}`
       );
     }
     return;
   }
 
-  const run = await runDailyRating({ closedBusinessDay: day, prisma });
+  const run = await runDailyRating({ closedCalendarDay: day, prisma });
 
   for (const result of run.results) {
     console.log(
@@ -123,7 +137,8 @@ async function main(): Promise<void> {
         `${String(result.deliveredCalls).padStart(6)} calls  ` +
         `${String(result.submittedApplications).padStart(5)} apps  ` +
         `${pct(result.closingPct).padStart(7)}  ` +
-        `${money(result.previousRate)} → ${money(result.newRate)}` +
+        `${money(result.previousRate)} → ${money(result.newRate)}  ` +
+        `[${result.windowDayKeys.join(' ') || 'no Delivery Days'}]` +
         (result.alreadyRated ? '  (already rated; nothing written)' : '')
     );
   }

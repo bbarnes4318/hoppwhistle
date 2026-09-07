@@ -58,12 +58,21 @@
  * agencies running side by side produce two independent closing percentages,
  * and each agent's calls and applications roll up into their own agency's
  * totals and nowhere else.
+ *
+ * ── The window lives elsewhere ───────────────────────────────────────────────
+ *
+ * This module measures a tenant over an instant range and knows nothing about
+ * which range. The rating window is the trailing three DELIVERY DAYS and is
+ * built in `delivery-day.ts`; the day boundary itself is `calendar-day.ts`.
+ * `deliveredCallWhere` is exported because `delivery-day.ts` needs the exact
+ * same predicate to decide whether a day was a Delivery Day at all -- one
+ * definition, used twice, rather than two that can drift.
  */
 
 import type { Prisma, PrismaClient } from '@prisma/client';
 
-import { businessDayBounds, trailingWindow } from './business-day.js';
-import type { BusinessDayKey, BusinessDayWindow } from './business-day.js';
+import { calendarDayBounds } from './calendar-day.js';
+import type { CalendarDayKey } from './calendar-day.js';
 
 /**
  * The slices of the generated client this needs. Derived from `PrismaClient`
@@ -175,30 +184,11 @@ export async function measureClosing(
   };
 }
 
-/** The closing percentage for one business day. */
-export async function measureBusinessDay(
+/** The closing percentage for one calendar day. */
+export async function measureCalendarDay(
   deps: MeasurementDeps,
   tenantId: string,
-  day: BusinessDayKey
+  day: CalendarDayKey
 ): Promise<ClosingMeasurement> {
-  return measureClosing(deps, tenantId, businessDayBounds(day));
-}
-
-export interface WindowMeasurement extends ClosingMeasurement {
-  window: BusinessDayWindow;
-}
-
-/**
- * The closing percentage over the trailing window of business days ending on
- * `lastDay` inclusive. This is the number that sets the rate.
- */
-export async function measureTrailingWindow(
-  deps: MeasurementDeps,
-  tenantId: string,
-  lastDay: BusinessDayKey,
-  windowBusinessDays: number
-): Promise<WindowMeasurement> {
-  const window = trailingWindow(lastDay, windowBusinessDays);
-  const measurement = await measureClosing(deps, tenantId, window);
-  return { ...measurement, window };
+  return measureClosing(deps, tenantId, calendarDayBounds(day));
 }

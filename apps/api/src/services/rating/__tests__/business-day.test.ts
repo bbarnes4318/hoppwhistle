@@ -1,114 +1,190 @@
 import { describe, it, expect } from 'vitest';
 
 import {
-  RATING_TIME_ZONE,
-  businessDayBounds,
-  businessDayOf,
-  lastClosedBusinessDay,
+  CONTRACT_PERIODS,
+  addBusinessDays,
+  businessDayPeriodEnd,
+  businessDaysBetween,
+  isBusinessDay,
   nextBusinessDay,
-  previousBusinessDay,
-  trailingWindow,
+  usFederalHolidays,
 } from '../business-day.js';
 
 /**
- * The business day is the timezone assumption the whole rating engine rests on,
- * so it is pinned here rather than left to be discovered in a billing dispute.
+ * The Business Day, which is the contractual unit and NOT the rating window.
  *
- * The cases that matter are the ones where a naive implementation is wrong:
- * the evening hours when UTC has already rolled over to tomorrow, and the two
- * days a year the offset changes.
+ * Every case here is one where reading "business day" as "calendar day" gives a
+ * different, always earlier, answer. That is why the term was split: an earlier
+ * deadline is not an error message, it is just an earlier date, and nobody
+ * would notice the agency losing two days of a right it was granted in writing.
  */
 describe('business day', () => {
-  it('reckons days in America/New_York, not UTC', () => {
-    expect(RATING_TIME_ZONE).toBe('America/New_York');
+  describe('which days count', () => {
+    it('counts Monday to Friday', () => {
+      // 2026-09-07 Mon .. 2026-09-11 Fri
+      for (const day of ['2026-09-08', '2026-09-09', '2026-09-10', '2026-09-11']) {
+        expect(isBusinessDay(day), `${day} should be a Business Day`).toBe(true);
+      }
+    });
 
-    // 2026-09-08T02:30:00Z is 22:30 on the 7th in New York (EDT, UTC-4).
-    // `toISOString().slice(0,10)` would say the 8th, and would move every
-    // application submitted after 8pm Eastern onto the following day.
-    expect(businessDayOf(new Date('2026-09-08T02:30:00Z'))).toBe('2026-09-07');
+    it('does not count Saturday or Sunday', () => {
+      expect(isBusinessDay('2026-09-05')).toBe(false); // Saturday
+      expect(isBusinessDay('2026-09-06')).toBe(false); // Sunday
+    });
+
+    it('does not count a federal holiday', () => {
+      // 2026-09-07 is Labor Day, the first Monday in September.
+      expect(isBusinessDay('2026-09-07')).toBe(false);
+      // 2026-01-01 New Year's Day, a Thursday.
+      expect(isBusinessDay('2026-01-01')).toBe(false);
+      // 2026-11-26 Thanksgiving, the fourth Thursday in November.
+      expect(isBusinessDay('2026-11-26')).toBe(false);
+    });
+
+    it('honours the observed day when a fixed-date holiday falls at a weekend', () => {
+      // 5 U.S.C. 6103(b). Independence Day 2026 is a Saturday, so the offices
+      // are shut on Friday the 3rd. Without the observed rule the 3rd counts as
+      // a working day and the deadline lands on a day nobody is at work.
+      expect(usFederalHolidays(2026).has('2026-07-03')).toBe(true);
+      expect(isBusinessDay('2026-07-03')).toBe(false);
+      // The 4th itself is a Saturday and not a Business Day either way.
+      expect(isBusinessDay('2026-07-04')).toBe(false);
+
+      // Christmas Day 2027 is a Saturday -> observed Friday the 24th.
+      expect(usFederalHolidays(2027).has('2027-12-24')).toBe(true);
+      // New Year's Day 2028 is a Saturday -> observed Friday 31 Dec 2027, which
+      // belongs to the 2028 holiday set while falling in 2027. `isBusinessDay`
+      // checks both years for exactly this.
+      expect(usFederalHolidays(2028).has('2027-12-31')).toBe(true);
+      expect(isBusinessDay('2027-12-31')).toBe(false);
+    });
+
+    it('honours the observed day when a fixed-date holiday falls on a Sunday', () => {
+      // Juneteenth 2027 is a Saturday; 2021's was a Saturday too. Veterans Day
+      // 2029 is a Sunday -> observed Monday the 12th.
+      expect(usFederalHolidays(2029).has('2029-11-12')).toBe(true);
+      expect(isBusinessDay('2029-11-12')).toBe(false);
+      expect(isBusinessDay('2029-11-13')).toBe(true);
+    });
+
+    it('computes all eleven federal holidays for a year', () => {
+      const holidays = usFederalHolidays(2026);
+      expect(holidays.size).toBe(11);
+      expect([...holidays].sort()).toEqual([
+        '2026-01-01', // New Year's Day
+        '2026-01-19', // MLK Day, 3rd Monday in January
+        '2026-02-16', // Washington's Birthday, 3rd Monday in February
+        '2026-05-25', // Memorial Day, last Monday in May
+        '2026-06-19', // Juneteenth (a Friday)
+        '2026-07-03', // Independence Day observed (the 4th is a Saturday)
+        '2026-09-07', // Labor Day, 1st Monday in September
+        '2026-10-12', // Columbus Day, 2nd Monday in October
+        '2026-11-11', // Veterans Day (a Wednesday)
+        '2026-11-26', // Thanksgiving, 4th Thursday in November
+        '2026-12-25', // Christmas Day (a Friday)
+      ]);
+    });
+
+    it('is computed, not tabulated, so it does not expire', () => {
+      // A year far outside anything anyone would have typed into a list.
+      const holidays = usFederalHolidays(2041);
+      expect(holidays.size).toBe(11);
+      // 2041-01-21 is the third Monday in January.
+      expect(holidays.has('2041-01-21')).toBe(true);
+    });
   });
 
-  it('ends the day at 23:59:59.999 Eastern', () => {
-    // 03:59:59.999Z on the 8th is 23:59:59.999 on the 7th (EDT).
-    expect(businessDayOf(new Date('2026-09-08T03:59:59.999Z'))).toBe('2026-09-07');
-    // One millisecond later is the next business day.
-    expect(businessDayOf(new Date('2026-09-08T04:00:00.000Z'))).toBe('2026-09-08');
+  describe('counting periods', () => {
+    it('ends a five Business Day period starting Thursday on the following Wednesday', () => {
+      // The case the whole split exists for. 2026-09-10 is a Thursday.
+      // Business days: Thu 10, Fri 11, Mon 14, Tue 15, Wed 16.
+      expect(businessDayPeriodEnd('2026-09-10', 5)).toBe('2026-09-16');
+
+      // Read as calendar days it would be Monday the 14th -- two days early,
+      // and silently.
+      expect(businessDayPeriodEnd('2026-09-10', 5)).not.toBe('2026-09-14');
+    });
+
+    it('extends a period by one day for a federal holiday inside it', () => {
+      // 2026-11-23 is a Monday. Five Business Days would be Mon 23, Tue 24,
+      // Wed 25, Thu 26, Fri 27 -- except Thursday the 26th is Thanksgiving, so
+      // the period runs on to Monday the 30th.
+      expect(isBusinessDay('2026-11-26')).toBe(false);
+      expect(businessDayPeriodEnd('2026-11-23', 5)).toBe('2026-11-30');
+
+      // A holiday-free week ends on the Friday. The week of 2026-10-19 is one:
+      // Columbus Day was the 12th.
+      expect(businessDayPeriodEnd('2026-10-19', 5)).toBe('2026-10-23');
+
+      // And the week of the 9th is NOT holiday-free -- Veterans Day is
+      // Wednesday the 11th -- so it runs to the Monday. Pinned because it is
+      // the mistake a reader of this test is most likely to make.
+      expect(isBusinessDay('2026-11-11')).toBe(false);
+      expect(businessDayPeriodEnd('2026-11-09', 5)).toBe('2026-11-16');
+    });
+
+    it('counts the start day as day one', () => {
+      // A one Business Day period starting on a Business Day is that day.
+      expect(businessDayPeriodEnd('2026-09-10', 1)).toBe('2026-09-10');
+    });
+
+    it('starts a period on the next Business Day when it opens at a weekend', () => {
+      // Notice served on Saturday the 5th: the period cannot start on a day
+      // nobody is at work, and the 7th is Labor Day, so it starts Tuesday.
+      expect(businessDayPeriodEnd('2026-09-05', 1)).toBe('2026-09-08');
+    });
+
+    it('distinguishes "within N business days of" from "an N business day period"', () => {
+      // Thursday the 10th. Five days AFTER it is the following Thursday;
+      // a five-day period BEGINNING on it ends the Wednesday. Both readings
+      // appear in commercial writing, which is why they are two functions.
+      expect(addBusinessDays('2026-09-10', 5)).toBe('2026-09-17');
+      expect(businessDayPeriodEnd('2026-09-10', 5)).toBe('2026-09-16');
+    });
+
+    it('treats zero added days as the day itself', () => {
+      expect(addBusinessDays('2026-09-10', 0)).toBe('2026-09-10');
+    });
+
+    it('skips a weekend when stepping to the next Business Day', () => {
+      expect(nextBusinessDay('2026-09-11')).toBe('2026-09-14'); // Fri -> Mon
+      expect(nextBusinessDay('2026-09-04')).toBe('2026-09-08'); // Fri -> Tue (Labor Day Mon)
+    });
+
+    it('lists the Business Days in a range, excluding weekends and holidays', () => {
+      // 2026-09-04 Fri .. 2026-09-09 Wed, over Labor Day weekend.
+      expect(businessDaysBetween('2026-09-04', '2026-09-09')).toEqual([
+        '2026-09-04',
+        '2026-09-08',
+        '2026-09-09',
+      ]);
+    });
+
+    it('returns nothing for an inverted range rather than looping', () => {
+      expect(businessDaysBetween('2026-09-09', '2026-09-04')).toEqual([]);
+    });
+
+    it('refuses a nonsensical period length rather than guessing', () => {
+      expect(() => businessDayPeriodEnd('2026-09-10', 0)).toThrow(/at least one day/);
+      expect(() => addBusinessDays('2026-09-10', -1)).toThrow(/non-negative/);
+      expect(() => addBusinessDays('2026-09-10', 2.5)).toThrow(/non-negative/);
+    });
   });
 
-  it('bounds a day as a half-open instant range', () => {
-    const { start, endExclusive } = businessDayBounds('2026-09-07');
-    expect(start.toISOString()).toBe('2026-09-07T04:00:00.000Z');
-    expect(endExclusive.toISOString()).toBe('2026-09-08T04:00:00.000Z');
-  });
+  describe('the contractual periods', () => {
+    it('names the three periods the agreement counts in Business Days', () => {
+      expect(CONTRACT_PERIODS.SETTLEMENT_DISPUTE_BUSINESS_DAYS).toBe(5);
+      expect(CONTRACT_PERIODS.DELIVERY_BUSINESS_DAYS).toBe(30);
+      expect(CONTRACT_PERIODS.SETTLEMENT_GRACE_BUSINESS_DAYS).toBe(5);
+    });
 
-  it('bounds a winter day at the standard-time offset', () => {
-    // EST is UTC-5, so a January day starts at 05:00Z rather than 04:00Z. A
-    // fixed offset would put every winter day four hours out.
-    const { start, endExclusive } = businessDayBounds('2027-01-15');
-    expect(start.toISOString()).toBe('2027-01-15T05:00:00.000Z');
-    expect(endExclusive.toISOString()).toBe('2027-01-16T05:00:00.000Z');
-  });
-
-  it('handles the spring-forward day, which is 23 hours long', () => {
-    // 2026-03-08: clocks jump 02:00 -> 03:00 EST->EDT.
-    const { start, endExclusive } = businessDayBounds('2026-03-08');
-    expect(start.toISOString()).toBe('2026-03-08T05:00:00.000Z');
-    expect(endExclusive.toISOString()).toBe('2026-03-09T04:00:00.000Z');
-    expect(endExclusive.getTime() - start.getTime()).toBe(23 * 60 * 60 * 1000);
-  });
-
-  it('handles the fall-back day, which is 25 hours long', () => {
-    // 2026-11-01: clocks fall 02:00 -> 01:00 EDT->EST.
-    const { start, endExclusive } = businessDayBounds('2026-11-01');
-    expect(start.toISOString()).toBe('2026-11-01T04:00:00.000Z');
-    expect(endExclusive.toISOString()).toBe('2026-11-02T05:00:00.000Z');
-    expect(endExclusive.getTime() - start.getTime()).toBe(25 * 60 * 60 * 1000);
-  });
-
-  it('walks days across a DST boundary without skipping or repeating one', () => {
-    expect(nextBusinessDay('2026-03-07')).toBe('2026-03-08');
-    expect(nextBusinessDay('2026-03-08')).toBe('2026-03-09');
-    expect(previousBusinessDay('2026-11-02')).toBe('2026-11-01');
-    expect(previousBusinessDay('2026-11-01')).toBe('2026-10-31');
-  });
-
-  it('walks days across a month and a year boundary', () => {
-    expect(nextBusinessDay('2026-09-30')).toBe('2026-10-01');
-    expect(nextBusinessDay('2026-12-31')).toBe('2027-01-01');
-    expect(previousBusinessDay('2027-01-01')).toBe('2026-12-31');
-    // 2028 is a leap year.
-    expect(nextBusinessDay('2028-02-28')).toBe('2028-02-29');
-  });
-
-  it('builds a trailing window of consecutive days, oldest first', () => {
-    const window = trailingWindow('2026-09-07', 3);
-    expect(window.dayKeys).toEqual(['2026-09-05', '2026-09-06', '2026-09-07']);
-    expect(window.start.toISOString()).toBe('2026-09-05T04:00:00.000Z');
-    expect(window.endExclusive.toISOString()).toBe('2026-09-08T04:00:00.000Z');
-  });
-
-  it('honours a configured window length other than three', () => {
-    expect(trailingWindow('2026-09-07', 1).dayKeys).toEqual(['2026-09-07']);
-    expect(trailingWindow('2026-09-07', 5).dayKeys).toHaveLength(5);
-  });
-
-  it('refuses a nonsensical window length rather than guessing', () => {
-    expect(() => trailingWindow('2026-09-07', 0)).toThrow(/positive whole number/);
-    expect(() => trailingWindow('2026-09-07', -3)).toThrow(/positive whole number/);
-    expect(() => trailingWindow('2026-09-07', 2.5)).toThrow(/positive whole number/);
-  });
-
-  it('refuses a malformed day key rather than producing an Invalid Date', () => {
-    expect(() => businessDayBounds('2026-9-7')).toThrow(/YYYY-MM-DD/);
-    expect(() => businessDayBounds('yesterday')).toThrow(/YYYY-MM-DD/);
-  });
-
-  it('closes the day that has actually ended, from the Eastern clock', () => {
-    // 00:05 Eastern on the 8th: the 7th has closed.
-    expect(lastClosedBusinessDay(new Date('2026-09-08T04:05:00Z'))).toBe('2026-09-07');
-    // 23:00 Eastern on the 7th: the 7th is still open, so the 6th is the last
-    // closed day. A run scheduled in UTC that fired "at midnight" would
-    // otherwise rate a day that still had an hour left in it.
-    expect(lastClosedBusinessDay(new Date('2026-09-08T03:00:00Z'))).toBe('2026-09-06');
+    it('runs the 30 Business Day delivery window well past 30 calendar days', () => {
+      // Thursday 2026-09-10 plus 30 Business Days. Six weekends and Columbus
+      // Day fall inside it, so the calendar-day answer (2026-10-09) is more
+      // than a fortnight short.
+      const end = businessDayPeriodEnd('2026-09-10', 30);
+      expect(end).toBe('2026-10-22');
+      expect(end > '2026-10-09').toBe(true);
+    });
   });
 });

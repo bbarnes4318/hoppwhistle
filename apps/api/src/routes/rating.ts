@@ -33,7 +33,7 @@ import { toNumber } from '../services/rating/rate-curve.js';
 import {
   clearReviewFlag,
   loadActiveCurve,
-  loadWindowBusinessDays,
+  loadWindowSettings,
   recomputeFromRecord,
   runDailyRating,
 } from '../services/rating/rating-engine.js';
@@ -84,16 +84,19 @@ export async function registerRatingRoutes(fastify: FastifyInstance): Promise<vo
 
       const rows = await prisma.rateChange.findMany({
         where: { tenantId },
-        orderBy: { effectiveBusinessDay: 'desc' },
+        orderBy: { effectiveCalendarDay: 'desc' },
         take: limit,
       });
 
       return reply.send({
         data: rows.map(row => ({
           id: row.id,
-          effectiveBusinessDay: row.effectiveBusinessDay,
+          effectiveCalendarDay: row.effectiveCalendarDay,
+          // The actual Delivery Days, so a disputing agency can reconstruct the
+          // window rather than being told "3 days" and left to guess which.
           windowDayKeys: row.windowDayKeys,
-          windowBusinessDays: row.windowBusinessDays,
+          windowDeliveryDays: row.windowDeliveryDays,
+          windowDaysFound: row.windowDaysFound,
           deliveredCalls: row.deliveredCalls,
           submittedApplications: row.submittedApplications,
           closingPct: row.closingPct === null ? null : toNumber(row.closingPct),
@@ -150,9 +153,9 @@ export async function registerRatingRoutes(fastify: FastifyInstance): Promise<vo
     const tenantId = resolveTenant(request, reply);
     if (!tenantId) return;
 
-    const [curve, windowBusinessDays] = await Promise.all([
+    const [curve, windowSettings] = await Promise.all([
       loadActiveCurve(prisma),
-      loadWindowBusinessDays(prisma),
+      loadWindowSettings(prisma),
     ]);
 
     return reply.send({
@@ -162,7 +165,8 @@ export async function registerRatingRoutes(fastify: FastifyInstance): Promise<vo
         flatFromClosingPct: curve.flatFromClosingPct,
         introductoryRate: curve.introductoryRate,
         introductoryApplications: curve.introductoryApplications,
-        windowBusinessDays,
+        windowDeliveryDays: windowSettings.windowDeliveryDays,
+        deliveryDayLookback: windowSettings.deliveryDayLookback,
         anchors: curve.anchors,
       },
     });
@@ -206,8 +210,8 @@ export async function registerRatingRoutes(fastify: FastifyInstance): Promise<vo
             slug: tenant.slug,
             status: state?.status ?? 'INTRODUCTORY',
             currentRate: state?.currentRate == null ? null : toNumber(state.currentRate),
-            currentRateBusinessDay: state?.currentRateBusinessDay ?? null,
-            lastRatedBusinessDay: state?.lastRatedBusinessDay ?? null,
+            currentRateCalendarDay: state?.currentRateCalendarDay ?? null,
+            lastRatedCalendarDay: state?.lastRatedCalendarDay ?? null,
             openReviewFlag: flag
               ? {
                   id: flag.id,
@@ -268,26 +272,27 @@ export async function registerRatingRoutes(fastify: FastifyInstance): Promise<vo
   /**
    * POST /api/v1/platform/rating/run
    *
-   * Run the daily rating by hand, for the day that just closed or a named one.
+   * Run the daily rating by hand, for the calendar day that just closed or a
+   * named one.
    * Idempotent: a day already rated writes nothing and reports
    * `alreadyRated: true`.
    */
-  fastify.post<{ Body: { closedBusinessDay?: string } }>(
+  fastify.post<{ Body: { closedCalendarDay?: string } }>(
     '/api/v1/platform/rating/run',
     { preHandler: [authenticate, requirePlatformAdmin] },
     async (request, reply) => {
-      const closedBusinessDay = request.body?.closedBusinessDay;
+      const closedCalendarDay = request.body?.closedCalendarDay;
 
-      if (closedBusinessDay !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(closedBusinessDay)) {
+      if (closedCalendarDay !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(closedCalendarDay)) {
         return reply.code(400).send({
           error: {
             code: 'VALIDATION_ERROR',
-            message: 'closedBusinessDay must be YYYY-MM-DD',
+            message: 'closedCalendarDay must be YYYY-MM-DD',
           },
         });
       }
 
-      return reply.send({ data: await runDailyRating({ closedBusinessDay, prisma }) });
+      return reply.send({ data: await runDailyRating({ closedCalendarDay, prisma }) });
     }
   );
 
@@ -310,7 +315,7 @@ export async function registerRatingRoutes(fastify: FastifyInstance): Promise<vo
       introductoryApplications?: number;
       label?: string;
       note?: string;
-      windowBusinessDays?: number;
+      windowDeliveryDays?: number;
     };
   }>(
     '/api/v1/platform/rating/curve',
@@ -395,12 +400,12 @@ export async function registerRatingRoutes(fastify: FastifyInstance): Promise<vo
           create: {
             id: 'global',
             activeCurveVersionId: curve.id,
-            windowBusinessDays: body.windowBusinessDays ?? 3,
+            windowDeliveryDays: body.windowDeliveryDays ?? 3,
           },
           update: {
             activeCurveVersionId: curve.id,
-            ...(typeof body.windowBusinessDays === 'number'
-              ? { windowBusinessDays: body.windowBusinessDays }
+            ...(typeof body.windowDeliveryDays === 'number'
+              ? { windowDeliveryDays: body.windowDeliveryDays }
               : {}),
           },
         });

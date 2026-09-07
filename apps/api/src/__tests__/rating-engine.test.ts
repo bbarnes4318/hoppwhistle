@@ -6,8 +6,9 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { grantPlatformAdmin } from '../lib/platform-admin.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { registerApiV1Auth } from '../middleware/api-v1-auth.js';
-import { businessDayBounds } from '../services/rating/business-day.js';
-import { measureBusinessDay, measureTrailingWindow } from '../services/rating/measurement.js';
+import { calendarDayBounds } from '../services/rating/calendar-day.js';
+import { measureTrailingDeliveryDays } from '../services/rating/delivery-day.js';
+import { measureCalendarDay } from '../services/rating/measurement.js';
 import { rateFor } from '../services/rating/rate-curve.js';
 import {
   loadActiveCurve,
@@ -155,11 +156,11 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
       where: { id: 'global' },
       create: {
         id: 'global',
-        windowBusinessDays: 3,
+        windowDeliveryDays: 3,
         activeCurveVersionId: '00000000-0000-4000-8000-00000000c001',
       },
       update: {
-        windowBusinessDays: 3,
+        windowDeliveryDays: 3,
         activeCurveVersionId: '00000000-0000-4000-8000-00000000c001',
       },
     });
@@ -184,7 +185,7 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
 
   /** Noon Eastern on a business day, plus an offset in milliseconds. */
   function middayOf(day: string, offsetMs = 0): Date {
-    return new Date(businessDayBounds(day).start.getTime() + 12 * 3600_000 + offsetMs);
+    return new Date(calendarDayBounds(day).start.getTime() + 12 * 3600_000 + offsetMs);
   }
 
   let callSeq = 0;
@@ -293,14 +294,14 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
         durationSeconds: 0,
       });
 
-      const measured = await measureBusinessDay(deps(), big.id, CLOSED_DAY);
+      const measured = await measureCalendarDay(deps(), big.id, CLOSED_DAY);
       expect(measured.deliveredCalls).toBe(1);
     });
 
     it('does not count a call that rang unanswered', async () => {
       await seedCall({ tenantId: big.id, answeredAt: null });
 
-      const measured = await measureBusinessDay(deps(), big.id, CLOSED_DAY);
+      const measured = await measureCalendarDay(deps(), big.id, CLOSED_DAY);
       expect(measured.deliveredCalls).toBe(0);
     });
 
@@ -313,7 +314,7 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
         direction: 'OUTBOUND',
       });
 
-      const measured = await measureBusinessDay(deps(), big.id, CLOSED_DAY);
+      const measured = await measureCalendarDay(deps(), big.id, CLOSED_DAY);
       expect(measured.deliveredCalls).toBe(0);
     });
 
@@ -324,13 +325,13 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
         blocked: true,
       });
 
-      const measured = await measureBusinessDay(deps(), big.id, CLOSED_DAY);
+      const measured = await measureCalendarDay(deps(), big.id, CLOSED_DAY);
       expect(measured.deliveredCalls).toBe(0);
     });
 
     it('attributes delivery by when the agent answered, not when the call arrived', async () => {
       // Rings at 23:59:58 on the 7th, answered at 00:00:02 on the 8th.
-      const { endExclusive } = businessDayBounds(CLOSED_DAY);
+      const { endExclusive } = calendarDayBounds(CLOSED_DAY);
       await prisma.call.create({
         data: {
           tenantId: big.id,
@@ -343,8 +344,8 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
         },
       });
 
-      expect((await measureBusinessDay(deps(), big.id, CLOSED_DAY)).deliveredCalls).toBe(0);
-      expect((await measureBusinessDay(deps(), big.id, EFFECTIVE_DAY)).deliveredCalls).toBe(1);
+      expect((await measureCalendarDay(deps(), big.id, CLOSED_DAY)).deliveredCalls).toBe(0);
+      expect((await measureCalendarDay(deps(), big.id, EFFECTIVE_DAY)).deliveredCalls).toBe(1);
     });
   });
 
@@ -378,17 +379,17 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
       // be able to move an application across a business-day boundary.
       expect(second!.submittedAt?.toISOString()).toBe(first!.submittedAt?.toISOString());
 
-      const day = (await import('../services/rating/business-day.js')).businessDayOf(
+      const day = (await import('../services/rating/calendar-day.js')).calendarDayOf(
         first!.submittedAt as Date
       );
-      const measured = await measureBusinessDay(deps(), big.id, day);
+      const measured = await measureCalendarDay(deps(), big.id, day);
       expect(measured.submittedApplications).toBe(1);
     });
 
     it('does not count an application that has not been submitted', async () => {
       await seedApplication({ tenantId: big.id, submittedAt: null });
 
-      const measured = await measureBusinessDay(deps(), big.id, CLOSED_DAY);
+      const measured = await measureCalendarDay(deps(), big.id, CLOSED_DAY);
       expect(measured.submittedApplications).toBe(0);
     });
 
@@ -403,12 +404,12 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
         });
       }
 
-      const measured = await measureBusinessDay(deps(), big.id, CLOSED_DAY);
+      const measured = await measureCalendarDay(deps(), big.id, CLOSED_DAY);
       expect(measured.submittedApplications).toBe(4);
     });
 
     it('lands 23:59:58 and 00:00:02 on different business days', async () => {
-      const { endExclusive } = businessDayBounds(CLOSED_DAY);
+      const { endExclusive } = calendarDayBounds(CLOSED_DAY);
 
       await seedApplication({
         tenantId: big.id,
@@ -419,9 +420,9 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
         submittedAt: new Date(endExclusive.getTime() + 2000),
       });
 
-      expect((await measureBusinessDay(deps(), big.id, CLOSED_DAY)).submittedApplications).toBe(1);
+      expect((await measureCalendarDay(deps(), big.id, CLOSED_DAY)).submittedApplications).toBe(1);
       expect(
-        (await measureBusinessDay(deps(), big.id, EFFECTIVE_DAY)).submittedApplications
+        (await measureCalendarDay(deps(), big.id, EFFECTIVE_DAY)).submittedApplications
       ).toBe(1);
     });
 
@@ -430,7 +431,7 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
       // the next day.
       const call = await seedCall({
         tenantId: big.id,
-        answeredAt: new Date(businessDayBounds(CLOSED_DAY).start.getTime() + 16 * 3600_000),
+        answeredAt: new Date(calendarDayBounds(CLOSED_DAY).start.getTime() + 16 * 3600_000),
       });
 
       await prisma.insuranceCarrierApplication.create({
@@ -440,14 +441,14 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
           lastName: 'Morning',
           status: 'SUBMITTED',
           callId: call.id,
-          createdAt: new Date(businessDayBounds(CLOSED_DAY).start.getTime() + 16 * 3600_000),
-          submittedAt: new Date(businessDayBounds(EFFECTIVE_DAY).start.getTime() + 9 * 3600_000),
+          createdAt: new Date(calendarDayBounds(CLOSED_DAY).start.getTime() + 16 * 3600_000),
+          submittedAt: new Date(calendarDayBounds(EFFECTIVE_DAY).start.getTime() + 9 * 3600_000),
         },
       });
 
-      expect((await measureBusinessDay(deps(), big.id, CLOSED_DAY)).submittedApplications).toBe(0);
+      expect((await measureCalendarDay(deps(), big.id, CLOSED_DAY)).submittedApplications).toBe(0);
       expect(
-        (await measureBusinessDay(deps(), big.id, EFFECTIVE_DAY)).submittedApplications
+        (await measureCalendarDay(deps(), big.id, EFFECTIVE_DAY)).submittedApplications
       ).toBe(1);
     });
   });
@@ -465,8 +466,8 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
       await seedDeliveredCalls(small.id, CLOSED_DAY, 50);
       await seedSubmittedApplications(small.id, CLOSED_DAY, 3);
 
-      const bigMeasured = await measureBusinessDay(deps(), big.id, CLOSED_DAY);
-      const smallMeasured = await measureBusinessDay(deps(), small.id, CLOSED_DAY);
+      const bigMeasured = await measureCalendarDay(deps(), big.id, CLOSED_DAY);
+      const smallMeasured = await measureCalendarDay(deps(), small.id, CLOSED_DAY);
 
       expect(bigMeasured).toMatchObject({
         deliveredCalls: 100,
@@ -487,7 +488,7 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
       await seedDeliveredCalls(small.id, CLOSED_DAY, 150);
       await seedSubmittedApplications(small.id, CLOSED_DAY, 9); // 6%
 
-      const run = await runDailyRating({ closedBusinessDay: CLOSED_DAY, prisma });
+      const run = await runDailyRating({ closedCalendarDay: CLOSED_DAY, prisma });
       expect(run.failures).toEqual([]);
 
       const byTenant = new Map(run.results.map(r => [r.tenantId, r]));
@@ -509,7 +510,7 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
 
       // Two rows, one each, and neither names the other's numbers.
       const changes = await prisma.rateChange.findMany({
-        where: { effectiveBusinessDay: EFFECTIVE_DAY },
+        where: { effectiveCalendarDay: EFFECTIVE_DAY },
       });
       expect(changes).toHaveLength(2);
     });
@@ -517,7 +518,7 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
     it('never lets one agency read another’s rating history', async () => {
       await seedDeliveredCalls(big.id, CLOSED_DAY, 100);
       await seedSubmittedApplications(big.id, CLOSED_DAY, 10);
-      await runDailyRating({ closedBusinessDay: CLOSED_DAY, prisma });
+      await runDailyRating({ closedCalendarDay: CLOSED_DAY, prisma });
 
       const bigChange = await prisma.rateChange.findFirst({ where: { tenantId: big.id } });
 
@@ -544,10 +545,11 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
       }
       await seedSubmittedApplications(big.id, CLOSED_DAY, 10);
 
-      const measured = await measureTrailingWindow(deps(), big.id, CLOSED_DAY, 3);
-      expect(measured.deliveredCalls).toBe(300);
-      expect(measured.window.dayKeys).toEqual(['2026-09-05', '2026-09-06', '2026-09-07']);
-      expect(measured.closingPct).toBeCloseTo(3.3333, 3);
+      const measured = await measureTrailingDeliveryDays(deps(), big.id, CLOSED_DAY, 3);
+      expect(measured).not.toBeNull();
+      expect(measured!.deliveredCalls).toBe(300);
+      expect(measured!.window.dayKeys).toEqual(['2026-09-05', '2026-09-06', '2026-09-07']);
+      expect(measured!.closingPct).toBeCloseTo(3.3333, 3);
     });
 
     it('applies the rate to the day AFTER the window closed', async () => {
@@ -556,11 +558,11 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
 
       const result = await rateAgencyForClosedDay({
         tenantId: big.id,
-        closedBusinessDay: CLOSED_DAY,
+        closedCalendarDay: CLOSED_DAY,
         prisma,
       });
 
-      expect(result.effectiveBusinessDay).toBe(EFFECTIVE_DAY);
+      expect(result.effectiveCalendarDay).toBe(EFFECTIVE_DAY);
       expect(result.newRate).toBe(159);
     });
 
@@ -572,7 +574,7 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
 
       const result = await rateAgencyForClosedDay({
         tenantId: big.id,
-        closedBusinessDay: CLOSED_DAY,
+        closedCalendarDay: CLOSED_DAY,
         prisma,
       });
       expect(result.newRate).toBe(164);
@@ -584,12 +586,15 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
     });
 
     it('records every value needed to recompute the rate from the row alone', async () => {
-      await seedDeliveredCalls(big.id, CLOSED_DAY, 100);
-      await seedSubmittedApplications(big.id, CLOSED_DAY, 8);
+      // Three Delivery Days, so the row carries a full window.
+      for (const day of ['2026-09-05', '2026-09-06', CLOSED_DAY]) {
+        await seedDeliveredCalls(big.id, day, 100);
+        await seedSubmittedApplications(big.id, day, 8);
+      }
 
       const result = await rateAgencyForClosedDay({
         tenantId: big.id,
-        closedBusinessDay: CLOSED_DAY,
+        closedCalendarDay: CLOSED_DAY,
         prisma,
       });
 
@@ -597,15 +602,34 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
 
       expect(row).toMatchObject({
         tenantId: big.id,
-        effectiveBusinessDay: EFFECTIVE_DAY,
-        windowBusinessDays: 3,
-        deliveredCalls: 100,
-        submittedApplications: 8,
+        effectiveCalendarDay: EFFECTIVE_DAY,
+        windowDeliveryDays: 3,
+        deliveredCalls: 300,
+        submittedApplications: 24,
         curveVersion: 1,
       });
       expect(row!.windowDayKeys).toEqual(['2026-09-05', '2026-09-06', '2026-09-07']);
+      expect(row!.windowDaysFound).toBe(3);
       expect(Number(row!.closingPct)).toBeCloseTo(8, 6);
       expect(Number(row!.newRate)).toBe(184);
+    });
+
+    it('records a one-day window as one day when that is all there was', async () => {
+      // The complement of the case above, and the reason `windowDaysFound`
+      // exists: an agency delivered on exactly one day is priced on one day of
+      // evidence, and the row says one rather than implying three.
+      await seedDeliveredCalls(big.id, CLOSED_DAY, 100);
+      await seedSubmittedApplications(big.id, CLOSED_DAY, 8);
+
+      const result = await rateAgencyForClosedDay({
+        tenantId: big.id,
+        closedCalendarDay: CLOSED_DAY,
+        prisma,
+      });
+
+      expect(result.windowDayKeys).toEqual([CLOSED_DAY]);
+      expect(result.windowDaysFound).toBe(1);
+      expect(result.newRate).toBe(184);
     });
 
     it('flags an agency below 5% and gives it no rate', async () => {
@@ -615,7 +639,7 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
 
       const result = await rateAgencyForClosedDay({
         tenantId: big.id,
-        closedBusinessDay: CLOSED_DAY,
+        closedCalendarDay: CLOSED_DAY,
         prisma,
       });
 
@@ -640,7 +664,7 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
 
       const result = await rateAgencyForClosedDay({
         tenantId: big.id,
-        closedBusinessDay: CLOSED_DAY,
+        closedCalendarDay: CLOSED_DAY,
         prisma,
       });
 
@@ -654,8 +678,8 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
       await seedDeliveredCalls(big.id, CLOSED_DAY, 100);
       await seedSubmittedApplications(big.id, CLOSED_DAY, 6); // 2% over the window
 
-      await rateAgencyForClosedDay({ tenantId: big.id, closedBusinessDay: '2026-09-06', prisma });
-      await rateAgencyForClosedDay({ tenantId: big.id, closedBusinessDay: CLOSED_DAY, prisma });
+      await rateAgencyForClosedDay({ tenantId: big.id, closedCalendarDay: '2026-09-06', prisma });
+      await rateAgencyForClosedDay({ tenantId: big.id, closedCalendarDay: CLOSED_DAY, prisma });
 
       const flags = await prisma.ratingReviewFlag.findMany({ where: { tenantId: big.id } });
       expect(flags).toHaveLength(1);
@@ -665,12 +689,13 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
       // Day one: a real rate.
       await seedDeliveredCalls(big.id, '2026-09-01', 100);
       await seedSubmittedApplications(big.id, '2026-09-01', 10);
-      await rateAgencyForClosedDay({ tenantId: big.id, closedBusinessDay: '2026-09-01', prisma });
+      await rateAgencyForClosedDay({ tenantId: big.id, closedCalendarDay: '2026-09-01', prisma });
 
-      // A later window with nothing in it at all.
+      // A later window with nothing in it at all: the lookback is 60 days, so
+      // this reaches back past the September 1st delivery and finds nothing.
       const quiet = await rateAgencyForClosedDay({
         tenantId: big.id,
-        closedBusinessDay: '2026-09-20',
+        closedCalendarDay: '2026-12-20',
         prisma,
       });
 
@@ -690,12 +715,12 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
 
       const first = await rateAgencyForClosedDay({
         tenantId: big.id,
-        closedBusinessDay: CLOSED_DAY,
+        closedCalendarDay: CLOSED_DAY,
         prisma,
       });
       const second = await rateAgencyForClosedDay({
         tenantId: big.id,
-        closedBusinessDay: CLOSED_DAY,
+        closedCalendarDay: CLOSED_DAY,
         prisma,
       });
 
@@ -709,21 +734,181 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
     it('honours a configured window length other than three', async () => {
       await prisma.ratingSettings.update({
         where: { id: 'global' },
-        data: { windowBusinessDays: 5 },
+        data: { windowDeliveryDays: 5 },
       });
 
-      await seedDeliveredCalls(big.id, CLOSED_DAY, 100);
+      // Five Delivery Days need five days that actually had a delivery.
+      for (const day of ['2026-09-03', '2026-09-04', '2026-09-05', '2026-09-06', CLOSED_DAY]) {
+        await seedDeliveredCalls(big.id, day, 20);
+      }
       await seedSubmittedApplications(big.id, CLOSED_DAY, 10);
 
       const result = await rateAgencyForClosedDay({
         tenantId: big.id,
-        closedBusinessDay: CLOSED_DAY,
+        closedCalendarDay: CLOSED_DAY,
         prisma,
       });
 
       const row = await prisma.rateChange.findUnique({ where: { id: result.rateChangeId } });
-      expect(row!.windowBusinessDays).toBe(5);
+      expect(row!.windowDeliveryDays).toBe(5);
+      expect(row!.windowDaysFound).toBe(5);
       expect(row!.windowDayKeys).toHaveLength(5);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 4b. Delivery Days — the window adapts to the agency's schedule
+  //
+  // The property the Delivery Day exists for: the same definition is right for
+  // an agency that works five days a week and one that works seven, and it does
+  // not depend on anyone telling the system which.
+  //
+  // Calendar context. 2026-09-07 is a Monday (and Labor Day, which is a federal
+  // holiday and therefore not a BUSINESS Day -- irrelevant here, and pinned
+  // elsewhere, because the rating window does not use Business Days).
+  //   2026-09-03 Thu   2026-09-04 Fri   2026-09-05 Sat
+  //   2026-09-06 Sun   2026-09-07 Mon
+  // ══════════════════════════════════════════════════════════════════════════
+  describe('the rating window follows what was delivered, not the calendar', () => {
+    const THU = '2026-09-03';
+    const FRI = '2026-09-04';
+    const SAT = '2026-09-05';
+    const SUN = '2026-09-06';
+    const MON = '2026-09-07';
+
+    it('rates a weekday-only agency off Thursday, Friday and Monday', async () => {
+      // Nothing delivered at the weekend, so the weekend is not a Delivery Day
+      // and the window reaches back past it. Under the old calendar-day window
+      // this agency's Monday was priced off Sat + Sun + Mon: two empty days, a
+      // third of the denominator zero for reasons unconnected to how it closes.
+      await seedDeliveredCalls(big.id, THU, 100);
+      await seedSubmittedApplications(big.id, THU, 10);
+      await seedDeliveredCalls(big.id, FRI, 100);
+      await seedSubmittedApplications(big.id, FRI, 10);
+      await seedDeliveredCalls(big.id, MON, 100);
+      await seedSubmittedApplications(big.id, MON, 10);
+
+      const result = await rateAgencyForClosedDay({
+        tenantId: big.id,
+        closedCalendarDay: MON,
+        prisma,
+      });
+
+      expect(result.windowDayKeys).toEqual([THU, FRI, MON]);
+      expect(result.windowDaysFound).toBe(3);
+      expect(result.deliveredCalls).toBe(300);
+      expect(result.submittedApplications).toBe(30);
+      expect(result.closingPct).toBeCloseTo(10, 6);
+      expect(result.newRate).toBe(159);
+    });
+
+    it('rates a seven-day agency off Saturday, Sunday and Monday', async () => {
+      // Same definition, different agency, different window. Nobody told the
+      // system which schedule either of them runs.
+      for (const day of [THU, FRI, SAT, SUN, MON]) {
+        await seedDeliveredCalls(small.id, day, 100);
+        await seedSubmittedApplications(small.id, day, 10);
+      }
+
+      const result = await rateAgencyForClosedDay({
+        tenantId: small.id,
+        closedCalendarDay: MON,
+        prisma,
+      });
+
+      expect(result.windowDayKeys).toEqual([SAT, SUN, MON]);
+      expect(result.deliveredCalls).toBe(300);
+    });
+
+    it('gives two agencies different windows on the same rating day', async () => {
+      // Both properties above, at once, which is the whole claim: the window is
+      // a property of what each agency was given.
+      for (const day of [THU, FRI, MON]) {
+        await seedDeliveredCalls(big.id, day, 100);
+        await seedSubmittedApplications(big.id, day, 12);
+      }
+      for (const day of [SAT, SUN, MON]) {
+        await seedDeliveredCalls(small.id, day, 50);
+        await seedSubmittedApplications(small.id, day, 3);
+      }
+
+      const run = await runDailyRating({ closedCalendarDay: MON, prisma });
+      expect(run.failures).toEqual([]);
+
+      const byTenant = new Map(run.results.map(r => [r.tenantId, r]));
+
+      expect(byTenant.get(big.id)!.windowDayKeys).toEqual([THU, FRI, MON]);
+      expect(byTenant.get(big.id)!.closingPct).toBeCloseTo(12, 6);
+
+      expect(byTenant.get(small.id)!.windowDayKeys).toEqual([SAT, SUN, MON]);
+      expect(byTenant.get(small.id)!.closingPct).toBeCloseTo(6, 6);
+    });
+
+    it('does not count a day whose only calls rang unanswered', async () => {
+      // A Delivery Day is a day we DELIVERED a call, which is the same
+      // predicate the denominator uses. A day of ring-outs is not one.
+      await seedDeliveredCalls(big.id, THU, 50);
+      await seedDeliveredCalls(big.id, FRI, 50);
+      for (let i = 0; i < 20; i++) {
+        await seedCall({ tenantId: big.id, answeredAt: null });
+      }
+      await seedDeliveredCalls(big.id, MON, 50);
+
+      const result = await rateAgencyForClosedDay({
+        tenantId: big.id,
+        closedCalendarDay: MON,
+        prisma,
+      });
+
+      expect(result.windowDayKeys).toEqual([THU, FRI, MON]);
+      expect(result.deliveredCalls).toBe(150);
+    });
+
+    it('records a short window as short rather than padding it', async () => {
+      // A brand new agency with two Delivery Days. The row says three were
+      // asked for and two were found: a smaller sample, and the record an
+      // agency is shown in a dispute should say so rather than implying three
+      // days of evidence.
+      await seedDeliveredCalls(big.id, FRI, 100);
+      await seedSubmittedApplications(big.id, FRI, 10);
+      await seedDeliveredCalls(big.id, MON, 100);
+      await seedSubmittedApplications(big.id, MON, 10);
+
+      const result = await rateAgencyForClosedDay({
+        tenantId: big.id,
+        closedCalendarDay: MON,
+        prisma,
+      });
+
+      expect(result.windowDayKeys).toEqual([FRI, MON]);
+      expect(result.windowDaysFound).toBe(2);
+
+      const row = await prisma.rateChange.findUnique({ where: { id: result.rateChangeId } });
+      expect(row!.windowDeliveryDays).toBe(3);
+      expect(row!.windowDaysFound).toBe(2);
+      // Still priced, on what there is.
+      expect(result.newRate).toBe(159);
+    });
+
+    it('surfaces the window days to the agency, so it can reconstruct its own price', async () => {
+      for (const day of [THU, FRI, MON]) {
+        await seedDeliveredCalls(big.id, day, 100);
+        await seedSubmittedApplications(big.id, day, 8);
+      }
+      await rateAgencyForClosedDay({ tenantId: big.id, closedCalendarDay: MON, prisma });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/v1/rating/history',
+        headers: tokenFor(big.ownerId, big.id),
+      });
+
+      expect(response.statusCode).toBe(200);
+      const [row] = response.json().data;
+      // "3 days" would not tell the agency whether the weekend was in it.
+      expect(row.windowDayKeys).toEqual([THU, FRI, MON]);
+      expect(row.windowDeliveryDays).toBe(3);
+      expect(row.windowDaysFound).toBe(3);
     });
   });
 
@@ -737,7 +922,7 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
 
       const settled = await rateAgencyForClosedDay({
         tenantId: big.id,
-        closedBusinessDay: CLOSED_DAY,
+        closedCalendarDay: CLOSED_DAY,
         prisma,
       });
       expect(settled.newRate).toBe(159);
@@ -823,7 +1008,7 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
       await seedSubmittedApplications(big.id, CLOSED_DAY, 2); // 2%
       await rateAgencyForClosedDay({
         tenantId: big.id,
-        closedBusinessDay: CLOSED_DAY,
+        closedCalendarDay: CLOSED_DAY,
         prisma,
       });
       const flag = await prisma.ratingReviewFlag.findFirstOrThrow({
@@ -881,7 +1066,7 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
       await seedSubmittedApplications(big.id, EFFECTIVE_DAY, 30);
       const recovered = await rateAgencyForClosedDay({
         tenantId: big.id,
-        closedBusinessDay: EFFECTIVE_DAY,
+        closedCalendarDay: EFFECTIVE_DAY,
         prisma,
       });
 
@@ -941,7 +1126,7 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
 
       const result = await rateAgencyForClosedDay({
         tenantId: big.id,
-        closedBusinessDay: CLOSED_DAY,
+        closedCalendarDay: CLOSED_DAY,
         prisma,
       });
 
@@ -1002,7 +1187,7 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
       }
       await rateAgencyForClosedDay({
         tenantId: big.id,
-        closedBusinessDay: CLOSED_DAY,
+        closedCalendarDay: CLOSED_DAY,
         prisma,
       });
 
@@ -1013,11 +1198,11 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
       const { getRatingSummary } = await import('../services/rating/rating-summary.js');
       const summary = await getRatingSummary(big.id, {
         prisma,
-        now: new Date(businessDayBounds(EFFECTIVE_DAY).start.getTime() + 18 * 3600_000),
+        now: new Date(calendarDayBounds(EFFECTIVE_DAY).start.getTime() + 18 * 3600_000),
       });
 
       // Today, which prices nothing.
-      expect(summary.today.businessDay).toBe(EFFECTIVE_DAY);
+      expect(summary.today.calendarDay).toBe(EFFECTIVE_DAY);
       expect(summary.today.closingPct).toBeCloseTo(14, 6);
 
       // The window that actually set the rate in force.

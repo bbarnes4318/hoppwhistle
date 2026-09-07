@@ -4,17 +4,26 @@
  * Four numbers, and the whole point is that they are not confusable:
  *
  *   todayClosingPct     today so far. Moves all day, prices nothing.
- *   windowClosingPct    the trailing window that ACTUALLY set the current
- *                       rate. This is the number the agency is paid on.
+ *   windowClosingPct    the trailing Delivery Day window that ACTUALLY set the
+ *                       current rate. This is the number the agency is paid on.
  *   currentRate         dollars per submitted application, today.
- *   trackingRate        what the curve would return if the window ending
- *                       today closed right now — tomorrow's rate, if nothing
- *                       else changes.
+ *   trackingRate        what the curve would return if the window ending today
+ *                       closed right now — tomorrow's rate, if nothing else
+ *                       changes.
  *
  * An agency that mistakes the first for the second thinks its price changed at
  * 10am. An agency that mistakes the fourth for the third thinks it is being
  * paid a rate it is not yet being paid. Both are shaped like a billing dispute,
  * so each is labelled here and rendered distinctly in the portal.
+ *
+ * ── Delivery Days, and saying so ─────────────────────────────────────────────
+ *
+ * The window is the trailing three DELIVERY DAYS — calendar days on which this
+ * agency was delivered at least one call — not the trailing three calendar
+ * days. For a weekday-only agency, Monday's rate is set by the prior Thursday,
+ * Friday and Monday, and the portal names those three days rather than saying
+ * "3 days" and leaving the agency to guess which. An agency that cannot
+ * reconstruct its own window cannot check its own price.
  *
  * Every number is computed server-side from the tenant on the authenticated
  * request. Nothing here accepts a rate, a price or a computed amount from the
@@ -26,37 +35,39 @@ import { AgencyRatingStatus } from '@prisma/client';
 
 import { getPrismaClient } from '../../lib/prisma.js';
 
-import { currentBusinessDay, trailingWindow } from './business-day.js';
-import type { BusinessDayKey } from './business-day.js';
-import {
-  countSubmittedApplicationsLifetime,
-  measureBusinessDay,
-  measureTrailingWindow,
-} from './measurement.js';
-import type { MeasurementDeps } from './measurement.js';
+import { currentCalendarDay } from './calendar-day.js';
+import type { CalendarDayKey } from './calendar-day.js';
+import { measureTrailingDeliveryDays } from './delivery-day.js';
+import type { DeliveryDayDeps } from './delivery-day.js';
+import { countSubmittedApplicationsLifetime, measureCalendarDay } from './measurement.js';
 import { rateFor, toNumber } from './rate-curve.js';
-import { loadActiveCurve, loadWindowBusinessDays } from './rating-engine.js';
+import { loadActiveCurve, loadWindowSettings } from './rating-engine.js';
 
 export interface RatingSummary {
   tenantId: string;
-  businessDay: BusinessDayKey;
+  /** Today, as a calendar day in `timeZone`. */
+  calendarDay: CalendarDayKey;
   timeZone: string;
 
   status: AgencyRatingStatus;
 
   /** Today so far. Informational; it prices nothing. */
   today: {
-    businessDay: BusinessDayKey;
+    calendarDay: CalendarDayKey;
     deliveredCalls: number;
     submittedApplications: number;
     /** Null when no calls have been delivered yet today — never 0. */
     closingPct: number | null;
   };
 
-  /** The trailing window that set the rate now in force. */
+  /** The trailing Delivery Day window that set the rate now in force. */
   ratingWindow: {
-    businessDays: number;
-    dayKeys: BusinessDayKey[];
+    /** Delivery Days asked for. */
+    deliveryDays: number;
+    /** How many were found. Fewer means a shorter sample, and it is shown. */
+    daysFound: number;
+    /** The actual days, oldest first, so the agency can reconstruct the window. */
+    dayKeys: CalendarDayKey[];
     deliveredCalls: number;
     submittedApplications: number;
     closingPct: number | null;
@@ -64,16 +75,19 @@ export interface RatingSummary {
 
   /** The rate in force today. Null while under review — not zero. */
   currentRate: number | null;
-  currentRateBusinessDay: BusinessDayKey | null;
+  currentRateCalendarDay: CalendarDayKey | null;
 
   /**
    * Where today's performance is heading: the rate the curve would return for
-   * the window ending today. Null when it cannot be computed, or when today's
-   * window is below the curve's minimum — in which case `trackingBelowMinimum`
-   * says so rather than the rate quietly reading as null for two reasons.
+   * the Delivery Day window ending today. Null when it cannot be computed, or
+   * when that window is below the curve's minimum — in which case
+   * `trackingBelowMinimum` says so rather than the rate quietly reading as null
+   * for two different reasons.
    */
   trackingRate: number | null;
   trackingBelowMinimum: boolean;
+  /** The Delivery Days `trackingRate` was computed over. */
+  trackingDayKeys: CalendarDayKey[];
 
   curveVersion: number;
 
@@ -106,16 +120,16 @@ export async function getRatingSummary(
 ): Promise<RatingSummary> {
   const prisma = options.prisma ?? getPrismaClient();
   const now = options.now ?? new Date();
-  const today = currentBusinessDay(now);
+  const today = currentCalendarDay(now);
 
-  const deps: MeasurementDeps = {
+  const deps: DeliveryDayDeps = {
     calls: prisma.call,
     applications: prisma.insuranceCarrierApplication,
   };
 
-  const [curve, windowBusinessDays, state, openFlag] = await Promise.all([
+  const [curve, windowSettings, state, openFlag] = await Promise.all([
     loadActiveCurve(prisma),
-    loadWindowBusinessDays(prisma),
+    loadWindowSettings(prisma),
     prisma.agencyRatingState.findUnique({ where: { tenantId } }),
     prisma.ratingReviewFlag.findFirst({
       where: { tenantId, clearedAt: null },
@@ -124,9 +138,17 @@ export async function getRatingSummary(
   ]);
 
   const [todayMeasurement, trackingMeasurement, lifetimeApplications] = await Promise.all([
-    measureBusinessDay(deps, tenantId, today),
-    // The window ending TODAY: what tomorrow's rate is tracking toward.
-    measureTrailingWindow(deps, tenantId, today, windowBusinessDays),
+    measureCalendarDay(deps, tenantId, today),
+    // The Delivery Day window ending TODAY: what tomorrow's rate is tracking
+    // toward. Today counts as a Delivery Day as soon as one call lands, so this
+    // becomes a three-day window during the morning rather than after it.
+    measureTrailingDeliveryDays(
+      deps,
+      tenantId,
+      today,
+      windowSettings.windowDeliveryDays,
+      windowSettings.deliveryDayLookback
+    ),
     // Counted live rather than read off the state row, so the portal shows the
     // truth between rating runs rather than the count as of the last one.
     countSubmittedApplicationsLifetime(deps, tenantId),
@@ -139,12 +161,12 @@ export async function getRatingSummary(
    * agency would see a "window percentage" that never matched the row it would
    * be shown in a dispute.
    */
-  const appliedChange = state?.currentRateBusinessDay
+  const appliedChange = state?.currentRateCalendarDay
     ? await prisma.rateChange.findUnique({
         where: {
-          tenantId_effectiveBusinessDay: {
+          tenantId_effectiveCalendarDay: {
             tenantId,
-            effectiveBusinessDay: state.currentRateBusinessDay,
+            effectiveCalendarDay: state.currentRateCalendarDay,
           },
         },
       })
@@ -152,7 +174,8 @@ export async function getRatingSummary(
 
   const ratingWindow = appliedChange
     ? {
-        businessDays: appliedChange.windowBusinessDays,
+        deliveryDays: appliedChange.windowDeliveryDays,
+        daysFound: appliedChange.windowDaysFound,
         dayKeys: appliedChange.windowDayKeys,
         deliveredCalls: appliedChange.deliveredCalls,
         submittedApplications: appliedChange.submittedApplications,
@@ -160,10 +183,11 @@ export async function getRatingSummary(
           appliedChange.closingPct === null ? null : toNumber(appliedChange.closingPct),
       }
     : {
-        // Not yet rated. Show the window that WOULD be used, with its shape, so
+        // Not yet rated. Show the shape of the window that WOULD be used, so
         // the portal never renders an empty box with no explanation.
-        businessDays: windowBusinessDays,
-        dayKeys: trailingWindow(today, windowBusinessDays).dayKeys,
+        deliveryDays: windowSettings.windowDeliveryDays,
+        daysFound: 0,
+        dayKeys: [] as CalendarDayKey[],
         deliveredCalls: 0,
         submittedApplications: 0,
         closingPct: null,
@@ -171,7 +195,7 @@ export async function getRatingSummary(
 
   let trackingRate: number | null = null;
   let trackingBelowMinimum = false;
-  if (trackingMeasurement.closingPct !== null) {
+  if (trackingMeasurement?.closingPct != null) {
     const verdict = rateFor(curve, trackingMeasurement.closingPct);
     if (verdict.kind === 'BELOW_MINIMUM') {
       trackingBelowMinimum = true;
@@ -184,20 +208,21 @@ export async function getRatingSummary(
 
   return {
     tenantId,
-    businessDay: today,
+    calendarDay: today,
     timeZone: 'America/New_York',
     status,
     today: {
-      businessDay: today,
+      calendarDay: today,
       deliveredCalls: todayMeasurement.deliveredCalls,
       submittedApplications: todayMeasurement.submittedApplications,
       closingPct: todayMeasurement.closingPct,
     },
     ratingWindow,
     currentRate: resolveCurrentRate(state, curve.introductoryRate, status),
-    currentRateBusinessDay: state?.currentRateBusinessDay ?? null,
+    currentRateCalendarDay: state?.currentRateCalendarDay ?? null,
     trackingRate,
     trackingBelowMinimum,
+    trackingDayKeys: trackingMeasurement?.window.dayKeys ?? [],
     curveVersion: curve.version,
     reviewFlag: openFlag
       ? {

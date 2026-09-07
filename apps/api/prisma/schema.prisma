@@ -3615,14 +3615,28 @@ model RateCurveAnchor {
 model RatingSettings {
   id String @id @default("global")
 
-  /// Trailing window, in business days, over which the closing percentage that
+  /// Trailing window, in DELIVERY DAYS, over which the closing percentage that
   /// sets tomorrow's rate is measured. Configurable; 3 by default.
+  ///
+  /// A Delivery Day is a calendar day on which NetEnroll delivered at least one
+  /// call to that agency. Deliberately not calendar days: a weekday-only agency
+  /// would have Monday priced off Saturday and Sunday, two empty days, and a
+  /// third of its denominator would be zero for reasons unconnected to how it
+  /// performs. Deliberately not Business Days either -- that term is reserved
+  /// for contractual notice periods and would be wrong for an agency that does
+  /// work weekends. See `services/rating/delivery-day.ts`.
   ///
   /// There is deliberately no minimum-call threshold beside it. An earlier
   /// draft required 250 delivered calls in the window to stop a thin sample
   /// falling off a band edge; with a continuous curve there are no edges, and
   /// both launch agencies clear 450 calls in a 3-day window regardless.
-  windowBusinessDays Int @default(3)
+  windowDeliveryDays Int @default(3)
+
+  /// How many calendar days back to search for those Delivery Days before
+  /// giving up. Not a business rule -- a bound so an agency that stopped taking
+  /// calls does not cause an unbounded scan. A window that runs short is
+  /// recorded as short, never padded.
+  deliveryDayLookback Int @default(60)
 
   /// The version new ratings are priced from.
   activeCurveVersionId String?
@@ -3645,14 +3659,18 @@ model AgencyRatingState {
   currentRate    Decimal? @db.Decimal(10, 2)
   curveVersionId String?
 
-  /// The business day (`YYYY-MM-DD`, America/New_York) `currentRate` applies
+  /// The calendar day (`YYYY-MM-DD`, America/New_York) `currentRate` applies
   /// to. A string rather than a date column so no layer between here and the
   /// browser can shift it by a timezone.
-  currentRateBusinessDay String?
+  ///
+  /// A rate applies to a whole calendar day, not to a Delivery Day: an agency
+  /// that takes no calls on a Sunday still has a rate on Sunday, it simply does
+  /// not earn at it.
+  currentRateCalendarDay String?
 
-  /// The last closed business day the engine has rated. Makes a re-run a
-  /// no-op rather than a second row.
-  lastRatedBusinessDay String?
+  /// The last closed calendar day the engine has rated. Makes a re-run a no-op
+  /// rather than a second row.
+  lastRatedCalendarDay String?
 
   /// Submitted applications consumed against the introductory package.
   introductoryApplicationsUsed Int @default(0)
@@ -3686,16 +3704,25 @@ model RateChange {
   id       String @id @default(uuid())
   tenantId String
 
-  /// The business day this rate applies to (`YYYY-MM-DD`, America/New_York) --
+  /// The calendar day this rate applies to (`YYYY-MM-DD`, America/New_York) --
   /// the day AFTER the window closed.
-  effectiveBusinessDay String
+  effectiveCalendarDay String
 
-  /// The window the counts were taken over. The day keys are recorded verbatim
-  /// as well as the instants, so a reader never has to re-derive which days
-  /// were in the window from a timezone.
+  /// The window the counts were taken over.
+  ///
+  /// The day keys are recorded verbatim as well as the instants, because a
+  /// Delivery Day window is NOT contiguous: Thursday, Friday and Monday spans a
+  /// weekend, so `windowStart`..`windowEndExclusive` covers five days while the
+  /// counts cover three. A reader recomputing from this row must use
+  /// `windowDayKeys`, and having both is what makes that unambiguous.
   windowStart        DateTime
   windowEndExclusive DateTime
-  windowBusinessDays Int
+  /// How many Delivery Days were asked for.
+  windowDeliveryDays Int
+  /// How many were found. Fewer than requested for a new agency, or one that
+  /// has stopped. Recorded rather than padded -- a shorter window is a smaller
+  /// sample and the row should say so.
+  windowDaysFound    Int
   windowDayKeys      String[]
 
   /// The two counts. Delivered call: routed to this agency and answered by one
@@ -3727,7 +3754,7 @@ model RateChange {
 
   /// One decision per agency per effective day. Makes the daily run idempotent:
   /// re-running it writes nothing rather than a second, conflicting price.
-  @@unique([tenantId, effectiveBusinessDay])
+  @@unique([tenantId, effectiveCalendarDay])
   @@index([tenantId, computedAt])
   @@map("rate_changes")
 }

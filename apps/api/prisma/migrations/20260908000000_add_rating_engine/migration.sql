@@ -24,6 +24,24 @@
 
 BEGIN;
 
+-- ── A note on the column names ───────────────────────────────────────────────
+--
+-- An earlier draft of THIS FILE named three of these columns after "business
+-- days": "rating_settings.windowBusinessDays", "rate_changes.windowBusinessDays"
+-- and "rate_changes.effectiveBusinessDay". That was wrong, and the file is
+-- corrected in place rather than followed by a rename migration because it has
+-- never been applied to production -- the whole change is still on its branch.
+--
+-- The correction matters beyond tidiness: "Business Day" means Monday to Friday
+-- excluding US federal holidays and bounds four contractual notice periods, and
+-- leaving the rating columns wearing that name is how the two get conflated
+-- again. The rating window is counted in DELIVERY DAYS; the effective day is a
+-- CALENDAR day. See docs/RATING.md.
+--
+-- The guarded block at the end of this file cleans up after that earlier draft
+-- if anyone applied it to a scratch database, so re-running here is still a
+-- no-op rather than an error.
+--
 -- ---------------------------------------------------------------------------
 -- Measurement inputs on existing tables
 -- ---------------------------------------------------------------------------
@@ -130,11 +148,19 @@ CREATE INDEX IF NOT EXISTS "rate_curve_anchors_curveVersionId_idx"
 
 CREATE TABLE IF NOT EXISTS "rating_settings" (
     "id" TEXT NOT NULL DEFAULT 'global',
-    -- Trailing window, in business days, that sets tomorrow's rate.
-    -- Configurable; 3 by default. There is deliberately no minimum-call
-    -- threshold beside it: with a continuous curve there are no band edges for
-    -- a thin sample to fall off.
-    "windowBusinessDays" INTEGER NOT NULL DEFAULT 3,
+    -- Trailing window, in DELIVERY DAYS, that sets tomorrow's rate.
+    -- Configurable; 3 by default. A Delivery Day is a calendar day on which
+    -- NetEnroll delivered at least one call to that agency: not calendar days
+    -- (which price a weekday-only agency's Monday off two empty weekend days)
+    -- and not Business Days (which are the contractual notice-period unit and
+    -- would be wrong for an agency that does work weekends).
+    --
+    -- There is deliberately no minimum-call threshold beside it: with a
+    -- continuous curve there are no band edges for a thin sample to fall off.
+    "windowDeliveryDays" INTEGER NOT NULL DEFAULT 3,
+    -- Calendar days to search back for those Delivery Days before giving up.
+    -- A bound, not a business rule; a short window is recorded short.
+    "deliveryDayLookback" INTEGER NOT NULL DEFAULT 60,
     "activeCurveVersionId" TEXT,
     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -154,9 +180,11 @@ CREATE TABLE IF NOT EXISTS "agency_rating_states" (
     "currentRate" DECIMAL(10,2),
     "curveVersionId" TEXT,
     -- 'YYYY-MM-DD' in America/New_York. A string, not a date column, so no
-    -- layer between here and the browser can shift it by a timezone.
-    "currentRateBusinessDay" TEXT,
-    "lastRatedBusinessDay" TEXT,
+    -- layer between here and the browser can shift it by a timezone. A rate
+    -- applies to a whole CALENDAR day: an agency that takes no calls on a
+    -- Sunday still has a rate on Sunday, it simply does not earn at it.
+    "currentRateCalendarDay" TEXT,
+    "lastRatedCalendarDay" TEXT,
     "introductoryApplicationsUsed" INTEGER NOT NULL DEFAULT 0,
     -- An agreed opening rate and block, which supersede the introductory
     -- package. Set by a platform admin.
@@ -181,11 +209,19 @@ CREATE INDEX IF NOT EXISTS "agency_rating_states_status_idx"
 CREATE TABLE IF NOT EXISTS "rate_changes" (
     "id" TEXT NOT NULL,
     "tenantId" TEXT NOT NULL,
-    -- The business day this rate applies to: the day AFTER the window closed.
-    "effectiveBusinessDay" TEXT NOT NULL,
+    -- The calendar day this rate applies to: the day AFTER the window closed.
+    "effectiveCalendarDay" TEXT NOT NULL,
+    -- A Delivery Day window is NOT contiguous -- Thu/Fri/Mon spans a weekend --
+    -- so these two instants cover five days while the counts cover three.
+    -- Anything recomputing from this row must use "windowDayKeys"; both are
+    -- stored so that is unambiguous rather than inferred.
     "windowStart" TIMESTAMP(3) NOT NULL,
     "windowEndExclusive" TIMESTAMP(3) NOT NULL,
-    "windowBusinessDays" INTEGER NOT NULL,
+    -- Delivery Days asked for, and how many were actually found. A short window
+    -- is recorded short, never padded: it is a smaller sample and the row that
+    -- an agency is shown in a dispute should say so.
+    "windowDeliveryDays" INTEGER NOT NULL,
+    "windowDaysFound" INTEGER NOT NULL DEFAULT 0,
     -- The day keys verbatim, so a reader never re-derives the window from a
     -- timezone.
     "windowDayKeys" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
@@ -208,8 +244,8 @@ CREATE TABLE IF NOT EXISTS "rate_changes" (
 
 -- One decision per agency per effective day. This is what makes the daily run
 -- idempotent: a re-run writes nothing rather than a second, conflicting price.
-CREATE UNIQUE INDEX IF NOT EXISTS "rate_changes_tenantId_effectiveBusinessDay_key"
-    ON "rate_changes"("tenantId", "effectiveBusinessDay");
+CREATE UNIQUE INDEX IF NOT EXISTS "rate_changes_tenantId_effectiveCalendarDay_key"
+    ON "rate_changes"("tenantId", "effectiveCalendarDay");
 
 CREATE INDEX IF NOT EXISTS "rate_changes_tenantId_computedAt_idx"
     ON "rate_changes"("tenantId", "computedAt");
@@ -343,8 +379,60 @@ VALUES
     ('00000000-0000-4000-8000-00000000a150', '00000000-0000-4000-8000-00000000c001', 15.000, 134.00)
 ON CONFLICT ("curveVersionId", "closingPct") DO NOTHING;
 
-INSERT INTO "rating_settings" ("id", "windowBusinessDays", "activeCurveVersionId", "updatedAt")
-VALUES ('global', 3, '00000000-0000-4000-8000-00000000c001', CURRENT_TIMESTAMP)
+INSERT INTO "rating_settings" (
+    "id", "windowDeliveryDays", "deliveryDayLookback", "activeCurveVersionId", "updatedAt"
+)
+VALUES ('global', 3, 60, '00000000-0000-4000-8000-00000000c001', CURRENT_TIMESTAMP)
 ON CONFLICT ("id") DO NOTHING;
+
+-- ---------------------------------------------------------------------------
+-- Cleanup for the earlier draft of this file
+--
+-- Only fires on a database where a previous run of this migration created the
+-- "business day" spelling of these columns. Production has never run either
+-- version, so on production this block does nothing at all.
+--
+-- It does not DROP: it makes the stale columns nullable so that inserts against
+-- the corrected shape succeed, and copies any values across. Dropping a column
+-- is the one thing this file must never do, because a column that turns out to
+-- have been wanted cannot be un-dropped.
+-- ---------------------------------------------------------------------------
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'rating_settings' AND column_name = 'windowBusinessDays'
+    ) THEN
+        ALTER TABLE "rating_settings" ALTER COLUMN "windowBusinessDays" DROP NOT NULL;
+        UPDATE "rating_settings"
+           SET "windowDeliveryDays" = COALESCE("windowBusinessDays", 3)
+         WHERE "windowDeliveryDays" IS DISTINCT FROM "windowBusinessDays";
+    END IF;
+
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'rate_changes' AND column_name = 'windowBusinessDays'
+    ) THEN
+        ALTER TABLE "rate_changes" ALTER COLUMN "windowBusinessDays" DROP NOT NULL;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'rate_changes' AND column_name = 'effectiveBusinessDay'
+    ) THEN
+        ALTER TABLE "rate_changes" ALTER COLUMN "effectiveBusinessDay" DROP NOT NULL;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'agency_rating_states' AND column_name = 'currentRateBusinessDay'
+    ) THEN
+        ALTER TABLE "agency_rating_states"
+            ADD COLUMN IF NOT EXISTS "currentRateCalendarDay" TEXT,
+            ADD COLUMN IF NOT EXISTS "lastRatedCalendarDay" TEXT;
+    END IF;
+END
+$$;
 
 COMMIT;

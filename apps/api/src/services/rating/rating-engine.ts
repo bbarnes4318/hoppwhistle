@@ -43,10 +43,11 @@ import { Prisma, PrismaClient, AgencyRatingStatus, RateChangeStatus } from '@pri
 
 import { getPrismaClient } from '../../lib/prisma.js';
 
-import { lastClosedBusinessDay, nextBusinessDay } from './business-day.js';
-import type { BusinessDayKey } from './business-day.js';
-import { countSubmittedApplicationsLifetime, measureTrailingWindow } from './measurement.js';
-import type { MeasurementDeps } from './measurement.js';
+import { lastClosedCalendarDay, nextCalendarDay, windowOf } from './calendar-day.js';
+import type { CalendarDayKey } from './calendar-day.js';
+import { measureTrailingDeliveryDays } from './delivery-day.js';
+import type { DeliveryDayDeps } from './delivery-day.js';
+import { countSubmittedApplicationsLifetime } from './measurement.js';
 import { rateFor, toRateCurve, toNumber } from './rate-curve.js';
 import type { RateCurve } from './rate-curve.js';
 
@@ -97,18 +98,24 @@ export async function loadCurveVersion(
   return toRateCurve(row);
 }
 
-/** The trailing window length, in business days. Configurable; 3 by default. */
-export async function loadWindowBusinessDays(
+/**
+ * The trailing window length, in DELIVERY DAYS, and how far back to look for
+ * them. Configurable; 3 and 60 by default.
+ */
+export async function loadWindowSettings(
   prisma: PrismaClient = getPrismaClient()
-): Promise<number> {
+): Promise<{ windowDeliveryDays: number; deliveryDayLookback: number }> {
   const settings = await prisma.ratingSettings.findUnique({ where: { id: 'global' } });
-  return settings?.windowBusinessDays ?? 3;
+  return {
+    windowDeliveryDays: settings?.windowDeliveryDays ?? 3,
+    deliveryDayLookback: settings?.deliveryDayLookback ?? 60,
+  };
 }
 
 export interface RateAgencyOptions {
   tenantId: string;
   /** The business day that just closed. Defaults to the last closed day. */
-  closedBusinessDay?: BusinessDayKey;
+  closedCalendarDay?: CalendarDayKey;
   prisma?: PrismaClient;
   now?: Date;
 }
@@ -116,11 +123,15 @@ export interface RateAgencyOptions {
 export interface RateAgencyResult {
   rateChangeId: string;
   tenantId: string;
-  effectiveBusinessDay: BusinessDayKey;
+  effectiveCalendarDay: CalendarDayKey;
   status: RateChangeStatus;
   deliveredCalls: number;
   submittedApplications: number;
   closingPct: number | null;
+  /** The Delivery Days the counts came from, oldest first. */
+  windowDayKeys: CalendarDayKey[];
+  /** How many were found; fewer than requested is a shorter sample. */
+  windowDaysFound: number;
   previousRate: number | null;
   newRate: number | null;
   curveVersion: number;
@@ -139,12 +150,12 @@ export async function rateAgencyForClosedDay(
 ): Promise<RateAgencyResult> {
   const prisma = options.prisma ?? getPrismaClient();
   const now = options.now ?? new Date();
-  const closedDay = options.closedBusinessDay ?? lastClosedBusinessDay(now);
-  const effectiveBusinessDay = nextBusinessDay(closedDay);
+  const closedDay = options.closedCalendarDay ?? lastClosedCalendarDay(now);
+  const effectiveCalendarDay = nextCalendarDay(closedDay);
 
   const existing = await prisma.rateChange.findUnique({
     where: {
-      tenantId_effectiveBusinessDay: { tenantId: options.tenantId, effectiveBusinessDay },
+      tenantId_effectiveCalendarDay: { tenantId: options.tenantId, effectiveCalendarDay },
     },
   });
 
@@ -152,11 +163,13 @@ export async function rateAgencyForClosedDay(
     return {
       rateChangeId: existing.id,
       tenantId: existing.tenantId,
-      effectiveBusinessDay: existing.effectiveBusinessDay,
+      effectiveCalendarDay: existing.effectiveCalendarDay,
       status: existing.status,
       deliveredCalls: existing.deliveredCalls,
       submittedApplications: existing.submittedApplications,
       closingPct: existing.closingPct === null ? null : toNumber(existing.closingPct),
+      windowDayKeys: existing.windowDayKeys,
+      windowDaysFound: existing.windowDaysFound,
       previousRate: existing.previousRate === null ? null : toNumber(existing.previousRate),
       newRate: existing.newRate === null ? null : toNumber(existing.newRate),
       curveVersion: existing.curveVersion,
@@ -164,21 +177,36 @@ export async function rateAgencyForClosedDay(
     };
   }
 
-  const [curve, windowBusinessDays] = await Promise.all([
+  const [curve, windowSettings] = await Promise.all([
     loadActiveCurve(prisma),
-    loadWindowBusinessDays(prisma),
+    loadWindowSettings(prisma),
   ]);
 
-  const deps: MeasurementDeps = {
+  const deps: DeliveryDayDeps = {
     calls: prisma.call,
     applications: prisma.insuranceCarrierApplication,
   };
 
-  const measured = await measureTrailingWindow(
+  /*
+   * The trailing three DELIVERY DAYS ending on the day that just closed.
+   *
+   * Not calendar days. A weekday-only agency would have Monday priced off
+   * Saturday and Sunday, two days on which it was delivered nothing, and a
+   * third of its denominator would be zero for reasons unconnected to how it
+   * performs. Not Business Days either: that term is reserved for contractual
+   * notice periods and would be wrong for an agency that does work weekends.
+   *
+   * Null when the agency has no Delivery Days in the lookback at all -- it has
+   * never been sent a call, or has not been sent one in two months. That is
+   * NO_DATA below, and it is a different thing from a window whose days
+   * happened to be quiet.
+   */
+  const measured = await measureTrailingDeliveryDays(
     deps,
     options.tenantId,
     closedDay,
-    windowBusinessDays
+    windowSettings.windowDeliveryDays,
+    windowSettings.deliveryDayLookback
   );
 
   const [state, openFlag, lifetimeApplications] = await Promise.all([
@@ -195,11 +223,24 @@ export async function rateAgencyForClosedDay(
   let status: RateChangeStatus;
   let newRate: number | null;
 
-  if (measured.closingPct === null) {
-    // No delivered calls in the window. There is nothing to price from, so the
-    // previous rate stands. Recorded rather than skipped: a gap in the history
-    // must always mean "the engine did not run", never "it ran and said
-    // nothing".
+  if (measured === null || measured.closingPct === null) {
+    /*
+     * No Delivery Days in the lookback: this agency has not been sent a call in
+     * two months, or ever. There is nothing to price from, so the previous rate
+     * stands.
+     *
+     * Recorded rather than skipped, so a gap in the history always means "the
+     * engine did not run", never "it ran and said nothing". And deliberately
+     * NOT a review flag: an agency that was sent no calls has not performed
+     * below the floor, it has not performed at all, and flagging it would pause
+     * delivery to an agency whose only fault is that delivery already stopped.
+     *
+     * `measured.closingPct === null` cannot happen once `measured` exists -- a
+     * Delivery Day is by definition a day with at least one delivered call, so
+     * the denominator is at least the number of days. It is checked anyway so
+     * that a future change to the Delivery Day predicate cannot turn a
+     * divide-by-zero into a rate.
+     */
     status = RateChangeStatus.NO_DATA;
     newRate = previousRate;
   } else {
@@ -213,19 +254,36 @@ export async function rateAgencyForClosedDay(
     }
   }
 
+  /*
+   * The window to record when there is none.
+   *
+   * A NO_DATA row still has to say what was looked at, or it is not a record.
+   * The closed day, alone, with `windowDaysFound: 0` -- which reads exactly as
+   * what happened: we looked, ending here, and found no Delivery Days.
+   */
+  const recordedWindow = measured?.window ?? {
+    ...windowOf([closedDay]),
+    requested: windowSettings.windowDeliveryDays,
+    found: 0,
+    lookbackDays: windowSettings.deliveryDayLookback,
+  };
+
   const written = await prisma.$transaction(async tx => {
     const rateChange = await tx.rateChange.create({
       data: {
         tenantId: options.tenantId,
-        effectiveBusinessDay,
-        windowStart: measured.window.start,
-        windowEndExclusive: measured.window.endExclusive,
-        windowBusinessDays,
-        windowDayKeys: measured.window.dayKeys,
-        deliveredCalls: measured.deliveredCalls,
-        submittedApplications: measured.submittedApplications,
+        effectiveCalendarDay,
+        windowStart: recordedWindow.start,
+        windowEndExclusive: recordedWindow.endExclusive,
+        windowDeliveryDays: recordedWindow.requested,
+        windowDaysFound: recordedWindow.found,
+        windowDayKeys: measured ? recordedWindow.dayKeys : [],
+        deliveredCalls: measured?.deliveredCalls ?? 0,
+        submittedApplications: measured?.submittedApplications ?? 0,
         closingPct:
-          measured.closingPct === null ? null : new Prisma.Decimal(measured.closingPct.toFixed(6)),
+          measured?.closingPct == null
+            ? null
+            : new Prisma.Decimal(measured.closingPct.toFixed(6)),
         curveVersionId: curve.id,
         curveVersion: curve.version,
         previousRate: previousRate === null ? null : new Prisma.Decimal(previousRate),
@@ -282,8 +340,8 @@ export async function rateAgencyForClosedDay(
       currentRate: appliedRate,
       curveVersionId: curve.id,
       // The day the measurement covers, whatever rate is in force.
-      currentRateBusinessDay: effectiveBusinessDay,
-      lastRatedBusinessDay: closedDay,
+      currentRateCalendarDay: effectiveCalendarDay,
+      lastRatedCalendarDay: closedDay,
       // Counted, not incremented. See countSubmittedApplicationsLifetime().
       introductoryApplicationsUsed: lifetimeApplications,
     };
@@ -294,7 +352,7 @@ export async function rateAgencyForClosedDay(
       update: stateFields,
     });
 
-    if (status === RateChangeStatus.BELOW_MINIMUM && measured.closingPct !== null) {
+    if (status === RateChangeStatus.BELOW_MINIMUM && measured?.closingPct != null) {
       // One open flag at a time. A second consecutive day below the minimum is
       // the same review, not a new one.
       const open = await tx.ratingReviewFlag.findFirst({
@@ -321,11 +379,13 @@ export async function rateAgencyForClosedDay(
   return {
     rateChangeId: written.id,
     tenantId: options.tenantId,
-    effectiveBusinessDay,
+    effectiveCalendarDay,
     status,
-    deliveredCalls: measured.deliveredCalls,
-    submittedApplications: measured.submittedApplications,
-    closingPct: measured.closingPct,
+    deliveredCalls: measured?.deliveredCalls ?? 0,
+    submittedApplications: measured?.submittedApplications ?? 0,
+    closingPct: measured?.closingPct ?? null,
+    windowDayKeys: measured ? recordedWindow.dayKeys : [],
+    windowDaysFound: recordedWindow.found,
     previousRate,
     newRate,
     curveVersion: curve.version,
@@ -340,16 +400,16 @@ export async function rateAgencyForClosedDay(
  * a bad row for one must not leave the rest unpriced.
  */
 export async function runDailyRating(
-  options: { closedBusinessDay?: BusinessDayKey; prisma?: PrismaClient; now?: Date } = {}
+  options: { closedCalendarDay?: CalendarDayKey; prisma?: PrismaClient; now?: Date } = {}
 ): Promise<{
-  closedBusinessDay: BusinessDayKey;
-  effectiveBusinessDay: BusinessDayKey;
+  closedCalendarDay: CalendarDayKey;
+  effectiveCalendarDay: CalendarDayKey;
   results: RateAgencyResult[];
   failures: Array<{ tenantId: string; error: string }>;
 }> {
   const prisma = options.prisma ?? getPrismaClient();
   const now = options.now ?? new Date();
-  const closedBusinessDay = options.closedBusinessDay ?? lastClosedBusinessDay(now);
+  const closedCalendarDay = options.closedCalendarDay ?? lastClosedCalendarDay(now);
 
   const tenants = await prisma.tenant.findMany({
     where: { status: 'ACTIVE' },
@@ -365,7 +425,7 @@ export async function runDailyRating(
       results.push(
         await rateAgencyForClosedDay({
           tenantId: tenant.id,
-          closedBusinessDay,
+          closedCalendarDay,
           prisma,
           now,
         })
@@ -379,8 +439,8 @@ export async function runDailyRating(
   }
 
   return {
-    closedBusinessDay,
-    effectiveBusinessDay: nextBusinessDay(closedBusinessDay),
+    closedCalendarDay,
+    effectiveCalendarDay: nextCalendarDay(closedCalendarDay),
     results,
     failures,
   };
