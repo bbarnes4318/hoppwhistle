@@ -20,7 +20,11 @@ done
 # --- Guard 2: env file sanity
 [ -s "$ENVF" ] || { RED "REFUSED: $ENVF is missing or empty."; exit 1; }
 
-REQUIRED="FIELD_ENCRYPTION_KEY VAPI_API_KEY TCPA_API_KEY TCPA_API_SECRET STRIPE_SECRET_KEY SIGNALWIRE_API_TOKEN DEEPSEEK_API_KEY PUBLIC_IP"
+# FREESWITCH_INTERNAL_KEY is required because the FreeSWITCH callbacks now fail
+# closed without it. That makes a missing value an outage rather than a leak, so
+# it is caught here -- before anything ships -- instead of at 3am. Generate one
+# with: openssl rand -hex 32
+REQUIRED="FIELD_ENCRYPTION_KEY VAPI_API_KEY TCPA_API_KEY TCPA_API_SECRET STRIPE_SECRET_KEY SIGNALWIRE_API_TOKEN DEEPSEEK_API_KEY PUBLIC_IP FREESWITCH_INTERNAL_KEY"
 
 # --- Preflight: every required secret must be present AND non-empty in .env
 miss=""

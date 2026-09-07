@@ -207,7 +207,7 @@ above.
 
 ## 4. Left deliberately, with reasons
 
-- **`did-routes.ts` FreeSWITCH endpoints** (`/freeswitch/lookup`,
+- ~~**`did-routes.ts` FreeSWITCH endpoints** (`/freeswitch/lookup`,
   `/freeswitch/cdr`, call events) are documented `NO AUTH — internal network
   only`. They are public webhooks that derive their tenant from the resource
   being addressed (the DID, and the route row it resolves to), which is the
@@ -215,7 +215,12 @@ above.
   deployment assumption, not an enforced one — they are reachable through nginx
   today. Giving them the shared-secret guard that `post.ts`'s `/internal/` routes
   use is the obvious follow-up; it is a deployment-coordinated change (the
-  FreeSWITCH Lua script has to send the header) and did not belong in this pass.
+  FreeSWITCH Lua script has to send the header) and did not belong in this
+  pass.~~ **Closed in Phase 2c.** All five FreeSWITCH endpoints —
+  `/freeswitch/lookup`, `/freeswitch/cdr`, `/freeswitch/recording-uploaded`,
+  `/freeswitch/carrier-route` and `/freeswitch/carrier-result` — now carry
+  `requireInternalKey`. Both halves of the coordinated change are in the same
+  commit: the guard, and the FreeSWITCH side that satisfies it. See §7 below.
 - **`requirePublisherAccess()` / `buildPublisherScopedWhere()`**
   (`middleware/rbac.ts:446,459`) return `true` / `{}` for any ADMIN or OWNER
   without consulting the tenant. Every call site reached in this audit now
@@ -486,3 +491,112 @@ refactor away from being dropped, and nothing fails loudly when it is.
   and are gated on "any authenticated user". Flagged in Phase 1b §3 and still
   out of scope; they are not event-bus or Redis surfaces and this pass did not
   widen them.
+
+---
+
+# 7. The FreeSWITCH endpoints — closed
+
+**Scope:** the five `/api/v1/freeswitch/*` endpoints, and every caller of them.
+
+§4 of the Phase 1 pass recorded these as `NO AUTH — internal network only`, and
+recorded honestly that this was a deployment assumption rather than an enforced
+one: they are reachable through nginx. Phase 1 deferred closing them because
+doing so needs a coordinated change to the FreeSWITCH side. This is that change,
+both halves in one commit.
+
+## 7.1 What was open
+
+| Endpoint | Called by | What an unauthenticated caller could do |
+| --- | --- | --- |
+| `GET /freeswitch/lookup` | `inbound_route.lua`, `dialplan/default.xml` | Ask where any DID on the platform routes: the destination, the campaign, the recording policy. A DID enumeration oracle. |
+| `POST /freeswitch/cdr` | `inbound_route.lua` | Write a Call row against the tenant of any `routeId`. Phase 1 scoped the *update* by tenant; nothing stopped the row being created. |
+| `POST /freeswitch/recording-uploaded` | `upload-recording.sh` | Attach an arbitrary recording URL to a call. |
+| `GET /freeswitch/carrier-route` | `dialplan/default.xml`, `dialplan/vapi_outbound.xml` | Read any agency's carrier waterfall, including gateway hostnames, by passing `?tenant=`. |
+| `POST /freeswitch/carrier-result` | both dialplans' hangup hooks | **Take a `tenantId` from its own body or query** and write gateway health against it. An unauthenticated cross-agency write: poison another agency's waterfall into failing over away from a working carrier. |
+
+The last one is the same shape as the `demo-events.ts` finding — a `tenantId`
+read straight off the wire — and it survived the Phase 2 sweep because that
+sweep enumerated the event bus, Redis and WebSockets, and this is an HTTP route
+that the Phase 1 route pass had classified as an intentional public webhook.
+Three passes, three different blind spots. §8 is about that.
+
+## 7.2 The guard
+
+`apps/api/src/lib/internal-auth.ts`. A shared secret, `FREESWITCH_INTERNAL_KEY`,
+compared in constant time, presented either as the `X-Internal-Key` header or as
+a `?k=` query parameter.
+
+**Why a shared secret and not something better.** The callers are FreeSWITCH's
+`mod_curl`, from a Lua script and from dialplan `${curl(...)}` expressions.
+mod_curl can send a URL, a method and a body. It cannot compute an HMAC, hold a
+client certificate, or set a request header. A shared secret is the strongest
+thing that fits through that pipe.
+
+**Why a query parameter exists at all, and what it costs.** mod_curl's syntax is
+`curl <url> [headers|json] [get|head|post [body]] [connect-timeout n] [timeout
+n]`, where `headers` means *return* the response headers, not *send* these.
+There is no request-header argument in any released version. So the dialplan and
+the Lua script pass the secret in the query string, and **FreeSWITCH logs the
+URLs it fetches** — the secret is in FreeSWITCH's logs. That is stated rather
+than glossed, and it is why:
+
+- it is its **own** secret, used for nothing else, so a log leak costs one
+  rotation and reaches nothing but these five read-mostly endpoints;
+- the Lua script redacts it from its *own* log lines (mod_curl's it cannot);
+- callers that *can* send a header do — `upload-recording.sh` uses real curl;
+- the guard reports which transport was used, so the query form can be measured
+  and withdrawn once both mod_curl callers move to something that can carry a
+  header. That is the follow-up, and it is smaller than this change was.
+
+It is strictly better than what it replaces, which was nothing.
+
+**It fails closed.** No configured secret means every guarded request is
+refused. There is deliberately no "unset means open" mode, because that is
+exactly the deployment assumption being replaced — a hole that closes only if
+somebody remembers. The blast radius of a missing variable is therefore an
+outage rather than a leak, so `scripts/deploy.sh` lists
+`FREESWITCH_INTERNAL_KEY` among its required secrets and refuses to deploy
+without it: a misconfiguration is a refused deploy, not a silent telephony
+failure at 3am.
+
+**It does not choose a tenant.** The endpoints still derive their tenant from
+the resource being addressed — the DID, the `DidRoute` row — which is the
+correct shape for a webhook and is unchanged. The secret proves the *caller* is
+FreeSWITCH. Nothing here reads a tenant from the wire, and `carrier-result`'s
+body `tenantId` is now behind the guard rather than in front of it.
+
+## 7.3 The FreeSWITCH side
+
+Both halves are in this PR. What has to be deployed together, and in what order,
+is in the PR body; the short version is **FreeSWITCH first**, because a caller
+sending a header the API does not yet check breaks nothing, while an API
+checking a header the caller does not yet send drops every call.
+
+| File | Change |
+| --- | --- |
+| `apps/freeswitch/scripts/inbound_route.lua` | Reads `FREESWITCH_INTERNAL_KEY` from the environment; appends `&k=` to the lookup and CDR URLs, percent-encoded; redacts it from its own log lines; logs an explicit error if it is unset. |
+| `apps/freeswitch/conf/dialplan/default.xml` | `&k=$${internal_key}` on the lookup, carrier-route and carrier-result URLs. |
+| `apps/freeswitch/conf/dialplan/vapi_outbound.xml` | Same, on its carrier-route and carrier-result URLs. |
+| `apps/freeswitch/conf/vars.xml` | `internal_key` global, from `${FREESWITCH_INTERNAL_KEY}`. |
+| `apps/freeswitch/docker-entrypoint.sh` | Substitutes it, and warns loudly when it is unset. Deliberately no default value: a placeholder would produce a config that looks configured and authenticates against nothing. |
+| `apps/freeswitch/scripts/upload-recording.sh` | Sends `X-Internal-Key` — it is real curl and can. |
+| `infra/docker/docker-compose.dev.yml` | Passes the same value to both the `api` and `freeswitch` services, with no default. |
+
+## 7.4 Tests
+
+`apps/api/src/__tests__/freeswitch-internal-key.test.ts` — 15 cases against a
+real Fastify instance and the real preHandler. The header and the query form
+both work; a wrong key, a prefix of the key and the key plus a suffix are all
+refused; a repeated `?k=` parameter (which parses to an array) is not coerced;
+and the response is byte-identical for "wrong secret" and "no secret
+configured", so an unauthenticated caller cannot learn when to try again, while
+the log line distinguishes them for whoever is looking at the outage.
+
+Two of the fifteen are static and run with no database or services at all: every
+`/api/v1/freeswitch/*` registration carries `requireInternalKey`, and the check
+finds exactly the five routes it is meant to be checking — so a regex that
+matched nothing could not pass by checking nothing.
+
+The one that matters most: **it fails closed with no secret configured.** If
+that case ever returns 200 the endpoints are open again and nothing else in the
+system would say so.

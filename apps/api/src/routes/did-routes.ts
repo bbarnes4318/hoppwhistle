@@ -7,14 +7,22 @@
  *   PATCH  /api/v1/did-routes/:id          — Update destination / status
  *   DELETE /api/v1/did-routes/:id          — Remove mapping
  *
- *   GET    /api/v1/freeswitch/lookup       — FreeSWITCH Lua lookup (no auth)
- *   POST   /api/v1/freeswitch/cdr          — FreeSWITCH CDR webhook (no auth)
+ *   GET    /api/v1/freeswitch/lookup       — FreeSWITCH Lua lookup
+ *   POST   /api/v1/freeswitch/cdr          — FreeSWITCH CDR webhook
+ *   POST   /api/v1/freeswitch/recording-uploaded
+ *
+ * The three FreeSWITCH endpoints are gated on the internal shared secret; see
+ * `lib/internal-auth.ts`. They used to carry no authentication at all, on the
+ * documented assumption that they were reachable only from the internal
+ * network -- which was a deployment assumption rather than an enforced one, and
+ * they are reachable through nginx.
  */
 
 import { Prisma } from '@prisma/client';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 
 import { deriveTerminationParty, normalizeHangupCause } from '../lib/hangup-cause.js';
+import { requireInternalKey } from '../lib/internal-auth.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { sanitizeDestinationString } from '../lib/route-destination.js';
 import { getInboundCarrierChain, gatewayFromChannelName, recordGatewayOutcome } from '../services/carrier-routing.js';
@@ -320,7 +328,18 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
   });
 
   // ════════════════════════════════════════════════════════════════════════════
-  // FreeSWITCH Integration Endpoints (NO AUTH — internal network only)
+  // FreeSWITCH Integration Endpoints
+  //
+  // Called by mod_curl from the Lua script and the dialplan, never by a browser.
+  // Every one is gated on the internal shared secret (`lib/internal-auth.ts`),
+  // which is the thing docs/TENANT_ISOLATION_AUDIT.md §4 recorded as missing:
+  // "internal network only" was a deployment assumption, and these are
+  // reachable through nginx.
+  //
+  // They still derive their tenant from the resource being addressed -- the
+  // DID, the DidRoute row -- which is correct for a webhook and is unchanged.
+  // The secret proves the CALLER is FreeSWITCH; it does not choose a tenant,
+  // and there is no header or parameter here that does.
   // ════════════════════════════════════════════════════════════════════════════
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -329,7 +348,10 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
   // Called by the FreeSWITCH Lua script on every inbound call.
   // Returns destination number + recording config. ~5ms p99 with index.
   // ────────────────────────────────────────────────────────────────────────────
-  server.get('/api/v1/freeswitch/lookup', async (request: FastifyRequest, reply: FastifyReply) => {
+  server.get(
+    '/api/v1/freeswitch/lookup',
+    { preHandler: [requireInternalKey] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
     const query = request.query as { did?: string; caller?: string };
     const did = query.did?.replace(/[^\d+]/g, '') || '';
     const caller = query.caller?.replace(/[^\d+]/g, '') || '';
@@ -568,7 +590,10 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
   // Called by FreeSWITCH Lua script after each call ends.
   // Creates a Call record + optional Recording record.
   // ────────────────────────────────────────────────────────────────────────────
-  server.post('/api/v1/freeswitch/cdr', async (request: FastifyRequest, reply: FastifyReply) => {
+  server.post(
+    '/api/v1/freeswitch/cdr',
+    { preHandler: [requireInternalKey] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
     const body = request.body as {
       callId: string; // FreeSWITCH UUID
       routeId: string; // DidRoute ID
@@ -1021,6 +1046,7 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
   // ────────────────────────────────────────────────────────────────────────────
   server.post(
     '/api/v1/freeswitch/recording-uploaded',
+    { preHandler: [requireInternalKey] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const body = request.body as {
         callId: string;

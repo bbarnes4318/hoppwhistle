@@ -26,6 +26,7 @@ import {
   type CallRouteType,
 } from '@hopwhistle/shared';
 
+import { requireInternalKey } from '../lib/internal-auth.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { getActingTenantId, replyTenantRefusal } from '../lib/tenant-context.js';
 import { requireAnyPermission } from '../middleware/rbac.js';
@@ -372,7 +373,13 @@ export async function registerCarrierRoutingRoutes(server: FastifyInstance) {
   );
 
   // ══════════════════════════════════════════════════════════════════════════
-  // FreeSWITCH (no auth — internal network only, same as /freeswitch/lookup)
+  // FreeSWITCH — gated on the internal shared secret, same as /freeswitch/lookup
+  //
+  // These were "no auth — internal network only", which was a deployment
+  // assumption rather than an enforced one. `carrier-result` in particular took
+  // a `tenantId` from its own body and query with nothing at all in front of
+  // it: an unauthenticated cross-agency write onto another agency's gateway
+  // health. See `lib/internal-auth.ts`.
   // ══════════════════════════════════════════════════════════════════════════
 
   /**
@@ -388,6 +395,7 @@ export async function registerCarrierRoutingRoutes(server: FastifyInstance) {
    */
   server.get(
     '/api/v1/freeswitch/carrier-route',
+    { preHandler: [requireInternalKey] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const query = request.query as {
         type?: string;
@@ -460,6 +468,7 @@ export async function registerCarrierRoutingRoutes(server: FastifyInstance) {
    */
   server.post(
     '/api/v1/freeswitch/carrier-result',
+    { preHandler: [requireInternalKey] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const body = (request.body ?? {}) as {
         gateway?: string;
