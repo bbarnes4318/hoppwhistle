@@ -7,6 +7,7 @@
 
 import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 
+import { resolveTenant } from '../lib/tenant-context.js';
 import * as AICampaignService from '../services/ai-campaign-service.js';
 
 export async function registerAICampaignRoutes(
@@ -26,7 +27,8 @@ export async function registerAICampaignRoutes(
 
   // List all AI campaigns
   fastify.get('/api/v1/ai-campaigns', async (request, reply) => {
-    const tenantId = request.user.tenantId;
+    const tenantId = resolveTenant(request, reply);
+    if (!tenantId) return;
     const { page = '1', limit = '50' } = request.query as { page?: string; limit?: string };
 
     try {
@@ -73,7 +75,8 @@ export async function registerAICampaignRoutes(
   }
 
   fastify.post('/api/v1/ai-campaigns', async (request, reply) => {
-    const tenantId = request.user.tenantId;
+    const tenantId = resolveTenant(request, reply);
+    if (!tenantId) return;
     const body = request.body as CreateCampaignBody;
 
     // Validation
@@ -107,7 +110,8 @@ export async function registerAICampaignRoutes(
 
   // Get campaign by ID
   fastify.get('/api/v1/ai-campaigns/:id', async (request, reply) => {
-    const tenantId = request.user.tenantId;
+    const tenantId = resolveTenant(request, reply);
+    if (!tenantId) return;
     const { id } = request.params as { id: string };
 
     try {
@@ -124,7 +128,8 @@ export async function registerAICampaignRoutes(
 
   // Update campaign
   fastify.patch('/api/v1/ai-campaigns/:id', async (request, reply) => {
-    const tenantId = request.user.tenantId;
+    const tenantId = resolveTenant(request, reply);
+    if (!tenantId) return;
     const { id } = request.params as { id: string };
     const body = request.body as Partial<CreateCampaignBody>;
 
@@ -144,7 +149,8 @@ export async function registerAICampaignRoutes(
 
   // Delete campaign
   fastify.delete('/api/v1/ai-campaigns/:id', async (request, reply) => {
-    const tenantId = request.user.tenantId;
+    const tenantId = resolveTenant(request, reply);
+    if (!tenantId) return;
     const { id } = request.params as { id: string };
 
     try {
@@ -163,7 +169,8 @@ export async function registerAICampaignRoutes(
 
   // Start campaign
   fastify.post('/api/v1/ai-campaigns/:id/start', async (request, reply) => {
-    const tenantId = request.user.tenantId;
+    const tenantId = resolveTenant(request, reply);
+    if (!tenantId) return;
     const { id } = request.params as { id: string };
 
     try {
@@ -178,7 +185,8 @@ export async function registerAICampaignRoutes(
 
   // Pause campaign
   fastify.post('/api/v1/ai-campaigns/:id/pause', async (request, reply) => {
-    const tenantId = request.user.tenantId;
+    const tenantId = resolveTenant(request, reply);
+    if (!tenantId) return;
     const { id } = request.params as { id: string };
 
     try {
@@ -206,7 +214,8 @@ export async function registerAICampaignRoutes(
 
   // Get campaign restart-unreached preview
   fastify.get('/api/v1/ai-campaigns/:id/restart-unreached/preview', async (request, reply) => {
-    const tenantId = request.user.tenantId;
+    const tenantId = resolveTenant(request, reply);
+    if (!tenantId) return;
     const { id } = request.params as { id: string };
 
     try {
@@ -221,7 +230,8 @@ export async function registerAICampaignRoutes(
 
   // Execute campaign restart-unreached
   fastify.post('/api/v1/ai-campaigns/:id/restart-unreached', async (request, reply) => {
-    const tenantId = request.user.tenantId;
+    const tenantId = resolveTenant(request, reply);
+    if (!tenantId) return;
     const { id } = request.params as { id: string };
 
     try {

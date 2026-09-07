@@ -4,6 +4,7 @@ import { getPrismaClient } from '../lib/prisma.js';
 import { carrierService } from '../services/carrier-service.js';
 import { cnamService } from '../services/cnam-service.js';
 import { stirShakenService } from '../services/stir-shaken-service.js';
+import { resolveTenant } from '../lib/tenant-context.js';
 
 const prisma = getPrismaClient();
 
@@ -90,7 +91,8 @@ export async function registerStirShakenRoutes(fastify: FastifyInstance) {
       };
     }
 
-    const tenantId = (request as any).user?.tenantId || 'default';
+    const tenantId = resolveTenant(request, reply);
+    if (!tenantId) return;
 
     const result = await cnamService.lookup(tenantId, phoneNumber, {
       provider,
@@ -109,7 +111,8 @@ export async function registerStirShakenRoutes(fastify: FastifyInstance) {
         reason: string;
       };
 
-      const tenantId = (request as any).user?.tenantId || 'default';
+      const tenantId = resolveTenant(request, reply);
+      if (!tenantId) return;
 
       await cnamService.overrideCallerName(tenantId, phoneNumber, callerName, reason);
 
@@ -146,7 +149,8 @@ export async function registerStirShakenRoutes(fastify: FastifyInstance) {
       };
     }
 
-    const tenantId = (request as any).user?.tenantId || 'default';
+    const tenantId = resolveTenant(request, reply);
+    if (!tenantId) return;
 
     const result = await carrierService.lookup(tenantId, phoneNumber, {
       provider,
@@ -167,7 +171,8 @@ export async function registerStirShakenRoutes(fastify: FastifyInstance) {
         reason: string;
       };
 
-      const tenantId = (request as any).user?.tenantId || 'default';
+      const tenantId = resolveTenant(request, reply);
+      if (!tenantId) return;
 
       await carrierService.overrideCarrier(tenantId, phoneNumber, carrier, lata, ocn, reason);
 
@@ -193,7 +198,8 @@ export async function registerStirShakenRoutes(fastify: FastifyInstance) {
       limit?: number;
     };
 
-    const tenantId = (request as any).user?.tenantId || 'default';
+    const tenantId = resolveTenant(request, reply);
+    if (!tenantId) return;
 
     const where: any = { tenantId };
     if (phoneNumber) {

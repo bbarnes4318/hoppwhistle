@@ -252,6 +252,15 @@ export async function checkPermission(
     return false;
   }
 
+  // Permissions are per-tenant: they are read from role rows inside one agency.
+  // A NetEnroll operator in the cross-agency view has no acting tenant and so
+  // holds no per-tenant permission -- correctly, because the platform surfaces
+  // are gated on `requirePlatformAdmin`, not on these. Refusing here rather
+  // than looking permissions up under `undefined` keeps that explicit.
+  if (!user.tenantId) {
+    return false;
+  }
+
   // API key authentication
   if (user.apiKeyId) {
     const scopes = await getApiKeyScopes(user.tenantId, user.apiKeyId);
@@ -287,9 +296,11 @@ export function requirePermission(requiredPermission: Permission) {
     const hasPermission = await checkPermission(request, requiredPermission);
 
     if (!hasPermission) {
-      // Audit failed authorization attempt
+      // Audit failed authorization attempt. A denial by a principal with no
+      // acting tenant -- a NetEnroll operator in the cross-agency view, say --
+      // is recorded with a null tenant rather than skipped.
       await auditLog({
-        tenantId: user.tenantId,
+        tenantId: user.tenantId ?? null,
         userId: user.userId,
         apiKeyId: user.apiKeyId,
         action: 'authorization.denied',
@@ -338,9 +349,9 @@ export function requireAnyPermission(...permissions: Permission[]) {
       }
     }
 
-    // Audit failed authorization attempt
+    // Audit failed authorization attempt -- see the note in requirePermission.
     await auditLog({
-      tenantId: user.tenantId,
+      tenantId: user.tenantId ?? null,
       userId: user.userId,
       apiKeyId: user.apiKeyId,
       action: 'authorization.denied',
@@ -407,7 +418,7 @@ export function requireRole(...roles: RoleName[]) {
 
     if (!hasRole) {
       await auditLog({
-        tenantId: user.tenantId,
+        tenantId: user.tenantId ?? null,
         userId: user.userId,
         action: 'authorization.denied',
         entityType: 'Role',

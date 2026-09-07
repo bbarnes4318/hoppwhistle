@@ -3,6 +3,7 @@ import { FastifyInstance } from 'fastify';
 
 import { FlowEngine } from '../services/flow-engine.js';
 import { flowStore } from '../services/flow-store.js';
+import { getActingTenantId, resolveTenant } from '../lib/tenant-context.js';
 
 // Store active flow engines by call ID
 const activeEngines = new Map<string, FlowEngine>();
@@ -15,8 +16,7 @@ export async function registerFlowManagementRoutes(fastify: FastifyInstance) {
   fastify.post('/api/v1/flows', async (request, reply) => {
     try {
       const user = (request as any).user;
-      const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-      const tenantId = demoTenantId || user?.tenantId;
+      const tenantId = getActingTenantId(request);
       
       if (!tenantId) {
         reply.code(401);
@@ -56,9 +56,7 @@ export async function registerFlowManagementRoutes(fastify: FastifyInstance) {
 
   // Get all flow versions
   fastify.get('/api/v1/flows', async request => {
-    const user = (request as any).user;
-    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = getActingTenantId(request);
     
     if (!tenantId) {
       request.server.log.warn('No tenant ID for flows list');
@@ -298,7 +296,8 @@ export async function registerFlowManagementRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       try {
         const { callId, flowId, version } = request.body;
-        const tenantId = (request as any).user?.tenantId || 'default';
+        const tenantId = resolveTenant(request, reply);
+        if (!tenantId) return;
 
         // Get flow plan
         let plan;

@@ -2,6 +2,7 @@ import type { Prisma } from '@prisma/client';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
+import { getActingTenantId } from '../lib/tenant-context.js';
 import { callStateService } from '../services/call-state.js';
 import { eventBus } from '../services/event-bus.js';
 import { freeswitchService } from '../services/freeswitch-service.js';
@@ -17,7 +18,7 @@ import { tcpaValidationService } from '../services/tcpa-validation-service.js';
  * Determine whether a call should be recorded based on campaign settings.
  * If no campaign is attached, recording defaults to ON (business requirement).
  */
-async function shouldRecordCall(campaignId?: string | null): Promise<boolean> {
+async function shouldRecordCall(tenantId: string, campaignId?: string | null): Promise<boolean> {
   if (!campaignId) {
     // No campaign attached → record by default
     return true;
@@ -25,8 +26,10 @@ async function shouldRecordCall(campaignId?: string | null): Promise<boolean> {
 
   try {
     const prisma = getPrismaClient();
-    const campaign = await prisma.campaign.findUnique({
-      where: { id: campaignId },
+    // Scoped: a campaign id naming another agency's campaign must not decide
+    // whether this agency's call is recorded.
+    const campaign = await prisma.campaign.findFirst({
+      where: { id: campaignId, tenantId },
       select: { recordingEnabled: true },
     });
 
@@ -89,9 +92,30 @@ interface UserInfo {
 }
 
 // Helper to get user from request
-function getUser(request: FastifyRequest): UserInfo {
+/**
+ * The authenticated agent, or null after a 401 has been sent.
+ *
+ * This used to be `getUser()`, and when the request carried no credential it
+ * returned `{ userId: 'demo-agent', tenantId: 'default-tenant-id' }` -- an
+ * invented principal, on the softphone surface. Nothing downstream could tell
+ * the difference between that and a real agent, and the call handlers then
+ * addressed calls purely by id, so an anonymous request could answer, hang up,
+ * transfer or read the screen-pop of any call on the platform.
+ *
+ * There is no fallback now. No credential, no agent.
+ */
+function requireAgent(request: FastifyRequest, reply: FastifyReply): UserInfo | null {
+  const tenantId = getActingTenantId(request);
   const user = (request as FastifyRequest & { user?: UserInfo }).user;
-  return user ?? { userId: 'demo-agent', tenantId: 'default-tenant-id' };
+
+  if (!tenantId || !user?.userId) {
+    void reply.code(401).send({
+      error: { code: 'UNAUTHORIZED', message: 'Authentication required' },
+    });
+    return null;
+  }
+
+  return { ...user, tenantId };
 }
 
 // Redis key prefixes for agent data
@@ -154,8 +178,10 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
    * GET /api/v1/agent/status
    * Get current agent status
    */
-  fastify.get('/api/v1/agent/status', async (request: FastifyRequest, _reply: FastifyReply) => {
-    const { userId } = getUser(request);
+  fastify.get('/api/v1/agent/status', async (request: FastifyRequest, reply: FastifyReply) => {
+    const agent = requireAgent(request, reply);
+    if (!agent) return;
+    const { userId } = agent;
     const status = await getAgentStatus(userId);
 
     return {
@@ -171,7 +197,9 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
   fastify.put<{ Body: AgentStatusBody }>(
     '/api/v1/agent/status',
     async (request, reply: FastifyReply) => {
-      const { userId, tenantId } = getUser(request);
+      const agent = requireAgent(request, reply);
+      if (!agent) return;
+      const { userId, tenantId } = agent;
       const { status } = request.body;
 
       const validStatuses = ['available', 'away', 'dnd', 'offline', 'on-call'];
@@ -211,18 +239,10 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
    * GET /api/v1/agent/my-numbers
    * Returns the authenticated user's assigned phone numbers for caller ID selection
    */
-  fastify.get('/api/v1/agent/my-numbers', async (request, _reply: FastifyReply) => {
-    const { userId, tenantId } = getUser(request);
-
-    if (userId === 'demo-agent') {
-      return {
-        numbers: [
-          { id: 'demo-1', number: '12816991120', provider: 'local' },
-          { id: 'demo-2', number: '12816991121', provider: 'local' },
-          { id: 'demo-3', number: '12816991122', provider: 'local' },
-        ],
-      };
-    }
+  fastify.get('/api/v1/agent/my-numbers', async (request, reply: FastifyReply) => {
+    const agent = requireAgent(request, reply);
+    if (!agent) return;
+    const { userId, tenantId } = agent;
 
     const prisma = getPrismaClient();
 
@@ -263,7 +283,9 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
   fastify.post<{ Body: OriginateCallBody }>(
     '/api/v1/agent/call/originate',
     async (request, reply: FastifyReply) => {
-      let { userId, tenantId } = getUser(request);
+      const agent = requireAgent(request, reply);
+      if (!agent) return;
+      const { userId, tenantId } = agent;
       const { phoneNumber, callerId, campaignId } = request.body;
 
       if (!phoneNumber) {
@@ -275,46 +297,17 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       const callSid = `call_${Date.now()}_${Math.random().toString(36).substring(7)}`;
       const prisma = getPrismaClient();
 
-      let isAuthenticatedUser = userId !== 'demo-agent';
-
-      // Resilience for an expired/missing browser token. The softphone still
-      // sends the agent's assigned caller-ID DID, so recover the authoritative
-      // tenant + user from that number's owner (server-side, never trusting a
-      // client-supplied tenant). Without this, getUser falls back to a
-      // non-existent 'default-tenant-id' and call.create dies with a raw
-      // `calls_tenantId_fkey` foreign-key violation surfaced to the agent.
-      if (!isAuthenticatedUser && callerId && callerId !== 'ROTATE') {
-        const cidLast10 = callerId.replace(/\D/g, '').slice(-10);
-        if (cidLast10.length === 10) {
-          const owner = await prisma.phoneNumber.findFirst({
-            where: { number: { endsWith: cidLast10 }, userId: { not: null }, status: 'ACTIVE' },
-            select: { userId: true, tenantId: true },
-          });
-          if (owner?.userId) {
-            userId = owner.userId;
-            tenantId = owner.tenantId;
-            isAuthenticatedUser = true;
-            request.log.warn({
-              msg: 'Originate: recovered tenant/user from caller-ID DID (missing/expired agent token)',
-              callerId,
-              userId,
-              tenantId,
-            });
-          }
-        }
-      }
-
-      // If the tenant still cannot be resolved, fail cleanly with a clear,
-      // actionable message instead of a database FK crash.
-      if (!tenantId || tenantId === 'default-tenant-id') {
-        void reply.code(401);
-        return {
-          error: {
-            code: 'SESSION_EXPIRED',
-            message: 'Your session has expired. Please log out and log back in to place calls.',
-          },
-        };
-      }
+      // There used to be a fallback here for an expired or missing browser
+      // token: take the `callerId` out of the request body, find the
+      // PhoneNumber whose digits end with it, and adopt that number's owner as
+      // the acting user and tenant.
+      //
+      // That derives the acting tenant from the request body. Caller IDs are
+      // not secret -- they are dialled, they appear on invoices, they are
+      // printed on marketing -- so anyone who knew one of an agency's DIDs
+      // could originate calls as that agency, on their trunks, at their cost,
+      // with no credential at all. It is removed rather than repaired: an
+      // expired session is a session to renew, not a reason to guess.
 
       let outboundCallerId = callerId || process.env.OUTBOUND_CALLER_ID || '12816991120';
 
@@ -339,43 +332,41 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
         return selectedRecord.number;
       };
 
-      if (isAuthenticatedUser) {
-        if (callerId === 'ROTATE') {
-          // Call-center auto-dialer: rotate across the tenant DID pool.
-          const rotated = await rotatePoolCallerId();
-          if (rotated) outboundCallerId = rotated;
-        } else {
-          // Manual softphone: the agent dials with their OWN assigned number.
-          const userNumbers = await prisma.phoneNumber.findMany({
-            where: {
-              tenantId,
-              status: 'ACTIVE',
-              userId,
-              NOT: {
-                number: {
-                  contains: '555',
-                },
+      if (callerId === 'ROTATE') {
+        // Call-center auto-dialer: rotate across the tenant DID pool.
+        const rotated = await rotatePoolCallerId();
+        if (rotated) outboundCallerId = rotated;
+      } else {
+        // Manual softphone: the agent dials with their OWN assigned number.
+        const userNumbers = await prisma.phoneNumber.findMany({
+          where: {
+            tenantId,
+            status: 'ACTIVE',
+            userId,
+            NOT: {
+              number: {
+                contains: '555',
               },
             },
-          });
+          },
+        });
 
-          if (userNumbers.length > 0) {
-            if (callerId) {
-              const requested = userNumbers.find(
-                n =>
-                  n.number === callerId ||
-                  n.number.replace(/\D/g, '') === callerId.replace(/\D/g, '')
-              );
-              outboundCallerId = (requested ?? userNumbers[0]).number;
-            } else {
-              outboundCallerId = userNumbers[0].number;
-            }
+        if (userNumbers.length > 0) {
+          if (callerId) {
+            const requested = userNumbers.find(
+              n =>
+                n.number === callerId ||
+                n.number.replace(/\D/g, '') === callerId.replace(/\D/g, '')
+            );
+            outboundCallerId = (requested ?? userNumbers[0]).number;
           } else {
-            // Agent has no assigned number — fall back to a pool DID so the call
-            // still presents a valid FracTEL number rather than a dead default.
-            const rotated = await rotatePoolCallerId();
-            if (rotated) outboundCallerId = rotated;
+            outboundCallerId = userNumbers[0].number;
           }
+        } else {
+          // Agent has no assigned number — fall back to a pool DID so the call
+          // still presents a valid FracTEL number rather than a dead default.
+          const rotated = await rotatePoolCallerId();
+          if (rotated) outboundCallerId = rotated;
         }
       }
 
@@ -396,7 +387,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       });
 
       // Determine recording intent from campaign settings
-      const recordingEnabled = await shouldRecordCall(campaignId);
+      const recordingEnabled = await shouldRecordCall(tenantId, campaignId);
 
       // Create call in PostgreSQL
       // Skip createdById for demo/unauthenticated requests to avoid FK constraint issues
@@ -407,7 +398,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
           toNumber: phoneNumber,
           direction: 'OUTBOUND',
           status: 'INITIATED',
-          ...(isAuthenticatedUser ? { createdById: userId } : {}),
+          createdById: userId,
           campaignId: campaignId ?? null,
           callerId: fsCallerId,
           fromNumberId: dbNumber?.id || null,
@@ -512,12 +503,14 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
     '/api/v1/agent/call/:callId/answer',
     async (request, reply: FastifyReply) => {
       const { callId } = request.params;
-      const { userId, tenantId } = getUser(request);
+      const agent = requireAgent(request, reply);
+      if (!agent) return;
+      const { userId, tenantId } = agent;
       const prisma = getPrismaClient();
 
       // Get call from PostgreSQL
-      const call = await prisma.call.findUnique({
-        where: { id: callId },
+      const call = await prisma.call.findFirst({
+        where: { id: callId, tenantId },
       });
 
       if (!call) {
@@ -549,8 +542,8 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       };
 
       // Update call in PostgreSQL
-      await prisma.call.update({
-        where: { id: callId },
+      await prisma.call.updateMany({
+        where: { id: callId, tenantId },
         data: {
           status: 'ANSWERED',
           answeredAt,
@@ -652,12 +645,14 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       endedAt: bodyEndedAt,
       endReason,
     } = request.body || {};
-    const { userId, tenantId } = getUser(request);
+    const agent = requireAgent(request, reply);
+      if (!agent) return;
+      const { userId, tenantId } = agent;
     const prisma = getPrismaClient();
 
     // Get call from PostgreSQL
-    const call = await prisma.call.findUnique({
-      where: { id: callId },
+    const call = await prisma.call.findFirst({
+      where: { id: callId, tenantId },
     });
 
     if (!call) {
@@ -733,8 +728,8 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
     };
 
     // Update call in PostgreSQL
-    await prisma.call.update({
-      where: { id: callId },
+    await prisma.call.updateMany({
+      where: { id: callId, tenantId },
       data: {
         status: 'COMPLETED',
         endedAt,
@@ -806,7 +801,9 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
     '/api/v1/agent/call/:callId/hold',
     async (request, reply: FastifyReply) => {
       const { callId } = request.params;
-      const { tenantId } = getUser(request);
+      const agent = requireAgent(request, reply);
+      if (!agent) return;
+      const { tenantId } = agent;
 
       const callState = await callStateService.getCallState(callId);
 
@@ -848,7 +845,12 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
    */
   fastify.post<{ Params: CallIdParams }>(
     '/api/v1/agent/call/:callId/mute',
-    async (request, _reply: FastifyReply) => {
+    async (request, reply: FastifyReply) => {
+      // Authenticated even though the work is client-side: this route sits on
+      // the softphone surface and acknowledging a call id for an anonymous
+      // caller confirms that the id exists.
+      if (!requireAgent(request, reply)) return;
+
       const { callId } = request.params;
 
       return {
@@ -867,7 +869,9 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
     '/api/v1/agent/call/merge',
     async (request, reply) => {
       const { activeCallId, heldCallId } = request.body;
-      const { userId } = getUser(request);
+      const agent = requireAgent(request, reply);
+      if (!agent) return;
+      const { userId, tenantId } = agent;
 
       if (!activeCallId || !heldCallId) {
         void reply.code(400);
@@ -886,7 +890,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
         // Publish merge event
         void eventBus.publish('call.*', {
           event: 'call.merged',
-          tenantId: getUser(request).tenantId,
+          tenantId,
           data: {
             activeSipCallId: activeCallId,
             heldSipCallId: heldCallId,
@@ -916,7 +920,9 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
     async (request, reply: FastifyReply) => {
       const { callId } = request.params;
       const { destination, type } = request.body;
-      const { userId, tenantId } = getUser(request);
+      const agent = requireAgent(request, reply);
+      if (!agent) return;
+      const { userId, tenantId } = agent;
 
       if (!destination) {
         void reply.code(400);
@@ -927,8 +933,8 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
 
       // Get call from PostgreSQL
       const prisma = getPrismaClient();
-      const call = await prisma.call.findUnique({
-        where: { id: callId },
+      const call = await prisma.call.findFirst({
+        where: { id: callId, tenantId },
       });
 
       if (!call) {
@@ -937,8 +943,8 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       }
 
       // Update call metadata with transfer info
-      await prisma.call.update({
-        where: { id: callId },
+      await prisma.call.updateMany({
+        where: { id: callId, tenantId },
         data: {
           metadata: {
             ...((call.metadata as Prisma.JsonObject) ?? {}),
@@ -1016,14 +1022,13 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
    */
   fastify.get(
     '/api/v1/agent/webrtc/credentials',
-    async (request: FastifyRequest, _reply: FastifyReply) => {
-      const { userId, tenantId } = getUser(request);
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const agent = requireAgent(request, reply);
+      if (!agent) return;
+      const { userId, tenantId } = agent;
 
       const prisma = getPrismaClient();
-      let user =
-        userId && userId !== 'demo-agent'
-          ? await prisma.user.findUnique({ where: { id: userId } })
-          : null;
+      let user = await prisma.user.findFirst({ where: { id: userId, tenantId } });
       let extension: string | null = null;
       if (user?.metadata && typeof user.metadata === 'object' && !Array.isArray(user.metadata)) {
         const meta = user.metadata as Record<string, unknown>;
@@ -1033,8 +1038,13 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       }
 
       // If user has no extension, dynamically assign a free one from 1000-1019
-      if (!extension && user && userId && userId !== 'demo-agent') {
+      if (!extension && user) {
+        // Scoped to the agency. Unscoped, this read every user row on the
+        // platform to decide which extensions were free -- so one agency's
+        // agents shrank the extension pool of every other agency, and the
+        // metadata of every user on the platform was loaded to do it.
         const allUsers = await prisma.user.findMany({
+          where: { tenantId },
           select: { metadata: true },
         });
         const usedExtensions = new Set<string>();
@@ -1079,7 +1089,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
           try {
             const { didRouteService } = await import('../services/did-route-service.js');
             const phoneNumbers = await prisma.phoneNumber.findMany({
-              where: { userId, status: 'ACTIVE' },
+              where: { userId, tenantId, status: 'ACTIVE' },
             });
             for (const phoneNum of phoneNumbers) {
               await didRouteService.syncDidRouteForNumber(phoneNum.id, tenantId);
@@ -1115,7 +1125,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
           userId,
           extension: activeExt,
         });
-        void _reply.code(503);
+        void reply.code(503);
         return {
           error: {
             code: 'SIP_CREDENTIALS_UNAVAILABLE',
@@ -1156,12 +1166,22 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
   fastify.get<{ Params: CallIdParams }>(
     '/api/v1/agent/call/:callId/screenpop',
     async (request, reply: FastifyReply) => {
+      const agent = requireAgent(request, reply);
+      if (!agent) return;
+      const { tenantId } = agent;
+
       const { callId } = request.params;
 
-      // First check Redis for real-time state
+      // First check Redis for real-time state. Checked against the acting
+      // tenant: this is a lead's name, phone number and history, and the Redis
+      // key is the call id alone.
       const callState = await callStateService.getCallState(callId);
 
       if (callState?.metadata?.screenPopData) {
+        if (callState.tenantId && callState.tenantId !== tenantId) {
+          void reply.code(404);
+          return { error: { code: 'CALL_NOT_FOUND', message: 'Call not found' } };
+        }
         return {
           callId,
           data: callState.metadata.screenPopData,
@@ -1170,8 +1190,8 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
 
       // Fallback to PostgreSQL
       const prisma = getPrismaClient();
-      const call = await prisma.call.findUnique({
-        where: { id: callId },
+      const call = await prisma.call.findFirst({
+        where: { id: callId, tenantId },
       });
 
       if (!call) {
@@ -1254,7 +1274,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
 
       // Determine recording intent from campaign settings
       const prisma = getPrismaClient();
-      const recordingEnabled = await shouldRecordCall(campaignId || null);
+      const recordingEnabled = await shouldRecordCall(tenantId, campaignId || null);
 
       // Create call in PostgreSQL
       const call = await prisma.call.create({
@@ -1325,8 +1345,10 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
    * GET /api/v1/agent/calls
    * Get call history for the current agent from PostgreSQL
    */
-  fastify.get('/api/v1/agent/calls', async (request: FastifyRequest, _reply: FastifyReply) => {
-    const { userId, tenantId } = getUser(request);
+  fastify.get('/api/v1/agent/calls', async (request: FastifyRequest, reply: FastifyReply) => {
+    const agent = requireAgent(request, reply);
+    if (!agent) return;
+    const { userId, tenantId } = agent;
     const query = request.query as { limit?: string; offset?: string };
     const limit = parseInt(query.limit ?? '50', 10);
     const offset = parseInt(query.offset ?? '0', 10);
@@ -1377,7 +1399,9 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
    * Look up lead by phone number for screen pop
    */
   fastify.get('/api/v1/agent/lead/lookup', async (request: FastifyRequest, reply: FastifyReply) => {
-    const { tenantId } = getUser(request);
+    const agent = requireAgent(request, reply);
+    if (!agent) return;
+    const { tenantId } = agent;
     const query = request.query as { phoneNumber?: string };
     const phoneNumber = query.phoneNumber;
 

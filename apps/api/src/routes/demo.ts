@@ -1,13 +1,29 @@
 import { FastifyInstance } from 'fastify';
 
+import { requirePlatformAdmin } from '../lib/platform-context.js';
 import { getPrismaClient } from '../lib/prisma.js';
+import { authenticate } from '../middleware/auth.js';
 
 /**
  * Demo Mode Routes
- * 
- * Provides endpoints to toggle demo mode and access demo data
+ *
+ * Provides endpoints to toggle demo mode and access demo data.
+ *
+ * ── Platform, not agency ─────────────────────────────────────────────────────
+ *
+ * Every route here reads the tenant with slug `demo` -- a fixed, seeded tenant
+ * that is nobody's agency. `/demo/stats` returns its call volume, publisher and
+ * buyer counts and total invoiced revenue. None of that is the caller's own
+ * data, and none of these routes had any authentication at all.
+ *
+ * That makes them a NetEnroll surface: the demo tenant is a platform fixture,
+ * and reading its numbers is a platform operation. Gated at the plugin level so
+ * a route added here later cannot ship open.
  */
 export async function registerDemoRoutes(fastify: FastifyInstance) {
+  fastify.addHook('onRequest', authenticate);
+  fastify.addHook('preHandler', requirePlatformAdmin);
+
   // Get demo mode status
   fastify.get('/api/v1/demo/status', async (request, reply) => {
     const demoTenant = await getPrismaClient().tenant.findUnique({

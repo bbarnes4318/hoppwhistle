@@ -110,7 +110,7 @@ export async function registerPostRoutes(fastify: FastifyInstance): Promise<void
         }
 
         // 3. Process POST through PostService
-        const result = await postService.processPost(body.token, body.caller_number);
+        const result = await postService.processPost(body.token, publisherId, body.caller_number);
 
         // Log latency
         const latencyMs = Date.now() - startTime;
@@ -228,6 +228,21 @@ export async function registerPostRoutes(fastify: FastifyInstance): Promise<void
     '/internal/route/:e164',
     async (request: FastifyRequest<{ Params: { e164: string } }>, reply: FastifyReply) => {
       try {
+        // The same internal guard the two routes above carry. This one had
+        // none: it took any E.164 and returned that DID's routing -- the buyer
+        // it forwards to, the campaign, the tenant -- to anyone who asked,
+        // across every agency on the platform.
+        const internalKey = request.headers['x-internal-key'] as string;
+        const expectedKey = process.env.INTERNAL_API_KEY || 'internal-reclaim-key';
+
+        const isLocalhost =
+          request.ip === '127.0.0.1' || request.ip === '::1' || request.ip === '::ffff:127.0.0.1';
+
+        if (!isLocalhost && internalKey !== expectedKey) {
+          void reply.code(401);
+          return { error: 'Unauthorized' };
+        }
+
         const { e164 } = request.params;
 
         const routeInfo = await numberPoolService.getRouteInfo(e164);

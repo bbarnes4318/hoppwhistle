@@ -27,6 +27,7 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "audit:accounts": "tsx src/cli/audit-account-provenance.ts",
+    "platform:admins": "tsx src/cli/platform-admins.ts",
     "recordings:backfill": "tsx src/cli/backfill-recordings.ts",
     "recordings:backfill:one": "tsx src/cli/backfill-recordings.ts --recording-id",
     "dnc:import": "tsx src/cli/import-dnc.ts",

@@ -36,8 +36,18 @@ export interface PostRequest {
 export class PostService {
   /**
    * Process a POST request - accept a winning bid and lease a number
+   *
+   * `publisherId` is the publisher the caller authenticated as, taken from the
+   * API key's own record. It is checked against the ping's publisher below: a
+   * bid token names a ping, and without this check any publisher holding a
+   * valid API key could post another agency's ping token and lease the transfer
+   * number that ping had won.
    */
-  async processPost(token: string, callerNumber?: string): Promise<PostResult> {
+  async processPost(
+    token: string,
+    publisherId: string,
+    callerNumber?: string
+  ): Promise<PostResult> {
     const prisma = getPrismaClient();
 
     try {
@@ -95,6 +105,25 @@ export class PostService {
       });
 
       if (!pingRequest) {
+        return {
+          status: 'error',
+          accepted: false,
+          error_code: 'PING_NOT_FOUND',
+          message: 'Ping request not found',
+        };
+      }
+
+      // The ping must be the caller's own. PingRequest has no tenantId column;
+      // it is scoped through its publisher, so that is where the comparison
+      // has to happen. Answered as PING_NOT_FOUND rather than as a distinct
+      // error: whether some other publisher's ping exists is not something
+      // this endpoint should confirm.
+      if (pingRequest.publisherId !== publisherId) {
+        logger.warn({
+          msg: 'POST rejected: ping belongs to a different publisher',
+          pingId,
+          authenticatedPublisherId: publisherId,
+        });
         return {
           status: 'error',
           accepted: false,

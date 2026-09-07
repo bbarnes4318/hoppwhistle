@@ -143,6 +143,21 @@ export default function AuthPage() {
   const [position, setPosition] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
+  /**
+   * The activation token from the invitation link, e.g.
+   * `https://agents.netenroll.com/login?activation=<token>&email=<address>`.
+   *
+   * Signing up is no longer something a stranger can do from this page. The
+   * server used to work out which agency a new account belonged to by looking
+   * at the request -- Host, then Referer, then Origin, then whichever tenant
+   * row happened to be oldest -- which on a shared host put strangers inside a
+   * paying agency. The tenant now travels with this token, which the server
+   * issued when it verified a payment or an administrator's invitation, and
+   * `POST /api/auth/register` refuses without one.
+   */
+  const [activationToken, setActivationToken] = useState('');
+  const [agencyName, setAgencyName] = useState<string | null>(null);
+
   // UI state
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -166,7 +181,14 @@ export default function AuthPage() {
         const res = await fetch(`${API_BASE}/api/auth/google`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ credential: response.credential }),
+          // The token is sent when there is one. An existing account signs in
+          // without it; a brand new Google identity needs it for the same
+          // reason the email path does -- there is no safe way to guess which
+          // agency a stranger belongs to.
+          body: JSON.stringify({
+            credential: response.credential,
+            ...(activationToken ? { activationToken } : {}),
+          }),
           credentials: 'include',
         });
 
@@ -189,8 +211,41 @@ export default function AuthPage() {
         setIsLoading(false);
       }
     },
-    [router]
+    [router, activationToken]
   );
+
+  // Pick the invitation up out of the URL and show who it is for.
+  //
+  // The preview call consumes nothing -- the grant is still single-use
+  // afterwards -- and answers only with the agency's display name, never its
+  // id, so a stolen link cannot be turned into a tenant identifier.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('activation');
+    if (!token) return;
+
+    const invitedEmail = params.get('email') ?? '';
+    setActivationToken(token);
+    setActiveTab('signup');
+    if (invitedEmail) setEmail(invitedEmail);
+
+    if (!invitedEmail) return;
+
+    void (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/auth/activation/preview`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: invitedEmail, activationToken: token }),
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as { agencyName?: string };
+        if (data.agencyName) setAgencyName(data.agencyName);
+      } catch {
+        // A failed preview is cosmetic; registration still validates the token.
+      }
+    })();
+  }, []);
 
   // Initialize the Google client once the script is in. Rendering the buttons is
   // deliberately NOT done here -- see GoogleButton below for why.
@@ -250,6 +305,15 @@ export default function AuthPage() {
       return;
     }
 
+    if (!activationToken) {
+      setError(
+        'An invitation link is required to create an account. ' +
+          'Agencies receive one when their plan is purchased; agents receive one ' +
+          'from their agency administrator.'
+      );
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
@@ -257,7 +321,7 @@ export default function AuthPage() {
       const res = await fetch(`${API_BASE}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, firstName, lastName, position }),
+        body: JSON.stringify({ email, password, firstName, lastName, position, activationToken }),
         credentials: 'include',
       });
 
@@ -267,14 +331,14 @@ export default function AuthPage() {
         throw new Error(data.error?.message || 'Registration failed');
       }
 
-      // The API answers 202 with no token: the account exists but is PENDING
-      // until an administrator approves it. There is nothing to sign in with,
-      // so say so and leave them on the page rather than redirecting.
-      setNotice(
-        (data as { message?: string }).message ??
-          'Your account has been created and is awaiting approval.'
-      );
-      setPassword('');
+      // 201 with a token and a session. The activation grant IS the approval --
+      // it exists because the server verified a payment or an administrator's
+      // invitation -- so there is no second manual step to wait on. This used
+      // to be a 202 with no token and a PENDING account, which left a paying
+      // customer with no way in.
+      const authData = data as AuthResponse;
+      persistSessionToken(authData.token);
+      router.push(getRedirectPath(authData.user.roles));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');
     } finally {
@@ -504,6 +568,34 @@ export default function AuthPage() {
 
                 {/* Sign Up Form */}
                 <TabsContent value="signup" className="space-y-6 outline-none">
+                  {/*
+                    Which agency this invitation is for, when the link named
+                    one. Worth showing before the password field: an agent
+                    following a link should be able to see they are joining the
+                    right agency, and someone who is not expecting an invitation
+                    should be able to see that they are not.
+                  */}
+                  {activationToken ? (
+                    <div className="rounded-sm border border-border bg-muted/40 px-4 py-3">
+                      <p className="text-[10px] font-mono font-semibold tracking-widest text-muted-foreground uppercase">
+                        Invitation
+                      </p>
+                      <p className="mt-1 text-sm text-foreground">
+                        {agencyName
+                          ? `You are joining ${agencyName}.`
+                          : 'You are joining the agency that sent you this link.'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="rounded-sm border border-border bg-muted/40 px-4 py-3">
+                      <p className="text-sm text-muted-foreground">
+                        Creating an account needs an invitation link. Agencies receive one when
+                        their plan is purchased; agents receive one from their agency
+                        administrator.
+                      </p>
+                    </div>
+                  )}
+
                   <GoogleButton ready={googleReady} text="signup_with" id="google-signup-button" />
 
                   {/* Divider */}

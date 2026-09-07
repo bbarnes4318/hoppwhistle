@@ -11,19 +11,20 @@ import { spawn } from 'child_process';
 
 import { FastifyInstance, FastifyRequest } from 'fastify';
 
-interface AuthenticatedUser {
-  tenantId?: string;
-  apiKeyId?: string;
-  userId?: string;
-  scopes?: string[];
-}
+import { getActingTenantId } from '../lib/tenant-context.js';
 
-type AuthRequest = FastifyRequest & { user?: AuthenticatedUser };
 
+/**
+ * The acting tenant, from `lib/tenant-context.ts`.
+ *
+ * This file used to carry its own copy of the rule, and the copy also consulted
+ * the `X-Demo-Tenant-Id` header -- so an authenticated caller could name a
+ * tenant that was not theirs. There is now one implementation, it reads only
+ * the authenticated principal, and this wrapper exists solely so the existing
+ * call sites keep their shape.
+ */
 function getTenantId(request: FastifyRequest): string | null {
-  const user = (request as AuthRequest).user;
-  const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-  return demoTenantId || user?.tenantId || null;
+  return getActingTenantId(request);
 }
 
 interface DeliverySelector {

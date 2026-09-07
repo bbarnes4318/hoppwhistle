@@ -271,6 +271,22 @@ const mockPrisma = {
       }
       return null;
     }),
+    // The CDR webhook updates route stats through `updateMany` so the tenant
+    // can be part of the filter -- `update` only accepts a unique key. The
+    // mock honours the tenant filter, so a wrong-tenant routeId matches
+    // nothing here exactly as it would in Postgres.
+    updateMany: vi.fn(async ({ where, data }) => {
+      const matches = mockPrismaData.didRoutes.filter(
+        r =>
+          (where.id === undefined || r.id === where.id) &&
+          (where.tenantId === undefined || r.tenantId === where.tenantId)
+      );
+      for (const route of matches) {
+        const idx = mockPrismaData.didRoutes.indexOf(route);
+        mockPrismaData.didRoutes[idx] = { ...route, ...data };
+      }
+      return { count: matches.length };
+    }),
   },
 
   pingRequest: {
@@ -1172,7 +1188,7 @@ describe('Pay-Per-Call System End-to-End Integration Suite', () => {
     expect(pingResult.token).toBeDefined();
 
     // 2. Process Post using postService
-    const postResult = await postService.processPost(pingResult.token!, '+15554443333');
+    const postResult = await postService.processPost(pingResult.token!, 'pub-a', '+15554443333');
     expect(postResult.accepted).toBe(true);
     expect(postResult.transfer_number).toBe('+18005550100');
 

@@ -13,6 +13,7 @@ import { logger } from '../lib/logger.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { AuthenticatedUser } from '../middleware/auth.js';
 import { provisioningService } from '../services/provisioning/provisioning-service.js';
+import { getActingTenantId } from '../lib/tenant-context.js';
 
 type AuthRequest = FastifyRequest & { user?: AuthenticatedUser };
 
@@ -32,9 +33,7 @@ export async function registerFractelProcurementRoutes(fastify: FastifyInstance)
   fastify.get<{
     Querystring: { areaCode?: string; type?: string };
   }>('/api/v1/fractel/available', async (request, reply) => {
-    const user = (request as AuthRequest).user;
-    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
       void reply.code(401);
@@ -76,8 +75,7 @@ export async function registerFractelProcurementRoutes(fastify: FastifyInstance)
     Body: { areaCode?: string; number?: string; destination?: string; messagingEnabled?: boolean };
   }>('/api/v1/fractel/purchase', async (request, reply) => {
     const user = (request as AuthRequest).user;
-    const demoTenantId = request.headers['x-demo-tenant-id'] as string | undefined;
-    const tenantId = demoTenantId || user?.tenantId;
+    const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
       void reply.code(401);

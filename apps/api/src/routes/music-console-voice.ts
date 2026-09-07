@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
+import { resolveTenant } from '../lib/tenant-context.js';
 
 const VAPI_BASE = 'https://api.vapi.ai';
 
@@ -34,7 +35,8 @@ export async function registerMusicVoiceRoutes(
 
   // 1. GET /api/v1/music-console/voice-agents
   fastify.get('/api/v1/music-console/voice-agents', async (request, reply) => {
-    const tenantId = request.user.tenantId;
+    const tenantId = resolveTenant(request, reply);
+    if (!tenantId) return;
     const prisma = getPrismaClient();
 
     try {
@@ -94,7 +96,8 @@ export async function registerMusicVoiceRoutes(
 
   // 2. POST /api/v1/music-console/voice-agents
   fastify.post('/api/v1/music-console/voice-agents', async (request, reply) => {
-    const tenantId = request.user.tenantId;
+    const tenantId = resolveTenant(request, reply);
+    if (!tenantId) return;
     const userId = request.user.userId;
     const prisma = getPrismaClient();
     const body = request.body as any;
@@ -179,7 +182,8 @@ export async function registerMusicVoiceRoutes(
 
   // 3. DELETE /api/v1/music-console/voice-agents/:id
   fastify.delete('/api/v1/music-console/voice-agents/:id', async (request, reply) => {
-    const tenantId = request.user.tenantId;
+    const tenantId = resolveTenant(request, reply);
+    if (!tenantId) return;
     const { id } = request.params as { id: string };
     const prisma = getPrismaClient();
 
@@ -225,7 +229,8 @@ export async function registerMusicVoiceRoutes(
 
   // 4. GET /api/v1/music-console/voice-agents/:id/calls
   fastify.get('/api/v1/music-console/voice-agents/:id/calls', async (request, reply) => {
-    const tenantId = request.user.tenantId;
+    const tenantId = resolveTenant(request, reply);
+    if (!tenantId) return;
     const { id } = request.params as { id: string };
     const { limit = '50' } = request.query as { limit?: string };
     const prisma = getPrismaClient();
@@ -266,7 +271,8 @@ export async function registerMusicVoiceRoutes(
 
   // 5. POST /api/v1/music-console/voice-agents/:id/calls
   fastify.post('/api/v1/music-console/voice-agents/:id/calls', async (request, reply) => {
-    const tenantId = request.user.tenantId;
+    const tenantId = resolveTenant(request, reply);
+    if (!tenantId) return;
     const { id } = request.params as { id: string };
     const prisma = getPrismaClient();
     const body = request.body as any;

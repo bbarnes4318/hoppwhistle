@@ -1,13 +1,35 @@
 import { FastifyInstance } from 'fastify';
 
+import { requirePlatformAdmin } from '../lib/platform-context.js';
+import { authenticate } from '../middleware/auth.js';
 import { callStateService } from '../services/call-state.js';
 import { eventBus } from '../services/event-bus.js';
 
 /**
- * Demo endpoint to broadcast mocked call events
- * This simulates call events for testing the WebSocket gateway
+ * Demo endpoint to broadcast mocked call events.
+ * This simulates call events for testing the WebSocket gateway.
+ *
+ * ── Why this is gated ────────────────────────────────────────────────────────
+ *
+ * These routes take a `tenantId` FROM THE REQUEST BODY and publish call events
+ * onto the event bus for it, which is what the agency's WebSocket feed and live
+ * metrics render. Unauthenticated, that is a cross-tenant injection surface:
+ * anyone could push fabricated calls into any agency's live board.
+ *
+ * The Phase 1 audit did not catch it because it walked Prisma queries and this
+ * writes to Redis and an event bus rather than to a table -- worth remembering
+ * about the shape of that audit, not just about this file.
+ *
+ * Gated on the platform capability, because publishing events into an arbitrary
+ * agency is by definition not an agency-scoped operation. The `tenantId` in the
+ * body stays, and is not a Phase 1 violation for the same reason it is not one
+ * in `quotas.ts`: it names the object being acted on, and the authority to act
+ * on it comes from the capability, not from the body.
  */
 export async function registerDemoEventRoutes(fastify: FastifyInstance) {
+  fastify.addHook('onRequest', authenticate);
+  fastify.addHook('preHandler', requirePlatformAdmin);
+
   // Endpoint to trigger a mock call event
   fastify.post('/api/v1/demo/events/call', async (request, reply) => {
     const { callId, eventType, tenantId } = request.body as {
