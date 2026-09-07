@@ -92,6 +92,33 @@ that variable correct keeps new DIDs correct. It throws rather than guessing if
 `PUBLIC_IP` is unset. DIDs bought directly in the Anveo portal are not touched
 by it and have to be corrected by hand (see `docs/anveo-number-inventory.md`).
 
+## Where each carrier's return path is configured
+
+A migration breaks inbound for **every** carrier at once, but only some of them
+can be fixed from this repository. The distinction matters, because the ones
+that cannot are also the ones nothing here will warn you about:
+
+| Carrier         | Inbound return path is set by                                                          | In this repo?                         |
+| --------------- | -------------------------------------------------------------------------------------- | ------------------------------------- |
+| Anveo (retail)  | `configureForFreeSWITCH()` → `$[E164]$@<PUBLIC_IP>:5080`                               | yes — for DIDs bought through the app |
+| Anveo (adapter) | `AnveoAdapter.configureNumber()` → `SIP/<e164>@<PUBLIC_IP>:5080`                       | yes                                   |
+| Vapi            | BYO SIP trunk gateway IP (`vapi-carrier-service.ts`)                                   | yes                                   |
+| SignalWire      | LaML `<Sip>` bridge in the inbound webhook                                             | yes                                   |
+| Telnyx          | the **connection** a DID is assigned to; the connection's SIP endpoint is portal state | no — Telnyx portal                    |
+| BulkVS          | the **trunk group** on `/tnRecord`; the group's destination is portal state            | no — BulkVS portal                    |
+| FracTEL         | account/trunk level — `configureNumber()` is deliberately a no-op                      | no — FracTEL portal                   |
+| Voxbeam         | gateway only, no adapter                                                               | no — Voxbeam portal                   |
+| Wholesale       | gateway only, no adapter                                                               | no — carrier portal                   |
+
+The four code paths now refuse to run against an unset `PUBLIC_IP` instead of
+substituting a default. The five portal-only rows have no such protection: they
+keep pointing wherever they were last set, including at a host that has been
+released back to its cloud provider. **After any change of public IP, all five
+have to be checked by hand**, and a DID bought directly in a carrier portal is
+never touched by the code paths above even for the carriers that have them —
+which is how seven live Anveo DIDs came to be invisible to this platform
+(`docs/anveo-number-inventory.md`).
+
 ## Recognizing an authorization failure
 
 A carrier that does not recognize the source IP rejects the INVITE outright

@@ -358,6 +358,11 @@ export async function registerAnveoProcurementRoutes(fastify: FastifyInstance): 
           },
           routing: {
             configured: true,
+            // Reported from the same variable configureForFreeSWITCH() wrote
+            // from. It throws when PUBLIC_IP is unset, so reaching this line
+            // means there is a real value -- previously an unset variable was
+            // interpolated as the string "undefined" and returned as though it
+            // were the route we had configured.
             sipUri: `$[E164]$@${process.env.PUBLIC_IP}:5080`,
             smsWebhookUrl,
           },
