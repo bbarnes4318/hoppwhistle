@@ -58,6 +58,14 @@ POST is not a tenant input in the Phase 1 sense — nothing in that response is
 served according to the agency it names. The response says `appliesFrom:
 "next-request"` so this is not a surprise.
 
+**The audit rows cannot silently fail.** Entering and leaving each write one
+`AuditLog` row through `services/audit.ts`, which no longer swallows its own
+failures: if the row cannot be written, the switch fails and the operator does
+not get in, rather than entering an agency unlogged. `writePlatformAudit`
+originally bypassed `auditLog()` for exactly that reason — the bypass is gone now
+the reason is. See `docs/TENANT_ISOLATION_AUDIT.md` §4 and
+`apps/api/src/__tests__/audit-log.test.ts`.
+
 **Inside an agency, an operator carries that agency's ADMIN and OWNER roles**
 (`ACTING_TENANT_ROLES`), attached to the principal and never written as
 `UserRole` rows. Without this the switch is a button that does nothing: the

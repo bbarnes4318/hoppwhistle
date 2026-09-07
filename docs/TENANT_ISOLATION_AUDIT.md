@@ -227,11 +227,15 @@ above.
   gated on it, along with `quotas.ts`, the `/admin/api/v1/*` console and the demo
   routes. See `docs/PLATFORM_ADMIN.md` for the capability, the audited
   acting-tenant switch, and the verdict for every route examined.
-- **`auth.ts` audit rows using `tenantId: 'default'` / `'unknown'`** on
-  login/logout are pre-existing. `audit_logs.tenantId` is a foreign key, so those
-  rows fail to insert and `auditLog()` swallows the error — an audit trail that
-  reads as present and records nothing. Not extended by this change; the two new
-  rejection paths log to the server log instead, for exactly this reason.
+- ~~**`auth.ts` audit rows using `tenantId: 'default'` / `'unknown'`** on
+  login/logout are pre-existing.~~ **Fixed.** `audit_logs.tenantId` is now
+  nullable, so a genuinely tenant-less event is a real row rather than a fake
+  foreign key; `auditLog()` no longer swallows its failures; and all twelve call
+  sites that passed a placeholder now pass `null` or a real tenant. The same
+  defect on `calls.tenantId` — two TCPA blocked-call records written with
+  `tenantId: 'default'`, so every litigator block was recorded nowhere — is fixed
+  in `services/blocked-call.ts`, which resolves the agency from the dialled DID.
+  See `apps/api/src/__tests__/audit-log.test.ts`.
 - **`InsuranceCarrierApplication` has no HTTP list route** yet. It is written by
   the carrier RPA and read through the tenant-keyed automation job endpoints. The
   isolation suite seeds one per agency so that the row exists and the model is

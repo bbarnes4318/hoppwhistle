@@ -133,7 +133,10 @@ export async function authenticateJWT(request: FastifyRequest, reply: FastifyRep
         // Inside an agency, a platform operator carries that agency's
         // administrator roles; in the cross-agency view they carry none. See
         // ACTING_TENANT_ROLES for why.
-        roles: [...roles, ...platform.actingRoles.filter(r => !roles.includes(r))],
+        roles: [
+          ...roles,
+          ...platform.actingRoles.filter(r => !(roles as string[]).includes(r)),
+        ],
         buyerId: user.buyerId || null,
         publisherId,
         isPlatformAdmin: platform.isPlatformAdmin,
@@ -149,7 +152,7 @@ export async function authenticateJWT(request: FastifyRequest, reply: FastifyRep
     }
   } catch (err) {
     await auditLog({
-      tenantId: 'unknown',
+      tenantId: null,
       action: 'auth.jwt.invalid',
       entityType: 'JWT',
       resource: request.url,
@@ -212,7 +215,7 @@ export async function authenticateAPIKey(
   // Validate API key
   if (!dbApiKey) {
     await auditLog({
-      tenantId: 'unknown',
+      tenantId: null,
       action: 'auth.api_key.invalid',
       entityType: 'ApiKey',
       resource: request.url,

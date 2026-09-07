@@ -1643,8 +1643,24 @@ model Event {
 }
 
 model AuditLog {
-  id         String   @id @default(uuid())
-  tenantId   String
+  id String @id @default(uuid())
+
+  /// The agency this event belongs to, or NULL when it genuinely belongs to
+  /// none.
+  ///
+  /// It used to be required, and the events that have no tenant are exactly the
+  /// ones you most want recorded: a failed login for an address that matches no
+  /// account, an invalid JWT, a CSRF failure on an unauthenticated request.
+  /// Callers passed the string 'unknown' or 'default' for those. Neither is a
+  /// tenant id, the column is a foreign key, so every one of those inserts
+  /// failed -- and `auditLog()` caught and discarded the error. The trail read
+  /// as present and recorded nothing.
+  ///
+  /// Nullable is the honest shape: "this event had no agency" is a fact worth
+  /// storing, and the foreign key still holds for every row that names one, so
+  /// a fake id is now a loud failure rather than a silent one.
+  tenantId String?
+
   userId     String?
   apiKeyId   String?
   action     String // e.g., "user.create", "call.read", "api_key.revoke"
@@ -1661,7 +1677,7 @@ model AuditLog {
   createdAt  DateTime @default(now())
 
   // Relations
-  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user   User?   @relation(fields: [userId], references: [id])
   apiKey ApiKey? @relation(fields: [apiKeyId], references: [id])
 

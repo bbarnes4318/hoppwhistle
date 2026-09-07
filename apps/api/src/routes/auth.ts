@@ -112,7 +112,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     // Check if user exists and has a password (not Google-only)
     if (!user || !user.passwordHash) {
       await auditLog({
-        tenantId: 'unknown',
+        tenantId: null,
         action: 'auth.login.failed',
         entityType: 'User',
         resource: '/api/auth/login',
@@ -135,7 +135,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     // Verify password
     if (!(await compare(password, user.passwordHash))) {
       await auditLog({
-        tenantId: user.tenantId || 'unknown',
+        tenantId: user.tenantId,
         action: 'auth.login.failed',
         entityType: 'User',
         resource: '/api/auth/login',
@@ -203,7 +203,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
 
     // Audit successful login
     await auditLog({
-      tenantId: user.tenantId || 'default',
+      tenantId: user.tenantId,
       userId: user.id,
       action: 'auth.login.success',
       entityType: 'User',
@@ -598,7 +598,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
 
     if (!result.success) {
       await auditLog({
-        tenantId: 'unknown',
+        tenantId: null,
         action: 'auth.google.failed',
         entityType: 'User',
         resource: '/api/auth/google',
@@ -669,7 +669,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         });
 
         await auditLog({
-          tenantId: user.tenantId || 'default',
+          tenantId: user.tenantId,
           userId: user.id,
           action: 'auth.google.linked',
           entityType: 'User',
@@ -824,7 +824,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
 
     // Audit successful Google login
     await auditLog({
-      tenantId: user.tenantId || 'default',
+      tenantId: user.tenantId,
       userId: user.id,
       action: 'auth.google.success',
       entityType: 'User',
@@ -1025,7 +1025,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       }
 
       await auditLog({
-        tenantId: (request.user as { tenantId?: string })?.tenantId || 'default',
+        tenantId: (request.user as { tenantId?: string })?.tenantId ?? null,
         userId: (request.user as { userId: string }).userId,
         action: 'auth.logout',
         entityType: 'User',

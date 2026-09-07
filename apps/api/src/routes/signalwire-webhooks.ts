@@ -16,8 +16,8 @@
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 
+import { recordBlockedCall } from '../services/blocked-call.js';
 import { tcpaValidationService } from '../services/tcpa-validation-service.js';
-import { getPrismaClient } from '../lib/prisma.js';
 
 // ── In-memory ring buffer for recent events (debug aid) ──────────────────────
 const MAX_EVENTS = 200;
@@ -80,27 +80,21 @@ export async function registerSignalWireWebhookRoutes(server: FastifyInstance) {
         if (tcpaResult.isLitigator) {
           console.log(`[TCPA-BLOCK][SignalWire] Blocking litigator ${from} (cached=${tcpaResult.cached})`);
 
-          // Create blocked call record for audit trail
-          try {
-            const prisma = getPrismaClient();
-            await prisma.call.create({
-              data: {
-                tenantId: 'default',
-                callSid: (payload.CallSid as string) || `sw_blocked_${Date.now()}`,
-                toNumber: to,
-                callerId: from,
-                direction: 'INBOUND',
-                status: 'FAILED',
-                blocked: true,
-                blockReason: 'TCPA_LITIGATOR',
-                startedAt: new Date(),
-                endedAt: new Date(),
-                metadata: { tcpaResult, source: 'signalwire' } as Record<string, unknown>,
-              },
-            });
-          } catch (dbErr) {
-            console.error('[TCPA-BLOCK] Failed to create blocked call record:', dbErr);
-          }
+          // Record the block against the agency whose number was dialled.
+          // This used to insert with `tenantId: 'default'` -- not a tenant id,
+          // on a foreign key -- so every litigator block since it was written
+          // was recorded nowhere.
+          await recordBlockedCall(
+            {
+              toNumber: to,
+              callerId: from,
+              callSid: (payload.CallSid as string) || `sw_blocked_${Date.now()}`,
+              blockReason: 'TCPA_LITIGATOR',
+              source: 'signalwire',
+              metadata: { tcpaResult },
+            },
+            request.log
+          );
 
           const rejectLaml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>

@@ -34,6 +34,8 @@
  * the accounts with the most access.
  */
 
+import { auditLog } from '../services/audit.js';
+
 import { getPrismaClient } from './prisma.js';
 
 /**
@@ -258,14 +260,17 @@ export async function leaveActingTenant(
 }
 
 /**
- * The audit row for a switch, written directly rather than through
- * `services/audit.ts`.
+ * The audit row for a switch.
  *
- * `auditLog()` catches and swallows its own failures, which is right for an
- * incidental trail and wrong here: the whole point of the switch is that a
- * NetEnroll operator entering an agency is recorded. If the row cannot be
- * written, the caller is told and the operation fails rather than quietly
- * proceeding unlogged.
+ * This used to write through Prisma directly, bypassing `services/audit.ts`,
+ * because `auditLog()` caught and discarded its own failures -- and the whole
+ * point of these rows is that a NetEnroll operator entering an agency is
+ * recorded. A row that might vanish is not a record.
+ *
+ * `auditLog()` no longer swallows, so the bypass is gone and these go through
+ * the same path as everything else. If the row cannot be written, the switch
+ * fails and the operator is told, rather than quietly entering the agency
+ * unlogged.
  */
 async function writePlatformAudit(params: {
   tenantId: string;
@@ -274,22 +279,18 @@ async function writePlatformAudit(params: {
   entityId: string;
   context: OperatorContext;
 }): Promise<void> {
-  const prisma = getPrismaClient();
-
-  await prisma.auditLog.create({
-    data: {
-      tenantId: params.tenantId,
-      userId: params.userId,
-      action: params.action,
-      entityType: 'Tenant',
-      entityId: params.entityId,
-      resource: '/api/v1/platform/acting-tenant',
-      method: params.action === 'platform.tenant.entered' ? 'POST' : 'DELETE',
-      ipAddress: params.context.ipAddress,
-      userAgent: params.context.userAgent,
-      requestId: params.context.requestId,
-      success: true,
-    },
+  await auditLog({
+    tenantId: params.tenantId,
+    userId: params.userId,
+    action: params.action,
+    entityType: 'Tenant',
+    entityId: params.entityId,
+    resource: '/api/v1/platform/acting-tenant',
+    method: params.action === 'platform.tenant.entered' ? 'POST' : 'DELETE',
+    ipAddress: params.context.ipAddress,
+    userAgent: params.context.userAgent,
+    requestId: params.context.requestId,
+    success: true,
   });
 }
 
