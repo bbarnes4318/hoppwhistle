@@ -23,6 +23,13 @@
 # BEFORE the new code ships, against the old running application, so there is
 # never a window where the admin surface is locked.
 #
+# Migrations are applied by piping migration.sql into psql, which is how every
+# migration on this database has ever been applied. It deliberately does NOT run
+# `prisma migrate deploy`: there is no _prisma_migrations table on production,
+# so that command would find an empty history and try to replay the whole
+# repository against a schema where those objects already exist. Step 2 says
+# more; docs/MIGRATION_DIVERGENCE.md has the measurements.
+#
 # Step 3 refuses to continue if provisioning would leave zero platform admins.
 # That is the guard for (2), and it is the reason to use this instead of running
 # the steps by hand and trusting yourself to remember.
@@ -77,27 +84,206 @@ fi
 [ -s "$ROOT/.env" ] || { RED "REFUSED: $ROOT/.env is missing or empty (needed by scripts/deploy.sh)."; exit 1; }
 [ -s "$ROOT/apps/api/.env" ] || { RED "REFUSED: apps/api/.env is missing; Prisma reads DATABASE_URL from it."; exit 1; }
 
-# The migrations this deploy needs, by directory name. Named explicitly so the
-# script fails loudly on a checkout that does not contain them rather than
-# deploying code whose schema is absent.
+# The migrations this deploy needs, IN THE ORDER THEY MUST BE APPLIED. Named
+# explicitly so the script fails loudly on a checkout that does not contain them
+# rather than deploying code whose schema is absent, and so the order is a
+# reviewable list rather than whatever `ls` returns.
 REQUIRED_MIGRATIONS="
 20260906000000_add_tenant_activation_grants
 20260907000000_add_platform_admin
 20260907010000_audit_log_nullable_tenant
+20260908000000_add_rating_engine
 "
+MIGRATION_COUNT=0
 for m in $REQUIRED_MIGRATIONS; do
   [ -f "$ROOT/apps/api/prisma/migrations/$m/migration.sql" ] || {
     RED "REFUSED: migration $m is not in this checkout. Wrong branch?"; exit 1; }
+  MIGRATION_COUNT=$((MIGRATION_COUNT + 1))
 done
-GRN "preflight ok: clean tree, env files present, 3 required migrations found"
+
+# psql is how every migration on this database has ever been applied, and step 2
+# now uses it directly. Checking here rather than discovering it mid-deploy.
+command -v psql >/dev/null 2>&1 || {
+  RED "REFUSED: psql is not on PATH. Step 2 applies migrations through psql;"
+  RED "there is no Prisma CLI fallback, deliberately \u2014 see step 2."
+  exit 1; }
+
+# DATABASE_URL comes from apps/api/.env, which Prisma also reads. Sourced rather
+# than parsed so a quoted value or an inline comment behaves the same way it
+# does for every other consumer of that file.
+set -a
+# shellcheck disable=SC1091
+. "$ROOT/apps/api/.env"
+set +a
+
+[ -n "${DATABASE_URL:-}" ] || {
+  RED "REFUSED: DATABASE_URL is not set in apps/api/.env."; exit 1; }
+
+# ── The assumption this whole script rests on ────────────────────────────────
+#
+# This database has never been managed by `prisma migrate`. There is no
+# _prisma_migrations table; every migration to date was applied by piping its
+# migration.sql into psql by hand, and step 2 below does exactly that.
+#
+# If that table ever appears, the deployment model changed underneath this
+# script and the assumption no longer holds: some other process is now tracking
+# migration state, and applying the same SQL again outside it would leave the
+# two disagreeing about what has run. Refuse rather than guess.
+if [ "$DRY_RUN" = "0" ]; then
+  if ! HAS_PRISMA_TABLE="$(psql "$DATABASE_URL" -tAc \
+      "SELECT to_regclass('public._prisma_migrations') IS NOT NULL" 2>&1)"; then
+    RED "REFUSED: could not reach the database to check the migration model."
+    RED "$HAS_PRISMA_TABLE"
+    exit 1
+  fi
+
+  if [ "$HAS_PRISMA_TABLE" = "t" ]; then
+    RED "REFUSED: _prisma_migrations exists on this database."
+    RED ""
+    RED "This script applies migration SQL through psql because this database"
+    RED "has never been managed by prisma migrate. That table means something"
+    RED "else is now tracking migration state, and applying the same SQL"
+    RED "outside it would leave the two disagreeing about what has run."
+    RED ""
+    RED "Decide which model this database is on, and update this script to"
+    RED "match, before deploying."
+    exit 1
+  fi
+  GRN "migration model ok: no _prisma_migrations table, as expected"
+fi
+
+GRN "preflight ok: clean tree, env files present, $MIGRATION_COUNT required migrations found"
 
 # ═══════════════════════════════════════════════════════════════════════════
 STEP "2/5  Database migrations"
 # ═══════════════════════════════════════════════════════════════════════════
-echo "  prisma migrate deploy — all three are additive; none drops or rewrites data."
-run $API db:migrate:deploy
+#
+# ── Why this does not call the Prisma CLI ────────────────────────────────────
+#
+# It used to run `prisma migrate deploy`, and that would have failed, badly, the
+# first time anyone ran this script for real.
+#
+# The production database has NO _prisma_migrations table. It has never been
+# managed by prisma migrate. Every migration to date was applied by piping
+# migration.sql into psql by hand. `migrate deploy` against that database finds
+# an empty history and concludes that NOTHING has been applied, so it tries to
+# replay every migration in the repository from the beginning -- CREATE TABLE
+# against tables that already exist, against a schema that has also drifted from
+# schema.prisma. docs/MIGRATION_DIVERGENCE.md measured it: a replay from scratch
+# dies at migration 12 of 14 regardless, because the history references tables
+# no migration creates.
+#
+# .github/workflows/dialer-v2.yml already says this in its own comments, and
+# both CI workflows use `db push` for the same reason. This script was the one
+# place still reaching for the CLI.
+#
+# So: apply the named files, in the order the preflight listed them, through
+# psql. That is what has actually been happening all along; the only change is
+# that it is now written down and checked instead of done by hand.
+#
+# ── Re-runnability ───────────────────────────────────────────────────────────
+#
+# With no _prisma_migrations table there is no applied-state to consult, so this
+# probes the database for each migration's own visible effect and skips the ones
+# already there. That is not a nicety: a deploy that fails at step 4 has to be
+# re-runnable, and the three older migrations here are NOT idempotent -- the
+# activation-grants file opens with an unguarded CREATE TYPE and dies on a
+# second run. (The rating-engine migration is guarded throughout and would be a
+# no-op, but relying on that for some files and not others would make the
+# script's behaviour depend on which file it happened to reach.)
+#
+# The probe is per migration, written out, and is the SAME expression used to
+# verify the apply afterwards. One list, two uses: if the probe is wrong the
+# verification is wrong too and the deploy stops, rather than the two quietly
+# disagreeing.
+#
+# ON_ERROR_STOP=1 plus the single transaction inside each file mean a failure
+# leaves that migration unapplied rather than half-applied, and the loop stops
+# on the first one.
+
+# Has this migration's effect landed? Echoes `t` or `f`.
+migration_applied() {
+  case "$1" in
+    *_add_tenant_activation_grants)
+      echo "SELECT to_regclass('public.tenant_activation_grants') IS NOT NULL" ;;
+    *_add_platform_admin)
+      echo "SELECT to_regclass('public.platform_admins') IS NOT NULL" ;;
+    *_audit_log_nullable_tenant)
+      # Not a new table: this one relaxes a column, so table presence proves
+      # nothing and the nullability is the only visible effect.
+      echo "SELECT COALESCE((SELECT is_nullable = 'YES' FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = 'audit_logs'
+                AND column_name = 'tenantId'), false)" ;;
+    *_add_rating_engine)
+      echo "SELECT to_regclass('public.rate_curve_versions') IS NOT NULL" ;;
+    *)
+      echo "" ;;
+  esac
+}
+
+probe() {
+  psql "$DATABASE_URL" -tAc "$1" 2>&1 | tr -d '[:space:]'
+}
+
+for m in $REQUIRED_MIGRATIONS; do
+  SQL="$ROOT/apps/api/prisma/migrations/$m/migration.sql"
+  CHECK="$(migration_applied "$m")"
+
+  if [ -z "$CHECK" ]; then
+    RED "REFUSED: no applied-state probe is defined for migration $m."
+    RED "Add one to migration_applied() in this script. Without it the deploy"
+    RED "cannot tell whether the migration has already run, and this script"
+    RED "will not apply SQL it cannot verify."
+    exit 1
+  fi
+
+  if [ "$DRY_RUN" = "1" ]; then
+    printf "  would check and, if needed, apply: %s\n" "$m"
+    continue
+  fi
+
+  BEFORE="$(probe "$CHECK")"
+  if [ "$BEFORE" = "t" ]; then
+    echo "  $m — already applied, skipping"
+    continue
+  fi
+  if [ "$BEFORE" != "f" ]; then
+    RED "REFUSED: could not determine whether $m has been applied."
+    RED "$BEFORE"
+    exit 1
+  fi
+
+  echo "  applying $m"
+  if ! OUT="$(psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f "$SQL" 2>&1)"; then
+    RED "REFUSED: migration $m failed. Nothing after it has been applied."
+    RED "$OUT"
+    exit 1
+  fi
+
+  # Verify rather than trust the exit status. psql -f with ON_ERROR_STOP exits
+  # non-zero on a SQL error, but a file that silently did nothing -- an empty
+  # file, a truncated checkout -- exits zero and looks identical from here.
+  if [ "$(probe "$CHECK")" != "t" ]; then
+    RED "REFUSED: $m reported success but its effect is not present."
+    RED "Probe: $CHECK"
+    RED "Applied output was:"
+    RED "$OUT"
+    exit 1
+  fi
+  GRN "  applied $m"
+done
+
+# Constraints Prisma's schema language cannot express. A partial unique index is
+# not representable in schema.prisma, so lead_dial_reservations'
+# one-active-reservation-per-lead guarantee lives in SQL. Without it concurrent
+# workers each claim the same lead and several agents dial the same person.
+#
+# This one is `prisma db execute`, which is a file-runner rather than a
+# migration engine: it reads no history and applies exactly the file it is
+# given. It is not the thing this step exists to avoid.
 run $API db:constraints
-GRN "migrations applied"
+
+GRN "migrations applied and verified"
 
 # ═══════════════════════════════════════════════════════════════════════════
 STEP "3/5  Platform administrators"

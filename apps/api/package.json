@@ -19,7 +19,7 @@
     "clean": "rm -rf dist node_modules",
     "db:migrate": "prisma migrate dev",
     "db:constraints": "prisma db execute --file prisma/sql/db-push-constraints.sql --schema prisma/schema.prisma",
-    "db:migrate:deploy": "prisma migrate deploy",
+    "db:migrate:deploy": "bash scripts/refuse-migrate-deploy.sh",
     "db:migrate:reset": "prisma migrate reset",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:demo": "tsx prisma/demo-seed.ts",
