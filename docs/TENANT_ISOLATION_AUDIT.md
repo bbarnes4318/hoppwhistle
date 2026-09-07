@@ -600,3 +600,158 @@ matched nothing could not pass by checking nothing.
 The one that matters most: **it fails closed with no secret configured.** If
 that case ever returns 200 the endpoints are open again and nothing else in the
 system would say so.
+
+---
+
+# 8. Completeness: what has been audited, and what has never been looked at
+
+This is not another sweep. It is an inventory, written because the method used
+so far has now failed twice in the same way.
+
+- The **Phase 1** audit walked Prisma queries. It could not see `demo-events.ts`,
+  which took a `tenantId` from a request body and published call events for it,
+  because there is no query there. Phase 1b found that one by hand.
+- The **Phase 2** sweep walked the event bus, Redis and WebSockets. It found
+  `/ws/events` accepting any string as an API key and taking the subscriber's
+  tenant from an environment variable. It could not see
+  `/freeswitch/carrier-result`, which took a `tenantId` from its own body with
+  no authentication at all, because that is an HTTP route the Phase 1 pass had
+  already classified as an intentional public webhook. Phase 2c (§7) found it
+  while closing the FreeSWITCH endpoints.
+
+Two passes, two blind spots, both at the seam between what one pass considered
+in scope and what the next did. A third pass with a third method would find a
+third. So the deliverable here is the **map**, including the parts of it nobody
+has walked, so those can be scheduled rather than discovered.
+
+## 8.1 The inventory
+
+**Audited** means somebody enumerated the surface and read every site.
+**Examined** means it was looked at in the course of other work and a verdict
+recorded, without an exhaustive pass. **Never examined** means what it says.
+
+| Surface | Can it read or write agency-scoped data? | Status | When |
+| --- | --- | --- | --- |
+| `apps/api` HTTP routes — Prisma queries | Yes | **Audited** — 139 candidate sites read and classified | Phase 1 |
+| `apps/api` — tenant resolution (`lib/tenant-context.ts` and its ~90 call sites) | Yes | **Audited**, re-audited when the refusal was split | Phase 1, Phase 2 |
+| `apps/api` — event-bus publishes (20 sites) | Yes | **Audited** — §3 | Phase 2 |
+| `apps/api` / `apps/worker` — Redis keys (16 modules) | Yes | **Audited** — §4 | Phase 2 |
+| `apps/api` — WebSocket `/ws/events` | Yes | **Audited**, rewritten — §2.1 | Phase 2 |
+| `apps/api` — SSE (`lead-inject`, `automation`) | Yes | **Audited** — §5 | Phase 1, Phase 2 |
+| `apps/api` — the five `/api/v1/freeswitch/*` endpoints | Yes | **Audited**, closed — §7 | Phase 2c |
+| `apps/api` — platform-admin capability and the acting-tenant switch | Yes | **Audited** | Phase 1b, Phase 2 |
+| `apps/api` — rating: measurement, curve, engine | Yes (it is the billing input) | **Audited** by construction; every query carries a tenant and is tested against two agencies | Phase 2 |
+| FreeSWITCH Lua + dialplan callers | They *cause* writes | **Examined** while closing §7. Not audited: nobody has read the dialplan for other API calls | Phase 2c |
+| **`apps/worker` — scheduled jobs** | **Yes** | **NEVER EXAMINED** | — |
+| **`apps/dialer-v2`** | **Yes** | **NEVER EXAMINED** | — |
+| **ClickHouse — reads** | **Yes** | **Examined here only** (see 8.2) | — |
+| **ClickHouse — the ETL that writes it** | **Yes** | **NEVER EXAMINED** | — |
+| **MinIO / S3 — recordings** | **Yes** | **Examined here only** (see 8.2) | — |
+| **`apps/api` — `routes/freeswitch-mock.ts`** | No, but it is an open endpoint | **Examined here only** (see 8.2) | — |
+| **`apps/api` — the CLI commands under `src/cli/`** | **Yes** | **NEVER EXAMINED** | — |
+| `apps/web` | It renders what the API returns | Not a boundary. The API is the boundary; a web bug shows a user their own data wrongly, not another agency's | — |
+| `apps/media`, `apps/monitor`, `apps/avatar-worker` | No — no tenant dimension, no database access found | **Examined here** | — |
+| Kamailio, RTPengine | No — SIP signalling and media relay, no agency data | **Examined here** | — |
+
+## 8.2 The ones nothing has audited
+
+Named, not fixed. Fixing them is a scheduled pass, not a paragraph in a rating
+change — and doing it badly here would be worse than doing it deliberately
+later.
+
+### `apps/worker` scheduled jobs — never examined
+
+Seven services run on a schedule with no request and no authenticated
+principal, which means `lib/tenant-context.ts` protects none of them: they
+choose their own tenants.
+
+| Service | What it touches |
+| --- | --- |
+| `billing-worker.ts` | consumes `call.*` from the event bus, rates calls, writes accruals |
+| `invoice-generator.ts` | closes billing periods, writes invoices |
+| `accrual-ledger.ts` | the accrual ledger |
+| `clickhouse-etl.ts` | copies call and event rows into ClickHouse |
+| `dialer-worker.ts` / `autodialer.ts` | reserves leads and originates calls |
+| `stripe-service.ts` | Stripe; contains no `tenant` reference at all |
+| `recording-analysis-worker.ts`, `industry-research-worker.ts` | consume `events:stream` |
+
+They talk to Postgres through raw `pg`, not Prisma, so **the Phase 1 audit could
+not have seen them even in principle** — it enumerated `prisma.<model>.<op>`
+calls. Raw SQL in a worker is exactly the shape of thing all three passes so far
+have been structurally unable to see. This is the largest unexamined surface in
+the system and it is the one that writes money.
+
+`stripe-service.ts` having zero occurrences of "tenant" is not evidence of
+safety; it is the reason to look.
+
+### `apps/dialer-v2` — never examined
+
+A separate service, its own Postgres pool, its own HTTP listener on its own
+port. It has `/health`, `/status/flags`, `/status/ingestion` and a token-gated
+`/internal/*`. Nobody has asked whether its lead reservations, agent
+assignments and call origination are scoped per agency, or whether its
+`/status/*` endpoints report across agencies. It is in the repository, it is
+built by CI, and no isolation pass has ever opened it.
+
+### ClickHouse
+
+**Reads** (`services/analytics.ts`) do carry `tenant_id = {tenantId:String}` in
+their `WHERE` clauses, and the tables are `ORDER BY (tenant_id, ...)`. That is
+the right shape and it is what an examination here found — but nobody has
+enumerated every query, and ClickHouse is reached by raw query strings, so the
+Phase 1 method would not have seen these either.
+
+**Writes** — `apps/worker/src/services/clickhouse-etl.ts` — nobody has looked at
+where the `tenant_id` it inserts comes from. A wrong tenant on an ETL row is a
+number attributed to the wrong agency in every report built on it, and unlike a
+query it is not recoverable by fixing the read side.
+
+### MinIO / S3
+
+Recording objects are keyed `recordings/YYYY/MM/DD/<callId>.<format>` — **no
+tenant prefix**. Like the Redis `call:<id>` key, that is collision-free (the
+call id is a UUID) and access is controlled by the API scoping the `Recording`
+row before it signs a URL, which Phase 1 verified for `recordings.ts`.
+
+The consequence worth stating: because the bucket has no per-tenant prefix,
+there is no key structure to hang a bucket policy on, and anything holding raw
+bucket credentials sees every agency's recordings. Today that is the API and the
+FreeSWITCH upload script. Nobody has audited what else has those credentials, or
+whether the presigned URLs the API issues are scoped and short-lived enough.
+
+### `routes/freeswitch-mock.ts`
+
+Three unauthenticated endpoints — `/api/v1/trunks/auth`,
+`/api/v1/numbers/lookup`, `/api/v1/recordings/uploaded` — registered
+unconditionally in `index.ts`, not behind a flag. They return hardcoded fixtures
+and read no database, so they leak no agency data; `/trunks/auth` answers
+`{status: "authenticated", tenantId: "00000000-..."}` to anyone who asks. Harmless
+as written, and a mock that answers "authenticated" in production is the sort of
+thing that becomes real without anyone re-reading it.
+
+### `apps/api/src/cli/`
+
+Seventeen commands that take a tenant from `argv` or from nothing, and run
+against production with whatever `DATABASE_URL` is in the environment.
+`platform-admins.ts` was written carefully in Phase 1b; the other sixteen have
+never been read with isolation in mind. Two stand out without being audited:
+`db:migrate:reset` in `package.json` (`prisma migrate reset`, which drops the
+database) sits one typo away from `db:migrate:deploy`, and
+`query-db.ts` exists.
+
+## 8.3 What would actually close this
+
+Not a fourth pass with a fourth method. The passes keep missing whatever the
+current method cannot express, and the misses have all been at a seam. Two
+things would do better:
+
+1. **Audit by surface, not by technology.** The inventory above is the artefact
+   that makes that possible: it is a list of places data can move, and each row
+   can be walked with whatever method suits it. A row is either walked or it is
+   not, and this table says which.
+2. **Make the boundary testable rather than reviewable.** The 32-case
+   `tenant-isolation.test.ts` is worth more than any of these passes, because it
+   asserts the outcome rather than the shape of the code, and it keeps asserting
+   it. The workers and dialer-v2 have no equivalent. Extending that suite to
+   drive a worker tick and a dialer-v2 request with two agencies seeded would
+   catch the class of bug all three passes were structurally blind to.
