@@ -93,7 +93,7 @@ export function rateLimit(options: {
 
         if (!result.allowed) {
           await auditLog({
-            tenantId: user.tenantId,
+            tenantId: user.tenantId ?? null,
             apiKeyId: user.apiKeyId,
             action: 'rate_limit.exceeded',
             entityType: 'RateLimit',
@@ -137,7 +137,7 @@ export function rateLimit(options: {
 
     if (!ipResult.allowed) {
       await auditLog({
-        tenantId: user?.tenantId || 'unknown',
+        tenantId: user?.tenantId ?? null,
         userId: user?.userId,
         apiKeyId: user?.apiKeyId,
         action: 'rate_limit.exceeded',

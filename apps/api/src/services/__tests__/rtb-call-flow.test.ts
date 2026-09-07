@@ -454,7 +454,7 @@ describe('End-to-End RTB Call Flow Path Test', () => {
     const pingId = pingResult.ping_id;
 
     // 2. Publisher POSTs token + caller number (accepts token, leases a number)
-    const postResult = await postService.processPost(token, '+18005550199');
+    const postResult = await postService.processPost(token, 'pub-1', '+18005550199');
     if (!postResult.accepted) {
       console.log('POST RESULT ERROR:', JSON.stringify(postResult, null, 2));
     }

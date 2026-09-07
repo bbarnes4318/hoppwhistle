@@ -18,6 +18,7 @@ import { deriveTerminationParty, normalizeHangupCause } from '../lib/hangup-caus
 import { getPrismaClient } from '../lib/prisma.js';
 import { sanitizeDestinationString } from '../lib/route-destination.js';
 import { getInboundCarrierChain, gatewayFromChannelName, recordGatewayOutcome } from '../services/carrier-routing.js';
+import { recordBlockedCall } from '../services/blocked-call.js';
 import { numberPoolService } from '../services/number-pool-service.js';
 import { getRedisClient } from '../services/redis.js';
 import { tcpaValidationService } from '../services/tcpa-validation-service.js';
@@ -346,32 +347,28 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
             `[TCPA-BLOCK][FS-LOOKUP] Blocking litigator ${caller} on DID ${did} (cached=${tcpaResult.cached})`
           );
 
-          // Create blocked call record for audit trail
-          try {
-            await prisma.call.create({
-              data: {
-                tenantId: 'default',
-                callSid: `fs_blocked_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-                toNumber: did,
-                callerId: caller,
-                direction: 'INBOUND',
-                status: 'FAILED',
-                blocked: true,
-                blockReason: 'TCPA_LITIGATOR',
-                // We refused the INVITE. Recording the party here keeps blocked
-                // calls out of the abandon numerator while still counting them
-                // as instrumented, so a tenant that blocks a lot of traffic does
-                // not look uninstrumented.
-                terminationParty: 'SYSTEM',
-                terminationCause: 'TCPA_LITIGATOR_BLOCK',
-                startedAt: new Date(),
-                endedAt: new Date(),
-                metadata: { tcpaResult, source: 'freeswitch' } as Record<string, unknown>,
-              },
-            });
-          } catch (dbErr) {
-            console.error('[TCPA-BLOCK] Failed to create blocked call record:', dbErr);
-          }
+          // Record the block against the agency that owns the dialled DID.
+          // This used to insert with `tenantId: 'default'` -- not a tenant id,
+          // on a foreign key -- so every litigator block since it was written
+          // was recorded nowhere.
+          //
+          // `terminationParty: SYSTEM` because we refused the INVITE: it keeps
+          // blocked calls out of the abandon numerator while still counting
+          // them as instrumented, so an agency that blocks a lot of traffic
+          // does not look uninstrumented.
+          await recordBlockedCall(
+            {
+              toNumber: did,
+              callerId: caller,
+              callSid: `fs_blocked_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+              blockReason: 'TCPA_LITIGATOR',
+              source: 'freeswitch',
+              terminationParty: 'SYSTEM',
+              terminationCause: 'TCPA_LITIGATOR_BLOCK',
+              metadata: { tcpaResult },
+            },
+            request.log
+          );
 
           return reply.send({
             reject: true,
@@ -954,10 +951,17 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
         }, 1000); // 1-second delay
       }
 
-      // Update DID route stats if not an RTB route
+      // Update DID route stats if not an RTB route.
+      //
+      // `updateMany` with the tenant rather than `update` by id: this handler
+      // is the unauthenticated FreeSWITCH CDR webhook, and `routeId` arrives in
+      // its body. Unscoped, anyone who could reach the endpoint could inflate
+      // another agency's per-route call and duration counters -- numbers the
+      // agency is billed and rated on. A mismatched routeId now updates
+      // nothing instead.
       if (!body.routeId.startsWith('rtb-')) {
-        await prisma.didRoute.update({
-          where: { id: body.routeId },
+        await prisma.didRoute.updateMany({
+          where: { id: body.routeId, tenantId },
           data: {
             totalCalls: { increment: 1 },
             totalDuration: { increment: body.duration || 0 },
@@ -979,7 +983,9 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
         // Release the number in database immediately back to pool
         try {
           await prisma.phoneNumber.updateMany({
-            where: { number: rtbMetadata.transferNumber },
+            // Scoped: released by E.164 alone, this would return another
+            // agency's leased transfer number to the pool mid-call.
+            where: { number: rtbMetadata.transferNumber, tenantId },
             data: {
               poolStatus: 'AVAILABLE',
               lastAssignedAt: null,

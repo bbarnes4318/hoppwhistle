@@ -56,7 +56,7 @@ export async function csrfProtection(
   const sessionId = request.cookies.sessionId || request.headers['x-session-id'];
   if (!sessionId) {
     await auditLog({
-      tenantId: request.user?.tenantId || 'unknown',
+      tenantId: request.user?.tenantId ?? null,
       userId: request.user?.userId,
       action: 'csrf.missing_session',
       entityType: 'CSRF',
@@ -82,7 +82,7 @@ export async function csrfProtection(
   const csrfToken = request.headers['x-csrf-token'] as string;
   if (!csrfToken) {
     await auditLog({
-      tenantId: request.user?.tenantId || 'unknown',
+      tenantId: request.user?.tenantId ?? null,
       userId: request.user?.userId,
       action: 'csrf.missing_token',
       entityType: 'CSRF',
@@ -107,7 +107,7 @@ export async function csrfProtection(
   // Verify token
   if (!verifyCsrfToken(csrfToken, sessionId)) {
     await auditLog({
-      tenantId: request.user?.tenantId || 'unknown',
+      tenantId: request.user?.tenantId ?? null,
       userId: request.user?.userId,
       action: 'csrf.invalid_token',
       entityType: 'CSRF',

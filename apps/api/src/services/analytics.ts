@@ -5,8 +5,17 @@ import { logger } from '../lib/logger.js';
 import { clickhouseService } from './clickhouse.js';
 
 export interface AnalyticsFilters {
+  /**
+   * The agency these numbers belong to. Comes from the caller's authenticated
+   * session; there is deliberately no second field that can override it.
+   *
+   * There used to be a `demoTenantId`, applied as
+   * `filters.demoTenantId || filters.tenantId`, and the reporting routes filled
+   * it straight from the `X-Demo-Tenant-Id` request header -- so a header on an
+   * otherwise ordinary authenticated request chose whose revenue, call volume
+   * and payouts came back.
+   */
   tenantId: string;
-  demoTenantId?: string;
   startDate: Date;
   endDate: Date;
   campaignId?: string;
@@ -52,9 +61,7 @@ export class AnalyticsService {
   }
 
   async getMetrics(filters: AnalyticsFilters): Promise<MetricsResult> {
-    // Use demo tenant if provided
-    const tenantId = filters.demoTenantId || filters.tenantId;
-    const effectiveFilters = { ...filters, tenantId };
+    const effectiveFilters = filters;
 
     if (clickhouseService.isEnabled()) {
       try {

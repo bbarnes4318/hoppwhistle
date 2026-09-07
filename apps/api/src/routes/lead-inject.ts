@@ -4,6 +4,34 @@
  * Purpose: Accept incoming lead data before a call connects, allowing the Agent UI
  * to be pre-populated with customer details (DOB, Gender, Name, etc.)
  *
+ * ── Tenancy ──────────────────────────────────────────────────────────────────
+ *
+ * Every route here handles a consumer's name, date of birth, address and
+ * requested coverage. None of them had any tenant concept at all:
+ *
+ *   - POST /lead-inject took a payload from anyone and stored it.
+ *   - GET  /lead-inject/stream broadcast EVERY injected lead to EVERY connected
+ *     listener. One agency's agents watched another agency's leads arrive.
+ *   - GET  /lead-inject/recent and /lead-inject/lookup/:phoneNumber read the
+ *     same shared store, and `lookup` returned the record unmasked.
+ *
+ * The routes sit under /api/v1, where the auth hook populates `request.user`
+ * but never refuses a request, so all four answered anonymous callers.
+ *
+ * Both the store and the event bus are now keyed by tenant, and each route
+ * derives its tenant the way its kind requires:
+ *
+ *   - The POST is a webhook from a lead vendor. It authenticates with an API
+ *     key, and the tenant is the key's own tenant -- the addressed resource,
+ *     not anything in the payload. A vendor posting to the wrong tenant is not
+ *     something a body field should be able to arrange.
+ *   - The three read routes are agent-facing and take the tenant from the
+ *     authenticated session, like every other authenticated route.
+ *
+ * The store remains in memory and per-process: a lead is a transient hint for
+ * the screen pop that is about to happen, not a record. What changed is that
+ * one process's memory is no longer shared across agencies.
+ *
  * JSON Payload Specification:
  * {
  *   "lead_token": "string (optional) - Unique identifier for the lead",
@@ -27,13 +55,26 @@
  * }
  */
 
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { EventEmitter } from 'events';
 
-// Global event emitter for lead data broadcasts
-// In production, this should be replaced with Redis pub/sub or similar
+import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+
+import { resolveTenant } from '../lib/tenant-context.js';
+import { authenticateAPIKey } from '../middleware/auth.js';
+
+// Global event emitter for lead data broadcasts.
+//
+// Events are namespaced `lead:<tenantId>`, so a listener subscribes to its own
+// agency and receives nothing else. It used to emit a single `lead` event that
+// every listener on the process received.
+//
+// In production, this should be replaced with Redis pub/sub or similar.
 const leadEventEmitter = new EventEmitter();
 leadEventEmitter.setMaxListeners(100); // Support many connected agents
+
+function leadChannel(tenantId: string): string {
+  return `lead:${tenantId}`;
+}
 
 // Types
 interface LeadInjectPayload {
@@ -61,17 +102,30 @@ interface LeadInjectRequest extends FastifyRequest {
   body: LeadInjectPayload;
 }
 
-// In-memory store for recent leads (last 100)
-// In production, use Redis or database
-const recentLeads: Map<string, LeadInjectPayload & { receivedAt: string }> = new Map();
+type StoredLead = LeadInjectPayload & { receivedAt: string };
+
+// In-memory store for recent leads, per tenant (last 100 each).
+// In production, use Redis or database.
+const recentLeadsByTenant = new Map<string, Map<string, StoredLead>>();
 const MAX_RECENT_LEADS = 100;
 
-function addRecentLead(lead: LeadInjectPayload): string {
+function leadsFor(tenantId: string): Map<string, StoredLead> {
+  let leads = recentLeadsByTenant.get(tenantId);
+  if (!leads) {
+    leads = new Map<string, StoredLead>();
+    recentLeadsByTenant.set(tenantId, leads);
+  }
+  return leads;
+}
+
+function addRecentLead(tenantId: string, lead: LeadInjectPayload): string {
   const leadId = lead.lead_token || lead.caller_id || `lead-${Date.now()}`;
-  const enrichedLead = {
+  const enrichedLead: StoredLead = {
     ...lead,
     receivedAt: new Date().toISOString(),
   };
+
+  const recentLeads = leadsFor(tenantId);
 
   // Add to front, remove oldest if over limit
   recentLeads.set(leadId, enrichedLead);
@@ -83,16 +137,21 @@ function addRecentLead(lead: LeadInjectPayload): string {
   return leadId;
 }
 
+// eslint-disable-next-line @typescript-eslint/require-await -- plugin signature
 export async function registerLeadInjectRoutes(fastify: FastifyInstance) {
   /**
    * POST /api/v1/lead-inject
    *
-   * Main webhook endpoint to receive lead data before a call.
-   * Validates the payload and broadcasts to connected agents.
+   * Webhook endpoint for a lead vendor to push lead data ahead of a call.
+   * Authenticated with an API key; the key's tenant is the lead's tenant.
    */
   fastify.post<{ Body: LeadInjectPayload }>(
     '/api/v1/lead-inject',
+    { preHandler: [authenticateAPIKey] },
     async (request: LeadInjectRequest, reply: FastifyReply) => {
+      const tenantId = resolveTenant(request, reply);
+      if (!tenantId) return;
+
       const body = request.body;
 
       // Validate required fields - need at least a phone identifier
@@ -135,17 +194,17 @@ export async function registerLeadInjectRoutes(fastify: FastifyInstance) {
       }
 
       // Store the lead
-      const leadId = addRecentLead(normalizedLead);
+      const leadId = addRecentLead(tenantId, normalizedLead);
 
-      // Broadcast to all connected SSE clients
-      console.log(`[LeadInject] Broadcasting lead data for ${phoneId}`);
-      leadEventEmitter.emit('lead', normalizedLead);
+      // Broadcast to this tenant's connected SSE clients only.
+      leadEventEmitter.emit(leadChannel(tenantId), normalizedLead);
 
-      // Log for debugging
+      // Log for debugging. The phone number is not logged: this is a consumer's
+      // number arriving on a lead, and it used to be printed in full.
       fastify.log.info({
         event: 'lead_inject',
         leadId,
-        phone: phoneId,
+        tenantId,
         hasName: !!(normalizedLead.first_name || normalizedLead.last_name),
         hasDob: !!normalizedLead.dob,
         hasGender: !!normalizedLead.gender,
@@ -164,16 +223,22 @@ export async function registerLeadInjectRoutes(fastify: FastifyInstance) {
   /**
    * GET /api/v1/lead-inject/stream
    *
-   * SSE endpoint for agents to receive real-time lead data.
-   * The frontend should connect to this endpoint to listen for incoming leads.
+   * SSE endpoint for agents to receive real-time lead data for their own
+   * agency. The frontend connects here to listen for incoming leads.
    */
   fastify.get('/api/v1/lead-inject/stream', async (request, reply) => {
-    // Set SSE headers
+    const tenantId = resolveTenant(request, reply);
+    if (!tenantId) return;
+
+    // Set SSE headers.
+    //
+    // No `Access-Control-Allow-Origin: *` here any more: this stream carries
+    // one agency's leads, and a wildcard let any page on any origin open it
+    // with the viewer's credentials and read them.
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       Connection: 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
     });
 
     // Send initial connection message
@@ -186,18 +251,19 @@ export async function registerLeadInjectRoutes(fastify: FastifyInstance) {
       try {
         reply.raw.write(`data: ${JSON.stringify({ type: 'lead', data: lead })}\n\n`);
       } catch (err) {
-        console.error('[LeadInject] Error sending SSE message:', err);
+        request.log.error({ err }, '[LeadInject] Error sending SSE message');
       }
     };
 
-    // Subscribe to lead events
-    leadEventEmitter.on('lead', leadHandler);
+    // Subscribe to this tenant's lead events
+    const channel = leadChannel(tenantId);
+    leadEventEmitter.on(channel, leadHandler);
 
     // Keep-alive ping every 30 seconds
     const keepAliveInterval = setInterval(() => {
       try {
         reply.raw.write(`: keepalive\n\n`);
-      } catch (err) {
+      } catch {
         // Connection closed
         clearInterval(keepAliveInterval);
       }
@@ -205,9 +271,8 @@ export async function registerLeadInjectRoutes(fastify: FastifyInstance) {
 
     // Cleanup on connection close
     request.raw.on('close', () => {
-      leadEventEmitter.off('lead', leadHandler);
+      leadEventEmitter.off(channel, leadHandler);
       clearInterval(keepAliveInterval);
-      console.log('[LeadInject] SSE client disconnected');
     });
 
     // Don't end the response - keep it open for SSE
@@ -217,10 +282,14 @@ export async function registerLeadInjectRoutes(fastify: FastifyInstance) {
   /**
    * GET /api/v1/lead-inject/recent
    *
-   * Get recently received leads (for debugging/recovery).
+   * Recently received leads for the caller's own agency (for debugging and
+   * recovery).
    */
   fastify.get('/api/v1/lead-inject/recent', async (request, reply) => {
-    const leads = Array.from(recentLeads.values())
+    const tenantId = resolveTenant(request, reply);
+    if (!tenantId) return;
+
+    const leads = Array.from(leadsFor(tenantId).values())
       .reverse() // Most recent first
       .slice(0, 20); // Limit to 20
 
@@ -238,17 +307,20 @@ export async function registerLeadInjectRoutes(fastify: FastifyInstance) {
   /**
    * GET /api/v1/lead-inject/lookup/:phoneNumber
    *
-   * Look up a specific lead by phone number.
+   * Look up a lead by phone number within the caller's own agency.
    * Used when a call comes in to check if we have pre-populated data.
    */
   fastify.get<{ Params: { phoneNumber: string } }>(
     '/api/v1/lead-inject/lookup/:phoneNumber',
     async (request, reply) => {
+      const tenantId = resolveTenant(request, reply);
+      if (!tenantId) return;
+
       const { phoneNumber } = request.params;
       const normalizedPhone = phoneNumber.replace(/\D/g, '');
 
-      // Search recent leads for matching phone
-      for (const [_, lead] of recentLeads) {
+      // Search this tenant's recent leads for a matching phone
+      for (const lead of leadsFor(tenantId).values()) {
         const leadPhone = (lead.caller_id || lead.phone || '').replace(/\D/g, '');
         if (
           leadPhone === normalizedPhone ||
@@ -273,5 +345,6 @@ export async function registerLeadInjectRoutes(fastify: FastifyInstance) {
   );
 }
 
-// Export the event emitter for use in other modules (e.g., call events)
-export { leadEventEmitter };
+// Export the event emitter and its channel naming for use in other modules
+// (e.g. call events). Anything publishing here must name a tenant.
+export { leadEventEmitter, leadChannel };

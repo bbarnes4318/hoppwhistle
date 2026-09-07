@@ -17,9 +17,10 @@
 
 import { createHash } from 'crypto';
 
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyRequest } from 'fastify';
 
 import { isDemoTenantAuthEnabled, warnIfDemoTenantAuthEnabled } from '../lib/demo-auth.js';
+import { loadPlatformContext } from '../lib/platform-admin.js';
 import { getPrismaClient } from '../lib/prisma.js';
 
 export function registerApiV1Auth(server: FastifyInstance): void {
@@ -32,27 +33,31 @@ export function registerApiV1Auth(server: FastifyInstance): void {
   warnIfDemoTenantAuthEnabled();
 
   server.addHook('onRequest', async (request, _reply) => {
-    // Only authenticate /api/v1/* routes
-    if (!request.url.startsWith('/api/v1/')) {
-      return;
-    }
-
-    // With demo auth disabled the demo inputs carry no meaning here, so drop
-    // them before anything else looks at them.
+    // With demo auth disabled the demo inputs carry no meaning anywhere, so
+    // drop them before anything else looks at them.
     //
-    // This has to happen before the JWT branch below, which returns as soon as
-    // a token verifies. Handlers under /api/v1 read the header directly as
-    // `demoTenantId || user.tenantId` in ~200 places, so a request that
-    // authenticated perfectly well as one tenant could still name another and
-    // be served its data. Dropping the inputs here makes every one of those
-    // fall back to the tenant the caller actually authenticated as, without
-    // touching them.
+    // This runs for EVERY request, ahead of the /api/v1 gate below. It used to
+    // sit after it, which meant the routes registered outside /api/v1 -- the
+    // /api/automation/* aliases, /api/bot/*, the retention and call-center
+    // handlers -- still received the header and still read it. Stripping it
+    // here makes every reader in the codebase fall back to the tenant the
+    // caller actually authenticated as, whether or not it was ever converted
+    // to `requireTenantId`.
+    //
+    // It also has to happen before the JWT branch further down, which returns
+    // as soon as a token verifies: a request that authenticated perfectly well
+    // as one tenant could otherwise still name another and be served its data.
     if (!DEMO_TENANT_AUTH_ENABLED) {
       delete request.headers['x-demo-tenant-id'];
       const query = request.query as { demoTenantId?: string } | undefined;
       if (query && query.demoTenantId !== undefined) {
         delete query.demoTenantId;
       }
+    }
+
+    // Only authenticate /api/v1/* routes
+    if (!request.url.startsWith('/api/v1/')) {
+      return;
     }
 
     const authHeader = request.headers.authorization;
@@ -62,6 +67,7 @@ export function registerApiV1Auth(server: FastifyInstance): void {
     if (authHeader && authHeader.startsWith('Bearer ')) {
       try {
         await request.jwtVerify();
+        await applyPlatformContext(request);
         return;
       } catch {
         // JWT failed, try API key / demo tenant fallback
@@ -72,6 +78,7 @@ export function registerApiV1Auth(server: FastifyInstance): void {
         const decoded = server.jwt.verify(queryToken);
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         request.user = decoded as any;
+        await applyPlatformContext(request);
         return;
       } catch {
         // JWT failed, try API key / demo tenant fallback
@@ -142,4 +149,45 @@ export function registerApiV1Auth(server: FastifyInstance): void {
       }
     }
   });
+}
+
+/**
+ * Overlay NetEnroll staff state onto a principal this hook just built from a
+ * JWT.
+ *
+ * `request.jwtVerify()` populates `request.user` straight from the token, which
+ * carries the tenant the operator had at login and knows nothing about the
+ * agency they entered afterwards. For platform staff the entered agency
+ * REPLACES it: the `PlatformActingTenant` row is the authority, the token only
+ * says who is asking, and a stale tenant in a long-lived token must never
+ * decide whose data is served.
+ *
+ * For everyone else this is a no-op beyond one indexed lookup that misses.
+ */
+async function applyPlatformContext(request: FastifyRequest): Promise<void> {
+  const principal = request.user as
+    | {
+        userId?: string;
+        tenantId?: string;
+        roles?: string[];
+        isPlatformAdmin?: boolean;
+        actingTenantId?: string | null;
+        actingTenantName?: string | null;
+      }
+    | undefined;
+
+  if (!principal?.userId) return;
+
+  const platform = await loadPlatformContext(principal.userId);
+  if (!platform.isPlatformAdmin) return;
+
+  principal.isPlatformAdmin = true;
+  principal.actingTenantId = platform.actingTenantId;
+  principal.actingTenantName = platform.actingTenantName;
+  principal.tenantId = platform.actingTenantId ?? undefined;
+
+  // Inside an agency, carry that agency's administrator roles; in the
+  // cross-agency view, carry none. See ACTING_TENANT_ROLES.
+  const existing = principal.roles ?? [];
+  principal.roles = [...existing, ...platform.actingRoles.filter(r => !existing.includes(r))];
 }
