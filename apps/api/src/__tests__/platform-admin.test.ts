@@ -74,12 +74,18 @@ describe.skipIf(!gate.available)('Platform admin: capability and acting-tenant s
     const { registerPlatformRoutes } = await import('../routes/platform.js');
     const { registerQuotaRoutes } = await import('../routes/quotas.js');
     const { registerBotRoutes } = await import('../routes/bot.js');
+    // Two agency-scoped surfaces behind the per-tenant gates Phase 2 widened:
+    // requireAnyPermission (carrier routing) and requireRole (payroll).
+    const { registerCarrierRoutingRoutes } = await import('../routes/carrier-routing.js');
+    const { registerPayrollRoutes } = await import('../routes/payroll.js');
 
     await instance.register(registerCallRoutes);
     await instance.register(registerPlatformRoutes);
     await instance.register(registerQuotaRoutes);
     await instance.register(registerBotRoutes);
     await instance.register(registerAdminTenantRoutes);
+    await instance.register(registerCarrierRoutingRoutes);
+    await instance.register(registerPayrollRoutes);
 
     await instance.ready();
     return instance;
@@ -688,4 +694,109 @@ describe.skipIf(!gate.available)('Platform admin: capability and acting-tenant s
       expect(await prisma.platformAdmin.count({ where: { userId: operatorId } })).toBe(1);
     });
   });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 6. Per-tenant permission gates, widened in Phase 2
+  // ══════════════════════════════════════════════════════════════════════════
+  describe('per-tenant permission gates admit an operator inside an agency', () => {
+    /**
+     * Phase 1b left this as an open policy question and the conservative
+     * answer: an operator holds no `UserRole` row inside an agency, so every
+     * route gated on a per-tenant permission refused them, and the switch
+     * opened half the product.
+     *
+     * The policy is decided — platform admins have full access everywhere — and
+     * these are the two gate shapes it had to reach. `requireRole` needed its
+     * own fix beyond the permission lookup: it compares the user row's tenant
+     * against the acting tenant, and an operator's own `User.tenantId` is null.
+     */
+    const GATED: Array<[string, string, string]> = [
+      // requireAnyPermission('admin:*', 'settings:read', 'numbers:read')
+      ['GET', '/api/v1/carrier-routing/overview', 'requireAnyPermission'],
+      // requireRole('ADMIN', 'OWNER')
+      ['GET', '/api/v1/admin/time-entries', 'requireRole'],
+    ];
+
+    async function enterAgencyA() {
+      const entered = await app.inject({
+        method: 'POST',
+        url: '/api/v1/platform/acting-tenant',
+        headers: tokenFor(operatorId, null),
+        payload: { tenantId: tenantA.id },
+      });
+      expect(entered.statusCode).toBe(200);
+    }
+
+    it.each(GATED)('admits the operator: %s %s (%s)', async (method, url) => {
+      await enterAgencyA();
+
+      const response = await app.inject({
+        method: method as 'GET',
+        url,
+        headers: tokenFor(operatorId, null),
+      });
+
+      expect(
+        response.statusCode,
+        `${method} ${url} refused a platform operator inside an agency`
+      ).toBe(200);
+    });
+
+    it.each(GATED)(
+      'tells the operator to pick an agency rather than refusing: %s %s (%s)',
+      async (method, url) => {
+        // No agency entered. Not 403 ("you may not have this") and not 401
+        // ("your session is dead") — both would send the web client somewhere
+        // that cannot help.
+        const response = await app.inject({
+          method: method as 'GET',
+          url,
+          headers: tokenFor(operatorId, null),
+        });
+
+        expectCrossAgencyRefusal(response, `${method} ${url}`);
+      }
+    );
+
+    it('changes nothing for a user who is not staff', async () => {
+      // The whole widening keys off the PlatformAdmin row. An agency AGENT is
+      // not ADMIN or OWNER of their own agency and is still refused the payroll
+      // surface, exactly as before.
+      //
+      // Deliberately payroll rather than carrier routing: AGENT genuinely holds
+      // `numbers:read`, so `requireAnyPermission('admin:*', 'settings:read',
+      // 'numbers:read')` admits them and always did. Asserting 403 there would
+      // have been asserting the wrong thing about the fixture rather than
+      // anything about the widening.
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/v1/admin/time-entries',
+        headers: tokenFor(plainUserId, tenantA.id),
+      });
+
+      expect(response.statusCode).toBe(403);
+    });
+
+    it('does not admit an operator whose capability has been revoked', async () => {
+      await enterAgencyA();
+
+      const { revokePlatformAdmin } = await import('../lib/platform-admin.js');
+      await revokePlatformAdmin(operatorId);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/v1/carrier-routing/overview',
+        headers: tokenFor(operatorId, null),
+      });
+
+      // Revoking drops the acting tenant too. What is left is an authenticated
+      // principal with no tenant and no capability, which the permission gate
+      // has always answered 403 — and specifically NOT the 409 that says "pick
+      // an agency", because that is a staff-only condition and they are no
+      // longer staff.
+      expect(response.statusCode).toBe(403);
+      expect(response.json().error.code).not.toBe('NO_ACTING_TENANT');
+    });
+  });
+
 });

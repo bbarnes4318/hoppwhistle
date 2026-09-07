@@ -284,6 +284,12 @@ database, driving the real auth hook and the real route plugins.
 5. **The capability itself** — not conferred by OWNER with `admin:*`, works for a
    user with no tenant at all, revocation drops the agency too, granting twice
    creates one row.
+6. **The widened per-tenant gates** (Phase 2) — an operator inside an agency is
+   admitted to both gate shapes, `requireAnyPermission` (carrier routing) and
+   `requireRole` (payroll); with no agency selected both answer
+   `409 NO_ACTING_TENANT` rather than 403 or 401; an agency AGENT is still
+   refused the payroll surface; and an operator whose capability has been
+   revoked is refused with a plain 403, not the staff-only "pick an agency".
 
 `apps/api/src/__tests__/platform-capability-closure.test.ts` — 6 cases, added in
 Phase 2 alongside the permission widening. Two run with no database at all: no
@@ -297,5 +303,5 @@ update — and assert the row count never moves.
 API client: `NO_ACTING_TENANT` never clears the session or navigates, that holds
 even if the code ever arrives as a 401, and a genuine 401 still logs out.
 
-Full API suite at the time of writing: **622 passed, 8 skipped** (32 platform
+Full API suite at the time of writing: **628 passed, 8 skipped** (38 platform
 admin, 6 capability closure, 38 rating). Typecheck errors 83 → 80 (none added).
