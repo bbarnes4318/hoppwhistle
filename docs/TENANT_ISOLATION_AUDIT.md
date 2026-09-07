@@ -755,3 +755,117 @@ things would do better:
    it. The workers and dialer-v2 have no equivalent. Extending that suite to
    drive a worker tick and a dialer-v2 request with two agencies seeded would
    catch the class of bug all three passes were structurally blind to.
+
+---
+
+# 9. Phase 3 — the billing surfaces
+
+Phase 3 adds money to the platform: a per-agency credit ledger, an Overrun
+ceiling, a delivery gate and a nightly settlement that places off-session ACH
+debits. This section records what that added to the boundary and how each
+addition was scoped. The mechanics are in `docs/BILLING.md`; this is the
+isolation reading of them.
+
+**Nothing in Phase 1, 1b or 2 was relaxed.** `lib/tenant-context.ts` is
+byte-identical. No new way to find a tenant was introduced, and no route below
+reads a tenant from a header, a query parameter or a body.
+
+## 9.1 New tables, and their tenant dimension
+
+| Table | Tenant dimension |
+| --- | --- |
+| `agency_billing_profiles` | `tenantId`, unique. One row per agency |
+| `application_credit_ledger` | `tenantId` on every row; the balance is `SUM(quantity)` filtered by it |
+| `daily_settlements` | `tenantId`, unique with `deliveryDay` |
+| `settlement_payment_attempts` | via `settlementId` → `daily_settlements.tenantId` |
+| `delivery_hold_events` | `tenantId` |
+| `billing_notifications` | `tenantId` |
+
+Every one carries a foreign key to `tenants` with `ON DELETE CASCADE`, and every
+query in `services/billing/` filters on `tenantId`. There is no aggregate
+anywhere that sums across tenants: the cross-agency view computes each agency
+independently and returns a list of rows, so one agency's number can never be
+derived from another's traffic.
+
+## 9.2 New routes
+
+`routes/delivery-billing.ts`. Agency-scoped routes resolve the tenant through
+`resolveTenant()` and take **no parameter naming an agency**:
+
+    GET  /api/v1/delivery/today
+    GET  /api/v1/delivery/agents
+    GET  /api/v1/delivery/me
+    GET  /api/v1/delivery/settlements
+    GET  /api/v1/delivery/settlements.csv
+    GET  /api/v1/delivery/ledger
+    GET  /api/v1/delivery/mandate
+    POST /api/v1/delivery/mandate/setup-intent
+    POST /api/v1/delivery/mandate/confirm
+
+Platform-scoped routes are gated on `requirePlatformAdmin`. The `:tenantId` in
+their paths names **the agency being administered**, not the acting tenant of
+the caller — the same shape as `quotas.ts`, and authority comes from the
+capability rather than from the parameter:
+
+    GET  /api/v1/platform/delivery/overview
+    GET  /api/v1/platform/delivery/settlements
+    GET  /api/v1/platform/delivery/agencies/:tenantId/terms
+    PUT  /api/v1/platform/delivery/agencies/:tenantId/terms
+    PUT  /api/v1/platform/delivery/agencies/:tenantId/ceiling
+    POST /api/v1/platform/delivery/agencies/:tenantId/suspend
+    POST /api/v1/platform/delivery/agencies/:tenantId/resume
+    POST /api/v1/platform/delivery/agencies/:tenantId/opening-purchase
+    POST /api/v1/platform/delivery/settlement/run
+
+`settlement.test.ts` asserts an agency OWNER is refused the cross-agency view,
+the settlement run and its own ceiling override, and that one agency's
+settlement list never contains another's rows.
+
+## 9.3 The one place a browser names a Stripe object
+
+`POST /api/v1/delivery/mandate/confirm` takes a SetupIntent id from the request.
+That is the shape of the Stripe flow — the browser completes the SetupIntent and
+tells the server which one — and it is the sort of parameter this audit exists
+to be suspicious of, so:
+
+- **Nothing in the body is believed.** The payment method, the bank, the last
+  four and whether the mandate is usable at all are read back from Stripe by the
+  server.
+- **The SetupIntent's customer is compared to the agency's own** before anything
+  is written, so an agency that guessed or obtained another agency's SetupIntent
+  id gets 403 rather than that agency's bank account attached to its profile.
+- The route resolves its own tenant through the Phase 1 helper; the body carries
+  no tenant and there is no field for one.
+
+## 9.4 Delivery gating and the machine callbacks
+
+`GET /api/v1/freeswitch/lookup` and `POST /api/v1/agent/call/incoming` now ask
+the delivery gate. Neither gained a tenant input: the lookup takes its tenant
+from the `DidRoute` row or the Redis lease exactly as before, and the gate is
+asked about that tenant. `POST /api/v1/agent/call/incoming` still reads
+`body.tenantId`, which §4 of this document already records as a machine-callback
+surface out of scope for these passes — the gate does not widen it, and can only
+ever refuse more.
+
+`delivery-gating-paths.test.ts` pins that the Phase 1b internal-key guard still
+runs **before** the gate on the FreeSWITCH lookup: gating delivery must not have
+opened those callbacks to anyone who can reach nginx.
+
+## 9.5 Cross-app import
+
+`apps/api` now imports `apps/worker`'s Stripe service through the
+`@hopwhistle/worker/stripe-service` workspace export, so the platform keeps one
+Stripe integration rather than two. It is a code import, not a data path: the
+module is handed every value it uses, opens no connection pool in the API
+process, and reads no tenant of its own.
+
+## 9.6 What this does not close
+
+`apps/worker`'s scheduled jobs and `apps/dialer-v2` are still unaudited (§8.2),
+and Phase 3 does not change that. The settlement runs in `apps/api`, through
+Prisma, with a `tenantId` on every query — it is not one of the raw-SQL worker
+jobs this document flags. `services/billing/notifications.ts` sends email to an
+agency's own OWNER and ADMIN users and to holders of the platform capability;
+those two recipient lists are built from `tenantId` and from `platform_admins`
+respectively, and never merged into one message that would tell an agency about
+another.

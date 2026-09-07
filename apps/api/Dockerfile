@@ -15,6 +15,17 @@ COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml .npmrc ./
 
 # Copy package.json for all packages
 COPY apps/api/package.json ./apps/api/
+# apps/api depends on @hopwhistle/worker for one thing: the platform's single
+# Stripe integration, which lives in apps/worker/src/services/stripe-service.ts
+# and is what the daily settlement places its ACH debit through. Without this
+# line the deps stage's `pnpm install` cannot resolve the workspace dependency
+# and the image fails to build.
+#
+# tsup inlines that module into dist/index.js (noExternal), so nothing resolves
+# `@hopwhistle/worker` at runtime. `stripe` itself is deliberately NOT inlined --
+# see the note in apps/api/tsup.config.ts -- and is a direct dependency of
+# apps/api, so it is in the node_modules the runner stage copies.
+COPY apps/worker/package.json ./apps/worker/
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/routing-dsl/package.json ./packages/routing-dsl/
 COPY packages/sdk/package.json ./packages/sdk/

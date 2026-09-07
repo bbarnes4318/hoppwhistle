@@ -112,6 +112,47 @@ describe.skipIf(!gate.available)('Pay-Per-Call Real Database/Redis Integration T
       },
     });
 
+    /*
+     * Phase 3 delivery gating.
+     *
+     * `GET /api/v1/freeswitch/lookup` now asks the delivery gate before handing
+     * over a destination, so this tenant is set up to be deliverable: agreed
+     * terms, a valid ACH mandate, an agreed opening rate and a paid block on the
+     * ledger. Without them the gate refuses -- correctly, because an agency with
+     * no mandate is not delivered to -- and every routing assertion below would
+     * fail for a reason that has nothing to do with routing.
+     *
+     * The gate is exercised for its own sake in
+     * `src/__tests__/delivery-gating-paths.test.ts`.
+     */
+    await prisma.agencyBillingProfile.create({
+      data: {
+        tenantId,
+        dailyBlockApplications: 45,
+        maxDailyDebit: 8978,
+        stripeCustomerId: 'cus_integration',
+        achPaymentMethodId: 'pm_integration',
+        achMandateStatus: 'ACTIVE',
+        achMandateVerifiedAt: new Date(),
+      },
+    });
+
+    await prisma.agencyRatingState.create({
+      data: { tenantId, status: 'OPENING_BLOCK', openingRate: 134, currentRate: 134 },
+    });
+
+    await prisma.applicationCreditLedgerEntry.create({
+      data: {
+        tenantId,
+        entryType: 'PURCHASE',
+        quantity: 45,
+        deliveryDay: '2026-09-07',
+        unitRate: 134,
+        amount: 6030,
+        stripePaymentIntentId: 'pi_integration',
+      },
+    });
+
     // Seed Users & User Roles
     const usersToCreate = [
       { id: 'usr-admin-int', email: 'admin-int@e2e.com', tenantId, status: 'ACTIVE' as const },
@@ -398,6 +439,15 @@ describe.skipIf(!gate.available)('Pay-Per-Call Real Database/Redis Integration T
 
   async function cleanDatabase() {
     const tables = [
+      // Phase 3. Ordered before `tenants` like everything else here; the
+      // ledger's append-only trigger does not fire on TRUNCATE.
+      'billing_notifications',
+      'delivery_hold_events',
+      'settlement_payment_attempts',
+      'application_credit_ledger',
+      'daily_settlements',
+      'agency_billing_profiles',
+      'agency_rating_states',
       'accrual_ledger',
       'buyer_transactions',
       'calls',

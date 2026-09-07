@@ -29,6 +29,7 @@
     "audit:accounts": "tsx src/cli/audit-account-provenance.ts",
     "platform:admins": "tsx src/cli/platform-admins.ts",
     "rating:run": "tsx src/cli/run-daily-rating.ts",
+    "settlement:run": "tsx src/cli/run-daily-settlement.ts",
     "recordings:backfill": "tsx src/cli/backfill-recordings.ts",
     "recordings:backfill:one": "tsx src/cli/backfill-recordings.ts --recording-id",
     "dnc:import": "tsx src/cli/import-dnc.ts",
@@ -57,6 +58,7 @@
     "@fastify/websocket": "^8.3.0",
     "@hopwhistle/routing-dsl": "workspace:*",
     "@hopwhistle/shared": "workspace:*",
+    "@hopwhistle/worker": "workspace:*",
     "@opentelemetry/api": "^1.8.0",
     "@opentelemetry/auto-instrumentations-node": "^0.67.0",
     "@opentelemetry/exporter-jaeger": "^1.25.1",
@@ -84,6 +86,7 @@
     "pino-pretty": "^10.3.1",
     "prom-client": "^15.1.0",
     "puppeteer": "^21.6.1",
+    "stripe": "^14.21.0",
     "zod": "^3.22.4"
   },
   "devDependencies": {

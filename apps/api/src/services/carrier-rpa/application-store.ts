@@ -177,7 +177,7 @@ export const markAutomationCompleted = async (
     select: { submittedAt: true },
   });
 
-  await prisma.insuranceCarrierApplication.update({
+  const application = await prisma.insuranceCarrierApplication.update({
     where: { id: applicationId },
     data: {
       carrierApplicationNumber,
@@ -189,7 +189,55 @@ export const markAutomationCompleted = async (
       // submission timestamp is not.
       submittedAt: existing?.submittedAt ?? now,
     },
+    select: { id: true, tenantId: true, submittedAt: true },
   });
+
+  /*
+   * The application has reached submitted state, so it costs one credit.
+   *
+   * ── Deliberately after the update, and deliberately not in a transaction ────
+   *
+   * The carrier has accepted the application by the time this runs. Wrapping
+   * the ledger write into the same transaction would let a ledger failure roll
+   * back a submission that has already happened at the carrier -- an
+   * application the agency made, that the closing percentage would never count,
+   * because our billing had a bad second.
+   *
+   * ── Deliberately swallowed ─────────────────────────────────────────────────
+   *
+   * A failure here must not fail the submission for the same reason. It is not
+   * lost money either: the ledger row is keyed on the application, and the
+   * settlement's reconciliation pass writes a row for every application
+   * submitted on the Delivery Day that does not have one yet, before it counts
+   * the day's overrun. So the worst case is that the credit is spent tonight
+   * rather than at the moment of submission.
+   *
+   * ── It costs one credit however many times this runs ───────────────────────
+   *
+   * A retried automation run calls this again with the same application id. The
+   * unique index on `application_credit_ledger("applicationId")` means the
+   * second call finds the existing row and writes nothing, exactly as
+   * `submittedAt` above is carried forward rather than replaced.
+   */
+  try {
+    const { consumeCreditForApplication } = await import('../billing/credit-ledger.js');
+    const { calendarDayOf } = await import('../rating/calendar-day.js');
+    await consumeCreditForApplication({
+      tenantId: application.tenantId,
+      applicationId: application.id,
+      // The Delivery Day the application is ATTRIBUTED to, which is the day of
+      // its first submission -- not today. A retry the next morning must not
+      // move an application onto a day it was not submitted on, for the same
+      // reason `submittedAt` is write-once.
+      deliveryDay: calendarDayOf(application.submittedAt ?? now),
+    });
+  } catch (error) {
+    console.error(
+      `[billing] Could not record a credit for application ${applicationId}; ` +
+        'the settlement reconciliation pass will record it.',
+      error
+    );
+  }
 };
 
 /**

@@ -53,4 +53,46 @@ describe.skipIf(!gate.available)('constraints db push cannot create', () => {
     expect(rows[0].indexdef).toMatch(/\(\s*"?leadId"?\s*\)/i);
     expect(rows[0].indexdef).toMatch(/WHERE\s*\(?\s*"releasedAt"\s+IS\s+NULL/i);
   });
+
+  /*
+   * Phase 3 puts three triggers in the same file, for the same reason: a
+   * trigger cannot be expressed in schema.prisma either, so `db push` builds a
+   * database without them and nothing says so.
+   *
+   * Their absence is exactly as silent as the missing index above, and far more
+   * expensive: without them an UPDATE can move a balance or rewrite what an
+   * agency was charged on a night, and the row would still read as the record.
+   */
+  it.each([
+    [
+      'application_credit_ledger_append_only',
+      'application_credit_ledger',
+      'the credit ledger would accept an UPDATE that moves a balance',
+    ],
+    [
+      'daily_settlements_figures_immutable',
+      'daily_settlements',
+      "a settled day's figures could be rewritten after the fact",
+    ],
+    [
+      'settlement_payment_attempts_append_only',
+      'settlement_payment_attempts',
+      'a payment attempt could be edited out of the history',
+    ],
+  ])('%s is installed on %s', async (trigger, table, consequence) => {
+    const rows = await prisma.$queryRawUnsafe<Array<{ tgname: string }>>(
+      `SELECT t.tgname
+         FROM pg_trigger t
+         JOIN pg_class c ON c.oid = t.tgrelid
+        WHERE NOT t.tgisinternal
+          AND c.relname = '${table}'
+          AND t.tgname = '${trigger}'`
+    );
+
+    expect(
+      rows,
+      'Run `pnpm --filter @hopwhistle/api db:constraints` after `prisma db push`. ' +
+        `Without this trigger, ${consequence}.`
+    ).toHaveLength(1);
+  });
 });

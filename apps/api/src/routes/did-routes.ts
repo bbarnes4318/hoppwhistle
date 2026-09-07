@@ -16,6 +16,21 @@
  * documented assumption that they were reachable only from the internal
  * network -- which was a deployment assumption rather than an enforced one, and
  * they are reachable through nginx.
+ *
+ * ── Delivery gating (Phase 3) ────────────────────────────────────────────────
+ *
+ * `GET /api/v1/freeswitch/lookup` is the decision that hands a call to an
+ * agency's agent, so it is one of the paths gated on the agency's balance and
+ * Overrun ceiling. Both branches of it are gated -- the Redis RTB lease and the
+ * `DidRoute` lookup -- because both end in a destination FreeSWITCH bridges to.
+ *
+ * A refusal answers `reject: true`, which the Lua script already understands
+ * and which hangs the call up BEFORE answering. That matters for the
+ * measurement: a refused call never gets an `answeredAt`, so it never enters
+ * the delivered-call denominator, which is correct -- we did not deliver it.
+ *
+ * The CDR webhook below is deliberately NOT gated. It records a call that has
+ * already happened.
  */
 
 import { Prisma } from '@prisma/client';
@@ -25,6 +40,7 @@ import { deriveTerminationParty, normalizeHangupCause } from '../lib/hangup-caus
 import { requireInternalKey } from '../lib/internal-auth.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { sanitizeDestinationString } from '../lib/route-destination.js';
+import { isDeliveryAllowed } from '../services/billing/delivery-gate.js';
 import { getInboundCarrierChain, gatewayFromChannelName, recordGatewayOutcome } from '../services/carrier-routing.js';
 import { recordBlockedCall } from '../services/blocked-call.js';
 import { numberPoolService } from '../services/number-pool-service.js';
@@ -423,6 +439,29 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
     }
 
     if (routeInfo) {
+      /*
+       * Delivery gating, RTB branch.
+       *
+       * The lease already names the agency, so the gate is asked before the
+       * destination is handed over. Refusing here rather than after the bridge
+       * is the difference between a call that was never delivered and a call
+       * that was delivered and then cut off.
+       */
+      if (routeInfo.tenant_id) {
+        const gate = await isDeliveryAllowed(routeInfo.tenant_id);
+        if (!gate.allowed) {
+          console.warn(
+            `[FS-LOOKUP] Delivery held for tenant ${routeInfo.tenant_id} on DID ${foundDid}: ${gate.reason ?? 'unknown'}`
+          );
+          return reply.send({
+            reject: true,
+            reason: 'DELIVERY_PAUSED',
+            deliveryHoldReason: gate.reason,
+            message: gate.detail ?? 'Delivery is paused for this agency',
+          });
+        }
+      }
+
       // Resolve recordingEnabled unless disabled by campaign/tenant
       let recordingEnabled = true;
       if (routeInfo.campaign_id) {
@@ -485,6 +524,26 @@ export async function registerDidRouteRoutes(server: FastifyInstance) {
     if (!route) {
       console.log(`[FS-LOOKUP] No route for DID: ${normalizedDid}`);
       return reply.code(404).send({ error: 'no_route', did: normalizedDid });
+    }
+
+    /*
+     * Delivery gating, DidRoute branch.
+     *
+     * Before buyer selection, not after: selection reaches into campaign
+     * configuration and a fallback that rings every extension on the campaign,
+     * and an agency at its Overrun ceiling should not have any of that happen.
+     */
+    const gate = await isDeliveryAllowed(route.tenantId);
+    if (!gate.allowed) {
+      console.warn(
+        `[FS-LOOKUP] Delivery held for tenant ${route.tenantId} on DID ${normalizedDid}: ${gate.reason ?? 'unknown'}`
+      );
+      return reply.send({
+        reject: true,
+        reason: 'DELIVERY_PAUSED',
+        deliveryHoldReason: gate.reason,
+        message: gate.detail ?? 'Delivery is paused for this agency',
+      });
     }
 
     let destination = route.destination;

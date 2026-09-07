@@ -74,6 +74,11 @@ model Tenant {
   ratingState              AgencyRatingState?
   rateChanges              RateChange[]
   ratingReviewFlags        RatingReviewFlag[]
+  billingProfile           AgencyBillingProfile?
+  creditLedger             ApplicationCreditLedgerEntry[]
+  dailySettlements         DailySettlement[]
+  deliveryHoldEvents       DeliveryHoldEvent[]
+  billingNotifications     BillingNotification[]
 
   @@index([slug])
   @@index([status])
@@ -1161,6 +1166,22 @@ model Call {
   // ============================================================================
   // Contractor Call Intelligence Fields
   // ============================================================================
+  /// Which of the agency's agents picked this call up.
+  ///
+  /// Written alongside `answeredAt` by the softphone answer handler, which
+  /// already knew the agent and recorded it only inside `metadata`. A JSON key
+  /// cannot be indexed usefully, and the agency principal's per-agent table --
+  /// calls taken, applications, closing percentage -- is read live at 450 calls
+  /// a day.
+  ///
+  /// It does NOT narrow the delivered-call definition. A delivered call is one
+  /// with `answeredAt` set, exactly as Phase 2 defined it; this column only
+  /// says which agent, and a row where it is null is still a delivered call and
+  /// still in the agency's denominator. The per-agent table shows those rows as
+  /// unattributed rather than dropping them, so its total reconciles with the
+  /// agency total.
+  answeredByUserId String?
+
   disposition      String? // Canonical: SET_APPOINTMENT, SET_CALLBACK, FOLLOW_UP, NOT_INTERESTED, NOT_QUALIFIED, NO_ANSWER, WRONG_NUMBER, DISCONNECTED
   dispositionNotes String? // Free-text agent notes on the call
   callSource       String? // CALL_CENTER | SOFTPHONE | AI_VOICE
@@ -1211,6 +1232,8 @@ model Call {
   /// Delivery is counted by `answeredAt`, not `createdAt` -- a call is
   /// delivered when an agent picks it up.
   @@index([tenantId, answeredAt])
+  /// The per-agent table the agency principal coaches from.
+  @@index([tenantId, answeredByUserId, answeredAt])
   @@map("calls")
 }
 
@@ -3516,8 +3539,11 @@ model PlatformActingTenant {
 
 /// Where an agency stands: how it is priced today, and why.
 enum AgencyRatingStatus {
-  /// No rating history yet. Priced at the curve version's introductory rate
-  /// for its first N submitted applications.
+  /// RETIRED IN PHASE 3. There is no introductory rate, so nothing puts an
+  /// agency into this state any more. An agency that carries it -- or that has
+  /// no state row at all -- has no opening agreement recorded, which means it
+  /// has no rate and is not delivered to. The member survives because removing
+  /// an enum value is a destructive migration and this project's are additive.
   INTRODUCTORY
 
   /// An opening rate and opening block were agreed instead of the
@@ -3583,12 +3609,21 @@ model RateCurveVersion {
   /// highest anchor. Not extrapolated: 15% and 20% pay the same.
   flatFromClosingPct Decimal @db.Decimal(6, 3)
 
-  /// The opening package for an agency with no rating history: a flat rate for
-  /// its first `introductoryApplications` submitted applications. Deliberately
-  /// NOT an anchor point -- it is a commercial offer, not a point on the
-  /// curve, and it moves independently of the curve's shape.
-  introductoryRate         Decimal @db.Decimal(10, 2)
-  introductoryApplications Int
+  /// RETIRED IN PHASE 3. There is no introductory rate.
+  ///
+  /// An agency's opening rate and opening block are agreed before its first
+  /// Delivery Day and recorded per tenant (`AgencyBillingProfile` and
+  /// `AgencyRatingState.openingRate`); from the second Delivery Day the rate
+  /// curve governs. No code reads either column any more -- grep them.
+  ///
+  /// They are still here because the production database is migrated by piping
+  /// SQL into psql by hand and this project's migrations are additive only:
+  /// dropping a column is the one thing they must never do, since a column that
+  /// turns out to have been wanted cannot be un-dropped. Phase 3's migration
+  /// gives them defaults so a new curve version can be published without
+  /// supplying a number nobody uses.
+  introductoryRate         Decimal @default(0) @db.Decimal(10, 2)
+  introductoryApplications Int     @default(0)
 
   createdAt   DateTime @default(now())
   createdById String?
@@ -3693,7 +3728,8 @@ model AgencyRatingState {
   /// rather than a second row.
   lastRatedCalendarDay String?
 
-  /// Submitted applications consumed against the introductory package.
+  /// RETIRED IN PHASE 3, with `RateCurveVersion.introductoryRate`. Nothing
+  /// reads or writes it. Kept only because migrations here are additive only.
   introductoryApplicationsUsed Int @default(0)
 
   /// An agreed opening rate and block, which supersede the introductory
@@ -3806,4 +3842,427 @@ model RatingReviewFlag {
 
   @@index([tenantId, clearedAt])
   @@map("rating_review_flags")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Phase 3 — the ledger, overrun, delivery gating and daily settlement
+//
+// Phase 2 made the numbers correct. This is what charges money against them:
+// off-session ACH debits, against real bank accounts, with no refund path in
+// the product. There is no reversal, credit, rebate or make-good anywhere
+// below -- not a column, not an enum member, not a status.
+//
+// See docs/BILLING.md.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// What one row of the credit ledger records.
+///
+/// There is deliberately no REFUND, CREDIT, REVERSAL, ADJUSTMENT or CHARGEBACK
+/// member. A carrier's decision after an application is submitted never returns
+/// a credit, and the absence of the enum member is what makes that true rather
+/// than a policy someone has to remember.
+enum CreditLedgerEntryType {
+  /// A block of application credits bought for one Delivery Day, at one rate.
+  /// `quantity` is positive.
+  PURCHASE
+
+  /// One application that reached submitted state and spent one credit.
+  /// `quantity` is -1, always, and the row names both the application and the
+  /// purchase lot the credit came from.
+  CONSUMPTION
+
+  /// One application that reached submitted state beyond the Daily Block, with
+  /// no credit left to spend. `quantity` is 0 -- an overrun does not move the
+  /// balance, because there was no balance to move. It is billed that evening
+  /// at the rate the settlement derives, and the settlement row for its
+  /// Delivery Day is where that money is recorded.
+  OVERRUN
+}
+
+/// Where a settlement's single off-session debit stands.
+enum SettlementPaymentStatus {
+  /// Computed, not yet submitted to Stripe.
+  PENDING
+  /// Submitted and accepted. ACH settles over days; `SUCCEEDED` means Stripe
+  /// reported the payment intent succeeded.
+  SUCCEEDED
+  /// Stripe reported a failure. Delivery holds at the current paid balance and
+  /// the grace period starts.
+  FAILED
+  /// Nothing was charged because the computed total was zero -- no overrun, and
+  /// the next day's block fully covered by unused paid applications.
+  NOT_CHARGED
+  /// The computed total exceeded the agency's configured maximum daily debit.
+  /// Nothing was sent to Stripe. Platform admins are alerted and a human
+  /// decides. This is a halt, not a retry.
+  HALTED_MAX_DEBIT
+  /// The agency has no valid ACH mandate, so there is nothing to debit. Nothing
+  /// was sent to Stripe; delivery is already gated off for the same reason.
+  HALTED_NO_MANDATE
+}
+
+/// Why an ACH mandate is or is not usable for an off-session debit.
+enum AchMandateStatus {
+  /// No mandate has been recorded. No delivery.
+  NONE
+  /// A Stripe SetupIntent exists but micro-deposit or instant verification has
+  /// not completed. Not usable, so still no delivery.
+  PENDING_VERIFICATION
+  /// Verified and usable off-session.
+  ACTIVE
+  /// Stripe reported the payment method unusable, or a platform admin detached
+  /// it. No delivery.
+  REVOKED
+}
+
+/// Why delivery stopped. Every one of these is derived live by the delivery
+/// gate; the rows exist so the agency can be told which, so platform admins are
+/// notified once rather than once per call, and so the portal can say when.
+enum DeliveryHoldReason {
+  /// The Overrun ceiling for the Delivery Day was reached. Delivery resumes on
+  /// the next Delivery Day; a call already connected finishes normally.
+  CEILING_REACHED
+  /// The trailing-window closing percentage fell below the curve's minimum.
+  /// Only a platform admin clears this; the next day's numbers cannot.
+  BELOW_MINIMUM_CLOSING
+  /// A settlement is unpaid past its grace period, or unpaid at all.
+  SETTLEMENT_UNPAID
+  /// No valid ACH mandate.
+  NO_MANDATE
+  /// A platform admin suspended the account.
+  ADMIN_SUSPENDED
+  /// No opening rate and opening block have been agreed and recorded, so there
+  /// is no price and nothing has been bought.
+  NO_OPENING_AGREEMENT
+}
+
+/// Who a billing notification was for, and what it was about.
+enum BillingNotificationKind {
+  SETTLEMENT_FAILED
+  SETTLEMENT_UNPAID_GRACE_EXPIRED
+  MAX_DAILY_DEBIT_EXCEEDED
+  CEILING_REACHED
+  DELIVERY_PAUSED
+  MANDATE_MISSING
+  SETTLEMENT_RUN_FAILED
+}
+
+/// One agency's commercial terms and payment instrument.
+///
+/// Everything here is set by a platform admin or written by the server from a
+/// verified Stripe object. No figure on this row can be set from an agency's
+/// browser, because every one of them bounds what the agency can be charged.
+model AgencyBillingProfile {
+  id       String @id @default(uuid())
+  tenantId String @unique
+
+  /// The agency's configured daily target quantity: how many application
+  /// credits the nightly settlement sells for the next Delivery Day. Reduced or
+  /// omitted where unused paid applications remain.
+  dailyBlockApplications Int @default(0)
+
+  /// The maximum a single Delivery Day's debit may reach, in dollars. This is a
+  /// contractual commitment on the Insertion Order -- Daily Block plus Overrun
+  /// ceiling at the applicable rate -- not a guideline. A computed settlement
+  /// above it is not charged at all: it halts and alerts.
+  maxDailyDebit Decimal @db.Decimal(12, 2)
+
+  /// The Overrun ceiling, as a percentage above the Daily Block.
+  ///
+  /// 50% for an agency with fewer than `ceilingCleanSettlementThreshold`
+  /// consecutive settlements free of failed or unpaid debits, 100% at or beyond
+  /// it. Both configurable here, per tenant.
+  ceilingPctBelowThreshold        Decimal @default(50) @db.Decimal(6, 2)
+  ceilingPctAtThreshold           Decimal @default(100) @db.Decimal(6, 2)
+  ceilingCleanSettlementThreshold Int     @default(10)
+
+  /// A platform admin's override of the ceiling for this agency, as a
+  /// percentage above the Daily Block. Overrun is credit extended at
+  /// NetEnroll's discretion, so it can be reduced or withdrawn at any time:
+  /// 0 withdraws it entirely, and null means "use the schedule above".
+  ceilingPctOverride      Decimal?  @db.Decimal(6, 2)
+  ceilingOverrideByUserId String?
+  ceilingOverrideNote     String?
+  ceilingOverrideAt       DateTime?
+
+  /// Stripe. The customer is created once; the mandate is a us_bank_account
+  /// payment method saved against it, and its id is written here only after the
+  /// server has retrieved it from Stripe. A browser never asserts either.
+  stripeCustomerId     String?
+  achPaymentMethodId   String?
+  achMandateStatus     AchMandateStatus @default(NONE)
+  achMandateVerifiedAt DateTime?
+  achBankName          String?
+  achLast4             String?
+
+  /// A platform admin suspension. Paused is not terminated: paid applications
+  /// survive untouched and are available when delivery resumes.
+  suspendedAt       DateTime?
+  suspendedByUserId String?
+  suspensionReason  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("agency_billing_profiles")
+}
+
+/// The credit ledger. Append-only, per tenant, and the only source of a balance.
+///
+/// ── Balance is derived, never stored ─────────────────────────────────────────
+///
+/// `balance = SUM(quantity)` for the tenant. There is no counter column here or
+/// anywhere else, because a counter is wrong the first time a write is retried
+/// and it gates whether a call is delivered.
+///
+/// ── Two rows can never spend the same credit ─────────────────────────────────
+///
+/// A consumption claims a specific unit of a specific purchase lot:
+/// `(purchaseEntryId, lotIndex)` is unique. Two applications reaching submitted
+/// state at the same instant both compute the same next free index; the
+/// database admits one and rejects the other, which retries onto the next unit.
+/// That is a constraint, not a check-then-act, and it is what the concurrency
+/// test asserts.
+///
+/// ── An application spends at most one credit, ever ───────────────────────────
+///
+/// `applicationId` is unique across the whole table, so an application that
+/// reaches submitted state twice -- a retried automation run, a replayed
+/// completion -- has one row: either the credit it spent or the overrun it was
+/// recorded as, never both and never two.
+///
+/// ── Nothing here is ever updated or deleted ──────────────────────────────────
+///
+/// Enforced by a database trigger (see the migration), not by convention. A
+/// correction is a later row.
+model ApplicationCreditLedgerEntry {
+  id        String                @id @default(uuid())
+  tenantId  String
+  entryType CreditLedgerEntryType
+
+  /// +N for a purchase, -1 for a consumption, 0 for an overrun. Summing this
+  /// column for a tenant is the balance, and is the only way to get one.
+  quantity Int
+
+  /// The Delivery Day this row belongs to (`YYYY-MM-DD`, America/New_York).
+  /// For a purchase, the day the block was bought FOR. For a consumption or an
+  /// overrun, the day the application was submitted on.
+  deliveryDay String
+
+  /// Dollars per application.
+  ///
+  /// On a purchase, the price actually paid. On a consumption, copied from the
+  /// purchase lot the credit came from, so the row values itself without a
+  /// join. Null on an overrun, and only on an overrun: an overrun is priced
+  /// that evening at the rate the settlement derives, and the settlement row
+  /// for its Delivery Day carries that rate, the quantity and the amount.
+  unitRate Decimal? @db.Decimal(10, 2)
+
+  /// quantity * unitRate for a purchase, so the row reconstructs its own value.
+  amount Decimal? @db.Decimal(12, 2)
+
+  /// The curve version that priced a purchase, denormalised so the row is
+  /// readable without a join and still correct after a new version is published.
+  curveVersionId String?
+  curveVersion   Int?
+
+  /// The application this row is about. Set on CONSUMPTION and OVERRUN, null on
+  /// PURCHASE. Unique across the table.
+  applicationId String?
+
+  /// CONSUMPTION only: the purchase lot the credit came from, and which unit of
+  /// it. Oldest lot first, so credits spanning purchases at different rates are
+  /// consumed in the order they were bought.
+  purchaseEntryId String?
+  lotIndex        Int?
+
+  /// PURCHASE only. The Stripe payment reference the block was bought with, and
+  /// the settlement that sold it. The opening purchase has a payment reference
+  /// and no settlement.
+  stripePaymentIntentId String?
+  settlementId          String?
+
+  createdAt DateTime @default(now())
+
+  tenant       Tenant                         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  purchase     ApplicationCreditLedgerEntry?  @relation("CreditLot", fields: [purchaseEntryId], references: [id])
+  consumptions ApplicationCreditLedgerEntry[] @relation("CreditLot")
+  settlement   DailySettlement?               @relation(fields: [settlementId], references: [id])
+
+  /// One row per application, whatever its type. This is what makes an
+  /// application that reaches submitted state twice cost exactly one credit.
+  @@unique([applicationId])
+  /// One consumption per unit of a purchase lot. This is what makes two
+  /// simultaneous consumptions spend two different credits.
+  @@unique([purchaseEntryId, lotIndex])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, entryType, createdAt])
+  @@index([tenantId, deliveryDay])
+  @@index([settlementId])
+  @@map("application_credit_ledger")
+}
+
+/// One Delivery Day's settlement for one agency. Immutable.
+///
+/// Every figure that prices the day is written once, inside the transaction
+/// that writes the row, and a database trigger refuses any update that would
+/// change one. The only fields that advance afterwards are the payment
+/// lifecycle, and every transition of those is also appended to
+/// `settlement_payment_attempts`, so the history reads from rows rather than
+/// from a log.
+///
+/// `(tenantId, deliveryDay)` is unique. That is the idempotency, and it is a
+/// constraint rather than a check-then-act: running the job twice for the same
+/// tenant and day cannot double charge, cannot sell a second block, and cannot
+/// re-apply a rate, because the second insert fails.
+model DailySettlement {
+  id          String @id @default(uuid())
+  tenantId    String
+  /// The Delivery Day that closed (`YYYY-MM-DD`, America/New_York).
+  deliveryDay String
+
+  /// Step 1: the day's counts.
+  deliveredCalls        Int
+  submittedApplications Int
+
+  /// Step 2: the trailing window and the rate the curve returned for it. The
+  /// same rate applies to the next Delivery Day and prices tonight's overrun.
+  windowClosingPct   Decimal? @db.Decimal(9, 6)
+  windowDeliveryDays Int
+  windowDaysFound    Int
+  windowDayKeys      String[]
+  rate               Decimal? @db.Decimal(10, 2)
+  curveVersionId     String?
+  curveVersion       Int?
+  /// The `rate_changes` row this settlement priced from, so the two records
+  /// point at each other and a dispute resolves against one chain.
+  rateChangeId       String?
+
+  /// Step 3: today's overrun, billed at that rate.
+  overrunQuantity Int     @default(0)
+  overrunAmount   Decimal @default(0) @db.Decimal(12, 2)
+
+  /// Step 4: the next Delivery Day's block, at that rate, in the agency's
+  /// configured daily target quantity, reduced by whatever paid applications
+  /// remain unused.
+  configuredBlockQuantity Int     @default(0)
+  unusedPaidApplications  Int     @default(0)
+  nextBlockQuantity       Int     @default(0)
+  nextBlockAmount         Decimal @default(0) @db.Decimal(12, 2)
+
+  /// Step 5: the single off-session debit.
+  totalCharged  Decimal @default(0) @db.Decimal(12, 2)
+  /// The agency's configured maximum daily debit as it stood tonight, copied so
+  /// the halt decision is reconstructable from this row alone.
+  maxDailyDebit Decimal @db.Decimal(12, 2)
+
+  paymentStatus         SettlementPaymentStatus @default(PENDING)
+  stripePaymentIntentId String?
+  paymentFailureCode    String?
+  paymentFailureMessage String?
+  paidAt                DateTime?
+
+  /// The last Business Day -- weekdays excluding US federal holidays, not
+  /// Delivery Days -- on which an unpaid settlement may still be paid before
+  /// delivery stops entirely. Five Business Days from the first failure.
+  gracePeriodEndsOn String?
+
+  computedAt DateTime @default(now())
+
+  tenant    Tenant                         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  purchases ApplicationCreditLedgerEntry[]
+  attempts  SettlementPaymentAttempt[]
+
+  /// The idempotency constraint. One settlement per agency per Delivery Day.
+  @@unique([tenantId, deliveryDay])
+  @@index([tenantId, deliveryDay])
+  @@index([paymentStatus])
+  @@map("daily_settlements")
+}
+
+/// One attempt at a settlement's debit. Append-only.
+///
+/// ACH retries are scheduled on Stripe's own timetable rather than on one of
+/// ours, so what matters here is that every attempt and every outcome is a row:
+/// the settlement's current payment status is the latest of these, and an
+/// agency disputing a charge is answered from the attempts, not from a log line.
+model SettlementPaymentAttempt {
+  id            String @id @default(uuid())
+  settlementId  String
+  /// 1 for the first attempt, then 2, 3 ... for each retry.
+  attemptNumber Int
+
+  status                SettlementPaymentStatus
+  amount                Decimal                 @db.Decimal(12, 2)
+  stripePaymentIntentId String?
+  failureCode           String?
+  failureMessage        String?
+  occurredAt            DateTime                @default(now())
+
+  settlement DailySettlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+
+  @@unique([settlementId, attemptNumber])
+  @@index([settlementId])
+  @@map("settlement_payment_attempts")
+}
+
+/// A recorded transition of the delivery gate. Append-only.
+///
+/// The gate itself is derived live on every delivery decision -- a stored flag
+/// would be stale the moment a settlement failed or a credit was spent. These
+/// rows exist so the agency portal can say WHEN delivery stopped and why, and
+/// so platform admins are notified once per Delivery Day per reason rather than
+/// once per refused call.
+model DeliveryHoldEvent {
+  id          String             @id @default(uuid())
+  tenantId    String
+  deliveryDay String
+  reason      DeliveryHoldReason
+
+  detail     Json?
+  occurredAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  /// One row per agency per Delivery Day per reason. Also the notification
+  /// de-duplication: the insert either wins and sends, or loses and does not.
+  @@unique([tenantId, deliveryDay, reason])
+  @@index([tenantId, occurredAt])
+  @@map("delivery_hold_events")
+}
+
+/// A notification that was sent, or that we tried to send. Append-only.
+///
+/// The row is the record. Email and Slack are best-effort transports on top of
+/// it, so "the agency and platform admins were notified" is answerable from the
+/// database even when a transport was down.
+model BillingNotification {
+  id       String                  @id @default(uuid())
+  tenantId String
+  kind     BillingNotificationKind
+
+  /// Who it was addressed to: the agency, NetEnroll platform staff, or both.
+  toAgency   Boolean @default(false)
+  toPlatform Boolean @default(false)
+
+  subject String
+  body    String
+  detail  Json?
+
+  /// Which transports actually accepted it. Empty means the row is the only
+  /// record, which is still a record.
+  sentVia String[]
+
+  /// What this is about, so a repeat for the same event is not sent twice.
+  subjectKey String
+
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, kind, subjectKey])
+  @@index([tenantId, createdAt])
+  @@map("billing_notifications")
 }

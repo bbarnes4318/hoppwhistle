@@ -34,6 +34,19 @@
  * version that priced it. A change to the anchor points therefore cannot alter
  * a rate already applied: the old version still exists and still resolves. This
  * module never reads "the current curve" on its own -- it is always handed one.
+ *
+ * ── There is no introductory rate ────────────────────────────────────────────
+ *
+ * Phase 2 carried an introductory package on the curve: a flat price for an
+ * agency's first five submitted applications. Phase 3 removed it. An agency's
+ * opening rate and opening block are agreed before its first Delivery Day and
+ * recorded per tenant, and from the second Delivery Day the curve governs --
+ * so there is no "first N applications" anywhere in the pricing, and no
+ * lifetime count of applications is read to decide a price.
+ *
+ * `rate_curve_versions.introductoryRate` and `.introductoryApplications` still
+ * exist as columns because migrations against the production database are
+ * additive and never drop, but nothing in this codebase reads them. Grep.
  */
 
 import { Prisma } from '@prisma/client';
@@ -54,8 +67,6 @@ export interface RateCurve {
   minimumClosingPct: number;
   /** At and above this, flat at the highest anchor. */
   flatFromClosingPct: number;
-  introductoryRate: number;
-  introductoryApplications: number;
   /** Sorted ascending by `closingPct`. */
   anchors: CurveAnchor[];
 }
@@ -84,8 +95,6 @@ export function toRateCurve(row: {
   version: number;
   minimumClosingPct: Numeric;
   flatFromClosingPct: Numeric;
-  introductoryRate: Numeric;
-  introductoryApplications: number;
   anchors: Array<{ closingPct: Numeric; rate: Numeric }>;
 }): RateCurve {
   return {
@@ -93,8 +102,6 @@ export function toRateCurve(row: {
     version: row.version,
     minimumClosingPct: toNumber(row.minimumClosingPct),
     flatFromClosingPct: toNumber(row.flatFromClosingPct),
-    introductoryRate: toNumber(row.introductoryRate),
-    introductoryApplications: row.introductoryApplications,
     anchors: row.anchors
       .map(a => ({ closingPct: toNumber(a.closingPct), rate: toNumber(a.rate) }))
       .sort((a, b) => a.closingPct - b.closingPct),
