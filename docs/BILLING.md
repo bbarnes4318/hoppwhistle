@@ -1197,7 +1197,8 @@ An agency OWNER is refused every one of them.
 
 ### The agency principal — `/delivery`
 
-Live, refreshed every thirty seconds. Calls routed and calls answered; today's
+Live, refreshed every thirty seconds **while somebody is looking at it**. Calls
+routed, calls answered, and the calls connected right now; today's
 applications, split into those on the block and those in overrun; **today's
 closing percentage and the trailing-window figure, in separate cards, each
 labelled with what it does**; applications remaining on the block; overrun so far
@@ -1217,12 +1218,41 @@ provisional.
 When delivery is paused the page says so, says why, says when it stopped, and
 says how many paid applications are waiting.
 
+**An unenrolled agency sees the operational figures and nothing about money.**
+Calls answered, calls in progress, applications and today's closing percentage
+are all true whether or not an agency is in the billing system, and a floor
+still needs them. Every billing figure is absent rather than zero — an agency
+told it has 0 applications remaining on its block would reasonably conclude its
+phones are about to stop.
+
+**The panel polls only while it is being read.** A hidden tab stops entirely and
+refreshes the moment it comes back, and the interval is jittered by ±15%. At 45
+licensed agents with the principal, the floor leads and a wall display all on
+this page, that is the difference between load that scales with tabs open and
+load that scales with tabs being looked at. See `useLivePoll`; the scheduler
+underneath it is plain TypeScript so the behaviour is tested directly.
+
 ### The per-agent table — same page
 
-Calls taken, applications, closing percentage, talk time, availability and
-current status, sortable on every numeric column and sorted by closing
-percentage by default. This is the screen a principal decides who needs coaching
-from.
+Calls taken, applications, closing percentage, talk time, **time on the queue**,
+occupancy and current status, sortable on every numeric column.
+
+**Sorted by closing percentage ascending**, so the agents dragging the agency's
+rate are at the top. It sorted descending until Phase 4, which is a leaderboard
+on a screen that exists as a work list: this is where a principal decides who to
+coach or pull off the queue, and burying them under the top performers is the
+opposite of what the table is for.
+
+**The agency's own closing percentage is served with the rows** and shown as the
+reference line each agent is read against, with each agent's figure coloured for
+above or below it. It is not summed from the rows in the browser: the agency
+figure counts delivered calls no agent is attributed on, so a client-side sum
+would be a different number from the one the agency's price is set from.
+
+This table is the product's real lever. An agency that pulls its two worst
+closers off the queue raises its blended closing percentage, which lowers its
+rate and cuts the calls we spend per application. Both sides win, and this is
+what makes it visible.
 
 Calls are attributed by `answeredByUserId`, a column added in this phase and
 backfilled from the metadata key the answer handler has always written. A
@@ -1231,9 +1261,22 @@ delivered call can still have no agent on it, and those rows appear as a single
 loses ten percent of the day is a table somebody makes a coaching decision from.
 The test asserts the rows sum to the agency total.
 
-Availability is talk time as a share of the agent's recorded working hours, from
+Occupancy is talk time as a share of the agent's recorded working hours, from
 the payroll time entry for the day. When hours were not recorded it is an em
 dash, never 0%.
+
+**Time on the queue** is a different figure and answers a different question:
+how much of the day the agent was in the `available` state, waiting for a call.
+A 4% closer who was available for six hours and one who was available for forty
+minutes are different problems, and a principal choosing between those two
+people needs to see which is which.
+
+It comes from `agent_state_events`, appended on every softphone status change
+(§7b). Presence was Redis-only before Phase 4 — one key per agent, overwritten
+on every change — so nothing accumulated and this question had no answer at all.
+A day with no transitions recorded reports an **em dash, not zero**: there is no
+backfill and there cannot be one, and a day nobody measured is not a day
+somebody spent off the queue.
 
 ### Settlement history — `/delivery/settlements`
 
@@ -1241,11 +1284,44 @@ One row per settled Delivery Day carrying every figure from the settlement
 record, and the same columns as CSV. Nothing is summarised away and nothing is
 recomputed in the browser.
 
+Each row also carries the **outcome** in one word — charged, not charged,
+nothing due, halted, declined, in flight — because "were we charged for this
+day" is the shorter question, and the payment status beside it answers the same
+thing in the vocabulary of a payment attempt.
+
+#### A row expands to how its rate was derived
+
+`GET /api/v1/delivery/settlements/:id/derivation`. This is what an agency
+disputing a charge is shown, and it has to be **checkable** rather than merely
+asserted: a panel that reprints the stored rate proves nothing.
+
+So it does two things side by side. It reports what the settlement STORES, which
+is what was charged and is immutable. And it RE-MEASURES the Delivery Days the
+window named, one row per day with its calls and applications, sums them, and
+prices the result against the curve version **the settlement itself names** —
+never whichever curve is active now, because pricing a six-week-old settlement
+against today's curve produces a confident, wrong number on the one screen whose
+purpose is to be trusted. It names the two curve anchors the percentage was
+interpolated between, so the arithmetic reads rather than being asserted.
+
+When the recomputation does not land on the stored rate, it **says so**. That is
+not necessarily a defect: a call deleted or an application submitted late
+changes what a re-measurement finds today, and the stored figures remain what
+was charged. A disagreement is exactly what somebody checking a charge needs to
+see, and hiding it would turn the panel back into a restatement.
+
+The route is scoped by tenant inside the query, so one agency asking for
+another's settlement id gets a 404 — the answer that leaks nothing about whether
+it exists.
+
 Both exports — the agency's own `GET /api/v1/delivery/settlements.csv` and the
 cross-agency `GET /api/v1/platform/delivery/settlements.csv` (§0b) — share one
 column list and one row builder, so an agency and a platform admin cannot be
-looking at differently shaped versions of the same day. The platform one adds
-`agency` and `tenant_id` in front and takes `from`, `to`, `mode` and `tenantId`.
+looking at differently shaped versions of the same day. Both take an inclusive
+`from`/`to` Delivery Day range; the platform one adds `agency` and `tenant_id`
+in front and also takes `mode` and `tenantId`. A malformed date is a 400 on
+both rather than being ignored — an export that quietly widened its own range is
+one somebody reconciles from.
 
 Both guard cells beginning `=`, `+`, `-` or `@` so a spreadsheet does not
 evaluate them.
@@ -1261,11 +1337,37 @@ response and asserts the words are not in it.
 ### Platform admin, cross-agency — `/admin/agencies`
 
 Per agency for one Delivery Day: calls, applications, closing percentage, rate,
-revenue, call cost, margin, revenue per call and cost per call. Flags needing
-action — below 5% and paused, at ceiling, failed or unpaid settlement, no valid
-mandate, suspended — with flagged agencies sorted to the top. Settlement run
-status per agency: settled, failed, or not yet run. And a button to run the
-settlement, which is safe to press twice.
+revenue, call cost, margin, revenue per call and cost per call.
+
+**Margin per agency is the number that says whether an account is worth
+running**, and **revenue per call rises with closing percentage even as the rate
+falls** — that is the whole economics of the curve, so both are columns rather
+than something to infer from the others.
+
+Flags needing action — below 5% and paused, at ceiling, failed or unpaid
+settlement, no valid mandate, suspended, and enrolled-but-never-settled — with
+flagged agencies sorted to the top. **Each flag opens that agency's own
+controls**, so a badge is a place to act rather than only a place to look.
+
+`enrolledNeverSettled` is the quiet one: an agency enrolled days ago with
+nothing in `daily_settlements` is a nightly run that is not reaching it, and it
+is invisible in every other column because they all read a settlement that does
+not exist and render an em dash that looks like a quiet day.
+
+Settlement run status per agency: settled, dry run, **halted**, failed, or not
+yet run. A halt is deliberately not called a failure — the run worked and
+withheld the debit because the total breached the maximum daily debit or the
+mandate was gone, and the response is to explain the day rather than to retry a
+payment.
+
+Enrolment controls live here too: enrol, un-enrol, suspend, resume, and
+withdrawing or restoring the Overrun ceiling. A refused enrolment names every
+missing precondition. Each of them writes an `AuditLog` row server-side, and the
+routes are platform-gated there rather than by the page rendering them. Turning
+**charging** on is not one of them: it retires the dry run's credits (§0c) and
+belongs in the go-live runbook (§0d), not on a table row.
+
+And a button to run the settlement, which is safe to press twice.
 
 Every figure is computed per agency. There is no pooled cross-tenant aggregate
 anywhere on it.
@@ -1285,6 +1387,42 @@ the caller — the same shape as `quotas.ts`. Authority comes from the capabilit
 `settlement.test.ts` asserts an agency sees no other agency's settlements, is
 refused the cross-agency view, is refused the settlement run, and cannot raise
 its own ceiling.
+
+---
+
+## 7b. Time on the queue — `agent_state_events`
+
+One row per softphone status change: the agent, the state, and when. Time in a
+state is the span from one row to the next.
+
+**Why a log and not a column.** Redis holds each agent's CURRENT status, read on
+every routing decision. It answers "what is this agent doing now" and cannot
+answer "how long were they available today", because each write overwrites the
+last and nothing accumulates. The per-agent table needs the second question
+answered, so the transition is appended here as well.
+
+Redis stays the source of truth for the current status. This table is written
+beside it and read only by the portal.
+
+**It never fails a status change.** The write is best-effort and swallowed on
+error. An agent going available must not depend on this table being reachable:
+the cost of a failed write is a gap in a reporting figure, and the cost of a
+thrown one is an agent who cannot take calls.
+
+**Reading it is a span calculation**, and two parts of it are easy to get wrong:
+
+- The state in force at the START of a day was set by the last row BEFORE it,
+  which may be days earlier — an agent who went available on Friday evening and
+  never signed out is available at midnight. The read looks back past the day's
+  own rows for that one carried row.
+- The final span runs to **now** on today, and to the end of the day on a past
+  one. Running today's open span to midnight would report an agent as available
+  for hours they have not worked yet.
+
+**There is no backfill and there cannot be one.** Nothing recorded these
+transitions before the table existed, so days before deploy have no rows and
+report an em dash rather than zero seconds. An agent who was on the queue all
+day and a day nobody measured are different facts.
 
 ---
 
@@ -1363,6 +1501,13 @@ because that statement is not permitted inside one before PostgreSQL 12 and on
 12+ the new value cannot be used in the transaction that adds it. It **enrols nobody** — there is no `UPDATE` setting an enrolment
 anywhere in the file. Verified the same way: applied twice as a no-op, applied
 from scratch, and `prisma migrate diff` reports no difference.
+
+`20260912000000_add_agent_state_events/migration.sql` adds the state log above,
+on the same terms: additive, idempotent, drops nothing, plain SQL for psql. One
+table, two indexes and a foreign key, each guarded with `IF NOT EXISTS` or a
+`DO` block. Verified the same way: applied twice as a no-op, applied from
+scratch against a database with the table dropped, and `prisma migrate diff`
+reports no difference.
 
 **Nothing was added to the deploy path.** In particular no
 `prisma migrate deploy`: against an empty migration history it would try to
@@ -1456,6 +1601,30 @@ or unknown mode is a 400 rather than the whole table; an agency principal gets
 On the settlement command's flags: `--dry-run` and `--no-charge` exit `2` having
 printed what replaced them and run nothing, `--plan-only` says it is writing
 nothing, and `--settle-without-charge` announces itself before it settles.
+
+`portal.test.ts` covers Phase 4: an unenrolled agency gets its operational
+figures and no money figure at all; both closing percentages are present, under
+separate names, and genuinely different numbers; calls in progress is this
+instant and not the day's total; the per-agent table puts the worst closers
+first, carries the agency's own figure, and keeps agents with no calls at the
+bottom; time on the queue counts a state carried in from yesterday, never runs
+an open span past now, and reports absent rather than zero when nothing was
+recorded; an agent sees their own row with no other agent's id, name or figures
+and no money vocabulary at all; a settlement expands to per-day counts that sum
+and reprice to the rate stored on it, against the curve version it names even
+after a new one is published; one agency asking for another's derivation gets a
+404; the agency export honours a date range and refuses a malformed one; an
+agency principal is refused the cross-agency view without leaking another
+agency's id; a platform admin with no acting tenant is served it without a 401;
+an enrolled agency that has never been settled is flagged; an unenrolled one
+carries no flags; a halt is reported as halted rather than failed; and revenue
+per call rises with closing percentage as the rate falls.
+
+`use-live-poll.test.ts` covers the portal's polling against the real scheduler
+with fake timers: a hidden tab does no work, its loop stays alive so it resumes
+without an event, a returning tab refreshes immediately, a slow response never
+queues a second request, a stopped poller stays stopped, a throwing loader still
+settles, and the jitter stays within ±15% while actually varying.
 
 Also asserted: the ledger refuses `UPDATE` and `DELETE`; a settlement's figures
 refuse to change; oldest-lot-first across two rates; the Insertion Order figures

@@ -399,6 +399,15 @@ and what it will cost tonight, the distance to the ceiling and the per-agent
 closing percentages — and `/delivery/settlements`, the immutable record of what
 was actually charged. See `docs/BILLING.md` §6.
 
+Phase 4 makes a settlement row on that page **expand to how its rate was
+derived**: the Delivery Days the trailing window covered with each day's call
+and application counts, the totals they sum to, and the rate this module's own
+`rateFor()` returns for that percentage — priced against the curve version the
+settlement names rather than whichever is active now. It is the rating engine's
+arithmetic shown back to the agency it was applied to, and when the
+recomputation does not land on the stored rate the page says so rather than
+hiding it. See `docs/BILLING.md` §6.
+
 **No route accepts a rate, a price or a computed amount from the browser.** The
 two places a number arrives from a caller are both platform-only and are inputs
 to the pricing rather than assertions about it: the anchor points of a new curve

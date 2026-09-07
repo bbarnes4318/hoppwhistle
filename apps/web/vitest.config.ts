@@ -27,6 +27,9 @@ export default defineConfig({
       // The login loop: a platform admin with no acting tenant must not be
       // treated as signed out. This one cost production access.
       'src/lib/__tests__/**/*.test.ts',
+      // The delivery portal's polling: a floor of 45 agents leaves this open
+      // all day, and a hidden tab must cost nothing.
+      'src/hooks/__tests__/**/*.test.ts',
     ],
   },
 });

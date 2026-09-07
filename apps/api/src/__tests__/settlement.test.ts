@@ -2397,17 +2397,26 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
       const { getAgentBreakdown } = await import('../services/billing/delivery-view.js');
       const { agents } = await getAgentBreakdown(big.id, { prisma, day: CLOSED_DAY });
 
-      // Sorted by closing percentage, best first.
-      expect(agents[0].name).toBe('Alice Nguyen');
-      expect(agents[0].closingPct).toBeCloseTo(30, 5);
-      expect(agents[0].talkTimeSeconds).toBe(3000);
-      expect(agents[1].name).toBe('Bob Ortiz');
-      expect(agents[1].closingPct).toBeCloseTo(10, 5);
+      /*
+       * Sorted by closing percentage ASCENDING, weakest first. Phase 4 flipped
+       * this: it used to lead with the best closer, which is a leaderboard on a
+       * screen whose purpose is deciding who to coach or pull off the queue.
+       */
+      expect(agents[0].name).toBe('Bob Ortiz');
+      expect(agents[0].closingPct).toBeCloseTo(10, 5);
+      expect(agents[1].name).toBe('Alice Nguyen');
+      expect(agents[1].closingPct).toBeCloseTo(30, 5);
+      expect(agents[1].talkTimeSeconds).toBe(3000);
 
-      // The unattributed calls are shown, not dropped: the table's total has to
-      // reconcile with the agency total.
+      /*
+       * The unattributed calls are shown, not dropped: the table's total has to
+       * reconcile with the agency total. But they are held at the BOTTOM. That
+       * row closes at 0% and would otherwise lead an ascending table -- and it
+       * is not a person, so nobody can be coached about it.
+       */
       const unattributed = agents.find(a => a.userId === null);
       expect(unattributed?.callsTaken).toBe(2);
+      expect(agents[agents.length - 1].userId).toBeNull();
       expect(agents.reduce((sum, a) => sum + a.callsTaken, 0)).toBe(22);
 
       // Hours were never recorded, so occupancy is null rather than 0%.

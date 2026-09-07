@@ -65,6 +65,7 @@ import {
 import {
   getAgentBreakdown,
   getAgentSelfView,
+  getSettlementDerivation,
   getDeliveryToday,
   getPlatformOverview,
 } from '../services/billing/delivery-view.js';
@@ -194,31 +195,95 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
   );
 
   /**
-   * GET /api/v1/delivery/settlements.csv
+   * GET /api/v1/delivery/settlements/:settlementId/derivation
+   *
+   * How one settlement's rate was arrived at: the Delivery Days the trailing
+   * window covered, each day's call and application counts, the totals they sum
+   * to, and the rate the curve version named on the settlement returns for that
+   * percentage.
+   *
+   * This is what an agency disputing a charge is shown. It reports the stored
+   * figures AND re-measures the window, then says whether the two agree -- a
+   * page that only re-prints the stored rate proves nothing. The curve is
+   * loaded by the settlement's own `curveVersionId`, never by whichever curve
+   * is active now.
+   *
+   * Scoped by tenant inside the query, so an agency cannot read another
+   * agency's settlement by guessing an id.
+   */
+  fastify.get<{ Params: { settlementId: string } }>(
+    '/api/v1/delivery/settlements/:settlementId/derivation',
+    { preHandler: [authenticate] },
+    async (request, reply) => {
+      const tenantId = resolveTenant(request, reply);
+      if (!tenantId) return;
+
+      const derivation = await getSettlementDerivation(
+        tenantId,
+        request.params.settlementId,
+        { prisma }
+      );
+
+      if (!derivation) {
+        return reply
+          .code(404)
+          .send({ error: { code: 'NOT_FOUND', message: 'No such settlement for this agency' } });
+      }
+
+      return reply.send({ data: derivation });
+    }
+  );
+
+  /**
+   * GET /api/v1/delivery/settlements.csv?from=&to=
    *
    * The same rows, as a file. Every figure from the record, one row per settled
    * Delivery Day, so a finance team can reconcile without reading a screen.
+   *
+   * `from` and `to` are inclusive Delivery Days. Omitting both exports
+   * everything, which is what a finance team reconciling a first month wants;
+   * a malformed one is refused rather than silently ignored, because an export
+   * that quietly widened its own range is one somebody invoices from.
    */
-  fastify.get(
+  fastify.get<{ Querystring: { from?: string; to?: string } }>(
     '/api/v1/delivery/settlements.csv',
     { preHandler: [authenticate] },
     async (request, reply) => {
       const tenantId = resolveTenant(request, reply);
       if (!tenantId) return;
 
+      const { from, to } = request.query;
+      for (const [name, value] of [
+        ['from', from],
+        ['to', to],
+      ] as const) {
+        if (value !== undefined && !DAY_PATTERN.test(value)) {
+          return reply.code(400).send({
+            error: { code: 'VALIDATION_ERROR', message: `${name} must be YYYY-MM-DD` },
+          });
+        }
+      }
+
       const rows = await prisma.dailySettlement.findMany({
-        where: { tenantId },
+        where: {
+          tenantId,
+          ...(from || to
+            ? { deliveryDay: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } }
+            : {}),
+        },
         orderBy: { deliveryDay: 'desc' },
       });
 
       const body = rows.map(row => settlementCsvRow(row).map(csvCell).join(','));
 
+      // `from` and `to` are pattern-checked above, so nothing but YYYY-MM-DD
+      // reaches the header.
+      const filename = `settlements-${from ?? 'start'}-to-${to ?? 'today'}.csv`;
+
       return reply
         .header('Content-Type', 'text/csv; charset=utf-8')
-        .header('Content-Disposition', 'attachment; filename="settlements.csv"')
-        .send(
-          [SETTLEMENT_CSV_COLUMNS.map(csvCell).join(','), ...body].join('\n')
-        );
+        .header('Content-Disposition', `attachment; filename="${filename}"`)
+        .send([SETTLEMENT_CSV_COLUMNS.map(csvCell).join(','), ...body].join('\n'));
     }
   );
 

@@ -167,6 +167,31 @@ async function setAgentStatus(userId: string, status: AgentStatusData): Promise<
       (err as Error).message
     );
   }
+
+  await recordAgentStateEvent(userId, status.status);
+}
+
+/**
+ * Append the transition to the state log the portal reads.
+ *
+ * Redis above stays the source of truth for the CURRENT status -- it is read on
+ * every routing decision and must not become a database round trip. This row is
+ * what makes "how long was this agent available today" answerable at all: each
+ * Redis write overwrites the last, so nothing there accumulates.
+ *
+ * Best-effort, deliberately. An agent going available must not depend on this
+ * table being reachable: the cost of a failed write is a gap in a reporting
+ * figure, and the cost of a thrown one is an agent who cannot take calls.
+ */
+async function recordAgentStateEvent(userId: string, status: string): Promise<void> {
+  try {
+    await getPrismaClient().agentStateEvent.create({ data: { userId, status } });
+  } catch (err) {
+    console.warn(
+      `[AgentStatus] Could not record the state transition for ${userId}:`,
+      (err as Error).message
+    );
+  }
 }
 
 // eslint-disable-next-line @typescript-eslint/require-await

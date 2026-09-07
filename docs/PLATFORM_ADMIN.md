@@ -211,14 +211,27 @@ old `requirePermission('admin:full')` gate did.
 
 | Route(s) | Gate | Why platform-wide |
 | --- | --- | --- |
-| `delivery-billing.ts` — `/api/v1/platform/delivery/*` (13 routes) | `requirePlatformAdmin` | Sets an agency's Daily Block, its maximum daily debit and its Overrun ceiling; **enrols and un-enrols it from billing, and turns real charging on and off**; suspends and resumes delivery; sells an opening block; runs the nightly settlement; and reads the cross-agency view. Every one of these decides what an agency can be charged or whether it is delivered to at all, so none of them may be reachable by the agency. |
-| `delivery-billing.ts` — `/api/v1/delivery/*` (9 routes) | `authenticate` + `resolveTenant` | Agency-scoped, and deliberately so: an agency reads its own block, overrun, ceiling, settlements, ledger and mandate. No parameter names an agency. |
+| `delivery-billing.ts` — `/api/v1/platform/delivery/*` (14 routes) | `requirePlatformAdmin` | Sets an agency's Daily Block, its maximum daily debit and its Overrun ceiling; **enrols and un-enrols it from billing, and turns real charging on and off**; suspends and resumes delivery; sells an opening block; runs the nightly settlement; and reads the cross-agency view and its export. Every one of these decides what an agency can be charged or whether it is delivered to at all, so none of them may be reachable by the agency. |
+| `delivery-billing.ts` — `/api/v1/delivery/*` (10 routes) | `authenticate` + `resolveTenant` | Agency-scoped, and deliberately so: an agency reads its own block, overrun, ceiling, settlements, the derivation of one of them, its ledger and its mandate. No parameter names an agency. |
 
 The `:tenantId` in the platform paths names the agency being administered, not
 the acting tenant of the caller — the same reading as `quotas.ts` above.
 `settlement.test.ts` asserts an agency OWNER is refused the cross-agency view,
 the settlement run, its own ceiling override, and — added with the enrolment
 switch — enrolling itself, un-enrolling itself and turning on its own charging.
+
+**Phase 4 adds one agency-scoped route with an id in its path**:
+`GET /api/v1/delivery/settlements/:settlementId/derivation`. The id names a
+settlement, not a tenant, and the lookup is scoped by the acting tenant inside
+the query rather than checked after — so one agency asking for another's
+settlement gets a 404, which is the answer that leaks nothing about whether it
+exists. `portal.test.ts` asserts that, and asserts the response does not carry
+the other agency's id.
+
+Phase 4 also puts **enrolment, un-enrolment, suspend, resume and the ceiling
+override on `/admin/agencies`** as controls rather than as curl commands. That
+changes nothing about the gates: each button calls the same platform-gated,
+audited route it always did, and the page is not what makes them safe.
 
 ### Examined and left as agency-scoped
 
