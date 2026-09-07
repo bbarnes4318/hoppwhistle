@@ -297,5 +297,5 @@ update — and assert the row count never moves.
 API client: `NO_ACTING_TENANT` never clears the session or navigates, that holds
 even if the code ever arrives as a 401, and a genuine 401 still logs out.
 
-Full API suite at the time of writing: **546 passed, 8 skipped** (32 platform
-admin, 6 capability closure, 34 rating). Typecheck errors 83 → 80 (none added).
+Full API suite at the time of writing: **622 passed, 8 skipped** (32 platform
+admin, 6 capability closure, 38 rating). Typecheck errors 83 → 80 (none added).

@@ -45,7 +45,7 @@ import { getPrismaClient } from '../../lib/prisma.js';
 
 import { lastClosedBusinessDay, nextBusinessDay } from './business-day.js';
 import type { BusinessDayKey } from './business-day.js';
-import { measureTrailingWindow } from './measurement.js';
+import { countSubmittedApplicationsLifetime, measureTrailingWindow } from './measurement.js';
 import type { MeasurementDeps } from './measurement.js';
 import { rateFor, toRateCurve, toNumber } from './rate-curve.js';
 import type { RateCurve } from './rate-curve.js';
@@ -181,9 +181,15 @@ export async function rateAgencyForClosedDay(
     windowBusinessDays
   );
 
-  const state = await prisma.agencyRatingState.findUnique({
-    where: { tenantId: options.tenantId },
-  });
+  const [state, openFlag, lifetimeApplications] = await Promise.all([
+    prisma.agencyRatingState.findUnique({ where: { tenantId: options.tenantId } }),
+    prisma.ratingReviewFlag.findFirst({
+      where: { tenantId: options.tenantId, clearedAt: null },
+      select: { id: true },
+    }),
+    countSubmittedApplicationsLifetime(deps, options.tenantId),
+  ]);
+
   const previousRate = state?.currentRate == null ? null : toNumber(state.currentRate);
 
   let status: RateChangeStatus;
@@ -229,31 +235,63 @@ export async function rateAgencyForClosedDay(
       },
     });
 
-    // An agency below the minimum has NO rate: `currentRate` is nulled rather
-    // than left showing yesterday's number, because a stale rate on a paused
-    // account is exactly the sort of thing that gets billed by accident.
-    const nextStatus =
-      status === RateChangeStatus.BELOW_MINIMUM
+    /*
+     * What the agency's own state becomes.
+     *
+     * The rate change above always records what the CURVE returned — that is
+     * the measurement record, and it exists whatever commercial arrangement is
+     * in force. What the agency is actually priced at is this, and there are
+     * three cases where it is not the curve's answer:
+     *
+     *   OPENING_BLOCK  An opening rate and block were agreed. The brief is
+     *                  explicit that daily rating begins from the first SETTLED
+     *                  day, and Phase 2 settles nothing, so the engine records
+     *                  the measurement and leaves the agreed rate in force.
+     *                  Phase 3 decides when the block is done.
+     *
+     *   open review    An agency below the curve's minimum stays under review
+     *                  until a platform admin clears the flag. A recovered
+     *                  window does not un-flag it: "only a platform admin can
+     *                  clear it" would mean nothing if the next day's numbers
+     *                  could do it instead. The measurement is still recorded,
+     *                  so the operator reviewing the flag can see the recovery.
+     *
+     *   below minimum  No rate at all. `currentRate` is nulled rather than left
+     *                  showing yesterday's number: a stale rate on a paused
+     *                  account is exactly the sort of thing that gets billed by
+     *                  accident.
+     */
+    const heldByAgreement = state?.status === AgencyRatingStatus.OPENING_BLOCK;
+    const heldByReview = openFlag !== null && status !== RateChangeStatus.BELOW_MINIMUM;
+
+    const nextStatus = heldByAgreement
+      ? AgencyRatingStatus.OPENING_BLOCK
+      : status === RateChangeStatus.BELOW_MINIMUM || heldByReview
         ? AgencyRatingStatus.UNDER_REVIEW
         : AgencyRatingStatus.RATED;
 
+    const appliedRate =
+      heldByAgreement || heldByReview
+        ? (state?.currentRate ?? null)
+        : newRate === null
+          ? null
+          : new Prisma.Decimal(newRate);
+
+    const stateFields = {
+      status: nextStatus,
+      currentRate: appliedRate,
+      curveVersionId: curve.id,
+      // The day the measurement covers, whatever rate is in force.
+      currentRateBusinessDay: effectiveBusinessDay,
+      lastRatedBusinessDay: closedDay,
+      // Counted, not incremented. See countSubmittedApplicationsLifetime().
+      introductoryApplicationsUsed: lifetimeApplications,
+    };
+
     await tx.agencyRatingState.upsert({
       where: { tenantId: options.tenantId },
-      create: {
-        tenantId: options.tenantId,
-        status: nextStatus,
-        currentRate: newRate === null ? null : new Prisma.Decimal(newRate),
-        curveVersionId: curve.id,
-        currentRateBusinessDay: effectiveBusinessDay,
-        lastRatedBusinessDay: closedDay,
-      },
-      update: {
-        status: nextStatus,
-        currentRate: newRate === null ? null : new Prisma.Decimal(newRate),
-        curveVersionId: curve.id,
-        currentRateBusinessDay: effectiveBusinessDay,
-        lastRatedBusinessDay: closedDay,
-      },
+      create: { tenantId: options.tenantId, ...stateFields },
+      update: stateFields,
     });
 
     if (status === RateChangeStatus.BELOW_MINIMUM && measured.closingPct !== null) {

@@ -163,7 +163,12 @@ Where an opening rate and opening block were agreed instead, that **supersedes**
 the introductory package and daily rating begins from the first settled day. It
 is recorded per agency by a platform admin
 (`PUT /api/v1/platform/rating/agencies/:tenantId/opening`), which sets the
-agency's status to `OPENING_BLOCK`.
+agency's status to `OPENING_BLOCK`. An agency cannot record its own.
+
+Phase 2 settles nothing, so while an agency is in `OPENING_BLOCK` the engine
+records the measurement as usual and **leaves the agreed rate in force** rather
+than repricing the agency out from under the agreement. Phase 3 decides when the
+block is done; from that point the recorded measurements are already there.
 
 ---
 
@@ -214,6 +219,23 @@ Rows are never updated and never deleted. A correction is a later row.
 run", never "it ran and said nothing". An agency that was closed keeps its
 previous rate and is **not** flagged: being closed is not performing below the
 floor.
+
+### The rate change and the rate in force are two different things
+
+`rate_changes` always records what the **curve** returned for the window. That
+is the measurement record, and it exists whatever commercial arrangement is in
+force. What the agency is actually priced at is `agency_rating_states`, and
+there are two cases where the two differ:
+
+- **`OPENING_BLOCK`** — the agreed opening rate stands until Phase 3 settles the
+  block, as above.
+- **An open review flag** — an agency below the minimum stays under review until
+  a platform admin clears the flag. A recovered window does **not** un-flag it:
+  "only a platform admin can clear it" would mean nothing if the next day's
+  numbers could do it instead. The measurement is still recorded, so the
+  operator reviewing the flag can see the recovery. Clearing the flag does not
+  hand back a rate either — the next daily run prices from the curve, because a
+  price set by a button press is not a price derived from a measurement.
 
 ### Idempotence
 
@@ -305,7 +327,7 @@ replay every migration from the beginning.
 | --- | ---: | --- |
 | `services/rating/__tests__/business-day.test.ts` | 13 | Eastern reckoning, the 23:59:59 boundary, both DST transitions, month/year/leap-day walks, window construction, malformed input refused |
 | `services/rating/__tests__/rate-curve.test.ts` | 13 | Every anchor exactly; interpolation; flat at and above 15%; no rate below 5% and a rate exactly at 5%; continuity across 10%; monotonicity; a past settlement priced from its own version |
-| `__tests__/rating-engine.test.ts` | 34 | Against a real database: the two counts, day attribution, two agencies rating independently, the immutable record recomputing to the same rate, the review flag, curve versioning, and the portal's four numbers |
+| `__tests__/rating-engine.test.ts` | 38 | Against a real database: the two counts, day attribution, two agencies rating independently, the immutable record recomputing to the same rate, the review flag, curve versioning, and the portal's four numbers |
 
 The cases the brief names, and where they are:
 

@@ -28,7 +28,11 @@ import { getPrismaClient } from '../../lib/prisma.js';
 
 import { currentBusinessDay, trailingWindow } from './business-day.js';
 import type { BusinessDayKey } from './business-day.js';
-import { measureBusinessDay, measureTrailingWindow } from './measurement.js';
+import {
+  countSubmittedApplicationsLifetime,
+  measureBusinessDay,
+  measureTrailingWindow,
+} from './measurement.js';
 import type { MeasurementDeps } from './measurement.js';
 import { rateFor, toNumber } from './rate-curve.js';
 import { loadActiveCurve, loadWindowBusinessDays } from './rating-engine.js';
@@ -119,10 +123,13 @@ export async function getRatingSummary(
     }),
   ]);
 
-  const [todayMeasurement, trackingMeasurement] = await Promise.all([
+  const [todayMeasurement, trackingMeasurement, lifetimeApplications] = await Promise.all([
     measureBusinessDay(deps, tenantId, today),
     // The window ending TODAY: what tomorrow's rate is tracking toward.
     measureTrailingWindow(deps, tenantId, today, windowBusinessDays),
+    // Counted live rather than read off the state row, so the portal shows the
+    // truth between rating runs rather than the count as of the last one.
+    countSubmittedApplicationsLifetime(deps, tenantId),
   ]);
 
   /*
@@ -206,7 +213,7 @@ export async function getRatingSummary(
         ? {
             rate: curve.introductoryRate,
             applications: curve.introductoryApplications,
-            applicationsUsed: state?.introductoryApplicationsUsed ?? 0,
+            applicationsUsed: lifetimeApplications,
           }
         : null,
     openingBlock:

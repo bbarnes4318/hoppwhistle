@@ -871,6 +871,32 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
       expect(state?.currentRate).toBeNull();
     });
 
+    it('stays under review when the next window recovers, until someone clears it', async () => {
+      // "Only a platform admin can clear it" would mean nothing if the next
+      // day's numbers could do it instead.
+      const flagId = await flagBigAgency();
+
+      // A much better following window.
+      await seedDeliveredCalls(big.id, EFFECTIVE_DAY, 100);
+      await seedSubmittedApplications(big.id, EFFECTIVE_DAY, 30);
+      const recovered = await rateAgencyForClosedDay({
+        tenantId: big.id,
+        closedBusinessDay: EFFECTIVE_DAY,
+        prisma,
+      });
+
+      // The measurement is still recorded — the operator reviewing the flag
+      // needs to be able to see the recovery.
+      expect(recovered.status).toBe('APPLIED');
+
+      const state = await prisma.agencyRatingState.findUnique({ where: { tenantId: big.id } });
+      expect(state?.status).toBe('UNDER_REVIEW');
+      expect(state?.currentRate).toBeNull();
+
+      const flag = await prisma.ratingReviewFlag.findUnique({ where: { id: flagId } });
+      expect(flag?.clearedAt).toBeNull();
+    });
+
     it('refuses to clear the same flag twice', async () => {
       const flagId = await flagBigAgency();
 
@@ -889,6 +915,78 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
       });
 
       expect(second.statusCode).toBe(409);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 6b. The opening package
+  // ══════════════════════════════════════════════════════════════════════════
+  describe('the opening package', () => {
+    it('leaves an agreed opening rate in force while the block is unsettled', async () => {
+      // "Where an opening rate and opening block were agreed instead, that
+      // supersedes the introductory package and daily rating begins from the
+      // first settled day." Phase 2 settles nothing, so the engine records the
+      // measurement and does not reprice the agency out from under the
+      // agreement.
+      const agreed = await app.inject({
+        method: 'PUT',
+        url: `/api/v1/platform/rating/agencies/${big.id}/opening`,
+        headers: tokenFor(operatorId, null),
+        payload: { openingRate: 175, openingBlockApplications: 40, note: 'Signed 2026-09-01' },
+      });
+      expect(agreed.statusCode).toBe(200);
+
+      await seedDeliveredCalls(big.id, CLOSED_DAY, 100);
+      await seedSubmittedApplications(big.id, CLOSED_DAY, 14); // curve says $139
+
+      const result = await rateAgencyForClosedDay({
+        tenantId: big.id,
+        closedBusinessDay: CLOSED_DAY,
+        prisma,
+      });
+
+      // The rate change records what the CURVE returned. That is the
+      // measurement record and it exists whatever commercial arrangement is in
+      // force.
+      expect(result.newRate).toBe(139);
+
+      // What the agency is actually priced at is unchanged.
+      const state = await prisma.agencyRatingState.findUnique({ where: { tenantId: big.id } });
+      expect(state?.status).toBe('OPENING_BLOCK');
+      expect(Number(state?.openingRate)).toBe(175);
+
+      const { getRatingSummary } = await import('../services/rating/rating-summary.js');
+      const summary = await getRatingSummary(big.id, { prisma });
+      expect(summary.currentRate).toBe(175);
+      expect(summary.openingBlock).toMatchObject({ rate: 175, applications: 40 });
+      expect(summary.introductory).toBeNull();
+    });
+
+    it('shows the introductory rate, and counts applications against it, before any rating', async () => {
+      await seedSubmittedApplications(big.id, CLOSED_DAY, 3);
+
+      const { getRatingSummary } = await import('../services/rating/rating-summary.js');
+      const summary = await getRatingSummary(big.id, { prisma });
+
+      expect(summary.status).toBe('INTRODUCTORY');
+      expect(summary.currentRate).toBe(159);
+      expect(summary.introductory).toMatchObject({
+        rate: 159,
+        applications: 5,
+        applicationsUsed: 3,
+      });
+    });
+
+    it('an agency cannot record its own opening rate', async () => {
+      const response = await app.inject({
+        method: 'PUT',
+        url: `/api/v1/platform/rating/agencies/${big.id}/opening`,
+        headers: tokenFor(big.ownerId, big.id),
+        payload: { openingRate: 900 },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(await prisma.agencyRatingState.findUnique({ where: { tenantId: big.id } })).toBeNull();
     });
   });
 
