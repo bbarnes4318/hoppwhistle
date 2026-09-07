@@ -24,26 +24,26 @@
 
 ## FreeSWITCH / Telephony
 
-| Var                                                                         | Svc     | Purpose                                               | Default                                                            |
-| --------------------------------------------------------------------------- | ------- | ----------------------------------------------------- | ------------------------------------------------------------------ |
-| `FREESWITCH_HOST` / `FREESWITCH_ESL_HOST`                                   | A,W,Mon | ESL host                                              | `freeswitch`                                                       |
-| `FREESWITCH_ESL_PORT`                                                       | A,W     | ESL port                                              | `8021`                                                             |
-| `FREESWITCH_ESL_PASSWORD`                                                   | A,W,FS  | ESL password                                          | `ClueCon` ⚠️ (hard-coded in compose + autodialer)                  |
-| `RECORDING_CALLBACK_URL`                                                    | A/FS    | upload-recording.sh target                            | `http://<PUBLIC_IP>:3001/api/v1/recordings/uploaded`               |
-| `PUBLIC_IP`                                                                 | A,FS,K  | public IP for SIP/media/callbacks                     | — (hard-coded `3.214.60.13` fallback in `vapi-carrier-service.ts`) |
-| `SIP_DOMAIN` / `MEDIA_DOMAIN`                                               | A,FS    | SIP/media domains                                     | `freeswitch`                                                       |
-| `OUTBOUND_SIP_PROXY` / `OUTBOUND_SIP_USER` / `OUTBOUND_SIP_PASS`            | A,W,FS  | wholesale SIP trunk                                   | —                                                                  |
-| `OUTBOUND_CALLER_ID`                                                        | A,W,FS  | default caller-ID fallback                            | `12816991120` (A) / `+18656000124` (W) hard-coded literals         |
-| `MAX_CONCURRENT_CALLS`                                                      | W       | Hopper concurrency cap                                | `10`                                                               |
-| `DIALER_POLL_INTERVAL_MS`                                                   | W       | Hopper poll interval                                  | `1000`                                                             |
-| `DIALER_BATCH_SIZE`                                                         | W       | Hopper batch size                                     | `50`                                                               |
-| `SOCKET_LISTENER_HOST` / `SOCKET_LISTENER_PORT`                             | A,W     | Fronter Bot ESL bind (worker points FS at `api:8021`) | `api` / `8021`                                                     |
-| `FRONTER_SOCKET_HOST` / `FRONTER_SOCKET_PORT`                               | A       | Fronter Bot socket server                             | `0.0.0.0` / `8021`                                                 |
-| `FRONTER_DTMF_TIMEOUT_MS` / `FRONTER_INTRO_AUDIO` / `FRONTER_TRANSFER_DEST` | A       | Fronter Bot behavior                                  | `10000` / `ivr/ivr-welcome.wav` / `queue-default`                  |
-| `VERTO_WS_URL`                                                              | A       | (vestigial) WS URL returned to client, discarded      | `wss://<PUBLIC_IP>:8082`                                           |
-| `FREESWITCH_REALM`                                                          | A       | SIP realm                                             | `PUBLIC_IP` ?? `freeswitch`                                        |
-| `NEXT_PUBLIC_SIP_DOMAIN` / `NEXT_PUBLIC_IP`                                 | Wb      | client SIP config                                     | —                                                                  |
-| `RTPENGINE_URL` / `WORKER_CONCURRENCY`                                      | —       | dev compose                                           | —                                                                  |
+| Var                                                                         | Svc     | Purpose                                               | Default                                                           |
+| --------------------------------------------------------------------------- | ------- | ----------------------------------------------------- | ----------------------------------------------------------------- |
+| `FREESWITCH_HOST` / `FREESWITCH_ESL_HOST`                                   | A,W,Mon | ESL host                                              | `freeswitch`                                                      |
+| `FREESWITCH_ESL_PORT`                                                       | A,W     | ESL port                                              | `8021`                                                            |
+| `FREESWITCH_ESL_PASSWORD`                                                   | A,W,FS  | ESL password                                          | `ClueCon` ⚠️ (hard-coded in compose + autodialer)                 |
+| `RECORDING_CALLBACK_URL`                                                    | A/FS    | upload-recording.sh target                            | `http://<PUBLIC_IP>:3001/api/v1/recordings/uploaded`              |
+| `PUBLIC_IP`                                                                 | A,FS,K  | public IP for SIP/media/callbacks                     | — (no fallback; unset fails the Vapi trunk and SignalWire bridge) |
+| `SIP_DOMAIN` / `MEDIA_DOMAIN`                                               | A,FS    | SIP/media domains                                     | `freeswitch`                                                      |
+| `OUTBOUND_SIP_PROXY` / `OUTBOUND_SIP_USER` / `OUTBOUND_SIP_PASS`            | A,W,FS  | wholesale SIP trunk                                   | —                                                                 |
+| `OUTBOUND_CALLER_ID`                                                        | A,W,FS  | default caller-ID fallback                            | `12816991120` (A) / `+18656000124` (W) hard-coded literals        |
+| `MAX_CONCURRENT_CALLS`                                                      | W       | Hopper concurrency cap                                | `10`                                                              |
+| `DIALER_POLL_INTERVAL_MS`                                                   | W       | Hopper poll interval                                  | `1000`                                                            |
+| `DIALER_BATCH_SIZE`                                                         | W       | Hopper batch size                                     | `50`                                                              |
+| `SOCKET_LISTENER_HOST` / `SOCKET_LISTENER_PORT`                             | A,W     | Fronter Bot ESL bind (worker points FS at `api:8021`) | `api` / `8021`                                                    |
+| `FRONTER_SOCKET_HOST` / `FRONTER_SOCKET_PORT`                               | A       | Fronter Bot socket server                             | `0.0.0.0` / `8021`                                                |
+| `FRONTER_DTMF_TIMEOUT_MS` / `FRONTER_INTRO_AUDIO` / `FRONTER_TRANSFER_DEST` | A       | Fronter Bot behavior                                  | `10000` / `ivr/ivr-welcome.wav` / `queue-default`                 |
+| `VERTO_WS_URL`                                                              | A       | (vestigial) WS URL returned to client, discarded      | `wss://<PUBLIC_IP>:8082`                                          |
+| `FREESWITCH_REALM`                                                          | A       | SIP realm                                             | `PUBLIC_IP` ?? `freeswitch`                                       |
+| `NEXT_PUBLIC_SIP_DOMAIN` / `NEXT_PUBLIC_IP`                                 | Wb      | client SIP config                                     | —                                                                 |
+| `RTPENGINE_URL` / `WORKER_CONCURRENCY`                                      | —       | dev compose                                           | —                                                                 |
 
 ## Carriers
 

@@ -60,6 +60,38 @@ PATCH /api/v1/carrier-routing/gateways/:gatewayId  { "techPrefix": "012345" }
 
 Digits only; send `""` to clear it for a carrier that does not use one.
 
+## Inbound: where a carrier sends calls back
+
+Authorization covers outbound (this host → carrier). Inbound is a separate
+setting, configured per DID in the carrier's portal, and a server migration
+breaks it just as silently.
+
+For an Anveo **retail** DID the fields are `CALL_FORWARD_TYPE = SIP_URI` and:
+
+```
+$[E164]$@178.156.223.97:5080
+```
+
+`$[E164]$` is Anveo's own macro — it is substituted with the called number at
+call time, so it is stored literally. The port is 5080, the external profile's
+`sip-port`, which runs `auth-calls false` in the `public` context and therefore
+accepts a carrier's INVITE on source IP with no credentials.
+
+Three things this is not:
+
+- **Not the tech prefix.** `012345` selects an outbound Anveo Direct trunk and
+  has no place in an inbound call-forward URI.
+- **Not 5060.** That is Kamailio. Carrier traffic terminates on FreeSWITCH's
+  external profile.
+- **Not set once for the account.** It is per DID, so every number has to be
+  changed after a migration.
+
+`AnveoDIDService.configureForFreeSWITCH()` writes exactly this value from
+`PUBLIC_IP` when a DID is bought or re-configured through the app, so keeping
+that variable correct keeps new DIDs correct. It throws rather than guessing if
+`PUBLIC_IP` is unset. DIDs bought directly in the Anveo portal are not touched
+by it and have to be corrected by hand (see `docs/anveo-number-inventory.md`).
+
 ## Recognizing an authorization failure
 
 A carrier that does not recognize the source IP rejects the INVITE outright

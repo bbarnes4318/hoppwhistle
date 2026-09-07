@@ -32,6 +32,15 @@
   mod_curl callers, which cannot send headers, so FreeSWITCH logs it — it is its
   own secret, used for nothing else, and cheap to rotate.
 - `FRACTEL_DEFAULT_CALLER_ID` - Default fallback FracTEL caller ID DID (e.g. `12816991120`)
+- `PUBLIC_IP` - **Required.** This host's public IP, as carriers see it. It is
+  the address written into the Anveo DID call-forward
+  (`AnveoDIDService.configureForFreeSWITCH()`), the Vapi BYO SIP trunk gateway,
+  and the SignalWire inbound bridge. Every one of those paths now fails loudly
+  when it is unset rather than falling back to a hard-coded address: the old
+  default was the decommissioned AWS host, and a released elastic IP belongs to
+  whoever AWS assigns it to next. The current production value is documented in
+  `docs/voice/carrier_ip_authorization.md`; it must also be authorized with each
+  carrier, which is portal state this repository cannot set.
 
 #### Optional:
 

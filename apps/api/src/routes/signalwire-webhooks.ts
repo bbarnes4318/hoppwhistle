@@ -28,7 +28,11 @@ const recentEvents: Array<{
   payload: Record<string, unknown>;
 }> = [];
 
-function pushEvent(path: string, contentType: string | undefined, payload: Record<string, unknown>) {
+function pushEvent(
+  path: string,
+  contentType: string | undefined,
+  payload: Record<string, unknown>
+) {
   recentEvents.push({
     timestamp: new Date().toISOString(),
     path,
@@ -78,7 +82,9 @@ export async function registerSignalWireWebhookRoutes(server: FastifyInstance) {
       try {
         const tcpaResult = await tcpaValidationService.validateNumber(from);
         if (tcpaResult.isLitigator) {
-          console.log(`[TCPA-BLOCK][SignalWire] Blocking litigator ${from} (cached=${tcpaResult.cached})`);
+          console.log(
+            `[TCPA-BLOCK][SignalWire] Blocking litigator ${from} (cached=${tcpaResult.cached})`
+          );
 
           // Record the block against the agency whose number was dialled.
           // This used to insert with `tenantId: 'default'` -- not a tenant id,
@@ -107,43 +113,69 @@ export async function registerSignalWireWebhookRoutes(server: FastifyInstance) {
       }
     }
 
-    // Default: Answer and connect to FreeSWITCH
+    // Default: Answer and connect to FreeSWITCH.
+    //
+    // The host used to fall back to `3.214.60.13` -- the AWS box from before the
+    // Hetzner migration -- whenever PUBLIC_IP was unset. That is the worst
+    // possible default for this particular line: it does not drop the call, it
+    // bridges a real caller to an address we no longer control, and a released
+    // elastic IP belongs to whichever AWS tenant is handed it next. Telling the
+    // caller to try again is the only honest answer when we cannot say where
+    // our own switch is.
+    const publicIp = process.env.PUBLIC_IP;
+
+    if (!publicIp) {
+      console.error(
+        '[SignalWire] PUBLIC_IP is not set — refusing to bridge an inbound call ' +
+          "to a guessed address. Set PUBLIC_IP to this host's public IP " +
+          '(see docs/voice/carrier_ip_authorization.md).'
+      );
+
+      const misconfiguredLaml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="alice">We're sorry, we can't take your call right now. Please try again later.</Say>
+  <Hangup/>
+</Response>`;
+
+      return reply.code(200).header('Content-Type', 'application/xml').send(misconfiguredLaml);
+    }
+
     const laml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="alice">This number is managed by Hopwhistle. Please hold while we connect you.</Say>
   <Dial timeout="30">
-    <Sip>sip:operator@${process.env.PUBLIC_IP || '3.214.60.13'}:5060</Sip>
+    <Sip>sip:operator@${publicIp}:5060</Sip>
   </Dial>
   <Say voice="alice">We're sorry, no one is available right now. Goodbye.</Say>
   <Hangup/>
 </Response>`;
 
-    return reply
-      .code(200)
-      .header('Content-Type', 'application/xml')
-      .send(laml);
+    return reply.code(200).header('Content-Type', 'application/xml').send(laml);
   });
 
   // ────────────────────────────────────────────────────────────────────────────
   // POST /api/signalwire/voice/status — Call status callback
   // ────────────────────────────────────────────────────────────────────────────
-  server.post('/api/signalwire/voice/status', async (request: FastifyRequest, reply: FastifyReply) => {
-    const payload = extractPayload(request);
-    const ct = request.headers['content-type'];
+  server.post(
+    '/api/signalwire/voice/status',
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const payload = extractPayload(request);
+      const ct = request.headers['content-type'];
 
-    const callSid   = (payload.CallSid as string)    || '';
-    const status    = (payload.CallStatus as string)  || '';
-    const duration  = (payload.CallDuration as string)|| '0';
-    const from      = (payload.From as string)        || '';
-    const to        = (payload.To as string)          || '';
+      const callSid = (payload.CallSid as string) || '';
+      const status = (payload.CallStatus as string) || '';
+      const duration = (payload.CallDuration as string) || '0';
+      const from = (payload.From as string) || '';
+      const to = (payload.To as string) || '';
 
-    console.log(`[SignalWire][STATUS] ${callSid} | ${status} | ${from}→${to} | ${duration}s`);
-    pushEvent('/api/signalwire/voice/status', ct, payload);
+      console.log(`[SignalWire][STATUS] ${callSid} | ${status} | ${from}→${to} | ${duration}s`);
+      pushEvent('/api/signalwire/voice/status', ct, payload);
 
-    // TODO: Persist call records to database, update campaign stats, etc.
+      // TODO: Persist call records to database, update campaign stats, etc.
 
-    return reply.code(200).send({ received: true });
-  });
+      return reply.code(200).send({ received: true });
+    }
+  );
 
   // ────────────────────────────────────────────────────────────────────────────
   // POST /api/signalwire/sms — Inbound SMS webhook
@@ -153,7 +185,7 @@ export async function registerSignalWireWebhookRoutes(server: FastifyInstance) {
     const ct = request.headers['content-type'];
 
     const from = (payload.From as string) || '';
-    const to   = (payload.To as string)   || '';
+    const to = (payload.To as string) || '';
     const body = (payload.Body as string) || '';
 
     console.log(`[SignalWire][SMS] ${from}→${to}: "${body}"`);
@@ -165,24 +197,24 @@ export async function registerSignalWireWebhookRoutes(server: FastifyInstance) {
   <Message>Thanks for your message. A Hopwhistle agent will get back to you shortly.</Message>
 </Response>`;
 
-    return reply
-      .code(200)
-      .header('Content-Type', 'application/xml')
-      .send(laml);
+    return reply.code(200).header('Content-Type', 'application/xml').send(laml);
   });
 
   // ────────────────────────────────────────────────────────────────────────────
   // POST /api/signalwire/sms/status — SMS delivery receipt
   // ────────────────────────────────────────────────────────────────────────────
-  server.post('/api/signalwire/sms/status', async (request: FastifyRequest, reply: FastifyReply) => {
-    const payload = extractPayload(request);
-    const ct = request.headers['content-type'];
+  server.post(
+    '/api/signalwire/sms/status',
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const payload = extractPayload(request);
+      const ct = request.headers['content-type'];
 
-    console.log('[SignalWire][SMS-STATUS]', JSON.stringify(payload));
-    pushEvent('/api/signalwire/sms/status', ct, payload);
+      console.log('[SignalWire][SMS-STATUS]', JSON.stringify(payload));
+      pushEvent('/api/signalwire/sms/status', ct, payload);
 
-    return reply.code(200).send({ received: true });
-  });
+      return reply.code(200).send({ received: true });
+    }
+  );
 
   // ────────────────────────────────────────────────────────────────────────────
   // POST /api/signalwire/events — Catch-all for RELAY / SWML / SWAIG events
