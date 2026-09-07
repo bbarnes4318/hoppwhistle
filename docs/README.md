@@ -28,6 +28,8 @@ This directory contains documentation for the Hopwhistle platform.
 
 - **[Quotas & Budgets](QUOTAS.md)** - Cost controls and quota management
 - **[Pricing Configuration](PRICING.md)** - Rate card setup and pricing guide
+- **[Measurement and the rate engine](RATING.md)** - Closing percentage, Delivery Days, the rate curve, and the daily rating engine (Phase 2)
+- **[The ledger, Overrun and daily settlement](BILLING.md)** - The credit ledger, the Overrun ceiling, delivery gating and the nightly ACH settlement (Phase 3)
 - **[Performance & Load Testing](PERF.md)** - Performance baselines and k6 load test results
 - **[Release Checklist](release-checklist.md)** - v0.1.0 release checklist
 - **[Port Reference](PORTS.md)** - All ports used by the platform

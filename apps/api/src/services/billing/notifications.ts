@@ -29,7 +29,8 @@
 
 import type { PrismaClient } from '@prisma/client';
 import { BillingNotificationKind, Prisma } from '@prisma/client';
-import nodemailer from 'nodemailer';
+import { createTransport } from 'nodemailer';
+import type { Transporter } from 'nodemailer';
 
 import { logger } from '../../lib/logger.js';
 import { getPrismaClient } from '../../lib/prisma.js';
@@ -55,13 +56,13 @@ export interface NotifyResult {
   platformRecipients: number;
 }
 
-function transporter(): nodemailer.Transporter | null {
+function transporter(): Transporter | null {
   const host = process.env.SMTP_HOST;
   const port = Number(process.env.SMTP_PORT) || 587;
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASSWORD;
   if (!host || !user || !pass) return null;
-  return nodemailer.createTransport({
+  return createTransport({
     host,
     port,
     secure: port === 465,
@@ -199,7 +200,7 @@ export async function notify(
   if (sentVia.length > 0) {
     await prisma.billingNotification
       .update({ where: { id: notificationId }, data: { sentVia } })
-      .catch(error => {
+      .catch((error: unknown) => {
         logger.error({ msg: 'Could not record notification transports', error, notificationId });
       });
   }

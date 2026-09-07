@@ -5,9 +5,10 @@ submitted application. What an agency pays per application depends on how well
 it closes the calls it is given. This document is the definition of that
 arithmetic and the record of the decisions inside it.
 
-**Phase 2 does not charge anyone and does not gate delivery.** Both are Phase 3.
-This phase makes the numbers correct and provable, because Phase 3 bills money
-from them.
+**Phase 2 does not charge anyone and does not gate delivery.** Both are Phase 3,
+which is now built: see `docs/BILLING.md` for the credit ledger, Overrun,
+delivery gating and the daily settlement that bills from these numbers. This
+document remains the definition of the arithmetic.
 
 **There are no refunds, credits, reversals or make-goods**, anywhere: not in the
 schema, the API, the UI or the copy. A carrier's decision after an application is
@@ -131,8 +132,10 @@ commercial writing and a single ambiguous helper is how the off-by-one gets in:
 - `addBusinessDays(day, n)` — *n* Business Days **after** `day`, exclusive of it.
   Thursday + 5 → the following Thursday.
 
-Phase 2 does not enforce any of these periods; Phase 3 does. The definition
-lives here now so Phase 3 cannot reinvent it as calendar days.
+Phase 2 does not enforce any of these periods. Phase 3 enforces the grace
+period on failed settlement, using `businessDayPeriodEnd()` from here rather
+than reinventing it: a Friday failure with Labor Day inside the period expires
+on the following Friday, not on the Tuesday calendar days would give.
 
 #### Delivery Day — the rating window only
 
@@ -234,23 +237,33 @@ version retires the previous one rather than editing it, so a settled day still
 resolves against the curve that priced it. `POST /api/v1/platform/rating/curve`
 is the only way to publish, and it is platform-staff only.
 
-### Introductory rate, and the opening block
+### The opening block — and there is no introductory rate
 
-An agency with no rating history is **$159 per application for its first five**.
-Separately configurable (`introductoryRate`, `introductoryApplications` on the
-curve version) and deliberately **not an anchor point**: it is a commercial
-offer, not a point on the curve, and it moves independently of the curve's shape.
+**Removed in Phase 3.** Phase 2 priced an agency with no rating history at $159
+per application for its first five, configured as `introductoryRate` and
+`introductoryApplications` on the curve version. That concept is gone: from the
+engine, from `RateCurve`, from the summary, from the curve publish API and from
+the portal. `countSubmittedApplicationsLifetime()` — the lifetime count that
+decided when the package stopped applying — is deleted. Grep for
+"introductory": what remains is two database columns and one enum member,
+retired in place because migrations here are additive and never drop, and both
+are documented as retired in `schema.prisma`.
 
-Where an opening rate and opening block were agreed instead, that **supersedes**
-the introductory package and daily rating begins from the first settled day. It
-is recorded per agency by a platform admin
+An agency's opening rate and opening block are **agreed before its first
+Delivery Day and recorded per tenant**. The rate is recorded by a platform admin
 (`PUT /api/v1/platform/rating/agencies/:tenantId/opening`), which sets the
-agency's status to `OPENING_BLOCK`. An agency cannot record its own.
+agency's status to `OPENING_BLOCK`; the block is sold and paid for through
+`POST /api/v1/platform/delivery/agencies/:tenantId/opening-purchase`. An agency
+cannot record either.
 
-Phase 2 settles nothing, so while an agency is in `OPENING_BLOCK` the engine
-records the measurement as usual and **leaves the agreed rate in force** rather
-than repricing the agency out from under the agreement. Phase 3 decides when the
-block is done; from that point the recorded measurements are already there.
+While an agency is in `OPENING_BLOCK` the engine records the measurement as
+usual and **leaves the agreed rate in force** rather than repricing the agency
+out from under the agreement. From the first settled Delivery Day the curve
+governs.
+
+An agency with no opening agreement at all has **no rate** — an em dash, not a
+number nobody signed — and Phase 3's delivery gate refuses it with
+`NO_OPENING_AGREEMENT`.
 
 ---
 
@@ -313,8 +326,8 @@ is the measurement record, and it exists whatever commercial arrangement is in
 force. What the agency is actually priced at is `agency_rating_states`, and
 there are two cases where the two differ:
 
-- **`OPENING_BLOCK`** — the agreed opening rate stands until Phase 3 settles the
-  block, as above.
+- **`OPENING_BLOCK`** — the agreed opening rate stands until the block's first
+  Delivery Day is settled, as above.
 - **An open review flag** — an agency below the minimum stays under review until
   a platform admin clears the flag. A recovered window does **not** un-flag it:
   "only a platform admin can clear it" would mean nothing if the next day's
@@ -326,9 +339,18 @@ there are two cases where the two differ:
 ### Idempotence
 
 One decision per agency per effective day, enforced by a unique index on
-`(tenantId, effectiveBusinessDay)`. A second run reports `alreadyRated` and
+`(tenantId, effectiveCalendarDay)`. A second run reports `alreadyRated` and
 writes nothing, rather than producing a second, conflicting price. That is what
 makes it safe to put on a cron.
+
+**Amended in Phase 3.** That held for one run after another and not for two runs
+starting together: both found nothing on the pre-read and both wrote, and the
+loser of the unique index raised. With only a cron and a by-hand button calling
+this, the race was theoretical. Phase 3's settlement calls it, and a settlement
+that raises because another run was rating the same agency at the same moment is
+an agency that does not get billed. So the constraint violation is now caught
+and the existing decision returned. The index is still what decides; the engine
+reads the answer it gave.
 
 ### Running it
 
@@ -371,6 +393,11 @@ does.
 
 Below them, the rate history: every decision with its counts, its window days
 and its curve version.
+
+Phase 3 adds `/delivery` beside it — what is left on the block, today's overrun
+and what it will cost tonight, the distance to the ceiling and the per-agent
+closing percentages — and `/delivery/settlements`, the immutable record of what
+was actually charged. See `docs/BILLING.md` §6.
 
 **No route accepts a rate, a price or a computed amount from the browser.** The
 two places a number arrives from a caller are both platform-only and are inputs

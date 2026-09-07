@@ -53,6 +53,9 @@ import { cn } from '@/lib/utils';
 interface RatingSummary {
   calendarDay: string;
   timeZone: string;
+  // INTRODUCTORY is retired: there is no introductory rate. It survives in the
+  // database enum because migrations here are additive, and an agency carrying
+  // it has no opening agreement recorded, which means no rate at all.
   status: 'INTRODUCTORY' | 'OPENING_BLOCK' | 'RATED' | 'UNDER_REVIEW';
   today: {
     calendarDay: string;
@@ -81,7 +84,6 @@ interface RatingSummary {
     deliveredCalls: number;
     submittedApplications: number;
   } | null;
-  introductory: { rate: number; applications: number; applicationsUsed: number } | null;
   openingBlock: { rate: number; applications: number | null; note: string | null } | null;
 }
 
@@ -289,21 +291,14 @@ export default function RatingPage(): JSX.Element {
         </Card>
       </div>
 
-      {summary.introductory && (
-        <p className="text-[11px] text-muted-foreground">
-          Introductory rate: ${summary.introductory.rate} per application for the first{' '}
-          {summary.introductory.applications} ({summary.introductory.applicationsUsed} used).
-          Daily rating begins after that.
-        </p>
-      )}
-
       {summary.openingBlock && (
         <p className="text-[11px] text-muted-foreground">
           Agreed opening rate: ${summary.openingBlock.rate} per application
           {summary.openingBlock.applications
             ? ` for an opening block of ${summary.openingBlock.applications}`
             : ''}
-          . Daily rating begins from the first settled day.
+          . Daily rating begins from the first settled Delivery Day; from then the
+          rate curve governs. There is no introductory rate.
         </p>
       )}
 

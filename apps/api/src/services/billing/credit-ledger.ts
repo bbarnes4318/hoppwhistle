@@ -56,8 +56,7 @@
  * correctly after a new curve version is published.
  */
 
-import { Prisma, PrismaClient } from '@prisma/client';
-import { CreditLedgerEntryType } from '@prisma/client';
+import { CreditLedgerEntryType, Prisma, PrismaClient } from '@prisma/client';
 
 import { getPrismaClient } from '../../lib/prisma.js';
 import { calendarDayOf } from '../rating/calendar-day.js';

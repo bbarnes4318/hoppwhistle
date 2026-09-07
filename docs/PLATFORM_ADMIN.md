@@ -207,6 +207,18 @@ old `requirePermission('admin:full')` gate did.
   Prisma queries, and this writes to Redis and an event bus rather than to a
   table. Worth remembering about the shape of that audit, not just this file.
 
+### Added in Phase 3
+
+| Route(s) | Gate | Why platform-wide |
+| --- | --- | --- |
+| `delivery-billing.ts` — `/api/v1/platform/delivery/*` (9 routes) | `requirePlatformAdmin` | Sets an agency's Daily Block, its maximum daily debit and its Overrun ceiling; suspends and resumes delivery; sells an opening block; runs the nightly settlement; and reads the cross-agency view. Every one of these decides what an agency can be charged or whether it is delivered to at all, so none of them may be reachable by the agency. |
+| `delivery-billing.ts` — `/api/v1/delivery/*` (9 routes) | `authenticate` + `resolveTenant` | Agency-scoped, and deliberately so: an agency reads its own block, overrun, ceiling, settlements, ledger and mandate. No parameter names an agency. |
+
+The `:tenantId` in the platform paths names the agency being administered, not
+the acting tenant of the caller — the same reading as `quotas.ts` above.
+`settlement.test.ts` asserts an agency OWNER is refused the cross-agency view,
+the settlement run and its own ceiling override.
+
 ### Examined and left as agency-scoped
 
 These are gated on ADMIN/OWNER (or an inline `isAdminOrOwner`) and **should**

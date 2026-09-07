@@ -39,11 +39,11 @@
 import { AchMandateStatus, Prisma } from '@prisma/client';
 import type { FastifyInstance } from 'fastify';
 
-import { auditLog } from '../services/audit.js';
 import { requirePlatformAdmin } from '../lib/platform-context.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { getActingUserId, resolveTenant } from '../lib/tenant-context.js';
 import { authenticate } from '../middleware/auth.js';
+import { auditLog } from '../services/audit.js';
 import { paymentGateway } from '../services/billing/ach.js';
 import { creditBalance, recordPurchase } from '../services/billing/credit-ledger.js';
 import {
@@ -579,7 +579,7 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
 
       const fields = {
         dailyBlockApplications: block as number,
-        maxDailyDebit: new Prisma.Decimal((maxDebit as number).toFixed(2)),
+        maxDailyDebit: new Prisma.Decimal(maxDebit.toFixed(2)),
         ...(typeof body.ceilingPctBelowThreshold === 'number'
           ? { ceilingPctBelowThreshold: new Prisma.Decimal(body.ceilingPctBelowThreshold) }
           : {}),

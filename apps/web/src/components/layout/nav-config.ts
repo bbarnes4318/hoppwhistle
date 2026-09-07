@@ -2,6 +2,7 @@ import {
   AudioLines,
   BarChart3,
   Bot,
+  Building2,
   Disc3,
   FileText,
   Gauge,
@@ -91,6 +92,21 @@ export const ADMIN_NAV: NavGroup[] = [
       // What the agency is paid per submitted application, and the measurements
       // behind it. Under Money because it is a price, not a report.
       { name: 'Rate', href: '/rating', icon: Gauge },
+      // What is left on the block, what today's overrun will cost tonight, how
+      // far the agency is from the ceiling, and who is closing. Above Billing
+      // because it is the screen a principal watches during the day.
+      {
+        name: 'Delivery',
+        href: '/delivery',
+        icon: Gauge,
+        title: "Today's block, overrun, ceiling and per-agent closing percentages",
+      },
+      {
+        name: 'Settlements',
+        href: '/delivery/settlements',
+        icon: Receipt,
+        title: 'One row per settled Delivery Day, downloadable as CSV',
+      },
       { name: 'Billing', href: '/billing', icon: Receipt },
       // No admin payouts page exists yet; /admin/payroll is staff pay, which is
       // a different thing and lives under Admin below.
@@ -140,6 +156,15 @@ export const ADMIN_NAV: NavGroup[] = [
       { name: 'Carrier routing', href: '/settings/carriers', icon: PhoneForwarded },
       { name: 'Quotas & budgets', href: '/settings/quotas', icon: Wallet },
       { name: 'Payroll admin', href: '/admin/payroll', icon: Receipt },
+      // NetEnroll staff only. The endpoints behind it are gated on the platform
+      // capability, so an agency admin who reaches the URL is refused by the
+      // server rather than by the page.
+      {
+        name: 'Agencies',
+        href: '/admin/agencies',
+        icon: Building2,
+        title: 'Cross-agency delivery, revenue, margin and settlement status',
+      },
     ],
   },
 ];
@@ -225,6 +250,20 @@ export const AGENT_NAV: NavGroup[] = [
       { name: 'Billing', href: '/billing', icon: Receipt },
       { name: 'Reports', href: '/reports', icon: BarChart3 },
       { name: 'My payroll', href: '/payroll', icon: Receipt },
+    ],
+  },
+  {
+    label: 'Me',
+    items: [
+      // An agent's own calls, applications and closing percentage against the
+      // agency average. No pricing and no money: the endpoint behind it loads
+      // no rate, balance, overrun or charge at all.
+      {
+        name: 'My day',
+        href: '/delivery/me',
+        icon: Gauge,
+        title: 'Your calls, applications and closing percentage against the agency average',
+      },
     ],
   },
   {
