@@ -71,7 +71,12 @@ export interface IssuedGrant {
 
 export interface RedeemedGrant {
   grantId: string;
-  tenantId: string;
+  /**
+   * Null for a `PLATFORM_INVITE`: NetEnroll staff belong to no agency. The
+   * caller must not substitute a default -- picking a tenant when the grant
+   * names none is precisely the nine-step guess this module replaced.
+   */
+  tenantId: string | null;
   roleName: RoleName;
   source: TenantActivationSource;
 }
@@ -101,9 +106,15 @@ function emailsMatch(a: string, b: string): boolean {
  * session's own metadata, or the authenticated session of the OWNER/ADMIN doing
  * the inviting. Passing a tenant that arrived in a request body or a header
  * reintroduces exactly the hole this replaces.
+ *
+ * `tenantId: null` is a PLATFORM_INVITE -- NetEnroll staff, who belong to no
+ * agency. It confers strictly less than a tenanted grant: the account it
+ * creates has no agency and no role and can read nothing until the platform
+ * capability is granted to it separately. Only the provisioning command mints
+ * one; there is no HTTP route that does, deliberately.
  */
 export async function issueActivationGrant(params: {
-  tenantId: string;
+  tenantId: string | null;
   email: string;
   roleName?: RoleName;
   source: TenantActivationSource;
@@ -141,9 +152,11 @@ export async function issueActivationGrant(params: {
 export async function peekActivationGrant(
   token: string,
   email: string
-): Promise<{ tenantName: string; roleName: RoleName }> {
+): Promise<{ tenantName: string | null; roleName: RoleName }> {
   const grant = await loadRedeemableGrant(token, email);
-  return { tenantName: grant.tenant.name, roleName: grant.roleName };
+  // Null for a platform invite. The signup page shows "NetEnroll" rather than
+  // an agency name; it does not get to invent one.
+  return { tenantName: grant.tenant?.name ?? null, roleName: grant.roleName };
 }
 
 /**
@@ -238,7 +251,10 @@ async function loadRedeemableGrant(token: string, email: string) {
     );
   }
 
-  if (grant.tenant.status !== 'ACTIVE') {
+  // A tenanted grant into a suspended agency is refused. A PLATFORM_INVITE has
+  // no tenant and so nothing to be suspended; skipping the check for it is not
+  // a widening, because the account it creates has no agency to read.
+  if (grant.tenant && grant.tenant.status !== 'ACTIVE') {
     throw new ActivationGrantError('TENANT_INACTIVE', 'This agency account is not active');
   }
 

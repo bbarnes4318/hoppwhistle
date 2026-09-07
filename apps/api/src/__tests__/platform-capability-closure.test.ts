@@ -43,6 +43,32 @@ announceSkip('Platform capability: not self-serve', gate);
 const TEST_JWT_SECRET = 'platform-closure-suite-secret-not-used-anywhere-else';
 process.env.JWT_SECRET ??= TEST_JWT_SECRET;
 
+/**
+ * Files that call `issueActivationGrant` with no tenant.
+ *
+ * Looks at the call site -- the ~400 characters after the call opens -- rather
+ * than at the file, because `tenantId: null` is legitimate elsewhere (audit
+ * rows for tenant-less events) and a file-wide match would flag those and have
+ * to be suppressed. A suppressed check finds nothing.
+ */
+function tenantlessGrantCallSites(dir: string): string[] {
+  const found = new Set<string>();
+
+  for (const file of sourceFiles(dir)) {
+    if (file.endsWith(join('services', 'tenant-activation.ts'))) continue; // the definition
+    const source = readFileSync(file, 'utf8');
+
+    for (const match of source.matchAll(/issueActivationGrant\(([\s\S]{0,400})/g)) {
+      const args = match[1];
+      if (/tenantId:\s*null/.test(args) || /PLATFORM_INVITE/.test(args)) {
+        found.add(file.replace(process.cwd() + '/', ''));
+      }
+    }
+  }
+
+  return [...found].sort();
+}
+
 /** Every `.ts` file under a directory, recursively, tests excluded. */
 function sourceFiles(dir: string): string[] {
   const out: string[] = [];
@@ -266,6 +292,174 @@ describe.skipIf(!gate.available)('Platform capability: not self-serve', () => {
     }
 
     expect(await prisma.platformAdmin.count()).toBe(before);
+  });
+
+  describe('the one path that does create a platform admin', () => {
+    /**
+     * The provisioning path, end to end, because a documented path that has
+     * never been run is a guess.
+     *
+     * Production has exactly one platform admin: joel.vasquez@outlook.com has
+     * no account, so `--sync` reported him missing and granted nothing. A
+     * launch set of one is a single point of failure — lose that account and
+     * the dialer console, the quota routes and the /admin/api/v1 console are
+     * unreachable for everybody, with no second operator to restore them.
+     *
+     * Self-serve signup requires an invitation, and every invitation the API
+     * can issue carries a tenant. Inviting NetEnroll staff through one would
+     * create a NetEnroll employee inside a customer's agency. So the grant has
+     * to be able to carry no tenant, and this asserts what that produces.
+     */
+    it('invites with no agency, and the account it creates can do nothing yet', async () => {
+      const { issueActivationGrant } = await import('../services/tenant-activation.js');
+
+      const grant = await issueActivationGrant({
+        tenantId: null,
+        email: 'second.operator@netenroll.test',
+        source: 'PLATFORM_INVITE',
+      });
+
+      const registered = await app.inject({
+        method: 'POST',
+        url: '/api/auth/register',
+        payload: {
+          email: 'second.operator@netenroll.test',
+          password: 'Passw0rdPassw0rd',
+          firstName: 'Second',
+          lastName: 'Operator',
+          activationToken: grant.token,
+        },
+      });
+
+      expect(registered.statusCode).toBe(201);
+      // No roles: a role is a grant inside a tenant and there is no tenant.
+      expect(registered.json().user.roles).toEqual([]);
+
+      const created = await prisma.user.findUnique({
+        where: { email: 'second.operator@netenroll.test' },
+        include: { roles: true, platformAdmin: true },
+      });
+
+      expect(created).not.toBeNull();
+      // Belongs to no agency, exactly as docs/PLATFORM_ADMIN.md §1 requires.
+      expect(created!.tenantId).toBeNull();
+      expect(created!.roles).toEqual([]);
+      // And is NOT staff yet. The invitation and the capability are two
+      // deliberate acts; if this were non-null the invitation would itself be a
+      // way to become a platform admin.
+      expect(created!.platformAdmin).toBeNull();
+      expect(created!.status).toBe('ACTIVE');
+    });
+
+    it('becomes staff only when the provisioning command grants it', async () => {
+      const { issueActivationGrant } = await import('../services/tenant-activation.js');
+      const grant = await issueActivationGrant({
+        tenantId: null,
+        email: 'third.operator@netenroll.test',
+        source: 'PLATFORM_INVITE',
+      });
+
+      await app.inject({
+        method: 'POST',
+        url: '/api/auth/register',
+        payload: {
+          email: 'third.operator@netenroll.test',
+          password: 'Passw0rdPassw0rd',
+          activationToken: grant.token,
+        },
+      });
+
+      const created = await prisma.user.findUniqueOrThrow({
+        where: { email: 'third.operator@netenroll.test' },
+      });
+
+      // The second act. This is `platform:admins -- --grant`.
+      await grantPlatformAdmin(created.id, { note: 'test' });
+
+      expect(
+        await prisma.platformAdmin.findUnique({ where: { userId: created.id } })
+      ).not.toBeNull();
+    });
+
+    it('spends a platform invitation exactly once', async () => {
+      const { issueActivationGrant } = await import('../services/tenant-activation.js');
+      const grant = await issueActivationGrant({
+        tenantId: null,
+        email: 'fourth.operator@netenroll.test',
+        source: 'PLATFORM_INVITE',
+      });
+
+      const first = await app.inject({
+        method: 'POST',
+        url: '/api/auth/register',
+        payload: {
+          email: 'fourth.operator@netenroll.test',
+          password: 'Passw0rdPassw0rd',
+          activationToken: grant.token,
+        },
+      });
+      expect(first.statusCode).toBe(201);
+
+      const second = await app.inject({
+        method: 'POST',
+        url: '/api/auth/register',
+        payload: {
+          email: 'someone.else@netenroll.test',
+          password: 'Passw0rdPassw0rd',
+          activationToken: grant.token,
+        },
+      });
+      expect(second.statusCode).toBe(400);
+    });
+
+    it('refuses a platform invitation presented with a different address', async () => {
+      // The same binding an agency invitation has. Without it, intercepting the
+      // link creates a tenant-less account under the interceptor's own address
+      // — one `--grant` away from every agency on the platform.
+      const { issueActivationGrant } = await import('../services/tenant-activation.js');
+      const grant = await issueActivationGrant({
+        tenantId: null,
+        email: 'intended@netenroll.test',
+        source: 'PLATFORM_INVITE',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/auth/register',
+        payload: {
+          email: 'attacker@example.com',
+          password: 'Passw0rdPassw0rd',
+          activationToken: grant.token,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(await prisma.user.findUnique({ where: { email: 'attacker@example.com' } })).toBeNull();
+    });
+
+    it('is not reachable over HTTP: no route mints a tenant-less grant', () => {
+      // `POST /api/v1/auth/activation-grants` invites into the caller's OWN
+      // agency and has no tenantId field. Nothing on the HTTP surface mints a
+      // PLATFORM_INVITE; only the provisioning command does, which needs shell
+      // access to the host.
+      //
+      // Matched at the CALL SITE rather than anywhere in the file: `auth.ts`
+      // legitimately contains `tenantId: null` (audit rows for events with no
+      // tenant) and the words PLATFORM_INVITE (in a comment explaining why it
+      // skips role assignment for one). A file-wide grep flagged both and would
+      // have had to be silenced, which is how a real finding gets silenced too.
+      expect(
+        tenantlessGrantCallSites(join(process.cwd(), 'src', 'routes')),
+        'a route mints a tenant-less activation grant. Only ' +
+          'src/cli/platform-admins.ts may, and only from the host.'
+      ).toEqual([]);
+    });
+
+    it('the provisioning command is the only caller that mints one', () => {
+      expect(tenantlessGrantCallSites(join(process.cwd(), 'src'))).toEqual([
+        'src/cli/platform-admins.ts',
+      ]);
+    });
   });
 
   it('a user created through the API is never staff', async () => {

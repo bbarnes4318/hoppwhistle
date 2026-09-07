@@ -91,6 +91,15 @@ enum TenantActivationSource {
   /// An existing OWNER or ADMIN of the tenant invited this address. The tenant
   /// is the inviter's own, taken from their authenticated session.
   ADMIN_INVITE
+  /// NetEnroll staff, invited from the provisioning command on the host. The
+  /// grant carries NO tenant and NO role: it creates an account that belongs to
+  /// no agency and can do nothing at all until `platform:admins --grant` is run
+  /// for it separately.
+  ///
+  /// It is deliberately not reachable over HTTP. Issuing one needs shell access
+  /// to the host and DATABASE_URL, which is the same bar as granting the
+  /// capability itself.
+  PLATFORM_INVITE
 }
 
 /// A single-use permission to create a user inside one named tenant.
@@ -121,8 +130,19 @@ enum TenantActivationSource {
 /// applications purchased under the plan never expire. The expiry here is on
 /// the invitation link only.
 model TenantActivationGrant {
-  id       String @id @default(uuid())
-  tenantId String
+  id String @id @default(uuid())
+
+  /// The agency this grant creates an account inside.
+  ///
+  /// NULL for a `PLATFORM_INVITE`: NetEnroll staff belong to no agency
+  /// (`User.tenantId` is null for them, see docs/PLATFORM_ADMIN.md §1), so a
+  /// grant that put them inside one would be creating a NetEnroll employee in a
+  /// customer's team roster.
+  ///
+  /// A null tenant confers strictly LESS than a real one: the account it
+  /// creates has no agency and no role, and can read nothing until the platform
+  /// capability is granted to it separately.
+  tenantId String?
 
   /// SHA-256 hex digest of the single-use activation token. The token itself is
   /// shown once, to whoever the grant was issued for, and never stored.
@@ -134,7 +154,8 @@ model TenantActivationGrant {
   email String
 
   /// The role the redeeming user is given. An agency principal gets OWNER;
-  /// their staff get AGENT.
+  /// their staff get AGENT. Ignored when `tenantId` is null -- a role is a grant
+  /// inside a tenant, and there is no tenant to grant it in.
   roleName RoleName @default(AGENT)
 
   source TenantActivationSource
@@ -150,7 +171,7 @@ model TenantActivationGrant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([email])

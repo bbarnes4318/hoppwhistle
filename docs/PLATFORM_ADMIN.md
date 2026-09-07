@@ -238,9 +238,10 @@ tenant from `request.user` via the Phase 1 helper.
 ## 4. Provisioning
 
 ```
-pnpm --filter @hopwhistle/api platform:admins              # list
+pnpm --filter @hopwhistle/api platform:admins               # list
 PLATFORM_ADMIN_EMAILS=owner@example.com \
-pnpm --filter @hopwhistle/api platform:admins -- --sync    # provision the launch set
+pnpm --filter @hopwhistle/api platform:admins -- --sync     # provision the launch set
+pnpm --filter @hopwhistle/api platform:admins -- --invite someone@example.com
 pnpm --filter @hopwhistle/api platform:admins -- --grant  someone@example.com
 pnpm --filter @hopwhistle/api platform:admins -- --revoke someone@example.com
 ```
@@ -253,6 +254,84 @@ hardcoded in a public repository) plus `joel.vasquez@outlook.com`.
 It deliberately **does not create user accounts**. A login is created through the
 normal activation-grant invitation path; a provisioning script that mints
 accounts would be a second way in.
+
+### 4.1 The second operator — the exact commands
+
+**Production has exactly one platform admin.** `joel.vasquez@outlook.com` is in
+the launch set but has no user account, so `--sync` reported him missing and
+granted nothing. A launch set of one is a single point of failure: lose that
+account and the shared dialer console, the quota routes and the
+`/admin/api/v1/*` console are unreachable for everybody, with no second operator
+to restore them.
+
+Self-serve signup requires an invitation (Phase 1), and every invitation the API
+can issue carries a tenant — `POST /api/v1/auth/activation-grants` invites into
+the caller's **own** agency and has deliberately no `tenantId` field. Inviting
+NetEnroll staff through one of those would create a NetEnroll employee inside a
+customer's agency, visible in that customer's team roster and holding one of its
+roles, which contradicts §1: a platform admin's `User.tenantId` is null.
+
+So there is a third grant source, `PLATFORM_INVITE`, carrying **no tenant**.
+It is issued by the provisioning command only. There is no HTTP route that mints
+one, and `platform-capability-closure.test.ts` asserts that at the call site.
+
+**Run these on the host, in this order.**
+
+**1. Issue the invitation.** Prints a single-use token, valid seven days, bound
+to that address:
+
+```
+cd /opt/hopwhistle
+pnpm --filter @hopwhistle/api platform:admins -- --invite joel.vasquez@outlook.com
+```
+
+**2. Have Joel register with it.** The token is shown once and never stored in
+plaintext; send it to him over something he already trusts. He runs, or you run
+on his behalf with a password he then changes:
+
+```
+curl -sS -X POST https://agents.netenroll.com/api/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{
+        "email": "joel.vasquez@outlook.com",
+        "password": "<a password he chooses>",
+        "firstName": "Joel",
+        "lastName": "Vasquez",
+        "activationToken": "<the token from step 1>"
+      }'
+```
+
+Expect `201`, and `"roles": []` in the response body. That is correct and is the
+point: the account created belongs to **no agency** and holds **no role**. It
+can read nothing at all.
+
+**3. Grant the capability.** This is the second deliberate act, and it is the
+one that confers anything:
+
+```
+pnpm --filter @hopwhistle/api platform:admins -- --grant joel.vasquez@outlook.com
+```
+
+**4. Verify there are now two.**
+
+```
+pnpm --filter @hopwhistle/api platform:admins
+```
+
+Expect two rows, both `ACTIVE`, both in the `cross-agency view`.
+
+**If Joel already has an account** — say he was invited into an agency at some
+point — `--invite` says so and tells you to skip to step 3. Note that in that
+case he keeps his agency membership; `middleware/auth.ts` ignores a platform
+admin's own `User.tenantId` and uses the acting tenant instead, so it changes
+nothing about what he can see, but it does leave him listed in that agency's
+roster. Removing him from it is a separate decision.
+
+**Why this is not a new way in.** A `PLATFORM_INVITE` confers strictly *less*
+than an ordinary grant: an ordinary one puts an AGENT or OWNER inside a paying
+agency, this one produces an account with nothing. Minting it needs shell access
+to the host and `DATABASE_URL` — the same bar as granting the capability
+directly, which the same command already does.
 
 ---
 
@@ -291,13 +370,24 @@ database, driving the real auth hook and the real route plugins.
    refused the payroll surface; and an operator whose capability has been
    revoked is refused with a plain 403, not the staff-only "pick an agency".
 
-`apps/api/src/__tests__/platform-capability-closure.test.ts` — 6 cases, added in
-Phase 2 alongside the permission widening. Two run with no database at all: no
+`apps/api/src/__tests__/platform-capability-closure.test.ts` — 12 cases, added in
+Phase 2 alongside the permission widening and extended with the provisioning
+path. Two run with no database at all: no
 route file writes to `platform_admins`, and `src/cli/platform-admins.ts` is the
 only caller of `grantPlatformAdmin`. Four drive real requests as an agency
 OWNER, as an operator and anonymously, across every shape a grant could take —
 a dedicated endpoint, a user create carrying `isPlatformAdmin: true`, a profile
 update — and assert the row count never moves.
+
+Six more cover the provisioning path end to end, because a documented path that
+has never been run is a guess: a `PLATFORM_INVITE` produces an ACTIVE account
+with a null `tenantId`, no roles and **no** `PlatformAdmin` row; a separate
+grant is what makes it staff; the token is spent exactly once; it is refused
+when presented with a different address; and no route mints a tenant-less grant.
+That last check matches at the CALL SITE rather than file-wide, because
+`auth.ts` legitimately contains `tenantId: null` for audit rows with no tenant —
+a file-wide grep flagged those and would have had to be silenced, which is how a
+real finding gets silenced too.
 
 `apps/web/src/lib/__tests__/no-acting-tenant.test.ts` — 4 cases against the real
 API client: `NO_ACTING_TENANT` never clears the session or navigates, that holds
