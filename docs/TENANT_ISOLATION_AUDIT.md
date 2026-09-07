@@ -816,6 +816,16 @@ capability rather than from the parameter:
     POST /api/v1/platform/delivery/agencies/:tenantId/resume
     POST /api/v1/platform/delivery/agencies/:tenantId/opening-purchase
     POST /api/v1/platform/delivery/settlement/run
+    GET  /api/v1/platform/delivery/agencies/:tenantId/enrolment
+    POST /api/v1/platform/delivery/agencies/:tenantId/enrol
+    POST /api/v1/platform/delivery/agencies/:tenantId/unenrol
+    PUT  /api/v1/platform/delivery/agencies/:tenantId/charges
+
+The last four are the enrolment and charging switches (`docs/BILLING.md` §0).
+They decide whether an agency is billed at all and whether money leaves its bank
+account, so they are the most consequential routes on this surface and are
+platform-only for the same reason the ceiling override is: an agency must not be
+able to change what it can be charged, in either direction.
 
 `settlement.test.ts` asserts an agency OWNER is refused the cross-agency view,
 the settlement run and its own ceiling override, and that one agency's
@@ -836,6 +846,20 @@ to be suspicious of, so:
   id gets 403 rather than that agency's bank account attached to its profile.
 - The route resolves its own tenant through the Phase 1 helper; the body carries
   no tenant and there is no field for one.
+
+## 9.3b Enrolment does not widen anything
+
+The enrolment switch decides whether the billing system applies to an agency. It
+changes no tenant resolution: `billingEnrolledAt` lives on
+`agency_billing_profiles`, which is keyed on `tenantId`, and the gate reads it
+for the tenant it already resolved. An unenrolled agency is short-circuited to
+"not gated" **before** any billing state is read, so the enrolment check cannot
+become a path that reads another agency's rows.
+
+The one thing worth stating plainly: an unenrolled agency's calls are delivered
+without consulting a balance, which is the pre-Phase-3 behaviour and is the
+point. It is not a bypass of an isolation boundary — nothing about which agency
+a call belongs to changes.
 
 ## 9.4 Delivery gating and the machine callbacks
 

@@ -9,6 +9,20 @@
  * disagrees with itself, and the half that says yes is the one that bills
  * somebody.
  *
+ * ── An unenrolled agency is not gated at all ─────────────────────────────────
+ *
+ * The FIRST thing this function does is ask whether the agency is enrolled in
+ * billing, and an unenrolled one is allowed through before any other condition
+ * is evaluated. Not "allowed because it happens to pass the checks" -- not
+ * subject to the checks. No `delivery_hold_events` row, no notification, no
+ * ledger read.
+ *
+ * That ordering is the whole point. This gate shipped without it, and an agency
+ * with no billing profile has no mandate, so every existing tenant would have
+ * been refused with NO_MANDATE the moment it deployed -- including one carrying
+ * live client traffic. Enrolment is the opt-in, it is explicit, and it defaults
+ * to off.
+ *
  * ── Derived live, never a stored flag ────────────────────────────────────────
  *
  * Nothing here reads a "paused" boolean. Every condition is recomputed from the
@@ -71,12 +85,21 @@ import type { CalendarDayKey } from '../rating/calendar-day.js';
 
 import { creditBalance, ledgerCountsForDay } from './credit-ledger.js';
 import { BillingNotificationKind, notify } from './notifications.js';
-import { loadAgencyTerms } from './terms.js';
+import { isEnrolledForBilling, loadAgencyTerms } from './terms.js';
 import type { AgencyTerms } from './terms.js';
 
 export interface DeliveryGateDecision {
   tenantId: string;
   deliveryDay: CalendarDayKey;
+  /**
+   * Whether this agency is subject to the billing system at all.
+   *
+   * False means every other field on this object is a zero rather than a
+   * measurement, `allowed` is true, and nothing was read or written on the
+   * agency's behalf. The portal renders it as "not enrolled" rather than as an
+   * agency with no credit.
+   */
+  enrolled: boolean;
   /** Whether another call may be offered to one of this agency's agents. */
   allowed: boolean;
   /** Why not. Null when `allowed`. */
@@ -113,6 +136,33 @@ export interface DeliveryGateDecision {
     graceExpired: boolean;
   } | null;
 }
+
+/**
+ * The answer for an agency that is not enrolled in billing.
+ *
+ * Every measurement is zero because none was taken, and `allowed` is true
+ * because there is nothing to allow it against. Written out as a constant so
+ * the shape cannot drift from the real decision object, and so a reader can see
+ * at a glance that nothing here was read from the database.
+ */
+const UNENROLLED: Omit<DeliveryGateDecision, 'tenantId' | 'deliveryDay'> = {
+  enrolled: false,
+  allowed: true,
+  reason: null,
+  detail: null,
+  balance: 0,
+  dailyBlockApplications: 0,
+  consumedToday: 0,
+  overrunToday: 0,
+  overrunCeiling: 0,
+  overrunRemaining: 0,
+  ceilingPct: 0,
+  ceilingSource: 'CLEAN_SETTLEMENT_SCHEDULE',
+  consecutiveCleanSettlements: 0,
+  overrunWithheldForUnpaidSettlement: false,
+  hasValidMandate: false,
+  unpaidSettlement: null,
+};
 
 export interface GateOptions {
   prisma?: PrismaClient;
@@ -190,6 +240,23 @@ export async function evaluateDeliveryGate(
   const today = calendarDayOf(now);
   const record = options.record !== false;
 
+  /*
+   * Enrolment, first, and on its own.
+   *
+   * One indexed lookup, before anything else is read. An agency that has not
+   * been explicitly enrolled is not subject to any of the conditions below and
+   * delivers exactly as it did before Phase 3 existed. Nothing is recorded and
+   * nobody is notified, because nothing happened: this is not a decision to
+   * allow a call, it is the absence of a billing system for this agency.
+   */
+  if (!(await isEnrolledForBilling(prisma, tenantId))) {
+    return {
+      ...UNENROLLED,
+      tenantId,
+      deliveryDay: today,
+    };
+  }
+
   const [terms, balance, counts, ratingState, openFlag, unpaid] = await Promise.all([
     loadAgencyTerms(tenantId, { prisma }),
     creditBalance(prisma, tenantId),
@@ -214,6 +281,7 @@ export async function evaluateDeliveryGate(
   const base = {
     tenantId,
     deliveryDay: today,
+    enrolled: true,
     balance,
     dailyBlockApplications: terms.dailyBlockApplications,
     consumedToday: counts.consumed,
@@ -408,14 +476,30 @@ async function recordHold(
  * loses the agency a sale it had bought; delivering one it had not is a charge
  * we cannot substantiate. Both are bad, and the second is the one that ends up
  * on a bank statement, so an unreadable gate refuses.
+ *
+ * That is a deliberate cost for an ENROLLED agency, which has agreed to be
+ * billed and whose delivery is already conditional. It is why the enrolment
+ * lookup is the first read and not part of the same `Promise.all` as the rest:
+ * an unenrolled agency's calls must not stop because a query about a billing
+ * system it is not in failed.
  */
 export async function isDeliveryAllowed(
   tenantId: string,
   options: GateOptions = {}
-): Promise<{ allowed: boolean; reason: DeliveryHoldReason | null; detail: string | null }> {
+): Promise<{
+  allowed: boolean;
+  enrolled: boolean;
+  reason: DeliveryHoldReason | null;
+  detail: string | null;
+}> {
   try {
     const decision = await evaluateDeliveryGate(tenantId, options);
-    return { allowed: decision.allowed, reason: decision.reason, detail: decision.detail };
+    return {
+      allowed: decision.allowed,
+      enrolled: decision.enrolled,
+      reason: decision.reason,
+      detail: decision.detail,
+    };
   } catch (error) {
     logger.error({
       msg: 'Delivery gate could not be evaluated; refusing delivery',
@@ -424,6 +508,7 @@ export async function isDeliveryAllowed(
     });
     return {
       allowed: false,
+      enrolled: true,
       reason: null,
       detail: 'Delivery eligibility could not be determined.',
     };

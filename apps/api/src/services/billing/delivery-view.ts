@@ -47,11 +47,22 @@ import { getRedisClient } from '../redis.js';
 import { creditBalance, ledgerCountsForDay } from './credit-ledger.js';
 import { evaluateDeliveryGate } from './delivery-gate.js';
 import type { DeliveryGateDecision } from './delivery-gate.js';
+import { isEnrolledForBilling } from './terms.js';
 
 export interface DeliveryTodayView {
   tenantId: string;
   calendarDay: CalendarDayKey;
   timeZone: string;
+
+  /**
+   * Whether this agency is in the billing system at all.
+   *
+   * False means every figure below is a zero rather than a measurement, and the
+   * portal says "not enrolled" instead of showing an agency with no credit.
+   */
+  enrolled: boolean;
+  /** Whether an enrolled agency's settlements actually charge. */
+  chargesEnabled: boolean;
 
   /** Calls NetEnroll routed to this agency today, answered or not. */
   callsRouted: number;
@@ -107,6 +118,43 @@ export interface DeliveryTodayView {
 }
 
 /**
+ * The shape returned for an agency that is not in the billing system.
+ *
+ * Every billing figure is zero because none was measured, and `enrolled: false`
+ * is what the portal renders instead of the zeroes. Written out so the shape
+ * cannot drift from the real view.
+ */
+const NOT_ENROLLED_VIEW: Omit<
+  DeliveryTodayView,
+  'tenantId' | 'calendarDay' | 'callsRouted' | 'callsAnswered' | 'applicationsSubmitted' | 'todayClosingPct'
+> = {
+  timeZone: 'America/New_York',
+  enrolled: false,
+  chargesEnabled: false,
+  windowClosingPct: null,
+  windowDayKeys: [],
+  windowDaysFound: 0,
+  windowDeliveryDays: 0,
+  currentRate: null,
+  trackingRate: null,
+  trackingBelowMinimum: false,
+  applicationsRemainingOnBlock: 0,
+  dailyBlockApplications: 0,
+  applicationsConsumedToday: 0,
+  overrunToday: 0,
+  overrunAmountTonight: null,
+  overrunCeiling: 0,
+  distanceToCeiling: 0,
+  projectedTotalCharge: null,
+  projectedNextBlockQuantity: 0,
+  delivering: true,
+  holdReason: null,
+  holdDetail: null,
+  holdSince: null,
+  mandate: { status: 'NONE', bankName: null, last4: null },
+};
+
+/**
  * The agency principal's live panel.
  */
 export async function getDeliveryToday(
@@ -117,6 +165,40 @@ export async function getDeliveryToday(
   const now = options.now ?? new Date();
   const today = currentCalendarDay(now);
   const bounds = calendarDayBounds(today);
+
+  /*
+   * Not enrolled: none of the rest applies, and computing it anyway would mean
+   * loading a rate curve to price an agency that is not being priced. Answered
+   * from the two counts that are true regardless -- calls and applications --
+   * with every billing figure zero and `enrolled: false` saying why.
+   */
+  if (!(await isEnrolledForBilling(prisma, tenantId))) {
+    const [todayOnly, routedOnly] = await Promise.all([
+      measureCalendarDay(
+        { calls: prisma.call, applications: prisma.insuranceCarrierApplication },
+        tenantId,
+        today
+      ),
+      prisma.call.count({
+        where: {
+          tenantId,
+          direction: 'INBOUND',
+          blocked: false,
+          createdAt: { gte: bounds.start, lt: bounds.endExclusive },
+        },
+      }),
+    ]);
+
+    return {
+      ...NOT_ENROLLED_VIEW,
+      tenantId,
+      calendarDay: today,
+      callsRouted: routedOnly,
+      callsAnswered: todayOnly.deliveredCalls,
+      applicationsSubmitted: todayOnly.submittedApplications,
+      todayClosingPct: todayOnly.closingPct,
+    };
+  }
 
   const [rating, gate, balance, counts, todayMeasurement, routed, hold, profile] =
     await Promise.all([
@@ -178,6 +260,8 @@ export async function getDeliveryToday(
     tenantId,
     calendarDay: today,
     timeZone: 'America/New_York',
+    enrolled: gate.enrolled,
+    chargesEnabled: profile?.chargesEnabled === true,
     callsRouted: routed,
     callsAnswered: todayMeasurement.deliveredCalls,
     applicationsSubmitted: todayMeasurement.submittedApplications,
@@ -450,6 +534,10 @@ export interface PlatformAgencyRow {
   tenantId: string;
   name: string;
   slug: string;
+  /** Whether this agency is subject to the billing system at all. */
+  enrolled: boolean;
+  /** Whether an enrolled agency's settlements actually charge. */
+  chargesEnabled: boolean;
   deliveredCalls: number;
   applications: number;
   closingPct: number | null;
@@ -473,7 +561,8 @@ export interface PlatformAgencyRow {
 
   /** Where the day's settlement run got to for this agency. */
   settlement: {
-    status: 'SETTLED' | 'FAILED' | 'NOT_YET_RUN';
+    /** `NOT_ENROLLED` is not a failure to run: there was nothing to settle. */
+    status: 'SETTLED' | 'DRY_RUN' | 'FAILED' | 'NOT_YET_RUN' | 'NOT_ENROLLED';
     paymentStatus: SettlementPaymentStatus | null;
     totalCharged: number | null;
     overrunQuantity: number | null;
@@ -561,6 +650,8 @@ export async function getPlatformOverview(
       tenantId: tenant.id,
       name: tenant.name,
       slug: tenant.slug,
+      enrolled: profile?.billingEnrolledAt != null,
+      chargesEnabled: profile?.chargesEnabled === true,
       deliveredCalls: calls,
       applications: measurement.submittedApplications,
       closingPct: measurement.closingPct,
@@ -571,21 +662,46 @@ export async function getPlatformOverview(
       revenuePerCall:
         revenue === null || calls === 0 ? null : Number((revenue / calls).toFixed(4)),
       costPerCall: callCost === null || calls === 0 ? null : Number((callCost / calls).toFixed(4)),
-      flags: {
-        belowMinimumAndPaused: flag !== null || state?.status === 'UNDER_REVIEW',
-        atCeiling: ledger.overrun >= ceilingApplications && ceilingApplications > 0,
-        settlementFailedOrUnpaid: unpaid > 0,
-        noValidMandate: profile?.achMandateStatus !== 'ACTIVE' || !profile.achPaymentMethodId,
-        suspended: profile?.suspendedAt != null,
-      },
+      /*
+       * Flags are conditions that need somebody to act, so they are only raised
+       * for an agency that is actually in the billing system. An unenrolled
+       * agency has no mandate and no rate by definition; flagging it would put
+       * five red badges on every tenant that has not been onboarded yet and
+       * bury the one that genuinely needs attention.
+       */
+      flags:
+        profile?.billingEnrolledAt == null
+          ? {
+              belowMinimumAndPaused: false,
+              atCeiling: false,
+              settlementFailedOrUnpaid: false,
+              noValidMandate: false,
+              suspended: false,
+            }
+          : {
+              belowMinimumAndPaused: flag !== null || state?.status === 'UNDER_REVIEW',
+              atCeiling: ledger.overrun >= ceilingApplications && ceilingApplications > 0,
+              settlementFailedOrUnpaid: unpaid > 0,
+              noValidMandate:
+                profile.achMandateStatus !== 'ACTIVE' || !profile.achPaymentMethodId,
+              suspended: profile.suspendedAt != null,
+            },
       settlement: {
         status:
-          settlement === null
+          profile?.billingEnrolledAt == null
+            ? 'NOT_ENROLLED'
+            : settlement === null
             ? 'NOT_YET_RUN'
             : settlement.paymentStatus === SettlementPaymentStatus.SUCCEEDED ||
                 settlement.paymentStatus === SettlementPaymentStatus.NOT_CHARGED
               ? 'SETTLED'
-              : 'FAILED',
+              : // A dry run is neither settled nor failed: it computed
+                // correctly and deliberately took no money. Calling it FAILED
+                // would put a red flag on the one state an operator has
+                // chosen, on every agency being watched before go-live.
+                settlement.paymentStatus === SettlementPaymentStatus.DRY_RUN
+                ? 'DRY_RUN'
+                : 'FAILED',
         paymentStatus: settlement?.paymentStatus ?? null,
         totalCharged: settlement === null ? null : toNumber(settlement.totalCharged),
         overrunQuantity: settlement?.overrunQuantity ?? null,

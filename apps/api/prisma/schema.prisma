@@ -3883,6 +3883,15 @@ enum CreditLedgerEntryType {
 enum SettlementPaymentStatus {
   /// Computed, not yet submitted to Stripe.
   PENDING
+
+  /// Computed and recorded in full, with no debit placed, because charging is
+  /// not enabled for this agency (`AgencyBillingProfile.chargesEnabled`) or the
+  /// run was invoked with `--no-charge`.
+  ///
+  /// Every figure on the row is the real computation, so this is what a
+  /// settlement WOULD have charged. It is deliberately not counted as a clean
+  /// settlement: nothing was paid, so it must not raise an Overrun ceiling.
+  DRY_RUN
   /// Submitted and accepted. ACH settles over days; `SUCCEEDED` means Stripe
   /// reported the payment intent succeeded.
   SUCCEEDED
@@ -3956,6 +3965,44 @@ model AgencyBillingProfile {
   id       String @id @default(uuid())
   tenantId String @unique
 
+  /// ── The enrolment switch ──────────────────────────────────────────────────
+  ///
+  /// Whether this agency is subject to the billing system AT ALL. Set when a
+  /// platform admin explicitly enrols the agency, and null otherwise.
+  ///
+  /// A tenant that is not enrolled is not gated, not metered and not settled:
+  /// its calls deliver exactly as they did before Phase 3 existed, no ledger
+  /// row is written when one of its applications reaches submitted state, and
+  /// the nightly settlement skips it rather than settling it at zero.
+  ///
+  /// It is deliberately NOT inferred from anything. Not from the existence of
+  /// this row, not from a mandate, not from ledger rows. Phase 3 shipped
+  /// inferring it -- a tenant with no billing profile got `hasValidMandate:
+  /// false` and was refused with NO_MANDATE -- which would have stopped call
+  /// delivery for every agency on the platform the moment it deployed,
+  /// including one carrying live client traffic. An opt-in that can be arrived
+  /// at accidentally is not an opt-in.
+  ///
+  /// The default is unenrolled, and the migration enrols nobody.
+  billingEnrolledAt       DateTime?
+  billingEnrolledByUserId String?
+  billingEnrolmentNote    String?
+
+  /// ── The charging switch ───────────────────────────────────────────────────
+  ///
+  /// Whether a settlement for this agency may actually place a debit.
+  ///
+  /// False by default, so enrolling an agency puts it in a state where the
+  /// settlement computes everything and records the full immutable settlement
+  /// row, and only the Stripe charge is skipped -- `paymentStatus: DRY_RUN`.
+  /// Real money needs a second, separate, explicit act.
+  ///
+  /// This is the switch to watch an agency's settlements compute correctly for
+  /// several days before anything reaches a bank account.
+  chargesEnabled         Boolean   @default(false)
+  chargesEnabledAt       DateTime?
+  chargesEnabledByUserId String?
+
   /// The agency's configured daily target quantity: how many application
   /// credits the nightly settlement sells for the next Delivery Day. Reduced or
   /// omitted where unused paid applications remain.
@@ -4006,6 +4053,9 @@ model AgencyBillingProfile {
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
+  /// The settlement run walks tenants and skips the unenrolled, so enrolment is
+  /// the only column read as a set.
+  @@index([billingEnrolledAt])
   @@map("agency_billing_profiles")
 }
 

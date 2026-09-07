@@ -5,8 +5,31 @@
  *   pnpm --filter @hopwhistle/api settlement:run -- --day 2026-09-07
  *   pnpm --filter @hopwhistle/api settlement:run -- --tenant <id>
  *   pnpm --filter @hopwhistle/api settlement:run -- --dry-run
+ *   pnpm --filter @hopwhistle/api settlement:run -- --no-charge
  *   pnpm --filter @hopwhistle/api settlement:run -- --retry-failed
  *   pnpm --filter @hopwhistle/api settlement:run -- --resume-stalled
+ *
+ * ── --dry-run and --no-charge are different, and the difference matters ───────
+ *
+ *   --dry-run    Writes NOTHING. Computes what tonight would be and prints it.
+ *                No settlement row, no ledger row, no charge. A preview.
+ *
+ *   --no-charge  Writes EVERYTHING except the debit. The full settlement row is
+ *                recorded with every figure on it, the next day's block is
+ *                sold, and Stripe is never called. The row reads DRY_RUN and
+ *                `totalCharged` is what it would have taken.
+ *
+ * `--no-charge` is the one to run a real agency on for a few days before money
+ * moves, and it is one-directional: it can only turn charging off. An agency
+ * whose profile has `chargesEnabled: false` is already in that mode and this
+ * flag changes nothing for it.
+ *
+ * ── Agencies not enrolled in billing are skipped ─────────────────────────────
+ *
+ * Every active tenant is walked and the unenrolled ones report a skip without a
+ * settlement row. Enrolment is explicit, per tenant, and defaults to off, so on
+ * a platform where nobody has been enrolled this command settles nobody and
+ * says so for each.
  *
  * ── When to run it ───────────────────────────────────────────────────────────
  *
@@ -69,6 +92,7 @@ async function main(): Promise<void> {
 
   const tenantFilter = argValue('--tenant');
   const dryRun = process.argv.includes('--dry-run');
+  const noCharge = process.argv.includes('--no-charge');
 
   console.log(`Delivery Day settled:  ${day} (closed 23:59:59 America/New_York)`);
   console.log(`Block sold for:        ${nextCalendarDay(day)}`);
@@ -119,6 +143,13 @@ async function main(): Promise<void> {
         creditBalance(prisma, tenant.id),
       ]);
 
+      // Not enrolled means nothing would happen, and printing a row of zeroes
+      // beside the agencies that are being billed reads as though it did.
+      if (!terms.enrolled) {
+        console.log(`${tenant.name.slice(0, 24).padEnd(24)}   not enrolled in billing — skipped`);
+        continue;
+      }
+
       const rate = summary.trackingRate ?? summary.currentRate;
       const overrunAmount = rate === null ? null : counts.overrun * rate;
       const blockQuantity =
@@ -141,10 +172,16 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (noCharge) {
+    console.log('--no-charge: settlements will be computed and RECORDED; no debit will be placed.');
+    console.log('');
+  }
+
   const result = await runDailySettlement({
     deliveryDay: day,
     prisma,
     tenantIds: tenantFilter ? [tenantFilter] : undefined,
+    noCharge,
   });
 
   for (const settlement of result.results) {
@@ -160,7 +197,8 @@ async function main(): Promise<void> {
       `${settlement.tenantId}  ${settlement.paymentStatus}  ` +
         `overrun ${settlement.overrunQuantity} (${money(settlement.overrunAmount)})  ` +
         `block ${settlement.nextBlockQuantity} (${money(settlement.nextBlockAmount)})  ` +
-        `total ${money(settlement.totalCharged)}`
+        `total ${money(settlement.totalCharged)}` +
+        (settlement.paymentStatus === 'DRY_RUN' ? '   (recorded; nothing charged)' : '')
     );
   }
 

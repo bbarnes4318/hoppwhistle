@@ -115,43 +115,16 @@ describe.skipIf(!gate.available)('Pay-Per-Call Real Database/Redis Integration T
     /*
      * Phase 3 delivery gating.
      *
-     * `GET /api/v1/freeswitch/lookup` now asks the delivery gate before handing
-     * over a destination, so this tenant is set up to be deliverable: agreed
-     * terms, a valid ACH mandate, an agreed opening rate and a paid block on the
-     * ledger. Without them the gate refuses -- correctly, because an agency with
-     * no mandate is not delivered to -- and every routing assertion below would
-     * fail for a reason that has nothing to do with routing.
+     * `GET /api/v1/freeswitch/lookup` asks the delivery gate before handing
+     * over a destination, and the gate's first check is whether the agency is
+     * enrolled in billing. This tenant is not -- no billing profile is created
+     * anywhere in this fixture -- so the gate returns "not gated" and delivery
+     * behaves exactly as it did before Phase 3 existed.
      *
-     * The gate is exercised for its own sake in
-     * `src/__tests__/delivery-gating-paths.test.ts`.
+     * That is deliberately the state under test here: it is the state every
+     * tenant on the platform is in until a platform admin explicitly enrols it.
+     * The enrolled path has its own suite, `src/__tests__/delivery-gating-paths.test.ts`.
      */
-    await prisma.agencyBillingProfile.create({
-      data: {
-        tenantId,
-        dailyBlockApplications: 45,
-        maxDailyDebit: 8978,
-        stripeCustomerId: 'cus_integration',
-        achPaymentMethodId: 'pm_integration',
-        achMandateStatus: 'ACTIVE',
-        achMandateVerifiedAt: new Date(),
-      },
-    });
-
-    await prisma.agencyRatingState.create({
-      data: { tenantId, status: 'OPENING_BLOCK', openingRate: 134, currentRate: 134 },
-    });
-
-    await prisma.applicationCreditLedgerEntry.create({
-      data: {
-        tenantId,
-        entryType: 'PURCHASE',
-        quantity: 45,
-        deliveryDay: '2026-09-07',
-        unitRate: 134,
-        amount: 6030,
-        stripePaymentIntentId: 'pi_integration',
-      },
-    });
 
     // Seed Users & User Roles
     const usersToCreate = [

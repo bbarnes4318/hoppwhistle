@@ -221,7 +221,20 @@ export const markAutomationCompleted = async (
    */
   try {
     const { consumeCreditForApplication } = await import('../billing/credit-ledger.js');
+    const { isEnrolledForBilling } = await import('../billing/terms.js');
     const { calendarDayOf } = await import('../rating/calendar-day.js');
+
+    /*
+     * Only an agency that has been explicitly enrolled in billing is metered.
+     *
+     * An unenrolled agency's applications write no ledger row at all -- not a
+     * consumption, not an overrun, nothing. Its balance stays what it has
+     * always been, which is nothing, and no settlement will ever look at it.
+     * This is the same switch the delivery gate reads, and it is asked here
+     * rather than inside the ledger so the ledger has one job.
+     */
+    if (!(await isEnrolledForBilling(prisma, application.tenantId))) return;
+
     await consumeCreditForApplication({
       tenantId: application.tenantId,
       applicationId: application.id,

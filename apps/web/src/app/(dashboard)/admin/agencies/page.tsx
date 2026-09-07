@@ -38,12 +38,19 @@ import { cn } from '@/lib/utils';
  * Every figure is per agency and computed per agency. There is no pooled
  * cross-tenant aggregate anywhere on it: one agency's number must never be
  * derived from another's traffic.
+ *
+ * Billing is opt-in per agency. An agency that has not been enrolled is shown
+ * as such and carries no flags — it has no mandate and no rate by definition,
+ * and badging it for those would put five red flags on every tenant that has
+ * not been onboarded and bury the one that needs attention.
  */
 
 interface AgencyRow {
   tenantId: string;
   name: string;
   slug: string;
+  enrolled: boolean;
+  chargesEnabled: boolean;
   deliveredCalls: number;
   applications: number;
   closingPct: number | null;
@@ -61,7 +68,7 @@ interface AgencyRow {
     suspended: boolean;
   };
   settlement: {
-    status: 'SETTLED' | 'FAILED' | 'NOT_YET_RUN';
+    status: 'SETTLED' | 'DRY_RUN' | 'FAILED' | 'NOT_YET_RUN' | 'NOT_ENROLLED';
     paymentStatus: string | null;
     totalCharged: number | null;
     overrunQuantity: number | null;
@@ -122,7 +129,14 @@ export default function PlatformAgenciesPage(): JSX.Element {
     }
   }
 
-  const sorted = [...rows].sort((a, b) => flagCount(b) - flagCount(a) || a.name.localeCompare(b.name));
+  // Flagged first, then enrolled, then the rest. An unenrolled agency needs
+  // nothing from this screen and should not sit above one that does.
+  const sorted = [...rows].sort(
+    (a, b) =>
+      flagCount(b) - flagCount(a) ||
+      Number(b.enrolled) - Number(a.enrolled) ||
+      a.name.localeCompare(b.name)
+  );
   const needingAction = sorted.filter(row => flagCount(row) > 0);
 
   if (loading) {
@@ -188,6 +202,7 @@ export default function PlatformAgenciesPage(): JSX.Element {
               <TableHeader>
                 <TableRow>
                   <TableHead>Agency</TableHead>
+                  <TableHead>Billing</TableHead>
                   <TableHead className="text-right">Calls</TableHead>
                   <TableHead className="text-right">Applications</TableHead>
                   <TableHead className="text-right">Closing</TableHead>
@@ -205,6 +220,27 @@ export default function PlatformAgenciesPage(): JSX.Element {
                 {sorted.map(row => (
                   <TableRow key={row.tenantId}>
                     <TableCell className="font-medium">{row.name}</TableCell>
+                    <TableCell>
+                      {!row.enrolled ? (
+                        <Badge
+                          variant="outline"
+                          title="Not enrolled: not gated, not metered, not settled. Calls deliver as they always have."
+                        >
+                          not enrolled
+                        </Badge>
+                      ) : row.chargesEnabled ? (
+                        <Badge variant="secondary" title="Enrolled, and settlements charge">
+                          charging
+                        </Badge>
+                      ) : (
+                        <Badge
+                          variant="outline"
+                          title="Enrolled. Settlements compute and are recorded in full; no payment is taken."
+                        >
+                          dry run
+                        </Badge>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right tabular-nums">{row.deliveredCalls}</TableCell>
                     <TableCell className="text-right tabular-nums">{row.applications}</TableCell>
                     <TableCell className="text-right tabular-nums">{pct(row.closingPct)}</TableCell>
@@ -237,11 +273,13 @@ export default function PlatformAgenciesPage(): JSX.Element {
                               : 'outline'
                         }
                       >
-                        {row.settlement.status === 'NOT_YET_RUN'
-                          ? 'not yet run'
-                          : (row.settlement.paymentStatus ?? row.settlement.status)
-                              .replace(/_/g, ' ')
-                              .toLowerCase()}
+                        {row.settlement.status === 'NOT_ENROLLED'
+                          ? '—'
+                          : row.settlement.status === 'NOT_YET_RUN'
+                            ? 'not yet run'
+                            : (row.settlement.paymentStatus ?? row.settlement.status)
+                                .replace(/_/g, ' ')
+                                .toLowerCase()}
                       </Badge>
                     </TableCell>
                     <TableCell>

@@ -29,6 +29,17 @@
  * can be charged -- and each is written by a platform admin, audited, and
  * refused to an agency OWNER.
  *
+ * ── Enrolment is the opt-in, and it is here ──────────────────────────────────
+ *
+ * An agency is subject to the billing system only once a platform admin enrols
+ * it, and enrolment is refused unless the terms, the Daily Block, the maximum
+ * daily debit, the agreed opening rate and a valid ACH mandate are all already
+ * in place -- because enrolment takes effect on the next call offered, and
+ * enrolling an agency that fails any of those stops its phones that second.
+ *
+ * Charging is a second switch on top, off by default, so an enrolled agency can
+ * be watched settling for as long as it takes before money moves.
+ *
  * ── The agent's own view has no money on it ──────────────────────────────────
  *
  * `GET /api/v1/delivery/me` returns an agent's calls, applications and closing
@@ -53,7 +64,12 @@ import {
   getPlatformOverview,
 } from '../services/billing/delivery-view.js';
 import { runDailySettlement } from '../services/billing/settlement.js';
-import { loadAgencyTerms, maxDailyDebitFor, overrunCeilingApplications } from '../services/billing/terms.js';
+import {
+  enrolmentBlockersFor,
+  loadAgencyTerms,
+  maxDailyDebitFor,
+  overrunCeilingApplications,
+} from '../services/billing/terms.js';
 import { calendarDayOf, currentCalendarDay } from '../services/rating/calendar-day.js';
 import { toNumber } from '../services/rating/rate-curve.js';
 
@@ -898,12 +914,249 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
   );
 
   /**
+   * GET /api/v1/platform/delivery/agencies/:tenantId/enrolment
+   *
+   * Whether this agency is enrolled, and if not, exactly what is missing.
+   * Read-only: an operator can check an agency before committing to enrol it.
+   */
+  fastify.get<{ Params: { tenantId: string } }>(
+    '/api/v1/platform/delivery/agencies/:tenantId/enrolment',
+    { preHandler: [authenticate, requirePlatformAdmin] },
+    async (request, reply) => {
+      const { terms, blockers } = await enrolmentBlockersFor(request.params.tenantId, { prisma });
+
+      return reply.send({
+        data: {
+          tenantId: request.params.tenantId,
+          enrolled: terms.enrolled,
+          enrolledAt: terms.enrolledAt,
+          chargesEnabled: terms.chargesEnabled,
+          /** Empty when the agency is ready to be enrolled. */
+          blockers,
+          readyToEnrol: blockers.length === 0,
+        },
+      });
+    }
+  );
+
+  /**
+   * POST /api/v1/platform/delivery/agencies/:tenantId/enrol
+   *
+   * Bring one agency into the billing system.
+   *
+   * From the next call offered, this agency is gated on its balance and Overrun
+   * ceiling, its submitted applications spend credits, and the nightly
+   * settlement bills it. Charging stays OFF until it is turned on separately,
+   * so the first thing that happens is settlements that compute and record
+   * without taking money.
+   *
+   * Refused with the full list of what is missing rather than a bare no: an
+   * operator enrolling an agency should not discover the preconditions one
+   * failed request at a time.
+   */
+  fastify.post<{ Params: { tenantId: string }; Body: { note?: string } }>(
+    '/api/v1/platform/delivery/agencies/:tenantId/enrol',
+    { preHandler: [authenticate, requirePlatformAdmin] },
+    async (request, reply) => {
+      const { tenantId } = request.params;
+
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { id: true },
+      });
+      if (!tenant) {
+        return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Agency not found' } });
+      }
+
+      const { terms, blockers } = await enrolmentBlockersFor(tenantId, { prisma });
+
+      if (terms.enrolled) {
+        // Already in. Not an error, and deliberately not a re-enrolment: the
+        // enrolment timestamp is when this agency started being billed, and
+        // moving it would erase that.
+        return reply.send({
+          data: {
+            tenantId,
+            enrolled: true,
+            enrolledAt: terms.enrolledAt,
+            chargesEnabled: terms.chargesEnabled,
+            alreadyEnrolled: true,
+          },
+        });
+      }
+
+      if (blockers.length > 0) {
+        return reply.code(409).send({
+          error: {
+            code: 'ENROLMENT_BLOCKED',
+            message:
+              `This agency is not ready to be enrolled: ${blockers.length} thing(s) missing. ` +
+              'Enrolment takes effect on the next call offered, and enrolling without these ' +
+              'would stop delivery immediately.',
+            blockers,
+          },
+        });
+      }
+
+      const now = new Date();
+      const profile = await prisma.agencyBillingProfile.update({
+        where: { tenantId },
+        data: {
+          billingEnrolledAt: now,
+          billingEnrolledByUserId: getActingUserId(request),
+          billingEnrolmentNote: request.body?.note ?? null,
+        },
+      });
+
+      await auditLog({
+        tenantId,
+        userId: getActingUserId(request) ?? undefined,
+        action: 'platform.delivery.enrolled',
+        entityType: 'agency_billing_profile',
+        entityId: profile.id,
+        changes: {
+          enrolledAt: now.toISOString(),
+          note: request.body?.note ?? null,
+          chargesEnabled: profile.chargesEnabled,
+        },
+      });
+
+      return reply.send({
+        data: {
+          tenantId,
+          enrolled: true,
+          enrolledAt: profile.billingEnrolledAt,
+          chargesEnabled: profile.chargesEnabled,
+          alreadyEnrolled: false,
+        },
+      });
+    }
+  );
+
+  /**
+   * POST /api/v1/platform/delivery/agencies/:tenantId/unenrol
+   *
+   * Take one agency back out of the billing system.
+   *
+   * Delivery stops being gated immediately, its applications stop being
+   * metered, and the nightly settlement stops looking at it. The ledger and the
+   * settlements it already has are untouched -- they are the record of what it
+   * was charged, and nothing in this system removes those.
+   */
+  fastify.post<{ Params: { tenantId: string }; Body: { reason?: string } }>(
+    '/api/v1/platform/delivery/agencies/:tenantId/unenrol',
+    { preHandler: [authenticate, requirePlatformAdmin] },
+    async (request, reply) => {
+      const { tenantId } = request.params;
+
+      const updated = await prisma.agencyBillingProfile.updateMany({
+        where: { tenantId },
+        data: {
+          billingEnrolledAt: null,
+          billingEnrolledByUserId: null,
+          billingEnrolmentNote: request.body?.reason ?? null,
+        },
+      });
+
+      if (updated.count === 0) {
+        return reply.code(404).send({
+          error: { code: 'NOT_FOUND', message: 'This agency has no recorded terms' },
+        });
+      }
+
+      await auditLog({
+        tenantId,
+        userId: getActingUserId(request) ?? undefined,
+        action: 'platform.delivery.unenrolled',
+        entityType: 'tenant',
+        entityId: tenantId,
+        changes: { reason: request.body?.reason ?? null },
+      });
+
+      return reply.send({ data: { tenantId, enrolled: false } });
+    }
+  );
+
+  /**
+   * PUT /api/v1/platform/delivery/agencies/:tenantId/charges
+   *
+   * Turn real charging on or off for an enrolled agency.
+   *
+   * OFF is the dry run: the settlement computes everything and writes the full
+   * immutable record, and only the Stripe debit is skipped. ON is money leaving
+   * a bank account, so it is its own act with its own audit row, and it is
+   * refused for an agency that is not enrolled -- there would be nothing to
+   * charge.
+   */
+  fastify.put<{ Params: { tenantId: string }; Body: { enabled?: boolean } }>(
+    '/api/v1/platform/delivery/agencies/:tenantId/charges',
+    { preHandler: [authenticate, requirePlatformAdmin] },
+    async (request, reply) => {
+      const { tenantId } = request.params;
+      const enabled = request.body?.enabled;
+
+      if (typeof enabled !== 'boolean') {
+        return reply.code(400).send({
+          error: { code: 'VALIDATION_ERROR', message: 'enabled must be true or false' },
+        });
+      }
+
+      const terms = await loadAgencyTerms(tenantId, { prisma });
+      if (!terms.profile) {
+        return reply.code(404).send({
+          error: { code: 'NOT_FOUND', message: 'This agency has no recorded terms' },
+        });
+      }
+
+      if (enabled && !terms.enrolled) {
+        return reply.code(409).send({
+          error: {
+            code: 'NOT_ENROLLED',
+            message:
+              'This agency is not enrolled in billing, so there is nothing to charge. ' +
+              'Enrol it first.',
+          },
+        });
+      }
+
+      const profile = await prisma.agencyBillingProfile.update({
+        where: { tenantId },
+        data: {
+          chargesEnabled: enabled,
+          chargesEnabledAt: enabled ? new Date() : null,
+          chargesEnabledByUserId: enabled ? getActingUserId(request) : null,
+        },
+      });
+
+      await auditLog({
+        tenantId,
+        userId: getActingUserId(request) ?? undefined,
+        action: enabled
+          ? 'platform.delivery.charges.enabled'
+          : 'platform.delivery.charges.disabled',
+        entityType: 'agency_billing_profile',
+        entityId: profile.id,
+        changes: { chargesEnabled: enabled },
+      });
+
+      return reply.send({
+        data: {
+          tenantId,
+          enrolled: terms.enrolled,
+          chargesEnabled: profile.chargesEnabled,
+          chargesEnabledAt: profile.chargesEnabledAt,
+        },
+      });
+    }
+  );
+
+  /**
    * POST /api/v1/platform/delivery/settlement/run
    *
    * The nightly run, by hand. Safe to call twice: the unique index on
    * (tenantId, deliveryDay) means a second call charges nobody.
    */
-  fastify.post<{ Body: { deliveryDay?: string; tenantIds?: string[] } }>(
+  fastify.post<{ Body: { deliveryDay?: string; tenantIds?: string[]; noCharge?: boolean } }>(
     '/api/v1/platform/delivery/settlement/run',
     { preHandler: [authenticate, requirePlatformAdmin] },
     async (request, reply) => {
@@ -918,6 +1171,9 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
         deliveryDay,
         prisma,
         tenantIds: request.body?.tenantIds,
+        // Can only ever turn charging OFF for this run. There is no body field
+        // that turns it on for an agency whose profile says otherwise.
+        noCharge: request.body?.noCharge === true,
       });
 
       await auditLog({

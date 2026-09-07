@@ -18,11 +18,183 @@ asserted, not merely intended: `settlement.test.ts` reads the ledger's enum
 labels out of `pg_enum` and expects exactly `PURCHASE`, `CONSUMPTION`,
 `OVERRUN`.
 
+**Billing is opt-in, per agency, and off by default.** Nothing below applies to
+an agency until a platform admin explicitly enrols it. See §0 — it is first
+because it is what decides whether any of the rest happens at all.
+
 **There is no introductory rate.** Phase 2 carried one — a flat price for an
 agency's first five submitted applications. It is gone: from the engine, the
 curve, the summary, the publish API and the portal. An agency's opening rate and
 opening block are agreed before its first Delivery Day and recorded per tenant;
 from the second Delivery Day the rate curve governs. See §8.
+
+
+---
+
+## 0. Enrolment — the opt-in
+
+An agency is subject to the billing system **only** when a platform admin has
+explicitly enrolled it. Unenrolled is the default, and unenrolled means
+untouched:
+
+| | unenrolled | enrolled |
+| --- | --- | --- |
+| delivery gate | not consulted; calls deliver exactly as they did before Phase 3 existed | every condition in §3 applies |
+| submitted applications | no ledger row of any kind — not a consumption, not an overrun | metered per §1 |
+| nightly settlement | skipped entirely; **no settlement row**, not even one saying zero | settled per §4 |
+| `delivery_hold_events`, notifications | never written | per §3 |
+| the portal | "Billing is not enabled for this agency" | the panel in §6 |
+| the cross-agency view | shown as `not enrolled`, carrying **no flags** | flagged per §6 |
+
+### Why this exists
+
+Phase 3 shipped without it, and it was a production-stopping defect. The gate
+refuses an agency with no valid ACH mandate; an agency with no billing profile
+has no mandate; so every existing tenant would have been refused with
+`NO_MANDATE` the moment the gate went live — five of them in production, none
+with a profile, one carrying live client traffic.
+
+An opt-in that can be arrived at accidentally is not an opt-in. So enrolment is
+`agency_billing_profiles.billingEnrolledAt`, set by an explicit act and null
+otherwise. It is **not** inferred from the existence of that row, from a
+mandate, or from ledger rows.
+
+### The migration enrols nobody
+
+`20260911000000_add_billing_enrolment/migration.sql` adds the columns nullable
+or with a safe default and contains no `UPDATE` that sets an enrolment anywhere.
+Applying it leaves every existing tenant unenrolled, ungated, unmetered and
+unsettled.
+
+That is asserted rather than read: `settlement.test.ts` §0 seeds tenants shaped
+like the production ones — calls, applications, no billing profile — against a
+database the migration has actually been applied to, and checks that the gate
+returns `enrolled: false, allowed: true` for each, that no hold event exists,
+that no notification was sent and that the ledger is empty.
+`delivery-gating-paths.test.ts` does the same through the real HTTP routes,
+using conditions that *do* refuse an enrolled agency (a suspension, a missing
+mandate, no terms at all) so a pass means the gate is genuinely not applied
+rather than applied and saying yes.
+
+### The gate checks it first, and on its own
+
+`evaluateDeliveryGate` reads enrolment before anything else, in its own query
+rather than as part of the `Promise.all` with the ledger and settlement reads.
+That ordering is deliberate twice over: an unenrolled agency is short-circuited
+before any billing state is touched, and — because an unreadable gate refuses
+(§3) — its calls cannot stop because a query about a billing system it is not in
+failed.
+
+### Enrolling an agency
+
+    GET  /api/v1/platform/delivery/agencies/:tenantId/enrolment   check first
+    POST /api/v1/platform/delivery/agencies/:tenantId/enrol
+    POST /api/v1/platform/delivery/agencies/:tenantId/unenrol
+
+Platform-only; an agency OWNER gets 403 on all three and the row does not move.
+
+Enrolment is **refused** unless all of these are already in place, and the
+refusal names every missing one at once rather than one per attempt:
+
+| Blocker | Why it must be there first |
+| --- | --- |
+| `NO_BILLING_PROFILE` | everything else is read off it |
+| `NO_DAILY_BLOCK` | a block of zero means every application is Overrun and the ceiling is zero, so delivery stops on the first application |
+| `NO_MAX_DAILY_DEBIT` | a maximum of zero halts every settlement |
+| `NO_OPENING_RATE` | no price: the gate refuses with `NO_OPENING_AGREEMENT` and the settlement has nothing to bill overrun at |
+| `NO_VALID_MANDATE` | no mandate, no delivery — enrolling without one stops the agency immediately |
+
+The reason for checking is the same reason the switch exists. Enrolment takes
+effect on the next call offered, so enrolling an agency that fails any of these
+reproduces the original failure one step later and with somebody's name on it.
+
+Un-enrolling stops the gating, the metering and the settling immediately. It
+does **not** touch the ledger or the settlements already written: those are the
+record of what the agency was charged, and nothing in this system removes them.
+
+### The order to onboard an agency in
+
+1. `PUT  /api/v1/platform/delivery/agencies/:id/terms` — Daily Block, maximum daily debit
+2. `PUT  /api/v1/platform/rating/agencies/:id/opening` — the agreed opening rate
+3. the agency completes the ACH mandate (§5)
+4. `POST /api/v1/platform/delivery/agencies/:id/opening-purchase` — the opening block
+5. `GET  /api/v1/platform/delivery/agencies/:id/enrolment` — confirm `readyToEnrol`
+6. `POST /api/v1/platform/delivery/agencies/:id/enrol`
+7. watch settlements for as long as you like (§0b)
+8. `PUT  /api/v1/platform/delivery/agencies/:id/charges` `{enabled: true}`
+
+---
+
+## 0b. The dry run — everything except the debit
+
+Charging is a **second** switch, `agency_billing_profiles.chargesEnabled`, also
+false by default. An agency that is enrolled but not charging gets the whole
+settlement — the reconciliation, the counts, the rating call, the overrun, the
+next day's block, the full immutable record — and no Stripe charge. The row
+reads `paymentStatus: DRY_RUN` and `totalCharged` is exactly what it would have
+taken.
+
+So the first thing that happens to a newly enrolled agency is settlements that
+compute and record without moving money, for as many days as you want to watch.
+
+    PUT /api/v1/platform/delivery/agencies/:tenantId/charges  {"enabled": true}
+
+Refused for an agency that is not enrolled — there would be nothing to charge.
+
+### What the dry run does and does not do
+
+- **Does** write the settlement row, with every figure real.
+- **Does** sell the next Delivery Day's block. Deliberately: not selling it
+  would leave the agency at a zero balance, every application would be Overrun,
+  and delivery would stop at the ceiling on the first day — so the thing being
+  watched would not be the system's real behaviour. The purchase carries **no
+  Stripe payment reference** and names a `DRY_RUN` settlement, which is what
+  makes an unpaid block identifiable later.
+- **Does** still halt on the maximum daily debit. A dry run exists to show what
+  would happen, and reporting `DRY_RUN` for a settlement that would have
+  `HALTED_MAX_DEBIT` hides the one outcome somebody watching most needs to see.
+- **Does not** write a payment attempt row — none was attempted.
+- **Does not** send a failure notification — nothing failed.
+- **Does not** count as a clean settlement. Ten dry-run days must not raise the
+  Overrun ceiling to 100%: nothing was paid, and the ceiling is credit extended
+  on a payment history that does not exist yet.
+
+### At cutover
+
+Blocks sold during a dry run were not paid for. They are on the ledger as
+`PURCHASE` rows with a null `stripePaymentIntentId` naming a `DRY_RUN`
+settlement:
+
+```sql
+SELECT l."deliveryDay", l."quantity", l."unitRate", l."amount"
+  FROM "application_credit_ledger" l
+  JOIN "daily_settlements" s ON s."id" = l."settlementId"
+ WHERE l."tenantId" = $1
+   AND l."entryType" = 'PURCHASE'
+   AND s."paymentStatus" = 'DRY_RUN';
+```
+
+That balance carries into the first charging settlement and reduces its block,
+because the block is the daily target minus unused paid applications (§4 step 4)
+and the ledger cannot tell those credits from bought ones. Decide before turning
+charging on whether to leave them as an onboarding allowance or to start the
+agency from a fresh balance. The ledger is append-only, so "start fresh" means a
+new agency-level decision recorded deliberately, not an edit.
+
+### The two flags on the settlement job
+
+Do not confuse them. They are both safe, but they are not the same:
+
+| | writes | charges |
+| --- | --- | --- |
+| `--dry-run` | **nothing** — a preview, printed | no |
+| `--no-charge` | **everything** — the settlement row and the block | no |
+
+`--no-charge` is the run-level form of `chargesEnabled: false` and is
+one-directional: it can only turn charging off. There is no flag or body field
+that turns charging **on** for an agency whose profile says otherwise, because a
+per-run switch that starts charging somebody is a switch somebody passes by
+accident once.
 
 ---
 
@@ -187,6 +359,11 @@ One function — `services/billing/delivery-gate.ts` — and every path that off
 a call to an agent calls it. A gate written twice is a gate that disagrees with
 itself, and the half that says yes is the one that bills somebody.
 
+### An unenrolled agency is not gated at all
+
+The first check, before any other condition and before any billing state is
+read. See §0 — this is the ordering the whole switch rests on.
+
 ### The conditions, in the order they are checked
 
 The order is severity, not convenience: an agency that is suspended *and* at its
@@ -349,6 +526,18 @@ which is a number both sides already agreed and which is stored on the purchase
 row — and **no block is sold**, because delivery is paused on the review flag and
 selling an agency a block it cannot use would be taking money for nothing.
 
+### An unenrolled agency is skipped, not settled at zero
+
+Checked before anything is computed. A row saying zero would assert the agency
+was billed nothing for the day, and the truth is different and worth keeping
+distinguishable: it is not in the billing system. A night of zero-value rows for
+every unenrolled tenant would also bury the days that were genuinely settled.
+
+The run still walks every active tenant and reports a skip for each unenrolled
+one, rather than querying only the enrolled — so the result names every agency
+and says what happened to it, which is what an operator watching a staged
+rollout wants.
+
 ### One agency failing must not stop another
 
 `runDailySettlement()` settles tenants one at a time and collects failures.
@@ -363,7 +552,8 @@ figures are asserted to differ.
 pnpm --filter @hopwhistle/api settlement:run                      # the day that just closed
 pnpm --filter @hopwhistle/api settlement:run -- --day 2026-09-07
 pnpm --filter @hopwhistle/api settlement:run -- --tenant <id>
-pnpm --filter @hopwhistle/api settlement:run -- --dry-run         # compute and print, charge nobody
+pnpm --filter @hopwhistle/api settlement:run -- --dry-run         # compute and PRINT; writes nothing
+pnpm --filter @hopwhistle/api settlement:run -- --no-charge       # compute and RECORD; charges nobody
 pnpm --filter @hopwhistle/api settlement:run -- --retry-failed
 pnpm --filter @hopwhistle/api settlement:run -- --resume-stalled
 ```
@@ -654,6 +844,15 @@ which CI runs after `prisma db push` — `db push` builds from `schema.prisma`,
 which cannot express a trigger, so without that file every database CI and every
 developer works against would silently permit an UPDATE that moves a balance.
 
+`20260911000000_add_billing_enrolment/migration.sql` adds the enrolment and
+charging switches and the `DRY_RUN` payment status, on the same terms: additive,
+idempotent, drops nothing. The `ALTER TYPE ... ADD VALUE` sits **outside** the
+transaction block, because that statement is not permitted inside one before
+PostgreSQL 12 and on 12+ the new value cannot be used in the transaction that
+adds it. It **enrols nobody** — there is no `UPDATE` setting an enrolment
+anywhere in the file. Verified the same way: applied twice as a no-op, applied
+from scratch, and `prisma migrate diff` reports no difference.
+
 **Nothing was added to the deploy path.** In particular no
 `prisma migrate deploy`: against an empty migration history it would try to
 replay every migration from the beginning. The pre-existing hazard recorded in
@@ -676,8 +875,8 @@ TEST_REDIS_URL=redis://localhost:6379/1 \
 
 | Suite | Cases | What it pins |
 | --- | ---: | --- |
-| `__tests__/settlement.test.ts` | 39 | the ledger, the ceiling, the gate, the settlement, the portal, and the absence of refunds — against a real database |
-| `__tests__/delivery-gating-paths.test.ts` | 7 | that every delivery path actually asks the gate, driven through the real route handlers |
+| `__tests__/settlement.test.ts` | 55 | enrolment, the dry run, the ledger, the ceiling, the gate, the settlement, the portal, and the absence of refunds — against a real database |
+| `__tests__/delivery-gating-paths.test.ts` | 11 | that every delivery path asks the gate when the agency is enrolled, **and does not when it is not** — driven through the real route handlers |
 | `__tests__/db-push-constraints.test.ts` | +3 | the three triggers are installed |
 
 The cases the brief names, and where they are:
@@ -709,11 +908,30 @@ The cases the brief names, and where they are:
   "costs one credit when an application reaches submitted state twice", driven
   through the real `markAutomationCompleted`, called three times.
 
+On enrolment specifically:
+
+- **every pre-existing tenant is unenrolled and ungated after the migration** —
+  the case this switch exists for, asserted against a database the migration has
+  been applied to;
+- an unenrolled agency's submitted application writes no ledger row;
+- the settlement skips it with no row at all;
+- enrolment is refused with every missing precondition named at once;
+- an agency cannot enrol itself, un-enrol itself or turn on its own charging;
+- charging cannot be enabled for an agency that is not enrolled;
+- un-enrolling leaves the ledger and the settlements untouched;
+- the portal tells an unenrolled agency that billing does not apply rather than
+  showing it zeroes.
+
+On the dry run: the full record is written and the gateway is never called; the
+block is sold with no Stripe reference; ten dry-run days do not raise the
+ceiling; a dry run over the maximum daily debit still halts; and `--no-charge`
+overrides an agency that has charging enabled.
+
 Also asserted: the ledger refuses `UPDATE` and `DELETE`; a settlement's figures
 refuse to change; oldest-lot-first across two rates; the Insertion Order figures
 `$8,978` and `$2,948`; the Business Day grace period across Labor Day; that no
 refund enum member exists; that a carrier declining after submission returns
 nothing; and that an agency cannot reach any platform surface.
 
-Full API suite at the time of writing: **746 passed** (was 697; +49). Typecheck
-errors unchanged at 80; web typecheck unchanged at 127; no new lint findings.
+Full API suite at the time of writing: **765 passed**. Typecheck errors
+unchanged at 80; web typecheck unchanged at 127; no new lint findings.

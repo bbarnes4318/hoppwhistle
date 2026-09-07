@@ -50,6 +50,15 @@ import { cn } from '@/lib/utils';
  * the screen a principal decides who to coach from is worse than an absent
  * number, and a $0 renders as a price.
  *
+ * ── Not every agency is in the billing system ────────────────────────────────
+ *
+ * Billing is opt-in per agency and defaults to off. An agency that has not been
+ * enrolled is not gated, not metered and not settled, and every figure the
+ * server returns for it is a zero rather than a measurement. Rendering those
+ * zeroes would tell a principal they have no credit and are about to stop
+ * delivering, which is the opposite of the truth, so the page says plainly that
+ * billing does not apply and shows nothing else.
+ *
  * Every figure comes from the server. Nothing on this page sends a rate, an
  * amount or a quantity anywhere.
  */
@@ -57,6 +66,8 @@ import { cn } from '@/lib/utils';
 interface DeliveryToday {
   calendarDay: string;
   timeZone: string;
+  enrolled: boolean;
+  chargesEnabled: boolean;
   callsRouted: number;
   callsAnswered: number;
   applicationsSubmitted: number;
@@ -202,6 +213,39 @@ export default function DeliveryPage(): JSX.Element {
     );
   }
 
+  /*
+   * Not enrolled: billing does not apply to this agency at all. Every number
+   * below would be a zero that means "not measured", and a principal reading
+   * "0 remaining on the block" would reasonably conclude their phones are about
+   * to stop.
+   */
+  if (!today.enrolled) {
+    return (
+      <CompactPageShell fullHeight={false}>
+        <CompactPageHeader
+          title="Delivery"
+          subtitle={`${today.calendarDay} · ${today.timeZone}`}
+          icon={Gauge}
+        >
+          <Badge variant="secondary">delivering</Badge>
+        </CompactPageHeader>
+
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-sm font-medium">Billing is not enabled for this agency.</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Calls are delivered without a prepaid block, an overrun ceiling or a nightly
+              settlement. There is nothing to charge and nothing to run out of.
+            </p>
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              NetEnroll enables it per agency, once the terms and a bank mandate are in place.
+            </p>
+          </CardContent>
+        </Card>
+      </CompactPageShell>
+    );
+  }
+
   const windowLabel =
     today.windowDayKeys.length > 0
       ? today.windowDayKeys.join(', ')
@@ -240,6 +284,19 @@ export default function DeliveryPage(): JSX.Element {
             <p className="mt-1 text-[11px] text-muted-foreground">
               Applications you have already paid for are untouched and available when delivery
               resumes: {today.applicationsRemainingOnBlock} remaining.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {!today.chargesEnabled && (
+        <div className="flex items-start gap-2 rounded border border-sky-500/40 bg-sky-500/10 p-3 text-sm">
+          <Gauge className="mt-0.5 h-4 w-4 shrink-0 text-sky-500" />
+          <div>
+            <p className="font-medium">Settlements are running without charging</p>
+            <p className="text-muted-foreground">
+              Every figure on this page is real and each night&rsquo;s settlement is recorded in
+              full, but no payment is taken. NetEnroll turns charging on separately.
             </p>
           </div>
         </div>
