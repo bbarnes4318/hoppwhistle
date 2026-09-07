@@ -3866,6 +3866,28 @@ enum CreditLedgerEntryType {
   /// `quantity` is positive.
   PURCHASE
 
+  /// The credits from one dry-run block, retired at the moment the agency
+  /// starts being charged. `quantity` is negative: whatever was left on that
+  /// lot.
+  ///
+  /// ── This is NOT a reversal, and the distinction is the point ──────────────
+  ///
+  /// Nothing is returned to anybody and no money moves, because no money ever
+  /// moved: a dry-run settlement sells the next day's block so the agency keeps
+  /// delivering realistically, and that block is never charged for. Those
+  /// credits were issued to make an observation possible, not sold.
+  ///
+  /// Leaving them on the balance would carry into the first charged
+  /// settlement and reduce its block -- the block is the daily target minus
+  /// unused paid applications, and the ledger cannot tell an unpaid dry-run
+  /// credit from a bought one. So the transition retires them explicitly, by
+  /// appending a row, and the first real settlement sells a full block against
+  /// a zero balance.
+  ///
+  /// One row per retired lot, naming the lot and the DRY_RUN settlement that
+  /// sold it, so what was retired and where it came from reads off the row.
+  DRY_RUN_CLOSEOUT
+
   /// One application that reached submitted state and spent one credit.
   /// `quantity` is -1, always, and the row names both the application and the
   /// purchase lot the credit came from.
@@ -3883,6 +3905,15 @@ enum CreditLedgerEntryType {
 enum SettlementPaymentStatus {
   /// Computed, not yet submitted to Stripe.
   PENDING
+
+  /// Computed and recorded in full, with no debit placed, because charging is
+  /// not enabled for this agency (`AgencyBillingProfile.chargesEnabled`) or the
+  /// run was invoked with `--no-charge`.
+  ///
+  /// Every figure on the row is the real computation, so this is what a
+  /// settlement WOULD have charged. It is deliberately not counted as a clean
+  /// settlement: nothing was paid, so it must not raise an Overrun ceiling.
+  DRY_RUN
   /// Submitted and accepted. ACH settles over days; `SUCCEEDED` means Stripe
   /// reported the payment intent succeeded.
   SUCCEEDED
@@ -3956,6 +3987,44 @@ model AgencyBillingProfile {
   id       String @id @default(uuid())
   tenantId String @unique
 
+  /// ── The enrolment switch ──────────────────────────────────────────────────
+  ///
+  /// Whether this agency is subject to the billing system AT ALL. Set when a
+  /// platform admin explicitly enrols the agency, and null otherwise.
+  ///
+  /// A tenant that is not enrolled is not gated, not metered and not settled:
+  /// its calls deliver exactly as they did before Phase 3 existed, no ledger
+  /// row is written when one of its applications reaches submitted state, and
+  /// the nightly settlement skips it rather than settling it at zero.
+  ///
+  /// It is deliberately NOT inferred from anything. Not from the existence of
+  /// this row, not from a mandate, not from ledger rows. Phase 3 shipped
+  /// inferring it -- a tenant with no billing profile got `hasValidMandate:
+  /// false` and was refused with NO_MANDATE -- which would have stopped call
+  /// delivery for every agency on the platform the moment it deployed,
+  /// including one carrying live client traffic. An opt-in that can be arrived
+  /// at accidentally is not an opt-in.
+  ///
+  /// The default is unenrolled, and the migration enrols nobody.
+  billingEnrolledAt       DateTime?
+  billingEnrolledByUserId String?
+  billingEnrolmentNote    String?
+
+  /// ── The charging switch ───────────────────────────────────────────────────
+  ///
+  /// Whether a settlement for this agency may actually place a debit.
+  ///
+  /// False by default, so enrolling an agency puts it in a state where the
+  /// settlement computes everything and records the full immutable settlement
+  /// row, and only the Stripe charge is skipped -- `paymentStatus: DRY_RUN`.
+  /// Real money needs a second, separate, explicit act.
+  ///
+  /// This is the switch to watch an agency's settlements compute correctly for
+  /// several days before anything reaches a bank account.
+  chargesEnabled         Boolean   @default(false)
+  chargesEnabledAt       DateTime?
+  chargesEnabledByUserId String?
+
   /// The agency's configured daily target quantity: how many application
   /// credits the nightly settlement sells for the next Delivery Day. Reduced or
   /// omitted where unused paid applications remain.
@@ -4006,6 +4075,9 @@ model AgencyBillingProfile {
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
+  /// The settlement run walks tenants and skips the unenrolled, so enrolment is
+  /// the only column read as a set.
+  @@index([billingEnrolledAt])
   @@map("agency_billing_profiles")
 }
 
@@ -4072,9 +4144,17 @@ model ApplicationCreditLedgerEntry {
   /// PURCHASE. Unique across the table.
   applicationId String?
 
-  /// CONSUMPTION only: the purchase lot the credit came from, and which unit of
-  /// it. Oldest lot first, so credits spanning purchases at different rates are
+  /// The purchase lot this row is about, and which unit of it.
+  ///
+  /// CONSUMPTION: the lot the credit came from and the unit claimed, 0-based.
+  /// Oldest lot first, so credits spanning purchases at different rates are
   /// consumed in the order they were bought.
+  ///
+  /// DRY_RUN_CLOSEOUT: the lot being retired, with `lotIndex` -1. A real unit
+  /// index is never negative, so -1 is a slot no consumption can occupy -- and
+  /// the existing unique index on `(purchaseEntryId, lotIndex)` then guarantees
+  /// a lot can be closed out at most once, without needing a second constraint
+  /// for it. Turning charging on twice retires nothing the second time.
   purchaseEntryId String?
   lotIndex        Int?
 

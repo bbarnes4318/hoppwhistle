@@ -17,9 +17,13 @@ import {
   runDailySettlement,
   settleAgencyForDeliveryDay,
 } from '../services/billing/settlement.js';
-import { maxDailyDebitFor, overrunCeilingApplications } from '../services/billing/terms.js';
+import {
+  loadAgencyTerms,
+  maxDailyDebitFor,
+  overrunCeilingApplications,
+} from '../services/billing/terms.js';
 import { businessDayPeriodEnd } from '../services/rating/business-day.js';
-import { calendarDayBounds } from '../services/rating/calendar-day.js';
+import { calendarDayBounds, currentCalendarDay } from '../services/rating/calendar-day.js';
 
 import { announceSkip, databaseGate } from './helpers/live-services.js';
 
@@ -256,6 +260,16 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
    * maximum daily debit of $8,978 -- which is (45 + floor(45 x 0.5)) x $134,
    * the figure on the Insertion Order.
    */
+  /**
+   * Commercial terms, enrolled and charging, unless told otherwise.
+   *
+   * Enrolment and charging are both OFF by default in the product -- that is
+   * the whole point of them -- so every test of Phase 3's behaviour has to turn
+   * them on explicitly. The defaults here are inverted from the product's on
+   * purpose: a test fixture that had to opt in to charging on every single case
+   * would make the enrolment tests below indistinguishable from a forgotten
+   * flag.
+   */
   async function seedTerms(
     tenantId: string,
     overrides: Partial<{
@@ -263,31 +277,32 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
       maxDailyDebit: number;
       ceilingPctBelowThreshold: number;
       mandate: boolean;
+      enrolled: boolean;
+      chargesEnabled: boolean;
     }> = {}
   ) {
     const block = overrides.dailyBlockApplications ?? 45;
     const ceilingPct = overrides.ceilingPctBelowThreshold ?? 50;
     const mandate = overrides.mandate ?? true;
+    const enrolled = overrides.enrolled ?? true;
+    const chargesEnabled = overrides.chargesEnabled ?? true;
+
+    const fields = {
+      dailyBlockApplications: block,
+      maxDailyDebit: overrides.maxDailyDebit ?? maxDailyDebitFor(block, ceilingPct, 134),
+      ceilingPctBelowThreshold: ceilingPct,
+      stripeCustomerId: 'cus_fake',
+      achPaymentMethodId: mandate ? 'pm_fake' : null,
+      achMandateStatus: (mandate ? 'ACTIVE' : 'NONE') as 'ACTIVE' | 'NONE',
+      achMandateVerifiedAt: mandate ? new Date() : null,
+      billingEnrolledAt: enrolled ? new Date() : null,
+      chargesEnabled,
+    };
 
     return prisma.agencyBillingProfile.upsert({
       where: { tenantId },
-      create: {
-        tenantId,
-        dailyBlockApplications: block,
-        maxDailyDebit: overrides.maxDailyDebit ?? maxDailyDebitFor(block, ceilingPct, 134),
-        ceilingPctBelowThreshold: ceilingPct,
-        stripeCustomerId: 'cus_fake',
-        achPaymentMethodId: mandate ? 'pm_fake' : null,
-        achMandateStatus: mandate ? 'ACTIVE' : 'NONE',
-        achMandateVerifiedAt: mandate ? new Date() : null,
-      },
-      update: {
-        dailyBlockApplications: block,
-        maxDailyDebit: overrides.maxDailyDebit ?? maxDailyDebitFor(block, ceilingPct, 134),
-        ceilingPctBelowThreshold: ceilingPct,
-        achPaymentMethodId: mandate ? 'pm_fake' : null,
-        achMandateStatus: mandate ? 'ACTIVE' : 'NONE',
-      },
+      create: { tenantId, ...fields },
+      update: fields,
     });
   }
 
@@ -397,6 +412,805 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
     });
     operatorId = operator.id;
     await grantPlatformAdmin(operatorId, { note: 'settlement suite fixture' });
+  });
+
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 0. Enrolment — the opt-in
+  //
+  // Phase 3 shipped without one. A tenant with no billing profile has no
+  // mandate, so the gate refused it with NO_MANDATE, and deploying that would
+  // have stopped call delivery for every agency on the platform. These are the
+  // cases that say it cannot happen again.
+  // ══════════════════════════════════════════════════════════════════════════
+  describe('enrolment', () => {
+    it('leaves every pre-existing tenant unenrolled and ungated after the migration', async () => {
+      /*
+       * THE case. Production has five tenants, none with a billing profile, one
+       * carrying live client traffic. Applying the migration must change
+       * nothing about any of them.
+       *
+       * This asserts against a database the migration file has actually been
+       * applied to -- CI runs `db:constraints` and the migration after
+       * `prisma db push` -- rather than trusting a reading of the SQL. It also
+       * seeds a tenant that looks like a production one: a `Call`, an
+       * application, no billing profile, no mandate, no ledger row.
+       */
+      const ownerRole = await prisma.role.findFirst({ where: { name: 'OWNER' } });
+      const preExisting = await Promise.all([
+        seedAgency('Legacy-One', ownerRole!.id),
+        seedAgency('Legacy-Two', ownerRole!.id),
+        seedAgency('Legacy-Three', ownerRole!.id),
+      ]);
+
+      for (const tenant of preExisting) {
+        await seedDeliveredCalls(tenant.id, CLOSED_DAY, 3);
+        await seedApplication(tenant.id, middayOf(CLOSED_DAY));
+      }
+
+      // No enrolment anywhere on the platform.
+      const enrolledCount = await prisma.agencyBillingProfile.count({
+        where: { billingEnrolledAt: { not: null } },
+      });
+      expect(enrolledCount).toBe(0);
+
+      for (const tenant of preExisting) {
+        const decision = await evaluateDeliveryGate(tenant.id, {
+          prisma,
+          now: middayOf(CLOSED_DAY),
+        });
+
+        // Not gated. Not "allowed because it passed the checks" -- not subject
+        // to them.
+        expect(decision.enrolled).toBe(false);
+        expect(decision.allowed).toBe(true);
+        expect(decision.reason).toBeNull();
+      }
+
+      // Nothing was recorded and nobody was notified on their behalf.
+      expect(await prisma.deliveryHoldEvent.count()).toBe(0);
+      expect(await prisma.billingNotification.count()).toBe(0);
+      expect(await prisma.applicationCreditLedgerEntry.count()).toBe(0);
+    });
+
+    it('does not meter an unenrolled agency when an application is submitted', async () => {
+      const application = await seedApplication(big.id, null);
+
+      const { markAutomationCompleted } = await import(
+        '../services/carrier-rpa/application-store.js'
+      );
+      await markAutomationCompleted(application.id, 'AA-9001');
+
+      // The application is submitted -- Phase 2 still counts it -- and no
+      // ledger row exists, so it is neither a consumption nor an overrun.
+      const row = await prisma.insuranceCarrierApplication.findUnique({
+        where: { id: application.id },
+      });
+      expect(row?.status).toBe('SUBMITTED');
+      expect(row?.submittedAt).not.toBeNull();
+
+      expect(
+        await prisma.applicationCreditLedgerEntry.count({ where: { tenantId: big.id } })
+      ).toBe(0);
+      expect(await creditBalance(prisma, big.id)).toBe(0);
+    });
+
+    it('skips an unenrolled agency entirely rather than settling it at zero', async () => {
+      await seedDeliveredCalls(big.id, CLOSED_DAY, 100);
+      await seedApplication(big.id, middayOf(CLOSED_DAY));
+
+      const run = await runDailySettlement({ deliveryDay: CLOSED_DAY, prisma, gateway });
+
+      const result = run.results.find(r => r.tenantId === big.id);
+      expect(result?.skippedReason).toMatch(/not enrolled/i);
+      expect(result?.settlementId).toBeNull();
+
+      // No row at all. A settlement saying zero would assert this agency was
+      // billed nothing, and the truth is that it is not in the billing system.
+      expect(await prisma.dailySettlement.count()).toBe(0);
+      expect(gateway.achCharges).toHaveLength(0);
+    });
+
+    it('will not enrol an agency with nothing recorded, and says what is missing', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: `/api/v1/platform/delivery/agencies/${big.id}/enrol`,
+        headers: tokenFor(operatorId, null),
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = response.json();
+      expect(body.error.code).toBe('ENROLMENT_BLOCKED');
+      expect(body.error.blockers.map((b: any) => b.code)).toEqual(['NO_BILLING_PROFILE']);
+
+      const profile = await prisma.agencyBillingProfile.findUnique({
+        where: { tenantId: big.id },
+      });
+      expect(profile).toBeNull();
+    });
+
+    it('names every missing precondition rather than one at a time', async () => {
+      // Terms exist, but with no Daily Block, no mandate and no agreed rate.
+      await prisma.agencyBillingProfile.create({
+        data: { tenantId: big.id, dailyBlockApplications: 0, maxDailyDebit: 0 },
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/api/v1/platform/delivery/agencies/${big.id}/enrol`,
+        headers: tokenFor(operatorId, null),
+      });
+
+      expect(response.statusCode).toBe(409);
+      const codes = response.json().error.blockers.map((b: any) => b.code).sort();
+      expect(codes).toEqual([
+        'NO_DAILY_BLOCK',
+        'NO_MAX_DAILY_DEBIT',
+        'NO_OPENING_RATE',
+        'NO_VALID_MANDATE',
+      ]);
+
+      // Still not enrolled.
+      const profile = await prisma.agencyBillingProfile.findUnique({
+        where: { tenantId: big.id },
+      });
+      expect(profile?.billingEnrolledAt).toBeNull();
+    });
+
+    it('refuses to enrol an agency missing only its mandate', async () => {
+      await seedTerms(big.id, { mandate: false, enrolled: false });
+      await seedOpeningAgreement(big.id);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/api/v1/platform/delivery/agencies/${big.id}/enrol`,
+        headers: tokenFor(operatorId, null),
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json().error.blockers.map((b: any) => b.code)).toEqual([
+        'NO_VALID_MANDATE',
+      ]);
+    });
+
+    it('enrols an agency that has everything, with charging still off', async () => {
+      await seedTerms(big.id, { enrolled: false, chargesEnabled: false });
+      await seedOpeningAgreement(big.id);
+
+      const ready = await app.inject({
+        method: 'GET',
+        url: `/api/v1/platform/delivery/agencies/${big.id}/enrolment`,
+        headers: tokenFor(operatorId, null),
+      });
+      expect(ready.json().data.readyToEnrol).toBe(true);
+      expect(ready.json().data.blockers).toEqual([]);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/api/v1/platform/delivery/agencies/${big.id}/enrol`,
+        headers: tokenFor(operatorId, null),
+        payload: { note: 'Insertion Order signed 2026-09-01' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().data.enrolled).toBe(true);
+      // Enrolment does NOT start charging. That is a second, separate act.
+      expect(response.json().data.chargesEnabled).toBe(false);
+
+      /*
+       * And from here Phase 3 applies unchanged: the agency is gated, and every
+       * figure on the decision is a real measurement rather than the zeroes an
+       * unenrolled agency gets.
+       *
+       * It is allowed, on nothing: it has bought no block yet, so its balance
+       * is zero and it is in Overrun from its first application, up to a
+       * ceiling of 22. That is the design -- delivery does not stop at a zero
+       * balance -- and it is why an opening purchase is sold before an agency
+       * starts, not because the gate would otherwise refuse it.
+       */
+      const decision = await evaluateDeliveryGate(big.id, {
+        prisma,
+        now: middayOf(CLOSED_DAY),
+        record: false,
+      });
+      expect(decision.enrolled).toBe(true);
+      expect(decision.allowed).toBe(true);
+      expect(decision.balance).toBe(0);
+      expect(decision.overrunCeiling).toBe(22);
+      expect(decision.overrunRemaining).toBe(22);
+
+      const audit = await prisma.auditLog.findFirst({
+        where: { tenantId: big.id, action: 'platform.delivery.enrolled' },
+      });
+      expect(audit).not.toBeNull();
+    });
+
+    it('un-enrols an agency without touching its ledger or settlements', async () => {
+      await seedTerms(big.id);
+      await seedOpeningAgreement(big.id);
+      await recordPurchase(prisma, {
+        tenantId: big.id,
+        deliveryDay: CLOSED_DAY,
+        quantity: 45,
+        unitRate: 134,
+        stripePaymentIntentId: 'pi_block',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/api/v1/platform/delivery/agencies/${big.id}/unenrol`,
+        headers: tokenFor(operatorId, null),
+        payload: { reason: 'Paused pending contract review' },
+      });
+      expect(response.statusCode).toBe(200);
+
+      const decision = await evaluateDeliveryGate(big.id, {
+        prisma,
+        now: middayOf(CLOSED_DAY),
+        record: false,
+      });
+      expect(decision.enrolled).toBe(false);
+      expect(decision.allowed).toBe(true);
+
+      // The record of what it was charged is untouched.
+      expect(
+        await prisma.applicationCreditLedgerEntry.count({ where: { tenantId: big.id } })
+      ).toBe(1);
+    });
+
+    it('tells an unenrolled agency that billing does not apply, without zeroes', async () => {
+      // The portal reads this. Rendering "0 remaining on the block" to an
+      // agency that is not in the billing system would tell a principal their
+      // phones are about to stop, which is the opposite of the truth.
+      await seedDeliveredCalls(big.id, currentCalendarDay(), 7);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/v1/delivery/today',
+        headers: tokenFor(big.ownerId, big.id),
+      });
+
+      expect(response.statusCode).toBe(200);
+      const view = response.json().data;
+      expect(view.enrolled).toBe(false);
+      expect(view.delivering).toBe(true);
+      expect(view.holdReason).toBeNull();
+      // The two counts that are true regardless are still real.
+      expect(view.callsAnswered).toBe(7);
+      // And nothing was priced.
+      expect(view.currentRate).toBeNull();
+      expect(view.projectedTotalCharge).toBeNull();
+    });
+
+    it('refuses an agency enrolling itself or turning on its own charging', async () => {
+      await seedTerms(big.id, { enrolled: false, chargesEnabled: false });
+      await seedOpeningAgreement(big.id);
+
+      for (const [method, url] of [
+        ['POST', `/api/v1/platform/delivery/agencies/${big.id}/enrol`],
+        ['POST', `/api/v1/platform/delivery/agencies/${big.id}/unenrol`],
+        ['PUT', `/api/v1/platform/delivery/agencies/${big.id}/charges`],
+      ] as const) {
+        const response = await app.inject({
+          method,
+          url,
+          headers: tokenFor(big.ownerId, big.id),
+          payload: { enabled: true },
+        });
+        expect(response.statusCode, `${method} ${url}`).toBe(403);
+      }
+
+      const profile = await prisma.agencyBillingProfile.findUnique({
+        where: { tenantId: big.id },
+      });
+      expect(profile?.billingEnrolledAt).toBeNull();
+      expect(profile?.chargesEnabled).toBe(false);
+    });
+
+    it('will not enable charging for an agency that is not enrolled', async () => {
+      await seedTerms(big.id, { enrolled: false, chargesEnabled: false });
+
+      const response = await app.inject({
+        method: 'PUT',
+        url: `/api/v1/platform/delivery/agencies/${big.id}/charges`,
+        headers: tokenFor(operatorId, null),
+        payload: { enabled: true },
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json().error.code).toBe('NOT_ENROLLED');
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 0b. The dry run — everything except the debit
+  // ══════════════════════════════════════════════════════════════════════════
+  describe('the dry run', () => {
+    async function seedSettleableDryRunDay(tenantId: string, chargesEnabled: boolean) {
+      await seedTerms(tenantId, { dailyBlockApplications: 45, chargesEnabled });
+      await seedOpeningAgreement(tenantId);
+      await recordPurchase(prisma, {
+        tenantId,
+        deliveryDay: CLOSED_DAY,
+        quantity: 45,
+        unitRate: 134,
+        stripePaymentIntentId: 'pi_block',
+      });
+      await seedDeliveredCalls(tenantId, CLOSED_DAY, 440);
+      await submitApplications(tenantId, CLOSED_DAY, 67);
+    }
+
+    it('records the full settlement and places no debit when charging is off', async () => {
+      await seedSettleableDryRunDay(big.id, false);
+
+      const result = await settleAgencyForDeliveryDay({
+        tenantId: big.id,
+        deliveryDay: CLOSED_DAY,
+        prisma,
+        gateway,
+      });
+
+      // No money moved.
+      expect(gateway.achCharges).toHaveLength(0);
+      expect(gateway.cardCharges).toHaveLength(0);
+      expect(result.paymentStatus).toBe('DRY_RUN');
+
+      // And every figure is the real computation, not a placeholder.
+      const settlement = await prisma.dailySettlement.findUnique({
+        where: { tenantId_deliveryDay: { tenantId: big.id, deliveryDay: CLOSED_DAY } },
+      });
+      expect(settlement?.deliveredCalls).toBe(440);
+      expect(settlement?.submittedApplications).toBe(67);
+      expect(settlement?.overrunQuantity).toBe(22);
+      expect(Number(settlement?.rate)).toBe(134);
+      expect(settlement?.nextBlockQuantity).toBe(45);
+      expect(Number(settlement?.totalCharged)).toBe(8978);
+      expect(settlement?.stripePaymentIntentId).toBeNull();
+      expect(settlement?.gracePeriodEndsOn).toBeNull();
+
+      // Nothing was attempted, so there is no attempt row and no failure notice.
+      expect(
+        await prisma.settlementPaymentAttempt.count({ where: { settlementId: settlement!.id } })
+      ).toBe(0);
+      expect(
+        await prisma.billingNotification.count({
+          where: { tenantId: big.id, kind: 'SETTLEMENT_FAILED' },
+        })
+      ).toBe(0);
+
+      /*
+       * The block IS sold, so the agency keeps delivering the way it would if
+       * the charge had gone through -- otherwise the thing being watched would
+       * be an agency starved to its ceiling rather than the real system. The
+       * purchase carries no Stripe reference and names this DRY_RUN settlement,
+       * which is what makes an unpaid block identifiable at cutover.
+       */
+      const purchase = await prisma.applicationCreditLedgerEntry.findFirst({
+        where: { tenantId: big.id, entryType: 'PURCHASE', deliveryDay: NEXT_DAY },
+      });
+      expect(purchase?.quantity).toBe(45);
+      expect(purchase?.stripePaymentIntentId).toBeNull();
+      expect(purchase?.settlementId).toBe(settlement!.id);
+    });
+
+    it('charges when charging is enabled, from the same inputs', async () => {
+      await seedSettleableDryRunDay(big.id, true);
+
+      const result = await settleAgencyForDeliveryDay({
+        tenantId: big.id,
+        deliveryDay: CLOSED_DAY,
+        prisma,
+        gateway,
+      });
+
+      expect(result.paymentStatus).toBe('SUCCEEDED');
+      expect(gateway.achCharges).toHaveLength(1);
+      expect(gateway.achCharges[0].amountCents).toBe(897_800);
+    });
+
+    it('honours --settle-without-charge over an agency that has charging enabled', async () => {
+      await seedSettleableDryRunDay(big.id, true);
+
+      const run = await runDailySettlement({
+        deliveryDay: CLOSED_DAY,
+        prisma,
+        gateway,
+        tenantIds: [big.id],
+        settleWithoutCharge: true,
+      });
+
+      expect(run.results[0].paymentStatus).toBe('DRY_RUN');
+      expect(gateway.achCharges).toHaveLength(0);
+    });
+
+    it('does not count a dry run as a clean settlement', async () => {
+      /*
+       * Ten dry-run days must not raise the Overrun ceiling to 100%: nothing
+       * was charged, so nothing was paid, and the ceiling is credit extended on
+       * a payment history that does not exist yet.
+       */
+      await seedTerms(big.id, { dailyBlockApplications: 45, chargesEnabled: false });
+
+      for (let i = 0; i < 12; i++) {
+        await prisma.dailySettlement.create({
+          data: {
+            tenantId: big.id,
+            deliveryDay: `2026-08-${String(i + 1).padStart(2, '0')}`,
+            deliveredCalls: 400,
+            submittedApplications: 60,
+            windowDeliveryDays: 3,
+            windowDaysFound: 3,
+            windowDayKeys: [],
+            totalCharged: 8040,
+            maxDailyDebit: 8978,
+            paymentStatus: 'DRY_RUN',
+          },
+        });
+      }
+
+      const terms = await loadAgencyTerms(big.id, { prisma });
+      expect(terms.consecutiveCleanSettlements).toBe(0);
+      // Still the below-threshold ceiling: 50% of 45.
+      expect(terms.ceilingApplications).toBe(22);
+    });
+
+    it('still halts a dry run that exceeds the maximum daily debit', async () => {
+      // A dry run exists to show what would happen. Reporting DRY_RUN for a
+      // settlement that would have HALTED hides the one outcome somebody
+      // watching a dry run most needs to see.
+      await seedSettleableDryRunDay(big.id, false);
+      await prisma.agencyBillingProfile.update({
+        where: { tenantId: big.id },
+        data: { maxDailyDebit: 1000 },
+      });
+
+      const result = await settleAgencyForDeliveryDay({
+        tenantId: big.id,
+        deliveryDay: CLOSED_DAY,
+        prisma,
+        gateway,
+      });
+
+      expect(result.paymentStatus).toBe('HALTED_MAX_DEBIT');
+      expect(gateway.achCharges).toHaveLength(0);
+      // No block sold on a halt, dry run or not.
+      expect(
+        await prisma.applicationCreditLedgerEntry.count({
+          where: { tenantId: big.id, entryType: 'PURCHASE', deliveryDay: NEXT_DAY },
+        })
+      ).toBe(0);
+    });
+
+    // ════════════════════════════════════════════════════════════════════════
+    // The closeout: what happens to the dry run's credits at cutover
+    //
+    // A dry-run settlement SELLS the next block, so the agency keeps
+    // delivering. Nobody paid for those credits. Left on the balance they
+    // carry into the first charged settlement and shrink its block -- the
+    // block is the daily target minus unused paid applications, and the ledger
+    // cannot tell an unpaid credit from a bought one. So the transition
+    // retires them, by appending rows, and the first real settlement sells a
+    // full block against a zero balance.
+    // ════════════════════════════════════════════════════════════════════════
+    describe('the closeout at cutover', () => {
+      /** Two dry-run Delivery Days, each selling a block that nobody paid for. */
+      async function runDryRunDays(tenantId: string, days: string[]) {
+        await seedTerms(tenantId, { dailyBlockApplications: 45, chargesEnabled: false });
+        await seedOpeningAgreement(tenantId);
+        // The opening purchase: bought on the Insertion Order, by card. It has
+        // no settlement, and it is not the dry run's to retire.
+        await recordPurchase(prisma, {
+          tenantId,
+          deliveryDay: days[0],
+          quantity: 45,
+          unitRate: 134,
+          stripePaymentIntentId: 'pi_opening_card',
+        });
+
+        for (const day of days) {
+          await seedDeliveredCalls(tenantId, day, 440);
+          await submitApplications(tenantId, day, 67);
+          await settleAgencyForDeliveryDay({ tenantId, deliveryDay: day, prisma, gateway });
+        }
+      }
+
+      async function enableCharging(tenantId: string) {
+        return app.inject({
+          method: 'PUT',
+          url: `/api/v1/platform/delivery/agencies/${tenantId}/charges`,
+          headers: tokenFor(operatorId, null),
+          payload: { enabled: true },
+        });
+      }
+
+      it('leaves the dry run spending its own credits while it is running', async () => {
+        /*
+         * The credits are NOT excluded from the balance during the dry run.
+         * If they were, every application would be Overrun from the first hour
+         * and delivery would stop at the ceiling on day one -- what was being
+         * watched would be a starved agency rather than the real system.
+         */
+        await runDryRunDays(big.id, [CLOSED_DAY]);
+
+        // 45 opening + 45 sold by the dry-run settlement, less 45 consumed
+        // (67 submitted: 45 spent credits, 22 overran).
+        expect(await creditBalance(prisma, big.id)).toBe(45);
+
+        const decision = await evaluateDeliveryGate(big.id, {
+          prisma,
+          now: middayOf(NEXT_DAY),
+        });
+        expect(decision.allowed).toBe(true);
+        expect(decision.reason).toBeNull();
+      });
+
+      it('retires every remaining dry-run credit when charging is turned on', async () => {
+        await runDryRunDays(big.id, [CLOSED_DAY]);
+        const before = await creditBalance(prisma, big.id);
+        expect(before).toBe(45);
+
+        const response = await enableCharging(big.id);
+        expect(response.statusCode).toBe(200);
+
+        const closeout = response.json().data.dryRunCloseout;
+        expect(closeout.lotsRetired).toBe(1);
+        expect(closeout.creditsRetired).toBe(45);
+        expect(closeout.balanceAfter).toBe(0);
+        expect(await creditBalance(prisma, big.id)).toBe(0);
+      });
+
+      it('leaves the opening purchase alone: it was paid for', async () => {
+        /*
+         * The opening block was bought by card on the Insertion Order and
+         * carries no settlement at all. Retiring it would take away credits
+         * the agency has already paid for -- the closeout only ever touches a
+         * lot sold by a settlement whose status is DRY_RUN.
+         */
+        await seedTerms(big.id, { dailyBlockApplications: 45, chargesEnabled: false });
+        await seedOpeningAgreement(big.id);
+        await recordPurchase(prisma, {
+          tenantId: big.id,
+          deliveryDay: CLOSED_DAY,
+          quantity: 45,
+          unitRate: 134,
+          stripePaymentIntentId: 'pi_opening_card',
+        });
+
+        const response = await enableCharging(big.id);
+        expect(response.statusCode).toBe(200);
+        expect(response.json().data.dryRunCloseout.lotsRetired).toBe(0);
+
+        // Untouched, and still spendable.
+        expect(await creditBalance(prisma, big.id)).toBe(45);
+        expect(
+          await prisma.applicationCreditLedgerEntry.count({
+            where: { tenantId: big.id, entryType: 'DRY_RUN_CLOSEOUT' },
+          })
+        ).toBe(0);
+      });
+
+      it('leaves a block that was actually charged for alone', async () => {
+        // Charging on from the start, so the settlement really debits and the
+        // block it sells was paid for. Turning charging on again later must not
+        // retire it.
+        await seedTerms(big.id, { dailyBlockApplications: 45, chargesEnabled: true });
+        await seedOpeningAgreement(big.id);
+        await recordPurchase(prisma, {
+          tenantId: big.id,
+          deliveryDay: CLOSED_DAY,
+          quantity: 45,
+          unitRate: 134,
+          stripePaymentIntentId: 'pi_opening_card',
+        });
+        await seedDeliveredCalls(big.id, CLOSED_DAY, 440);
+        await submitApplications(big.id, CLOSED_DAY, 67);
+        const settled = await settleAgencyForDeliveryDay({
+          tenantId: big.id,
+          deliveryDay: CLOSED_DAY,
+          prisma,
+          gateway,
+        });
+        expect(settled.paymentStatus).toBe('SUCCEEDED');
+
+        const response = await enableCharging(big.id);
+        expect(response.json().data.dryRunCloseout.lotsRetired).toBe(0);
+        expect(await creditBalance(prisma, big.id)).toBe(45);
+      });
+
+      it('retires each lot once however many times charging is turned on', async () => {
+        /*
+         * The guarantee is the unique index on (purchaseEntryId, lotIndex) --
+         * each closeout claims slot -1 of its lot -- not a flag the route
+         * checks. Pressing the button twice retires nothing the second time,
+         * and pressing it twice AT ONCE must not retire twice either.
+         */
+        /*
+         * Two dry-run days at 20 applications against a 45 block, so each
+         * settlement sells a short block that is then only partly spent and
+         * BOTH dry-run lots still carry credits at cutover. 130 calls to 20
+         * applications is 15.4%, above the flat point, so the rate stays $134
+         * and the arithmetic below reads.
+         *
+         * Lots at cutover: the opening 45 with 5 left (paid for, kept), and
+         * two dry-run blocks of 20 with nothing spent (retired).
+         */
+        await seedTerms(big.id, { dailyBlockApplications: 45, chargesEnabled: false });
+        await seedOpeningAgreement(big.id);
+        await recordPurchase(prisma, {
+          tenantId: big.id,
+          deliveryDay: CLOSED_DAY,
+          quantity: 45,
+          unitRate: 134,
+          stripePaymentIntentId: 'pi_opening_card',
+        });
+        for (const day of [CLOSED_DAY, NEXT_DAY]) {
+          await seedDeliveredCalls(big.id, day, 130);
+          await submitApplications(big.id, day, 20);
+          await settleAgencyForDeliveryDay({ tenantId: big.id, deliveryDay: day, prisma, gateway });
+        }
+
+        expect(await creditBalance(prisma, big.id)).toBe(45);
+
+        const [first, second] = await Promise.all([
+          enableCharging(big.id),
+          enableCharging(big.id),
+        ]);
+
+        // Between them, 40 credits over 2 lots -- once, however the two calls
+        // interleave.
+        const sum = (key: 'lotsRetired' | 'creditsRetired') =>
+          [first, second].reduce((total, r) => total + r.json().data.dryRunCloseout[key], 0);
+        expect(sum('creditsRetired')).toBe(40);
+        expect(sum('lotsRetired')).toBe(2);
+
+        const third = await enableCharging(big.id);
+        expect(third.json().data.dryRunCloseout.lotsRetired).toBe(0);
+
+        // One closeout row per dry-run lot, never two.
+        const rows = await prisma.applicationCreditLedgerEntry.findMany({
+          where: { tenantId: big.id, entryType: 'DRY_RUN_CLOSEOUT' },
+        });
+        expect(rows).toHaveLength(2);
+        expect(new Set(rows.map(row => row.purchaseEntryId)).size).toBe(2);
+
+        // The 5 credits left on the paid opening block survive. Only the dry
+        // run's own blocks were retired.
+        expect(await creditBalance(prisma, big.id)).toBe(5);
+      });
+
+      it('names the lot and the settlement it retired, and moves no money', async () => {
+        await runDryRunDays(big.id, [CLOSED_DAY]);
+        await enableCharging(big.id);
+
+        const row = await prisma.applicationCreditLedgerEntry.findFirstOrThrow({
+          where: { tenantId: big.id, entryType: 'DRY_RUN_CLOSEOUT' },
+        });
+
+        // Negative: the credits stop counting toward the balance.
+        expect(row.quantity).toBe(-45);
+        // No money moved, in either direction. An amount here would read as
+        // one that did -- this is not a refund, credit, reversal or rebate.
+        expect(row.amount).toBeNull();
+        expect(row.stripePaymentIntentId).toBeNull();
+        // The row reads on its own: which lot, which settlement, which day the
+        // retired block was for, and the rate it was nominally sold at.
+        expect(row.lotIndex).toBe(-1);
+        expect(row.purchaseEntryId).not.toBeNull();
+        expect(row.deliveryDay).toBe(NEXT_DAY);
+        expect(Number(row.unitRate)).toBe(134);
+
+        const settlement = await prisma.dailySettlement.findUniqueOrThrow({
+          where: { tenantId_deliveryDay: { tenantId: big.id, deliveryDay: CLOSED_DAY } },
+        });
+        expect(row.settlementId).toBe(settlement.id);
+        expect(settlement.paymentStatus).toBe('DRY_RUN');
+
+        const purchase = await prisma.applicationCreditLedgerEntry.findUniqueOrThrow({
+          where: { id: row.purchaseEntryId! },
+        });
+        expect(purchase.entryType).toBe('PURCHASE');
+        expect(purchase.settlementId).toBe(settlement.id);
+        // Append-only: the purchase it retires is exactly as it was written.
+        expect(purchase.quantity).toBe(45);
+      });
+
+      it('sells a full block on the first charged settlement after the dry run', async () => {
+        /*
+         * THE reason the closeout exists. Without it the 45 unpaid dry-run
+         * credits look like unused paid applications, the first charged
+         * settlement sells 45 - 45 = 0 and the agency delivers its first real
+         * billing day on credits nobody paid for.
+         */
+        await runDryRunDays(big.id, [CLOSED_DAY]);
+        await enableCharging(big.id);
+
+        /*
+         * The cutover day, delivered on a zero balance right up to the
+         * Overrun ceiling: 22 applications, which is 50% of a 45 block. 144
+         * calls keeps the trailing window at or above 15% so the rate is the
+         * flat $134 and the arithmetic is readable.
+         */
+        const firstCharged = '2026-09-09';
+        await seedDeliveredCalls(big.id, firstCharged, 144);
+        await submitApplications(big.id, firstCharged, 22);
+
+        const result = await settleAgencyForDeliveryDay({
+          tenantId: big.id,
+          deliveryDay: firstCharged,
+          prisma,
+          gateway,
+        });
+
+        expect(result.paymentStatus).toBe('SUCCEEDED');
+        // A FULL block. Without the closeout the 45 unpaid dry-run credits
+        // would read as unused paid applications and this would be 45-45 = 0.
+        expect(result.nextBlockQuantity).toBe(45);
+        // Nothing was left to spend, so all 22 were Overrun.
+        expect(result.overrunQuantity).toBe(22);
+
+        const settlement = await prisma.dailySettlement.findUniqueOrThrow({
+          where: { tenantId_deliveryDay: { tenantId: big.id, deliveryDay: firstCharged } },
+        });
+        expect(settlement.unusedPaidApplications).toBe(0);
+
+        /*
+         * $2,948 of Overrun plus $6,030 of block is $8,978 -- exactly the
+         * maximum daily debit, because that figure IS (45 + 22) x $134. An
+         * agency delivered to its ceiling on a zero balance bills its
+         * contractual maximum to the cent and does not halt.
+         */
+        expect(result.totalCharged).toBe(8978);
+        expect(gateway.achCharges[0].amountCents).toBe(897_800);
+      });
+
+      it('shows an operator the number before they press the button', async () => {
+        await runDryRunDays(big.id, [CLOSED_DAY]);
+
+        const before = await app.inject({
+          method: 'GET',
+          url: `/api/v1/platform/delivery/agencies/${big.id}/enrolment`,
+          headers: tokenFor(operatorId, null),
+        });
+        expect(before.json().data.balance).toBe(45);
+        expect(before.json().data.pendingDryRunCloseout).toEqual({ lots: 1, credits: 45 });
+
+        // And which bank account the debits will come out of. A mandate that
+        // exists is not the same fact as a mandate on the right account.
+        expect(before.json().data.mandate).toMatchObject({ status: 'ACTIVE', valid: true });
+
+        await enableCharging(big.id);
+
+        const after = await app.inject({
+          method: 'GET',
+          url: `/api/v1/platform/delivery/agencies/${big.id}/enrolment`,
+          headers: tokenFor(operatorId, null),
+        });
+        expect(after.json().data.balance).toBe(0);
+        expect(after.json().data.pendingDryRunCloseout).toEqual({ lots: 0, credits: 0 });
+      });
+
+      it('refuses to update or delete a closeout row', async () => {
+        // Append-only stays intact: the closeout is a correction expressed as a
+        // later row, and it is no more mutable than anything else here.
+        await runDryRunDays(big.id, [CLOSED_DAY]);
+        await enableCharging(big.id);
+
+        const row = await prisma.applicationCreditLedgerEntry.findFirstOrThrow({
+          where: { tenantId: big.id, entryType: 'DRY_RUN_CLOSEOUT' },
+        });
+
+        await expect(
+          prisma.$executeRawUnsafe(
+            `UPDATE "application_credit_ledger" SET "quantity" = 0 WHERE "id" = '${row.id}'`
+          )
+        ).rejects.toThrow();
+        await expect(
+          prisma.$executeRawUnsafe(
+            `DELETE FROM "application_credit_ledger" WHERE "id" = '${row.id}'`
+          )
+        ).rejects.toThrow();
+      });
+    });
   });
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -571,6 +1385,9 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
        * automation run calls markAutomationCompleted again with the same
        * application id.
        */
+      // Metering is opt-in: an unenrolled agency's applications write no ledger
+      // row at all, so this case only exists for an enrolled one.
+      await seedTerms(big.id);
       await recordPurchase(prisma, {
         tenantId: big.id,
         deliveryDay: CLOSED_DAY,
@@ -915,14 +1732,37 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
       expect(decision.balance).toBe(45);
     });
 
-    it('refuses delivery to an agency with no opening agreement', async () => {
+    it('refuses an enrolled agency that has no agreed rate', async () => {
+      /*
+       * `NO_OPENING_AGREEMENT` is defence in depth rather than a state the
+       * enrolment route can produce: enrolment refuses an agency with no agreed
+       * opening rate, precisely so this cannot happen. It is still asserted,
+       * because an agency enrolled by a direct database write, or one whose
+       * rating state was cleared afterwards, must not be delivered to at a
+       * price nobody agreed.
+       *
+       * Note there is no rating state at all here -- `seedOpeningAgreement` is
+       * deliberately not called.
+       */
+      await seedTerms(big.id);
+      await recordPurchase(prisma, {
+        tenantId: big.id,
+        deliveryDay: CLOSED_DAY,
+        quantity: 45,
+        unitRate: 134,
+        stripePaymentIntentId: 'pi_block',
+      });
+
       const decision = await evaluateDeliveryGate(big.id, {
         prisma,
         now: middayOf(CLOSED_DAY),
         record: false,
       });
+      expect(decision.enrolled).toBe(true);
       expect(decision.allowed).toBe(false);
-      expect(decision.reason).toBe('NO_MANDATE');
+      expect(decision.reason).toBe('NO_OPENING_AGREEMENT');
+      // And the block it paid for is still there.
+      expect(decision.balance).toBe(45);
     });
 
     it('stops delivery when a settlement is unpaid past its Business Day grace period', async () => {
@@ -1718,9 +2558,263 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
       expect(bigRow.settlement.status).toBe('NOT_YET_RUN');
       expect(bigRow.flags.noValidMandate).toBe(false);
 
+      /*
+       * `small` has no billing profile, so it is not enrolled -- and an
+       * unenrolled agency carries NO flags. Flagging it "no valid mandate"
+       * would put a red badge on every tenant that has not been onboarded and
+       * bury the one that genuinely needs attention.
+       */
       const smallRow = rows.find((r: any) => r.tenantId === small.id);
       expect(smallRow.deliveredCalls).toBe(0);
-      expect(smallRow.flags.noValidMandate).toBe(true);
+      expect(smallRow.enrolled).toBe(false);
+      expect(smallRow.flags.noValidMandate).toBe(false);
+      expect(Object.values(smallRow.flags).every((f) => f === false)).toBe(true);
+      expect(smallRow.settlement.status).toBe('NOT_ENROLLED');
+
+      // An ENROLLED agency that then loses its mandate is flagged, which is the
+      // case the flag exists for.
+      await seedTerms(small.id, { dailyBlockApplications: 15, mandate: false });
+      const afterEnrolment = await app.inject({
+        method: 'GET',
+        url: `/api/v1/platform/delivery/overview?day=${CLOSED_DAY}`,
+        headers: tokenFor(operatorId, null),
+      });
+      const flagged = afterEnrolment
+        .json()
+        .data.agencies.find((r: any) => r.tenantId === small.id);
+      expect(flagged.enrolled).toBe(true);
+      expect(flagged.flags.noValidMandate).toBe(true);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 5b. The settlement export — what a dry run is invoiced from
+  //
+  // The dry run is three Delivery Days and it is invoiced BY HAND. At 45
+  // applications a day the larger agency generates $6,030 of production daily,
+  // so "we were watching the numbers" is not a reason to give the period away.
+  // The export therefore has to carry enough to raise an invoice from the file
+  // alone, and to separate the days that took money from the days that did not.
+  // ══════════════════════════════════════════════════════════════════════════
+  describe('the settlement export', () => {
+    /** One settlement row on `day`, written directly so the figures are exact. */
+    async function seedSettlement(
+      tenantId: string,
+      day: string,
+      overrides: Partial<{
+        deliveredCalls: number;
+        submittedApplications: number;
+        paymentStatus: 'DRY_RUN' | 'SUCCEEDED' | 'FAILED' | 'HALTED_MAX_DEBIT';
+        totalCharged: number;
+      }> = {}
+    ) {
+      return prisma.dailySettlement.create({
+        data: {
+          tenantId,
+          deliveryDay: day,
+          deliveredCalls: overrides.deliveredCalls ?? 440,
+          submittedApplications: overrides.submittedApplications ?? 67,
+          windowClosingPct: 15.2273,
+          windowDeliveryDays: 3,
+          windowDaysFound: 3,
+          windowDayKeys: [day],
+          rate: 134,
+          curveVersion: 1,
+          overrunQuantity: 22,
+          overrunAmount: 2948,
+          configuredBlockQuantity: 45,
+          unusedPaidApplications: 0,
+          nextBlockQuantity: 45,
+          nextBlockAmount: 6030,
+          totalCharged: overrides.totalCharged ?? 8978,
+          maxDailyDebit: 8978,
+          paymentStatus: overrides.paymentStatus ?? 'DRY_RUN',
+        },
+      });
+    }
+
+    /**
+     * Every cell is quoted -- the export is a file a finance team opens in
+     * Excel, and an unquoted cell beginning `=` is a formula -- so reading it
+     * back means unquoting it.
+     */
+    function parseLine(line: string): string[] {
+      const cells: string[] = [];
+      let cell = '';
+      let quoted = false;
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (quoted) {
+          if (char !== '"') cell += char;
+          else if (line[i + 1] === '"') (cell += '"'), i++;
+          else quoted = false;
+        } else if (char === '"') quoted = true;
+        else if (char === ',') (cells.push(cell), (cell = ''));
+        else cell += char;
+      }
+      cells.push(cell);
+      return cells;
+    }
+
+    function parse(body: string): { header: string[]; rows: string[][] } {
+      const [head, ...rest] = body.trim().split('\n');
+      return { header: parseLine(head), rows: rest.map(parseLine) };
+    }
+
+    async function exportCsv(query: string) {
+      return app.inject({
+        method: 'GET',
+        url: `/api/v1/platform/delivery/settlements.csv${query}`,
+        headers: tokenFor(operatorId, null),
+      });
+    }
+
+    it('carries every figure an invoice is raised from', async () => {
+      await seedSettlement(big.id, CLOSED_DAY);
+
+      const response = await exportCsv('');
+      expect(response.statusCode).toBe(200);
+      expect(response.headers['content-type']).toMatch(/text\/csv/);
+      expect(response.headers['content-disposition']).toMatch(/settlements-all-/);
+
+      const { header, rows } = parse(response.body);
+
+      // Everything asked for, by name, so a missing column fails here rather
+      // than in a spreadsheet at invoicing time.
+      for (const column of [
+        'agency',
+        'delivery_day',
+        'delivered_calls',
+        'submitted_applications',
+        'day_closing_pct',
+        'rate',
+        'curve_version',
+        'overrun_quantity',
+        'overrun_amount',
+        'next_block_quantity',
+        'next_block_amount',
+        'total_charged',
+        'payment_status',
+      ]) {
+        expect(header).toContain(column);
+      }
+
+      expect(rows).toHaveLength(1);
+      const row = Object.fromEntries(header.map((name, i) => [name, rows[0][i]]));
+      expect(row.agency).toContain('Ridgeline');
+      expect(row.tenant_id).toBe(big.id);
+      expect(row.delivery_day).toBe(CLOSED_DAY);
+      expect(row.delivered_calls).toBe('440');
+      expect(row.submitted_applications).toBe('67');
+      expect(row.rate).toBe('134');
+      expect(row.curve_version).toBe('1');
+      expect(row.overrun_quantity).toBe('22');
+      expect(row.overrun_amount).toBe('2948');
+      expect(row.next_block_quantity).toBe('45');
+      expect(row.next_block_amount).toBe('6030');
+      expect(row.total_charged).toBe('8978');
+      expect(row.payment_status).toBe('DRY_RUN');
+
+      // The DAY's closing percentage, derived from the two counts on the row
+      // rather than stored beside them: 67 / 440.
+      expect(Number(row.day_closing_pct)).toBeCloseTo(15.2273, 4);
+      // And it is a different number from the trailing window that set the
+      // rate, which is why both are present under names that say which.
+      expect(header).toContain('window_closing_pct');
+    });
+
+    it('filters to an inclusive Delivery Day range', async () => {
+      for (const day of ['2026-09-05', '2026-09-06', CLOSED_DAY, '2026-09-08']) {
+        await seedSettlement(big.id, day);
+      }
+
+      const { rows } = parse((await exportCsv(`?from=2026-09-06&to=${CLOSED_DAY}`)).body);
+      expect(rows.map(row => row[2])).toEqual(['2026-09-06', CLOSED_DAY]);
+    });
+
+    it('separates the days that took money from the days that did not', async () => {
+      await seedSettlement(big.id, '2026-09-05', { paymentStatus: 'DRY_RUN' });
+      await seedSettlement(big.id, '2026-09-06', { paymentStatus: 'DRY_RUN' });
+      await seedSettlement(big.id, CLOSED_DAY, { paymentStatus: 'SUCCEEDED' });
+
+      const dryRun = parse((await exportCsv('?mode=DRY_RUN')).body);
+      expect(dryRun.rows.map(row => row[2])).toEqual(['2026-09-05', '2026-09-06']);
+
+      const charged = parse((await exportCsv('?mode=CHARGED')).body);
+      expect(charged.rows.map(row => row[2])).toEqual([CLOSED_DAY]);
+
+      const all = parse((await exportCsv('?mode=ALL')).body);
+      expect(all.rows).toHaveLength(3);
+    });
+
+    it('counts a failed or halted day as charged, not as a dry run', async () => {
+      /*
+       * Charging was in force on both: one was sent to Stripe and declined,
+       * the other never went because it breached the maximum daily debit.
+       * Neither is a dry run, and leaving them out of the charged export would
+       * make a reconciler think the day was never settled at all.
+       */
+      await seedSettlement(big.id, '2026-09-05', { paymentStatus: 'FAILED' });
+      await seedSettlement(big.id, '2026-09-06', { paymentStatus: 'HALTED_MAX_DEBIT' });
+      await seedSettlement(big.id, CLOSED_DAY, { paymentStatus: 'DRY_RUN' });
+
+      const charged = parse((await exportCsv('?mode=CHARGED')).body);
+      expect(charged.rows.map(row => row[2])).toEqual(['2026-09-05', '2026-09-06']);
+      expect(parse((await exportCsv('?mode=DRY_RUN')).body).rows).toHaveLength(1);
+    });
+
+    it('spans every agency, and narrows to one on request', async () => {
+      await seedSettlement(big.id, CLOSED_DAY);
+      await seedSettlement(small.id, CLOSED_DAY);
+
+      const both = parse((await exportCsv('')).body);
+      expect(both.rows).toHaveLength(2);
+      expect(both.rows.map(row => row[1]).sort()).toEqual([big.id, small.id].sort());
+
+      const one = parse((await exportCsv(`?tenantId=${small.id}`)).body);
+      expect(one.rows).toHaveLength(1);
+      expect(one.rows[0][1]).toBe(small.id);
+    });
+
+    it('refuses a malformed date or an unknown mode rather than exporting the lot', async () => {
+      expect((await exportCsv('?from=07-09-2026')).statusCode).toBe(400);
+      expect((await exportCsv(`?from=${CLOSED_DAY}&to=nonsense`)).statusCode).toBe(400);
+      expect((await exportCsv('?mode=SOMETHING')).statusCode).toBe(400);
+    });
+
+    it('does not hand a finance team a spreadsheet formula', async () => {
+      /*
+       * The agency name is the one free-text field in this file, and this file
+       * is opened in Excel by somebody raising an invoice. A cell beginning
+       * `=`, `+`, `-` or `@` is evaluated there, so it is quoted and prefixed
+       * rather than trusted.
+       */
+      await prisma.tenant.update({
+        where: { id: big.id },
+        data: { name: '=1+1' },
+      });
+      await seedSettlement(big.id, CLOSED_DAY);
+
+      const response = await exportCsv('');
+      expect(response.body).toContain(`"'=1+1"`);
+
+      const row = parse(response.body).rows[0];
+      expect(row[0]).toBe("'=1+1");
+    });
+
+    it('is platform staff only', async () => {
+      await seedSettlement(big.id, CLOSED_DAY);
+      await seedSettlement(small.id, CLOSED_DAY);
+
+      // An agency principal, with a perfectly good token, asking for the
+      // export that contains every other agency's revenue.
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/v1/platform/delivery/settlements.csv',
+        headers: tokenFor(big.ownerId, big.id),
+      });
+      expect(response.statusCode).toBe(403);
+      expect(response.body).not.toContain(small.id);
     });
   });
 
@@ -1735,7 +2829,33 @@ describe.skipIf(!gate.available)('Phase 3: the ledger, Overrun and daily settlem
           WHERE t.typname = 'CreditLedgerEntryType'`
       );
       const labels = types.map(t => t.enumlabel).sort();
-      expect(labels).toEqual(['CONSUMPTION', 'OVERRUN', 'PURCHASE']);
+
+      /*
+       * The whole vocabulary, listed exactly, so a fourth member cannot be
+       * added without somebody deciding here what it means.
+       *
+       * DRY_RUN_CLOSEOUT is the only one that reduces a balance without an
+       * application behind it, and it is NOT a refund. It retires credits
+       * issued by a dry-run settlement -- credits that were never sold, never
+       * invoiced and never paid for, created so an agency could keep
+       * delivering while its numbers were watched. Nothing is returned to
+       * anybody and no money moves in either direction, which is why those
+       * rows carry a null `amount`. A refund, credit, reversal, rebate or
+       * make-good would give back something that was paid for, and none of
+       * those exists here.
+       */
+      expect(labels).toEqual([
+        'CONSUMPTION',
+        'DRY_RUN_CLOSEOUT',
+        'OVERRUN',
+        'PURCHASE',
+      ]);
+
+      // And no money is attached to one, ever.
+      const withMoney = await prisma.applicationCreditLedgerEntry.count({
+        where: { entryType: 'DRY_RUN_CLOSEOUT', OR: [{ amount: { not: null } }, { stripePaymentIntentId: { not: null } }] },
+      });
+      expect(withMoney).toBe(0);
     });
 
     it('does not return a credit when a carrier declines after submission', async () => {

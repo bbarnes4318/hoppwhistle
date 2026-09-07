@@ -52,6 +52,27 @@
  * Their ledgers, rates and payment instruments are independent, and a bad row
  * for one must not leave the rest unbilled.
  *
+ * ── Enrolment, and the dry run ───────────────────────────────────────────────
+ *
+ * An agency that has not been explicitly enrolled is skipped entirely, before
+ * anything is computed or written. See `settleAgencyForDeliveryDay` below.
+ *
+ * An agency that IS enrolled but has not had charging enabled gets the whole
+ * settlement -- the reconciliation, the counts, the rating call, the overrun,
+ * the block, the immutable record with every figure on it -- and no Stripe
+ * charge. The row reads `paymentStatus: DRY_RUN` and `totalCharged` is what it
+ * would have taken. That is the mode to run a real agency in for a few days
+ * before any money moves, and it is the default on enrolment: turning charging
+ * on is a second, separate, explicit act.
+ *
+ * The next Delivery Day's block IS sold in a dry run, deliberately. Not selling
+ * it would leave the agency at a zero balance, every application would be
+ * Overrun, and delivery would stop at the ceiling on the first day -- so the
+ * thing being watched would not be the system's real behaviour. The purchase
+ * carries no Stripe payment reference and names a DRY_RUN settlement, so an
+ * unpaid block is identifiable from the rows; see docs/BILLING.md on what to do
+ * with that balance at cutover.
+ *
  * ── No refunds ───────────────────────────────────────────────────────────────
  *
  * Nothing here reverses anything. There is no code path that returns a credit,
@@ -98,6 +119,17 @@ export interface SettleOptions {
   prisma?: PrismaClient;
   gateway?: PaymentGateway;
   now?: Date;
+  /**
+   * Settle without charging: compute and record the full settlement for this
+   * invocation, whatever the agency's own `chargesEnabled` says, and place no
+   * debit.
+   *
+   * One-directional on purpose: this can only ever turn charging OFF. There is
+   * no option here that turns it on for an agency whose profile says otherwise,
+   * because a per-run flag that starts charging somebody is a flag somebody
+   * passes by accident once.
+   */
+  settleWithoutCharge?: boolean;
 }
 
 export interface SettlementResult {
@@ -149,15 +181,26 @@ export async function settleAgencyForDeliveryDay(
   });
 
   const terms = await loadAgencyTerms(tenantId, { prisma });
-  if (!terms.profile) {
-    /*
-     * No commercial terms recorded. There is no Daily Block to sell, no maximum
-     * daily debit to respect and no mandate to debit, so there is nothing to
-     * settle. Deliberately not a settlement row saying zero: a row would assert
-     * that this agency was billed nothing for the day, and the truth is that it
-     * has never been set up to be billed at all.
-     */
-    return empty('no billing profile: no opening agreement has been recorded');
+
+  /*
+   * An agency that has not been explicitly enrolled in billing is skipped
+   * entirely -- no settlement row, not even one saying zero.
+   *
+   * A row would be an assertion that this agency was billed nothing for the
+   * day, and the truth is different and worth keeping distinguishable: it is
+   * not in the billing system. `daily_settlements` is the record of days that
+   * were settled, and a night of zero-value rows for every unenrolled tenant on
+   * the platform would bury the days that were.
+   *
+   * This covers the no-profile case too, since enrolment lives on the profile
+   * and an agency without one cannot be enrolled.
+   */
+  if (!terms.enrolled) {
+    return empty(
+      terms.profile
+        ? 'not enrolled in billing'
+        : 'not enrolled in billing: no billing profile recorded'
+    );
   }
 
   const bounds = calendarDayBounds(deliveryDay);
@@ -247,13 +290,33 @@ export async function settleAgencyForDeliveryDay(
   const exceedsMaxDebit = totalCharged > terms.maxDailyDebit;
   const missingMandate = !terms.hasValidMandate;
 
+  /*
+   * Whether a debit may actually be placed.
+   *
+   * Off unless the agency's profile says charging is enabled, and the per-run
+   * `settleWithoutCharge` can only turn it further off. Everything above this
+   * line has already been computed either way -- the dry run is the real
+   * settlement with the last step withheld, not a different calculation.
+   */
+  const chargingAllowed = terms.chargesEnabled && options.settleWithoutCharge !== true;
+
+  /*
+   * The maximum-daily-debit halt is checked even in a dry run, and comes first.
+   *
+   * A dry run exists to show what would happen. An agency whose computed
+   * settlement is over its Insertion Order ceiling would HALT, not be charged,
+   * so that is what the record has to say -- reporting DRY_RUN there would hide
+   * the one outcome somebody watching a dry run most needs to see.
+   */
   const initialStatus: SettlementPaymentStatus = exceedsMaxDebit
     ? SettlementPaymentStatus.HALTED_MAX_DEBIT
-    : missingMandate && totalCharged > 0
-      ? SettlementPaymentStatus.HALTED_NO_MANDATE
-      : totalCharged === 0
-        ? SettlementPaymentStatus.NOT_CHARGED
-        : SettlementPaymentStatus.PENDING;
+    : totalCharged === 0
+      ? SettlementPaymentStatus.NOT_CHARGED
+      : !chargingAllowed
+        ? SettlementPaymentStatus.DRY_RUN
+        : missingMandate
+          ? SettlementPaymentStatus.HALTED_NO_MANDATE
+          : SettlementPaymentStatus.PENDING;
 
   /*
    * Step 6, part one -- the record. Written BEFORE any money moves.
@@ -372,6 +435,43 @@ export async function settleAgencyForDeliveryDay(
     // Nothing owed and nothing to sell. The row still exists, because a day the
     // job ran and found nothing to bill and a day the job did not run are
     // different things and only one of them is fine.
+    return base;
+  }
+
+  if (initialStatus === SettlementPaymentStatus.DRY_RUN) {
+    /*
+     * Everything except the debit.
+     *
+     * The block is still sold, so the agency keeps delivering the way it would
+     * if the charge had gone through and what is being watched is the system's
+     * real behaviour rather than an agency starved to its ceiling on day one.
+     * The purchase carries no Stripe payment reference and names this DRY_RUN
+     * settlement, which is what makes an unpaid block identifiable later.
+     *
+     * No payment attempt row: none was attempted. No notification: nothing
+     * failed. `totalCharged` on the record is what this would have taken.
+     */
+    if (nextBlockQuantity > 0 && curveRate !== null) {
+      await recordPurchase(prisma, {
+        tenantId,
+        deliveryDay: nextCalendarDay(deliveryDay),
+        quantity: nextBlockQuantity,
+        unitRate: curveRate,
+        stripePaymentIntentId: null,
+        settlementId: settlement.id,
+        curveVersionId: rateChange?.curveVersionId ?? null,
+        curveVersion: rateChange?.curveVersion ?? null,
+      });
+    }
+
+    logger.info({
+      msg: 'Settlement computed and recorded; no debit placed (charging not enabled)',
+      tenantId,
+      deliveryDay,
+      settlementId: settlement.id,
+      wouldHaveCharged: totalCharged,
+    });
+
     return base;
   }
 
@@ -654,6 +754,12 @@ export interface RunResult {
  * Sequential and individually guarded. One agency's settlement failing --
  * a declined debit, a missing profile, a database error -- collects a failure
  * and moves on. Their money is independent and so is their billing.
+ *
+ * Every active tenant is walked, and the ones not enrolled in billing return a
+ * skip without a settlement row. Walking them and skipping, rather than
+ * querying only the enrolled, is deliberate: the run's result then names every
+ * agency and says what happened to it, which is what an operator watching a
+ * staged rollout wants to see.
  */
 export async function runDailySettlement(
   options: {
@@ -662,6 +768,11 @@ export async function runDailySettlement(
     gateway?: PaymentGateway;
     now?: Date;
     tenantIds?: string[];
+    /**
+     * Settle every agency in this invocation without charging any of them.
+     * Never the reverse.
+     */
+    settleWithoutCharge?: boolean;
   } = {}
 ): Promise<RunResult> {
   const prisma = options.prisma ?? getPrismaClient();
@@ -688,6 +799,7 @@ export async function runDailySettlement(
           prisma,
           gateway: options.gateway,
           now,
+          settleWithoutCharge: options.settleWithoutCharge,
         })
       );
     } catch (error) {

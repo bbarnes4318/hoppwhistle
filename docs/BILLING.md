@@ -16,13 +16,683 @@ application is submitted — issued, declined, rescinded, lapsed — never retur
 credit. There is no enum member for it, no column, and no code path. That is
 asserted, not merely intended: `settlement.test.ts` reads the ledger's enum
 labels out of `pg_enum` and expects exactly `PURCHASE`, `CONSUMPTION`,
-`OVERRUN`.
+`OVERRUN`, `DRY_RUN_CLOSEOUT`.
+
+The fourth is not an exception to that. `DRY_RUN_CLOSEOUT` retires credits a
+**dry-run** settlement issued — credits that were never sold, never invoiced and
+never paid for, created only so an agency could keep delivering while its
+numbers were being watched. No money moves in either direction, which is why
+those rows carry a null `amount`, and nothing is returned to anybody, because
+nothing was taken. See §0c.
+
+**Billing is opt-in, per agency, and off by default.** Nothing below applies to
+an agency until a platform admin explicitly enrols it. See §0 — it is first
+because it is what decides whether any of the rest happens at all.
+
+**Taking an agency live is §0d, the go-live runbook**: the ordered steps from
+unenrolled to charging, what to check after each one, and what reverses it.
+Follow it rather than reasoning from the rest of this document.
 
 **There is no introductory rate.** Phase 2 carried one — a flat price for an
 agency's first five submitted applications. It is gone: from the engine, the
 curve, the summary, the publish API and the portal. An agency's opening rate and
 opening block are agreed before its first Delivery Day and recorded per tenant;
 from the second Delivery Day the rate curve governs. See §8.
+
+
+---
+
+## 0. Enrolment — the opt-in
+
+An agency is subject to the billing system **only** when a platform admin has
+explicitly enrolled it. Unenrolled is the default, and unenrolled means
+untouched:
+
+| | unenrolled | enrolled |
+| --- | --- | --- |
+| delivery gate | not consulted; calls deliver exactly as they did before Phase 3 existed | every condition in §3 applies |
+| submitted applications | no ledger row of any kind — not a consumption, not an overrun | metered per §1 |
+| nightly settlement | skipped entirely; **no settlement row**, not even one saying zero | settled per §4 |
+| `delivery_hold_events`, notifications | never written | per §3 |
+| the portal | "Billing is not enabled for this agency" | the panel in §6 |
+| the cross-agency view | shown as `not enrolled`, carrying **no flags** | flagged per §6 |
+
+### Why this exists
+
+Phase 3 shipped without it, and it was a production-stopping defect. The gate
+refuses an agency with no valid ACH mandate; an agency with no billing profile
+has no mandate; so every existing tenant would have been refused with
+`NO_MANDATE` the moment the gate went live — five of them in production, none
+with a profile, one carrying live client traffic.
+
+An opt-in that can be arrived at accidentally is not an opt-in. So enrolment is
+`agency_billing_profiles.billingEnrolledAt`, set by an explicit act and null
+otherwise. It is **not** inferred from the existence of that row, from a
+mandate, or from ledger rows.
+
+### The migration enrols nobody
+
+`20260911000000_add_billing_enrolment/migration.sql` adds the columns nullable
+or with a safe default and contains no `UPDATE` that sets an enrolment anywhere.
+Applying it leaves every existing tenant unenrolled, ungated, unmetered and
+unsettled.
+
+That is asserted rather than read: `settlement.test.ts` §0 seeds tenants shaped
+like the production ones — calls, applications, no billing profile — against a
+database the migration has actually been applied to, and checks that the gate
+returns `enrolled: false, allowed: true` for each, that no hold event exists,
+that no notification was sent and that the ledger is empty.
+`delivery-gating-paths.test.ts` does the same through the real HTTP routes,
+using conditions that *do* refuse an enrolled agency (a suspension, a missing
+mandate, no terms at all) so a pass means the gate is genuinely not applied
+rather than applied and saying yes.
+
+### The gate checks it first, and on its own
+
+`evaluateDeliveryGate` reads enrolment before anything else, in its own query
+rather than as part of the `Promise.all` with the ledger and settlement reads.
+That ordering is deliberate twice over: an unenrolled agency is short-circuited
+before any billing state is touched, and — because an unreadable gate refuses
+(§3) — its calls cannot stop because a query about a billing system it is not in
+failed.
+
+### Enrolling an agency
+
+    GET  /api/v1/platform/delivery/agencies/:tenantId/enrolment   check first
+    POST /api/v1/platform/delivery/agencies/:tenantId/enrol
+    POST /api/v1/platform/delivery/agencies/:tenantId/unenrol
+
+Platform-only; an agency OWNER gets 403 on all three and the row does not move.
+
+Enrolment is **refused** unless all of these are already in place, and the
+refusal names every missing one at once rather than one per attempt:
+
+| Blocker | Why it must be there first |
+| --- | --- |
+| `NO_BILLING_PROFILE` | everything else is read off it |
+| `NO_DAILY_BLOCK` | a block of zero means every application is Overrun and the ceiling is zero, so delivery stops on the first application |
+| `NO_MAX_DAILY_DEBIT` | a maximum of zero halts every settlement |
+| `NO_OPENING_RATE` | no price: the gate refuses with `NO_OPENING_AGREEMENT` and the settlement has nothing to bill overrun at |
+| `NO_VALID_MANDATE` | no mandate, no delivery — enrolling without one stops the agency immediately |
+
+The reason for checking is the same reason the switch exists. Enrolment takes
+effect on the next call offered, so enrolling an agency that fails any of these
+reproduces the original failure one step later and with somebody's name on it.
+
+Un-enrolling stops the gating, the metering and the settling immediately. It
+does **not** touch the ledger or the settlements already written: those are the
+record of what the agency was charged, and nothing in this system removes them.
+
+### The order to onboard an agency in
+
+1. `PUT  /api/v1/platform/delivery/agencies/:id/terms` — Daily Block, maximum daily debit
+2. `PUT  /api/v1/platform/rating/agencies/:id/opening` — the agreed opening rate
+3. the agency completes the ACH mandate (§5)
+4. `POST /api/v1/platform/delivery/agencies/:id/opening-purchase` — the opening block
+5. `GET  /api/v1/platform/delivery/agencies/:id/enrolment` — confirm `readyToEnrol`
+6. `POST /api/v1/platform/delivery/agencies/:id/enrol`
+7. watch settlements compute with no money moving (§0b)
+8. invoice that period by hand from the export (§0b)
+9. `PUT  /api/v1/platform/delivery/agencies/:id/charges` `{enabled: true}` — which
+   also retires the dry run's credits (§0c)
+10. sell the first paid block for the cutover day
+
+**Do not work from this list.** It is the shape of the thing; §0d is the
+runbook, with the verification to run after each step and the call that reverses
+it. Three of these steps cannot be reversed, and the list above does not say
+which.
+
+---
+
+## 0b. The dry run — everything except the debit
+
+Charging is a **second** switch, `agency_billing_profiles.chargesEnabled`, also
+false by default. An agency that is enrolled but not charging gets the whole
+settlement — the reconciliation, the counts, the rating call, the overrun, the
+next day's block, the full immutable record — and no Stripe charge. The row
+reads `paymentStatus: DRY_RUN` and `totalCharged` is exactly what it would have
+taken.
+
+So the first thing that happens to a newly enrolled agency is settlements that
+compute and record without moving money, for as many days as you want to watch.
+
+    PUT /api/v1/platform/delivery/agencies/:tenantId/charges  {"enabled": true}
+
+Refused for an agency that is not enrolled — there would be nothing to charge.
+
+### What the dry run does and does not do
+
+- **Does** write the settlement row, with every figure real.
+- **Does** sell the next Delivery Day's block. Deliberately: not selling it
+  would leave the agency at a zero balance, every application would be Overrun,
+  and delivery would stop at the ceiling on the first day — so the thing being
+  watched would not be the system's real behaviour. The purchase carries **no
+  Stripe payment reference** and names a `DRY_RUN` settlement, which is what
+  makes an unpaid block identifiable later.
+- **Does** still halt on the maximum daily debit. A dry run exists to show what
+  would happen, and reporting `DRY_RUN` for a settlement that would have
+  `HALTED_MAX_DEBIT` hides the one outcome somebody watching most needs to see.
+- **Does not** write a payment attempt row — none was attempted.
+- **Does not** send a failure notification — nothing failed.
+- **Does not** count as a clean settlement. Ten dry-run days must not raise the
+  Overrun ceiling to 100%: nothing was paid, and the ceiling is credit extended
+  on a payment history that does not exist yet.
+
+### Invoicing the dry run
+
+The dry run is invoiced **by hand**. At 45 applications a day the larger agency
+generates $6,030 of production daily, so a period spent watching numbers is not
+a period given away. The settlement record is written to be enough to invoice
+from on its own, and there is an export that hands it over as a file:
+
+    GET /api/v1/platform/delivery/settlements.csv?from=&to=&mode=&tenantId=
+
+Platform staff only; an agency principal gets 403. `from` and `to` are inclusive
+Delivery Days (`YYYY-MM-DD`); a malformed one is a 400 rather than the whole
+table. `mode` is `DRY_RUN`, `CHARGED` or `ALL` (the default).
+
+Every column is on the row it came from — nothing is recomputed and nothing is
+summarised away:
+
+| column | |
+| --- | --- |
+| `agency`, `tenant_id` | who to invoice |
+| `delivery_day` | the day being billed |
+| `delivered_calls`, `submitted_applications` | the two counts |
+| `day_closing_pct` | that day's closing percentage |
+| `window_closing_pct`, `window_delivery_days`, `window_days_found`, `window_day_keys` | the trailing window that set the rate |
+| `rate`, `curve_version` | the price and the curve version that produced it |
+| `overrun_quantity`, `overrun_amount` | Overrun billed |
+| `configured_block_quantity`, `unused_paid_applications`, `next_block_quantity`, `next_block_amount` | the block sold |
+| `total_charged`, `max_daily_debit` | what was, or would have been, taken |
+| `payment_status`, `stripe_payment_intent_id`, `paid_at`, `grace_period_ends_on`, `computed_at` | what happened to it |
+
+`day_closing_pct` is **derived** from the two counts on the row rather than
+stored beside them: it is exactly `submitted_applications / delivered_calls`, and
+a second stored copy of a number is a second thing that can disagree with the
+first. It is not the same number as `window_closing_pct`, which is the trailing
+window that set the rate, and both are present under names that say which.
+
+`mode=CHARGED` means every status **except** `DRY_RUN` — including `FAILED` and
+`HALTED_MAX_DEBIT`. Charging was in force on those days; leaving them out would
+make a reconciler think the day was never settled at all.
+
+Cells beginning `=`, `+`, `-` or `@` are quoted and prefixed, so an agency name
+does not reach a finance team as a spreadsheet formula.
+
+### The two flags on the settlement job
+
+Do not confuse them. They are both safe, but they are not the same:
+
+| | writes | charges |
+| --- | --- | --- |
+| `--plan-only` | **nothing** — a preview, printed | no |
+| `--settle-without-charge` | **everything** — the settlement row and the block | no |
+
+These were `--dry-run` and `--no-charge`: two flags one character apart, where
+one writes nothing and the other writes everything except the debit. That is a
+typo with a bank statement at the end of it, at eleven at night, on a command
+that debits real accounts. They now share no prefix and are named for what they
+do.
+
+**The old spellings are refused, not ignored.** `process.argv.includes('--no-charge')`
+on a command that no longer knows that flag is silently `false` and the run
+proceeds — charging every enrolled agency. So an old spelling prints what
+replaced it and exits `2` having run nothing. `settlement-cli-flags.test.ts`
+spawns the real command and asserts it, including the half-updated
+`--dry-run --settle-without-charge`, which stops rather than guessing.
+
+`--settle-without-charge` is the run-level form of `chargesEnabled: false` and is
+one-directional: it can only turn charging off. There is no flag or body field
+that turns charging **on** for an agency whose profile says otherwise, because a
+per-run switch that starts charging somebody is a switch somebody passes by
+accident once. The HTTP form is
+`POST /api/v1/platform/delivery/settlement/run {"settleWithoutCharge": true}`.
+
+---
+
+## 0c. The closeout — what happens to the dry run's credits
+
+A dry-run settlement **sells** the next Delivery Day's block, and nobody paid for
+it. Left alone those credits carry into the first charging settlement and shrink
+it: the block is the daily target minus unused paid applications (§4 step 4), and
+the ledger cannot tell an unpaid dry-run credit from a bought one. The agency's
+first real billing day would deliver a short block, on credits nobody paid for.
+
+So at the moment charging is turned on — and only then — every remaining
+dry-run credit is retired. The balance starts at zero and the first real
+settlement sells a full block.
+
+```
+PUT /api/v1/platform/delivery/agencies/:tenantId/charges  {"enabled": true}
+
+  → { chargesEnabled: true,
+      dryRunCloseout: { lotsRetired: 1, creditsRetired: 45, balanceAfter: 0 } }
+```
+
+### It is not a reversal
+
+`DRY_RUN_CLOSEOUT` is its own entry type precisely so it cannot be mistaken for
+one. Nothing is returned to anybody and no money moves, because no money ever
+moved: these credits were issued to make an observation possible and were never
+sold. The rows carry a null `amount` and a null `stripePaymentIntentId`, and
+that is asserted. It is not a refund, a credit, a reversal, a rebate or a
+make-good — none of those exists here, which the enum test asserts.
+
+### Append-only stays intact
+
+Nothing is updated and nothing is deleted. The purchases stay exactly as they
+were written; the retirement is a **later row**, which is the only correction
+this ledger has. One row per retired lot, carrying:
+
+| field | |
+| --- | --- |
+| `quantity` | negative — whatever was left on that lot |
+| `deliveryDay` | the day the retired block was **for**, not when somebody pressed the button |
+| `unitRate` | the rate the block was nominally sold at, so the row reads on its own |
+| `amount` | **null** — no money moved in either direction |
+| `purchaseEntryId` | the lot it retired |
+| `settlementId` | the `DRY_RUN` settlement that sold that lot |
+| `lotIndex` | `-1` |
+
+### It cannot happen twice
+
+`lotIndex = -1`. A real unit index is never negative, so `-1` is a slot no
+consumption can occupy, and the existing unique index on
+`(purchaseEntryId, lotIndex)` then guarantees a lot is retired **at most once** —
+a database constraint, not a check-then-act. Turning charging on twice retires
+nothing the second time; turning it on twice at once retires each lot once.
+Asserted by two concurrent enables.
+
+### What is not retired
+
+Only lots sold by a settlement whose `paymentStatus` is `DRY_RUN`. An agency's
+opening purchase was paid for by card or ACH and carries no settlement at all; a
+block sold by a settlement that was charged was paid for. Neither is touched and
+both keep their credits.
+
+### During the dry run, the credits count
+
+They are **not** excluded from the balance while the dry run is running. If they
+were, every application would be Overrun from the first hour and delivery would
+stop at the ceiling on day one — what was being watched would be a starved
+agency rather than the real system. It is the transition that needs the entry,
+not the dry run.
+
+### Seeing the number before pressing the button
+
+`GET /api/v1/platform/delivery/agencies/:tenantId/enrolment` reports the current
+`balance` and `pendingDryRunCloseout: { lots, credits }` — what turning charging
+on would retire, computed the same way as the closeout itself so the preview and
+the act cannot disagree.
+
+
+---
+
+## 0d. Go-live runbook — one agency, unenrolled to charging
+
+Read this as a checklist. Every step says what to do, how to confirm it worked,
+and how to undo it. Work down the list; do not skip the verifications.
+
+**The one thing to hold in your head:** three steps are irreversible, and they
+are irreversible because this product has no refund path. They are step 4 and
+step 9 (real debits) and step 8's closeout (an append-only ledger row). Every
+other step can be walked back in one call.
+
+**Before you start**, have to hand:
+
+| | |
+| --- | --- |
+| tenant id | `SELECT id, name, slug FROM tenants WHERE slug = '…';` |
+| a platform admin token | an agency OWNER token gets 403 on every step here |
+| the Insertion Order | the agreed rate, the Daily Block, the maximum daily debit |
+| the arithmetic | maximum daily debit = (block + ceiling) × rate. 45 agents at $134 with a 50% ceiling is (45 + 22) × 134 = **$8,978**. 15 agents is (15 + 7) × 134 = **$2,948**. |
+
+Below, `$T` is the tenant id and `$ADMIN` a platform admin bearer token. Routes
+are written relative to `https://<api>/api/v1`; in full, each call is:
+
+```sh
+curl -sS -X GET "$API/api/v1/platform/delivery/agencies/$T/enrolment" \
+     -H "Authorization: Bearer $ADMIN" | jq .
+```
+
+---
+
+### Step 0 — Confirm the agency is untouched today
+
+```
+GET /platform/delivery/agencies/$T/enrolment
+```
+
+**Expect** `enrolled: false`, and a `blockers` list naming everything not yet in
+place. Nothing about this agency's delivery is gated while that is false — that
+is the whole point of §0, and it is what makes the rest of this list safe to do
+during business hours.
+
+**Undo:** nothing has been done.
+
+---
+
+### Step 1 — Record the commercial terms
+
+```
+PUT /platform/delivery/agencies/$T/terms
+{ "dailyBlockApplications": 45, "maxDailyDebit": 8978 }
+```
+
+`maxDailyDebit` is the figure on the Insertion Order, not a guideline: a
+settlement above it **halts without charging** and alerts platform admins, and
+is never clamped down to it (§4). Getting it wrong low means nightly halts;
+getting it wrong high means the contractual cap is not enforced.
+
+**Verify** — re-read the enrolment status; `NO_DAILY_BLOCK` and
+`NO_MAX_DAILY_DEBIT` are gone from `blockers`:
+
+```
+GET /platform/delivery/agencies/$T/enrolment
+```
+
+**Undo:** `PUT` the same route with the previous values. The agency is not
+enrolled yet, so nothing is gated on these and there is no delivery impact.
+
+---
+
+### Step 2 — Record the agreed opening rate
+
+```
+PUT /platform/rating/agencies/$T/opening
+{ "openingRate": 134, "openingBlockApplications": 45, "note": "IO 2026-09-01" }
+```
+
+**Verify** — `NO_OPENING_RATE` is gone from `blockers`.
+
+**Undo:** `PUT` again with the right figure. Note that rate history is an
+immutable record: a corrected rate is a **new** row, and the wrong one stays
+visible as something that was set and then changed. That is deliberate.
+
+---
+
+### Step 3 — The agency completes its ACH mandate
+
+This one is not yours to do. The agency's own principal, signed in, in their
+browser:
+
+```
+POST /delivery/mandate/setup-intent     → Stripe client secret
+   … the agency verifies its bank account with Stripe …
+POST /delivery/mandate/confirm          { "setupIntentId": "seti_…" }
+```
+
+Every fact recorded — the payment method, the bank, the last four, whether it is
+usable at all — is read back **from Stripe by the server**. A browser saying
+which account a five-figure daily debit comes out of is not believed (§5).
+
+**Verify** — `NO_VALID_MANDATE` is gone from `blockers`, and `mandate` names the
+account you expect. A mandate existing is not the same fact as a mandate on the
+right bank account, and this is the last point at which noticing is cheap:
+
+```
+GET /platform/delivery/agencies/$T/enrolment
+   → mandate: { status: "ACTIVE", valid: true, bankName: "…", last4: "6789" }
+```
+
+**Undo:** nothing to undo. An unused mandate charges nothing. If the wrong
+account was attached, have them attach the right one — the server re-reads it.
+
+---
+
+### Step 4 — Sell the opening block ⚠️ real money
+
+```
+POST /platform/delivery/agencies/$T/opening-purchase
+{ "quantity": 45, "unitRate": 134, "method": "CARD", "deliveryDay": "2026-09-14" }
+```
+
+`"CARD"` is permitted **here and nowhere else** — this is the opening purchase.
+Daily settlement is ACH only; card fees at these volumes would run roughly
+$87,000 a year on one account (§5). Omit `method` for ACH.
+
+**Check the arithmetic before you send it.** 45 × $134 = $6,030. The maximum
+daily debit governs *settlements*; it does not cap this call.
+
+**Verify** — a `201` whose body carries `balance` equal to the quantity:
+
+```
+GET /platform/delivery/agencies/$T/enrolment      → balance: 45
+```
+
+**Undo: none.** This is a real charge and the product has no refund, credit,
+reversal or make-good, by design. A repeat of the *identical* call does not
+double-charge — Stripe is given an idempotency key of
+`opening:$T:<day>:<quantity>:<rate>` — but a call with a different quantity or
+rate is a second charge.
+
+---
+
+### Step 5 — Enrol ⚠️ first step with a delivery consequence
+
+Check readiness first. Do not skip this: enrolment takes effect on the **next
+call offered**, so enrolling an agency that is missing something reproduces the
+original production-stopping defect one step later and with your name on it.
+
+```
+GET /platform/delivery/agencies/$T/enrolment      → readyToEnrol: true, blockers: []
+POST /platform/delivery/agencies/$T/enrol         { "note": "IO 2026-09-01, go-live" }
+```
+
+**Verify** — within a minute or two of the next calls being offered:
+
+```
+GET /platform/delivery/overview?day=YYYY-MM-DD    the cross-agency view
+```
+
+The agency now appears with a balance and **no flags**. If it shows
+`noValidMandate`, `ceilingReached`, `unpaidSettlement` or `paused`, delivery has
+stopped — go to the symptom table at the end of this section.
+
+```sql
+-- Nothing should have been written here. A row means delivery was refused.
+SELECT * FROM delivery_hold_events WHERE "tenantId" = '…' ORDER BY "createdAt" DESC LIMIT 5;
+```
+
+**Undo:**
+
+```
+POST /platform/delivery/agencies/$T/unenrol       { "reason": "backing out go-live" }
+```
+
+Immediate, and complete: the gate stops being consulted, applications stop being
+metered and the nightly run stops looking at the agency. The ledger and any
+settlements already written are **not** touched — they are the record of what
+the agency was charged, and nothing here removes them.
+
+---
+
+### Step 6 — Watch three Delivery Days settle, with no money moving
+
+Charging is a **second** switch and it is still off, so the nightly run records a
+full settlement and places no debit (§0b). Nothing to turn on; this is what
+being enrolled and not charging does.
+
+Each morning, before reading the numbers, you can preview without writing:
+
+```
+pnpm --filter @hopwhistle/api settlement:run -- --plan-only --tenant $T --day 2026-09-15
+```
+
+Then the real (still money-free) run, if the cron has not already done it:
+
+```
+pnpm --filter @hopwhistle/api settlement:run -- --day 2026-09-15 --tenant $T
+```
+
+**Verify** each day:
+
+```sql
+SELECT "deliveryDay", "deliveredCalls", "submittedApplications", "rate",
+       "overrunQuantity", "nextBlockQuantity", "totalCharged", "paymentStatus"
+  FROM daily_settlements WHERE "tenantId" = '…' ORDER BY "deliveryDay";
+```
+
+- `paymentStatus` is `DRY_RUN` on every row. Anything else means charging is on.
+- `totalCharged` is what you expect from the rate and the counts.
+- `HALTED_MAX_DEBIT` on any day is a real finding, not a dry-run artefact: that
+  day would have breached the Insertion Order cap. Understand it before step 8.
+- No payment attempt rows exist:
+  `SELECT count(*) FROM settlement_payment_attempts WHERE "settlementId" IN (…);`
+
+**Undo:** `POST …/unenrol` as in step 5. Nothing has been charged.
+
+---
+
+### Step 7 — Invoice the dry run, by hand
+
+Do this **before** step 8, while `mode=DRY_RUN` still means exactly "the days
+nobody was charged for".
+
+```
+GET /platform/delivery/settlements.csv?tenantId=$T&from=2026-09-15&to=2026-09-17&mode=DRY_RUN
+```
+
+One row per Delivery Day, carrying everything an invoice is raised from (§0b).
+The sum of `total_charged` is the amount to invoice; each row shows the counts,
+the closing percentage, the rate and the curve version it came from, so a line
+item can be explained without opening the application.
+
+**Verify** — the number of rows equals the number of Delivery Days you watched.
+A missing day means that day never settled; find out why before continuing.
+
+**Undo:** nothing was changed.
+
+---
+
+### Step 8 — Turn charging on ⚠️ retires the dry run's credits, irreversibly
+
+**Timing.** Do this *after* the last dry-run Delivery Day's settlement has run,
+and *before* the next Delivery Day's calls start — early in the morning. Doing
+it mid-day retires the credits the agency is delivering against right then, and
+it will stop at its Overrun ceiling within the hour.
+
+Read the numbers first:
+
+```
+GET /platform/delivery/agencies/$T/enrolment
+   → balance: 45, pendingDryRunCloseout: { lots: 1, credits: 45 }
+```
+
+That is what is about to be retired: blocks the dry run sold and nobody paid
+for. Confirm it looks like one or two blocks, not a surprise.
+
+```
+PUT /platform/delivery/agencies/$T/charges        { "enabled": true }
+   → { chargesEnabled: true,
+       dryRunCloseout: { lotsRetired: 1, creditsRetired: 45, balanceAfter: 0 } }
+```
+
+**Verify** — the closeout matches the preview and the balance is now zero:
+
+```
+GET /platform/delivery/agencies/$T/enrolment
+   → balance: 0, pendingDryRunCloseout: { lots: 0, credits: 0 }
+```
+
+**Undo — read this carefully, it is two different things:**
+
+| | |
+| --- | --- |
+| the charging switch | `PUT …/charges {"enabled": false}` — reversible, immediate, future settlements go back to `DRY_RUN` |
+| the closeout | **not reversible.** It is an append-only ledger row, and there is no path in this system that returns a credit. |
+
+So turning charging back off does **not** restore the retired credits. An agency
+left on a zero balance delivers on Overrun only and stops at its ceiling. If you
+back out here, you must also sell it a block — step 9 — or it will run short the
+next day.
+
+---
+
+### Step 9 — Sell the first paid block for the cutover day ⚠️ real money
+
+**This step is required, not optional.** After the closeout the balance is zero.
+An agency on a zero balance is in Overrun from its first application and stops
+delivering at its ceiling — 50% of the Daily Block, so 22 applications for a
+45-agent agency — partway through the morning.
+
+```
+POST /platform/delivery/agencies/$T/opening-purchase
+{ "quantity": 45, "unitRate": 134, "deliveryDay": "2026-09-18" }
+```
+
+ACH, not card (omit `method`). `unitRate` is the agency's current rate — read it
+from the last settlement's `rate`, not from memory.
+
+**Verify:**
+
+```
+GET /platform/delivery/agencies/$T/enrolment      → balance: 45
+GET /platform/delivery/overview                   the agency shows a balance, no flags
+```
+
+**Undo: none.** A real debit against a real mandate, and there are no refunds.
+
+> **Why not just let the last dry-run settlement charge?** Turning charging on
+> *before* the final dry-run day's settlement would make that settlement charge
+> the day's Overrun and sell a full paid block in one debit, and step 9 would be
+> unnecessary. It is not the recommended order because that day then appears
+> both on the hand-raised invoice from step 7 and on the agency's bank
+> statement. One clean line between "invoiced by hand" and "charged
+> automatically" is worth an extra debit.
+
+---
+
+### Step 10 — The first charged settlement
+
+That night's run charges the cutover day's Overrun plus the next day's block as
+**one** debit (§4).
+
+```
+pnpm --filter @hopwhistle/api settlement:run -- --day 2026-09-18 --tenant $T
+```
+
+**Verify:**
+
+```sql
+SELECT "deliveryDay", "totalCharged", "maxDailyDebit", "paymentStatus",
+       "stripePaymentIntentId", "gracePeriodEndsOn"
+  FROM daily_settlements
+ WHERE "tenantId" = '…' ORDER BY "deliveryDay" DESC LIMIT 1;
+```
+
+| `paymentStatus` | what it means | what to do |
+| --- | --- | --- |
+| `SUCCEEDED` / `PENDING` | the debit was accepted by Stripe. ACH settles over days, so `PENDING` is normal for a while | nothing; `settlement:run -- --resume-stalled` picks up the ones Stripe has since resolved |
+| `NOT_CHARGED` | nothing was owed that day | nothing |
+| `HALTED_MAX_DEBIT` | the total breached the Insertion Order cap; **no debit was placed** and platform admins were notified | do not raise the cap to make it go through — find out why the day was that large |
+| `HALTED_NO_MANDATE` | the mandate stopped being usable | back to step 3 |
+| `FAILED` | the debit was declined. Delivery holds at the paid balance once the Business Day grace period expires | `settlement:run -- --retry-failed` after the agency fixes the account |
+
+Run it once more, deliberately, and confirm it charges nothing: one settlement
+per agency per Delivery Day is a unique index, so the second run reports
+`alreadySettled` (§4).
+
+**Undo:** `PUT …/charges {"enabled": false}` stops *future* settlements from
+charging. It does not undo a debit that has already been placed.
+
+---
+
+### If something looks wrong
+
+| symptom | first thing to look at | the stop |
+| --- | --- | --- |
+| the agency stopped delivering right after enrolling | `GET /platform/delivery/overview` for its flags; `delivery_hold_events` for the reason | `POST …/unenrol` |
+| it stops mid-morning every day | balance is zero and it is hitting the Overrun ceiling — it needs a block, or its Daily Block is set too low | sell a block (step 9) |
+| a settlement halted on the maximum daily debit | the day's counts and rate; the cap is a contractual commitment, so the day is the thing to explain, not the cap | leave it halted |
+| a debit failed | `settlement_payment_attempts` for Stripe's failure code; the agency has until `gracePeriodEndsOn` (Business Days) before delivery holds | `--retry-failed` once fixed |
+| you are not sure and calls are moving | — | `POST /platform/delivery/agencies/$T/suspend` stops delivery immediately and does **not** touch the ledger; paid applications survive it and are there when you resume |
+| you want the agency out of billing entirely | — | `POST …/unenrol`. Ledger and settlements stay as the record of what was charged |
+
+**Nothing on this page ever gives money back.** Suspend, unenrol and disabling
+charging all stop things happening *next*; none of them reverses a debit, a
+consumption or a closeout. That is the design, not a gap in the runbook.
 
 ---
 
@@ -37,15 +707,21 @@ There is no counter column here or anywhere else. A counter is wrong the first
 time a write is retried or a job is re-run, and this number decides whether a
 call is delivered and whether an application is billed tonight.
 
-### Three kinds of row
+### Four kinds of row
 
 | Type | `quantity` | Carries |
 | --- | ---: | --- |
 | `PURCHASE` | +N | the unit rate, the amount, the Delivery Day the block is **for**, the Stripe payment reference, and the rate curve version that priced it |
 | `CONSUMPTION` | −1 | the application, the purchase lot it drew on, which unit of that lot, and the rate that lot was bought at |
 | `OVERRUN` | 0 | the application and the Delivery Day. No rate: an overrun is priced that evening, and the settlement row for its Delivery Day is where that money is recorded |
+| `DRY_RUN_CLOSEOUT` | −N | the lot it retires, the `DRY_RUN` settlement that sold that lot, the day that block was for, and the rate it was nominally sold at. `amount` is **null** — no money moved (§0c) |
 
 An overrun does not move a balance because there was no balance to move.
+
+A closeout is the only row that reduces a balance without an application behind
+it, and it happens exactly once per agency, at the moment it starts being
+charged. It is not a refund and nothing is returned: it retires credits a dry
+run issued and nobody ever paid for. See §0c.
 
 ### Append-only is a property of the database
 
@@ -186,6 +862,11 @@ takes away.
 One function — `services/billing/delivery-gate.ts` — and every path that offers
 a call to an agent calls it. A gate written twice is a gate that disagrees with
 itself, and the half that says yes is the one that bills somebody.
+
+### An unenrolled agency is not gated at all
+
+The first check, before any other condition and before any billing state is
+read. See §0 — this is the ordering the whole switch rests on.
 
 ### The conditions, in the order they are checked
 
@@ -349,6 +1030,18 @@ which is a number both sides already agreed and which is stored on the purchase
 row — and **no block is sold**, because delivery is paused on the review flag and
 selling an agency a block it cannot use would be taking money for nothing.
 
+### An unenrolled agency is skipped, not settled at zero
+
+Checked before anything is computed. A row saying zero would assert the agency
+was billed nothing for the day, and the truth is different and worth keeping
+distinguishable: it is not in the billing system. A night of zero-value rows for
+every unenrolled tenant would also bury the days that were genuinely settled.
+
+The run still walks every active tenant and reports a skip for each unenrolled
+one, rather than querying only the enrolled — so the result names every agency
+and says what happened to it, which is what an operator watching a staged
+rollout wants.
+
 ### One agency failing must not stop another
 
 `runDailySettlement()` settles tenants one at a time and collects failures.
@@ -363,7 +1056,8 @@ figures are asserted to differ.
 pnpm --filter @hopwhistle/api settlement:run                      # the day that just closed
 pnpm --filter @hopwhistle/api settlement:run -- --day 2026-09-07
 pnpm --filter @hopwhistle/api settlement:run -- --tenant <id>
-pnpm --filter @hopwhistle/api settlement:run -- --dry-run         # compute and print, charge nobody
+pnpm --filter @hopwhistle/api settlement:run -- --plan-only               # compute and PRINT; writes nothing
+pnpm --filter @hopwhistle/api settlement:run -- --settle-without-charge  # compute and RECORD; charges nobody
 pnpm --filter @hopwhistle/api settlement:run -- --retry-failed
 pnpm --filter @hopwhistle/api settlement:run -- --resume-stalled
 ```
@@ -377,9 +1071,10 @@ itself and that engine is idempotent.
 15 0 * * *   settlement:run   (America/New_York)
 ```
 
-`--dry-run` is a **separate read-only path**, not the real one with a flag
-threaded through it. A dry run that shares the write path with the real run is
-one `if` away from charging somebody.
+`--plan-only` is a **separate read-only path**, not the real one with a flag
+threaded through it. A preview that shares the write path with the real run is
+one `if` away from charging somebody. The retired spellings `--dry-run` and
+`--no-charge` exit `2` and run nothing; see §0b.
 
 `POST /api/v1/platform/delivery/settlement/run` is the same run, by hand, for
 platform staff. Its body carries a Delivery Day and optionally which agencies,
@@ -546,7 +1241,13 @@ One row per settled Delivery Day carrying every figure from the settlement
 record, and the same columns as CSV. Nothing is summarised away and nothing is
 recomputed in the browser.
 
-The CSV guards cells beginning `=`, `+`, `-` or `@` so a spreadsheet does not
+Both exports — the agency's own `GET /api/v1/delivery/settlements.csv` and the
+cross-agency `GET /api/v1/platform/delivery/settlements.csv` (§0b) — share one
+column list and one row builder, so an agency and a platform admin cannot be
+looking at differently shaped versions of the same day. The platform one adds
+`agency` and `tenant_id` in front and takes `from`, `to`, `mode` and `tenantId`.
+
+Both guard cells beginning `=`, `+`, `-` or `@` so a spreadsheet does not
 evaluate them.
 
 ### An agent's own view — `/delivery/me`
@@ -654,6 +1355,15 @@ which CI runs after `prisma db push` — `db push` builds from `schema.prisma`,
 which cannot express a trigger, so without that file every database CI and every
 developer works against would silently permit an UPDATE that moves a balance.
 
+`20260911000000_add_billing_enrolment/migration.sql` adds the enrolment and
+charging switches, the `DRY_RUN` payment status and the `DRY_RUN_CLOSEOUT`
+ledger entry type, on the same terms: additive, idempotent, drops nothing. Both
+`ALTER TYPE ... ADD VALUE` statements sit **outside** the transaction block,
+because that statement is not permitted inside one before PostgreSQL 12 and on
+12+ the new value cannot be used in the transaction that adds it. It **enrols nobody** — there is no `UPDATE` setting an enrolment
+anywhere in the file. Verified the same way: applied twice as a no-op, applied
+from scratch, and `prisma migrate diff` reports no difference.
+
 **Nothing was added to the deploy path.** In particular no
 `prisma migrate deploy`: against an empty migration history it would try to
 replay every migration from the beginning. The pre-existing hazard recorded in
@@ -676,8 +1386,8 @@ TEST_REDIS_URL=redis://localhost:6379/1 \
 
 | Suite | Cases | What it pins |
 | --- | ---: | --- |
-| `__tests__/settlement.test.ts` | 39 | the ledger, the ceiling, the gate, the settlement, the portal, and the absence of refunds — against a real database |
-| `__tests__/delivery-gating-paths.test.ts` | 7 | that every delivery path actually asks the gate, driven through the real route handlers |
+| `__tests__/settlement.test.ts` | 55 | enrolment, the dry run, the ledger, the ceiling, the gate, the settlement, the portal, and the absence of refunds — against a real database |
+| `__tests__/delivery-gating-paths.test.ts` | 11 | that every delivery path asks the gate when the agency is enrolled, **and does not when it is not** — driven through the real route handlers |
 | `__tests__/db-push-constraints.test.ts` | +3 | the three triggers are installed |
 
 The cases the brief names, and where they are:
@@ -709,11 +1419,49 @@ The cases the brief names, and where they are:
   "costs one credit when an application reaches submitted state twice", driven
   through the real `markAutomationCompleted`, called three times.
 
+On enrolment specifically:
+
+- **every pre-existing tenant is unenrolled and ungated after the migration** —
+  the case this switch exists for, asserted against a database the migration has
+  been applied to;
+- an unenrolled agency's submitted application writes no ledger row;
+- the settlement skips it with no row at all;
+- enrolment is refused with every missing precondition named at once;
+- an agency cannot enrol itself, un-enrol itself or turn on its own charging;
+- charging cannot be enabled for an agency that is not enrolled;
+- un-enrolling leaves the ledger and the settlements untouched;
+- the portal tells an unenrolled agency that billing does not apply rather than
+  showing it zeroes.
+
+On the dry run: the full record is written and the gateway is never called; the
+block is sold with no Stripe reference; ten dry-run days do not raise the
+ceiling; a dry run over the maximum daily debit still halts; and
+`--settle-without-charge` overrides an agency that has charging enabled.
+
+On the closeout at cutover: the dry run's credits are spendable while it runs
+and the gate lets delivery through; turning charging on retires them and the
+balance reaches zero; the paid opening block and any block that was actually
+charged for are untouched; two concurrent enables retire each lot exactly once
+and a third retires nothing; the row names its lot, its settlement and the day,
+carries a null `amount` and refuses `UPDATE` and `DELETE`; and the first charged
+settlement afterwards sells a **full** block, billing exactly the maximum daily
+debit when the day ran to the ceiling.
+
+On the export: every column an invoice needs is present by name; the day range
+is inclusive; `mode` separates the days that took money from the days that did
+not, with `FAILED` and `HALTED_MAX_DEBIT` counted as charged; a malformed date
+or unknown mode is a 400 rather than the whole table; an agency principal gets
+403; and an agency named `=1+1` does not reach a finance team as a formula.
+
+On the settlement command's flags: `--dry-run` and `--no-charge` exit `2` having
+printed what replaced them and run nothing, `--plan-only` says it is writing
+nothing, and `--settle-without-charge` announces itself before it settles.
+
 Also asserted: the ledger refuses `UPDATE` and `DELETE`; a settlement's figures
 refuse to change; oldest-lot-first across two rates; the Insertion Order figures
 `$8,978` and `$2,948`; the Business Day grace period across Labor Day; that no
 refund enum member exists; that a carrier declining after submission returns
 nothing; and that an agency cannot reach any platform surface.
 
-Full API suite at the time of writing: **746 passed** (was 697; +49). Typecheck
-errors unchanged at 80; web typecheck unchanged at 127; no new lint findings.
+Full API suite at the time of writing: **765 passed**. Typecheck errors
+unchanged at 80; web typecheck unchanged at 127; no new lint findings.

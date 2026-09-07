@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertTriangle, Building2, Loader2, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Building2, Download, Loader2, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { CompactPageHeader, CompactPageShell } from '@/components/layout/compact-layout';
@@ -38,12 +38,25 @@ import { cn } from '@/lib/utils';
  * Every figure is per agency and computed per agency. There is no pooled
  * cross-tenant aggregate anywhere on it: one agency's number must never be
  * derived from another's traffic.
+ *
+ * Billing is opt-in per agency. An agency that has not been enrolled is shown
+ * as such and carries no flags — it has no mandate and no rate by definition,
+ * and badging it for those would put five red flags on every tenant that has
+ * not been onboarded and bury the one that needs attention.
+ *
+ * The export is here because a dry-run period is invoiced by hand and this is
+ * the screen somebody is looking at when they do it. It offers a date range and
+ * the dry-run / charged split, and it downloads the settlement records rather
+ * than what this table renders: the file is raised from the stored figures, not
+ * from a page that has rounded them for display.
  */
 
 interface AgencyRow {
   tenantId: string;
   name: string;
   slug: string;
+  enrolled: boolean;
+  chargesEnabled: boolean;
   deliveredCalls: number;
   applications: number;
   closingPct: number | null;
@@ -61,7 +74,7 @@ interface AgencyRow {
     suspended: boolean;
   };
   settlement: {
-    status: 'SETTLED' | 'FAILED' | 'NOT_YET_RUN';
+    status: 'SETTLED' | 'DRY_RUN' | 'FAILED' | 'NOT_YET_RUN' | 'NOT_ENROLLED';
     paymentStatus: string | null;
     totalCharged: number | null;
     overrunQuantity: number | null;
@@ -89,6 +102,10 @@ export default function PlatformAgenciesPage(): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportFrom, setExportFrom] = useState('');
+  const [exportTo, setExportTo] = useState('');
+  const [exportMode, setExportMode] = useState<'ALL' | 'DRY_RUN' | 'CHARGED'>('ALL');
 
   const load = useCallback(async () => {
     const query = day ? `?day=${encodeURIComponent(day)}` : '';
@@ -122,7 +139,51 @@ export default function PlatformAgenciesPage(): JSX.Element {
     }
   }
 
-  const sorted = [...rows].sort((a, b) => flagCount(b) - flagCount(a) || a.name.localeCompare(b.name));
+  /**
+   * Download the settlement records for a date range.
+   *
+   * Read-only and charges nothing. `mode` splits the days that took money from
+   * the days that did not, which is the split a hand-raised invoice for a dry
+   * run needs. The range defaults to the single day this page is showing, so
+   * pressing it without touching anything exports what is on screen.
+   */
+  async function exportSettlements(): Promise<void> {
+    setExporting(true);
+    try {
+      const from = exportFrom || day;
+      const to = exportTo || exportFrom || day;
+      const query = new URLSearchParams({ from, to, mode: exportMode }).toString();
+      const response = await apiClient.get<string>(
+        `/api/v1/platform/delivery/settlements.csv?${query}`,
+        { responseType: 'text' }
+      );
+      if (!response.data) {
+        setError(response.error ? response.error.message : 'The export returned nothing');
+        return;
+      }
+      const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `settlements-${exportMode.toLowerCase()}-${from}-to-${to}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  // Flagged first, then enrolled, then the rest. An unenrolled agency needs
+  // nothing from this screen and should not sit above one that does.
+  const sorted = [...rows].sort(
+    (a, b) =>
+      flagCount(b) - flagCount(a) ||
+      Number(b.enrolled) - Number(a.enrolled) ||
+      a.name.localeCompare(b.name)
+  );
   const needingAction = sorted.filter(row => flagCount(row) > 0);
 
   if (loading) {
@@ -163,6 +224,65 @@ export default function PlatformAgenciesPage(): JSX.Element {
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Export settlement records</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="text-xs text-muted-foreground">
+              From
+              <Input
+                type="date"
+                value={exportFrom}
+                onChange={event => setExportFrom(event.target.value)}
+                className="mt-1 h-8 w-40"
+              />
+            </label>
+            <label className="text-xs text-muted-foreground">
+              To
+              <Input
+                type="date"
+                value={exportTo}
+                onChange={event => setExportTo(event.target.value)}
+                className="mt-1 h-8 w-40"
+              />
+            </label>
+            <label className="text-xs text-muted-foreground">
+              Mode
+              <select
+                value={exportMode}
+                onChange={event =>
+                  setExportMode(event.target.value as 'ALL' | 'DRY_RUN' | 'CHARGED')
+                }
+                className="mt-1 block h-8 rounded border bg-background px-2 text-sm"
+              >
+                <option value="ALL">All settlements</option>
+                <option value="DRY_RUN">Dry run — nothing was charged</option>
+                <option value="CHARGED">Charged</option>
+              </select>
+            </label>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void exportSettlements()}
+              disabled={exporting}
+            >
+              {exporting ? (
+                <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+              ) : (
+                <Download className="mr-2 h-3 w-3" />
+              )}
+              Download CSV
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              Every figure from the settlement record — counts, closing percentage, rate, curve
+              version, overrun, block and total. Defaults to the day shown above.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
       {needingAction.length > 0 && (
         <div className="flex items-start gap-2 rounded border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
@@ -188,6 +308,7 @@ export default function PlatformAgenciesPage(): JSX.Element {
               <TableHeader>
                 <TableRow>
                   <TableHead>Agency</TableHead>
+                  <TableHead>Billing</TableHead>
                   <TableHead className="text-right">Calls</TableHead>
                   <TableHead className="text-right">Applications</TableHead>
                   <TableHead className="text-right">Closing</TableHead>
@@ -205,6 +326,27 @@ export default function PlatformAgenciesPage(): JSX.Element {
                 {sorted.map(row => (
                   <TableRow key={row.tenantId}>
                     <TableCell className="font-medium">{row.name}</TableCell>
+                    <TableCell>
+                      {!row.enrolled ? (
+                        <Badge
+                          variant="outline"
+                          title="Not enrolled: not gated, not metered, not settled. Calls deliver as they always have."
+                        >
+                          not enrolled
+                        </Badge>
+                      ) : row.chargesEnabled ? (
+                        <Badge variant="secondary" title="Enrolled, and settlements charge">
+                          charging
+                        </Badge>
+                      ) : (
+                        <Badge
+                          variant="outline"
+                          title="Enrolled. Settlements compute and are recorded in full; no payment is taken."
+                        >
+                          dry run
+                        </Badge>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right tabular-nums">{row.deliveredCalls}</TableCell>
                     <TableCell className="text-right tabular-nums">{row.applications}</TableCell>
                     <TableCell className="text-right tabular-nums">{pct(row.closingPct)}</TableCell>
@@ -237,11 +379,13 @@ export default function PlatformAgenciesPage(): JSX.Element {
                               : 'outline'
                         }
                       >
-                        {row.settlement.status === 'NOT_YET_RUN'
-                          ? 'not yet run'
-                          : (row.settlement.paymentStatus ?? row.settlement.status)
-                              .replace(/_/g, ' ')
-                              .toLowerCase()}
+                        {row.settlement.status === 'NOT_ENROLLED'
+                          ? '—'
+                          : row.settlement.status === 'NOT_YET_RUN'
+                            ? 'not yet run'
+                            : (row.settlement.paymentStatus ?? row.settlement.status)
+                                .replace(/_/g, ' ')
+                                .toLowerCase()}
                       </Badge>
                     </TableCell>
                     <TableCell>

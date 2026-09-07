@@ -33,6 +33,14 @@ import { announceSkip, databaseGate } from './helpers/live-services.js';
  *
  * The full survey of delivery paths, including the ones deliberately NOT gated
  * and why, is in docs/BILLING.md.
+ *
+ * ── And that every path is ungated for an agency not enrolled in billing ─────
+ *
+ * The other half of the same claim, and the more expensive one to get wrong.
+ * Enrolment is explicit and defaults to off, so an agency that has not been
+ * enrolled must reach an agent exactly as it did before Phase 3 existed. The
+ * final block below takes the same routes, with the same suspended profile that
+ * refuses an enrolled agency, and asserts the calls go through.
  */
 
 const gate = databaseGate();
@@ -105,6 +113,10 @@ describe.skipIf(!gate.available)(
           achPaymentMethodId: 'pm_fake',
           achMandateStatus: 'ACTIVE',
           achMandateVerifiedAt: new Date(),
+          // Explicitly enrolled: the gate does nothing at all otherwise, which
+          // is what the last describe block below asserts.
+          billingEnrolledAt: new Date(),
+          chargesEnabled: true,
         },
       });
 
@@ -263,6 +275,95 @@ describe.skipIf(!gate.available)(
          * never offered to anybody into the agency's call history.
          */
         expect(await prisma.call.count({ where: { tenantId } })).toBe(0);
+      });
+    });
+
+    describe('an agency not enrolled in billing is not gated at all', () => {
+      /*
+       * The production case this switch was added for: five tenants, none with
+       * a billing profile, one carrying live client traffic. Every one of them
+       * must keep delivering.
+       *
+       * Each case here uses a condition that DOES refuse an enrolled agency --
+       * suspension, a missing mandate, no terms whatsoever -- so a pass means
+       * the gate is genuinely not being applied rather than being applied and
+       * happening to say yes.
+       */
+      it('routes a call for a tenant with no billing profile at all', async () => {
+        await prisma.agencyBillingProfile.deleteMany({ where: { tenantId } });
+        await seedDidRoute('+15551230010');
+
+        const response = await app.inject({
+          method: 'GET',
+          url: '/api/v1/freeswitch/lookup?did=%2B15551230010',
+          headers: { 'x-internal-key': INTERNAL_KEY },
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.json().reject).toBeUndefined();
+        expect(response.json().destination).toBe('1001');
+      });
+
+      it('routes a call for an unenrolled tenant that is suspended and has no mandate', async () => {
+        // Both of these refuse an ENROLLED agency outright. Unenrolled, they
+        // are simply not consulted.
+        await prisma.agencyBillingProfile.update({
+          where: { tenantId },
+          data: {
+            billingEnrolledAt: null,
+            suspendedAt: new Date(),
+            suspensionReason: 'would refuse an enrolled agency',
+            achMandateStatus: 'NONE',
+            achPaymentMethodId: null,
+          },
+        });
+        await seedDidRoute('+15551230011');
+
+        const response = await app.inject({
+          method: 'GET',
+          url: '/api/v1/freeswitch/lookup?did=%2B15551230011',
+          headers: { 'x-internal-key': INTERNAL_KEY },
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.json().reject).toBeUndefined();
+        expect(response.json().destination).toBe('1001');
+      });
+
+      it('creates the ringing call for an unenrolled tenant on the softphone path', async () => {
+        await prisma.agencyBillingProfile.update({
+          where: { tenantId },
+          data: { billingEnrolledAt: null, suspendedAt: new Date() },
+        });
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/api/v1/agent/call/incoming',
+          payload: { tenantId, from: '+15559990002' },
+        });
+
+        expect(response.statusCode).toBe(201);
+        expect(await prisma.call.count({ where: { tenantId } })).toBe(1);
+      });
+
+      it('records no hold event and sends no notification for an unenrolled tenant', async () => {
+        await prisma.agencyBillingProfile.update({
+          where: { tenantId },
+          data: { billingEnrolledAt: null, suspendedAt: new Date() },
+        });
+        await seedDidRoute('+15551230012');
+
+        for (let i = 0; i < 3; i++) {
+          await app.inject({
+            method: 'GET',
+            url: '/api/v1/freeswitch/lookup?did=%2B15551230012',
+            headers: { 'x-internal-key': INTERNAL_KEY },
+          });
+        }
+
+        // Nothing happened, so nothing is recorded and nobody is told.
+        expect(await prisma.deliveryHoldEvent.count({ where: { tenantId } })).toBe(0);
+        expect(await prisma.billingNotification.count({ where: { tenantId } })).toBe(0);
       });
     });
 
