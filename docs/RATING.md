@@ -319,6 +319,17 @@ on `IS NULL` so a re-run never moves a timestamp already set.
 `prisma migrate deploy`: against an empty migration history it would try to
 replay every migration from the beginning.
 
+> **Flagged, not changed.** `scripts/deploy-netenroll.sh` — the ordered script
+> written for the Phase 1b change — already runs
+> `pnpm --filter @hopwhistle/api db:migrate:deploy` at step 2/5. Against the
+> production database, which has no `_prisma_migrations` table, that is the
+> failure mode described above; `.github/workflows/dialer-v2.yml` says as much
+> in its own comments ("`prisma migrate deploy` from an empty database currently
+> FAILS"). Phase 2 neither uses that script nor extends it, and this migration
+> is deliberately not in its `REQUIRED_MIGRATIONS` list. It is recorded here
+> because it is a live hazard on `main` that predates this work and should be
+> dealt with on its own, not folded into a rating change.
+
 ---
 
 ## 6. Tests
