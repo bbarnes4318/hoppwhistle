@@ -111,7 +111,8 @@ export class CallStateService {
 
     // `tenantId` is never taken from `updates`: an update must not be able to
     // move a call into another agency.
-    const { tenantId: _ignoredTenant, ...safeUpdates } = updates;
+    const safeUpdates = { ...updates };
+    delete safeUpdates.tenantId;
     return this.updateCallState(callId, safeUpdates);
   }
 

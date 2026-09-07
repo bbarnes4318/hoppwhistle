@@ -71,6 +71,9 @@ model Tenant {
   carrierRoutes            CarrierRoute[]
   activationGrants         TenantActivationGrant[]
   platformOperators        PlatformActingTenant[]
+  ratingState              AgencyRatingState?
+  rateChanges              RateChange[]
+  ratingReviewFlags        RatingReviewFlag[]
 
   @@index([slug])
   @@index([status])
@@ -1183,6 +1186,10 @@ model Call {
   @@index([tenantId, buyerId, createdAt])
   @@index([tenantId, billable, createdAt])
   @@index([tenantId, terminationParty, createdAt])
+  /// The measurement query: delivered calls for one agency in one window.
+  /// Delivery is counted by `answeredAt`, not `createdAt` -- a call is
+  /// delivered when an agent picks it up.
+  @@index([tenantId, answeredAt])
   @@map("calls")
 }
 
@@ -3072,6 +3079,18 @@ model InsuranceCarrierApplication {
   automationCompletedAt    DateTime?
   lastDebugSnapshotPath    String?
 
+  /// When this application first reached submitted state.
+  ///
+  /// Write-once: set on the FIRST transition into SUBMITTED and never moved
+  /// afterwards, so an application that reaches submitted state twice -- a
+  /// retried automation run, a replayed webhook -- counts once and lands on the
+  /// day it was actually submitted.
+  ///
+  /// This, not `createdAt` and not the call that produced it, is what the
+  /// closing percentage attributes by. An application from a 4pm call submitted
+  /// at 9am the next day belongs to the next day.
+  submittedAt DateTime?
+
   // Audit
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -3080,6 +3099,8 @@ model InsuranceCarrierApplication {
   @@index([tenantId])
   @@index([tenantId, phone])
   @@index([tenantId, createdAt])
+  /// The measurement query: submitted applications for one agency in one window.
+  @@index([tenantId, submittedAt])
   @@index([prospectIntakeId])
   @@index([insuranceLeadId])
   @@index([callId])
@@ -3456,4 +3477,285 @@ model PlatformActingTenant {
 
   @@index([tenantId])
   @@map("platform_acting_tenants")
+}
+
+// ============================================================================
+// Phase 2 — measurement, the rate curve, and the daily rating engine
+//
+// Nothing here charges anyone or gates delivery; that is Phase 3. What these
+// tables hold is the arithmetic Phase 3 will bill from, and the evidence for
+// it. An agency that disputes its price is shown a `rate_changes` row, so that
+// row has to be complete enough to recompute the rate from itself.
+//
+// Money is never a refund, a credit, a reversal or a make-good. There is no
+// column for one anywhere below, and a carrier's decision after submission --
+// issued, declined, rescinded, lapsed -- appears nowhere in this schema,
+// because it is not an input to the price.
+// ============================================================================
+
+/// Where an agency stands: how it is priced today, and why.
+enum AgencyRatingStatus {
+  /// No rating history yet. Priced at the curve version's introductory rate
+  /// for its first N submitted applications.
+  INTRODUCTORY
+
+  /// An opening rate and opening block were agreed instead of the
+  /// introductory package. Supersedes INTRODUCTORY; daily rating begins from
+  /// the first settled day.
+  OPENING_BLOCK
+
+  /// Priced from the curve, off the trailing window.
+  RATED
+
+  /// Measured below the curve's minimum closing percentage. There is NO rate
+  /// in this state -- the curve is never extrapolated below its lowest anchor.
+  /// Phase 3 pauses delivery on this flag. Only a platform admin clears it.
+  UNDER_REVIEW
+}
+
+/// What a day's rating run concluded.
+enum RateChangeStatus {
+  /// A rate was derived from the curve and applies to `effectiveBusinessDay`.
+  APPLIED
+
+  /// The window's closing percentage was below the curve's minimum. No rate;
+  /// the agency is flagged for review.
+  BELOW_MINIMUM
+
+  /// The window contained no delivered calls, so there is no closing
+  /// percentage to price from. The previous rate stands. Recorded rather than
+  /// skipped, so a gap in the history is always a gap in the RUNS, never a day
+  /// that ran and said nothing.
+  NO_DATA
+}
+
+/// One published version of the rate curve.
+///
+/// ── Why the anchors are rows and not constants ───────────────────────────────
+///
+/// A change to the anchor points must never alter a rate already applied to a
+/// completed settlement. Constants in code cannot promise that: the next deploy
+/// silently reprices every historical row that recomputes from them. So the
+/// curve is versioned data, every `rate_changes` row records which version
+/// priced it, and a new version is a new row rather than an edit.
+///
+/// Versions are never edited in place and never deleted. `retiredAt` stops a
+/// version being selected for new pricing; the rows that were priced by it
+/// still resolve.
+model RateCurveVersion {
+  id      String @id @default(uuid())
+  /// Monotonic, human-quotable ("priced on curve v1").
+  version Int    @unique
+  label   String?
+  note    String?
+
+  /// When this version became the one new ratings are priced from.
+  effectiveFrom DateTime  @default(now())
+  retiredAt     DateTime?
+
+  /// Below this closing percentage there is NO rate: the agency is flagged for
+  /// review and the curve is not extrapolated downward. Stored as a
+  /// percentage, so 5.0 means 5%.
+  minimumClosingPct Decimal @db.Decimal(6, 3)
+
+  /// At and above this closing percentage the curve is FLAT at the rate of its
+  /// highest anchor. Not extrapolated: 15% and 20% pay the same.
+  flatFromClosingPct Decimal @db.Decimal(6, 3)
+
+  /// The opening package for an agency with no rating history: a flat rate for
+  /// its first `introductoryApplications` submitted applications. Deliberately
+  /// NOT an anchor point -- it is a commercial offer, not a point on the
+  /// curve, and it moves independently of the curve's shape.
+  introductoryRate         Decimal @db.Decimal(10, 2)
+  introductoryApplications Int
+
+  createdAt   DateTime @default(now())
+  createdById String?
+
+  anchors     RateCurveAnchor[]
+  rateChanges RateChange[]
+  states      AgencyRatingState[]
+
+  @@map("rate_curve_versions")
+}
+
+/// One (closing percentage, rate) point on a curve version.
+///
+/// The rate for any closing percentage between two anchors is their linear
+/// interpolation, rounded to the nearest dollar. That is a deliberate change
+/// from an earlier step-banded design and must not be simplified back: at these
+/// volumes the measured closing percentage carries about +/-1.4 points of
+/// sampling error at 450 calls in a window and +/-2.8 at 150, so one-point-wide
+/// bands are narrower than the noise. On a step scale an agency sitting exactly
+/// on a band edge pays about 4% above its fair rate purely from randomness,
+/// because downward noise is expensive and upward noise is free. A continuous
+/// curve makes small errors symmetric and cuts that distortion to under 2%.
+model RateCurveAnchor {
+  id             String @id @default(uuid())
+  curveVersionId String
+
+  /// A percentage, so 10.0 means 10%.
+  closingPct Decimal @db.Decimal(6, 3)
+  /// Dollars per submitted application.
+  rate       Decimal @db.Decimal(10, 2)
+
+  curveVersion RateCurveVersion @relation(fields: [curveVersionId], references: [id], onDelete: Cascade)
+
+  @@unique([curveVersionId, closingPct])
+  @@index([curveVersionId])
+  @@map("rate_curve_anchors")
+}
+
+/// Operational settings for the rating engine. One row, id `global`.
+///
+/// Separate from `RateCurveVersion` because these are not pricing: the window
+/// length is how the engine measures, the curve is what the measurement is
+/// priced against. Every `rate_changes` row records the window it actually used
+/// anyway, so changing this never makes a past row unreproducible.
+model RatingSettings {
+  id String @id @default("global")
+
+  /// Trailing window, in business days, over which the closing percentage that
+  /// sets tomorrow's rate is measured. Configurable; 3 by default.
+  ///
+  /// There is deliberately no minimum-call threshold beside it. An earlier
+  /// draft required 250 delivered calls in the window to stop a thin sample
+  /// falling off a band edge; with a continuous curve there are no edges, and
+  /// both launch agencies clear 450 calls in a 3-day window regardless.
+  windowBusinessDays Int @default(3)
+
+  /// The version new ratings are priced from.
+  activeCurveVersionId String?
+
+  updatedAt DateTime @updatedAt
+
+  @@map("rating_settings")
+}
+
+/// Where one agency stands right now. Mutable; the history is `rate_changes`.
+model AgencyRatingState {
+  id       String @id @default(uuid())
+  tenantId String @unique
+
+  status AgencyRatingStatus @default(INTRODUCTORY)
+
+  /// Dollars per submitted application, or null in UNDER_REVIEW -- an agency
+  /// below the curve's minimum has no rate at all, which is not the same as a
+  /// rate of zero and must never be rendered as one.
+  currentRate    Decimal? @db.Decimal(10, 2)
+  curveVersionId String?
+
+  /// The business day (`YYYY-MM-DD`, America/New_York) `currentRate` applies
+  /// to. A string rather than a date column so no layer between here and the
+  /// browser can shift it by a timezone.
+  currentRateBusinessDay String?
+
+  /// The last closed business day the engine has rated. Makes a re-run a
+  /// no-op rather than a second row.
+  lastRatedBusinessDay String?
+
+  /// Submitted applications consumed against the introductory package.
+  introductoryApplicationsUsed Int @default(0)
+
+  /// An agreed opening rate and block, which supersede the introductory
+  /// package. Set by a platform admin; daily rating begins from the first
+  /// settled day.
+  openingRate              Decimal? @db.Decimal(10, 2)
+  openingBlockApplications Int?
+  openingAgreementNote     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant       Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  curveVersion RateCurveVersion? @relation(fields: [curveVersionId], references: [id])
+
+  @@index([status])
+  @@map("agency_rating_states")
+}
+
+/// One immutable rating decision.
+///
+/// This is the row shown to an agency that disputes its price, so it carries
+/// everything needed to recompute that price from itself: the window, the two
+/// counts, the closing percentage they produce, the curve version that priced
+/// it, and the rate before and after. Nothing here is derived at read time.
+///
+/// Never updated and never deleted. A correction is a later row, not an edit.
+model RateChange {
+  id       String @id @default(uuid())
+  tenantId String
+
+  /// The business day this rate applies to (`YYYY-MM-DD`, America/New_York) --
+  /// the day AFTER the window closed.
+  effectiveBusinessDay String
+
+  /// The window the counts were taken over. The day keys are recorded verbatim
+  /// as well as the instants, so a reader never has to re-derive which days
+  /// were in the window from a timezone.
+  windowStart        DateTime
+  windowEndExclusive DateTime
+  windowBusinessDays Int
+  windowDayKeys      String[]
+
+  /// The two counts. Delivered call: routed to this agency and answered by one
+  /// of its agents. Submitted application: an InsuranceCarrierApplication for
+  /// this agency that reached submitted state, counted once, attributed by
+  /// submission timestamp.
+  deliveredCalls         Int
+  submittedApplications  Int
+
+  /// submittedApplications / deliveredCalls, as a percentage. Null when there
+  /// were no delivered calls -- never 0, which would read as "nobody closed
+  /// anything" and price the agency for review.
+  closingPct Decimal? @db.Decimal(9, 6)
+
+  curveVersionId String
+  /// Denormalised so the row is readable, and quotable, without a join.
+  curveVersion   Int
+
+  previousRate Decimal? @db.Decimal(10, 2)
+  /// Null in BELOW_MINIMUM: there is no rate below the curve's floor.
+  newRate      Decimal? @db.Decimal(10, 2)
+
+  status     RateChangeStatus
+  computedAt DateTime         @default(now())
+
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  curve       RateCurveVersion @relation(fields: [curveVersionId], references: [id])
+  reviewFlags RatingReviewFlag[]
+
+  /// One decision per agency per effective day. Makes the daily run idempotent:
+  /// re-running it writes nothing rather than a second, conflicting price.
+  @@unique([tenantId, effectiveBusinessDay])
+  @@index([tenantId, computedAt])
+  @@map("rate_changes")
+}
+
+/// An agency measured below the curve's minimum closing percentage.
+///
+/// Raised by the rating engine, cleared only by a platform admin. An agency
+/// cannot clear its own flag -- the whole point of the state is that somebody
+/// outside the agency looks at it before delivery resumes in Phase 3.
+model RatingReviewFlag {
+  id       String @id @default(uuid())
+  tenantId String
+
+  raisedAt     DateTime @default(now())
+  rateChangeId String
+
+  /// Copied from the rate change that raised it, so the flag reads on its own.
+  closingPct            Decimal @db.Decimal(9, 6)
+  deliveredCalls        Int
+  submittedApplications Int
+
+  clearedAt       DateTime?
+  clearedByUserId String?
+  clearedNote     String?
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  rateChange RateChange @relation(fields: [rateChangeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, clearedAt])
+  @@map("rating_review_flags")
 }

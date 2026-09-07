@@ -99,6 +99,24 @@ describe.skipIf(!gate.available)('Platform admin: capability and acting-tenant s
     };
   }
 
+  /**
+   * The refusal a platform operator with no agency selected earns.
+   *
+   * Phase 1b answered this with 401, the same as an anonymous caller. That was
+   * honest about the outcome and wrong about the reason, and it locked the
+   * owner out of production: the web client reads 401 as a dead session, so it
+   * cleared the token, went to /login, loaded the app, and asked again. Phase 2
+   * split the two -- 409 NO_ACTING_TENANT means "pick an agency", 401 still
+   * means "sign in" -- so these assertions check the refusal AND that it is the
+   * refusal a client can act on.
+   *
+   * It is still a refusal. Nothing below is served agency data.
+   */
+  function expectCrossAgencyRefusal(response: { statusCode: number; json: () => any }, note?: string) {
+    expect(response.statusCode, note ?? 'the cross-agency view was served agency data').toBe(409);
+    expect(response.json().error.code).toBe('NO_ACTING_TENANT');
+  }
+
   async function cleanDatabase() {
     for (const table of [
       'platform_acting_tenants',
@@ -300,10 +318,13 @@ describe.skipIf(!gate.available)('Platform admin: capability and acting-tenant s
         headers: tokenFor(operatorId, null),
       });
 
-      expect(
-        response.statusCode,
+      expectCrossAgencyRefusal(
+        response,
         'the cross-agency view was treated as a wildcard over agency data'
-      ).toBe(401);
+      );
+      // And it is NOT the anonymous refusal: the two conditions stay
+      // distinguishable in both directions.
+      expect(response.statusCode).not.toBe(401);
     });
 
     it('cannot smuggle a tenant in through the token it was issued', async () => {
@@ -316,7 +337,7 @@ describe.skipIf(!gate.available)('Platform admin: capability and acting-tenant s
         headers: tokenFor(operatorId, tenantA.id),
       });
 
-      expect(response.statusCode).toBe(401);
+      expectCrossAgencyRefusal(response);
     });
 
     it('reports itself as staff with no agency', async () => {
@@ -369,7 +390,7 @@ describe.skipIf(!gate.available)('Platform admin: capability and acting-tenant s
         headers: tokenFor(operatorId, null),
       });
 
-      expect(response.statusCode).toBe(401);
+      expectCrossAgencyRefusal(response);
     });
 
     it('surfaces the entered agency in the context the UI banner reads', async () => {
@@ -500,8 +521,10 @@ describe.skipIf(!gate.available)('Platform admin: capability and acting-tenant s
      *
      * Each case sends a request that names agency A by some wire mechanism and
      * asserts it is not served as agency A. The operator has no agency selected
-     * throughout, so "not served as A" reads as a 401 -- the cross-agency view
-     * refusing an agency-scoped route.
+     * throughout, so "not served as A" reads as a 409 NO_ACTING_TENANT -- the
+     * cross-agency view refusing an agency-scoped route and saying which of the
+     * two possible reasons it is. A 200 here would be the failure; so would a
+     * 401, which would mean the refusal had lost the distinction Phase 2 added.
      */
     it('ignores an X-Demo-Tenant-Id header', async () => {
       const response = await app.inject({
@@ -509,7 +532,7 @@ describe.skipIf(!gate.available)('Platform admin: capability and acting-tenant s
         url: '/api/v1/calls',
         headers: { ...tokenFor(operatorId, null), 'x-demo-tenant-id': tenantA.id },
       });
-      expect(response.statusCode).toBe(401);
+      expectCrossAgencyRefusal(response, 'X-Demo-Tenant-Id selected an agency');
     });
 
     it('ignores an X-Acting-Tenant-Id header, in case one is ever invented', async () => {
@@ -522,7 +545,7 @@ describe.skipIf(!gate.available)('Platform admin: capability and acting-tenant s
           'x-tenant-id': tenantA.id,
         },
       });
-      expect(response.statusCode).toBe(401);
+      expectCrossAgencyRefusal(response, 'a speculative acting-tenant header selected an agency');
     });
 
     it('ignores a query parameter', async () => {
@@ -536,7 +559,7 @@ describe.skipIf(!gate.available)('Platform admin: capability and acting-tenant s
           url: `/api/v1/calls${qs}`,
           headers: tokenFor(operatorId, null),
         });
-        expect(response.statusCode, `${qs} selected an agency`).toBe(401);
+        expectCrossAgencyRefusal(response, `${qs} selected an agency`);
       }
     });
 
@@ -547,7 +570,7 @@ describe.skipIf(!gate.available)('Platform admin: capability and acting-tenant s
         headers: tokenFor(operatorId, null),
         payload: { tenantId: tenantA.id, actingTenantId: tenantA.id },
       });
-      expect([400, 401]).toContain(response.statusCode);
+      expect([400, 409]).toContain(response.statusCode);
 
       // Whatever the route made of that body, it did not become a selection.
       expect(

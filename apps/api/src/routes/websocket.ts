@@ -94,7 +94,7 @@ async function authenticateWebSocket(
   // never names a tenant.
   const apiKey =
     (typeof request.headers['x-api-key'] === 'string'
-      ? (request.headers['x-api-key'] as string)
+      ? (request.headers['x-api-key'])
       : undefined) ?? (typeof query.apiKey === 'string' ? query.apiKey : undefined);
 
   if (apiKey) {

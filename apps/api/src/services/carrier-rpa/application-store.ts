@@ -144,6 +144,8 @@ export const markAutomationCompleted = async (
   carrierApplicationNumber: string
 ): Promise<void> => {
   const prisma = getPrismaClient();
+  const submittedAt = new Date();
+
   await prisma.insuranceCarrierApplication.update({
     where: { id: applicationId },
     data: {
@@ -151,8 +153,28 @@ export const markAutomationCompleted = async (
       automationStatus: 'COMPLETED',
       status: 'SUBMITTED',
       automationError: null,
-      automationCompletedAt: new Date(),
+      automationCompletedAt: submittedAt,
     },
+  });
+
+  /*
+   * `submittedAt` is written ONCE, and this is the write.
+   *
+   * It is the timestamp the closing percentage attributes by, so it decides
+   * which day an application is counted on and therefore which window prices
+   * the agency. A retried automation run, or a redelivered completion, must not
+   * move an application from the day it was actually submitted onto the day the
+   * retry happened -- that would move a submission across a business-day
+   * boundary and change two agencies' rates for two different days.
+   *
+   * `updateMany` with `submittedAt: null` in the WHERE is the write-once: the
+   * second run matches no row and changes nothing. Kept separate from the
+   * update above so that update stays free to run again -- the carrier
+   * application number is worth refreshing, the submission timestamp is not.
+   */
+  await prisma.insuranceCarrierApplication.updateMany({
+    where: { id: applicationId, submittedAt: null },
+    data: { submittedAt },
   });
 };
 

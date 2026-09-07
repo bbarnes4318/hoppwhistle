@@ -15,6 +15,8 @@ const DATABASE_BACKED = [
   '**/src/__tests__/security.test.ts',
   '**/src/__tests__/tenant-isolation.test.ts',
   '**/src/__tests__/platform-admin.test.ts',
+  '**/src/__tests__/rating-engine.test.ts',
+  '**/src/__tests__/platform-capability-closure.test.ts',
   '**/src/__tests__/audit-log.test.ts',
   '**/src/__tests__/db-push-constraints.test.ts',
   '**/src/services/__tests__/ai-campaign-service.db.test.ts',
