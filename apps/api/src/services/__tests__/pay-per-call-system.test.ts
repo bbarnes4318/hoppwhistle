@@ -66,6 +66,81 @@ const nextId = (prefix: string) => `${prefix}-${++mockIdCounter}`;
 const mockPrisma = {
   $transaction: vi.fn(cb => cb(mockPrisma)),
 
+  /*
+   * Phase 3 delivery gating.
+   *
+   * `GET /api/v1/freeswitch/lookup` now asks the delivery gate before handing
+   * over a destination, so these fixtures describe an agency that is
+   * deliverable: agreed terms, a valid ACH mandate, a paid block on the ledger
+   * and no unpaid settlement. Without them the gate reads an unreadable
+   * account and refuses -- which is the correct production behaviour and would
+   * make every routing assertion below fail for a reason that has nothing to do
+   * with routing.
+   *
+   * The gate itself is driven against a real database in
+   * `src/__tests__/delivery-gating-paths.test.ts`; these are the reads it makes.
+   */
+  agencyBillingProfile: {
+    findUnique: vi.fn(async () => ({
+      id: 'billing-profile-1',
+      tenantId: 'tenant-1',
+      dailyBlockApplications: 45,
+      maxDailyDebit: 8978,
+      ceilingPctBelowThreshold: 50,
+      ceilingPctAtThreshold: 100,
+      ceilingCleanSettlementThreshold: 10,
+      ceilingPctOverride: null,
+      stripeCustomerId: 'cus_test',
+      achPaymentMethodId: 'pm_test',
+      achMandateStatus: 'ACTIVE',
+      achBankName: 'Test Bank',
+      achLast4: '6789',
+      suspendedAt: null,
+      suspensionReason: null,
+    })),
+    updateMany: vi.fn(async () => ({ count: 1 })),
+  },
+
+  agencyRatingState: {
+    findUnique: vi.fn(async () => ({
+      tenantId: 'tenant-1',
+      status: 'OPENING_BLOCK',
+      currentRate: 134,
+      openingRate: 134,
+    })),
+  },
+
+  ratingReviewFlag: {
+    findFirst: vi.fn(async () => null),
+  },
+
+  dailySettlement: {
+    findMany: vi.fn(async () => []),
+    findFirst: vi.fn(async () => null),
+    findUnique: vi.fn(async () => null),
+  },
+
+  applicationCreditLedgerEntry: {
+    // A paid block with credits left on it: the balance is positive, so the
+    // gate allows delivery without touching the Overrun ceiling.
+    aggregate: vi.fn(async () => ({ _sum: { quantity: 45 } })),
+    groupBy: vi.fn(async () => []),
+  },
+
+  deliveryHoldEvent: {
+    create: vi.fn(async () => ({ id: 'hold-1' })),
+    findFirst: vi.fn(async () => null),
+  },
+
+  billingNotification: {
+    create: vi.fn(async () => ({ id: 'notification-1' })),
+    update: vi.fn(async () => ({ id: 'notification-1' })),
+  },
+
+  platformAdmin: {
+    findMany: vi.fn(async () => []),
+  },
+
   tenant: {
     findUnique: vi.fn(
       async ({ where }) =>

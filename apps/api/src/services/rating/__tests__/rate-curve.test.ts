@@ -13,8 +13,6 @@ const LAUNCH_CURVE: RateCurve = toRateCurve({
   version: 1,
   minimumClosingPct: 5,
   flatFromClosingPct: 15,
-  introductoryRate: 159,
-  introductoryApplications: 5,
   anchors: [
     { closingPct: 5, rate: 264 },
     { closingPct: 6, rate: 234 },
@@ -132,8 +130,6 @@ describe('rate curve', () => {
       version: 2,
       minimumClosingPct: 5,
       flatFromClosingPct: 15,
-      introductoryRate: 159,
-      introductoryApplications: 5,
       anchors: [
         { closingPct: 5, rate: 200 },
         { closingPct: 15, rate: 100 },

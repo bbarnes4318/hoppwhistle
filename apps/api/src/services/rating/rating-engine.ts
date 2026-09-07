@@ -37,6 +37,13 @@
  * second run for the same day writes nothing and returns the existing row: a
  * cron that fires twice, or an operator re-running by hand, must not be able to
  * produce a second, conflicting price.
+ *
+ * That holds for two runs starting TOGETHER as well as for one after another.
+ * The pre-read makes the repeat case cheap; the unique index makes the
+ * concurrent case correct, and the constraint violation is caught and the
+ * existing decision returned rather than raised. Phase 3's settlement calls
+ * this, so a run that raised because another run was rating the same agency at
+ * the same moment would be an agency that did not get billed.
  */
 
 import { Prisma, PrismaClient, AgencyRatingStatus, RateChangeStatus } from '@prisma/client';
@@ -47,7 +54,6 @@ import { lastClosedCalendarDay, nextCalendarDay, windowOf } from './calendar-day
 import type { CalendarDayKey } from './calendar-day.js';
 import { measureTrailingDeliveryDays } from './delivery-day.js';
 import type { DeliveryDayDeps } from './delivery-day.js';
-import { countSubmittedApplicationsLifetime } from './measurement.js';
 import { rateFor, toRateCurve, toNumber } from './rate-curve.js';
 import type { RateCurve } from './rate-curve.js';
 
@@ -209,13 +215,12 @@ export async function rateAgencyForClosedDay(
     windowSettings.deliveryDayLookback
   );
 
-  const [state, openFlag, lifetimeApplications] = await Promise.all([
+  const [state, openFlag] = await Promise.all([
     prisma.agencyRatingState.findUnique({ where: { tenantId: options.tenantId } }),
     prisma.ratingReviewFlag.findFirst({
       where: { tenantId: options.tenantId, clearedAt: null },
       select: { id: true },
     }),
-    countSubmittedApplicationsLifetime(deps, options.tenantId),
   ]);
 
   const previousRate = state?.currentRate == null ? null : toNumber(state.currentRate);
@@ -268,7 +273,7 @@ export async function rateAgencyForClosedDay(
     lookbackDays: windowSettings.deliveryDayLookback,
   };
 
-  const written = await prisma.$transaction(async tx => {
+  const write = async () => prisma.$transaction(async tx => {
     const rateChange = await tx.rateChange.create({
       data: {
         tenantId: options.tenantId,
@@ -301,11 +306,11 @@ export async function rateAgencyForClosedDay(
      * in force. What the agency is actually priced at is this, and there are
      * three cases where it is not the curve's answer:
      *
-     *   OPENING_BLOCK  An opening rate and block were agreed. The brief is
-     *                  explicit that daily rating begins from the first SETTLED
-     *                  day, and Phase 2 settles nothing, so the engine records
-     *                  the measurement and leaves the agreed rate in force.
-     *                  Phase 3 decides when the block is done.
+     *   OPENING_BLOCK  An opening rate and block were agreed before the
+     *                  agency's first Delivery Day. The agreed rate stands
+     *                  until the settlement of that first day, after which the
+     *                  curve governs -- there is no introductory package and no
+     *                  first-N-applications count anywhere in this decision.
      *
      *   open review    An agency below the curve's minimum stays under review
      *                  until a platform admin clears the flag. A recovered
@@ -342,8 +347,6 @@ export async function rateAgencyForClosedDay(
       // The day the measurement covers, whatever rate is in force.
       currentRateCalendarDay: effectiveCalendarDay,
       lastRatedCalendarDay: closedDay,
-      // Counted, not incremented. See countSubmittedApplicationsLifetime().
-      introductoryApplicationsUsed: lifetimeApplications,
     };
 
     await tx.agencyRatingState.upsert({
@@ -375,6 +378,52 @@ export async function rateAgencyForClosedDay(
 
     return rateChange;
   });
+
+  /*
+   * Idempotence under concurrency, not just under repetition.
+   *
+   * The `findUnique` above makes a re-run a no-op. It does not make two runs
+   * STARTING TOGETHER a no-op: both find nothing and both write, and the loser
+   * of the unique index on (tenantId, effectiveCalendarDay) raises. Phase 2
+   * only ever ran this from a cron and a by-hand button, so that race was
+   * theoretical. Phase 3's settlement calls it, and a settlement that raises
+   * because another settlement was rating the same agency at the same moment is
+   * an agency that does not get billed.
+   *
+   * So the constraint is caught and the existing decision returned. The index
+   * is still what decides; this is reading the answer it gave.
+   */
+  let written: Awaited<ReturnType<typeof write>>;
+  try {
+    written = await write();
+  } catch (error) {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') {
+      throw error;
+    }
+
+    const raced = await prisma.rateChange.findUnique({
+      where: {
+        tenantId_effectiveCalendarDay: { tenantId: options.tenantId, effectiveCalendarDay },
+      },
+    });
+    if (!raced) throw error;
+
+    return {
+      rateChangeId: raced.id,
+      tenantId: raced.tenantId,
+      effectiveCalendarDay: raced.effectiveCalendarDay,
+      status: raced.status,
+      deliveredCalls: raced.deliveredCalls,
+      submittedApplications: raced.submittedApplications,
+      closingPct: raced.closingPct === null ? null : toNumber(raced.closingPct),
+      windowDayKeys: raced.windowDayKeys,
+      windowDaysFound: raced.windowDaysFound,
+      previousRate: raced.previousRate === null ? null : toNumber(raced.previousRate),
+      newRate: raced.newRate === null ? null : toNumber(raced.newRate),
+      curveVersion: raced.curveVersion,
+      alreadyRated: true,
+    };
+  }
 
   return {
     rateChangeId: written.id,

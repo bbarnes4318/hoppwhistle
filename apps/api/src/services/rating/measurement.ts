@@ -131,21 +131,6 @@ export async function countSubmittedApplications(
   return deps.applications.count({ where: submittedApplicationWhere(tenantId, range) });
 }
 
-/**
- * Every application this agency has ever submitted.
- *
- * The introductory package is "the first N applications", so the number that
- * decides whether it still applies is a lifetime count, not a windowed one. It
- * is counted rather than incremented: a counter drifts the first time a write
- * is retried or a run is repeated, and this one gates a price.
- */
-export async function countSubmittedApplicationsLifetime(
-  deps: MeasurementDeps,
-  tenantId: string
-): Promise<number> {
-  return deps.applications.count({ where: { tenantId, submittedAt: { not: null } } });
-}
-
 /** The two counts and the percentage they produce. */
 export interface ClosingMeasurement {
   deliveredCalls: number;

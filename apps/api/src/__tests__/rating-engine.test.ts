@@ -131,8 +131,6 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
           label: 'Launch curve',
           minimumClosingPct: 5,
           flatFromClosingPct: 15,
-          introductoryRate: 159,
-          introductoryApplications: 5,
           anchors: {
             create: [
               { closingPct: 5, rate: 264 },
@@ -937,8 +935,6 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
           label: 'Repriced',
           minimumClosingPct: 5,
           flatFromClosingPct: 15,
-          introductoryRate: 159,
-          introductoryApplications: 5,
           anchors: [
             { closingPct: 5, rate: 120 },
             { closingPct: 15, rate: 80 },
@@ -963,7 +959,15 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
       expect(rateFor(curve, 10)).toEqual({ kind: 'RATE', rate: 100 });
     });
 
-    it('refuses a curve with no introductory package rather than inferring one', async () => {
+    it('publishes a curve with no introductory package, because there is no such thing', async () => {
+      /*
+       * Phase 2 required `introductoryRate` and `introductoryApplications` on
+       * every published curve and answered 400 without them. Phase 3 removed the
+       * introductory package entirely -- an agency's opening rate and block are
+       * agreed per tenant before its first Delivery Day -- so a curve that names
+       * only its anchors is now the normal shape, and this asserts the old
+       * refusal is gone rather than merely untested.
+       */
       const response = await app.inject({
         method: 'POST',
         url: '/api/v1/platform/rating/curve',
@@ -976,8 +980,14 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
         },
       });
 
-      expect(response.statusCode).toBe(400);
-      expect(response.json().error.message).toMatch(/introductoryRate/);
+      expect(response.statusCode).toBe(201);
+
+      // And nothing on the published version quotes an introductory price.
+      const published = await prisma.rateCurveVersion.findUnique({
+        where: { id: response.json().data.id as string },
+      });
+      expect(Number(published!.introductoryRate)).toBe(0);
+      expect(published!.introductoryApplications).toBe(0);
     });
 
     it('refuses an agency OWNER publishing a curve', async () => {
@@ -986,8 +996,6 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
         url: '/api/v1/platform/rating/curve',
         headers: tokenFor(big.ownerId, big.id),
         payload: {
-          introductoryRate: 1,
-          introductoryApplications: 1,
           anchors: [
             { closingPct: 5, rate: 1 },
             { closingPct: 15, rate: 1 },
@@ -1108,11 +1116,10 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
   // ══════════════════════════════════════════════════════════════════════════
   describe('the opening package', () => {
     it('leaves an agreed opening rate in force while the block is unsettled', async () => {
-      // "Where an opening rate and opening block were agreed instead, that
-      // supersedes the introductory package and daily rating begins from the
-      // first settled day." Phase 2 settles nothing, so the engine records the
-      // measurement and does not reprice the agency out from under the
-      // agreement.
+      // An opening rate and block are agreed before the agency's first Delivery
+      // Day and recorded per tenant; daily rating begins from the first settled
+      // day. Until then the engine records the measurement and does not reprice
+      // the agency out from under the agreement.
       const agreed = await app.inject({
         method: 'PUT',
         url: `/api/v1/platform/rating/agencies/${big.id}/opening`,
@@ -1144,22 +1151,25 @@ describe.skipIf(!gate.available)('Rating: measurement and the daily rate engine'
       const summary = await getRatingSummary(big.id, { prisma });
       expect(summary.currentRate).toBe(175);
       expect(summary.openingBlock).toMatchObject({ rate: 175, applications: 40 });
-      expect(summary.introductory).toBeNull();
+      expect(summary).not.toHaveProperty('introductory');
     });
 
-    it('shows the introductory rate, and counts applications against it, before any rating', async () => {
+    it('quotes no rate at all to an agency with no opening agreement', async () => {
+      /*
+       * Phase 2 quoted $159 here -- the introductory rate, for the first five
+       * applications. There is no such rate now. An agency whose opening terms
+       * have not been agreed and recorded has no price, and the portal shows an
+       * em dash rather than a number nobody signed. The delivery gate refuses
+       * the same agency with NO_OPENING_AGREEMENT.
+       */
       await seedSubmittedApplications(big.id, CLOSED_DAY, 3);
 
       const { getRatingSummary } = await import('../services/rating/rating-summary.js');
       const summary = await getRatingSummary(big.id, { prisma });
 
-      expect(summary.status).toBe('INTRODUCTORY');
-      expect(summary.currentRate).toBe(159);
-      expect(summary.introductory).toMatchObject({
-        rate: 159,
-        applications: 5,
-        applicationsUsed: 3,
-      });
+      expect(summary.currentRate).toBeNull();
+      expect(summary.openingBlock).toBeNull();
+      expect(summary).not.toHaveProperty('introductory');
     });
 
     it('an agency cannot record its own opening rate', async () => {

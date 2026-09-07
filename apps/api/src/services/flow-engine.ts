@@ -13,6 +13,7 @@ import { carrierService } from './carrier-service.js';
 import { cnamService } from './cnam-service.js';
 import { compliancePolicyService } from './compliance-policy-service.js';
 import { complianceService } from './compliance-service.js';
+import { isDeliveryAllowed } from './billing/delivery-gate.js';
 import { eventBus } from './event-bus.js';
 import { stirShakenService } from './stir-shaken-service.js';
 
@@ -258,6 +259,39 @@ export class FlowEngine {
         if (!complianceResult.allowed) {
           // Block call and log audit
           await this.handleComplianceBlock(complianceResult);
+          return;
+        }
+
+        /*
+         * Delivery gating.
+         *
+         * A flow's `buyer.route` action is the third way a call reaches an
+         * agent: the flow engine publishes `call.buyer.route` and the telephony
+         * layer bridges it. It is gated on the agency's balance and Overrun
+         * ceiling for the same reason the FreeSWITCH lookup is, and before the
+         * dynamic buyer selection below rather than after -- selecting a buyer
+         * for an agency that may not be delivered to is work with only one
+         * possible use.
+         *
+         * The gate is evaluated for THIS flow's tenant, which the engine was
+         * constructed with. There is no tenant on the action's params and there
+         * must not be: an action parameter naming an agency would be a routing
+         * decision taken from flow configuration rather than from the call.
+         */
+        const deliveryGate = await isDeliveryAllowed(this.tenantId);
+        if (!deliveryGate.allowed) {
+          console.warn(
+            `[flow] Delivery held for tenant ${this.tenantId} on call ${this.callId}: ${deliveryGate.reason ?? 'unknown'}`
+          );
+          await eventBus.publish('call.*', {
+            event: 'call.delivery.held',
+            tenantId: this.tenantId,
+            data: {
+              callId: this.callId,
+              reason: deliveryGate.reason,
+              message: deliveryGate.detail,
+            },
+          });
           return;
         }
 

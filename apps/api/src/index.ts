@@ -181,6 +181,12 @@ async function buildServer() {
   // the platform-scoped curve, review flags and manual run.
   const { registerRatingRoutes } = await import('./routes/rating.js');
   await server.register(registerRatingRoutes);
+
+  // Phase 3: the credit ledger, Overrun, delivery gating and daily settlement.
+  // Agency-scoped reads plus the platform-scoped terms, ceiling, suspension,
+  // opening purchase and settlement run.
+  const { registerDeliveryBillingRoutes } = await import('./routes/delivery-billing.js');
+  await server.register(registerDeliveryBillingRoutes);
   // Single aggregate endpoint powering the LiveStrip for every role.
   await server.register(registerLiveMetricsRoutes);
 

@@ -163,8 +163,9 @@ export async function registerRatingRoutes(fastify: FastifyInstance): Promise<vo
         version: curve.version,
         minimumClosingPct: curve.minimumClosingPct,
         flatFromClosingPct: curve.flatFromClosingPct,
-        introductoryRate: curve.introductoryRate,
-        introductoryApplications: curve.introductoryApplications,
+        // No introductory rate. Phase 3 removed the concept; an agency's
+        // opening rate and block are agreed per tenant, not carried on the
+        // curve, and there is no "first N applications" price to publish.
         windowDeliveryDays: windowSettings.windowDeliveryDays,
         deliveryDayLookback: windowSettings.deliveryDayLookback,
         anchors: curve.anchors,
@@ -208,7 +209,11 @@ export async function registerRatingRoutes(fastify: FastifyInstance): Promise<vo
             tenantId: tenant.id,
             name: tenant.name,
             slug: tenant.slug,
-            status: state?.status ?? 'INTRODUCTORY',
+            // No state row means the agency has never been priced, which is
+            // the same thing as having no rate: shown as UNDER_REVIEW rather
+            // than as the retired INTRODUCTORY, which would name a price that
+            // no longer exists.
+            status: state?.status ?? 'UNDER_REVIEW',
             currentRate: state?.currentRate == null ? null : toNumber(state.currentRate),
             currentRateCalendarDay: state?.currentRateCalendarDay ?? null,
             lastRatedCalendarDay: state?.lastRatedCalendarDay ?? null,
@@ -311,8 +316,6 @@ export async function registerRatingRoutes(fastify: FastifyInstance): Promise<vo
       anchors?: AnchorInput[];
       minimumClosingPct?: number;
       flatFromClosingPct?: number;
-      introductoryRate?: number;
-      introductoryApplications?: number;
       label?: string;
       note?: string;
       windowDeliveryDays?: number;
@@ -348,20 +351,17 @@ export async function registerRatingRoutes(fastify: FastifyInstance): Promise<vo
       const minimumClosingPct = body.minimumClosingPct ?? sorted[0].closingPct;
       const flatFromClosingPct =
         body.flatFromClosingPct ?? sorted[sorted.length - 1].closingPct;
-      const introductoryRate = body.introductoryRate;
-      const introductoryApplications = body.introductoryApplications;
 
-      if (typeof introductoryRate !== 'number' || typeof introductoryApplications !== 'number') {
-        return reply.code(400).send({
-          error: {
-            code: 'VALIDATION_ERROR',
-            message:
-              'introductoryRate and introductoryApplications are required: the opening package ' +
-              'is configured separately from the anchors, never inferred from them',
-          },
-        });
-      }
-
+      /*
+       * No introductory package is accepted or required. Phase 2 demanded an
+       * `introductoryRate` and `introductoryApplications` on every published
+       * curve -- a flat price for an agency's first five applications. Phase 3
+       * removed the concept: an opening rate and block are agreed per agency
+       * before its first Delivery Day and recorded through
+       * `PUT /api/v1/platform/rating/agencies/:tenantId/opening`, and from the
+       * second Delivery Day the curve governs. The columns keep their database
+       * defaults and nothing reads them.
+       */
       const userId = getActingUserId(request);
 
       const created = await prisma.$transaction(async tx => {
@@ -375,8 +375,6 @@ export async function registerRatingRoutes(fastify: FastifyInstance): Promise<vo
             note: body.note ?? null,
             minimumClosingPct,
             flatFromClosingPct,
-            introductoryRate,
-            introductoryApplications,
             createdById: userId,
             anchors: {
               create: sorted.map(a => ({ closingPct: a.closingPct, rate: a.rate })),

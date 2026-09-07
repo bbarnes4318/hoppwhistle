@@ -103,6 +103,9 @@ importers:
       '@hopwhistle/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@hopwhistle/worker':
+        specifier: workspace:*
+        version: link:../worker
       '@opentelemetry/api':
         specifier: ^1.8.0
         version: 1.9.0

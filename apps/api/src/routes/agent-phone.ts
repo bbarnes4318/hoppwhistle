@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
 import { getActingTenantId } from '../lib/tenant-context.js';
+import { isDeliveryAllowed } from '../services/billing/delivery-gate.js';
 import { callStateService } from '../services/call-state.js';
 import { eventBus } from '../services/event-bus.js';
 import { freeswitchService } from '../services/freeswitch-service.js';
@@ -554,6 +555,11 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
                 recordingStartedAt: new Date(),
               }
             : {}),
+          // The column, alongside the metadata key it has always been written
+          // to. The key stays because older rows carry it and the migration
+          // backfilled from it; the column is what the per-agent table reads,
+          // because a JSON key cannot be indexed and that table is live.
+          answeredByUserId: userId,
           metadata: {
             ...callMetadata,
             answeredByAgentId: userId,
@@ -1270,6 +1276,32 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
           // Fail-open: if TCPA check itself errors, let the call through
           console.error('[TCPA] Validation error (fail-open):', err);
         }
+      }
+
+      /*
+       * Delivery gating.
+       *
+       * This route is the other way a call reaches an agent: an external
+       * telephony webhook announces an inbound call, a `Call` row is created
+       * RINGING, and the agent's softphone gets a screen pop. So it is gated on
+       * the agency's balance and Overrun ceiling like the FreeSWITCH lookup is.
+       *
+       * The refusal deliberately creates NO `Call` row. A TCPA block writes one
+       * because a blocked litigator is a compliance record somebody may have to
+       * produce; a delivery hold is already recorded once per Delivery Day in
+       * `delivery_hold_events`, and writing a row per refused call would put
+       * hundreds of RINGING calls that were never offered to anybody into the
+       * agency's call history.
+       */
+      const gate = await isDeliveryAllowed(tenantId);
+      if (!gate.allowed) {
+        void reply.code(403);
+        return {
+          delivered: false,
+          reason: 'DELIVERY_PAUSED',
+          deliveryHoldReason: gate.reason,
+          message: gate.detail ?? 'Delivery is paused for this agency',
+        };
       }
 
       // Determine recording intent from campaign settings

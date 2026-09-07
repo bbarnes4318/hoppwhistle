@@ -39,7 +39,7 @@ import { currentCalendarDay } from './calendar-day.js';
 import type { CalendarDayKey } from './calendar-day.js';
 import { measureTrailingDeliveryDays } from './delivery-day.js';
 import type { DeliveryDayDeps } from './delivery-day.js';
-import { countSubmittedApplicationsLifetime, measureCalendarDay } from './measurement.js';
+import { measureCalendarDay } from './measurement.js';
 import { rateFor, toNumber } from './rate-curve.js';
 import { loadActiveCurve, loadWindowSettings } from './rating-engine.js';
 
@@ -100,13 +100,12 @@ export interface RatingSummary {
     submittedApplications: number;
   } | null;
 
-  /** The opening package, while it still applies. */
-  introductory: {
-    rate: number;
-    applications: number;
-    applicationsUsed: number;
-  } | null;
-
+  /*
+   * There is no `introductory` block, deliberately. Phase 2 showed an
+   * introductory rate for an agency's first five applications; Phase 3 removed
+   * the concept entirely. What an agency sees before its first settled Delivery
+   * Day is `openingBlock`: the rate and block that were agreed and recorded.
+   */
   openingBlock: {
     rate: number;
     applications: number | null;
@@ -137,7 +136,7 @@ export async function getRatingSummary(
     }),
   ]);
 
-  const [todayMeasurement, trackingMeasurement, lifetimeApplications] = await Promise.all([
+  const [todayMeasurement, trackingMeasurement] = await Promise.all([
     measureCalendarDay(deps, tenantId, today),
     // The Delivery Day window ending TODAY: what tomorrow's rate is tracking
     // toward. Today counts as a Delivery Day as soon as one call lands, so this
@@ -149,9 +148,6 @@ export async function getRatingSummary(
       windowSettings.windowDeliveryDays,
       windowSettings.deliveryDayLookback
     ),
-    // Counted live rather than read off the state row, so the portal shows the
-    // truth between rating runs rather than the count as of the last one.
-    countSubmittedApplicationsLifetime(deps, tenantId),
   ]);
 
   /*
@@ -204,7 +200,14 @@ export async function getRatingSummary(
     }
   }
 
-  const status = state?.status ?? AgencyRatingStatus.INTRODUCTORY;
+  /*
+   * An agency with no rating state row has not been priced at all. It is shown
+   * as UNDER_REVIEW rather than as the retired INTRODUCTORY, because the
+   * accurate statement is "there is no rate here yet" and INTRODUCTORY would
+   * assert a price that no longer exists. Delivery is gated off for the same
+   * agency by `NO_OPENING_AGREEMENT`.
+   */
+  const status = state?.status ?? AgencyRatingStatus.UNDER_REVIEW;
 
   return {
     tenantId,
@@ -218,7 +221,7 @@ export async function getRatingSummary(
       closingPct: todayMeasurement.closingPct,
     },
     ratingWindow,
-    currentRate: resolveCurrentRate(state, curve.introductoryRate, status),
+    currentRate: resolveCurrentRate(state, status),
     currentRateCalendarDay: state?.currentRateCalendarDay ?? null,
     trackingRate,
     trackingBelowMinimum,
@@ -233,14 +236,6 @@ export async function getRatingSummary(
           submittedApplications: openFlag.submittedApplications,
         }
       : null,
-    introductory:
-      status === AgencyRatingStatus.INTRODUCTORY
-        ? {
-            rate: curve.introductoryRate,
-            applications: curve.introductoryApplications,
-            applicationsUsed: lifetimeApplications,
-          }
-        : null,
     openingBlock:
       status === AgencyRatingStatus.OPENING_BLOCK && state?.openingRate != null
         ? {
@@ -256,23 +251,22 @@ export async function getRatingSummary(
  * The rate in force, which is not always `state.currentRate`.
  *
  * Under review there is no rate at all — null, never zero, because a zero rate
- * renders as a price and this is the absence of one. On the introductory
- * package or an agreed opening block, the rate is that package's, because daily
- * rating has not started.
+ * renders as a price and this is the absence of one. On an agreed opening
+ * block the rate is the agreed one, because the curve does not govern until the
+ * first settled Delivery Day.
+ *
+ * There is no introductory branch. An agency with no agreed opening rate has no
+ * rate, full stop — the curve is never asked to invent one and there is no
+ * package to fall back to.
  */
 function resolveCurrentRate(
   state: { currentRate: unknown; openingRate: unknown } | null,
-  introductoryRate: number,
   status: AgencyRatingStatus
 ): number | null {
   if (status === AgencyRatingStatus.UNDER_REVIEW) return null;
 
   if (status === AgencyRatingStatus.OPENING_BLOCK) {
     return state?.openingRate == null ? null : toNumber(state.openingRate as never);
-  }
-
-  if (status === AgencyRatingStatus.INTRODUCTORY) {
-    return state?.currentRate == null ? introductoryRate : toNumber(state.currentRate as never);
   }
 
   return state?.currentRate == null ? null : toNumber(state.currentRate as never);
