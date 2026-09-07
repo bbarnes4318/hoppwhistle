@@ -24,6 +24,9 @@ export default defineConfig({
       // Keeps the login page's Google client id equal to the API's. A mismatch
       // removes the sign-in buttons with no error anywhere.
       'src/app/login/__tests__/**/*.test.ts',
+      // The login loop: a platform admin with no acting tenant must not be
+      // treated as signed out. This one cost production access.
+      'src/lib/__tests__/**/*.test.ts',
     ],
   },
 });

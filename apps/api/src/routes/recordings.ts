@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
+import { getActingTenantId, sendTenantRefusal } from '../lib/tenant-context.js';
 import { RecordingService } from '../services/recording-service.js';
 
 const recordingService = new RecordingService();
@@ -241,10 +242,9 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
 
   // List recordings
   fastify.get('/api/v1/recordings', async (request, reply) => {
-    const tenantId = (request as any).user?.tenantId;
+    const tenantId = getActingTenantId(request);
     if (!tenantId) {
-      reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const {
@@ -388,10 +388,9 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
   fastify.get<{ Params: { recordingId: string } }>(
     '/api/v1/recordings/:recordingId',
     async (request, reply) => {
-      const tenantId = (request as any).user?.tenantId;
+      const tenantId = getActingTenantId(request);
       if (!tenantId) {
-        reply.code(401);
-        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+        return sendTenantRefusal(request, reply);
       }
 
       const recording = await prisma.recording.findFirst({
@@ -447,10 +446,9 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
     Params: { recordingId: string };
     Querystring: { expiresIn?: string };
   }>('/api/v1/recordings/:recordingId/url', async (request, reply) => {
-    const tenantId = (request as any).user?.tenantId;
+    const tenantId = getActingTenantId(request);
     if (!tenantId) {
-      reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     try {
@@ -512,10 +510,9 @@ export async function registerRecordingManagementRoutes(fastify: FastifyInstance
   fastify.get<{ Params: { recordingId: string } }>(
     '/api/v1/recordings/:recordingId/stream',
     async (request, reply) => {
-      const tenantId = (request as any).user?.tenantId;
+      const tenantId = getActingTenantId(request);
       if (!tenantId) {
-        reply.code(401);
-        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+        return sendTenantRefusal(request, reply);
       }
 
       try {

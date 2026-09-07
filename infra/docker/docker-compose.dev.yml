@@ -114,6 +114,11 @@ services:
       FREESWITCH_ESL_HOST: freeswitch
       FREESWITCH_ESL_PORT: 8021
       FREESWITCH_ESL_PASSWORD: ${FREESWITCH_ESL_PASSWORD:-ClueCon}
+      # Shared secret the FreeSWITCH callbacks must present. Deliberately no
+      # default: the guard fails closed, and a default here would be a default
+      # secret shipped in a public repository. scripts/deploy.sh refuses to
+      # deploy without it. Generate with: openssl rand -hex 32
+      FREESWITCH_INTERNAL_KEY: ${FREESWITCH_INTERNAL_KEY:-}
       SIP_AGENT_PASSWORD: ${SIP_AGENT_PASSWORD:-1234}
       FONESTORM_BASE_URL: ${FONESTORM_BASE_URL:-https://api.fonestorm.com/v2}
       FONESTORM_USERNAME: ${FONESTORM_USERNAME:-}
@@ -295,6 +300,11 @@ services:
       FREESWITCH_ESL_PASSWORD: ${FREESWITCH_ESL_PASSWORD:-ClueCon}
       API_URL: http://api:3001
       API_KEY: ${API_KEY:-demo-key}
+      # MUST be the same value as the api service's. The entrypoint substitutes
+      # it into vars.xml as $${internal_key} for the dialplan, and
+      # inbound_route.lua reads it from the environment directly. Without it the
+      # API refuses every lookup and no call routes.
+      FREESWITCH_INTERNAL_KEY: ${FREESWITCH_INTERNAL_KEY:-}
       S3_ENDPOINT: http://minio:9000
       S3_BUCKET: ${S3_BUCKET:-recordings}
       S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}

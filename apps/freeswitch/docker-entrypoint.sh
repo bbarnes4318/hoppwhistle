@@ -45,6 +45,19 @@ if [ -f "$VANILLA_CONF/vars.xml" ]; then
     sed -i "s|\${FRACTEL_DEFAULT_CALLER_ID}|${FRACTEL_DEFAULT_CALLER_ID:-${OUTBOUND_CALLER_ID:-12816991120}}|g" "$VANILLA_CONF/vars.xml"
     sed -i "s|\${FREESWITCH_ESL_PASSWORD}|${FREESWITCH_ESL_PASSWORD:-ClueCon}|g" "$VANILLA_CONF/vars.xml"
 
+    # The API refuses every FreeSWITCH callback without this. Deliberately no
+    # default: substituting a placeholder would produce a config that looks
+    # configured and authenticates against nothing, and the failure would then
+    # be "all calls drop" with no clue why. An empty value here at least makes
+    # the dialplan send `k=` and the API log a specific refusal.
+    if [ -z "${FREESWITCH_INTERNAL_KEY:-}" ]; then
+        echo "WARNING: FREESWITCH_INTERNAL_KEY is not set." >&2
+        echo "         The API will refuse every lookup, CDR and carrier-route" >&2
+        echo "         callback, and no call will route. Set it to the same" >&2
+        echo "         value the API has." >&2
+    fi
+    sed -i "s|\${FREESWITCH_INTERNAL_KEY}|${FREESWITCH_INTERNAL_KEY:-}|g" "$VANILLA_CONF/vars.xml"
+
     # Anveo Direct. The username default reproduces what mod_sofia substituted
     # when the gateway carried no credentials, so an unset .env leaves the
     # trunk behaving exactly as it did before these variables existed.

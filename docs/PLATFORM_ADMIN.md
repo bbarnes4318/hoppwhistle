@@ -1,4 +1,4 @@
-# Platform staff and the acting-tenant switch — Phase 1b
+# Platform staff and the acting-tenant switch — Phase 1b, extended in Phase 2
 
 Phase 1 established that the acting tenant comes from `request.user` and nothing
 else, and `apps/api/src/lib/tenant-context.ts` is still the only place that
@@ -36,8 +36,9 @@ A platform admin's `User.tenantId` is null — they belong to no agency.
 | `GET /api/v1/platform/tenants` | The agency picker. Id, name, slug, status only — the list that lets an operator choose must not also be a cross-agency export. |
 
 **Default is none.** A platform admin with no agency selected gets the
-cross-agency view, and an agency-scoped route refuses them with a 401 exactly as
-it refuses an anonymous caller. "No tenant" is a refusal, not a wildcard.
+cross-agency view, and an agency-scoped route refuses them. "No tenant" is a
+refusal, not a wildcard. It is no longer the *same* refusal an anonymous caller
+gets — see §2b, which is the part that locked the owner out of production.
 
 **The state is a table, not a header and not the session.** Not a header, query
 parameter or body field, because Phase 1 removed every one of those and re-adding
@@ -66,6 +67,64 @@ originally bypassed `auditLog()` for exactly that reason — the bypass is gone 
 the reason is. See `docs/TENANT_ISOLATION_AUDIT.md` §4 and
 `apps/api/src/__tests__/audit-log.test.ts`.
 
+## 2b. "No acting tenant" is a different answer from "not authenticated"
+
+Phase 1b answered a platform admin with no agency selected the same way it
+answered an anonymous caller: 401. That is honest about the outcome and wrong
+about the reason, and it locked the owner out of production.
+
+The observed failure: `/api/auth/me` returned 200, the `platform_admins` lookup
+succeeded, the `platform_acting_tenants` lookup returned nothing, `tenantId`
+resolved to none, every agency-scoped route refused with 401 — and the web
+client reads 401 as a dead session. It cleared the token and set
+`window.location.href = '/login'`. The login page loaded the app, the app called
+an agency-scoped route, and round it went. Six requests in one second. The row
+had to be deleted from the database by hand to restore access.
+
+Phase 2 splits the two:
+
+| | Meaning | What fixes it |
+| --- | --- | --- |
+| `401 UNAUTHORIZED` | Nobody is authenticated. | Sign in. |
+| `409 NO_ACTING_TENANT` | Somebody is authenticated, holds the capability, and has entered no agency. | Pick an agency. Signing in again changes nothing. |
+
+409 rather than 403: the caller is permitted to reach the data once they choose
+an agency, so this is a conflict with the state of their session rather than
+with their identity.
+
+`lib/tenant-context.ts` decides which, in one place, and reads
+`request.user.isPlatformAdmin` **only** to choose the refusal. No branch there
+can return a tenant, and an operator with no selection still gets none — the
+Phase 1 rule is unchanged. The ~90 route sites that hardcoded their own 401
+after a tenant lookup now call the shared helper, so the distinction cannot go
+missing one handler at a time.
+
+On the client, `apps/web/src/lib/api.ts` gates the auto-logout on the error
+**code** as well as the status, so moving a status code somewhere else cannot
+reopen the loop, and `apps/web/src/lib/__tests__/no-acting-tenant.test.ts` pins
+all three cases.
+
+## 2c. The switcher
+
+Phase 1b built the switch as an API and shipped no UI, which is how an operator
+came to have no agency selected and no way to pick one.
+
+`apps/web/src/components/platform/tenant-switcher.tsx` sits in the top bar on
+every page. It renders **nothing at all** for an agency user — not a disabled
+control, not an empty menu. For staff it shows "All agencies" when nothing is
+selected and a list to enter; while an agency IS entered it is a filled amber
+control carrying that agency's name, for the whole time it is entered, because
+an operator looking at one agency's callers and money must not be able to
+mistake it for the platform view.
+
+Entering and leaving go through the existing endpoints and then reload the page.
+The selection applies from the *next* request, so a client-side navigation would
+render the new agency's chrome around the old agency's data.
+
+`cross-agency-prompt.tsx` is where an operator with no agency lands on an agency
+page: the condition, and the one action that resolves it. `/settings` and
+`/admin` are exempt — neither is agency data.
+
 **Inside an agency, an operator carries that agency's ADMIN and OWNER roles**
 (`ACTING_TENANT_ROLES`), attached to the principal and never written as
 `UserRole` rows. Without this the switch is a button that does nothing: the
@@ -74,15 +133,44 @@ role-aware handlers (`getUserProfile`, `buildCallWhere`, the publisher and buyer
 narrowing) would show them an empty agency. It is bounded three ways — one agency
 at a time, only while the row exists, and every entry and exit audited.
 
-### Known limitation, deliberate
+### ~~Known limitation, deliberate~~ — resolved in Phase 2
 
 Routes gated on **per-tenant permissions** (`requirePermission`, which reads
-`UserRole` permission arrays from the database rather than the principal) still
-refuse a platform operator inside an agency, because they hold no role rows
-there. `checkPermission` now returns false early for a principal with no tenant
-rather than looking permissions up under `undefined`. Widening this is a policy
-decision, not a bug fix, and is not in this phase. The conservative direction is
-the right default.
+`UserRole` permission arrays from the database rather than the principal)
+refused a platform operator inside an agency, because they hold no role rows
+there. Phase 1b recorded that as a policy decision rather than a bug and left it
+open.
+
+**The policy is decided: platform admins have full access everywhere.**
+`checkPermission`, `requireAnyPermission` and `requireRole` now pass a platform
+admin who has an agency selected. `requireRole` needed one more fix than the
+others — it compared `userWithRoles.tenantId !== user.tenantId`, and an
+operator's own `User.tenantId` is null while their acting tenant is the agency
+they entered, so it rejected every platform admin who had entered anywhere.
+
+The widening keys off the `PlatformAdmin` capability and **nothing else**. Not a
+role, because roles are per-tenant and every agency has an OWNER. Not a header,
+query parameter or body field, because those are exactly what Phase 1 removed
+and the most privileged accounts are the worst place to reintroduce one.
+`isPlatformAdmin` is written onto the principal by `middleware/auth.ts` from a
+row keyed on the authenticated user id. **A user not in `PlatformAdmin` sees no
+change from any of it.**
+
+It is still bounded by the acting tenant. An operator in the cross-agency view
+has no tenant, so `checkPermission` returns false — granting the permission
+without a tenant would not widen what they can read, only turn a clear refusal
+into an empty page. Instead the gate answers `409 NO_ACTING_TENANT`, which is
+the "pick an agency" signal described in §2b.
+
+**The capability is not self-serve, and that is now asserted.** Widening every
+per-tenant gate raises the stakes on one question: can anything reachable over
+HTTP write a `platform_admins` row? `apps/api/src/__tests__/platform-capability-closure.test.ts`
+answers it two ways — a static sweep of every route file for a write to the
+model or a call to `grantPlatformAdmin`, which runs with no database and so
+fails the build on every machine; and real requests as an agency OWNER, as an
+operator and anonymously, against every shape a grant could plausibly take,
+asserting the row count never moves. Only `src/cli/platform-admins.ts` may grant
+it, and the test pins that it is the sole caller.
 
 ---
 
@@ -150,9 +238,10 @@ tenant from `request.user` via the Phase 1 helper.
 ## 4. Provisioning
 
 ```
-pnpm --filter @hopwhistle/api platform:admins              # list
+pnpm --filter @hopwhistle/api platform:admins               # list
 PLATFORM_ADMIN_EMAILS=owner@example.com \
-pnpm --filter @hopwhistle/api platform:admins -- --sync    # provision the launch set
+pnpm --filter @hopwhistle/api platform:admins -- --sync     # provision the launch set
+pnpm --filter @hopwhistle/api platform:admins -- --invite someone@example.com
 pnpm --filter @hopwhistle/api platform:admins -- --grant  someone@example.com
 pnpm --filter @hopwhistle/api platform:admins -- --revoke someone@example.com
 ```
@@ -165,6 +254,84 @@ hardcoded in a public repository) plus `joel.vasquez@outlook.com`.
 It deliberately **does not create user accounts**. A login is created through the
 normal activation-grant invitation path; a provisioning script that mints
 accounts would be a second way in.
+
+### 4.1 The second operator — the exact commands
+
+**Production has exactly one platform admin.** `joel.vasquez@outlook.com` is in
+the launch set but has no user account, so `--sync` reported him missing and
+granted nothing. A launch set of one is a single point of failure: lose that
+account and the shared dialer console, the quota routes and the
+`/admin/api/v1/*` console are unreachable for everybody, with no second operator
+to restore them.
+
+Self-serve signup requires an invitation (Phase 1), and every invitation the API
+can issue carries a tenant — `POST /api/v1/auth/activation-grants` invites into
+the caller's **own** agency and has deliberately no `tenantId` field. Inviting
+NetEnroll staff through one of those would create a NetEnroll employee inside a
+customer's agency, visible in that customer's team roster and holding one of its
+roles, which contradicts §1: a platform admin's `User.tenantId` is null.
+
+So there is a third grant source, `PLATFORM_INVITE`, carrying **no tenant**.
+It is issued by the provisioning command only. There is no HTTP route that mints
+one, and `platform-capability-closure.test.ts` asserts that at the call site.
+
+**Run these on the host, in this order.**
+
+**1. Issue the invitation.** Prints a single-use token, valid seven days, bound
+to that address:
+
+```
+cd /opt/hopwhistle
+pnpm --filter @hopwhistle/api platform:admins -- --invite joel.vasquez@outlook.com
+```
+
+**2. Have Joel register with it.** The token is shown once and never stored in
+plaintext; send it to him over something he already trusts. He runs, or you run
+on his behalf with a password he then changes:
+
+```
+curl -sS -X POST https://agents.netenroll.com/api/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{
+        "email": "joel.vasquez@outlook.com",
+        "password": "<a password he chooses>",
+        "firstName": "Joel",
+        "lastName": "Vasquez",
+        "activationToken": "<the token from step 1>"
+      }'
+```
+
+Expect `201`, and `"roles": []` in the response body. That is correct and is the
+point: the account created belongs to **no agency** and holds **no role**. It
+can read nothing at all.
+
+**3. Grant the capability.** This is the second deliberate act, and it is the
+one that confers anything:
+
+```
+pnpm --filter @hopwhistle/api platform:admins -- --grant joel.vasquez@outlook.com
+```
+
+**4. Verify there are now two.**
+
+```
+pnpm --filter @hopwhistle/api platform:admins
+```
+
+Expect two rows, both `ACTIVE`, both in the `cross-agency view`.
+
+**If Joel already has an account** — say he was invited into an agency at some
+point — `--invite` says so and tells you to skip to step 3. Note that in that
+case he keeps his agency membership; `middleware/auth.ts` ignores a platform
+admin's own `User.tenantId` and uses the acting tenant instead, so it changes
+nothing about what he can see, but it does leave him listed in that agency's
+roster. Removing him from it is a separate decision.
+
+**Why this is not a new way in.** A `PLATFORM_INVITE` confers strictly *less*
+than an ordinary grant: an ordinary one puts an AGENT or OWNER inside a paying
+agency, this one produces an account with nothing. Minting it needs shell access
+to the host and `DATABASE_URL` — the same bar as granting the capability
+directly, which the same command already does.
 
 ---
 
@@ -181,6 +348,9 @@ database, driving the real auth hook and the real route plugins.
 2. **No acting tenant is a refusal** — the operator is refused `/api/v1/calls`,
    is still refused when the token names an agency, sees exactly one agency's
    calls after entering and none of the other's, and stops seeing them on leave.
+   Phase 2 tightened these: the refusal must be `409 NO_ACTING_TENANT` and must
+   **not** be 401, in both directions, so the two conditions cannot quietly
+   collapse back into one.
 3. **Exactly one audit row each way** — enter and leave, each naming operator and
    agency; no row for a leave with nothing to leave; a move between agencies
    records a leave *and* an enter and leaves the operator in exactly one agency;
@@ -193,5 +363,35 @@ database, driving the real auth hook and the real route plugins.
 5. **The capability itself** — not conferred by OWNER with `admin:*`, works for a
    user with no tenant at all, revocation drops the agency too, granting twice
    creates one row.
+6. **The widened per-tenant gates** (Phase 2) — an operator inside an agency is
+   admitted to both gate shapes, `requireAnyPermission` (carrier routing) and
+   `requireRole` (payroll); with no agency selected both answer
+   `409 NO_ACTING_TENANT` rather than 403 or 401; an agency AGENT is still
+   refused the payroll surface; and an operator whose capability has been
+   revoked is refused with a plain 403, not the staff-only "pick an agency".
 
-Full API suite: **540 passed, 8 skipped**. Typecheck errors 95 → 85 (none added).
+`apps/api/src/__tests__/platform-capability-closure.test.ts` — 12 cases, added in
+Phase 2 alongside the permission widening and extended with the provisioning
+path. Two run with no database at all: no
+route file writes to `platform_admins`, and `src/cli/platform-admins.ts` is the
+only caller of `grantPlatformAdmin`. Four drive real requests as an agency
+OWNER, as an operator and anonymously, across every shape a grant could take —
+a dedicated endpoint, a user create carrying `isPlatformAdmin: true`, a profile
+update — and assert the row count never moves.
+
+Six more cover the provisioning path end to end, because a documented path that
+has never been run is a guess: a `PLATFORM_INVITE` produces an ACTIVE account
+with a null `tenantId`, no roles and **no** `PlatformAdmin` row; a separate
+grant is what makes it staff; the token is spent exactly once; it is refused
+when presented with a different address; and no route mints a tenant-less grant.
+That last check matches at the CALL SITE rather than file-wide, because
+`auth.ts` legitimately contains `tenantId: null` for audit rows with no tenant —
+a file-wide grep flagged those and would have had to be silenced, which is how a
+real finding gets silenced too.
+
+`apps/web/src/lib/__tests__/no-acting-tenant.test.ts` — 4 cases against the real
+API client: `NO_ACTING_TENANT` never clears the session or navigates, that holds
+even if the code ever arrives as a 401, and a genuine 401 still logs out.
+
+Full API suite at the time of writing: **628 passed, 8 skipped** (38 platform
+admin, 6 capability closure, 38 rating). Typecheck errors 83 → 80 (none added).

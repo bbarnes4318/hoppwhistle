@@ -428,7 +428,20 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       },
     });
 
-    await assignGrantedRole(user.id, grant.roleName);
+    /*
+     * A role is a grant INSIDE a tenant. A PLATFORM_INVITE has no tenant, so
+     * there is nothing to grant a role in, and NetEnroll staff deliberately
+     * hold no `UserRole` rows at all -- see docs/PLATFORM_ADMIN.md §1. Creating
+     * an AGENT row here would put the operator's capability back inside the
+     * tenant dimension, which is exactly what the PlatformAdmin table exists to
+     * avoid.
+     *
+     * The account created is therefore inert: no agency, no role, nothing it
+     * can read, until `platform:admins --grant` is run for it on the host.
+     */
+    if (grant.tenantId) {
+      await assignGrantedRole(user.id, grant.roleName);
+    }
     await completeActivationGrant(grant.grantId, user.id);
 
     // Audit registration
@@ -465,7 +478,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
-        roles: [grant.roleName],
+        roles: grant.tenantId ? [grant.roleName] : [],
       },
     });
   });

@@ -13,12 +13,37 @@
   Environment:
     API_URL     — Base URL of the Hopwhistle API (default: http://127.0.0.1:3001)
     RECORDING_DIR — Directory for recordings (default: /recordings)
+    FREESWITCH_INTERNAL_KEY — REQUIRED. Shared secret proving to the API that
+                  this really is FreeSWITCH calling. Without it the API answers
+                  401 and no call routes. See docs/TENANT_ISOLATION_AUDIT.md.
+
+  ── Why the key is in the query string and not a header ──────────────────────
+
+  Because mod_curl cannot send request headers. Its syntax is
+    curl <url> [headers|json] [get|head|post [body]] [connect-timeout n] [timeout n]
+  where `headers` means "return the response headers", not "send these". There
+  is no request-header argument in any released version.
+
+  So the key goes in `?k=`, and FreeSWITCH logs the URLs it fetches, which means
+  the key ends up in FreeSWITCH's logs. That is why it is its own secret, used
+  for nothing but these five read-mostly endpoints, and why rotating it is
+  cheap. This script's own log lines redact it; mod_curl's do not.
+
+  The key is percent-encoded before it goes into the query. Generating it as
+  `openssl rand -hex 32` makes that a no-op, and the encoding is there so a key
+  generated some other way -- one containing a `&` or a `#` -- truncates
+  nothing and simply fails the comparison instead of silently sending half a
+  key and half a query.
+
+  It is strictly better than what it replaces, which was no authentication at
+  all on an endpoint reachable through nginx.
 ]]
 
 -- ── Configuration ───────────────────────────────────────────────────────────
 local API_URL      = os.getenv("API_URL") or "http://127.0.0.1:3001"
 local RECORDING_DIR = os.getenv("RECORDING_DIR") or "/recordings"
 local UPLOAD_SCRIPT = "/usr/share/freeswitch/scripts/upload-recording.sh"
+local INTERNAL_KEY = os.getenv("FREESWITCH_INTERNAL_KEY") or ""
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
 -- FS API handle for sofia_contact registration checks and the CDR post.
@@ -187,19 +212,41 @@ local function url_encode_plus(val)
     return string.gsub(val or "", "%+", "%%2B")
 end
 
+-- Full percent-encoding, for values that are not phone numbers. `url_encode_plus`
+-- above escapes only `+`, which is all a normalized E.164 needs; a shared secret
+-- may contain anything, and a `&` in one would otherwise end the parameter and
+-- start a new one.
+local function url_encode_component(val)
+    return (string.gsub(val or "", "[^%w%-%_%.%~]", function(c)
+        return string.format("%%%02X", string.byte(c))
+    end))
+end
+
 local encoded_did = url_encode_plus(did_normalized)
 local encoded_caller = url_encode_plus(caller_normalized)
+
+if INTERNAL_KEY == "" then
+    -- Fail loudly at the point of use rather than letting the API answer 401
+    -- and leaving whoever reads the log to work out why every call is dropping.
+    log("ERR", "FREESWITCH_INTERNAL_KEY is not set in the FreeSWITCH environment. "
+        .. "The API will refuse every lookup. Set it in the FreeSWITCH container "
+        .. "environment to the same value as the API's.")
+end
 
 local lookup_url = API_URL .. "/api/v1/freeswitch/lookup?did=" .. encoded_did
 if encoded_caller ~= "" and encoded_caller ~= "unknown" then
     lookup_url = lookup_url .. "&caller=" .. encoded_caller
 end
+lookup_url = lookup_url .. "&k=" .. url_encode_component(INTERNAL_KEY)
 
 -- Bounds are passed as mod_curl arguments. Setting `curl_connect_timeout` and
 -- `curl_timeout` as channel variables, as this did before, has no effect —
 -- mod_curl does not read them — which left an inbound call blocked on this
 -- lookup for as long as the API cared to take.
-log("INFO", "Looking up route: " .. lookup_url)
+-- Logged WITHOUT the key. FreeSWITCH's own mod_curl logging still records the
+-- full URL, which is the cost noted at the top of this file; there is no reason
+-- for this script to add a second copy.
+log("INFO", "Looking up route: " .. string.gsub(lookup_url, "([?&]k=)[^&]*", "%1REDACTED"))
 
 session:execute("curl", lookup_url .. " connect-timeout 3 timeout 15")
 
@@ -634,14 +681,14 @@ local cdr_json = string.format(
 )
 
 -- POST CDR to API
-local cdr_url = API_URL .. "/api/v1/freeswitch/cdr"
+local cdr_url = API_URL .. "/api/v1/freeswitch/cdr?k=" .. url_encode_component(INTERNAL_KEY)
 local cdr_cmd = string.format(
   "%s content-type application/json timeout 10 post '%s'",
   cdr_url,
   cdr_json
 )
 
-log("INFO", "Posting CDR to: " .. cdr_url)
+log("INFO", "Posting CDR to: " .. string.gsub(cdr_url, "([?&]k=)[^&]*", "%1REDACTED"))
 local cdr_response = api:execute("curl", cdr_cmd) or ""
 log("INFO", "CDR response: " .. cdr_response)
 

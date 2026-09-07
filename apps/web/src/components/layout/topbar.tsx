@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import * as React from 'react';
 
+import { TenantSwitcher } from '@/components/platform/tenant-switcher';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -63,6 +64,11 @@ export function Topbar() {
       <header className="flex h-12 shrink-0 items-center gap-3 border-b border-rule bg-surface px-4">
         <MobileNav />
         <h1 className="t-title min-w-0 flex-1 truncate text-ink">{title}</h1>
+
+        {/* NetEnroll staff only, and rendered on every page: an operator must
+            never be able to forget which agency's data they are looking at.
+            Renders nothing for an agency user. */}
+        <TenantSwitcher />
 
         <button
           type="button"

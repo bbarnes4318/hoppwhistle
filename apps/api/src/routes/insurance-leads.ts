@@ -11,7 +11,7 @@ import { spawn } from 'child_process';
 
 import { FastifyInstance, FastifyRequest } from 'fastify';
 
-import { getActingTenantId } from '../lib/tenant-context.js';
+import { getActingTenantId, sendTenantRefusal } from '../lib/tenant-context.js';
 
 
 /**
@@ -470,8 +470,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
   }>('/api/v1/insurance-leads', async (request, reply) => {
     const tenantId = getTenantId(request);
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const q = request.query;
@@ -553,8 +552,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
   }>('/api/v1/insurance-leads/delivery-report', async (request, reply) => {
     const tenantId = getTenantId(request);
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const q = request.query;
@@ -612,8 +610,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
   fastify.get('/api/v1/lead-lists', async (request, reply) => {
     const tenantId = getTenantId(request);
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const { getPrismaClient } = await import('../lib/prisma.js');
@@ -638,8 +635,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
   fastify.delete<{ Params: { id: string } }>('/api/v1/lead-lists/:id', async (request, reply) => {
     const tenantId = getTenantId(request);
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const { id } = request.params;
@@ -678,8 +674,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
   fastify.get('/api/v1/insurance-leads/stats', async (request, reply) => {
     const tenantId = getTenantId(request);
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const { getStats } = await import('../services/insurance-lead-service.js');
@@ -692,8 +687,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
   fastify.get<{ Params: { id: string } }>('/api/v1/insurance-leads/:id', async (request, reply) => {
     const tenantId = getTenantId(request);
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const { getLeadById } = await import('../services/insurance-lead-service.js');
@@ -717,8 +711,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
   }>('/api/v1/insurance-leads/:id', async (request, reply) => {
     const tenantId = getTenantId(request);
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const { updateLead } = await import('../services/insurance-lead-service.js');
@@ -742,8 +735,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
   }>('/api/v1/insurance-leads/:id/submissions/:submissionId/retry', async (request, reply) => {
     const tenantId = getTenantId(request);
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const { retrySubmission } = await import('../services/insurance-lead-service.js');
@@ -770,8 +762,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
   }>('/api/v1/insurance-leads/delivery/preflight', async (request, reply) => {
     const tenantId = getTenantId(request);
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const selector = parseDeliverySelector(request.body || {});
@@ -813,8 +804,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
   }>('/api/v1/insurance-leads/delivery/send', async (request, reply) => {
     const tenantId = getTenantId(request);
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const body = request.body || {};
@@ -860,8 +850,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
   }>('/api/v1/insurance-leads/:id/tasks', async (request, reply) => {
     const tenantId = getTenantId(request);
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const { getPrismaClient } = await import('../lib/prisma.js');
@@ -896,8 +885,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
   }>('/api/v1/insurance-leads/:id/tasks', async (request, reply) => {
     const tenantId = getTenantId(request);
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const { getPrismaClient } = await import('../lib/prisma.js');
@@ -955,8 +943,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
   }>('/api/v1/insurance-leads/:id/tasks/:taskId/complete', async (request, reply) => {
     const tenantId = getTenantId(request);
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const { getPrismaClient } = await import('../lib/prisma.js');
@@ -1005,8 +992,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
   }>('/api/v1/insurance-leads/:id/tasks/:taskId/cancel', async (request, reply) => {
     const tenantId = getTenantId(request);
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const { getPrismaClient } = await import('../lib/prisma.js');
@@ -1056,8 +1042,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
   }>('/api/v1/insurance-leads', async (request, reply) => {
     const tenantId = getTenantId(request);
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const { ids } = request.body;
@@ -1087,8 +1072,7 @@ export async function registerInsuranceLeadRoutes(fastify: FastifyInstance) {
   }>('/api/v1/insurance-leads/bulk', async (request, reply) => {
     const tenantId = getTenantId(request);
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const { leads } = request.body;

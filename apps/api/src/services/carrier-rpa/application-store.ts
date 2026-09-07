@@ -144,6 +144,39 @@ export const markAutomationCompleted = async (
   carrierApplicationNumber: string
 ): Promise<void> => {
   const prisma = getPrismaClient();
+  const now = new Date();
+
+  /*
+   * `submittedAt` is the timestamp the closing percentage attributes by, so it
+   * decides which business day an application is counted on and therefore which
+   * window prices the agency. Two properties, and they pull in opposite
+   * directions:
+   *
+   *   WRITE-ONCE. A retried automation run, or a redelivered completion, must
+   *   not move an application from the day it was actually submitted onto the
+   *   day the retry happened. That would move a submission across a
+   *   business-day boundary and change two different days' rates. So an
+   *   existing timestamp is carried forward rather than replaced.
+   *
+   *   NEVER SEPARATE FROM THE STATUS. This was briefly a second statement --
+   *   an `updateMany` guarded on `submittedAt: null` after the update below --
+   *   which reads well and is wrong here. The only caller
+   *   (`routes/automation.ts`) wraps this whole function in a try/catch that
+   *   logs and continues, so a failure on the second statement would leave the
+   *   row SUBMITTED with a null `submittedAt`: an application the agency
+   *   submitted, that the closing percentage never counts, with nothing on the
+   *   surface to say so. A silently uncounted application is a silently wrong
+   *   price.
+   *
+   * So it is one statement. The row is read first only to learn whether a
+   * timestamp already exists; SUBMITTED and `submittedAt` are then written
+   * together and fail together.
+   */
+  const existing = await prisma.insuranceCarrierApplication.findUnique({
+    where: { id: applicationId },
+    select: { submittedAt: true },
+  });
+
   await prisma.insuranceCarrierApplication.update({
     where: { id: applicationId },
     data: {
@@ -151,7 +184,10 @@ export const markAutomationCompleted = async (
       automationStatus: 'COMPLETED',
       status: 'SUBMITTED',
       automationError: null,
-      automationCompletedAt: new Date(),
+      automationCompletedAt: now,
+      // The carrier application number is worth refreshing on a re-run. The
+      // submission timestamp is not.
+      submittedAt: existing?.submittedAt ?? now,
     },
   });
 };

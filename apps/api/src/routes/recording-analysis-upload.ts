@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 
 import { FastifyInstance } from 'fastify';
 
+import { getActingTenantId, sendTenantRefusal } from '../lib/tenant-context.js';
 import { getStorageService } from '../services/storage.js';
 
 /**
@@ -35,11 +36,9 @@ export async function registerRecordingAnalysisUploadRoutes(fastify: FastifyInst
       contentType?: string;
     };
   }>('/api/v1/recording-analysis/presign', async (request, reply) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-    const tenantId = (request as any).user?.tenantId as string | undefined;
+    const tenantId = getActingTenantId(request);
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const { filename, contentType } = request.body ?? {};

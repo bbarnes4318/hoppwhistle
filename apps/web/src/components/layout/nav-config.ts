@@ -4,6 +4,7 @@ import {
   Bot,
   Disc3,
   FileText,
+  Gauge,
   GitBranch,
   Globe,
   Headphones,
@@ -87,6 +88,9 @@ export const ADMIN_NAV: NavGroup[] = [
   {
     label: 'Money',
     items: [
+      // What the agency is paid per submitted application, and the measurements
+      // behind it. Under Money because it is a price, not a report.
+      { name: 'Rate', href: '/rating', icon: Gauge },
       { name: 'Billing', href: '/billing', icon: Receipt },
       // No admin payouts page exists yet; /admin/payroll is staff pay, which is
       // a different thing and lives under Admin below.

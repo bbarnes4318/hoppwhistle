@@ -176,6 +176,11 @@ async function buildServer() {
   // banner reads. See lib/platform-admin.ts.
   const { registerPlatformRoutes } = await import('./routes/platform.js');
   await server.register(registerPlatformRoutes);
+
+  // Phase 2: measurement and the daily rate engine. Agency-scoped reads plus
+  // the platform-scoped curve, review flags and manual run.
+  const { registerRatingRoutes } = await import('./routes/rating.js');
+  await server.register(registerRatingRoutes);
   // Single aggregate endpoint powering the LiveStrip for every role.
   await server.register(registerLiveMetricsRoutes);
 

@@ -7,7 +7,7 @@ import { FastifyInstance, FastifyRequest } from 'fastify';
 import { PrismaClient, PolicyStatus, PolicyType, RelationshipType } from '@prisma/client';
 import { z } from 'zod';
 
-import { getActingTenantId } from '../lib/tenant-context.js';
+import { getActingTenantId, replyTenantRefusal } from '../lib/tenant-context.js';
 
 const prisma = new PrismaClient();
 
@@ -112,7 +112,7 @@ export async function registerRetentionRoutes(fastify: FastifyInstance): Promise
   fastify.get('/api/v1/retention', async (request: FastifyRequest, reply) => {
     const tenantId = getTenantId(request);
     if (!tenantId) {
-      return reply.status(401).send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+      return replyTenantRefusal(request, reply);
     }
 
     try {
@@ -205,7 +205,7 @@ export async function registerRetentionRoutes(fastify: FastifyInstance): Promise
   fastify.get('/api/v1/retention/:id', async (request: FastifyRequest, reply) => {
     const tenantId = getTenantId(request);
     if (!tenantId) {
-      return reply.status(401).send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+      return replyTenantRefusal(request, reply);
     }
 
     try {
@@ -237,7 +237,7 @@ export async function registerRetentionRoutes(fastify: FastifyInstance): Promise
   fastify.post('/api/v1/retention', async (request: FastifyRequest, reply) => {
     const tenantId = getTenantId(request);
     if (!tenantId) {
-      return reply.status(401).send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+      return replyTenantRefusal(request, reply);
     }
 
     try {
@@ -330,7 +330,7 @@ export async function registerRetentionRoutes(fastify: FastifyInstance): Promise
   fastify.put('/api/v1/retention/:id', async (request: FastifyRequest, reply) => {
     const tenantId = getTenantId(request);
     if (!tenantId) {
-      return reply.status(401).send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+      return replyTenantRefusal(request, reply);
     }
 
     try {
@@ -402,7 +402,7 @@ export async function registerRetentionRoutes(fastify: FastifyInstance): Promise
   fastify.post('/api/v1/retention/:id/log-call', async (request: FastifyRequest, reply) => {
     const tenantId = getTenantId(request);
     if (!tenantId) {
-      return reply.status(401).send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+      return replyTenantRefusal(request, reply);
     }
 
     try {
@@ -447,7 +447,7 @@ export async function registerRetentionRoutes(fastify: FastifyInstance): Promise
   fastify.post('/api/v1/retention/:id/status', async (request: FastifyRequest, reply) => {
     const tenantId = getTenantId(request);
     if (!tenantId) {
-      return reply.status(401).send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+      return replyTenantRefusal(request, reply);
     }
 
     try {
@@ -489,7 +489,7 @@ export async function registerRetentionRoutes(fastify: FastifyInstance): Promise
   fastify.post('/api/v1/retention/:id/onboarding-attempt', async (request: FastifyRequest, reply) => {
     const tenantId = getTenantId(request);
     if (!tenantId) {
-      return reply.status(401).send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+      return replyTenantRefusal(request, reply);
     }
 
     try {
@@ -520,7 +520,7 @@ export async function registerRetentionRoutes(fastify: FastifyInstance): Promise
   fastify.get('/api/v1/retention/stats', async (request: FastifyRequest, reply) => {
     const tenantId = getTenantId(request);
     if (!tenantId) {
-      return reply.status(401).send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+      return replyTenantRefusal(request, reply);
     }
 
     try {

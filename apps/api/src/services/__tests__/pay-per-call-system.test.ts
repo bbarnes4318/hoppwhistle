@@ -810,11 +810,19 @@ import { auctionService } from '../auction-service.js';
 import { BillingService } from '../billing-service.js';
 import { BuyerBillingService } from '../buyer-billing-service.js';
 import { postService } from '../post-service.js';
+import {
+  internalKeyHeaders,
+  useTestInternalKey,
+} from '../../__tests__/helpers/internal-key.js';
 
 describe('Pay-Per-Call System End-to-End Integration Suite', () => {
   let app: any;
   const billingService = new BillingService();
   const buyerBillingService = new BuyerBillingService();
+
+  // This suite drives `/api/v1/freeswitch/*`, which is now behind the
+  // shared-secret guard. Authenticate the caller; never relax the guard.
+  useTestInternalKey();
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -1103,6 +1111,7 @@ describe('Pay-Per-Call System End-to-End Integration Suite', () => {
     const lookupResponse = await app.inject({
       method: 'GET',
       url: '/api/v1/freeswitch/lookup',
+      headers: internalKeyHeaders,
       query: { did: '+18005550200', caller: '+15556667777' },
     });
     expect(lookupResponse.statusCode).toBe(200);
@@ -1114,6 +1123,7 @@ describe('Pay-Per-Call System End-to-End Integration Suite', () => {
     const cdrResponse = await app.inject({
       method: 'POST',
       url: '/api/v1/freeswitch/cdr',
+      headers: internalKeyHeaders,
       body: {
         callId: 'static-call-uuid-1',
         routeId: 'route-static',
@@ -1202,6 +1212,7 @@ describe('Pay-Per-Call System End-to-End Integration Suite', () => {
     const lookupResponse = await app.inject({
       method: 'GET',
       url: '/api/v1/freeswitch/lookup',
+      headers: internalKeyHeaders,
       query: { did: '+18005550100', caller: '+15554443333' },
     });
     expect(lookupResponse.statusCode).toBe(200);
@@ -1213,6 +1224,7 @@ describe('Pay-Per-Call System End-to-End Integration Suite', () => {
     const cdrResponse = await app.inject({
       method: 'POST',
       url: '/api/v1/freeswitch/cdr',
+      headers: internalKeyHeaders,
       body: {
         callId: 'rtb-call-uuid-1',
         routeId: `rtb-${pingResult.ping_id}`,

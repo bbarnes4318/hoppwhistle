@@ -24,6 +24,13 @@
 - `FREESWITCH_ESL_HOST` - Your FreeSWITCH host
 - `FREESWITCH_ESL_PORT` - FreeSWITCH ESL port (default: `8021`)
 - `FREESWITCH_ESL_PASSWORD` - FreeSWITCH ESL password
+- `FREESWITCH_INTERNAL_KEY` - **Required.** Shared secret the FreeSWITCH
+  callbacks (`/api/v1/freeswitch/*`) must present. The guard fails closed, so
+  without it no call routes; `scripts/deploy.sh` refuses to deploy without it.
+  The SAME value must be set on both the `api` and `freeswitch` containers.
+  Generate with `openssl rand -hex 32`. It travels as a query parameter from
+  mod_curl callers, which cannot send headers, so FreeSWITCH logs it — it is its
+  own secret, used for nothing else, and cheap to rotate.
 - `FRACTEL_DEFAULT_CALLER_ID` - Default fallback FracTEL caller ID DID (e.g. `12816991120`)
 
 #### Optional:

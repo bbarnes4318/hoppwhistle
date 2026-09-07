@@ -140,7 +140,7 @@
         <!-- Save the clean 10-digit number to clean_dest -->
         <action application="set" data="clean_dest=$1" inline="true"/>
         <!-- Lookup via HTTP GET API using mod_curl -->
-        <action application="set" data="lookup_response=${curl(http://api:3001/api/v1/freeswitch/lookup?did=%2b1$1 connect-timeout 2 timeout 5)}" inline="true"/>
+        <action application="set" data="lookup_response=${curl(http://api:3001/api/v1/freeswitch/lookup?did=%2b1$1&amp;k=$${internal_key} connect-timeout 2 timeout 5)}" inline="true"/>
         <!-- Extract the destination extension if it's a 4-digit number -->
         <action application="set" data="local_ext=${regex(${lookup_response}|&quot;destination&quot;:&quot;(\d{4})&quot;|%1)}" inline="true"/>
         <action application="log" data="INFO [OUTBOUND-LOOKUP] response=${lookup_response} local_ext=${local_ext}"/>
@@ -175,7 +175,7 @@
              variables, which mod_curl does not read — so the call was in fact
              unbounded and this comment was describing a guard that did not
              exist. Every blocking curl in this file now passes them inline. -->
-        <action application="set" data="carrier_bridge=${curl(http://api:3001/api/v1/freeswitch/carrier-route?type=${hopwhistle_route_type}&amp;dest=$1&amp;cid=${clean_caller_id}&amp;cid_name=Hopwhistle connect-timeout 2 timeout 4)}" inline="true"/>
+        <action application="set" data="carrier_bridge=${curl(http://api:3001/api/v1/freeswitch/carrier-route?type=${hopwhistle_route_type}&amp;dest=$1&amp;cid=${clean_caller_id}&amp;cid_name=Hopwhistle&amp;k=$${internal_key} connect-timeout 2 timeout 4)}" inline="true"/>
       </condition>
 
       <!-- If the API did not return a usable chain — down, timed out, or
@@ -221,7 +221,7 @@
              carries `{}`, `[]`, `,` and `|`, none of which are legal raw in a
              query string. Interpolated bare, curl rejects the URL outright and
              the outcome that demotes a failing carrier is never reported. -->
-        <anti-action application="set" data="carrier_report=${curl(http://api:3001/api/v1/freeswitch/carrier-result?chain=${url_encode(${carrier_bridge})}&amp;cause=${originate_disposition}&amp;answered=false connect-timeout 2 timeout 4)}" inline="true"/>
+        <anti-action application="set" data="carrier_report=${curl(http://api:3001/api/v1/freeswitch/carrier-result?chain=${url_encode(${carrier_bridge})}&amp;cause=${originate_disposition}&amp;answered=false&amp;k=$${internal_key} connect-timeout 2 timeout 4)}" inline="true"/>
         <anti-action application="hangup" data="NORMAL_CLEARING"/>
       </condition>
     </extension>

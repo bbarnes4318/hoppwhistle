@@ -8,7 +8,7 @@
 import { FastifyInstance, FastifyRequest } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
-import { getActingTenantId } from '../lib/tenant-context.js';
+import { getActingTenantId, sendTenantRefusal } from '../lib/tenant-context.js';
 
 
 /**
@@ -35,8 +35,7 @@ export async function registerCallCenterRoutes(fastify: FastifyInstance) {
   }>('/api/v1/call-center/customer-lookup', async (request, reply) => {
     const tenantId = getTenantId(request);
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const { phone } = request.query;

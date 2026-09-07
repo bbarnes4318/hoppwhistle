@@ -13,7 +13,7 @@ import { logger } from '../lib/logger.js';
 import { getPrismaClient } from '../lib/prisma.js';
 import { AuthenticatedUser } from '../middleware/auth.js';
 import { getAnveoDIDService } from '../services/provisioning/anveo-did-service.js';
-import { getActingTenantId } from '../lib/tenant-context.js';
+import { getActingTenantId, sendTenantRefusal } from '../lib/tenant-context.js';
 
 type AuthRequest = FastifyRequest & { user?: AuthenticatedUser };
 
@@ -33,8 +33,7 @@ export async function registerAnveoProcurementRoutes(fastify: FastifyInstance): 
     const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     try {
@@ -71,8 +70,7 @@ export async function registerAnveoProcurementRoutes(fastify: FastifyInstance): 
     const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     try {
@@ -114,8 +112,7 @@ export async function registerAnveoProcurementRoutes(fastify: FastifyInstance): 
     const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     try {
@@ -170,8 +167,7 @@ export async function registerAnveoProcurementRoutes(fastify: FastifyInstance): 
     const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const { areaId, ratePlanId, didType = 'GEOGRAPHIC', title } = request.body;
@@ -399,8 +395,7 @@ export async function registerAnveoProcurementRoutes(fastify: FastifyInstance): 
     const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     try {
@@ -474,8 +469,7 @@ export async function registerAnveoProcurementRoutes(fastify: FastifyInstance): 
     const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const { numberId } = request.params;

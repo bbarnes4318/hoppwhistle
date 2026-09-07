@@ -2,6 +2,7 @@ import type { RoleName } from '@prisma/client';
 import { FastifyRequest, FastifyReply } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
+import { describeTenantRefusal, getActingTenantId } from '../lib/tenant-context.js';
 import { auditLog } from '../services/audit.js';
 
 export type Permission =
@@ -241,7 +242,32 @@ async function getApiKeyScopes(tenantId: string, apiKeyId: string): Promise<Perm
 }
 
 /**
- * Check if user has required permission
+ * Check if user has required permission.
+ *
+ * ── Platform staff ───────────────────────────────────────────────────────────
+ *
+ * A NetEnroll operator inside an agency holds no `UserRole` row there -- the
+ * capability lives outside the tenant dimension by design, and entering an
+ * agency writes no grants. So every route gated on a per-tenant permission
+ * refused them, which made the acting-tenant switch a button that opened half
+ * the product. Phase 1b recorded that as a known limitation and left the policy
+ * decision open; the decision is that platform admins have full access
+ * everywhere, so the check is widened here.
+ *
+ * The widening keys off the `PlatformAdmin` capability and NOTHING else. Not a
+ * role -- roles are per-tenant and every agency has an OWNER. Not a header,
+ * query parameter or body field -- those are exactly what Phase 1 removed, and
+ * re-adding one for the most privileged accounts is the worst possible place to
+ * start. `isPlatformAdmin` is written onto the principal by
+ * `middleware/auth.ts` from a row keyed on the authenticated user id, and a
+ * user with no row sees no change from any of this.
+ *
+ * It is still bounded by the acting tenant: an operator in the cross-agency
+ * view has no tenant, so the queries behind these routes have nothing to scope
+ * to, and `lib/tenant-context.ts` refuses them there. Granting the permission
+ * without a tenant would not widen what they can read -- it would only turn a
+ * clear refusal into an empty page -- so this returns false and
+ * `requirePermission` below answers with NO_ACTING_TENANT instead.
  */
 export async function checkPermission(
   request: FastifyRequest,
@@ -253,12 +279,17 @@ export async function checkPermission(
   }
 
   // Permissions are per-tenant: they are read from role rows inside one agency.
-  // A NetEnroll operator in the cross-agency view has no acting tenant and so
-  // holds no per-tenant permission -- correctly, because the platform surfaces
-  // are gated on `requirePlatformAdmin`, not on these. Refusing here rather
-  // than looking permissions up under `undefined` keeps that explicit.
+  // An operator in the cross-agency view has no acting tenant and so holds no
+  // per-tenant permission. Refusing here rather than looking permissions up
+  // under `undefined` keeps that explicit.
   if (!user.tenantId) {
     return false;
+  }
+
+  // NetEnroll staff, inside an agency. See the note above: the capability, and
+  // only the capability.
+  if (user.isPlatformAdmin === true) {
+    return true;
   }
 
   // API key authentication
@@ -277,6 +308,25 @@ export async function checkPermission(
 }
 
 /**
+ * Refuse a platform operator who has not entered an agency, distinctly.
+ *
+ * Returns true when it has answered the request. Every per-tenant gate below
+ * calls this before deciding anything, so "you are in the cross-agency view"
+ * never reaches a client as 401 (your session is dead) or 403 (you may not
+ * have this). See `lib/tenant-context.ts` for why those two answers cost the
+ * owner access to production.
+ */
+function refuseWithoutActingTenant(request: FastifyRequest, reply: FastifyReply): boolean {
+  if (getActingTenantId(request)) return false;
+
+  const refusal = describeTenantRefusal(request);
+  if (refusal.statusCode !== 409) return false;
+
+  void reply.code(refusal.statusCode).send({ error: refusal.error });
+  return true;
+}
+
+/**
  * Authorization middleware factory
  */
 export function requirePermission(requiredPermission: Permission) {
@@ -292,6 +342,12 @@ export function requirePermission(requiredPermission: Permission) {
       });
       return;
     }
+
+    // A platform operator in the cross-agency view is not "denied": they have
+    // not chosen an agency yet. Saying 403 here would be as misleading as the
+    // 401 that used to come out of tenant resolution, and the web client would
+    // bounce them to a page that cannot help.
+    if (refuseWithoutActingTenant(request, reply)) return;
 
     const hasPermission = await checkPermission(request, requiredPermission);
 
@@ -342,6 +398,8 @@ export function requireAnyPermission(...permissions: Permission[]) {
       return;
     }
 
+    if (refuseWithoutActingTenant(request, reply)) return;
+
     for (const permission of permissions) {
       const hasPermission = await checkPermission(request, permission);
       if (hasPermission) {
@@ -388,6 +446,18 @@ export function requireRole(...roles: RoleName[]) {
           message: 'User authentication required',
         },
       });
+      return;
+    }
+
+    if (refuseWithoutActingTenant(request, reply)) return;
+
+    // NetEnroll staff inside an agency. Same rule as checkPermission: the
+    // capability alone, never a role. Without this the comparison two lines
+    // below rejects them outright -- an operator's own `User.tenantId` is null
+    // while their acting tenant is the agency they entered, so
+    // `userWithRoles.tenantId !== user.tenantId` is true for every platform
+    // admin who has entered anywhere.
+    if (user.isPlatformAdmin === true && user.tenantId) {
       return;
     }
 

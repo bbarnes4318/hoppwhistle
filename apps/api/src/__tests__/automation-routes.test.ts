@@ -7,6 +7,12 @@ const mockPrisma = {
   insuranceCarrierApplication: {
     create: vi.fn(),
     update: vi.fn(),
+    // markAutomationCompleted reads the row to learn whether it already has a
+    // `submittedAt` before writing one. Without this on the mock the read
+    // throws, the caller's try/catch swallows it, and the completion
+    // assertions below still pass while the write never happened -- which is
+    // exactly how the missing-timestamp path went unnoticed.
+    findUnique: vi.fn(),
   },
   apiKey: {
     findUnique: vi.fn(),
@@ -68,6 +74,7 @@ describe('Automation routes (American Amicable RPA)', () => {
     vi.clearAllMocks();
     mockPrisma.insuranceCarrierApplication.create.mockResolvedValue({ id: 'app-1' });
     mockPrisma.insuranceCarrierApplication.update.mockResolvedValue({ id: 'app-1' });
+    mockPrisma.insuranceCarrierApplication.findUnique.mockResolvedValue({ submittedAt: null });
     mockRunAutomation.mockResolvedValue({
       success: true,
       applicationNumber: 'M001234567',
@@ -190,6 +197,38 @@ describe('Automation routes (American Amicable RPA)', () => {
       expect(completedCall).toBeDefined();
       expect(completedCall![0].where).toEqual({ id: 'app-1' });
       expect(completedCall![0].data.carrierApplicationNumber).toBe('M001234567');
+
+      // SUBMITTED and `submittedAt` are written together. An application the
+      // agency submitted with no submission timestamp is one the closing
+      // percentage never counts, and nothing on the surface would say so.
+      expect(completedCall![0].data.status).toBe('SUBMITTED');
+      expect(completedCall![0].data.submittedAt).toBeInstanceOf(Date);
+    });
+  });
+
+  it('carries an existing submission timestamp forward on a re-run', async () => {
+    // A retried automation run must not move an application from the day it was
+    // actually submitted onto the day the retry happened: that would move it
+    // across a business-day boundary and change two different days' rates.
+    const firstSubmission = new Date('2026-09-07T18:00:00.000Z');
+    mockPrisma.insuranceCarrierApplication.findUnique.mockResolvedValue({
+      submittedAt: firstSubmission,
+    });
+
+    const app = await buildApp();
+    await app.inject({
+      method: 'POST',
+      url: '/api/automation/run-carrier-app',
+      headers: TENANT_HEADER,
+      payload: validPayload,
+    });
+
+    await vi.waitFor(() => {
+      const completedCall = mockPrisma.insuranceCarrierApplication.update.mock.calls.find(
+        call => call[0]?.data?.automationStatus === 'COMPLETED'
+      );
+      expect(completedCall).toBeDefined();
+      expect(completedCall![0].data.submittedAt).toEqual(firstSubmission);
     });
   });
 

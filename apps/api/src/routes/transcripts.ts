@@ -1,6 +1,8 @@
 import { FastifyInstance } from 'fastify';
 import { Pool } from 'pg';
 
+import { getActingTenantId, sendTenantRefusal } from '../lib/tenant-context.js';
+
 // Inline repository to avoid path issues
 class TranscriptRepository {
   private pool: Pool;
@@ -58,10 +60,9 @@ export async function registerTranscriptRoutes(fastify: FastifyInstance) {
   fastify.get<{ Params: { callId: string } }>(
     '/api/v1/calls/:callId/transcript',
     async (request, reply) => {
-      const tenantId = (request as any).user?.tenantId;
+      const tenantId = getActingTenantId(request);
       if (!tenantId) {
-        reply.code(401);
-        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+        return sendTenantRefusal(request, reply);
       }
 
       try {
@@ -118,10 +119,9 @@ export async function registerTranscriptRoutes(fastify: FastifyInstance) {
 
   // List transcripts with search
   fastify.get('/api/v1/transcripts', async (request, reply) => {
-    const tenantId = (request as any).user?.tenantId;
+    const tenantId = getActingTenantId(request);
     if (!tenantId) {
-      reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const { q, page = 1, limit = 20 } = request.query as {
