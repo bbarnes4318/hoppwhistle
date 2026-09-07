@@ -8,6 +8,22 @@ const API_URL =
     ? window.location.origin
     : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
+/**
+ * The API's answer to "you are authenticated, you are NetEnroll staff, and you
+ * have entered no agency."
+ *
+ * Distinct from an authentication failure on purpose: signing in again does
+ * nothing for it, and picking an agency fixes it. Anything rendering agency
+ * data should show the cross-agency view and a prompt to choose, never a login
+ * page. See `apps/api/src/lib/tenant-context.ts`.
+ */
+export const NO_ACTING_TENANT = 'NO_ACTING_TENANT';
+
+/** Whether a failed response means "pick an agency" rather than "sign in". */
+export function isNoActingTenant(response: { error?: { code: string } }): boolean {
+  return response.error?.code === NO_ACTING_TENANT;
+}
+
 export interface ApiResponse<T> {
   data?: T;
   error?: {
@@ -139,17 +155,35 @@ class ApiClient {
       }
 
       if (!response.ok) {
-        // Auto-logout on 401 Unauthorized - clear invalid token and redirect to login
-        if (response.status === 401) {
+        const code: string = data?.error?.code || 'UNKNOWN_ERROR';
+
+        /*
+         * The login redirect, and the one condition it must never fire on.
+         *
+         * A platform admin who has entered no agency is not signed out. Until
+         * Phase 2 the API answered them with 401 on every agency-scoped route,
+         * this branch cleared their token and sent them to /login, the login
+         * page loaded the app, the app called an agency-scoped route, and the
+         * whole thing went round again — six requests in a second, ended only
+         * by deleting a row from the production database by hand.
+         *
+         * The server now says NO_ACTING_TENANT (409) for that case, so it does
+         * not reach this branch at all. The code is checked here as well
+         * because this is the line that clears somebody's session, and it
+         * should be impossible to reintroduce the loop by changing a status
+         * code somewhere else.
+         */
+        if (response.status === 401 && code !== NO_ACTING_TENANT) {
           this.clearToken();
           // Only redirect if we're in a browser and not already on login page
           if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
             window.location.href = '/login';
           }
         }
+
         return {
           error: {
-            code: data?.error?.code || 'UNKNOWN_ERROR',
+            code,
             message: data?.error?.message || 'An error occurred',
           },
         };

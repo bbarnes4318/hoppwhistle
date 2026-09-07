@@ -8,7 +8,9 @@ import { LiveStripMount } from '@/components/layout/live-strip-mount';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
 import { AgentPhonePanel, GlobalDispositionModal, PhoneProvider } from '@/components/phone';
+import { CrossAgencyPrompt } from '@/components/platform/cross-agency-prompt';
 import { useAuth } from '@/hooks/use-auth';
+import { usePlatformContext } from '@/hooks/use-platform-context';
 import { getRedirectPath } from '@/lib/roles';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }): JSX.Element {
@@ -23,6 +25,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     loading: authLoading,
   } = useAuth();
 
+  /*
+   * NetEnroll staff, and the agency they are inside.
+   *
+   * A platform admin with no agency selected used to be sent to /login by the
+   * API client, because every agency-scoped route answered 401 and the client
+   * read that as a dead session. The API now distinguishes the two conditions;
+   * this is the other half — the operator lands on the cross-agency view with a
+   * prompt to pick an agency instead of on a page that cannot load.
+   */
+  const platform = usePlatformContext();
+
   useEffect(() => {
     if (authLoading) return;
 
@@ -30,6 +43,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       router.replace('/login');
       return;
     }
+
+    // A platform operator holds no agency roles in the cross-agency view, so
+    // the role-based redirects below have nothing to say about them. Leaving
+    // them to fall through would send them to an agency home page that cannot
+    // load.
+    if (platform.isPlatformAdmin) return;
 
     const path = pathname || '';
     const home = getRedirectPath(userRoles);
@@ -58,7 +77,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     ) {
       router.replace('/dashboard');
     }
-  }, [user, userRoles, isPublisherOnly, isBuyerOnly, isAgentOnly, authLoading, pathname, router]);
+  }, [
+    user,
+    userRoles,
+    isPublisherOnly,
+    isBuyerOnly,
+    isAgentOnly,
+    authLoading,
+    pathname,
+    router,
+    platform.isPlatformAdmin,
+  ]);
+
+  /*
+   * Which pages an operator can use without having entered an agency.
+   *
+   * Everything under this layout renders one agency's data, with two
+   * exceptions: /settings is about the signed-in person, and /admin is the
+   * platform console. Anything else gets the prompt rather than an empty table
+   * or a spinner that never resolves.
+   */
+  const worksWithoutAgency =
+    (pathname || '').startsWith('/settings') || (pathname || '').startsWith('/admin');
+
+  const needsAgency = platform.needsAgency && !worksWithoutAgency;
 
   // Check if we're on the call center page (fullscreen mode)
   const isCallCenterPage = pathname?.startsWith('/call-center');
@@ -108,7 +150,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <LiveStripMount />
           </ThemeScope>
           <main className="flex-1 bg-background flex flex-col min-h-0 overflow-y-auto">
-            {children}
+            {needsAgency ? <CrossAgencyPrompt /> : children}
           </main>
           {/* Footer removed - legal links accessible via Settings page */}
         </div>
