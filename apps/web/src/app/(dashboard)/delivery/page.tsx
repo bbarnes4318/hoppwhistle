@@ -7,10 +7,11 @@ import {
   Gauge,
   Loader2,
   PauseCircle,
+  RefreshCw,
   Users,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import { CompactPageHeader, CompactPageShell } from '@/components/layout/compact-layout';
 import { Badge } from '@/components/ui/badge';
@@ -24,6 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { useLivePoll } from '@/hooks/use-live-poll';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
@@ -69,6 +71,7 @@ interface DeliveryToday {
   enrolled: boolean;
   chargesEnabled: boolean;
   callsRouted: number;
+  callsInProgress: number;
   callsAnswered: number;
   applicationsSubmitted: number;
   todayClosingPct: number | null;
@@ -103,21 +106,48 @@ interface AgentRow {
   applications: number;
   closingPct: number | null;
   talkTimeSeconds: number;
+  /** Seconds on the queue today. Null when nothing was recorded for the day. */
+  availableSeconds: number | null;
+  statusSince: string | null;
   hoursWorked: number | null;
   occupancyPct: number | null;
   currentStatus: string;
 }
 
-type SortKey = 'closingPct' | 'callsTaken' | 'applications' | 'talkTimeSeconds' | 'name';
+interface AgentBreakdown {
+  agencyClosingPct: number | null;
+  agents: AgentRow[];
+}
+
+type SortKey =
+  | 'closingPct'
+  | 'callsTaken'
+  | 'applications'
+  | 'talkTimeSeconds'
+  | 'availableSeconds'
+  | 'name';
 
 /** A percentage, or an em dash. Never a fabricated 0%. */
 function pct(value: number | null): string {
   return value === null ? '—' : `${value.toFixed(2)}%`;
 }
 
-/** Whole dollars, or an em dash. Under review there is no rate, not a $0 one. */
+/**
+ * Dollars to the cent, or an em dash. Under review there is no rate, not a $0.
+ *
+ * Two decimal places because that is what the server stores and what the
+ * settlement will debit. This rounded to whole dollars, so an overrun of
+ * $2,948.50 read as $2,949 here and $2,948.50 on the bank statement -- a
+ * fifty-cent discrepancy between the screen an agency checks and the charge
+ * they are checking it against.
+ */
 function dollars(value: number | null): string {
-  return value === null ? '—' : `$${Math.round(value).toLocaleString()}`;
+  return value === null
+    ? '—'
+    : `$${value.toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}`;
 }
 
 function duration(seconds: number): string {
@@ -127,34 +157,58 @@ function duration(seconds: number): string {
   return h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
+/**
+ * Time on the queue, or an em dash.
+ *
+ * Null means no status transitions were recorded for that agent on that day,
+ * which is a different fact from "was never available". Presence was held only
+ * in Redis before Phase 4 -- one key per agent, overwritten on every change --
+ * so days before it have nothing to read. Rendering that as 0m would put a
+ * coaching decision on a number nobody recorded.
+ */
+function available(seconds: number | null): string {
+  return seconds === null ? '—' : duration(seconds);
+}
+
 export default function DeliveryPage(): JSX.Element {
   const [today, setToday] = useState<DeliveryToday | null>(null);
   const [agents, setAgents] = useState<AgentRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [agencyClosingPct, setAgencyClosingPct] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>('closingPct');
-  const [sortAsc, setSortAsc] = useState(false);
+  /*
+   * Ascending, so the agents dragging the agency's rate are at the top.
+   *
+   * This defaulted to descending, which put the best closers first. That is a
+   * leaderboard, and this is a work list: the screen exists so a principal can
+   * find who to coach or pull off the queue, and burying them under the top
+   * performers is the opposite of what it is for.
+   */
+  const [sortAsc, setSortAsc] = useState(true);
 
   const load = useCallback(async () => {
     const [todayResponse, agentsResponse] = await Promise.all([
       apiClient.get<DeliveryToday>('/api/v1/delivery/today'),
-      apiClient.get<{ agents: AgentRow[] }>('/api/v1/delivery/agents'),
+      apiClient.get<AgentBreakdown>('/api/v1/delivery/agents'),
     ]);
 
     setError(todayResponse.error ? todayResponse.error.message : null);
     setToday(todayResponse.data ?? null);
     setAgents(agentsResponse.data?.agents ?? []);
-    setLoading(false);
+    // The agency's own figure, served with the rows. Not summed from them: it
+    // includes calls no agent is attributed on, so a client-side sum would give
+    // a different number from the one the agency is priced on.
+    setAgencyClosingPct(agentsResponse.data?.agencyClosingPct ?? null);
   }, []);
 
-  useEffect(() => {
-    void load();
-    // The panel is live: an agency at its ceiling wants to know within the
-    // minute, not on a refresh. Thirty seconds is well inside the rate the
-    // numbers actually move at, and every figure is server-computed.
-    const timer = setInterval(() => void load(), 30_000);
-    return () => clearInterval(timer);
-  }, [load]);
+  /*
+   * Live, but only while somebody is looking. See `useLivePoll`: a hidden tab
+   * stops polling and refreshes the moment it comes back, and the interval is
+   * jittered so the tabs a floor opened together do not stay in lockstep. At 45
+   * agents with the panel open all day that is the difference between load that
+   * scales with tabs open and load that scales with tabs being read.
+   */
+  const { loading, refresh } = useLivePoll(load, { intervalMs: 30_000 });
 
   const sortedAgents = useMemo(() => {
     const rows = [...agents];
@@ -165,8 +219,8 @@ export default function DeliveryPage(): JSX.Element {
       // Nulls last in both directions: an agent who took no calls has no
       // percentage, and a null at the top of a "who needs coaching" list reads
       // as a finding.
-      const av = a[sortKey];
-      const bv = b[sortKey];
+      const av: number | null = a[sortKey];
+      const bv: number | null = b[sortKey];
       if (av === null && bv === null) return 0;
       if (av === null) return 1;
       if (bv === null) return -1;
@@ -181,7 +235,9 @@ export default function DeliveryPage(): JSX.Element {
       return;
     }
     setSortKey(key);
-    setSortAsc(key === 'name');
+    // Closing percentage and name read best ascending -- the agents who need
+    // attention, and A first. Counts read best descending: the busiest first.
+    setSortAsc(key === 'name' || key === 'closingPct');
   }
 
   function sortIcon(key: SortKey): JSX.Element | null {
@@ -230,6 +286,64 @@ export default function DeliveryPage(): JSX.Element {
           <Badge variant="secondary">delivering</Badge>
         </CompactPageHeader>
 
+        {/*
+          Operational figures only. These are true whether or not an agency is
+          in the billing system, and a principal running a floor needs them.
+        */}
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <Card>
+            <CardHeader className="pb-1">
+              <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                Calls today
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-3xl font-bold tabular-nums">{today.callsAnswered}</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                answered by an agent · {today.callsRouted} routed
+              </p>
+              <p className="mt-2 flex items-center gap-1.5 text-xs font-medium">
+                <span
+                  className={cn(
+                    'inline-block h-2 w-2 rounded-full',
+                    today.callsInProgress > 0 ? 'bg-emerald-500' : 'bg-muted-foreground/40'
+                  )}
+                />
+                <span className="tabular-nums">{today.callsInProgress}</span>
+                <span className="font-normal text-muted-foreground">
+                  {today.callsInProgress === 1 ? 'call in progress now' : 'calls in progress now'}
+                </span>
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-1">
+              <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                Applications today
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-3xl font-bold tabular-nums">{today.applicationsSubmitted}</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">submitted today</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-1">
+              <CardTitle className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                Today so far
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-3xl font-bold tabular-nums">{pct(today.todayClosingPct)}</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                applications as a share of answered calls
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
         <Card>
           <CardContent className="pt-6">
             <p className="text-sm font-medium">Billing is not enabled for this agency.</p>
@@ -262,6 +376,10 @@ export default function DeliveryPage(): JSX.Element {
           <Badge variant={today.delivering ? 'secondary' : 'destructive'}>
             {today.delivering ? 'delivering' : 'paused'}
           </Badge>
+          <Button variant="outline" size="sm" onClick={refresh}>
+            <RefreshCw className="mr-2 h-3 w-3" />
+            Refresh
+          </Button>
           <Link href="/delivery/settlements">
             <Button variant="outline" size="sm">
               Settlement history
@@ -329,6 +447,23 @@ export default function DeliveryPage(): JSX.Element {
             </p>
             <p className="mt-0.5 text-[11px] text-muted-foreground">
               answered is the delivered-call count your rate is measured on
+            </p>
+            {/*
+              The only figure on this panel about this instant rather than the
+              day. A principal watching the queue wants to know whether the
+              floor is busy right now, and no daily total can tell them.
+            */}
+            <p className="mt-2 flex items-center gap-1.5 text-xs font-medium">
+              <span
+                className={cn(
+                  'inline-block h-2 w-2 rounded-full',
+                  today.callsInProgress > 0 ? 'bg-emerald-500' : 'bg-muted-foreground/40'
+                )}
+              />
+              <span className="tabular-nums">{today.callsInProgress}</span>
+              <span className="font-normal text-muted-foreground">
+                {today.callsInProgress === 1 ? 'call in progress now' : 'calls in progress now'}
+              </span>
             </p>
           </CardContent>
         </Card>
@@ -498,9 +633,28 @@ export default function DeliveryPage(): JSX.Element {
       {/* ── Per agent ───────────────────────────────────────────────────── */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-sm">
-            <Users className="h-4 w-4" />
-            Agents today
+          <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-sm">
+            <span className="flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              Agents today
+            </span>
+            {/*
+              The reference line. This table is the lever: an agency that moves
+              its two worst closers off the queue raises its blended closing
+              percentage, which lowers its rate. Reading who is above and who is
+              below the agency's own figure is the whole decision, and it should
+              not require holding a number in your head while you scan a column.
+
+              Served by the server alongside the rows, not summed from them: the
+              agency figure counts calls no agent is attributed on.
+            */}
+            <span className="flex items-center gap-2 text-[11px] font-normal text-muted-foreground">
+              <span
+                className="inline-block h-0 w-6 border-t-2 border-dashed border-sky-500"
+                aria-hidden
+              />
+              Agency today {pct(agencyClosingPct)} — the line each agent is read against
+            </span>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -540,7 +694,14 @@ export default function DeliveryPage(): JSX.Element {
                   >
                     Talk time{sortIcon('talkTimeSeconds')}
                   </TableHead>
-                  <TableHead className="text-right">Availability</TableHead>
+                  <TableHead
+                    className="cursor-pointer select-none text-right"
+                    onClick={() => toggleSort('availableSeconds')}
+                    title="Time on the queue today, waiting for a call. A low closer who was available all day and one who was available for forty minutes are different problems."
+                  >
+                    On queue{sortIcon('availableSeconds')}
+                  </TableHead>
+                  <TableHead className="text-right">Occupancy</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -563,11 +724,40 @@ export default function DeliveryPage(): JSX.Element {
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{agent.callsTaken}</TableCell>
                     <TableCell className="text-right tabular-nums">{agent.applications}</TableCell>
-                    <TableCell className="text-right font-medium tabular-nums">
+                    {/*
+                      Read against the agency's own figure rather than against
+                      nothing. Muted where there is no comparison to make: an
+                      agent with no calls has no percentage, and an agency with
+                      no delivered calls has no line to be above or below.
+                    */}
+                    <TableCell
+                      className={cn(
+                        'text-right font-medium tabular-nums',
+                        agent.closingPct !== null &&
+                          agencyClosingPct !== null &&
+                          (agent.closingPct >= agencyClosingPct
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-amber-600 dark:text-amber-400')
+                      )}
+                      title={
+                        agent.closingPct !== null && agencyClosingPct !== null
+                          ? `${(agent.closingPct - agencyClosingPct >= 0 ? '+' : '') + (agent.closingPct - agencyClosingPct).toFixed(2)} points against the agency's ${agencyClosingPct.toFixed(2)}% today`
+                          : undefined
+                      }
+                    >
                       {pct(agent.closingPct)}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {duration(agent.talkTimeSeconds)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                      {agent.availableSeconds === null ? (
+                        <span title="No status transitions were recorded for this agent today. That is not the same as no time on the queue, so it is shown as absent rather than as zero.">
+                          —
+                        </span>
+                      ) : (
+                        available(agent.availableSeconds)
+                      )}
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-muted-foreground">
                       {agent.occupancyPct === null ? (

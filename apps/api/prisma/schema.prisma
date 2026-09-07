@@ -317,6 +317,9 @@ model User {
   platformAdmin      PlatformAdmin?
   platformActingTenant PlatformActingTenant?
 
+  /// Softphone status transitions. Append-only; see `AgentStateEvent`.
+  stateEvents    AgentStateEvent[]
+
   // Payroll relations
   timeEntries    TimeEntry[]
   financials     UserFinancials?
@@ -2293,6 +2296,53 @@ model RetentionNote {
 /// TimeEntry tracks work hours logged by contractors
 /// Multiple entries per day are allowed
 /// Entries become locked when attached to a PayrollPayout
+/// One softphone status transition, appended when an agent changes state.
+///
+/// ── Why a log and not a column ───────────────────────────────────────────────
+///
+/// Redis holds each agent's CURRENT status, read on every routing decision. It
+/// answers "what is this agent doing now" and cannot answer "how long were they
+/// available today", because each write overwrites the last.
+///
+/// The per-agent table needs the second question answered. A 4% closer who was
+/// available for six hours and one who was available for forty minutes are
+/// different problems, and a principal deciding who to pull off the queue is
+/// choosing between exactly those two people.
+///
+/// ── Reading it ───────────────────────────────────────────────────────────────
+///
+/// Time in a state is the span from one row to the next, clipped to the day
+/// being asked about. The state in force at the start of a day is the last row
+/// before it, which is why the read looks back beyond the day's own rows.
+///
+/// ── It never fails a status change ───────────────────────────────────────────
+///
+/// Written best-effort beside the Redis write. An agent going available must
+/// not depend on this table being reachable, so a failure here is logged and
+/// swallowed -- the cost is a gap in a reporting figure, not an agent who
+/// cannot take calls.
+///
+/// There is no backfill: nothing recorded these transitions before the table
+/// existed, so a day with no rows reports an em dash rather than zero.
+model AgentStateEvent {
+  id     String @id @default(uuid())
+  userId String
+
+  /// 'available', 'away', 'dnd', 'offline', 'on-call'. Deliberately a string
+  /// and not an enum: these come from the softphone, and a new value appearing
+  /// must not fail an agent's status change. An unrecognised state is simply
+  /// not counted as available.
+  status String
+
+  occurredAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, occurredAt])
+  @@index([occurredAt])
+  @@map("agent_state_events")
+}
+
 model TimeEntry {
   id              String   @id @default(uuid())
   userId          String

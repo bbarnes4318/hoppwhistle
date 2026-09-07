@@ -1,7 +1,15 @@
 'use client';
 
-import { AlertTriangle, Building2, Download, Loader2, RefreshCw } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import {
+  AlertTriangle,
+  Building2,
+  ChevronDown,
+  ChevronRight,
+  Download,
+  Loader2,
+  RefreshCw,
+} from 'lucide-react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 
 import { CompactPageHeader, CompactPageShell } from '@/components/layout/compact-layout';
 import { Badge } from '@/components/ui/badge';
@@ -72,9 +80,11 @@ interface AgencyRow {
     settlementFailedOrUnpaid: boolean;
     noValidMandate: boolean;
     suspended: boolean;
+    /** Enrolled, and no settlement has ever been written for it. */
+    enrolledNeverSettled: boolean;
   };
   settlement: {
-    status: 'SETTLED' | 'DRY_RUN' | 'FAILED' | 'NOT_YET_RUN' | 'NOT_ENROLLED';
+    status: 'SETTLED' | 'DRY_RUN' | 'HALTED' | 'FAILED' | 'NOT_YET_RUN' | 'NOT_ENROLLED';
     paymentStatus: string | null;
     totalCharged: number | null;
     overrunQuantity: number | null;
@@ -92,6 +102,26 @@ function money(value: number | null, digits = 2): string {
     : `$${value.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
 }
 
+/** What is standing between an agency and being enrolled. */
+const BLOCKER_TEXT: Record<string, string> = {
+  NO_BILLING_PROFILE: 'no recorded terms',
+  NO_DAILY_BLOCK: 'no daily block',
+  NO_MAX_DAILY_DEBIT: 'no maximum daily debit',
+  NO_OPENING_RATE: 'no agreed opening rate',
+  NO_VALID_MANDATE: 'no valid ACH mandate',
+};
+
+interface EnrolmentStatus {
+  tenantId: string;
+  enrolled: boolean;
+  chargesEnabled: boolean;
+  blockers: string[];
+  readyToEnrol: boolean;
+  balance: number;
+  pendingDryRunCloseout: { lots: number; credits: number };
+  mandate: { status: string; valid: boolean; bankName: string | null; last4: string | null };
+}
+
 function flagCount(row: AgencyRow): number {
   return Object.values(row.flags).filter(Boolean).length;
 }
@@ -107,6 +137,12 @@ export default function PlatformAgenciesPage(): JSX.Element {
   const [exportTo, setExportTo] = useState('');
   const [exportMode, setExportMode] = useState<'ALL' | 'DRY_RUN' | 'CHARGED'>('ALL');
 
+  /** Which agency's enrolment panel is open, and what the server says about it. */
+  const [openAgency, setOpenAgency] = useState<string | null>(null);
+  const [enrolment, setEnrolment] = useState<EnrolmentStatus | null>(null);
+  const [enrolmentBusy, setEnrolmentBusy] = useState(false);
+  const [enrolmentNote, setEnrolmentNote] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     const query = day ? `?day=${encodeURIComponent(day)}` : '';
     const response = await apiClient.get<{ calendarDay: string; agencies: AgencyRow[] }>(
@@ -121,6 +157,92 @@ export default function PlatformAgenciesPage(): JSX.Element {
   useEffect(() => {
     void load();
   }, [load]);
+
+  /**
+   * Open one agency's enrolment panel.
+   *
+   * The readiness check is a server read, always re-fetched: the blockers are
+   * the same ones `POST .../enrol` will apply, and showing a cached "ready"
+   * next to a button that then refuses is worse than a moment's wait.
+   */
+  async function openEnrolment(tenantId: string): Promise<void> {
+    if (openAgency === tenantId) {
+      setOpenAgency(null);
+      return;
+    }
+    setOpenAgency(tenantId);
+    setEnrolment(null);
+    setEnrolmentNote(null);
+    const response = await apiClient.get<EnrolmentStatus>(
+      `/api/v1/platform/delivery/agencies/${tenantId}/enrolment`
+    );
+    setEnrolment(response.data ?? null);
+    if (response.error) setEnrolmentNote(response.error.message);
+  }
+
+  /**
+   * Enrol, un-enrol, suspend or resume one agency.
+   *
+   * Every one of these writes an AuditLog row on the server -- who did it, to
+   * which agency, and when -- because each changes whether an agency's phones
+   * ring or whether it is charged. Nothing about that is enforced here: the
+   * routes are platform-gated and audited server-side, and this panel only
+   * calls them.
+   *
+   * A refused enrolment names every missing precondition at once. The refusal
+   * itself carries them, but `apiClient` narrows an error to its code and
+   * message, so the list is read back from the enrolment status below -- the
+   * same server check that produced the refusal, so the two cannot disagree.
+   * "Not ready" is not something an operator can act on; "no agreed opening
+   * rate" is.
+   */
+  async function act(
+    tenantId: string,
+    path: 'enrol' | 'unenrol' | 'suspend' | 'resume',
+    body: Record<string, unknown> = {}
+  ): Promise<void> {
+    setEnrolmentBusy(true);
+    setEnrolmentNote(null);
+    try {
+      const response = await apiClient.post(
+        `/api/v1/platform/delivery/agencies/${tenantId}/${path}`,
+        body
+      );
+      if (response.error) setEnrolmentNote(response.error.message);
+
+      // Re-read both: the panel's own state, which carries the blockers, and
+      // the row behind it.
+      const refreshed = await apiClient.get<EnrolmentStatus>(
+        `/api/v1/platform/delivery/agencies/${tenantId}/enrolment`
+      );
+      setEnrolment(refreshed.data ?? null);
+      await load();
+    } finally {
+      setEnrolmentBusy(false);
+    }
+  }
+
+  /**
+   * Withdraw or restore an agency's Overrun ceiling.
+   *
+   * `null` puts it back on the schedule -- 50% below the clean-settlement
+   * threshold, 100% at or beyond it. `0` withdraws overrun entirely, so the
+   * agency delivers only what it has paid for.
+   */
+  async function setCeiling(tenantId: string, override: number | null): Promise<void> {
+    setEnrolmentBusy(true);
+    setEnrolmentNote(null);
+    try {
+      const response = await apiClient.put(
+        `/api/v1/platform/delivery/agencies/${tenantId}/ceiling`,
+        { ceilingPctOverride: override }
+      );
+      if (response.error) setEnrolmentNote(response.error.message);
+      await load();
+    } finally {
+      setEnrolmentBusy(false);
+    }
+  }
 
   /**
    * Run the settlement for the day shown.
@@ -307,6 +429,7 @@ export default function PlatformAgenciesPage(): JSX.Element {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-8" />
                   <TableHead>Agency</TableHead>
                   <TableHead>Billing</TableHead>
                   <TableHead className="text-right">Calls</TableHead>
@@ -324,7 +447,23 @@ export default function PlatformAgenciesPage(): JSX.Element {
               </TableHeader>
               <TableBody>
                 {sorted.map(row => (
-                  <TableRow key={row.tenantId}>
+                  <Fragment key={row.tenantId}>
+                  <TableRow>
+                    <TableCell className="align-middle">
+                      <button
+                        type="button"
+                        aria-expanded={openAgency === row.tenantId}
+                        aria-label={`Enrolment controls for ${row.name}`}
+                        className="text-muted-foreground"
+                        onClick={() => void openEnrolment(row.tenantId)}
+                      >
+                        {openAgency === row.tenantId ? (
+                          <ChevronDown className="h-4 w-4" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4" />
+                        )}
+                      </button>
+                    </TableCell>
                     <TableCell className="font-medium">{row.name}</TableCell>
                     <TableCell>
                       {!row.enrolled ? (
@@ -350,9 +489,7 @@ export default function PlatformAgenciesPage(): JSX.Element {
                     <TableCell className="text-right tabular-nums">{row.deliveredCalls}</TableCell>
                     <TableCell className="text-right tabular-nums">{row.applications}</TableCell>
                     <TableCell className="text-right tabular-nums">{pct(row.closingPct)}</TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {row.rate === null ? '—' : `$${row.rate}`}
-                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{money(row.rate)}</TableCell>
                     <TableCell className="text-right tabular-nums">{money(row.revenue)}</TableCell>
                     <TableCell className="text-right tabular-nums">{money(row.callCost)}</TableCell>
                     <TableCell
@@ -370,13 +507,25 @@ export default function PlatformAgenciesPage(): JSX.Element {
                       {money(row.costPerCall, 4)}
                     </TableCell>
                     <TableCell>
+                      {/*
+                        A halt is not a decline: the run worked and withheld the
+                        debit on purpose. It still needs somebody, so it is not
+                        quiet -- but calling it "failed" sends an operator to
+                        retry a card instead of to explain the day.
+                      */}
                       <Badge
                         variant={
                           row.settlement.status === 'SETTLED'
                             ? 'secondary'
-                            : row.settlement.status === 'FAILED'
+                            : row.settlement.status === 'FAILED' ||
+                                row.settlement.status === 'HALTED'
                               ? 'destructive'
                               : 'outline'
+                        }
+                        title={
+                          row.settlement.status === 'HALTED'
+                            ? 'The run completed and deliberately placed no debit. Explain the day rather than retrying the payment.'
+                            : undefined
                         }
                       >
                         {row.settlement.status === 'NOT_ENROLLED'
@@ -388,36 +537,75 @@ export default function PlatformAgenciesPage(): JSX.Element {
                                 .toLowerCase()}
                       </Badge>
                     </TableCell>
+                    {/*
+                      Each flag opens that agency's own controls, so a badge is
+                      a place to act rather than only a place to look. Without
+                      it an operator reads "no mandate" and then has to find the
+                      row again in a table sorted by flag count.
+                    */}
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
                         {row.flags.belowMinimumAndPaused && (
-                          <Badge variant="destructive" title="Below the curve minimum; only a platform admin can clear the review">
-                            below 5%
-                          </Badge>
+                          <FlagBadge
+                            label="below 5%"
+                            title="Below the curve minimum. Only a platform admin can clear the review."
+                            onClick={() => void openEnrolment(row.tenantId)}
+                          />
                         )}
                         {row.flags.atCeiling && (
-                          <Badge variant="destructive" title="Overrun ceiling reached for this Delivery Day">
-                            at ceiling
-                          </Badge>
+                          <FlagBadge
+                            label="at ceiling"
+                            title="The Overrun ceiling has been reached for this Delivery Day, so delivery has stopped until tomorrow."
+                            onClick={() => void openEnrolment(row.tenantId)}
+                          />
                         )}
                         {row.flags.settlementFailedOrUnpaid && (
-                          <Badge variant="destructive" title="A settlement is failed or unpaid">
-                            unpaid
-                          </Badge>
+                          <FlagBadge
+                            label="unpaid"
+                            title="A settlement is failed, halted or unpaid."
+                            onClick={() => void openEnrolment(row.tenantId)}
+                          />
                         )}
                         {row.flags.noValidMandate && (
-                          <Badge variant="destructive" title="No valid ACH mandate — no delivery">
-                            no mandate
-                          </Badge>
+                          <FlagBadge
+                            label="no mandate"
+                            title="No valid ACH mandate, so nothing will deliver."
+                            onClick={() => void openEnrolment(row.tenantId)}
+                          />
                         )}
                         {row.flags.suspended && (
-                          <Badge variant="destructive" title="Suspended by a platform admin">
-                            suspended
-                          </Badge>
+                          <FlagBadge
+                            label="suspended"
+                            title="Suspended by a platform admin. Paid applications survive a suspension."
+                            onClick={() => void openEnrolment(row.tenantId)}
+                          />
+                        )}
+                        {row.flags.enrolledNeverSettled && (
+                          <FlagBadge
+                            label="never settled"
+                            title="Enrolled, and no settlement has ever been written for this agency. The nightly run is not reaching it — every other column here reads a settlement that does not exist and shows an em dash that looks like a quiet day."
+                            onClick={() => void openEnrolment(row.tenantId)}
+                          />
                         )}
                       </div>
                     </TableCell>
                   </TableRow>
+
+                  {openAgency === row.tenantId && (
+                    <TableRow className="bg-muted/30 hover:bg-muted/30">
+                      <TableCell colSpan={14} className="p-4">
+                        <EnrolmentPanel
+                          row={row}
+                          status={enrolment}
+                          busy={enrolmentBusy}
+                          note={enrolmentNote}
+                          onAct={act}
+                          onCeiling={setCeiling}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  </Fragment>
                 ))}
               </TableBody>
             </Table>
@@ -425,5 +613,207 @@ export default function PlatformAgenciesPage(): JSX.Element {
         </CardContent>
       </Card>
     </CompactPageShell>
+  );
+}
+
+/**
+ * A flag that is also a way to act on it.
+ *
+ * The table sorts flagged agencies to the top, so an operator reads the badge
+ * and then has to find that row again to do anything about it. Clicking the
+ * badge opens the same controls the chevron does.
+ */
+function FlagBadge({
+  label,
+  title,
+  onClick,
+}: {
+  label: string;
+  title: string;
+  onClick: () => void;
+}): JSX.Element {
+  return (
+    <button type="button" onClick={onClick} title={title} className="cursor-pointer">
+      <Badge variant="destructive">{label}</Badge>
+    </button>
+  );
+}
+
+/**
+ * Enrolment, suspension and the Overrun ceiling for one agency.
+ *
+ * ── Why these live here ──────────────────────────────────────────────────────
+ *
+ * This is the screen an operator is already on when they notice an agency needs
+ * something. Sending them elsewhere to act on it means the noticing and the
+ * doing happen in different places, which is how an agency ends up flagged for
+ * a week.
+ *
+ * ── Every one of these is audited, server-side ───────────────────────────────
+ *
+ * Enrol, un-enrol, suspend, resume and the ceiling override each write an
+ * AuditLog row naming the operator, the agency and the change. That is enforced
+ * by the routes, not by this panel: these buttons only call them, and the
+ * platform capability is checked on the server for each.
+ *
+ * ── A refusal names what is missing ──────────────────────────────────────────
+ *
+ * Enrolment is refused unless the agency has recorded terms, a daily block, a
+ * maximum daily debit, an agreed opening rate and a valid mandate. The server
+ * returns every missing one at once and they are listed here. "Not ready" is
+ * not something an operator can act on; "no agreed opening rate" is.
+ *
+ * ── Nothing here computes money ──────────────────────────────────────────────
+ *
+ * The balance and the dry-run closeout figures are read from the server. The
+ * ceiling override sends a percentage the operator chose and reads the
+ * resulting application count back; it does not work one out.
+ */
+function EnrolmentPanel({
+  row,
+  status,
+  busy,
+  note,
+  onAct,
+  onCeiling,
+}: {
+  row: AgencyRow;
+  status: EnrolmentStatus | null;
+  busy: boolean;
+  note: string | null;
+  onAct: (
+    tenantId: string,
+    path: 'enrol' | 'unenrol' | 'suspend' | 'resume',
+    body?: Record<string, unknown>
+  ) => Promise<void>;
+  onCeiling: (tenantId: string, override: number | null) => Promise<void>;
+}): JSX.Element {
+  if (!status) {
+    return (
+      <p className="flex items-center text-sm text-muted-foreground">
+        <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+        Reading this agency&rsquo;s enrolment
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-3 text-sm">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
+        <span className="font-medium">{row.name}</span>
+        <span className="text-muted-foreground">
+          {status.enrolled ? 'Enrolled in billing' : 'Not enrolled in billing'}
+          {status.enrolled && (status.chargesEnabled ? ' · charging' : ' · not charging')}
+        </span>
+        <span className="text-muted-foreground">
+          Balance <span className="tabular-nums">{status.balance}</span> paid applications
+        </span>
+        <span className="text-muted-foreground">
+          Mandate {status.mandate.valid ? 'valid' : status.mandate.status.toLowerCase()}
+          {status.mandate.last4 ? ` · ${status.mandate.bankName ?? 'bank'} ····${status.mandate.last4}` : ''}
+        </span>
+      </div>
+
+      {note && (
+        <p className="rounded border border-amber-500/40 bg-amber-500/10 p-2 text-[13px]">{note}</p>
+      )}
+
+      {!status.enrolled && status.blockers.length > 0 && (
+        <p className="text-muted-foreground">
+          Not ready to enrol. Still needed:{' '}
+          <span className="font-medium">
+            {status.blockers.map(code => BLOCKER_TEXT[code] ?? code).join(', ')}
+          </span>
+          .
+        </p>
+      )}
+
+      {status.enrolled && status.pendingDryRunCloseout.credits > 0 && (
+        <p className="text-muted-foreground">
+          Turning charging on will retire {status.pendingDryRunCloseout.credits} credits from{' '}
+          {status.pendingDryRunCloseout.lots}{' '}
+          {status.pendingDryRunCloseout.lots === 1 ? 'dry-run block' : 'dry-run blocks'}, so the
+          first charged settlement sells a full block. Charging is switched on from the go-live
+          runbook, not from here.
+        </p>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2">
+        {status.enrolled ? (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            onClick={() => void onAct(row.tenantId, 'unenrol', { reason: 'From the agency view' })}
+          >
+            Un-enrol
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            disabled={busy || !status.readyToEnrol}
+            title={
+              status.readyToEnrol
+                ? 'Enrolment takes effect on the next call offered.'
+                : 'Every precondition has to be in place first.'
+            }
+            onClick={() => void onAct(row.tenantId, 'enrol', { note: 'From the agency view' })}
+          >
+            Enrol
+          </Button>
+        )}
+
+        {row.flags.suspended ? (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            onClick={() => void onAct(row.tenantId, 'resume')}
+          >
+            Resume delivery
+          </Button>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            title="Stops delivery immediately. Paid applications are untouched and are there when you resume."
+            onClick={() =>
+              void onAct(row.tenantId, 'suspend', { reason: 'Suspended from the agency view' })
+            }
+          >
+            Suspend delivery
+          </Button>
+        )}
+
+        <span className="ml-2 text-xs text-muted-foreground">Overrun ceiling:</span>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={busy}
+          title="Withdraw overrun entirely. The agency then delivers only what it has paid for."
+          onClick={() => void onCeiling(row.tenantId, 0)}
+        >
+          Withdraw
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={busy}
+          title="Put the ceiling back on the standard schedule."
+          onClick={() => void onCeiling(row.tenantId, null)}
+        >
+          Back to schedule
+        </Button>
+
+        {busy && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+      </div>
+
+      <p className="text-[11px] text-muted-foreground">
+        Each of these is recorded in the audit log against your account. Un-enrolling stops
+        gating, metering and settling immediately, and leaves the ledger and every settlement
+        already written exactly as they are.
+      </p>
+    </div>
   );
 }

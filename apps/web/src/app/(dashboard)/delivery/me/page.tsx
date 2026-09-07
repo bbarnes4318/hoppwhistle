@@ -1,10 +1,11 @@
 'use client';
 
 import { Loader2, User } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { CompactPageHeader, CompactPageShell } from '@/components/layout/compact-layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useLivePoll } from '@/hooks/use-live-poll';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
@@ -23,6 +24,8 @@ interface SelfView {
   applications: number;
   closingPct: number | null;
   talkTimeSeconds: number;
+  /** Seconds on the queue today. Null when nothing was recorded. */
+  availableSeconds: number | null;
   agencyClosingPct: number | null;
   agencyCallsTaken: number;
   agencyApplications: number;
@@ -38,23 +41,28 @@ function duration(seconds: number): string {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
+/**
+ * Time on the queue, or an em dash when the day has no transitions recorded.
+ * Absent and zero are different facts, and this is somebody's own day.
+ */
+function available(seconds: number | null): string {
+  return seconds === null ? '—' : duration(seconds);
+}
+
 export default function MyDeliveryPage(): JSX.Element {
   const [view, setView] = useState<SelfView | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const response = await apiClient.get<SelfView>('/api/v1/delivery/me');
     setError(response.error ? response.error.message : null);
     setView(response.data ?? null);
-    setLoading(false);
   }, []);
 
-  useEffect(() => {
-    void load();
-    const timer = setInterval(() => void load(), 60_000);
-    return () => clearInterval(timer);
-  }, [load]);
+  // Every agent on the floor has this open beside their softphone all day, so
+  // it stops polling when the tab is not in front of them and refreshes the
+  // moment it is. See `useLivePoll`.
+  const { loading } = useLivePoll(load, { intervalMs: 60_000 });
 
   if (loading) {
     return (
@@ -151,7 +159,12 @@ export default function MyDeliveryPage(): JSX.Element {
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold tabular-nums">{duration(view.talkTimeSeconds)}</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">connected, today</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              connected, today
+              {view.availableSeconds !== null && (
+                <> · {available(view.availableSeconds)} on the queue</>
+              )}
+            </p>
           </CardContent>
         </Card>
       </div>

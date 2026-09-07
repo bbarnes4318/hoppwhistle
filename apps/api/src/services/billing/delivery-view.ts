@@ -32,7 +32,7 @@
  * not know" is worse than an absent number.
  */
 
-import type { PrismaClient } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { CreditLedgerEntryType, SettlementPaymentStatus } from '@prisma/client';
 
 import { logger } from '../../lib/logger.js';
@@ -40,7 +40,8 @@ import { getPrismaClient } from '../../lib/prisma.js';
 import { calendarDayBounds, currentCalendarDay } from '../rating/calendar-day.js';
 import type { CalendarDayKey } from '../rating/calendar-day.js';
 import { deliveredCallWhere, measureCalendarDay } from '../rating/measurement.js';
-import { toNumber } from '../rating/rate-curve.js';
+import { rateFor, toNumber, toRateCurve } from '../rating/rate-curve.js';
+import type { CurveAnchor, RateCurve } from '../rating/rate-curve.js';
 import { getRatingSummary } from '../rating/rating-summary.js';
 import { getRedisClient } from '../redis.js';
 
@@ -66,6 +67,15 @@ export interface DeliveryTodayView {
 
   /** Calls NetEnroll routed to this agency today, answered or not. */
   callsRouted: number;
+  /**
+   * Calls connected to an agent right now.
+   *
+   * Answered and not yet ended. This is the only figure on the panel that is
+   * about this instant rather than about the day, which is why it is named for
+   * it: a principal watching the queue wants to know whether the floor is busy,
+   * and the day's totals cannot tell them.
+   */
+  callsInProgress: number;
   /**
    * Calls an agent picked up. This is the delivered-call count -- the
    * denominator of the closing percentage -- and it is deliberately reported
@@ -126,7 +136,13 @@ export interface DeliveryTodayView {
  */
 const NOT_ENROLLED_VIEW: Omit<
   DeliveryTodayView,
-  'tenantId' | 'calendarDay' | 'callsRouted' | 'callsAnswered' | 'applicationsSubmitted' | 'todayClosingPct'
+  | 'tenantId'
+  | 'calendarDay'
+  | 'callsRouted'
+  | 'callsInProgress'
+  | 'callsAnswered'
+  | 'applicationsSubmitted'
+  | 'todayClosingPct'
 > = {
   timeZone: 'America/New_York',
   enrolled: false,
@@ -155,6 +171,24 @@ const NOT_ENROLLED_VIEW: Omit<
 };
 
 /**
+ * Calls connected to an agent at this instant.
+ *
+ * Answered, not ended, and not blocked. Deliberately NOT scoped to today's
+ * calendar day: a call that connected at 23:58 and is still up at 00:02 is
+ * still in progress, and dropping it because the Delivery Day rolled over would
+ * show an empty floor to a principal watching a live one.
+ */
+function callsInProgressWhere(tenantId: string): Prisma.CallWhereInput {
+  return {
+    tenantId,
+    direction: 'INBOUND',
+    blocked: false,
+    answeredAt: { not: null },
+    endedAt: null,
+  };
+}
+
+/**
  * The agency principal's live panel.
  */
 export async function getDeliveryToday(
@@ -173,7 +207,7 @@ export async function getDeliveryToday(
    * with every billing figure zero and `enrolled: false` saying why.
    */
   if (!(await isEnrolledForBilling(prisma, tenantId))) {
-    const [todayOnly, routedOnly] = await Promise.all([
+    const [todayOnly, routedOnly, inProgressOnly] = await Promise.all([
       measureCalendarDay(
         { calls: prisma.call, applications: prisma.insuranceCarrierApplication },
         tenantId,
@@ -187,6 +221,7 @@ export async function getDeliveryToday(
           createdAt: { gte: bounds.start, lt: bounds.endExclusive },
         },
       }),
+      prisma.call.count({ where: callsInProgressWhere(tenantId) }),
     ]);
 
     return {
@@ -194,13 +229,16 @@ export async function getDeliveryToday(
       tenantId,
       calendarDay: today,
       callsRouted: routedOnly,
+      // Operational, not billing: an unenrolled agency still runs a floor, and
+      // these are the figures that tell them how it is doing.
+      callsInProgress: inProgressOnly,
       callsAnswered: todayOnly.deliveredCalls,
       applicationsSubmitted: todayOnly.submittedApplications,
       todayClosingPct: todayOnly.closingPct,
     };
   }
 
-  const [rating, gate, balance, counts, todayMeasurement, routed, hold, profile] =
+  const [rating, gate, balance, counts, todayMeasurement, routed, inProgress, hold, profile] =
     await Promise.all([
       getRatingSummary(tenantId, { prisma, now }),
       // `record: false` -- reading a screen is not a delivery decision, and a
@@ -222,6 +260,7 @@ export async function getDeliveryToday(
           createdAt: { gte: bounds.start, lt: bounds.endExclusive },
         },
       }),
+      prisma.call.count({ where: callsInProgressWhere(tenantId) }),
       prisma.deliveryHoldEvent.findFirst({
         where: { tenantId, deliveryDay: today },
         orderBy: { occurredAt: 'asc' },
@@ -263,6 +302,7 @@ export async function getDeliveryToday(
     enrolled: gate.enrolled,
     chargesEnabled: profile?.chargesEnabled === true,
     callsRouted: routed,
+    callsInProgress: inProgress,
     callsAnswered: todayMeasurement.deliveredCalls,
     applicationsSubmitted: todayMeasurement.submittedApplications,
     todayClosingPct: todayMeasurement.closingPct,
@@ -304,12 +344,106 @@ export interface AgentRow {
   closingPct: number | null;
   /** Seconds connected, summed over the day's answered calls. */
   talkTimeSeconds: number;
+  /**
+   * Seconds spent in the 'available' state today: on the queue, waiting.
+   *
+   * Null when nothing was recorded for this agent on this day, which is not the
+   * same fact as zero. Presence was Redis-only until Phase 4, so every day
+   * before that has no transitions to read and reports null.
+   */
+  availableSeconds: number | null;
+  /** When the current status began. Null when it was never recorded. */
+  statusSince: Date | null;
   /** Self-reported hours for the day, from the payroll time entry. */
   hoursWorked: number | null;
   /** Talk time as a share of recorded hours. Null when hours are not recorded. */
   occupancyPct: number | null;
   /** Live softphone presence. 'unknown' when Redis could not be read. */
   currentStatus: string;
+}
+
+/**
+ * How long each agent was in the 'available' state on one day.
+ *
+ * ── Why this is a span calculation and not a sum ─────────────────────────────
+ *
+ * `agent_state_events` records TRANSITIONS, not durations. An agent is in a
+ * state from the row that set it until the next row, so the time in a state is
+ * the sum of those spans clipped to the day being asked about.
+ *
+ * Two consequences the arithmetic has to respect:
+ *
+ *   1. The state in force at the START of the day was set by the last row
+ *      BEFORE the day, which may be days earlier -- an agent who went available
+ *      on Friday and never signed out is available at midnight on Saturday. So
+ *      the read looks back past the day's own rows for that one carried row.
+ *   2. The final span runs to "now" on today, and to the end of the day on any
+ *      past day. Running today's open span to midnight would report an agent
+ *      as available for hours they have not worked yet.
+ *
+ * Returns null for an agent with no rows bearing on the day at all. That is a
+ * day nobody measured, and reporting it as zero seconds available would put a
+ * coaching decision on a number that was never recorded.
+ */
+async function availableSecondsByUser(
+  prisma: PrismaClient,
+  userIds: string[],
+  bounds: { start: Date; endExclusive: Date },
+  now: Date
+): Promise<Map<string, number>> {
+  const available = new Map<string, number>();
+  if (userIds.length === 0) return available;
+
+  const events = await prisma.agentStateEvent.findMany({
+    where: { userId: { in: userIds }, occurredAt: { lt: bounds.endExclusive } },
+    orderBy: [{ userId: 'asc' }, { occurredAt: 'asc' }],
+    select: { userId: true, status: true, occurredAt: true },
+  });
+
+  // The day's span never extends past this instant: an open state on today runs
+  // to now, not to midnight.
+  const dayEnd = new Date(Math.min(bounds.endExclusive.getTime(), now.getTime()));
+  if (dayEnd <= bounds.start) return available;
+
+  const byUser = new Map<string, typeof events>();
+  for (const event of events) {
+    const list = byUser.get(event.userId);
+    if (list) list.push(event);
+    else byUser.set(event.userId, [event]);
+  }
+
+  for (const [userId, rows] of byUser) {
+    let seconds = 0;
+    for (let i = 0; i < rows.length; i++) {
+      if (rows[i].status !== 'available') continue;
+
+      const from = Math.max(rows[i].occurredAt.getTime(), bounds.start.getTime());
+      const until = i + 1 < rows.length ? rows[i + 1].occurredAt.getTime() : dayEnd.getTime();
+      const to = Math.min(until, dayEnd.getTime());
+      if (to > from) seconds += (to - from) / 1000;
+    }
+    available.set(userId, Math.round(seconds));
+  }
+
+  return available;
+}
+
+export interface AgentBreakdown {
+  calendarDay: CalendarDayKey;
+  /**
+   * The agency's own closing percentage for the same day -- the reference line
+   * the rows are read against.
+   *
+   * Served with the rows rather than left to the client to sum, for two
+   * reasons. It is the agency's Phase 2 measurement, which includes calls no
+   * agent is attributed on, so summing the rows would produce a different
+   * number. And a browser computing it is a browser computing the figure the
+   * agency's price is set from.
+   */
+  agencyClosingPct: number | null;
+  agencyCallsTaken: number;
+  agencyApplications: number;
+  agents: AgentRow[];
 }
 
 /**
@@ -334,13 +468,13 @@ export interface AgentRow {
 export async function getAgentBreakdown(
   tenantId: string,
   options: { prisma?: PrismaClient; now?: Date; day?: CalendarDayKey } = {}
-): Promise<{ calendarDay: CalendarDayKey; agents: AgentRow[] }> {
+): Promise<AgentBreakdown> {
   const prisma = options.prisma ?? getPrismaClient();
   const now = options.now ?? new Date();
   const day = options.day ?? currentCalendarDay(now);
   const bounds = calendarDayBounds(day);
 
-  const [callRows, applicationRows, users] = await Promise.all([
+  const [callRows, applicationRows, users, agencyToday] = await Promise.all([
     prisma.call.groupBy({
       by: ['answeredByUserId'],
       // The Phase 2 delivered-call predicate, used verbatim. The per-agent
@@ -359,6 +493,18 @@ export async function getAgentBreakdown(
       where: { tenantId },
       select: { id: true, email: true, firstName: true, lastName: true },
     }),
+    /*
+     * The agency's own figure for the same day, from the same Phase 2
+     * measurement the agents are measured with. It is the reference line the
+     * per-agent table is read against -- who is above it and who is dragging it
+     * down -- and it is computed here rather than by summing the rows so the
+     * two cannot disagree over an unattributed call.
+     */
+    measureCalendarDay(
+      { calls: prisma.call, applications: prisma.insuranceCarrierApplication },
+      tenantId,
+      day
+    ),
   ]);
 
   const userIds = users.map(u => u.id);
@@ -369,7 +515,12 @@ export async function getAgentBreakdown(
   });
   const hoursByUser = new Map(timeEntries.map(t => [t.userId, toNumber(t.hoursWorked)]));
 
-  const statuses = await readAgentStatuses(userIds);
+  const [presence, availableByUser] = await Promise.all([
+    readAgentStatuses(userIds),
+    availableSecondsByUser(prisma, userIds, bounds, now),
+  ]);
+  const statuses = presence.statuses;
+  const statusSince = presence.since;
 
   const applicationsByUser = new Map(
     applicationRows.map(row => [row.createdById, row._count._all])
@@ -398,6 +549,10 @@ export async function getAgentBreakdown(
       applications,
       closingPct: calls > 0 ? (applications / calls) * 100 : null,
       talkTimeSeconds,
+      availableSeconds: row.answeredByUserId
+        ? availableByUser.get(row.answeredByUserId) ?? null
+        : null,
+      statusSince: row.answeredByUserId ? statusSince.get(row.answeredByUserId) ?? null : null,
       hoursWorked,
       occupancyPct:
         hoursWorked && hoursWorked > 0 ? (talkTimeSeconds / (hoursWorked * 3600)) * 100 : null,
@@ -425,24 +580,63 @@ export async function getAgentBreakdown(
       applications,
       closingPct: null,
       talkTimeSeconds: 0,
+      availableSeconds: availableByUser.get(userId) ?? null,
+      statusSince: statusSince.get(userId) ?? null,
       hoursWorked,
       occupancyPct: hoursWorked && hoursWorked > 0 ? 0 : null,
       currentStatus: statuses.get(userId) ?? 'offline',
     });
   }
 
-  // Sorted by closing percentage descending, with the agents who took no calls
-  // last: they have no percentage, and putting a null at the top of a "who
-  // needs coaching" list is a bug that looks like a finding.
-  rows.sort((a, b) => (b.closingPct ?? -1) - (a.closingPct ?? -1));
+  /*
+   * Sorted by closing percentage ASCENDING: the agents dragging the agency's
+   * rate are at the top, because they are what this table is for.
+   *
+   * It used to sort descending, which put the best closers first -- a
+   * leaderboard rather than a work list, on the one screen whose whole purpose
+   * is deciding who to coach or pull off the queue.
+   *
+   * Two kinds of row are held at the bottom whichever way it is sorted:
+   *
+   *   The UNATTRIBUTED row. It is delivered calls with no agent recorded on
+   *   them, and it usually closes at 0% -- so ascending it would lead the
+   *   table. It is not a person, nobody can be coached about it, and it is here
+   *   only so the rows reconcile with the agency total. Leading a "who needs
+   *   attention" list with it puts noise in the one position that matters.
+   *
+   *   AGENTS WHO TOOK NO CALLS. They have no percentage at all, and a null at
+   *   the top of that list reads as a finding.
+   */
+  rows.sort((a, b) => {
+    const rank = (row: AgentRow): number =>
+      row.userId === null ? 2 : row.closingPct === null ? 1 : 0;
+    const byRank = rank(a) - rank(b);
+    if (byRank !== 0) return byRank;
+    return (a.closingPct ?? 0) - (b.closingPct ?? 0);
+  });
 
-  return { calendarDay: day, agents: rows };
+  return {
+    calendarDay: day,
+    agencyClosingPct: agencyToday.closingPct,
+    agencyCallsTaken: agencyToday.deliveredCalls,
+    agencyApplications: agencyToday.submittedApplications,
+    agents: rows,
+  };
 }
 
-/** Live softphone presence, from the same Redis keys the softphone writes. */
-async function readAgentStatuses(userIds: string[]): Promise<Map<string, string>> {
+/**
+ * Live softphone presence, from the same Redis keys the softphone writes.
+ *
+ * Returns the status and when it was set. The second is what turns "available"
+ * into something a principal can act on: available for two minutes and
+ * available for two hours are the same badge and different situations.
+ */
+async function readAgentStatuses(
+  userIds: string[]
+): Promise<{ statuses: Map<string, string>; since: Map<string, Date> }> {
   const statuses = new Map<string, string>();
-  if (userIds.length === 0) return statuses;
+  const since = new Map<string, Date>();
+  if (userIds.length === 0) return { statuses, since };
 
   try {
     const redis = getRedisClient();
@@ -451,8 +645,12 @@ async function readAgentStatuses(userIds: string[]): Promise<Map<string, string>
       const raw = values[index];
       if (!raw) return;
       try {
-        const parsed = JSON.parse(raw) as { status?: string };
+        const parsed = JSON.parse(raw) as { status?: string; lastUpdated?: string };
         if (parsed.status) statuses.set(id, parsed.status);
+        if (parsed.lastUpdated) {
+          const at = new Date(parsed.lastUpdated);
+          if (!Number.isNaN(at.getTime())) since.set(id, at);
+        }
       } catch {
         // A malformed value is not a status. Leaving the agent absent from the
         // map renders as 'offline', which is the honest reading of "we cannot
@@ -463,7 +661,7 @@ async function readAgentStatuses(userIds: string[]): Promise<Map<string, string>
     logger.warn({ msg: 'Could not read agent presence; showing offline', error });
   }
 
-  return statuses;
+  return { statuses, since };
 }
 
 export interface AgentSelfView {
@@ -472,6 +670,8 @@ export interface AgentSelfView {
   applications: number;
   closingPct: number | null;
   talkTimeSeconds: number;
+  /** Seconds on the queue today. Null when nothing was recorded. */
+  availableSeconds: number | null;
   /** The agency's own closing percentage today, to measure against. */
   agencyClosingPct: number | null;
   agencyCallsTaken: number;
@@ -496,7 +696,7 @@ export async function getAgentSelfView(
   const day = options.day ?? currentCalendarDay(now);
   const bounds = calendarDayBounds(day);
 
-  const [mine, applications, agency] = await Promise.all([
+  const [mine, applications, agency, available] = await Promise.all([
     prisma.call.aggregate({
       where: { ...deliveredCallWhere(tenantId, bounds), answeredByUserId: userId },
       _count: { _all: true },
@@ -514,6 +714,7 @@ export async function getAgentSelfView(
       tenantId,
       day
     ),
+    availableSecondsByUser(prisma, [userId], bounds, now),
   ]);
 
   const callsTaken = mine._count._all;
@@ -524,6 +725,7 @@ export async function getAgentSelfView(
     applications,
     closingPct: callsTaken > 0 ? (applications / callsTaken) * 100 : null,
     talkTimeSeconds: mine._sum.connectedDuration ?? 0,
+    availableSeconds: available.get(userId) ?? null,
     agencyClosingPct: agency.closingPct,
     agencyCallsTaken: agency.deliveredCalls,
     agencyApplications: agency.submittedApplications,
@@ -557,12 +759,29 @@ export interface PlatformAgencyRow {
     settlementFailedOrUnpaid: boolean;
     noValidMandate: boolean;
     suspended: boolean;
+    /**
+     * Enrolled, and no settlement has ever been written for it.
+     *
+     * An agency enrolled days ago with nothing in `daily_settlements` is a
+     * nightly run that is not reaching it -- a cron that stopped, a tenant that
+     * went inactive, a job that threw on this one agency and moved on. It is
+     * invisible in every other column on this screen, because every one of them
+     * reads a settlement that does not exist and renders an em dash that looks
+     * like a quiet day.
+     */
+    enrolledNeverSettled: boolean;
   };
 
   /** Where the day's settlement run got to for this agency. */
   settlement: {
-    /** `NOT_ENROLLED` is not a failure to run: there was nothing to settle. */
-    status: 'SETTLED' | 'DRY_RUN' | 'FAILED' | 'NOT_YET_RUN' | 'NOT_ENROLLED';
+    /**
+     * `NOT_ENROLLED` is not a failure to run: there was nothing to settle.
+     * `HALTED` is not a failure either -- the run worked and deliberately
+     * placed no debit, because the total breached the maximum daily debit or
+     * the mandate was gone. It needs a different response from a decline, so it
+     * is a different word.
+     */
+    status: 'SETTLED' | 'DRY_RUN' | 'HALTED' | 'FAILED' | 'NOT_YET_RUN' | 'NOT_ENROLLED';
     paymentStatus: SettlementPaymentStatus | null;
     totalCharged: number | null;
     overrunQuantity: number | null;
@@ -591,10 +810,27 @@ export async function getPlatformOverview(
     orderBy: { name: 'asc' },
   });
 
-  const agencies: PlatformAgencyRow[] = [];
-
-  for (const tenant of tenants) {
-    const [measurement, state, flag, settlement, profile, ledger, cost] = await Promise.all([
+  /*
+   * One agency at a time was a sequential walk: eight round trips per tenant,
+   * awaited before the next tenant started. At five tenants that is forty
+   * serial queries behind one page load, and it grows linearly with the
+   * platform. The per-tenant work is independent -- no agency's figures are
+   * derived from another's -- so the tenants now run together, and the queries
+   * within each still run together.
+   */
+  const agencies: PlatformAgencyRow[] = await Promise.all(
+    tenants.map(async (tenant): Promise<PlatformAgencyRow> => {
+    const [
+      measurement,
+      state,
+      flag,
+      settlement,
+      profile,
+      ledger,
+      cost,
+      unpaid,
+      settlementsEver,
+    ] = await Promise.all([
       measureCalendarDay(
         { calls: prisma.call, applications: prisma.insuranceCarrierApplication },
         tenant.id,
@@ -617,6 +853,21 @@ export async function getPlatformOverview(
         where: deliveredCallWhere(tenant.id, bounds),
         _sum: { cost: true },
       }),
+      prisma.dailySettlement.count({
+        where: {
+          tenantId: tenant.id,
+          paymentStatus: {
+            in: [
+              SettlementPaymentStatus.FAILED,
+              SettlementPaymentStatus.HALTED_MAX_DEBIT,
+              SettlementPaymentStatus.HALTED_NO_MANDATE,
+            ],
+          },
+        },
+      }),
+      // Any settlement ever, not just this day's: an agency enrolled a week ago
+      // with none at all is a nightly run that is not reaching it.
+      prisma.dailySettlement.count({ where: { tenantId: tenant.id } }),
     ]);
 
     const revenue = settlement === null ? null : toNumber(settlement.totalCharged);
@@ -633,20 +884,7 @@ export async function getPlatformOverview(
               100
           );
 
-    const unpaid = await prisma.dailySettlement.count({
-      where: {
-        tenantId: tenant.id,
-        paymentStatus: {
-          in: [
-            SettlementPaymentStatus.FAILED,
-            SettlementPaymentStatus.HALTED_MAX_DEBIT,
-            SettlementPaymentStatus.HALTED_NO_MANDATE,
-          ],
-        },
-      },
-    });
-
-    agencies.push({
+    return {
       tenantId: tenant.id,
       name: tenant.name,
       slug: tenant.slug,
@@ -677,6 +915,7 @@ export async function getPlatformOverview(
               settlementFailedOrUnpaid: false,
               noValidMandate: false,
               suspended: false,
+              enrolledNeverSettled: false,
             }
           : {
               belowMinimumAndPaused: flag !== null || state?.status === 'UNDER_REVIEW',
@@ -685,6 +924,7 @@ export async function getPlatformOverview(
               noValidMandate:
                 profile.achMandateStatus !== 'ACTIVE' || !profile.achPaymentMethodId,
               suspended: profile.suspendedAt != null,
+              enrolledNeverSettled: settlementsEver === 0,
             },
       settlement: {
         status:
@@ -701,16 +941,236 @@ export async function getPlatformOverview(
                 // chosen, on every agency being watched before go-live.
                 settlement.paymentStatus === SettlementPaymentStatus.DRY_RUN
                 ? 'DRY_RUN'
-                : 'FAILED',
+                : // A halt is not a decline either. The run worked and
+                  // deliberately placed no debit -- the total breached the
+                  // maximum daily debit, or the mandate was gone -- and the
+                  // response to it is to explain the day, not to retry a card.
+                  settlement.paymentStatus === SettlementPaymentStatus.HALTED_MAX_DEBIT ||
+                    settlement.paymentStatus === SettlementPaymentStatus.HALTED_NO_MANDATE
+                  ? 'HALTED'
+                  : 'FAILED',
         paymentStatus: settlement?.paymentStatus ?? null,
         totalCharged: settlement === null ? null : toNumber(settlement.totalCharged),
         overrunQuantity: settlement?.overrunQuantity ?? null,
         nextBlockQuantity: settlement?.nextBlockQuantity ?? null,
       },
-    });
-  }
+    };
+    })
+  );
 
   return { calendarDay: day, agencies };
 }
 
 export { CreditLedgerEntryType };
+
+// ════════════════════════════════════════════════════════════════════════════
+// How one settlement's rate was derived
+// ════════════════════════════════════════════════════════════════════════════
+
+export interface SettlementDerivation {
+  settlementId: string;
+  deliveryDay: CalendarDayKey;
+
+  /** Exactly what the settlement row stores. Nothing here is recomputed. */
+  stored: {
+    windowClosingPct: number | null;
+    windowDayKeys: CalendarDayKey[];
+    windowDeliveryDays: number;
+    windowDaysFound: number;
+    rate: number | null;
+    curveVersion: number | null;
+  };
+
+  /**
+   * One row per Delivery Day the window covered, re-measured now.
+   *
+   * These are the counts that produced the percentage. `null` counts mean the
+   * day could not be re-measured -- the calls were purged, say -- which is
+   * information rather than a zero.
+   */
+  window: Array<{
+    deliveryDay: CalendarDayKey;
+    deliveredCalls: number;
+    submittedApplications: number;
+    closingPct: number | null;
+  }>;
+
+  /**
+   * The recomputation: the window's totals, the percentage they give, and the
+   * rate the stored curve version returns for it.
+   */
+  recomputed: {
+    deliveredCalls: number;
+    submittedApplications: number;
+    closingPct: number | null;
+    rate: number | null;
+    belowMinimum: boolean;
+    /** The two anchors the percentage sits between, and the curve's bounds. */
+    anchors: { left: CurveAnchor; right: CurveAnchor } | null;
+    minimumClosingPct: number | null;
+    flatFromClosingPct: number | null;
+  };
+
+  /**
+   * Whether the recomputation lands on the rate the settlement was written
+   * with.
+   *
+   * `false` is not necessarily a defect: a call deleted or an application
+   * submitted late changes what today's re-measurement finds, and the stored
+   * figures are what was actually charged. It is surfaced rather than hidden
+   * because a disagreement is exactly what somebody disputing a charge needs to
+   * see, and hiding it would make this screen a restatement of the stored rate
+   * rather than a check on it.
+   */
+  matchesStoredRate: boolean;
+  /** Null when the curve version the settlement names no longer exists. */
+  curveFound: boolean;
+}
+
+/**
+ * Reconstruct how one settlement's rate was arrived at.
+ *
+ * ── What this screen has to survive ──────────────────────────────────────────
+ *
+ * An agency disputing a charge. The answer has to be readable without anybody
+ * opening a database, and it has to be checkable rather than merely asserted --
+ * a page that re-prints the stored rate proves nothing.
+ *
+ * So it does two things side by side. It reports what the settlement STORES,
+ * which is what was charged and is immutable. And it RE-MEASURES the Delivery
+ * Days the window named, sums them, prices the result against the curve version
+ * the settlement names, and says whether that lands on the stored rate.
+ *
+ * The curve is loaded by the settlement's own `curveVersionId`, never by
+ * whichever curve is active now. Pricing a six-week-old settlement against
+ * today's curve would produce a confident, wrong number on the one screen whose
+ * purpose is to be trusted.
+ */
+export async function getSettlementDerivation(
+  tenantId: string,
+  settlementId: string,
+  options: { prisma?: PrismaClient } = {}
+): Promise<SettlementDerivation | null> {
+  const prisma = options.prisma ?? getPrismaClient();
+
+  // Scoped by tenant in the query, not checked after: an agency must not be
+  // able to read another agency's settlement by guessing an id.
+  const settlement = await prisma.dailySettlement.findFirst({
+    where: { id: settlementId, tenantId },
+  });
+  if (!settlement) return null;
+
+  const dayKeys = settlement.windowDayKeys;
+
+  const perDay = await Promise.all(
+    dayKeys.map(async day => {
+      const measurement = await measureCalendarDay(
+        { calls: prisma.call, applications: prisma.insuranceCarrierApplication },
+        tenantId,
+        day
+      );
+      return {
+        deliveryDay: day,
+        deliveredCalls: measurement.deliveredCalls,
+        submittedApplications: measurement.submittedApplications,
+        closingPct: measurement.closingPct,
+      };
+    })
+  );
+
+  const deliveredCalls = perDay.reduce((total, row) => total + row.deliveredCalls, 0);
+  const submittedApplications = perDay.reduce(
+    (total, row) => total + row.submittedApplications,
+    0
+  );
+  const closingPct =
+    deliveredCalls > 0 ? (submittedApplications / deliveredCalls) * 100 : null;
+
+  const storedRate = settlement.rate === null ? null : toNumber(settlement.rate);
+
+  const curveRow = settlement.curveVersionId
+    ? await prisma.rateCurveVersion.findUnique({
+        where: { id: settlement.curveVersionId },
+        include: { anchors: true },
+      })
+    : null;
+
+  let rate: number | null = null;
+  let belowMinimum = false;
+  let anchors: { left: CurveAnchor; right: CurveAnchor } | null = null;
+  let minimumClosingPct: number | null = null;
+  let flatFromClosingPct: number | null = null;
+
+  if (curveRow && closingPct !== null) {
+    const curve = toRateCurve(curveRow);
+    minimumClosingPct = curve.minimumClosingPct;
+    flatFromClosingPct = curve.flatFromClosingPct;
+
+    const verdict = rateFor(curve, closingPct);
+    if (verdict.kind === 'RATE') {
+      rate = verdict.rate;
+      anchors = bracketingAnchors(curve, closingPct);
+    } else {
+      belowMinimum = true;
+    }
+  }
+
+  return {
+    settlementId: settlement.id,
+    deliveryDay: settlement.deliveryDay,
+    stored: {
+      windowClosingPct:
+        settlement.windowClosingPct === null ? null : toNumber(settlement.windowClosingPct),
+      windowDayKeys: dayKeys,
+      windowDeliveryDays: settlement.windowDeliveryDays,
+      windowDaysFound: settlement.windowDaysFound,
+      rate: storedRate,
+      curveVersion: settlement.curveVersion,
+    },
+    window: perDay,
+    recomputed: {
+      deliveredCalls,
+      submittedApplications,
+      closingPct,
+      rate,
+      belowMinimum,
+      anchors,
+      minimumClosingPct,
+      flatFromClosingPct,
+    },
+    matchesStoredRate: rate !== null && storedRate !== null && rate === storedRate,
+    curveFound: curveRow !== null,
+  };
+}
+
+/**
+ * The two anchors a closing percentage was interpolated between.
+ *
+ * Shown so the arithmetic is legible rather than asserted: "15.2% sits above
+ * the flat point, so it prices at the top anchor" is a sentence somebody can
+ * check. Both anchors are the same one where the percentage is flat at an end
+ * of the curve, which is the honest picture of what happened.
+ */
+function bracketingAnchors(
+  curve: RateCurve,
+  closingPct: number
+): { left: CurveAnchor; right: CurveAnchor } | null {
+  if (curve.anchors.length === 0) return null;
+
+  const lowest = curve.anchors[0];
+  const highest = curve.anchors[curve.anchors.length - 1];
+
+  if (closingPct >= curve.flatFromClosingPct || closingPct >= highest.closingPct) {
+    return { left: highest, right: highest };
+  }
+  if (closingPct <= lowest.closingPct) return { left: lowest, right: lowest };
+
+  for (let i = 0; i < curve.anchors.length - 1; i++) {
+    const left = curve.anchors[i];
+    const right = curve.anchors[i + 1];
+    if (closingPct >= left.closingPct && closingPct <= right.closingPct) {
+      return { left, right };
+    }
+  }
+  return null;
+}
