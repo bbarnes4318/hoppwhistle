@@ -120,16 +120,16 @@ export interface SettleOptions {
   gateway?: PaymentGateway;
   now?: Date;
   /**
-   * Force the dry run for this invocation, whatever the agency's own
-   * `chargesEnabled` says. The settlement is computed and recorded in full and
-   * no debit is placed.
+   * Settle without charging: compute and record the full settlement for this
+   * invocation, whatever the agency's own `chargesEnabled` says, and place no
+   * debit.
    *
    * One-directional on purpose: this can only ever turn charging OFF. There is
    * no option here that turns it on for an agency whose profile says otherwise,
    * because a per-run flag that starts charging somebody is a flag somebody
    * passes by accident once.
    */
-  noCharge?: boolean;
+  settleWithoutCharge?: boolean;
 }
 
 export interface SettlementResult {
@@ -294,11 +294,11 @@ export async function settleAgencyForDeliveryDay(
    * Whether a debit may actually be placed.
    *
    * Off unless the agency's profile says charging is enabled, and the per-run
-   * `noCharge` can only turn it further off. Everything above this line has
-   * already been computed either way -- the dry run is the real settlement with
-   * the last step withheld, not a different calculation.
+   * `settleWithoutCharge` can only turn it further off. Everything above this
+   * line has already been computed either way -- the dry run is the real
+   * settlement with the last step withheld, not a different calculation.
    */
-  const chargingAllowed = terms.chargesEnabled && options.noCharge !== true;
+  const chargingAllowed = terms.chargesEnabled && options.settleWithoutCharge !== true;
 
   /*
    * The maximum-daily-debit halt is checked even in a dry run, and comes first.
@@ -768,8 +768,11 @@ export async function runDailySettlement(
     gateway?: PaymentGateway;
     now?: Date;
     tenantIds?: string[];
-    /** Force the dry run for every agency in this invocation. Never the reverse. */
-    noCharge?: boolean;
+    /**
+     * Settle every agency in this invocation without charging any of them.
+     * Never the reverse.
+     */
+    settleWithoutCharge?: boolean;
   } = {}
 ): Promise<RunResult> {
   const prisma = options.prisma ?? getPrismaClient();
@@ -796,7 +799,7 @@ export async function runDailySettlement(
           prisma,
           gateway: options.gateway,
           now,
-          noCharge: options.noCharge,
+          settleWithoutCharge: options.settleWithoutCharge,
         })
       );
     } catch (error) {

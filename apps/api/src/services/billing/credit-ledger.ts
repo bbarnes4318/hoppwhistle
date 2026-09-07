@@ -122,6 +122,7 @@ export async function openLots(
       id: string;
       quantity: number;
       used: bigint;
+      retired: boolean;
       unitRate: Prisma.Decimal | null;
       deliveryDay: string;
     }>
@@ -130,8 +131,15 @@ export async function openLots(
            p."quantity",
            p."unitRate",
            p."deliveryDay",
+           -- CONSUMPTION only. A DRY_RUN_CLOSEOUT row also references the lot,
+           -- and counting it as a used unit would silently shrink the lot by
+           -- one instead of retiring it.
            (SELECT COUNT(*) FROM "application_credit_ledger" c
-             WHERE c."purchaseEntryId" = p."id") AS "used"
+             WHERE c."purchaseEntryId" = p."id"
+               AND c."entryType" = 'CONSUMPTION'::"CreditLedgerEntryType") AS "used",
+           EXISTS (SELECT 1 FROM "application_credit_ledger" x
+                    WHERE x."purchaseEntryId" = p."id"
+                      AND x."entryType" = 'DRY_RUN_CLOSEOUT'::"CreditLedgerEntryType") AS "retired"
       FROM "application_credit_ledger" p
      WHERE p."tenantId" = ${tenantId}
        AND p."entryType" = 'PURCHASE'::"CreditLedgerEntryType"
@@ -147,7 +155,9 @@ export async function openLots(
       unitRate: row.unitRate === null ? null : toNumber(row.unitRate),
       deliveryDay: row.deliveryDay,
     }))
-    .filter(lot => lot.remaining > 0);
+    // A retired lot has nothing left to spend whatever its arithmetic says: its
+    // credits were issued for a dry run and never paid for.
+    .filter((lot, index) => lot.remaining > 0 && !rows[index].retired);
 }
 
 export interface PurchaseInput {
@@ -460,4 +470,195 @@ export async function overrunEntriesForDay(
     select: { id: true, applicationId: true, createdAt: true },
     orderBy: { createdAt: 'asc' },
   });
+}
+
+/** What retiring an agency's dry-run credits actually retired. */
+export interface DryRunCloseout {
+  /** Purchase lots retired. Zero when there was nothing to retire. */
+  lotsRetired: number;
+  /** Credits retired across those lots. */
+  creditsRetired: number;
+  /** The balance after, which is what the first charged settlement sees. */
+  balanceAfter: number;
+  entryIds: string[];
+}
+
+/**
+ * Retire every unused credit that came from a dry-run settlement.
+ *
+ * ── When this runs, and why it has to ────────────────────────────────────────
+ *
+ * At the moment an agency moves from dry run to live charging, and only then.
+ *
+ * A dry-run settlement sells the next Delivery Day's block so the agency keeps
+ * delivering the way it would if the charge had gone through -- without it the
+ * balance is zero, every application is Overrun, and delivery stops at the
+ * ceiling on day one, so what was being watched would not be the real system.
+ * Those blocks are never charged for.
+ *
+ * Left on the balance they carry into the first charged settlement and reduce
+ * its block, because the block is the daily target minus unused paid
+ * applications and the ledger cannot tell an unpaid dry-run credit from a
+ * bought one. The agency would be delivered a short block, on credits nobody
+ * paid for, on its first real billing day.
+ *
+ * So the transition retires them, by appending rows. The balance starts at zero
+ * and the first real settlement sells a full block.
+ *
+ * ── It is not a reversal ─────────────────────────────────────────────────────
+ *
+ * Nothing is returned to anybody and no money moves, because no money ever
+ * moved. This is not a refund, a credit, a rebate or a make-good, and the entry
+ * type is its own thing precisely so it cannot be mistaken for one: it retires
+ * credits that were issued to make an observation possible and were never sold.
+ *
+ * ── Append-only, and idempotent ──────────────────────────────────────────────
+ *
+ * Nothing is updated or deleted; the purchases stay exactly as they were and
+ * the retirement is a later row, which is the only correction this ledger has.
+ * Each closeout claims slot -1 of its lot, and `(purchaseEntryId, lotIndex)` is
+ * unique, so turning charging on twice retires nothing the second time.
+ *
+ * ── What is NOT retired ──────────────────────────────────────────────────────
+ *
+ * Only lots sold by a settlement whose payment status is DRY_RUN. An agency's
+ * opening purchase was paid for by card or ACH and carries no settlement at
+ * all; a block sold by a settlement that was charged was paid for. Neither is
+ * touched, and both keep their credits.
+ */
+export async function closeOutDryRunLots(params: {
+  prisma?: LedgerClient;
+  tenantId: string;
+  /** For the record: what the closeout is attributed to. */
+  note?: string;
+}): Promise<DryRunCloseout> {
+  const prisma = params.prisma ?? getPrismaClient();
+
+  /*
+   * Lots sold by a DRY_RUN settlement that still have credits on them and have
+   * not already been retired. The join onto `daily_settlements` is what limits
+   * this to dry-run blocks: a lot with no settlement is an opening purchase and
+   * was paid for.
+   */
+  const rows = await prisma.$queryRaw<
+    Array<{
+      id: string;
+      quantity: number;
+      used: bigint;
+      unitRate: Prisma.Decimal | null;
+      deliveryDay: string;
+      settlementId: string;
+      curveVersionId: string | null;
+      curveVersion: number | null;
+    }>
+  >`
+    SELECT p."id",
+           p."quantity",
+           p."unitRate",
+           p."deliveryDay",
+           p."settlementId",
+           p."curveVersionId",
+           p."curveVersion",
+           (SELECT COUNT(*) FROM "application_credit_ledger" c
+             WHERE c."purchaseEntryId" = p."id"
+               AND c."entryType" = 'CONSUMPTION'::"CreditLedgerEntryType") AS "used"
+      FROM "application_credit_ledger" p
+      JOIN "daily_settlements" s ON s."id" = p."settlementId"
+     WHERE p."tenantId" = ${params.tenantId}
+       AND p."entryType" = 'PURCHASE'::"CreditLedgerEntryType"
+       AND s."paymentStatus" = 'DRY_RUN'::"SettlementPaymentStatus"
+       AND NOT EXISTS (
+             SELECT 1 FROM "application_credit_ledger" x
+              WHERE x."purchaseEntryId" = p."id"
+                AND x."entryType" = 'DRY_RUN_CLOSEOUT'::"CreditLedgerEntryType")
+     ORDER BY p."deliveryDay" ASC, p."createdAt" ASC, p."id" ASC
+  `;
+
+  const entryIds: string[] = [];
+  let creditsRetired = 0;
+
+  for (const lot of rows) {
+    const remaining = lot.quantity - Number(lot.used);
+    if (remaining <= 0) continue;
+
+    try {
+      const entry = await prisma.applicationCreditLedgerEntry.create({
+        data: {
+          tenantId: params.tenantId,
+          entryType: CreditLedgerEntryType.DRY_RUN_CLOSEOUT,
+          // Negative: these credits stop counting toward the balance.
+          quantity: -remaining,
+          // The Delivery Day the retired block was FOR, so the row says which
+          // block it retired rather than when somebody pressed the button.
+          deliveryDay: lot.deliveryDay,
+          // The rate the block was nominally sold at, so the row reads on its
+          // own. `amount` stays null: no money moved, in either direction, and
+          // a figure there would read as one that did.
+          unitRate: lot.unitRate,
+          amount: null,
+          curveVersionId: lot.curveVersionId,
+          curveVersion: lot.curveVersion,
+          purchaseEntryId: lot.id,
+          // Slot -1. A real unit index is never negative, so the existing
+          // unique index on (purchaseEntryId, lotIndex) makes this at most once
+          // per lot.
+          lotIndex: -1,
+          settlementId: lot.settlementId,
+        },
+        select: { id: true },
+      });
+      entryIds.push(entry.id);
+      creditsRetired += remaining;
+    } catch (error) {
+      // Already retired by a concurrent or earlier call. Nothing to do: the
+      // unique index is the guarantee and this is it holding.
+      if (!isUniqueViolation(error)) throw error;
+    }
+  }
+
+  return {
+    lotsRetired: entryIds.length,
+    creditsRetired,
+    balanceAfter: await creditBalance(prisma, params.tenantId),
+    entryIds,
+  };
+}
+
+/**
+ * What retiring the dry-run credits WOULD do, without writing anything.
+ *
+ * For the go-live runbook: an operator should be able to see the number before
+ * they turn charging on, not discover it in the response.
+ */
+export async function previewDryRunCloseout(
+  prisma: LedgerClient,
+  tenantId: string
+): Promise<{ lots: number; credits: number }> {
+  /*
+   * A fully spent lot is excluded, matching `closeOutDryRunLots()` exactly: it
+   * writes no row for a lot with nothing left, so counting one here would tell
+   * an operator a lot was about to be retired that then is not.
+   */
+  const rows = await prisma.$queryRaw<Array<{ lots: bigint; credits: bigint }>>`
+    SELECT COUNT(*) AS "lots", COALESCE(SUM("remaining"), 0) AS "credits"
+      FROM (
+        SELECT p."quantity" - (
+                 SELECT COUNT(*) FROM "application_credit_ledger" c
+                  WHERE c."purchaseEntryId" = p."id"
+                    AND c."entryType" = 'CONSUMPTION'::"CreditLedgerEntryType"
+               ) AS "remaining"
+          FROM "application_credit_ledger" p
+          JOIN "daily_settlements" s ON s."id" = p."settlementId"
+         WHERE p."tenantId" = ${tenantId}
+           AND p."entryType" = 'PURCHASE'::"CreditLedgerEntryType"
+           AND s."paymentStatus" = 'DRY_RUN'::"SettlementPaymentStatus"
+           AND NOT EXISTS (
+                 SELECT 1 FROM "application_credit_ledger" x
+                  WHERE x."purchaseEntryId" = p."id"
+                    AND x."entryType" = 'DRY_RUN_CLOSEOUT'::"CreditLedgerEntryType")
+      ) AS "lots"
+     WHERE "remaining" > 0
+  `;
+
+  return { lots: Number(rows[0]?.lots ?? 0), credits: Number(rows[0]?.credits ?? 0) };
 }

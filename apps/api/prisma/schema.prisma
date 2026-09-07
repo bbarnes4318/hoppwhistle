@@ -3866,6 +3866,28 @@ enum CreditLedgerEntryType {
   /// `quantity` is positive.
   PURCHASE
 
+  /// The credits from one dry-run block, retired at the moment the agency
+  /// starts being charged. `quantity` is negative: whatever was left on that
+  /// lot.
+  ///
+  /// ── This is NOT a reversal, and the distinction is the point ──────────────
+  ///
+  /// Nothing is returned to anybody and no money moves, because no money ever
+  /// moved: a dry-run settlement sells the next day's block so the agency keeps
+  /// delivering realistically, and that block is never charged for. Those
+  /// credits were issued to make an observation possible, not sold.
+  ///
+  /// Leaving them on the balance would carry into the first charged
+  /// settlement and reduce its block -- the block is the daily target minus
+  /// unused paid applications, and the ledger cannot tell an unpaid dry-run
+  /// credit from a bought one. So the transition retires them explicitly, by
+  /// appending a row, and the first real settlement sells a full block against
+  /// a zero balance.
+  ///
+  /// One row per retired lot, naming the lot and the DRY_RUN settlement that
+  /// sold it, so what was retired and where it came from reads off the row.
+  DRY_RUN_CLOSEOUT
+
   /// One application that reached submitted state and spent one credit.
   /// `quantity` is -1, always, and the row names both the application and the
   /// purchase lot the credit came from.
@@ -4122,9 +4144,17 @@ model ApplicationCreditLedgerEntry {
   /// PURCHASE. Unique across the table.
   applicationId String?
 
-  /// CONSUMPTION only: the purchase lot the credit came from, and which unit of
-  /// it. Oldest lot first, so credits spanning purchases at different rates are
+  /// The purchase lot this row is about, and which unit of it.
+  ///
+  /// CONSUMPTION: the lot the credit came from and the unit claimed, 0-based.
+  /// Oldest lot first, so credits spanning purchases at different rates are
   /// consumed in the order they were bought.
+  ///
+  /// DRY_RUN_CLOSEOUT: the lot being retired, with `lotIndex` -1. A real unit
+  /// index is never negative, so -1 is a slot no consumption can occupy -- and
+  /// the existing unique index on `(purchaseEntryId, lotIndex)` then guarantees
+  /// a lot can be closed out at most once, without needing a second constraint
+  /// for it. Turning charging on twice retires nothing the second time.
   purchaseEntryId String?
   lotIndex        Int?
 

@@ -4,25 +4,34 @@
  *   pnpm --filter @hopwhistle/api settlement:run
  *   pnpm --filter @hopwhistle/api settlement:run -- --day 2026-09-07
  *   pnpm --filter @hopwhistle/api settlement:run -- --tenant <id>
- *   pnpm --filter @hopwhistle/api settlement:run -- --dry-run
- *   pnpm --filter @hopwhistle/api settlement:run -- --no-charge
+ *   pnpm --filter @hopwhistle/api settlement:run -- --plan-only
+ *   pnpm --filter @hopwhistle/api settlement:run -- --settle-without-charge
  *   pnpm --filter @hopwhistle/api settlement:run -- --retry-failed
  *   pnpm --filter @hopwhistle/api settlement:run -- --resume-stalled
  *
- * ── --dry-run and --no-charge are different, and the difference matters ───────
+ * ── The two safe modes, and why they are not named alike ─────────────────────
  *
- *   --dry-run    Writes NOTHING. Computes what tonight would be and prints it.
- *                No settlement row, no ledger row, no charge. A preview.
+ *   --plan-only               Writes NOTHING. Computes what tonight would be
+ *                             and prints it. No settlement row, no ledger row,
+ *                             no charge. A preview.
  *
- *   --no-charge  Writes EVERYTHING except the debit. The full settlement row is
- *                recorded with every figure on it, the next day's block is
- *                sold, and Stripe is never called. The row reads DRY_RUN and
- *                `totalCharged` is what it would have taken.
+ *   --settle-without-charge   Writes EVERYTHING except the debit. The full
+ *                             settlement row is recorded with every figure on
+ *                             it, the next day's block is sold, and Stripe is
+ *                             never called. The row reads DRY_RUN and
+ *                             `totalCharged` is what it would have taken.
  *
- * `--no-charge` is the one to run a real agency on for a few days before money
- * moves, and it is one-directional: it can only turn charging off. An agency
- * whose profile has `chargesEnabled: false` is already in that mode and this
- * flag changes nothing for it.
+ * These were `--dry-run` and `--no-charge`, which is two flags a character
+ * apart where one writes nothing and the other writes almost everything. That
+ * is a mistake waiting to be made at eleven at night on a system that moves
+ * money, so they are now named for what they do and share no prefix. The old
+ * spellings are REFUSED rather than ignored -- an unrecognised flag would leave
+ * the run charging people, which is the worst of the three outcomes.
+ *
+ * `--settle-without-charge` is the one to run a real agency on for a few days
+ * before money moves, and it is one-directional: it can only turn charging off.
+ * An agency whose profile has `chargesEnabled: false` is already in that mode
+ * and this flag changes nothing for it.
  *
  * ── Agencies not enrolled in billing are skipped ─────────────────────────────
  *
@@ -48,7 +57,7 @@
  * it safe to put on a cron at all, and it is asserted by two genuinely
  * concurrent runs in `settlement.test.ts`.
  *
- * ── --dry-run charges nobody and writes nothing ──────────────────────────────
+ * ── --plan-only charges nobody and writes nothing ────────────────────────────
  *
  * It prints what each agency's settlement would be -- the counts, the rate the
  * curve is returning, the overrun, the block and the total -- without touching
@@ -90,9 +99,36 @@ async function main(): Promise<void> {
     return;
   }
 
+  /*
+   * The retired spellings, refused loudly.
+   *
+   * `--dry-run` and `--no-charge` were renamed because they were a character
+   * apart and did almost opposite things. Silently ignoring an unrecognised
+   * flag would leave this command doing a full charging run, so anybody with
+   * the old names in their fingers or in a cron gets an error and an exit code
+   * instead.
+   */
+  const retired: Array<[string, string]> = [
+    ['--dry-run', '--plan-only'],
+    ['--no-charge', '--settle-without-charge'],
+  ];
+  for (const [old, replacement] of retired) {
+    if (process.argv.includes(old)) {
+      console.error(
+        `${old} no longer exists. Use ${replacement}.\n\n` +
+          '  --plan-only              compute and PRINT; writes nothing, charges nobody\n' +
+          '  --settle-without-charge  compute and RECORD the settlement; charges nobody\n\n' +
+          'They were renamed because the old names were one character apart and ' +
+          'did almost opposite things. Nothing has been run.'
+      );
+      process.exitCode = 2;
+      return;
+    }
+  }
+
   const tenantFilter = argValue('--tenant');
-  const dryRun = process.argv.includes('--dry-run');
-  const noCharge = process.argv.includes('--no-charge');
+  const planOnly = process.argv.includes('--plan-only');
+  const settleWithoutCharge = process.argv.includes('--settle-without-charge');
 
   console.log(`Delivery Day settled:  ${day} (closed 23:59:59 America/New_York)`);
   console.log(`Block sold for:        ${nextCalendarDay(day)}`);
@@ -114,7 +150,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (dryRun) {
+  if (planOnly) {
     /*
      * Deliberately a separate read-only path rather than the real one with a
      * flag threaded through it. A "dry run" that shares the write path with the
@@ -129,7 +165,7 @@ async function main(): Promise<void> {
           orderBy: { createdAt: 'asc' },
         });
 
-    console.log('DRY RUN — nothing is written and nobody is charged.\n');
+    console.log('PLAN ONLY — nothing is written and nobody is charged.\n');
     console.log(
       'agency                     rate   overrun    overrun $   block    block $      total     max'
     );
@@ -172,8 +208,11 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (noCharge) {
-    console.log('--no-charge: settlements will be computed and RECORDED; no debit will be placed.');
+  if (settleWithoutCharge) {
+    console.log(
+      '--settle-without-charge: settlements will be computed and RECORDED in full; ' +
+        'no debit will be placed.'
+    );
     console.log('');
   }
 
@@ -181,7 +220,7 @@ async function main(): Promise<void> {
     deliveryDay: day,
     prisma,
     tenantIds: tenantFilter ? [tenantFilter] : undefined,
-    noCharge,
+    settleWithoutCharge,
   });
 
   for (const settlement of result.results) {

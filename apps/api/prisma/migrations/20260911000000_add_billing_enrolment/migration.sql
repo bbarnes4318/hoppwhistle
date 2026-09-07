@@ -1,4 +1,5 @@
--- Phase 3, follow-up: the billing enrolment switch, and the charging switch.
+-- Phase 3, follow-up: the billing enrolment switch, the charging switch, and
+-- the dry-run closeout.
 --
 -- ── Why this exists ──────────────────────────────────────────────────────────
 --
@@ -86,3 +87,24 @@ COMMIT;
 -- ---------------------------------------------------------------------------
 
 ALTER TYPE "SettlementPaymentStatus" ADD VALUE IF NOT EXISTS 'DRY_RUN';
+
+-- ---------------------------------------------------------------------------
+-- The DRY_RUN_CLOSEOUT ledger entry type
+--
+-- The credits from one dry-run block, retired at the moment the agency starts
+-- being charged. A dry-run settlement sells the next day's block so the agency
+-- keeps delivering realistically, and that block is never paid for; leaving it
+-- on the balance would reduce the first CHARGED settlement's block, because the
+-- block is the daily target minus unused paid applications and the ledger
+-- cannot tell an unpaid dry-run credit from a bought one.
+--
+-- It is NOT a reversal and it is not a refund. Nothing is returned to anybody
+-- and no money moves, because no money ever moved. It retires credits that were
+-- issued to make an observation possible and were never sold, by appending a
+-- row -- the ledger stays append-only and the purchases are untouched.
+--
+-- Same placement and reasoning as the value above: its own autocommitted
+-- statement, outside any transaction block.
+-- ---------------------------------------------------------------------------
+
+ALTER TYPE "CreditLedgerEntryType" ADD VALUE IF NOT EXISTS 'DRY_RUN_CLOSEOUT';

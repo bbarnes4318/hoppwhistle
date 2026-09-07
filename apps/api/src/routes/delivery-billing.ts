@@ -47,7 +47,7 @@
  * charge at all. That is a property of the query, not of the rendering.
  */
 
-import { AchMandateStatus, Prisma } from '@prisma/client';
+import { AchMandateStatus, Prisma, SettlementPaymentStatus } from '@prisma/client';
 import type { FastifyInstance } from 'fastify';
 
 import { requirePlatformAdmin } from '../lib/platform-context.js';
@@ -56,7 +56,12 @@ import { getActingUserId, resolveTenant } from '../lib/tenant-context.js';
 import { authenticate } from '../middleware/auth.js';
 import { auditLog } from '../services/audit.js';
 import { paymentGateway } from '../services/billing/ach.js';
-import { creditBalance, recordPurchase } from '../services/billing/credit-ledger.js';
+import {
+  closeOutDryRunLots,
+  creditBalance,
+  previewDryRunCloseout,
+  recordPurchase,
+} from '../services/billing/credit-ledger.js';
 import {
   getAgentBreakdown,
   getAgentSelfView,
@@ -206,64 +211,14 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
         orderBy: { deliveryDay: 'desc' },
       });
 
-      const header = [
-        'delivery_day',
-        'delivered_calls',
-        'submitted_applications',
-        'window_closing_pct',
-        'window_delivery_days',
-        'window_days_found',
-        'window_day_keys',
-        'rate',
-        'curve_version',
-        'overrun_quantity',
-        'overrun_amount',
-        'configured_block_quantity',
-        'unused_paid_applications',
-        'next_block_quantity',
-        'next_block_amount',
-        'total_charged',
-        'max_daily_debit',
-        'payment_status',
-        'stripe_payment_intent_id',
-        'paid_at',
-        'grace_period_ends_on',
-        'computed_at',
-      ];
-
-      const body = rows.map(row =>
-        [
-          row.deliveryDay,
-          row.deliveredCalls,
-          row.submittedApplications,
-          row.windowClosingPct === null ? '' : toNumber(row.windowClosingPct),
-          row.windowDeliveryDays,
-          row.windowDaysFound,
-          row.windowDayKeys.join(' '),
-          row.rate === null ? '' : toNumber(row.rate),
-          row.curveVersion ?? '',
-          row.overrunQuantity,
-          toNumber(row.overrunAmount),
-          row.configuredBlockQuantity,
-          row.unusedPaidApplications,
-          row.nextBlockQuantity,
-          toNumber(row.nextBlockAmount),
-          toNumber(row.totalCharged),
-          toNumber(row.maxDailyDebit),
-          row.paymentStatus,
-          row.stripePaymentIntentId ?? '',
-          row.paidAt?.toISOString() ?? '',
-          row.gracePeriodEndsOn ?? '',
-          row.computedAt.toISOString(),
-        ]
-          .map(csvCell)
-          .join(',')
-      );
+      const body = rows.map(row => settlementCsvRow(row).map(csvCell).join(','));
 
       return reply
         .header('Content-Type', 'text/csv; charset=utf-8')
         .header('Content-Disposition', 'attachment; filename="settlements.csv"')
-        .send([header.map(csvCell).join(','), ...body].join('\n'));
+        .send(
+          [SETTLEMENT_CSV_COLUMNS.map(csvCell).join(','), ...body].join('\n')
+        );
     }
   );
 
@@ -925,6 +880,10 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
     async (request, reply) => {
       const { terms, blockers } = await enrolmentBlockersFor(request.params.tenantId, { prisma });
 
+      // What turning charging on would retire, so an operator sees the number
+      // before they press the button rather than in the response afterwards.
+      const closeout = await previewDryRunCloseout(prisma, request.params.tenantId);
+
       return reply.send({
         data: {
           tenantId: request.params.tenantId,
@@ -934,6 +893,24 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
           /** Empty when the agency is ready to be enrolled. */
           blockers,
           readyToEnrol: blockers.length === 0,
+          balance: await creditBalance(prisma, request.params.tenantId),
+          pendingDryRunCloseout: closeout,
+          /**
+           * The account a five-figure daily debit would come out of.
+           *
+           * `NO_VALID_MANDATE` leaving the blocker list says a mandate exists;
+           * it does not say it is the right bank account. Somebody about to
+           * enrol an agency should be able to read the bank and the last four
+           * off the same response they are checking readiness in, rather than
+           * finding out from a settlement.
+           */
+          mandate: {
+            status: terms.mandateStatus,
+            valid: terms.hasValidMandate,
+            bankName: terms.profile?.achBankName ?? null,
+            last4: terms.profile?.achLast4 ?? null,
+            verifiedAt: terms.profile?.achMandateVerifiedAt ?? null,
+          },
         },
       });
     }
@@ -1087,6 +1064,10 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
    * a bank account, so it is its own act with its own audit row, and it is
    * refused for an agency that is not enrolled -- there would be nothing to
    * charge.
+   *
+   * Turning it ON also retires every credit the dry run issued, so the first
+   * charged settlement sells a full block against a zero balance rather than a
+   * short one against credits nobody paid for. The response says how many.
    */
   fastify.put<{ Params: { tenantId: string }; Body: { enabled?: boolean } }>(
     '/api/v1/platform/delivery/agencies/:tenantId/charges',
@@ -1128,6 +1109,25 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
         },
       });
 
+      /*
+       * Turning charging ON retires the credits the dry run issued.
+       *
+       * Blocks sold by a DRY_RUN settlement were never paid for. Left on the
+       * balance they would reduce the first charged settlement's block, because
+       * the block is the daily target minus unused paid applications and the
+       * ledger cannot tell an unpaid credit from a bought one -- so the
+       * agency's first real billing day would deliver short, on credits nobody
+       * paid for.
+       *
+       * Retired by appending rows, never by editing the purchases: the ledger
+       * is append-only and a correction is a later row. Idempotent, so pressing
+       * this twice retires nothing the second time. See
+       * `closeOutDryRunLots()` -- it is not a reversal and no money moves.
+       */
+      const closeout = enabled
+        ? await closeOutDryRunLots({ prisma, tenantId })
+        : { lotsRetired: 0, creditsRetired: 0, balanceAfter: 0, entryIds: [] };
+
       await auditLog({
         tenantId,
         userId: getActingUserId(request) ?? undefined,
@@ -1136,7 +1136,11 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
           : 'platform.delivery.charges.disabled',
         entityType: 'agency_billing_profile',
         entityId: profile.id,
-        changes: { chargesEnabled: enabled },
+        changes: {
+          chargesEnabled: enabled,
+          dryRunLotsRetired: closeout.lotsRetired,
+          dryRunCreditsRetired: closeout.creditsRetired,
+        },
       });
 
       return reply.send({
@@ -1145,6 +1149,17 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
           enrolled: terms.enrolled,
           chargesEnabled: profile.chargesEnabled,
           chargesEnabledAt: profile.chargesEnabledAt,
+          /**
+           * What the transition retired. Zero on every call but the first, and
+           * on an agency that never ran a dry run.
+           */
+          dryRunCloseout: enabled
+            ? {
+                lotsRetired: closeout.lotsRetired,
+                creditsRetired: closeout.creditsRetired,
+                balanceAfter: closeout.balanceAfter,
+              }
+            : null,
         },
       });
     }
@@ -1156,7 +1171,9 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
    * The nightly run, by hand. Safe to call twice: the unique index on
    * (tenantId, deliveryDay) means a second call charges nobody.
    */
-  fastify.post<{ Body: { deliveryDay?: string; tenantIds?: string[]; noCharge?: boolean } }>(
+  fastify.post<{
+    Body: { deliveryDay?: string; tenantIds?: string[]; settleWithoutCharge?: boolean };
+  }>(
     '/api/v1/platform/delivery/settlement/run',
     { preHandler: [authenticate, requirePlatformAdmin] },
     async (request, reply) => {
@@ -1173,7 +1190,7 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
         tenantIds: request.body?.tenantIds,
         // Can only ever turn charging OFF for this run. There is no body field
         // that turns it on for an agency whose profile says otherwise.
-        noCharge: request.body?.noCharge === true,
+        settleWithoutCharge: request.body?.settleWithoutCharge === true,
       });
 
       await auditLog({
@@ -1186,6 +1203,111 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
       });
 
       return reply.send({ data: result });
+    }
+  );
+
+  /**
+   * GET /api/v1/platform/delivery/settlements.csv
+   *
+   * Every agency's settlements over a date range, as a file, optionally
+   * filtered to the ones that charged or the ones that did not.
+   *
+   * This is what a dry-run period is invoiced from. It carries every figure the
+   * settlement record was written with — the Delivery Day, the two counts, both
+   * closing percentages, the rate and its curve version, the overrun quantity
+   * and amount, the block quantity and amount, and the total that was or would
+   * have been charged — plus the agency's name and id, so an invoice can be
+   * raised from the file without opening the application.
+   *
+   *   ?from=2026-09-07&to=2026-09-09   inclusive Delivery Day range
+   *   ?mode=DRY_RUN                    only the settlements that took no money
+   *   ?mode=CHARGED                    only the ones that did
+   *   ?mode=ALL                        both (the default)
+   *   ?tenantId=<id>                   one agency
+   */
+  fastify.get<{
+    Querystring: { from?: string; to?: string; mode?: string; tenantId?: string };
+  }>(
+    '/api/v1/platform/delivery/settlements.csv',
+    { preHandler: [authenticate, requirePlatformAdmin] },
+    async (request, reply) => {
+      const { from, to, tenantId } = request.query;
+      const mode = (request.query.mode ?? 'ALL').toUpperCase();
+
+      for (const [name, value] of [
+        ['from', from],
+        ['to', to],
+      ] as const) {
+        if (value !== undefined && !DAY_PATTERN.test(value)) {
+          return reply.code(400).send({
+            error: { code: 'VALIDATION_ERROR', message: `${name} must be YYYY-MM-DD` },
+          });
+        }
+      }
+
+      if (!['ALL', 'DRY_RUN', 'CHARGED'].includes(mode)) {
+        return reply.code(400).send({
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'mode must be ALL, DRY_RUN or CHARGED',
+          },
+        });
+      }
+
+      /*
+       * CHARGED is every status except DRY_RUN, not just SUCCEEDED.
+       *
+       * A settlement that was sent to Stripe and failed, or that halted on the
+       * maximum daily debit, is one where charging was in force -- it belongs
+       * in the charged export, because leaving it out would make a reconciler
+       * think the day was never settled. DRY_RUN is the only status where no
+       * charge was ever attempted, so it is the only one the split turns on.
+       */
+      const paymentStatus =
+        mode === 'DRY_RUN'
+          ? { equals: SettlementPaymentStatus.DRY_RUN }
+          : mode === 'CHARGED'
+            ? { not: SettlementPaymentStatus.DRY_RUN }
+            : undefined;
+
+      /*
+       * Deliberately unpaginated. This is one row per agency per Delivery Day
+       * and an invoice is raised from it, so a page limit would hand somebody a
+       * file that silently stops part-way through a billing period -- a worse
+       * failure than a large download. The date range is the way to bound it.
+       */
+      const rows = await prisma.dailySettlement.findMany({
+        where: {
+          ...(tenantId ? { tenantId } : {}),
+          ...(from || to
+            ? { deliveryDay: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } }
+            : {}),
+          ...(paymentStatus ? { paymentStatus } : {}),
+        },
+        orderBy: [{ deliveryDay: 'asc' }, { tenantId: 'asc' }],
+      });
+
+      // One lookup for the names rather than a join per row: this export is
+      // read by a person, and an agency id is not something they can invoice.
+      const tenants = await prisma.tenant.findMany({
+        where: { id: { in: [...new Set(rows.map(row => row.tenantId))] } },
+        select: { id: true, name: true },
+      });
+      const nameById = new Map(tenants.map(t => [t.id, t.name]));
+
+      const header = ['agency', 'tenant_id', ...SETTLEMENT_CSV_COLUMNS];
+      const body = rows.map(row =>
+        [nameById.get(row.tenantId) ?? '', row.tenantId, ...settlementCsvRow(row)]
+          .map(csvCell)
+          .join(',')
+      );
+
+      const filename = `settlements-${mode.toLowerCase()}-${from ?? 'start'}-to-${to ?? 'today'}.csv`;
+
+      return reply
+        .header('Content-Type', 'text/csv; charset=utf-8')
+        .header('Content-Disposition', `attachment; filename="${filename}"`)
+        .send([header.map(csvCell).join(','), ...body].join('\n'));
     }
   );
 
@@ -1228,8 +1350,82 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
   );
 }
 
+/**
+ * The settlement export's columns, and one row.
+ *
+ * ── This is what an invoice is written from ──────────────────────────────────
+ *
+ * A dry-run period is invoiced by hand, so the export has to carry everything
+ * needed to raise that invoice without opening the application: the Delivery
+ * Day, the two counts, the closing percentages, the rate and the curve version
+ * that produced it, the overrun quantity and amount, the block quantity and
+ * amount, and the total that was -- or would have been -- charged.
+ *
+ * `day_closing_pct` is derived here from the two counts on the row rather than
+ * stored, because it is exactly `submittedApplications / deliveredCalls` and a
+ * second stored copy of a number is a second thing that can disagree. It is the
+ * DAY's percentage; `window_closing_pct` is the trailing window that set the
+ * rate, and they are different numbers, which is why both are here under names
+ * that say which.
+ */
+const SETTLEMENT_CSV_COLUMNS = [
+  'delivery_day',
+  'delivered_calls',
+  'submitted_applications',
+  'day_closing_pct',
+  'window_closing_pct',
+  'window_delivery_days',
+  'window_days_found',
+  'window_day_keys',
+  'rate',
+  'curve_version',
+  'overrun_quantity',
+  'overrun_amount',
+  'configured_block_quantity',
+  'unused_paid_applications',
+  'next_block_quantity',
+  'next_block_amount',
+  'total_charged',
+  'max_daily_debit',
+  'payment_status',
+  'stripe_payment_intent_id',
+  'paid_at',
+  'grace_period_ends_on',
+  'computed_at',
+] as const;
+
+function settlementCsvRow(row: SettlementRecord): unknown[] {
+  return [
+    row.deliveryDay,
+    row.deliveredCalls,
+    row.submittedApplications,
+    row.deliveredCalls > 0
+      ? ((row.submittedApplications / row.deliveredCalls) * 100).toFixed(4)
+      : '',
+    row.windowClosingPct === null ? '' : toNumber(row.windowClosingPct),
+    row.windowDeliveryDays,
+    row.windowDaysFound,
+    row.windowDayKeys.join(' '),
+    row.rate === null ? '' : toNumber(row.rate),
+    row.curveVersion ?? '',
+    row.overrunQuantity,
+    toNumber(row.overrunAmount),
+    row.configuredBlockQuantity,
+    row.unusedPaidApplications,
+    row.nextBlockQuantity,
+    toNumber(row.nextBlockAmount),
+    toNumber(row.totalCharged),
+    toNumber(row.maxDailyDebit),
+    row.paymentStatus,
+    row.stripePaymentIntentId ?? '',
+    row.paidAt?.toISOString() ?? '',
+    row.gracePeriodEndsOn ?? '',
+    row.computedAt.toISOString(),
+  ];
+}
+
 /** One settlement row, with every figure it was written with. */
-function serialiseSettlement(row: {
+type SettlementRecord = {
   id: string;
   tenantId: string;
   deliveryDay: string;
@@ -1257,7 +1453,9 @@ function serialiseSettlement(row: {
   paidAt: Date | null;
   gracePeriodEndsOn: string | null;
   computedAt: Date;
-}): Record<string, unknown> {
+};
+
+function serialiseSettlement(row: SettlementRecord): Record<string, unknown> {
   return {
     id: row.id,
     tenantId: row.tenantId,
