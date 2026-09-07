@@ -21,8 +21,10 @@ COPY apps/api/package.json ./apps/api/
 # line the deps stage's `pnpm install` cannot resolve the workspace dependency
 # and the image fails to build.
 #
-# tsup inlines every @hopwhistle/* package into dist/index.js (noExternal), so
-# nothing resolves it at runtime and the runner image is unaffected.
+# tsup inlines that module into dist/index.js (noExternal), so nothing resolves
+# `@hopwhistle/worker` at runtime. `stripe` itself is deliberately NOT inlined --
+# see the note in apps/api/tsup.config.ts -- and is a direct dependency of
+# apps/api, so it is in the node_modules the runner stage copies.
 COPY apps/worker/package.json ./apps/worker/
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/routing-dsl/package.json ./packages/routing-dsl/

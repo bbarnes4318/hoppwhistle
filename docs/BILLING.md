@@ -409,8 +409,14 @@ Three mechanical notes on that wiring:
 - The worker's `Pool` is now built on first use rather than in the constructor,
   so importing the class from `apps/api` does not open a second connection pool
   or throw in a process with no `DATABASE_URL`.
-- `apps/api/tsup.config.ts` already sets `noExternal: [/@hopwhistle\/.*/]`, so
-  the module is inlined into `dist/index.js` and nothing resolves it at runtime.
+- `apps/api/tsup.config.ts` sets `noExternal: [/@hopwhistle\/.*/]`, so the module
+  itself is inlined into `dist/index.js`. **`stripe` is pinned external there**,
+  and that is load-bearing rather than tidy: inlining it drags in `qs` →
+  `side-channel` → `object-inspect`, which are CommonJS and call
+  `require("util")` at import time, and esbuild's CJS shim answers that with
+  `Error: Dynamic require of "util" is not supported` — thrown while the server
+  starts, after a green build. `stripe` is a direct dependency of `apps/api` so
+  Node resolves it from the node_modules the runner image already copies.
 - `apps/api/Dockerfile`'s deps stage gained one `COPY apps/worker/package.json`
   line, without which `pnpm install` cannot resolve the workspace dependency.
 
