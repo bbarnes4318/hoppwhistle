@@ -6,10 +6,31 @@ const ESL_HOST = process.env.FREESWITCH_HOST || 'freeswitch';
 const ESL_PORT = parseInt(process.env.FREESWITCH_ESL_PORT || '8021', 10);
 const ESL_PASSWORD = process.env.FREESWITCH_ESL_PASSWORD || 'ClueCon';
 
-// Recording callback URL - FreeSWITCH will POST here when recording completes
-const RECORDING_CALLBACK_URL =
-  process.env.RECORDING_CALLBACK_URL ||
-  `http://${process.env.PUBLIC_IP || 'localhost'}:3001/api/v1/recordings/uploaded`;
+/**
+ * Where FreeSWITCH POSTs a finished recording.
+ *
+ * The `localhost` fallback here was the same failure as the carrier ones: this
+ * URL is handed to FreeSWITCH, which resolves it in *its own* container, so
+ * `localhost:3001` is FreeSWITCH itself and never the API. Recordings would be
+ * cut, uploaded to nowhere, and reported as fine.
+ *
+ * Resolved per call so an unset value fails recording setup rather than API
+ * startup.
+ */
+function recordingCallbackUrl(): string {
+  const explicit = process.env.RECORDING_CALLBACK_URL;
+  if (explicit) return explicit;
+
+  const publicIp = process.env.PUBLIC_IP;
+  if (!publicIp) {
+    throw new Error(
+      'Neither RECORDING_CALLBACK_URL nor PUBLIC_IP is set — FreeSWITCH has no ' +
+        'reachable address to upload recordings to.'
+    );
+  }
+
+  return `http://${publicIp}:3001/api/v1/recordings/uploaded`;
+}
 
 export class FreeSwitchService {
   /**
@@ -63,18 +84,17 @@ export class FreeSwitchService {
 
       // Iterate through active channels to find the one matching the SIP Call-ID
       const uuids: string[] = rows
-          .map((r: { uuid?: string }) => r.uuid)
-          .filter((u): u is string => typeof u === 'string');
+        .map((r: { uuid?: string }) => r.uuid)
+        .filter((u): u is string => typeof u === 'string');
 
       for (const uuid of uuids) {
         try {
           const chanCallId = await this.executeApi('uuid_getvar', `${uuid} sip_call_id`);
           if (
-            chanCallId && (
-              chanCallId === sipCallId ||
+            chanCallId &&
+            (chanCallId === sipCallId ||
               (chanCallId.length >= 10 && sipCallId.startsWith(chanCallId)) ||
-              (sipCallId.length >= 10 && chanCallId.startsWith(sipCallId))
-            )
+              (sipCallId.length >= 10 && chanCallId.startsWith(sipCallId)))
           ) {
             return uuid;
           }
@@ -82,7 +102,7 @@ export class FreeSwitchService {
           logger.warn({
             msg: 'Failed to check sip_call_id on active channel',
             uuid,
-            error: err instanceof Error ? err.stack : String(err)
+            error: err instanceof Error ? err.stack : String(err),
           });
         }
       }
@@ -91,7 +111,7 @@ export class FreeSwitchService {
     } catch (err) {
       logger.error({
         msg: 'Error resolving UUID',
-        error: err instanceof Error ? err.stack : String(err)
+        error: err instanceof Error ? err.stack : String(err),
       });
       return null;
     }
@@ -117,7 +137,7 @@ export class FreeSwitchService {
           logger.warn({
             msg: 'Failed to check hopwhistle_call_id on active channel',
             uuid,
-            error: err instanceof Error ? err.stack : String(err)
+            error: err instanceof Error ? err.stack : String(err),
           });
         }
       }
@@ -125,7 +145,7 @@ export class FreeSwitchService {
     } catch (err) {
       logger.error({
         msg: 'Error resolving UUID by Call ID',
-        error: err instanceof Error ? err.stack : String(err)
+        error: err instanceof Error ? err.stack : String(err),
       });
       return null;
     }
@@ -176,12 +196,19 @@ export class FreeSwitchService {
       await this.executeApi('uuid_record', `${realUuid} start ${recordingPath}`);
 
       await this.executeApi('uuid_setvar', `${realUuid} hopwhistle_call_id ${callId}`);
-      await this.executeApi('uuid_setvar', `${realUuid} hopwhistle_recording_path ${recordingPath}`);
+      await this.executeApi(
+        'uuid_setvar',
+        `${realUuid} hopwhistle_recording_path ${recordingPath}`
+      );
 
       const uploadCmd = `bg_system /usr/share/freeswitch/scripts/upload-recording.sh ${recordingPath} ${callId}`;
       await this.executeApi('uuid_setvar', `${realUuid} api_hangup_hook "${uploadCmd}"`);
 
-      logger.info({ msg: 'Recording started successfully with hangup hook', uuid: realUuid, callId });
+      logger.info({
+        msg: 'Recording started successfully with hangup hook',
+        uuid: realUuid,
+        callId,
+      });
 
       try {
         const { getPrismaClient } = await import('../lib/prisma.js');
@@ -199,9 +226,9 @@ export class FreeSwitchService {
                   ...existingRecordingDebug,
                   freeswitchRecordingStartedAt: new Date().toISOString(),
                   freeswitchRecordingPath: recordingPath,
-                }
-              } as any
-            }
+                },
+              } as any,
+            },
           });
         }
       } catch (err) {
@@ -235,7 +262,12 @@ export class FreeSwitchService {
       logger.info({ msg: 'Recording stopped', callUuid, callId });
     } catch (err) {
       // Non-fatal: recording may have already stopped (e.g., call ended)
-      logger.warn({ msg: 'Could not stop recording (may already be stopped)', callUuid, callId, error: err });
+      logger.warn({
+        msg: 'Could not stop recording (may already be stopped)',
+        callUuid,
+        callId,
+        error: err,
+      });
     }
   }
 
@@ -256,7 +288,7 @@ export class FreeSwitchService {
    * This URL is used in the dialplan/hangup_hook to POST the recording file.
    */
   getRecordingCallbackUrl(): string {
-    return RECORDING_CALLBACK_URL;
+    return recordingCallbackUrl();
   }
 
   // ============================================================================
@@ -276,7 +308,18 @@ export class FreeSwitchService {
       const jsonOutput = await this.executeApi('show', 'channels as json');
       const parsed = JSON.parse(jsonOutput) as { rows?: Array<Record<string, string>> };
       channels = parsed.rows || [];
-      logger.info({ msg: 'Active FreeSWITCH channels for merge', count: channels.length, channels: channels.map(c => ({ uuid: c.uuid, name: c.name, cid_num: c.cid_num, dest: c.dest, call_uuid: c.call_uuid, callstate: c.callstate })) });
+      logger.info({
+        msg: 'Active FreeSWITCH channels for merge',
+        count: channels.length,
+        channels: channels.map(c => ({
+          uuid: c.uuid,
+          name: c.name,
+          cid_num: c.cid_num,
+          dest: c.dest,
+          call_uuid: c.call_uuid,
+          callstate: c.callstate,
+        })),
+      });
     } catch (err) {
       logger.error({ msg: 'Failed to list channels for merge', error: (err as Error).message });
     }
@@ -310,7 +353,11 @@ export class FreeSwitchService {
       // Strategy 4: match by call_uuid field (bridged partner UUID)
       const byCallUuid = channels.find(c => c.call_uuid === id);
       if (byCallUuid?.uuid) {
-        logger.info({ msg: `${label}: resolved via call_uuid bridge partner`, id, uuid: byCallUuid.uuid });
+        logger.info({
+          msg: `${label}: resolved via call_uuid bridge partner`,
+          id,
+          uuid: byCallUuid.uuid,
+        });
         return byCallUuid.uuid;
       }
 
@@ -321,7 +368,11 @@ export class FreeSwitchService {
         return byName.uuid;
       }
 
-      logger.error({ msg: `${label}: could not resolve UUID`, id, availableUuids: channels.map(c => c.uuid) });
+      logger.error({
+        msg: `${label}: could not resolve UUID`,
+        id,
+        availableUuids: channels.map(c => c.uuid),
+      });
       return null;
     };
 
@@ -329,7 +380,13 @@ export class FreeSwitchService {
     const heldUuid = await resolveMulti(heldSipCallId, 'HELD');
 
     if (!activeUuid || !heldUuid) {
-      logger.error({ msg: 'Could not resolve UUIDs for merge', activeUuid, heldUuid, activeSipCallId, heldSipCallId });
+      logger.error({
+        msg: 'Could not resolve UUIDs for merge',
+        activeUuid,
+        heldUuid,
+        activeSipCallId,
+        heldSipCallId,
+      });
       throw new Error('Could not find active calls in FreeSWITCH');
     }
 
@@ -346,7 +403,12 @@ export class FreeSwitchService {
         if (chan.dest && chan.dest.startsWith('conference:')) {
           const confPeer = channels.find(c => c.dest === chan.dest && c.uuid !== uuid);
           if (confPeer) {
-            logger.info({ msg: 'findPeerLeg: resolved via shared conference destination', uuid, peer: confPeer.uuid, conference: chan.dest });
+            logger.info({
+              msg: 'findPeerLeg: resolved via shared conference destination',
+              uuid,
+              peer: confPeer.uuid,
+              conference: chan.dest,
+            });
             return confPeer.uuid;
           }
         }
@@ -356,12 +418,12 @@ export class FreeSwitchService {
           const parentExists = channels.some(c => c.uuid === chan.call_uuid);
           if (parentExists) return chan.call_uuid;
         }
-        
+
         // Strategy 3: If this channel is the parent leg, its peer is the child leg
         const child = channels.find(c => c.call_uuid === uuid && c.uuid !== uuid);
         if (child) return child.uuid;
       }
-      
+
       // Fallback: search for child leg by call_uuid
       const child = channels.find(c => c.call_uuid === uuid && c.uuid !== uuid);
       return child?.uuid || null;

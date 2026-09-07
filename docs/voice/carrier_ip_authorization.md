@@ -60,6 +60,65 @@ PATCH /api/v1/carrier-routing/gateways/:gatewayId  { "techPrefix": "012345" }
 
 Digits only; send `""` to clear it for a carrier that does not use one.
 
+## Inbound: where a carrier sends calls back
+
+Authorization covers outbound (this host → carrier). Inbound is a separate
+setting, configured per DID in the carrier's portal, and a server migration
+breaks it just as silently.
+
+For an Anveo **retail** DID the fields are `CALL_FORWARD_TYPE = SIP_URI` and:
+
+```
+$[E164]$@178.156.223.97:5080
+```
+
+`$[E164]$` is Anveo's own macro — it is substituted with the called number at
+call time, so it is stored literally. The port is 5080, the external profile's
+`sip-port`, which runs `auth-calls false` in the `public` context and therefore
+accepts a carrier's INVITE on source IP with no credentials.
+
+Three things this is not:
+
+- **Not the tech prefix.** `012345` selects an outbound Anveo Direct trunk and
+  has no place in an inbound call-forward URI.
+- **Not 5060.** That is Kamailio. Carrier traffic terminates on FreeSWITCH's
+  external profile.
+- **Not set once for the account.** It is per DID, so every number has to be
+  changed after a migration.
+
+`AnveoDIDService.configureForFreeSWITCH()` writes exactly this value from
+`PUBLIC_IP` when a DID is bought or re-configured through the app, so keeping
+that variable correct keeps new DIDs correct. It throws rather than guessing if
+`PUBLIC_IP` is unset. DIDs bought directly in the Anveo portal are not touched
+by it and have to be corrected by hand (see `docs/anveo-number-inventory.md`).
+
+## Where each carrier's return path is configured
+
+A migration breaks inbound for **every** carrier at once, but only some of them
+can be fixed from this repository. The distinction matters, because the ones
+that cannot are also the ones nothing here will warn you about:
+
+| Carrier         | Inbound return path is set by                                                          | In this repo?                         |
+| --------------- | -------------------------------------------------------------------------------------- | ------------------------------------- |
+| Anveo (retail)  | `configureForFreeSWITCH()` → `$[E164]$@<PUBLIC_IP>:5080`                               | yes — for DIDs bought through the app |
+| Anveo (adapter) | `AnveoAdapter.configureNumber()` → `SIP/<e164>@<PUBLIC_IP>:5080`                       | yes                                   |
+| Vapi            | BYO SIP trunk gateway IP (`vapi-carrier-service.ts`)                                   | yes                                   |
+| SignalWire      | LaML `<Sip>` bridge in the inbound webhook                                             | yes                                   |
+| Telnyx          | the **connection** a DID is assigned to; the connection's SIP endpoint is portal state | no — Telnyx portal                    |
+| BulkVS          | the **trunk group** on `/tnRecord`; the group's destination is portal state            | no — BulkVS portal                    |
+| FracTEL         | account/trunk level — `configureNumber()` is deliberately a no-op                      | no — FracTEL portal                   |
+| Voxbeam         | gateway only, no adapter                                                               | no — Voxbeam portal                   |
+| Wholesale       | gateway only, no adapter                                                               | no — carrier portal                   |
+
+The four code paths now refuse to run against an unset `PUBLIC_IP` instead of
+substituting a default. The five portal-only rows have no such protection: they
+keep pointing wherever they were last set, including at a host that has been
+released back to its cloud provider. **After any change of public IP, all five
+have to be checked by hand**, and a DID bought directly in a carrier portal is
+never touched by the code paths above even for the carriers that have them —
+which is how seven live Anveo DIDs came to be invisible to this platform
+(`docs/anveo-number-inventory.md`).
+
 ## Recognizing an authorization failure
 
 A carrier that does not recognize the source IP rejects the INVITE outright

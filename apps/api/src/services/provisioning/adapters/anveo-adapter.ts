@@ -246,6 +246,17 @@ export class AnveoAdapter implements ProvisioningAdapter {
    * Routes calls to SIP/{E164}@{PUBLIC_IP}:5080 (external profile)
    */
   async configureNumber(providerId: string, features: NumberFeatures): Promise<void> {
+    // `isConfigured()` already covers publicIp, and provisioning-service only
+    // registers this adapter when it passes -- but that is a guarantee made
+    // somewhere else about a class that is exported, and the cost of it being
+    // wrong is a DID told to route to `SIP/+1...@:5080`. Anveo accepts that
+    // string and the number stops ringing, with nothing logged as an error.
+    if (!this.publicIp) {
+      throw new Error(
+        'PUBLIC_IP is not set — refusing to write an incomplete SIP route to an Anveo DID.'
+      );
+    }
+
     // Format: SIP/+1XXXXXXXXXX@IP:5080
     const e164Number = providerId.startsWith('+') ? providerId : `+1${providerId}`;
     const sipUri = `SIP/${e164Number}@${this.publicIp}:5080`;

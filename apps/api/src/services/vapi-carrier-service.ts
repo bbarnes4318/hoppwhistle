@@ -55,13 +55,44 @@ const VAPI_API_TOKEN = process.env.VAPI_API_TOKEN || process.env.VAPI_API_KEY ||
 
 /**
  * FreeSWITCH / BulkVS carrier config (existing setup)
+ *
+ * `host` is deliberately absent -- see `freeswitchHost()`.
  */
 const FREESWITCH_CONFIG = {
-  host: process.env.PUBLIC_IP || '3.214.60.13',
   port: 5070,
   username: 'vapi',
   password: 'VapiFS_5070_StrongPass!9xQ2',
 };
+
+/**
+ * The public IP Vapi should send calls to, or an error.
+ *
+ * This used to be `process.env.PUBLIC_IP || '3.214.60.13'`. That address is the
+ * decommissioned AWS host from before the Hetzner migration, and a default like
+ * it is worse than no value at all: with PUBLIC_IP unset the code did not fail,
+ * it quietly registered a Vapi trunk pointing at an IP we no longer control.
+ * Nobody would see that until calls stopped arriving -- and an elastic IP that
+ * has been released belongs to whoever AWS hands it to next, so "pointing
+ * somewhere harmless" is not among the outcomes.
+ *
+ * Resolved per call rather than at module load: an unset PUBLIC_IP should fail
+ * the Vapi carrier operation that needs it, not refuse to start the API.
+ *
+ * `AnveoDIDService.configureForFreeSWITCH()` has always thrown here rather than
+ * guessed; this brings the Vapi path in line with it.
+ */
+export function freeswitchHost(): string {
+  const publicIp = process.env.PUBLIC_IP;
+
+  if (!publicIp) {
+    throw new Error(
+      'PUBLIC_IP is not set — cannot point the Vapi trunk at FreeSWITCH. ' +
+        "Set it to this host's public IP (see docs/voice/carrier_ip_authorization.md)."
+    );
+  }
+
+  return publicIp;
+}
 
 /**
  * SignalWire carrier config
@@ -110,9 +141,7 @@ async function vapiRequest<T>(method: string, path: string, body?: unknown): Pro
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(
-      `Vapi API ${response.status}: ${JSON.stringify(data).substring(0, 300)}`
-    );
+    throw new Error(`Vapi API ${response.status}: ${JSON.stringify(data).substring(0, 300)}`);
   }
 
   return data as T;
@@ -127,22 +156,23 @@ async function vapiRequest<T>(method: string, path: string, body?: unknown): Pro
  * This is the existing setup — calls go Vapi → FreeSWITCH → BulkVS signing → DIDCentral/FracTEL.
  */
 async function getOrCreateFreeSwitchCredential(): Promise<string> {
+  const host = freeswitchHost();
   const credentials = await vapiRequest<VapiCredential[]>('GET', '/credential');
   const existing = Array.isArray(credentials)
     ? credentials.find(c => {
         if (c.provider !== 'byo-sip-trunk') return false;
-        return c.gateways?.some(g => g.ip === FREESWITCH_CONFIG.host);
+        return c.gateways?.some(g => g.ip === host);
       })
     : null;
 
   if (existing) {
     // Ensure inbound is enabled
-    const gw = existing.gateways?.find(g => g.ip === FREESWITCH_CONFIG.host);
+    const gw = existing.gateways?.find(g => g.ip === host);
     if (gw && gw.inboundEnabled === false) {
       await vapiRequest('PATCH', `/credential/${existing.id}`, {
         gateways: [
           {
-            ip: FREESWITCH_CONFIG.host,
+            ip: host,
             port: FREESWITCH_CONFIG.port,
             netmask: 32,
             inboundEnabled: true,
@@ -161,7 +191,7 @@ async function getOrCreateFreeSwitchCredential(): Promise<string> {
     name: 'FreeSWITCH Vapi Trunk',
     gateways: [
       {
-        ip: FREESWITCH_CONFIG.host,
+        ip: host,
         port: FREESWITCH_CONFIG.port,
         netmask: 32,
         inboundEnabled: true,

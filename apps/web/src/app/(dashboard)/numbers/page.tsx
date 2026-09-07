@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowRightLeft, Download, Edit2, Loader2, Plus, Search } from 'lucide-react';
+import { ArrowRightLeft, Download, Edit2, Loader2, Plus, RefreshCw, Search } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 import { RoleGuard } from '@/components/auth/role-guard';
@@ -31,6 +31,10 @@ interface PhoneNumber {
   id: string;
   number: string;
   status: string;
+  /** Upstream the DID came from: 'anveo', 'fractel', 'bulkvs', ... */
+  provider?: string | null;
+  /** Linked routing carrier, when the number has one. */
+  carrier?: { id: string; name: string; code: string } | null;
   poolType?: 'POOL' | 'STATIC' | 'BUYER' | null;
   poolStatus?: 'AVAILABLE' | 'ASSIGNED' | 'RESERVED' | null;
   campaign: { id: string; name: string } | null;
@@ -56,6 +60,144 @@ interface DidRoute {
   createdAt: string;
 }
 
+const PROVIDER_LABELS: Record<string, string> = {
+  anveo: 'Anveo Direct',
+  bulkvs: 'BulkVS',
+  fractel: 'FracTEL',
+  signalwire: 'SignalWire',
+  telnyx: 'Telnyx',
+  bandwidth: 'Bandwidth',
+  local: 'Local / Imported',
+};
+
+/**
+ * How a number is labelled in the carrier grouping.
+ *
+ * A linked Carrier row is the real answer. Numbers imported before one existed
+ * -- every Anveo DID pulled in by the inventory sync, until a carrier is
+ * configured with numberProvider 'anveo' -- carry only `provider`, and showing
+ * that is more useful than filing them all under "Unassigned".
+ */
+function carrierLabel(number: PhoneNumber): string {
+  if (number.carrier?.name) return number.carrier.name;
+  if (number.provider) return PROVIDER_LABELS[number.provider.toLowerCase()] || number.provider;
+  return 'Unassigned Carrier';
+}
+
+/** Numbers grouped by carrier, largest group first, unassigned last. */
+function groupByCarrier(
+  numbers: PhoneNumber[]
+): Array<{ carrier: string; numbers: PhoneNumber[] }> {
+  const groups = new Map<string, PhoneNumber[]>();
+
+  for (const number of numbers) {
+    const label = carrierLabel(number);
+    const existing = groups.get(label);
+    if (existing) {
+      existing.push(number);
+    } else {
+      groups.set(label, [number]);
+    }
+  }
+
+  return Array.from(groups.entries())
+    .map(([carrier, groupNumbers]) => ({ carrier, numbers: groupNumbers }))
+    .sort((a, b) => {
+      const aUnassigned = a.carrier === 'Unassigned Carrier';
+      const bUnassigned = b.carrier === 'Unassigned Carrier';
+      if (aUnassigned !== bUnassigned) return aUnassigned ? 1 : -1;
+      if (a.numbers.length !== b.numbers.length) return b.numbers.length - a.numbers.length;
+      return a.carrier.localeCompare(b.carrier);
+    });
+}
+
+function NumberCard({
+  number,
+  onEdit,
+}: {
+  number: PhoneNumber;
+  onEdit: (number: PhoneNumber) => void;
+}) {
+  return (
+    <div className="flex flex-col rounded border border-border bg-card p-3 transition-all hover:border-primary/50 hover:shadow-sm">
+      <div className="flex items-start justify-between mb-2">
+        <div className="space-y-0.5">
+          <div className="font-mono text-sm font-semibold tracking-tight text-white">
+            {formatPhoneNumber(number.number)}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Badge
+              variant={number.status === 'ACTIVE' ? 'success' : 'secondary'}
+              className="text-[8px] px-1 py-0"
+            >
+              {number.status}
+            </Badge>
+            {number.poolType === 'POOL' && (
+              <Badge
+                variant={number.poolStatus === 'AVAILABLE' ? 'success' : 'warning'}
+                className="text-[8px] px-1 py-0"
+              >
+                RTB: {number.poolStatus === 'AVAILABLE' ? 'AVAIL' : 'ASSIGNED'}
+              </Badge>
+            )}
+          </div>
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6 rounded-full"
+          onClick={() => onEdit(number)}
+        >
+          <Edit2 className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+
+      <div className="mt-2 border-t border-border/10 pt-2 space-y-1.5 text-[11px]">
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <div className="text-muted-foreground text-[9px] uppercase tracking-wider">Carrier</div>
+            <div className="font-medium truncate text-white" title={carrierLabel(number)}>
+              {carrierLabel(number)}
+            </div>
+          </div>
+          <div>
+            <div className="text-muted-foreground text-[9px] uppercase tracking-wider">
+              Purchased
+            </div>
+            <div className="font-medium text-white">
+              {number.purchasedAt ? new Date(number.purchasedAt).toLocaleDateString() : 'N/A'}
+            </div>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <div className="text-muted-foreground text-[9px] uppercase tracking-wider">
+              Campaign
+            </div>
+            <div
+              className="font-medium truncate text-white"
+              title={number.campaign?.name || 'Unassigned'}
+            >
+              {number.campaign?.name || 'Unassigned'}
+            </div>
+          </div>
+          <div>
+            <div className="text-muted-foreground text-[9px] uppercase tracking-wider">
+              Assigned Agent
+            </div>
+            <div
+              className="font-medium truncate text-white"
+              title={number.user?.name || 'Unassigned'}
+            >
+              {number.user?.name || 'Unassigned'}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function NumbersPage() {
   const [search, setSearch] = useState('');
   const [bulkvsPurchaseDialogOpen, setBulkvsPurchaseDialogOpen] = useState(false);
@@ -69,6 +211,7 @@ function NumbersPage() {
   const [loading, setLoading] = useState(true);
   const [routes, setRoutes] = useState<DidRoute[]>([]);
   const [loadingRoutes, setLoadingRoutes] = useState(true);
+  const [syncingAnveo, setSyncingAnveo] = useState(false);
 
   useEffect(() => {
     void loadNumbers();
@@ -78,7 +221,9 @@ function NumbersPage() {
   const loadNumbers = async () => {
     setLoading(true);
     try {
-      const response = await apiClient.get<{ data: PhoneNumber[] }>('/api/v1/numbers');
+      // Grouping by carrier is only honest over the whole inventory: the
+      // endpoint's default page of 20 was dropping entire carriers off the page.
+      const response = await apiClient.get<{ data: PhoneNumber[] }>('/api/v1/numbers?limit=500');
       if (response.data?.data) {
         setNumbers(response.data.data);
       }
@@ -106,8 +251,11 @@ function NumbersPage() {
   const filteredNumbers = numbers.filter(
     n =>
       n.number.includes(search) ||
-      (n.campaign?.name || '').toLowerCase().includes(search.toLowerCase())
+      (n.campaign?.name || '').toLowerCase().includes(search.toLowerCase()) ||
+      carrierLabel(n).toLowerCase().includes(search.toLowerCase())
   );
+
+  const carrierGroups = groupByCarrier(filteredNumbers);
 
   const handleImport = () => {
     const input = document.createElement('input');
@@ -123,6 +271,51 @@ function NumbersPage() {
       }
     };
     input.click();
+  };
+
+  /**
+   * Pull the Anveo account's DIDs into our inventory.
+   *
+   * Numbers bought in the Anveo portal rather than through this app were never
+   * written to our database, which is why they appeared nowhere on this page.
+   */
+  const handleSyncAnveo = async () => {
+    setSyncingAnveo(true);
+    try {
+      // The `{}` is not decoration: the client always sends
+      // `Content-Type: application/json`, and Fastify rejects an empty body
+      // under that header with a 400 before the handler ever runs.
+      const response = await apiClient.post<{
+        success: boolean;
+        data: { found: number; created: number; updated: number; unchanged: number };
+      }>('/api/v1/anveo/sync', {});
+
+      if (response.error) {
+        toast({
+          title: 'Anveo sync failed',
+          description: response.error.message,
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const result = response.data?.data;
+      toast({
+        title: 'Anveo inventory synced',
+        description: result
+          ? `${result.found} DID(s) on the account — ${result.created} added, ${result.updated} updated.`
+          : 'Sync complete.',
+      });
+      void loadNumbers();
+    } catch (err) {
+      toast({
+        title: 'Anveo sync failed',
+        description: err instanceof Error ? err.message : 'Could not reach Anveo',
+        variant: 'destructive',
+      });
+    } finally {
+      setSyncingAnveo(false);
+    }
   };
 
   const handleBuyFractelNumber = () => {
@@ -172,6 +365,21 @@ function NumbersPage() {
         >
           <Download className="mr-2 h-3.5 w-3.5" />
           Import
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => void handleSyncAnveo()}
+          disabled={syncingAnveo}
+          title="Import DIDs bought directly in the Anveo portal"
+          className="h-8 text-xs border-border/50 text-muted-foreground"
+        >
+          {syncingAnveo ? (
+            <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="mr-2 h-3.5 w-3.5" />
+          )}
+          Sync Anveo
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -244,79 +452,24 @@ function NumbersPage() {
                   No phone numbers found
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                  {filteredNumbers.map(number => (
-                    <div
-                      key={number.id}
-                      className="flex flex-col rounded border border-border bg-card p-3 transition-all hover:border-primary/50 hover:shadow-sm"
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="space-y-0.5">
-                          <div className="font-mono text-sm font-semibold tracking-tight text-white">
-                            {formatPhoneNumber(number.number)}
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <Badge
-                              variant={number.status === 'ACTIVE' ? 'success' : 'secondary'}
-                              className="text-[8px] px-1 py-0"
-                            >
-                              {number.status}
-                            </Badge>
-                            {number.poolType === 'POOL' && (
-                              <Badge
-                                variant={number.poolStatus === 'AVAILABLE' ? 'success' : 'warning'}
-                                className="text-[8px] px-1 py-0"
-                              >
-                                RTB: {number.poolStatus === 'AVAILABLE' ? 'AVAIL' : 'ASSIGNED'}
-                              </Badge>
-                            )}
-                          </div>
+                <div className="space-y-4">
+                  {carrierGroups.map(group => (
+                    <div key={group.carrier}>
+                      {/* Admins manage inventory carrier by carrier: which DIDs
+                          can attest on which trunk, and where a gap is. The flat
+                          list made that impossible to see. */}
+                      <div className="flex items-center gap-2 mb-2 pb-1 border-b border-border/20">
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          {group.carrier}
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 rounded-full"
-                          onClick={() => handleEdit(number)}
-                        >
-                          <Edit2 className="h-3.5 w-3.5" />
-                        </Button>
+                        <Badge variant="secondary" className="text-[8px] px-1 py-0">
+                          {group.numbers.length}
+                        </Badge>
                       </div>
-
-                      <div className="mt-2 border-t border-border/10 pt-2 space-y-1.5 text-[11px]">
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <div className="text-muted-foreground text-[9px] uppercase tracking-wider">
-                              Campaign
-                            </div>
-                            <div
-                              className="font-medium truncate text-white"
-                              title={number.campaign?.name || 'Unassigned'}
-                            >
-                              {number.campaign?.name || 'Unassigned'}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-muted-foreground text-[9px] uppercase tracking-wider">
-                              Purchased
-                            </div>
-                            <div className="font-medium text-white">
-                              {number.purchasedAt
-                                ? new Date(number.purchasedAt).toLocaleDateString()
-                                : 'N/A'}
-                            </div>
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-muted-foreground text-[9px] uppercase tracking-wider">
-                            Assigned Agent
-                          </div>
-                          <div
-                            className="font-medium truncate text-white"
-                            title={number.user?.name || 'Unassigned'}
-                          >
-                            {number.user?.name || 'Unassigned'}
-                          </div>
-                        </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                        {group.numbers.map(number => (
+                          <NumberCard key={number.id} number={number} onEdit={handleEdit} />
+                        ))}
                       </div>
                     </div>
                   ))}

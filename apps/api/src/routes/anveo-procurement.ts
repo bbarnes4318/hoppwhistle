@@ -11,9 +11,10 @@ import { FastifyInstance, FastifyRequest } from 'fastify';
 
 import { logger } from '../lib/logger.js';
 import { getPrismaClient } from '../lib/prisma.js';
-import { AuthenticatedUser } from '../middleware/auth.js';
-import { getAnveoDIDService } from '../services/provisioning/anveo-did-service.js';
 import { getActingTenantId, sendTenantRefusal } from '../lib/tenant-context.js';
+import { AuthenticatedUser } from '../middleware/auth.js';
+import { requireRole } from '../middleware/rbac.js';
+import { getAnveoDIDService } from '../services/provisioning/anveo-did-service.js';
 
 type AuthRequest = FastifyRequest & { user?: AuthenticatedUser };
 
@@ -357,6 +358,11 @@ export async function registerAnveoProcurementRoutes(fastify: FastifyInstance): 
           },
           routing: {
             configured: true,
+            // Reported from the same variable configureForFreeSWITCH() wrote
+            // from. It throws when PUBLIC_IP is unset, so reaching this line
+            // means there is a real value -- previously an unset variable was
+            // interpolated as the string "undefined" and returned as though it
+            // were the route we had configured.
             sipUri: `$[E164]$@${process.env.PUBLIC_IP}:5080`,
             smsWebhookUrl,
           },
@@ -380,6 +386,68 @@ export async function registerAnveoProcurementRoutes(fastify: FastifyInstance): 
       };
     }
   });
+
+  // ==========================================================================
+  // INVENTORY SYNC
+  // ==========================================================================
+
+  /**
+   * Pull the Anveo account's DIDs into `phone_numbers`.
+   *
+   * Numbers bought in the Anveo portal rather than through this API never
+   * existed in our database, so the Numbers page -- which lists that table and
+   * nothing else -- showed none of them. This is the reconciliation: it reads
+   * Anveo's own inventory (DID.LIST) and files it under the acting tenant.
+   *
+   * Admin-only, because it writes inventory for the whole tenant and spends an
+   * upstream API call to do it.
+   */
+  fastify.post<{
+    Body?: { didType?: string };
+  }>(
+    '/api/v1/anveo/sync',
+    { preHandler: [requireRole('ADMIN', 'OWNER')] },
+    async (request, reply) => {
+      const user = (request as AuthRequest).user;
+      const tenantId = getActingTenantId(request);
+
+      if (!tenantId) {
+        return sendTenantRefusal(request, reply);
+      }
+
+      try {
+        const { syncAnveoNumbers } = await import('../services/provisioning/anveo-sync.js');
+        const result = await syncAnveoNumbers(tenantId, {
+          didType: request.body?.didType,
+        });
+
+        logger.info({
+          msg: 'Anveo inventory synced',
+          tenantId,
+          userId: user?.userId,
+          found: result.found,
+          created: result.created,
+          updated: result.updated,
+        });
+
+        return { success: true, data: result };
+      } catch (error) {
+        logger.error({
+          msg: 'Failed to sync Anveo inventory',
+          tenantId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+
+        void reply.code(502);
+        return {
+          error: {
+            code: 'ANVEO_SYNC_FAILED',
+            message: error instanceof Error ? error.message : 'Failed to sync Anveo numbers',
+          },
+        };
+      }
+    }
+  );
 
   // ==========================================================================
   // USER'S NUMBERS (Isolated by tenant)
