@@ -57,12 +57,19 @@ ringing at 23:59:58 and is answered at 00:00:02 was delivered on the second day.
 An `InsuranceCarrierApplication` for that agency that reached submitted state.
 
 `submittedAt` is a new column, written **once**, on the first transition into
-`SUBMITTED` (`services/carrier-rpa/application-store.ts`). The write is an
-`updateMany` with `submittedAt: null` in the `WHERE`, so a retried automation run
-or a redelivered completion matches no row and changes nothing. It counts once,
-and it keeps the timestamp of the first submission — which matters because
-moving that timestamp could move the application across a business-day boundary
-and change two different days' rates.
+`SUBMITTED` (`services/carrier-rpa/application-store.ts`). A retried automation
+run or a redelivered completion carries the existing timestamp forward rather
+than replacing it, which matters because moving it could move the application
+across a business-day boundary and change two different days' rates.
+
+It is written in the **same statement** as the status. This was briefly a second
+statement — an `updateMany` guarded on `submittedAt: null` — which reads well
+and is wrong here: the only caller wraps the whole function in a try/catch that
+logs and continues, so a failure on the second statement would leave the row
+`SUBMITTED` with a null `submittedAt`. That is an application the agency
+submitted, that the closing percentage never counts, with nothing on the surface
+to say so — a silently uncounted application is a silently wrong price. So
+`SUBMITTED` and `submittedAt` succeed or fail together.
 
 Attribution is by submission timestamp, not by the date of the call that
 produced it. An application from a 4pm call submitted at 9am the next day belongs
