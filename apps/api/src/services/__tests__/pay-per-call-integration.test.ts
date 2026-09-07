@@ -19,6 +19,10 @@ import { BillingService } from '../billing-service.js';
 import { BuyerBillingService } from '../buyer-billing-service.js';
 import { postService } from '../post-service.js';
 import { getRedisClient } from '../redis.js';
+import {
+  internalKeyHeaders,
+  useTestInternalKey,
+} from '../../__tests__/helpers/internal-key.js';
 
 // Truncates real tables and uses real Redis. Runs only against services
 // explicitly nominated as disposable — never DATABASE_URL/REDIS_URL, which
@@ -37,6 +41,10 @@ describe.skipIf(!gate.available)('Pay-Per-Call Real Database/Redis Integration T
 
   const tenantId = 'tenant-integration-1';
 
+  // This suite drives `/api/v1/freeswitch/*`, which is now behind the
+  // shared-secret guard. Authenticate the caller; never relax the guard.
+  useTestInternalKey();
+
   beforeAll(async () => {
     // Connect to actual database and redis
     prisma = getPrismaClient();
@@ -44,6 +52,7 @@ describe.skipIf(!gate.available)('Pay-Per-Call Real Database/Redis Integration T
 
     // Clean tables
     await cleanDatabase();
+    await cleanRedis();
 
     // Seed Roles
     const rolesToCreate = [
@@ -383,6 +392,7 @@ describe.skipIf(!gate.available)('Pay-Per-Call Real Database/Redis Integration T
 
   afterAll(async () => {
     await cleanDatabase();
+    await cleanRedis();
     if (redis) await redis.quit();
   });
 
@@ -419,6 +429,47 @@ describe.skipIf(!gate.available)('Pay-Per-Call Real Database/Redis Integration T
     }
   }
 
+  /**
+   * The Redis counterpart of `cleanDatabase`, without which this suite fails
+   * on a schedule nobody can see.
+   *
+   * `cleanDatabase` truncates the tables and leaves every Redis key the call
+   * flow wrote. Two of them are what actually break a re-run:
+   *
+   *   ping:cap:reserved:<endpointId>  a reservation COUNTER. It is never
+   *                                   decremented by a truncate, so it
+   *                                   accumulates across runs until the
+   *                                   endpoint reads as at capacity and
+   *                                   `processPost` returns accepted: false.
+   *   ping:result:<requestId>         the post idempotency record, which
+   *                                   replays a stale answer for a ping id
+   *                                   this suite hardcodes.
+   *
+   * The other three (`route:did:`, `ping:lease:`, `lock:number:`) carry a
+   * 900-second TTL from `numberPoolService.leaseNumber`, so they expire on
+   * their own -- fifteen minutes later, which is long enough for the failure
+   * to look like a billing bug rather than a dirty cache.
+   *
+   * Scoped to the key families this suite writes rather than FLUSHDB:
+   * `redisGate()` has established the instance is disposable, but "disposable"
+   * and "yours alone" are not the same claim.
+   */
+  async function cleanRedis() {
+    if (!redis) return;
+    const patterns = [
+      'route:did:*',
+      'ping:lease:*',
+      'ping:cap:reserved:*',
+      'ping:result:*',
+      'lock:number:*',
+      'tcpa:*',
+    ];
+    for (const pattern of patterns) {
+      const keys = await redis.keys(pattern);
+      if (keys.length > 0) await redis.del(...keys);
+    }
+  }
+
   const generateToken = (
     userId: string,
     role: string,
@@ -442,6 +493,7 @@ describe.skipIf(!gate.available)('Pay-Per-Call Real Database/Redis Integration T
     const lookupResponse = await app.inject({
       method: 'GET',
       url: '/api/v1/freeswitch/lookup',
+      headers: internalKeyHeaders,
       query: { did: '+18005550400', caller: '+15551112222' },
     });
     expect(lookupResponse.statusCode).toBe(200);
@@ -456,6 +508,7 @@ describe.skipIf(!gate.available)('Pay-Per-Call Real Database/Redis Integration T
     const cdrResponse = await app.inject({
       method: 'POST',
       url: '/api/v1/freeswitch/cdr',
+      headers: internalKeyHeaders,
       body: {
         callId: callSid,
         routeId: 'route-static-int',
@@ -551,6 +604,7 @@ describe.skipIf(!gate.available)('Pay-Per-Call Real Database/Redis Integration T
     const lookupResponse = await app.inject({
       method: 'GET',
       url: '/api/v1/freeswitch/lookup',
+      headers: internalKeyHeaders,
       query: { did: '+18005550300', caller: '+15552223333' },
     });
     expect(lookupResponse.statusCode).toBe(200);

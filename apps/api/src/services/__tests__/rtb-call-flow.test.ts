@@ -321,9 +321,17 @@ vi.mock('../event-bus.js', () => ({
 import { registerDidRouteRoutes } from '../../routes/did-routes.js';
 import { auctionService } from '../auction-service.js';
 import { postService } from '../post-service.js';
+import {
+  internalKeyHeaders,
+  useTestInternalKey,
+} from '../../__tests__/helpers/internal-key.js';
 
 describe('End-to-End RTB Call Flow Path Test', () => {
   let app: any;
+
+  // This suite drives `/api/v1/freeswitch/*`, which is now behind the
+  // shared-secret guard. Authenticate the caller; never relax the guard.
+  useTestInternalKey();
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -474,6 +482,7 @@ describe('End-to-End RTB Call Flow Path Test', () => {
     const lookupResponse = await app.inject({
       method: 'GET',
       url: '/api/v1/freeswitch/lookup',
+      headers: internalKeyHeaders,
       query: { did: '+18005550100', caller: '+18005550199' },
     });
     expect(lookupResponse.statusCode).toBe(200);
@@ -487,6 +496,7 @@ describe('End-to-End RTB Call Flow Path Test', () => {
     const cdrResponse = await app.inject({
       method: 'POST',
       url: '/api/v1/freeswitch/cdr',
+      headers: internalKeyHeaders,
       body: {
         callId: 'fs-call-uuid-123',
         routeId: `rtb-${pingId}`,
@@ -566,5 +576,29 @@ describe('End-to-End RTB Call Flow Path Test', () => {
     expect(mockPrismaData.buyerTransactions.length).toBe(1);
     // Verify ledger entries are still 4 (idempotent updates instead of new creates)
     expect(mockPrismaData.accrualLedgers.length).toBe(4);
+  });
+
+  it('refuses the same call flow when the caller has no internal key', async () => {
+    // The companion to every keyed inject above. `freeswitch-internal-key.test.ts`
+    // proves the guard refuses, and proves by static check that these routes
+    // carry it; this proves it end to end on the routes as actually registered,
+    // so removing the preHandler cannot pass by leaving the static check happy.
+    const lookup = await app.inject({
+      method: 'GET',
+      url: '/api/v1/freeswitch/lookup',
+      query: { did: '+18005550100', caller: '+18005550199' },
+    });
+    expect(lookup.statusCode).toBe(401);
+    expect(JSON.parse(lookup.body).error.code).toBe('INTERNAL_KEY_REQUIRED');
+
+    const cdr = await app.inject({
+      method: 'POST',
+      url: '/api/v1/freeswitch/cdr',
+      body: { callId: 'fs-call-uuid-unauthenticated', duration: 10 },
+    });
+    expect(cdr.statusCode).toBe(401);
+
+    // And nothing was written on the way to being refused.
+    expect(mockPrismaData.calls.length).toBe(0);
   });
 });
