@@ -1,0 +1,133 @@
+name: Deploy
+
+# Manual only. There is deliberately no `push:` trigger: a deploy to the box
+# that two agencies take live calls through is a decision somebody makes, not a
+# consequence of merging.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch, tag or SHA to deploy'
+        required: true
+        default: 'main'
+        type: string
+      dry_run:
+        description: 'Print the plan without changing anything'
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  # One deploy at a time, and never cancel one midway: a half-applied migration
+  # is worse than a queued job.
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to production
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+
+    steps:
+      # No checkout. The runner never needs the source: the host pulls it
+      # itself, so there is one copy of the code and one place it came from.
+
+      - name: Check the required secrets are present
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER: ${{ secrets.DEPLOY_USER }}
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          missing=""
+          [ -n "$HOST" ] || missing="$missing DEPLOY_HOST"
+          [ -n "$USER" ] || missing="$missing DEPLOY_USER"
+          [ -n "$KEY"  ] || missing="$missing DEPLOY_SSH_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:$missing"
+            echo "Add them under Settings → Secrets and variables → Actions."
+            echo "DEPLOY_SSH_KEY is the PRIVATE half of the keypair; the public"
+            echo "half belongs in ~/.ssh/authorized_keys on the host."
+            exit 1
+          fi
+
+      - name: Load the deploy key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Pin the host key
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          if [ -n "$KNOWN_HOSTS" ]; then
+            printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+            echo "Host key pinned from the DEPLOY_KNOWN_HOSTS secret."
+          else
+            # Trust-on-first-use. Works, and is the weaker option: it accepts
+            # whatever answers on that address at the moment the job runs.
+            # Harden it by capturing `ssh-keyscan -H <host>` once, from a
+            # machine you trust, into a DEPLOY_KNOWN_HOSTS secret.
+            echo "::warning::DEPLOY_KNOWN_HOSTS is not set; accepting the host key unverified."
+            ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          fi
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Deploy
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER: ${{ secrets.DEPLOY_USER }}
+          # Where the checkout lives on the box. Override with a repository
+          # variable if it is not the documented /opt/hopwhistle.
+          APP_DIR: ${{ vars.DEPLOY_PATH || '/opt/hopwhistle' }}
+          # The launch set for `platform:admins --sync`. Without it only
+          # joel.vasquez@outlook.com is provisioned; see scripts/deploy-netenroll.sh.
+          PLATFORM_ADMIN_EMAILS: ${{ vars.PLATFORM_ADMIN_EMAILS }}
+          REF: ${{ inputs.ref }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+
+          FLAG=""
+          if [ "$DRY_RUN" = "true" ]; then
+            FLAG="--dry-run"
+            echo "::notice::Dry run — nothing will be changed."
+          fi
+
+          # -T: no pty, so the remote output is not line-buffered through one.
+          # The heredoc is quoted so it is expanded on the host, not here.
+          ssh -T -o StrictHostKeyChecking=yes "$USER@$HOST" \
+            APP_DIR="$APP_DIR" REF="$REF" FLAG="$FLAG" \
+            PLATFORM_ADMIN_EMAILS="$PLATFORM_ADMIN_EMAILS" \
+            'bash -seuo pipefail' <<'REMOTE'
+          cd "$APP_DIR"
+
+          echo "── Fetching $REF"
+          git fetch --all --tags --prune
+          git checkout --detach "$REF"
+          git --no-pager log --oneline -1
+
+          echo
+          # scripts/deploy-netenroll.sh does the ordering that matters:
+          # migrate → provision platform admins → verify → scripts/deploy.sh.
+          # It refuses to deploy if that would leave zero platform admins, which
+          # would make the dialer console unreachable for everyone.
+          exec ./scripts/deploy-netenroll.sh $FLAG
+          REMOTE
+
+      - name: Summarise
+        if: always()
+        env:
+          REF: ${{ inputs.ref }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          {
+            echo "### Deploy"
+            echo
+            echo "- ref: \`$REF\`"
+            echo "- dry run: \`$DRY_RUN\`"
+            echo "- result: \`${{ job.status }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
