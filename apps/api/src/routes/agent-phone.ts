@@ -590,7 +590,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
 
       // Update Redis state
       try {
-        await callStateService.updateCallState(callId, { status: 'answered' });
+        await callStateService.updateCallStateForTenant(callId, tenantId, { status: 'answered' });
       } catch (err) {
         console.warn(`[Answer] Redis callState update failed, continuing:`, (err as Error).message);
       }
@@ -743,7 +743,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
 
     // Update Redis state
     try {
-      await callStateService.updateCallState(callId, { status: 'completed' });
+      await callStateService.updateCallStateForTenant(callId, tenantId, { status: 'completed' });
     } catch (err) {
       console.warn(`[Hangup] Redis callState update failed, continuing:`, (err as Error).message);
     }
@@ -805,7 +805,11 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       if (!agent) return;
       const { tenantId } = agent;
 
-      const callState = await callStateService.getCallState(callId);
+      // Scoped to the acting tenant. The Redis key is the call id alone, and
+      // the call id arrives in the path: unscoped, this read told an agent
+      // whether another agency's call id existed and the write below put that
+      // agency's live call on hold.
+      const callState = await callStateService.getCallStateForTenant(callId, tenantId);
 
       if (!callState) {
         void reply.code(404);
@@ -817,7 +821,7 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
       const currentHoldState = metadata.isOnHold === true;
       const isOnHold = !currentHoldState;
 
-      await callStateService.updateCallState(callId, {
+      await callStateService.updateCallStateForTenant(callId, tenantId, {
         metadata: { ...metadata, isOnHold },
       });
 
@@ -1172,16 +1176,12 @@ export async function registerAgentPhoneRoutes(fastify: FastifyInstance): Promis
 
       const { callId } = request.params;
 
-      // First check Redis for real-time state. Checked against the acting
-      // tenant: this is a lead's name, phone number and history, and the Redis
-      // key is the call id alone.
-      const callState = await callStateService.getCallState(callId);
+      // First check Redis for real-time state. Scoped to the acting tenant:
+      // this is a lead's name, phone number and history, and the Redis key is
+      // the call id alone.
+      const callState = await callStateService.getCallStateForTenant(callId, tenantId);
 
       if (callState?.metadata?.screenPopData) {
-        if (callState.tenantId && callState.tenantId !== tenantId) {
-          void reply.code(404);
-          return { error: { code: 'CALL_NOT_FOUND', message: 'Call not found' } };
-        }
         return {
           callId,
           data: callState.metadata.screenPopData,

@@ -1,15 +1,13 @@
 import { Prisma } from '@prisma/client';
 import type { PrismaClient } from '@prisma/client';
-import { FastifyInstance, FastifyRequest } from 'fastify';
+import { FastifyInstance } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
-import type { AuthenticatedUser } from '../middleware/auth.js';
+import { getActingTenantId, replyTenantRefusal } from '../lib/tenant-context.js';
 import { computeAbandonRate } from '../services/abandon-rate.js';
 import { getRedisClient } from '../services/redis.js';
 
 import { getUserProfile } from './index.js';
-
-type AuthRequest = FastifyRequest & { user?: AuthenticatedUser };
 
 /**
  * GET /api/v1/live/metrics — the single source for the LiveStrip.
@@ -314,13 +312,10 @@ export async function registerLiveMetricsRoutes(fastify: FastifyInstance) {
   await Promise.resolve();
 
   fastify.get('/api/v1/live/metrics', async (request, reply) => {
-    const user = (request as AuthRequest).user;
-    const tenantId = user?.tenantId;
+    const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
-      return reply
-        .code(401)
-        .send({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
+      return replyTenantRefusal(request, reply);
     }
 
     const prisma = getPrismaClient();

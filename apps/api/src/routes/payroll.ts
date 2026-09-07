@@ -4,6 +4,7 @@
  */
 import { FastifyInstance, FastifyRequest } from 'fastify';
 
+import { replyTenantRefusal } from '../lib/tenant-context.js';
 import { authenticate } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
 import * as timeTrackingService from '../services/time-tracking-service.js';
@@ -380,9 +381,7 @@ export async function registerPayrollRoutes(fastify: FastifyInstance) {
       const user = (request as AuthRequest).user;
 
       if (!user?.tenantId) {
-        return reply.code(401).send({
-          error: { code: 'UNAUTHORIZED', message: 'Authentication required' },
-        });
+        return replyTenantRefusal(request, reply);
       }
 
       const { startDate, endDate, userId } = request.query;
@@ -429,9 +428,7 @@ export async function registerPayrollRoutes(fastify: FastifyInstance) {
       const user = (request as AuthRequest).user;
 
       if (!user?.tenantId) {
-        return reply.code(401).send({
-          error: { code: 'UNAUTHORIZED', message: 'Authentication required' },
-        });
+        return replyTenantRefusal(request, reply);
       }
 
       try {
@@ -476,9 +473,7 @@ export async function registerPayrollRoutes(fastify: FastifyInstance) {
       const user = (request as AuthRequest).user;
 
       if (!user?.tenantId) {
-        return reply.code(401).send({
-          error: { code: 'UNAUTHORIZED', message: 'Authentication required' },
-        });
+        return replyTenantRefusal(request, reply);
       }
 
       // Default to current month

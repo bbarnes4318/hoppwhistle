@@ -3,7 +3,7 @@ import { FastifyInstance } from 'fastify';
 
 import { FlowEngine } from '../services/flow-engine.js';
 import { flowStore } from '../services/flow-store.js';
-import { getActingTenantId, resolveTenant } from '../lib/tenant-context.js';
+import { getActingTenantId, resolveTenant, sendTenantRefusal } from '../lib/tenant-context.js';
 
 // Store active flow engines by call ID
 const activeEngines = new Map<string, FlowEngine>();
@@ -19,8 +19,7 @@ export async function registerFlowManagementRoutes(fastify: FastifyInstance) {
       const tenantId = getActingTenantId(request);
       
       if (!tenantId) {
-        reply.code(401);
-        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+        return sendTenantRefusal(request, reply);
       }
 
       // Add tenant ID to flow metadata

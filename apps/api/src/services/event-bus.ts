@@ -13,6 +13,8 @@ export type EventChannel = 'call.*' | 'billing.*' | 'recording.*';
 export class EventBus {
   private redis = getRedisClient();
   private subscriber: ReturnType<typeof getRedisClient> | null = null;
+  /** Live pub/sub handlers, one per open subscription. See subscribePubSub(). */
+  private pubSubHandlers = new Set<(channel: EventChannel, payload: EventPayload) => void>();
   private streamKey = 'events:stream';
   private consumerGroupName = 'event-consumers';
 
@@ -157,54 +159,94 @@ export class EventBus {
   }
 
   /**
-   * Subscribe to events using Redis pub/sub (for real-time WebSocket delivery)
+   * Subscribe to events using Redis pub/sub (for real-time WebSocket delivery).
+   *
+   * ── One connection, many subscribers ────────────────────────────────────────
+   *
+   * Every live WebSocket calls this. The previous version attached a fresh
+   * `pmessage` listener to ONE shared ioredis connection on every call and
+   * never removed it, so:
+   *
+   *   - closing the first socket ran `punsubscribe('call.*')` on the shared
+   *     connection and silently stopped delivery for every other socket still
+   *     open, and
+   *   - the listeners of closed sockets stayed attached, growing without bound
+   *     and tripping Node's max-listeners warning at eleven connections.
+   *
+   * So the listeners are now attached exactly once and the handlers live in a
+   * Set. Unsubscribing removes one handler; the Redis-level `punsubscribe` runs
+   * only when the last subscriber has gone, which is the only point at which it
+   * is not someone else's delivery being cancelled.
+   *
+   * The handler is called for every event on the connection, of every tenant.
+   * That is inherent to a shared pub/sub connection, and it is why the callers
+   * -- `routes/websocket.ts` -- compare `payload.tenantId` against the
+   * subscriber's own tenant before sending anything. Do not add a caller here
+   * that skips that comparison.
    */
   async subscribePubSub(
     channels: EventChannel[],
     handler: (channel: EventChannel, payload: EventPayload) => void
   ): Promise<() => Promise<void>> {
     if (!this.subscriber) {
-      this.subscriber = getRedisClient().duplicate();
+      const conn = getRedisClient().duplicate();
+      // duplicate() copies options, not listeners. An ioredis 'error' with no
+      // listener is an unhandled 'error' event, which takes the process down.
+      conn.on('error', (err) => {
+        console.error('[EventBus] Pub/sub connection error:', err.message);
+      });
+
+      const dispatch = (channel: string, message: string) => {
+        let payload: EventPayload;
+        try {
+          payload = JSON.parse(message) as EventPayload;
+        } catch (err) {
+          console.error('Error parsing pub/sub message:', err);
+          return;
+        }
+        // Copied before iterating: a handler may unsubscribe itself.
+        for (const h of [...this.pubSubHandlers]) {
+          try {
+            h(channel as EventChannel, payload);
+          } catch (err) {
+            console.error('Error in pub/sub handler:', err);
+          }
+        }
+      };
+
+      conn.on('pmessage', (_pattern, channel, message) => dispatch(channel, message));
+      conn.on('message', (channel, message) => dispatch(channel, message));
+
+      this.subscriber = conn;
     }
 
-    const messageHandler = (channel: string, message: string) => {
-      try {
-        const payload = JSON.parse(message) as EventPayload;
-        handler(channel as EventChannel, payload);
-      } catch (err) {
-        console.error('Error parsing pub/sub message:', err);
-      }
-    };
-
-    // Subscribe to wildcard patterns using psubscribe
-    // For 'call.*', we subscribe to pattern 'call.*'
     const patterns = channels.filter((ch) => ch.endsWith('.*'));
-    
+    const specificChannels = channels.filter((ch) => !ch.endsWith('.*'));
+
     if (patterns.length > 0) {
       await this.subscriber.psubscribe(...patterns);
-      this.subscriber.on('pmessage', (pattern, channel, message) => {
-        messageHandler(channel as EventChannel, message);
-      });
     }
-
-    // Also subscribe to specific channels (non-wildcard)
-    const specificChannels = channels.filter((ch) => !ch.endsWith('.*'));
     if (specificChannels.length > 0) {
       await this.subscriber.subscribe(...specificChannels);
-      this.subscriber.on('message', (channel, message) => {
-        messageHandler(channel as EventChannel, message);
-      });
     }
 
-    // Return unsubscribe function
+    this.pubSubHandlers.add(handler);
+
+    let released = false;
     return async () => {
-      if (this.subscriber) {
-        if (patterns.length > 0) {
-          await this.subscriber.punsubscribe(...patterns);
-        }
-        if (specificChannels.length > 0) {
-          await this.subscriber.unsubscribe(...specificChannels);
-        }
+      if (released) return;
+      released = true;
+      this.pubSubHandlers.delete(handler);
+
+      // Only the last subscriber tears the Redis subscription down. Anything
+      // else cancels delivery for connections that are still open.
+      if (this.pubSubHandlers.size > 0 || !this.subscriber) return;
+
+      if (patterns.length > 0) {
+        await this.subscriber.punsubscribe(...patterns);
+      }
+      if (specificChannels.length > 0) {
+        await this.subscriber.unsubscribe(...specificChannels);
       }
     };
   }

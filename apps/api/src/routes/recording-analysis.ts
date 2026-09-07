@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { FastifyInstance } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
+import { getActingTenantId, sendTenantRefusal } from '../lib/tenant-context.js';
 import { getRedisClient } from '../services/redis.js';
 import { getStorageService } from '../services/storage.js';
 
@@ -27,13 +28,11 @@ export async function registerRecordingAnalysisRoutes(fastify: FastifyInstance) 
       uploads?: UploadRef[];
     };
   }>('/api/v1/recording-analysis/analyze', async (request, reply) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-    const tenantId = (request as any).user?.tenantId as string | undefined;
+    const tenantId = getActingTenantId(request);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
     const userId = (request as any).user?.userId as string | undefined;
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const { vertical, selectedFields, urls = [], uploads = [] } = request.body ?? {};
@@ -144,11 +143,9 @@ export async function registerRecordingAnalysisRoutes(fastify: FastifyInstance) 
   fastify.get<{
     Params: { batchId: string };
   }>('/api/v1/recording-analysis/batch/:batchId', async (request, reply) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-    const tenantId = (request as any).user?.tenantId as string | undefined;
+    const tenantId = getActingTenantId(request);
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const batchId = request.params.batchId;
@@ -167,11 +164,9 @@ export async function registerRecordingAnalysisRoutes(fastify: FastifyInstance) 
   fastify.get<{
     Params: { id: string };
   }>('/api/v1/recording-analysis/:id', async (request, reply) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-    const tenantId = (request as any).user?.tenantId as string | undefined;
+    const tenantId = getActingTenantId(request);
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const id = request.params.id;
@@ -194,11 +189,9 @@ export async function registerRecordingAnalysisRoutes(fastify: FastifyInstance) 
   fastify.get<{
     Querystring: { page?: string; limit?: string; status?: string };
   }>('/api/v1/recording-analysis', async (request, reply) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-    const tenantId = (request as any).user?.tenantId as string | undefined;
+    const tenantId = getActingTenantId(request);
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const page = parseInt(request.query.page || '1');
@@ -239,13 +232,11 @@ export async function registerRecordingAnalysisRoutes(fastify: FastifyInstance) 
     Params: { id: string };
     Body: { selectedFields: string[] };
   }>('/api/v1/recording-analysis/:id/rerun', async (request, reply) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-    const tenantId = (request as any).user?.tenantId as string | undefined;
+    const tenantId = getActingTenantId(request);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
     const userId = (request as any).user?.userId as string | undefined;
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const { id } = request.params;
@@ -328,11 +319,9 @@ export async function registerRecordingAnalysisRoutes(fastify: FastifyInstance) 
   fastify.get<{
     Params: { batchId: string };
   }>('/api/v1/recording-analysis/batch/:batchId/csv', async (request, reply) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-    const tenantId = (request as any).user?.tenantId as string | undefined;
+    const tenantId = getActingTenantId(request);
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const batchId = request.params.batchId;

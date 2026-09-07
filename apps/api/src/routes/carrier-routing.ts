@@ -27,6 +27,7 @@ import {
 } from '@hopwhistle/shared';
 
 import { getPrismaClient } from '../lib/prisma.js';
+import { getActingTenantId, replyTenantRefusal } from '../lib/tenant-context.js';
 import { requireAnyPermission } from '../middleware/rbac.js';
 import {
   getCarrierChain,
@@ -76,8 +77,7 @@ const canWrite = requireAnyPermission('admin:*', 'settings:write', 'numbers:writ
  * route can reconfigure where a tenant's calls are sent.
  */
 function tenantOf(request: FastifyRequest): string | null {
-  const user = (request as FastifyRequest & { user?: { tenantId?: string } }).user;
-  return user?.tenantId ?? null;
+  return getActingTenantId(request);
 }
 
 export async function registerCarrierRoutingRoutes(server: FastifyInstance) {
@@ -94,9 +94,7 @@ export async function registerCarrierRoutingRoutes(server: FastifyInstance) {
     async (request: FastifyRequest, reply: FastifyReply) => {
       const tenantId = tenantOf(request);
       if (!tenantId) {
-        return reply.code(401).send({
-          error: { code: 'UNAUTHORIZED', message: 'Authentication required' },
-        });
+        return replyTenantRefusal(request, reply);
       }
 
       const prisma = getPrismaClient();
@@ -131,9 +129,7 @@ export async function registerCarrierRoutingRoutes(server: FastifyInstance) {
     async (request, reply) => {
       const tenantId = tenantOf(request);
       if (!tenantId) {
-        return reply.code(401).send({
-          error: { code: 'UNAUTHORIZED', message: 'Authentication required' },
-        });
+        return replyTenantRefusal(request, reply);
       }
 
       const { callType } = request.params;
@@ -248,9 +244,7 @@ export async function registerCarrierRoutingRoutes(server: FastifyInstance) {
     async (request, reply) => {
       const tenantId = tenantOf(request);
       if (!tenantId) {
-        return reply.code(401).send({
-          error: { code: 'UNAUTHORIZED', message: 'Authentication required' },
-        });
+        return replyTenantRefusal(request, reply);
       }
 
       const prisma = getPrismaClient();
@@ -317,9 +311,7 @@ export async function registerCarrierRoutingRoutes(server: FastifyInstance) {
     async (request, reply) => {
       const tenantId = tenantOf(request);
       if (!tenantId) {
-        return reply.code(401).send({
-          error: { code: 'UNAUTHORIZED', message: 'Authentication required' },
-        });
+        return replyTenantRefusal(request, reply);
       }
 
       const prisma = getPrismaClient();
@@ -351,9 +343,7 @@ export async function registerCarrierRoutingRoutes(server: FastifyInstance) {
     async (request, reply) => {
       const tenantId = tenantOf(request);
       if (!tenantId) {
-        return reply.code(401).send({
-          error: { code: 'UNAUTHORIZED', message: 'Authentication required' },
-        });
+        return replyTenantRefusal(request, reply);
       }
 
       const { callType } = request.params;

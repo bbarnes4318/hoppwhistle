@@ -4,7 +4,7 @@ import { FastifyInstance, FastifyRequest } from 'fastify';
 import { Prisma } from '@prisma/client';
 
 import { requirePlatformAdmin } from '../lib/platform-context.js';
-import { getActingTenantId, resolveTenant } from '../lib/tenant-context.js';
+import { getActingTenantId, resolveTenant, sendTenantRefusal } from '../lib/tenant-context.js';
 import { authenticate } from '../middleware/auth.js';
 import { AuthenticatedUser } from '../middleware/auth.js';
 
@@ -533,8 +533,7 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
       const tenantId = getActingTenantId(request);
 
       if (!tenantId) {
-        void reply.code(401);
-        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+        return sendTenantRefusal(request, reply);
       }
 
       const prisma = (await import('../lib/prisma.js')).getPrismaClient();
@@ -634,8 +633,7 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
       const tenantId = getActingTenantId(request);
 
       if (!tenantId) {
-        void reply.code(401);
-        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+        return sendTenantRefusal(request, reply);
       }
 
       const body = request.body;
@@ -760,8 +758,7 @@ export async function registerNumberRoutes(fastify: FastifyInstance) {
       const tenantId = getActingTenantId(request);
 
       if (!tenantId) {
-        void reply.code(401);
-        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+        return sendTenantRefusal(request, reply);
       }
 
       const { numberId } = request.params as { numberId: string };
@@ -898,8 +895,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
       const tenantId = getActingTenantId(request);
 
       if (!tenantId) {
-        void reply.code(401);
-        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+        return sendTenantRefusal(request, reply);
       }
 
       const prisma = (await import('../lib/prisma.js')).getPrismaClient();
@@ -991,8 +987,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
       const tenantId = getActingTenantId(request);
 
       if (!tenantId) {
-        void reply.code(401);
-        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+        return sendTenantRefusal(request, reply);
       }
 
       const body = request.body;
@@ -1167,8 +1162,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
     const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const prisma = (await import('../lib/prisma.js')).getPrismaClient();
@@ -1266,8 +1260,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
       const tenantId = getActingTenantId(request);
 
       if (!tenantId) {
-        void reply.code(401);
-        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+        return sendTenantRefusal(request, reply);
       }
 
       const prisma = (await import('../lib/prisma.js')).getPrismaClient();
@@ -1332,8 +1325,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
       const tenantId = getActingTenantId(request);
 
       if (!tenantId) {
-        void reply.code(401);
-        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+        return sendTenantRefusal(request, reply);
       }
 
       const { campaignId } = request.params;
@@ -1443,8 +1435,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
         const tenantId = getActingTenantId(request);
 
         if (!tenantId) {
-          void reply.code(401);
-          return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+          return sendTenantRefusal(request, reply);
         }
 
         const { campaignId } = request.params;
@@ -1532,8 +1523,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
         const tenantId = getActingTenantId(request);
 
         if (!tenantId) {
-          void reply.code(401);
-          return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+          return sendTenantRefusal(request, reply);
         }
 
         const { campaignId } = request.params;
@@ -1988,8 +1978,7 @@ export async function registerFlowRoutes(fastify: FastifyInstance) {
     const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const prisma = (await import('../lib/prisma.js')).getPrismaClient();
@@ -2071,8 +2060,7 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
       const tenantId = getActingTenantId(request);
 
       if (!tenantId) {
-        void reply.code(401);
-        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+        return sendTenantRefusal(request, reply);
       }
 
       const prisma = (await import('../lib/prisma.js')).getPrismaClient();
@@ -2132,8 +2120,7 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
     const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const prisma = (await import('../lib/prisma.js')).getPrismaClient();
@@ -2203,8 +2190,7 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
       const tenantId = getActingTenantId(request);
 
       if (!tenantId) {
-        void reply.code(401);
-        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+        return sendTenantRefusal(request, reply);
       }
 
       const body = request.body;
@@ -2302,8 +2288,7 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
       const tenantId = getActingTenantId(request);
 
       if (!tenantId) {
-        void reply.code(401);
-        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+        return sendTenantRefusal(request, reply);
       }
 
       const { publisherId } = request.params;
@@ -2379,8 +2364,7 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
         const tenantId = getActingTenantId(request);
 
         if (!tenantId) {
-          void reply.code(401);
-          return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+          return sendTenantRefusal(request, reply);
         }
 
         const { publisherId } = request.params;
@@ -2432,8 +2416,7 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
         const tenantId = getActingTenantId(request);
 
         if (!tenantId) {
-          void reply.code(401);
-          return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+          return sendTenantRefusal(request, reply);
         }
 
         const { publisherId } = request.params;
@@ -2487,8 +2470,7 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
       const tenantId = getActingTenantId(request);
 
       if (!tenantId) {
-        void reply.code(401);
-        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+        return sendTenantRefusal(request, reply);
       }
 
       const { publisherId } = request.params;
@@ -2626,8 +2608,7 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
         const tenantId = getActingTenantId(request);
 
         if (!tenantId) {
-          void reply.code(401);
-          return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+          return sendTenantRefusal(request, reply);
         }
 
         const { publisherId } = request.params;
@@ -2681,8 +2662,7 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
       const tenantId = getActingTenantId(request);
 
       if (!tenantId) {
-        void reply.code(401);
-        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+        return sendTenantRefusal(request, reply);
       }
 
       const { publisherId } = request.params;
@@ -2754,8 +2734,7 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
         const tenantId = getActingTenantId(request);
 
         if (!tenantId) {
-          void reply.code(401);
-          return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+          return sendTenantRefusal(request, reply);
         }
 
         const { publisherId, keyId } = request.params;
@@ -2803,8 +2782,7 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
         const tenantId = getActingTenantId(request);
 
         if (!tenantId) {
-          void reply.code(401);
-          return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+          return sendTenantRefusal(request, reply);
         }
 
         const { publisherId } = request.params;
@@ -2881,8 +2859,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
     const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const startDate = request.query.startDate;
@@ -3027,8 +3004,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
     const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const startDate = request.query.startDate;
@@ -3243,10 +3219,9 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
   });
 
   fastify.post('/api/v1/calls', async (request, reply) => {
-    const user = (request as AuthRequest).user;
-    if (!user || !user.tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+    const tenantId = getActingTenantId(request);
+    if (!tenantId) {
+      return sendTenantRefusal(request, reply);
     }
 
     const body = request.body as {
@@ -3258,7 +3233,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
 
     // Check concurrent calls quota
     const overrideToken = request.headers['x-quota-override'] as string | undefined;
-    const concurrentCheck = await quotaService.checkConcurrentCalls(user.tenantId, overrideToken);
+    const concurrentCheck = await quotaService.checkConcurrentCalls(tenantId, overrideToken);
     if (!concurrentCheck.allowed) {
       void reply.code(403);
       return {
@@ -3274,7 +3249,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
     // Check daily minutes quota
     const estimatedMinutes = body.estimatedMinutes || 1;
     const minutesCheck = await quotaService.checkDailyMinutes(
-      user.tenantId,
+      tenantId,
       estimatedMinutes,
       overrideToken
     );
@@ -3292,7 +3267,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
 
     // Check budget
     const estimatedCost = body.estimatedCost || 0;
-    const budgetCheck = await quotaService.checkBudget(user.tenantId, estimatedCost, overrideToken);
+    const budgetCheck = await quotaService.checkBudget(tenantId, estimatedCost, overrideToken);
     if (!budgetCheck.allowed) {
       void reply.code(403);
       return {
@@ -3309,7 +3284,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
     void reply.code(201);
     return {
       id: '00000000-0000-0000-0000-000000000000',
-      tenantId: user.tenantId,
+      tenantId: tenantId,
       toNumber: body.toNumber || '+15551234567',
       callSid: `call_${Date.now()}`,
       status: 'INITIATED',
@@ -3329,8 +3304,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
     const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const prisma = (await import('../lib/prisma.js')).getPrismaClient();
@@ -3778,8 +3752,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
     const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const {
@@ -3945,8 +3918,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
     const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const { callId } = request.params;
@@ -4017,8 +3989,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
     const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const { callId } = request.params;
@@ -4120,8 +4091,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
     const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const { publisherId } = request.params;
@@ -4182,8 +4152,7 @@ export async function registerCallRoutes(fastify: FastifyInstance) {
     const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const prisma = (await import('../lib/prisma.js')).getPrismaClient();
@@ -4267,8 +4236,7 @@ export async function registerWebhookRoutes(fastify: FastifyInstance) {
       const tenantId = getActingTenantId(request);
 
       if (!tenantId) {
-        void reply.code(401);
-        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+        return sendTenantRefusal(request, reply);
       }
 
       const prisma = (await import('../lib/prisma.js')).getPrismaClient();
@@ -4317,8 +4285,7 @@ export async function registerWebhookRoutes(fastify: FastifyInstance) {
     const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const body = request.body;
@@ -4393,8 +4360,7 @@ export async function registerWebhookRoutes(fastify: FastifyInstance) {
       const tenantId = getActingTenantId(request);
 
       if (!tenantId) {
-        void reply.code(401);
-        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+        return sendTenantRefusal(request, reply);
       }
 
       const { webhookId } = request.params as { webhookId: string };
@@ -4437,8 +4403,7 @@ export async function registerWebhookRoutes(fastify: FastifyInstance) {
     const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const { webhookId } = request.params as { webhookId: string };
@@ -4510,8 +4475,7 @@ export async function registerWebhookRoutes(fastify: FastifyInstance) {
       const tenantId = getActingTenantId(request);
 
       if (!tenantId) {
-        void reply.code(401);
-        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+        return sendTenantRefusal(request, reply);
       }
 
       const { webhookId } = request.params as { webhookId: string };
@@ -4561,8 +4525,7 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
       const tenantId = getActingTenantId(request);
 
       if (!tenantId) {
-        void reply.code(401);
-        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+        return sendTenantRefusal(request, reply);
       }
 
       const prisma = (await import('../lib/prisma.js')).getPrismaClient();
@@ -4647,8 +4610,7 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
     const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const prismaForAuthz = (await import('../lib/prisma.js')).getPrismaClient();
@@ -4903,8 +4865,7 @@ export async function registerUserRoutes(fastify: FastifyInstance) {
       const tenantId = getActingTenantId(request);
 
       if (!tenantId) {
-        void reply.code(401);
-        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+        return sendTenantRefusal(request, reply);
       }
 
       const { userId } = request.params;
@@ -6936,8 +6897,7 @@ export async function registerBillingRoutes(fastify: FastifyInstance) {
       const tenantId = getActingTenantId(request);
 
       if (!tenantId) {
-        void reply.code(401);
-        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+        return sendTenantRefusal(request, reply);
       }
 
       const prisma = (await import('../lib/prisma.js')).getPrismaClient();
@@ -7023,8 +6983,7 @@ export async function registerBillingRoutes(fastify: FastifyInstance) {
       const tenantId = getActingTenantId(request);
 
       if (!tenantId) {
-        void reply.code(401);
-        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+        return sendTenantRefusal(request, reply);
       }
 
       const prisma = (await import('../lib/prisma.js')).getPrismaClient();
@@ -7084,8 +7043,7 @@ export async function registerBillingRoutes(fastify: FastifyInstance) {
     const tenantId = getActingTenantId(request);
 
     if (!tenantId) {
-      void reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const prisma = (await import('../lib/prisma.js')).getPrismaClient();

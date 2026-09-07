@@ -4,7 +4,7 @@ import { getPrismaClient } from '../lib/prisma.js';
 import { compliancePolicyService } from '../services/compliance-policy-service.js';
 import { complianceService } from '../services/compliance-service.js';
 import { consentProviderService } from '../services/consent-provider-service.js';
-import { getActingTenantId, resolveTenant } from '../lib/tenant-context.js';
+import { getActingTenantId, resolveTenant, sendTenantRefusal } from '../lib/tenant-context.js';
 
 const prisma = getPrismaClient();
 
@@ -170,8 +170,7 @@ export async function registerComplianceRoutes(fastify: FastifyInstance) {
     const tenantId = getActingTenantId(request);
     
     if (!tenantId) {
-      reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const { type } = request.query as { type?: string };
@@ -219,8 +218,7 @@ export async function registerComplianceRoutes(fastify: FastifyInstance) {
       const tenantId = getActingTenantId(request);
       
       if (!tenantId) {
-        reply.code(401);
-        return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+        return sendTenantRefusal(request, reply);
       }
 
       const { name, type, campaignId } = request.body;
@@ -306,8 +304,7 @@ export async function registerComplianceRoutes(fastify: FastifyInstance) {
     const tenantId = getActingTenantId(request);
     
     if (!tenantId) {
-      reply.code(401);
-      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } };
+      return sendTenantRefusal(request, reply);
     }
 
     const { listId } = request.params as { listId: string };
