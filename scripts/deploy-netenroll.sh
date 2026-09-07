@@ -124,8 +124,25 @@ else
 
   # The guard. Deploying with zero platform admins locks the dialer console,
   # the quota routes and the /admin/api/v1 console for everybody.
+  #
+  # The listing's exit status is checked separately from its content: an
+  # unreachable database also prints no admins, and reporting that as "you have
+  # no platform admins" would send someone off provisioning accounts when the
+  # real problem is that nothing can read the table. Both refuse the deploy --
+  # they just say different true things about why.
   if [ "$DRY_RUN" = "0" ]; then
-    ADMIN_COUNT="$($API platform:admins 2>/dev/null | grep -cE '^\s+\S+@\S+' || true)"
+    if ! ADMIN_LIST="$($API platform:admins 2>&1)"; then
+      RED "REFUSED: could not read the platform admin list."
+      RED "$ADMIN_LIST"
+      exit 2
+    fi
+
+    # `[[:space:]]` rather than `\s`: POSIX ERE has no \s, and BSD grep does not
+    # accept it. Counts the address lines; the indented `note:` lines carry no
+    # `@` and so do not inflate the total.
+    ADMIN_COUNT="$(printf '%s\n' "$ADMIN_LIST" \
+      | grep -cE '^[[:space:]]+[^[:space:]]+@[^[:space:]]+' || true)"
+
     if [ "${ADMIN_COUNT:-0}" -lt 1 ]; then
       RED "REFUSED: no platform admins exist."
       RED "Deploying now would make the dialer console, the quota routes and the"
