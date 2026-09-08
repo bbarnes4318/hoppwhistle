@@ -187,6 +187,20 @@ async function buildServer() {
   // opening purchase and settlement run.
   const { registerDeliveryBillingRoutes } = await import('./routes/delivery-billing.js');
   await server.register(registerDeliveryBillingRoutes);
+
+  // Internal onboarding: one platform-admin screen from nothing to enrolled.
+  const { registerOnboardingRoutes } = await import('./routes/onboarding.js');
+  await server.register(registerOnboardingRoutes);
+
+  /*
+   * Stripe's dispute webhooks. Registered as its own plugin because it installs
+   * a raw-body content type parser -- the signature is verified over the bytes
+   * Stripe signed, and a re-serialised object is not those bytes. Fastify
+   * scopes the parser to this plugin, so no other route on the server is
+   * affected.
+   */
+  const { registerStripeWebhookRoutes } = await import('./routes/stripe-webhooks.js');
+  await server.register(registerStripeWebhookRoutes);
   // Single aggregate endpoint powering the LiveStrip for every role.
   await server.register(registerLiveMetricsRoutes);
 

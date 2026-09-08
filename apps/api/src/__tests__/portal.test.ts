@@ -219,6 +219,68 @@ describe.skipIf(!gate.available)('Phase 4: the agency portal', () => {
     return new Date(calendarDayBounds(day).start.getTime() + 12 * 3600_000 + offsetMs);
   }
 
+  /**
+   * A closed availability span on TODAY that has actually already happened.
+   *
+   * ── Why this is not just `middayOf(TODAY)` ─────────────────────────────────
+   *
+   * `availableSecondsByUser` clips every span at this instant -- an open state
+   * on today runs to now, not to midnight, because reporting an agent as
+   * available for hours they have not worked yet is the defect that clip
+   * exists for. A fixture anchored at midday is therefore in the FUTURE on any
+   * run before local noon, every span clips to nothing, and the test reads 0.
+   *
+   * It failed exactly that way in CI at 01:29 Eastern and passed on the same
+   * code at 23:11 the evening before, which is a test that is wrong twice a
+   * day rather than a defect in the read.
+   *
+   * So the span is anchored BACKWARDS from now instead, clipped into the day,
+   * and the caller asserts the length this returns. `seconds` is the length of
+   * the span these two rows describe; the read has to arrive at the same
+   * number from the rows themselves. On any ordinary run that is the full
+   * requested length, and in the first minutes after midnight it is however
+   * much of the day has actually elapsed -- which is still the right answer to
+   * "how long was this agent available today".
+   */
+  function pastSpanToday(seconds: number): { start: Date; end: Date; seconds: number } {
+    const dayStart = calendarDayBounds(TODAY).start.getTime();
+    // A minute back from now, so the route's own `now` -- taken milliseconds
+    // after this -- is never earlier than the closing row.
+    const end = Math.max(dayStart, Date.now() - 60_000);
+    const start = Math.max(dayStart, end - seconds * 1000);
+    return {
+      start: new Date(start),
+      end: new Date(end),
+      seconds: Math.round((end - start) / 1000),
+    };
+  }
+
+  /**
+   * An OPEN availability on TODAY: one row and no closing row.
+   *
+   * The sibling of `pastSpanToday` for the case where the point of the test is
+   * that there is nothing to close the span -- the read has to run it to this
+   * instant rather than to midnight.
+   *
+   * `start` is clipped into the day for the same reason the closed span is:
+   * `availableSecondsByUser` clips every span to the day being asked about, so
+   * a start in yesterday contributes nothing before midnight. A fixture at a
+   * flat `now - 1h` is therefore short by however much of that hour fell in
+   * yesterday, which is all of it at 00:00 and none of it from 01:00 -- a test
+   * that fails for the first hour of every day.
+   *
+   * `seconds` is what has actually elapsed since `start`, which is the full
+   * hour on an ordinary run and less than it just after midnight. Either way it
+   * is the right answer to "how long has this agent been available today", and
+   * either way it is nowhere near midnight, which is the property under test.
+   */
+  function openSpanToday(seconds: number): { start: Date; seconds: number } {
+    const dayStart = calendarDayBounds(TODAY).start.getTime();
+    const now = Date.now();
+    const start = Math.max(dayStart, now - seconds * 1000);
+    return { start: new Date(start), seconds: Math.round((now - start) / 1000) };
+  }
+
   let callSeq = 0;
 
   async function seedCall(params: {
@@ -625,17 +687,14 @@ describe.skipIf(!gate.available)('Phase 4: the agency portal', () => {
       await seedDeliveredCalls(big.id, TODAY, 4, measured.id);
       await seedDeliveredCalls(big.id, TODAY, 4, unmeasured.id);
 
-      // Available for exactly two hours, then away.
-      const start = middayOf(TODAY);
+      // Available for two hours, then away -- in a window of today that has
+      // already elapsed. See `pastSpanToday`.
+      const span = pastSpanToday(2 * 3600);
       await prisma.agentStateEvent.create({
-        data: { userId: measured.id, status: 'available', occurredAt: start },
+        data: { userId: measured.id, status: 'available', occurredAt: span.start },
       });
       await prisma.agentStateEvent.create({
-        data: {
-          userId: measured.id,
-          status: 'away',
-          occurredAt: new Date(start.getTime() + 2 * 3600_000),
-        },
+        data: { userId: measured.id, status: 'away', occurredAt: span.end },
       });
 
       const data = (
@@ -649,7 +708,7 @@ describe.skipIf(!gate.available)('Phase 4: the agency portal', () => {
       const sage = data.agents.find((row: any) => row.userId === measured.id);
       const bex = data.agents.find((row: any) => row.userId === unmeasured.id);
 
-      expect(sage.availableSeconds).toBe(2 * 3600);
+      expect(sage.availableSeconds).toBe(span.seconds);
       expect(bex.availableSeconds).toBeNull();
     });
 
@@ -688,17 +747,15 @@ describe.skipIf(!gate.available)('Phase 4: the agency portal', () => {
 
     it('never runs an open availability past this instant', async () => {
       // An agent available since an hour ago with no closing row has been
-      // available for an hour, not until midnight.
+      // available for an hour, not until midnight. See `openSpanToday` for why
+      // the start is clipped into the day rather than a flat `now - 1h`.
       await seedTerms(big.id);
       const agent = await seedAgent(big.id, 'Nico');
       await seedDeliveredCalls(big.id, TODAY, 2, agent.id);
 
+      const span = openSpanToday(3600);
       await prisma.agentStateEvent.create({
-        data: {
-          userId: agent.id,
-          status: 'available',
-          occurredAt: new Date(Date.now() - 3600_000),
-        },
+        data: { userId: agent.id, status: 'available', occurredAt: span.start },
       });
 
       const data = (
@@ -710,8 +767,19 @@ describe.skipIf(!gate.available)('Phase 4: the agency portal', () => {
       ).json().data;
 
       const row = data.agents.find((r: any) => r.userId === agent.id);
-      expect(row.availableSeconds).toBeGreaterThanOrEqual(3595);
-      expect(row.availableSeconds).toBeLessThan(3700);
+
+      /*
+       * The span is open, so it runs to the route's own `now` -- a moment after
+       * this fixture was built. The measured figure is therefore at or just
+       * above `span.seconds`, never below it by more than rounding.
+       *
+       * The upper bound is what the test is actually for. Midnight-to-midnight
+       * would be up to 86,400 seconds and the elapsed part of the day is at
+       * least `span.seconds`, so anything within a hundred seconds of the
+       * fixture is the read stopping at this instant rather than running on.
+       */
+      expect(row.availableSeconds).toBeGreaterThanOrEqual(span.seconds - 5);
+      expect(row.availableSeconds).toBeLessThan(span.seconds + 100);
     });
   });
 
@@ -765,16 +833,12 @@ describe.skipIf(!gate.available)('Phase 4: the agency portal', () => {
       const agent = await seedAgent(big.id, 'Tam');
       await seedDeliveredCalls(big.id, TODAY, 3, agent.id);
 
-      const start = middayOf(TODAY);
+      const span = pastSpanToday(1800);
       await prisma.agentStateEvent.create({
-        data: { userId: agent.id, status: 'available', occurredAt: start },
+        data: { userId: agent.id, status: 'available', occurredAt: span.start },
       });
       await prisma.agentStateEvent.create({
-        data: {
-          userId: agent.id,
-          status: 'offline',
-          occurredAt: new Date(start.getTime() + 1800_000),
-        },
+        data: { userId: agent.id, status: 'offline', occurredAt: span.end },
       });
 
       const data = (
@@ -785,7 +849,7 @@ describe.skipIf(!gate.available)('Phase 4: the agency portal', () => {
         })
       ).json().data;
 
-      expect(data.availableSeconds).toBe(1800);
+      expect(data.availableSeconds).toBe(span.seconds);
     });
   });
 

@@ -47,13 +47,37 @@
  *
  * `enrolmentBlockers()` is the other half of enrolment. An agency cannot be
  * enrolled without a billing profile, a Daily Block, an agreed opening rate and
- * a valid mandate, because enrolment without them means the gate refuses every
- * call the moment it takes effect -- which is the failure this whole switch
- * exists to prevent, moved one step later.
+ * a valid payment instrument, because enrolment without them means the gate
+ * refuses every call the moment it takes effect -- which is the failure this
+ * whole switch exists to prevent, moved one step later.
+ *
+ * ── The rate offset ──────────────────────────────────────────────────────────
+ *
+ * `rateOffset` is dollars added to whatever the curve returns, at every point
+ * on the curve. It is a term, so it is stored here; it is part of the price, so
+ * it is READ through `services/rating/rate-offset.ts` and applied by
+ * `effectiveRate()`. It is not a surcharge and there is no fee line anywhere:
+ * see those two modules for why that distinction is the whole design.
+ *
+ * `maxDailyDebitFor()` therefore takes an EFFECTIVE rate. The maximum daily
+ * debit on an Insertion Order is what a full day at the ceiling costs, and a
+ * day at the ceiling costs the effective rate.
+ *
+ * ── ACH or card, and what that changes ───────────────────────────────────────
+ *
+ * `paymentMethod` decides which instrument the settlement debits and which
+ * Overrun ceiling applies. It decides nothing about the price -- an agency's
+ * offset is agreed and recorded, never derived from this column.
+ *
+ * A card-paying agency gets a flat 25% ceiling that does not rise with
+ * settlement history. Overrun is unsecured credit and a card payment can be
+ * taken back without our consent months later, so the clean-settlement schedule
+ * -- which rewards a payment record with MORE credit -- is the wrong shape for
+ * an instrument whose payment record can be undone. See `ceilingFor()`.
  */
 
 import type { AgencyBillingProfile, PrismaClient } from '@prisma/client';
-import { AchMandateStatus, SettlementPaymentStatus } from '@prisma/client';
+import { AchMandateStatus, AgencyPaymentMethod, SettlementPaymentStatus } from '@prisma/client';
 
 import { getPrismaClient } from '../../lib/prisma.js';
 import { toNumber } from '../rating/rate-curve.js';
@@ -84,6 +108,11 @@ export function overrunCeilingApplications(
  * offered as a computation so the number on the contract and the number in the
  * database come from the same arithmetic, and it is deliberately NOT what the
  * settlement compares against -- that compares against the stored commitment.
+ *
+ * `rate` is the EFFECTIVE rate: the curve rate plus the agency's rate offset.
+ * A maximum daily debit computed off the curve rate alone would be short by the
+ * offset times the whole block plus ceiling every day, and a settlement at the
+ * ceiling would halt on a cap that was never what the day actually costs.
  */
 export function maxDailyDebitFor(
   dailyBlockApplications: number,
@@ -138,6 +167,55 @@ export async function consecutiveCleanSettlements(
   return clean;
 }
 
+/**
+ * The Overrun ceiling percentage in force, and where it came from.
+ *
+ * Three sources, in this order:
+ *
+ *   PLATFORM_OVERRIDE   a platform admin set one. Replaces the rest outright
+ *                       rather than capping it, because "reduce or withdraw at
+ *                       any time" has to be able to say zero.
+ *   CARD_EXPOSURE       the agency pays by card. A flat percentage that does
+ *                       NOT rise with settlement history.
+ *   CLEAN_SETTLEMENT_SCHEDULE
+ *                       the ACH schedule: the lower percentage below the
+ *                       threshold, the higher one at or beyond it.
+ *
+ * Why card is its own source rather than a smaller number on the same schedule:
+ * the schedule extends MORE credit to an agency with a longer record of clean
+ * settlements, and a card payment can be taken back without our consent up to
+ * months after it settled. A run of clean card settlements is therefore not the
+ * evidence the schedule treats it as, and letting one earn a 100% ceiling would
+ * be extending unsecured credit against an instrument the counterparty can
+ * reverse. The percentage is chargeback exposure we are choosing to carry, and
+ * it is flat because the exposure does not shrink with time.
+ */
+export function ceilingFor(
+  profile: AgencyBillingProfile | null,
+  consecutiveClean: number
+): { ceilingPct: number; ceilingSource: AgencyTerms['ceilingSource'] } {
+  if (profile === null) return { ceilingPct: 0, ceilingSource: 'CLEAN_SETTLEMENT_SCHEDULE' };
+
+  if (profile.ceilingPctOverride != null) {
+    return {
+      ceilingPct: toNumber(profile.ceilingPctOverride),
+      ceilingSource: 'PLATFORM_OVERRIDE',
+    };
+  }
+
+  if (profile.paymentMethod === AgencyPaymentMethod.CARD) {
+    return { ceilingPct: toNumber(profile.ceilingPctCard), ceilingSource: 'CARD_EXPOSURE' };
+  }
+
+  return {
+    ceilingPct:
+      consecutiveClean >= profile.ceilingCleanSettlementThreshold
+        ? toNumber(profile.ceilingPctAtThreshold)
+        : toNumber(profile.ceilingPctBelowThreshold),
+    ceilingSource: 'CLEAN_SETTLEMENT_SCHEDULE',
+  };
+}
+
 /** One agency's terms, resolved. Every figure server-derived. */
 export interface AgencyTerms {
   tenantId: string;
@@ -154,17 +232,38 @@ export interface AgencyTerms {
   /** Whether an enrolled agency's settlement may place a real debit. */
   chargesEnabled: boolean;
   dailyBlockApplications: number;
+  /**
+   * Dollars added to the curve rate, at every point on the curve. Zero unless a
+   * platform admin agreed one. Not a fee and never itemised: see
+   * `services/rating/rate-offset.ts`.
+   */
+  rateOffset: number;
+  /** Which instrument the settlement debits. */
+  paymentMethod: AgencyPaymentMethod;
   /** The ceiling actually in force, as a percentage above the Daily Block. */
   ceilingPct: number;
   /** Where that percentage came from, so the portal can say. */
-  ceilingSource: 'PLATFORM_OVERRIDE' | 'CLEAN_SETTLEMENT_SCHEDULE';
+  ceilingSource: 'PLATFORM_OVERRIDE' | 'CLEAN_SETTLEMENT_SCHEDULE' | 'CARD_EXPOSURE';
   ceilingApplications: number;
   consecutiveCleanSettlements: number;
   maxDailyDebit: number;
+  /**
+   * The status of the instrument this agency actually pays with -- the bank
+   * mandate for an ACH agency, the saved card for a card one. One field rather
+   * than two, because every caller wants the same answer: is there something
+   * usable to debit.
+   */
   mandateStatus: AchMandateStatus;
   hasValidMandate: boolean;
   stripeCustomerId: string | null;
   achPaymentMethodId: string | null;
+  cardPaymentMethodId: string | null;
+  /**
+   * The Stripe payment method the settlement will debit, chosen by
+   * `paymentMethod`. Resolved here so no caller picks an instrument by reading
+   * two nullable columns and guessing.
+   */
+  settlementPaymentMethodId: string | null;
   suspended: boolean;
   suspensionReason: string | null;
 }
@@ -182,23 +281,26 @@ export async function loadAgencyTerms(
 
   const dailyBlockApplications = profile?.dailyBlockApplications ?? 0;
 
+  const { ceilingPct, ceilingSource } = ceilingFor(profile, clean);
+
   /*
-   * The ceiling schedule: 50% below the threshold, 100% at or beyond it, both
-   * configurable per tenant. A platform admin's override replaces the schedule
-   * outright rather than capping it, because "reduce or withdraw at any time"
-   * has to be able to say zero.
+   * The instrument this agency actually pays with.
+   *
+   * `paymentMethod` picks it, and everything downstream reads these three
+   * fields rather than the ACH columns directly -- so an agency that pays by
+   * card is not reported as having no mandate, and the settlement does not
+   * debit a bank account for an agency that never gave us one.
    */
-  const scheduled =
-    profile === null
-      ? 0
-      : clean >= profile.ceilingCleanSettlementThreshold
-        ? toNumber(profile.ceilingPctAtThreshold)
-        : toNumber(profile.ceilingPctBelowThreshold);
+  const paymentMethod = profile?.paymentMethod ?? AgencyPaymentMethod.ACH;
+  const payingByCard = paymentMethod === AgencyPaymentMethod.CARD;
 
-  const override =
-    profile?.ceilingPctOverride == null ? null : toNumber(profile.ceilingPctOverride);
+  const mandateStatus = payingByCard
+    ? profile?.cardMandateStatus ?? AchMandateStatus.NONE
+    : profile?.achMandateStatus ?? AchMandateStatus.NONE;
 
-  const ceilingPct = override ?? scheduled;
+  const settlementPaymentMethodId = payingByCard
+    ? profile?.cardPaymentMethodId ?? null
+    : profile?.achPaymentMethodId ?? null;
 
   return {
     tenantId,
@@ -207,16 +309,19 @@ export async function loadAgencyTerms(
     enrolledAt: profile?.billingEnrolledAt ?? null,
     chargesEnabled: profile?.chargesEnabled === true,
     dailyBlockApplications,
+    rateOffset: profile?.rateOffset == null ? 0 : toNumber(profile.rateOffset),
+    paymentMethod,
     ceilingPct,
-    ceilingSource: override === null ? 'CLEAN_SETTLEMENT_SCHEDULE' : 'PLATFORM_OVERRIDE',
+    ceilingSource,
     ceilingApplications: overrunCeilingApplications(dailyBlockApplications, ceilingPct),
     consecutiveCleanSettlements: clean,
     maxDailyDebit: profile === null ? 0 : toNumber(profile.maxDailyDebit),
-    mandateStatus: profile?.achMandateStatus ?? AchMandateStatus.NONE,
-    hasValidMandate:
-      profile?.achMandateStatus === AchMandateStatus.ACTIVE && !!profile.achPaymentMethodId,
+    mandateStatus,
+    hasValidMandate: mandateStatus === AchMandateStatus.ACTIVE && !!settlementPaymentMethodId,
     stripeCustomerId: profile?.stripeCustomerId ?? null,
     achPaymentMethodId: profile?.achPaymentMethodId ?? null,
+    cardPaymentMethodId: profile?.cardPaymentMethodId ?? null,
+    settlementPaymentMethodId,
     suspended: profile?.suspendedAt != null,
     suspensionReason: profile?.suspensionReason ?? null,
   };
@@ -330,10 +435,12 @@ export async function enrolmentBlockersFor(
   if (!terms.profile) return { terms, blockers };
 
   if (!terms.hasValidMandate) {
+    const instrument =
+      terms.paymentMethod === AgencyPaymentMethod.CARD ? 'card on file' : 'ACH mandate';
     blockers.push({
       code: 'NO_VALID_MANDATE',
       message:
-        `No valid ACH mandate (status: ${terms.mandateStatus}). No mandate, no ` +
+        `No valid ${instrument} (status: ${terms.mandateStatus}). No payment method, no ` +
         'delivery -- enrolling without one stops this agency immediately.',
     });
   }

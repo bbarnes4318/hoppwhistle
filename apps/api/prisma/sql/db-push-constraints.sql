@@ -74,6 +74,8 @@ BEGIN
     OR NEW."windowDaysFound"         IS DISTINCT FROM OLD."windowDaysFound"
     OR NEW."windowDayKeys"           IS DISTINCT FROM OLD."windowDayKeys"
     OR NEW."rate"                    IS DISTINCT FROM OLD."rate"
+    OR NEW."curveRate"               IS DISTINCT FROM OLD."curveRate"
+    OR NEW."rateOffset"              IS DISTINCT FROM OLD."rateOffset"
     OR NEW."curveVersionId"          IS DISTINCT FROM OLD."curveVersionId"
     OR NEW."curveVersion"            IS DISTINCT FROM OLD."curveVersion"
     OR NEW."rateChangeId"            IS DISTINCT FROM OLD."rateChangeId"

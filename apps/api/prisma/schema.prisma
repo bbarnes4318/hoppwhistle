@@ -22,6 +22,23 @@ model Tenant {
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 
+  /// ── Not a real agency ─────────────────────────────────────────────────────
+  ///
+  /// A demo, a fixture, or somebody's workspace. Off by default, so nothing
+  /// becomes non-production by accident and no existing row is reclassified by
+  /// a migration.
+  ///
+  /// The platform-wide screens are read every day, and five seeded tenants at
+  /// the top of them is five rows an operator learns to scroll past -- which is
+  /// how a real agency in trouble gets scrolled past too. A tenant marked here
+  /// is excluded from the platform totals and hidden behind a toggle. It is
+  /// NOT deleted, not suspended and not un-enrolled: this is a display and
+  /// aggregation decision and it changes nothing about delivery or billing.
+  isNonProduction             Boolean   @default(false)
+  nonProductionNote           String?
+  nonProductionMarkedAt       DateTime?
+  nonProductionMarkedByUserId String?
+
   // Quota & Budget Controls
   quota          TenantQuota?
   budget         TenantBudget?
@@ -79,9 +96,12 @@ model Tenant {
   dailySettlements         DailySettlement[]
   deliveryHoldEvents       DeliveryHoldEvent[]
   billingNotifications     BillingNotification[]
+  agencyProfile            AgencyProfile?
+  settlementDisputes       SettlementDispute[]
 
   @@index([slug])
   @@index([status])
+  @@index([isNonProduction])
   @@map("tenants")
 }
 
@@ -90,11 +110,19 @@ model Tenant {
 /// here for "the browser said so", because that is the thing grants exist to
 /// prevent.
 enum TenantActivationSource {
-  /// A completed Stripe Checkout session, verified against Stripe's API. The
-  /// tenant is the one the session was created for.
+  /// RETIRED IN PHASE 5. There is no self-serve purchase on this platform: every
+  /// agency is onboarded by NetEnroll after a conversation and a signed
+  /// agreement, and no route mints a grant from a payment. Nothing writes this
+  /// value. It survives because migrations against the production database are
+  /// additive and never drop, and dropping an enum member that turned out to
+  /// have been wanted cannot be undone.
   STRIPE_CHECKOUT
-  /// An existing OWNER or ADMIN of the tenant invited this address. The tenant
-  /// is the inviter's own, taken from their authenticated session.
+  /// Somebody with authority over the tenant invited this address: an OWNER or
+  /// ADMIN of the agency inviting one of their own AGENTS, with the tenant taken
+  /// from their authenticated session; or a platform admin onboarding the agency
+  /// and inviting its OWNER, with the tenant being the agency they are
+  /// administering. An agency cannot invite an OWNER and cannot name a tenant
+  /// other than its own — there is no field in which to do either.
   ADMIN_INVITE
   /// NetEnroll staff, invited from the provisioning command on the host. The
   /// grant carries NO tenant and NO role: it creates an account that belongs to
@@ -165,8 +193,9 @@ model TenantActivationGrant {
 
   source TenantActivationSource
 
-  /// The Stripe Checkout session this grant was minted from, when it came from
-  /// one. Unique, so replaying a webhook mints no second grant.
+  /// RETIRED IN PHASE 5 with `STRIPE_CHECKOUT` above. Always null: nothing mints
+  /// a grant from a payment, because there is no self-serve purchase. Kept only
+  /// because migrations here are additive and never drop a column.
   stripeSessionId String? @unique
 
   expiresAt        DateTime
@@ -3850,7 +3879,22 @@ model RateChange {
 
   previousRate Decimal? @db.Decimal(10, 2)
   /// Null in BELOW_MINIMUM: there is no rate below the curve's floor.
+  ///
+  /// This is the EFFECTIVE rate -- what the agency is actually priced at, and
+  /// what the settlement bills. It is `curveRate + rateOffset`, and the two
+  /// parts are stored beside it so this row can still be recomputed from
+  /// itself: reading the curve for `closingPct` gives `curveRate`, and adding
+  /// `rateOffset` gives this. A single stored total would leave a reader unable
+  /// to tell a curve change from an offset change.
   newRate      Decimal? @db.Decimal(10, 2)
+
+  /// What the curve alone returned for `closingPct`, before the agency's
+  /// offset. Null for the same reasons `newRate` is.
+  curveRate  Decimal? @db.Decimal(10, 2)
+  /// The agency's rate offset as it stood when this decision was made. Copied,
+  /// never joined: changing an agency's offset must not alter what an existing
+  /// row says it was priced with.
+  rateOffset Decimal  @default(0) @db.Decimal(10, 2)
 
   status     RateChangeStatus
   computedAt DateTime         @default(now())
@@ -4003,6 +4047,10 @@ enum DeliveryHoldReason {
   /// The Overrun ceiling for the Delivery Day was reached. Delivery resumes on
   /// the next Delivery Day; a call already connected finishes normally.
   CEILING_REACHED
+  /// A card payment against this agency has been disputed. Delivery stops on
+  /// the webhook and resumes only when a platform admin says so -- never
+  /// automatically, and not because the dispute closed.
+  PAYMENT_DISPUTED
   /// The trailing-window closing percentage fell below the curve's minimum.
   /// Only a platform admin clears this; the next day's numbers cannot.
   BELOW_MINIMUM_CLOSING
@@ -4026,6 +4074,42 @@ enum BillingNotificationKind {
   DELIVERY_PAUSED
   MANDATE_MISSING
   SETTLEMENT_RUN_FAILED
+  /// A card payment was disputed. Platform staff only: a chargeback is a
+  /// payment event for NetEnroll to answer, not news for the agency's floor.
+  PAYMENT_DISPUTE_OPENED
+  /// Stripe moved an existing dispute to another status. Also platform-only,
+  /// and it never resumes anything by itself.
+  PAYMENT_DISPUTE_UPDATED
+}
+
+/// How an agency pays. ACH by default, so no existing profile changes meaning.
+///
+/// This decides which instrument the daily settlement debits and which Overrun
+/// ceiling applies. It does NOT decide the price: the rate offset is a plain
+/// number a platform admin agreed and recorded, not something derived from
+/// this column. See `AgencyBillingProfile.rateOffset`.
+enum AgencyPaymentMethod {
+  ACH
+  CARD
+}
+
+/// Where a card dispute has got to.
+///
+/// Deliberately not a settlement status and not a ledger entry type: a
+/// chargeback is a payment event, and answering it in the ledger would be a
+/// reversal. Nothing here returns a credit or moves a settlement figure.
+enum SettlementDisputeStatus {
+  /// Stripe has taken the money back and is waiting for evidence.
+  OPEN
+  /// Evidence submitted, awaiting the network's decision.
+  UNDER_REVIEW
+  /// Decided in NetEnroll's favour. The money came back. Delivery does NOT
+  /// resume on this: a platform admin decides that separately.
+  WON
+  /// Decided against NetEnroll. The money is gone and stays gone.
+  LOST
+  /// Withdrawn by the cardholder or the bank before a decision.
+  WITHDRAWN
 }
 
 /// One agency's commercial terms and payment instrument.
@@ -4080,6 +4164,48 @@ model AgencyBillingProfile {
   /// omitted where unused paid applications remain.
   dailyBlockApplications Int @default(0)
 
+  /// ── The rate offset ───────────────────────────────────────────────────────
+  ///
+  /// Dollars added to whatever the curve returns, at every point on it:
+  ///
+  ///     effective rate = curve rate for the closing percentage + rateOffset
+  ///
+  /// It is a plain number agreed with the agency and recorded when the terms
+  /// are written. Zero by default, so an agency nobody agreed one with is
+  /// priced exactly off the curve and no existing row changes meaning.
+  ///
+  /// THIS IS NOT A SURCHARGE, and the difference is not cosmetic. A surcharge
+  /// is an itemised fee added to a price at the point of payment: it is a
+  /// regulated instrument requiring card-network registration, capped at 3%,
+  /// prohibited on debit cards, and unlawful in several states. A different
+  /// price is none of those things. So there is no fee line, no percentage on
+  /// top of a settlement, and nothing itemised separately anywhere -- the
+  /// offset is part of the rate everywhere the rate appears.
+  ///
+  /// It is deliberately NOT derived from `paymentMethod` in code. A platform
+  /// admin sets it when agreeing terms; why one exists for a card-paying agency
+  /// is a commercial matter, not a rule this software enforces.
+  rateOffset Decimal @default(0) @db.Decimal(10, 2)
+
+  /// ── How this agency pays ──────────────────────────────────────────────────
+  ///
+  /// ACH by default. A CARD agency's daily settlement debits the saved card
+  /// off-session instead of the bank mandate, and gets the lower Overrun
+  /// ceiling below.
+  paymentMethod AgencyPaymentMethod @default(ACH)
+
+  /// The Overrun ceiling for a card-paying agency, as a percentage above the
+  /// Daily Block. Flat: it does not rise with settlement history the way the
+  /// ACH schedule does.
+  ///
+  /// Overrun is unsecured credit, and a card payment can be taken back without
+  /// our consent up to months later while an ACH debit under a signed mandate
+  /// effectively cannot. Extending a card-paying agency the same 50% -- let
+  /// alone the 100% a clean ACH history earns -- would be extending credit
+  /// against an instrument the counterparty can reverse. 25% is the chargeback
+  /// exposure we are willing to carry.
+  ceilingPctCard Decimal @default(25) @db.Decimal(6, 2)
+
   /// The maximum a single Delivery Day's debit may reach, in dollars. This is a
   /// contractual commitment on the Insertion Order -- Daily Block plus Overrun
   /// ceiling at the applicable rate -- not a guideline. A computed settlement
@@ -4113,6 +4239,19 @@ model AgencyBillingProfile {
   achMandateVerifiedAt DateTime?
   achBankName          String?
   achLast4             String?
+
+  /// The saved card, when `paymentMethod` is CARD. Written on the same terms as
+  /// the bank mandate: every fact here is read back from Stripe by the server
+  /// after a SetupIntent succeeded, never reported by a browser.
+  ///
+  /// `cardMandateStatus` reuses `AchMandateStatus` rather than growing a
+  /// parallel enum with the same four members: the question is identical --
+  /// none, not verified yet, usable off-session, or revoked.
+  cardPaymentMethodId   String?
+  cardMandateStatus     AchMandateStatus @default(NONE)
+  cardMandateVerifiedAt DateTime?
+  cardBrand             String?
+  cardLast4             String?
 
   /// A platform admin suspension. Paused is not terminated: paid applications
   /// survive untouched and are available when delivery resumes.
@@ -4263,7 +4402,13 @@ model DailySettlement {
   windowDeliveryDays Int
   windowDaysFound    Int
   windowDayKeys      String[]
+  /// The EFFECTIVE rate this day was billed at: the curve rate plus the
+  /// agency's rate offset. Immutable, like every other figure here -- changing
+  /// an agency's offset tomorrow does not touch a settlement written today.
   rate               Decimal? @db.Decimal(10, 2)
+  /// The two parts of it, stored separately so the row explains its own price.
+  curveRate          Decimal? @db.Decimal(10, 2)
+  rateOffset         Decimal  @default(0) @db.Decimal(10, 2)
   curveVersionId     String?
   curveVersion       Int?
   /// The `rate_changes` row this settlement priced from, so the two records
@@ -4304,6 +4449,7 @@ model DailySettlement {
   tenant    Tenant                         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   purchases ApplicationCreditLedgerEntry[]
   attempts  SettlementPaymentAttempt[]
+  disputes  SettlementDispute[]
 
   /// The idempotency constraint. One settlement per agency per Delivery Day.
   @@unique([tenantId, deliveryDay])
@@ -4361,6 +4507,115 @@ model DeliveryHoldEvent {
   @@unique([tenantId, deliveryDay, reason])
   @@index([tenantId, occurredAt])
   @@map("delivery_hold_events")
+}
+
+/// One card dispute, against the settlement whose payment it hit.
+///
+/// ── A chargeback is a payment event, not a billing correction ────────────────
+///
+/// A card chargeback takes money back without our consent. This product has no
+/// refund, credit, reversal or make-good and does not gain one here. Consumed
+/// credits stay consumed, no ledger row is written or reversed, and no figure
+/// on the settlement changes -- the settlement is the record of what the agency
+/// was billed, and it was billed that. What a dispute needs is DETECTION and
+/// CONTAINMENT, and that is all this table is for.
+///
+/// So the response is: stop delivering to the tenant, flag it on the platform
+/// view as its own state, tell platform staff, and extend it no Overrun at all.
+/// Delivery resumes only when a platform admin says so -- never automatically,
+/// and not merely because a dispute closed in our favour.
+model SettlementDispute {
+  id       String @id @default(uuid())
+  tenantId String
+
+  /// The settlement whose debit was disputed, when it can be identified from
+  /// the payment intent Stripe named. Null when it cannot -- an opening
+  /// purchase, or a charge this platform did not place -- which is still a
+  /// dispute worth containing and worth a row.
+  settlementId String?
+
+  /// Stripe's own identifiers. `stripeDisputeId` is unique, so a webhook
+  /// delivered twice records one dispute rather than two.
+  stripeDisputeId       String  @unique
+  stripeChargeId        String?
+  stripePaymentIntentId String?
+
+  /// What Stripe says was taken, in dollars, and why. Recorded because it is
+  /// the amount at risk; nothing computes from it.
+  amount Decimal @db.Decimal(12, 2)
+  reason String?
+
+  status SettlementDisputeStatus @default(OPEN)
+  /// Stripe's own status string, verbatim, so a row is readable against the
+  /// dashboard without a mapping table in somebody's head.
+  stripeStatus String?
+
+  openedAt DateTime  @default(now())
+  /// When Stripe reported a terminal status. Delivery does NOT resume on this.
+  closedAt DateTime?
+
+  /// The explicit platform-admin act that let delivery start again. Null while
+  /// delivery is still stopped, which is the default and stays the default
+  /// however the dispute itself resolves.
+  deliveryResumedAt       DateTime?
+  deliveryResumedByUserId String?
+  deliveryResumedNote     String?
+
+  updatedAt DateTime @updatedAt
+
+  tenant     Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  settlement DailySettlement? @relation(fields: [settlementId], references: [id])
+
+  /// The gate asks "does this tenant have a dispute nobody has stood down
+  /// from", on every call offered.
+  @@index([tenantId, deliveryResumedAt])
+  @@index([tenantId, status])
+  @@map("settlement_disputes")
+}
+
+/// The agency itself: who it is, where it is licensed, and when it takes calls.
+///
+/// Recorded by a platform admin at onboarding, in the first step of the
+/// runbook. Separate from `AgencyBillingProfile` because none of it is a
+/// commercial term and none of it bounds what the agency can be charged, and
+/// separate from `Tenant` because a tenant is a platform primitive that also
+/// carries buyers, publishers and demo fixtures.
+///
+/// There is no self-serve path that writes this row. Every agency is onboarded
+/// by NetEnroll after a conversation and a signed agreement.
+model AgencyProfile {
+  id       String @id @default(uuid())
+  tenantId String @unique
+
+  /// The name on the agreement, which is not always the display name.
+  legalName String
+  /// Two-letter US state the agency is licensed in.
+  state     String
+
+  contactName  String
+  contactEmail String
+  contactPhone String
+
+  /// Licensed agents. The Daily Block is one application per licensed agent per
+  /// Delivery Day at launch, so this is what the opening block is agreed from.
+  licensedAgentCount Int
+
+  /// The days of the week this agency takes calls, as `MON`..`SUN`, and the
+  /// local window within them. Strings rather than a time column so nothing
+  /// between here and the browser can shift them by a timezone -- the same
+  /// treatment every day key in the rating engine gets.
+  deliveryDays      String[]
+  deliveryStartTime String
+  deliveryEndTime   String
+  deliveryTimeZone  String   @default("America/New_York")
+
+  createdByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("agency_profiles")
 }
 
 /// A notification that was sent, or that we tried to send. Append-only.

@@ -23,9 +23,13 @@
  */
 
 import { StripeService } from '@hopwhistle/worker/stripe-service';
-import type { AchChargeResult, AchMandateFacts } from '@hopwhistle/worker/stripe-service';
+import type {
+  AchChargeResult,
+  AchMandateFacts,
+  CardMandateFacts,
+} from '@hopwhistle/worker/stripe-service';
 
-export type { AchChargeResult, AchMandateFacts };
+export type { AchChargeResult, AchMandateFacts, CardMandateFacts };
 
 export interface ChargeRequest {
   customerId: string;
@@ -44,8 +48,18 @@ export interface ChargeRequest {
 
 /** What the settlement needs a payment gateway to be able to do. */
 export interface PaymentGateway {
-  /** The daily settlement debit. ACH, off-session, against a saved mandate. */
+  /** The daily settlement debit for an ACH agency, against a saved mandate. */
   chargeAchOffSession(request: ChargeRequest): Promise<AchChargeResult>;
+  /**
+   * The daily settlement debit for a card-paying agency, against a card the
+   * agency already authorised for off-session use.
+   *
+   * The amount is the same amount an ACH agency would be charged for the same
+   * day's applications at the same rate. Nothing is added here: a card-paying
+   * agency is priced differently through its rate offset, which is part of the
+   * rate, and not through a fee applied at the point of payment.
+   */
+  chargeCardOffSession(request: ChargeRequest): Promise<AchChargeResult>;
   /** An agency's opening purchase, and only that. Never a daily settlement. */
   chargeCardOnSession(request: ChargeRequest): Promise<AchChargeResult>;
   ensureCustomer(params: {
@@ -56,7 +70,38 @@ export interface PaymentGateway {
   }): Promise<string | null>;
   createAchSetupIntent(customerId: string): Promise<{ id: string; clientSecret: string } | null>;
   describeAchMandate(setupIntentId: string): Promise<AchMandateFacts | null>;
+  /** Begin saving a card for off-session use. The card equivalent of the above. */
+  createCardSetupIntent(customerId: string): Promise<{ id: string; clientSecret: string } | null>;
+  /** What a completed card SetupIntent produced, read back from Stripe. */
+  describeCardMandate(setupIntentId: string): Promise<CardMandateFacts | null>;
+  /**
+   * Verify a Stripe webhook against `STRIPE_WEBHOOK_SECRET` and parse it.
+   *
+   * Takes the RAW body, because a re-serialised object is not the bytes Stripe
+   * signed. Null when the secret is not configured or the signature does not
+   * verify -- one answer for both, so an unauthenticated caller learns nothing
+   * about which.
+   *
+   * Typed as `unknown` here rather than as Stripe's own `Event`: this package
+   * declares the shape it needs and does not take a type dependency on the
+   * Stripe SDK, which is pinned external in the API bundle for a load-bearing
+   * reason (see docs/BILLING.md §5). The webhook route narrows it.
+   */
+  constructWebhookEvent(rawBody: Buffer | string, signature: string): StripeWebhookEvent | null;
   isEnabled(): boolean;
+}
+
+/**
+ * The part of a Stripe event this platform reads.
+ *
+ * Deliberately minimal. Only `type` and `data.object` are used, and everything
+ * inside `data.object` is checked field by field rather than cast -- a payload
+ * shaped differently from expectation must produce a refusal, not a row of
+ * nulls, because the row in question stops an agency's delivery.
+ */
+export interface StripeWebhookEvent {
+  type: string;
+  data: { object: unknown };
 }
 
 let singleton: PaymentGateway | null = null;

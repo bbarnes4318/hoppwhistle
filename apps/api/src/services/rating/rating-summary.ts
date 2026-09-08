@@ -40,7 +40,8 @@ import type { CalendarDayKey } from './calendar-day.js';
 import { measureTrailingDeliveryDays } from './delivery-day.js';
 import type { DeliveryDayDeps } from './delivery-day.js';
 import { measureCalendarDay } from './measurement.js';
-import { rateFor, toNumber } from './rate-curve.js';
+import { effectiveRate, rateFor, toNumber } from './rate-curve.js';
+import { loadRateOffset } from './rate-offset.js';
 import { loadActiveCurve, loadWindowSettings } from './rating-engine.js';
 
 export interface RatingSummary {
@@ -73,8 +74,20 @@ export interface RatingSummary {
     closingPct: number | null;
   };
 
-  /** The rate in force today. Null while under review — not zero. */
+  /**
+   * The rate in force today. Null while under review — not zero.
+   *
+   * EFFECTIVE: the curve's answer plus this agency's rate offset. There is no
+   * separate fee line here or anywhere else, because an itemised fee added to a
+   * price is a surcharge and a different price is not. `curveRate` and
+   * `rateOffset` below are the two halves, reported so an agency can see what
+   * makes up its own price rather than being handed a total.
+   */
   currentRate: number | null;
+  /** The curve's own answer for the rate in force, when the curve set it. */
+  curveRate: number | null;
+  /** The agency's rate offset, in dollars. Zero unless one was agreed. */
+  rateOffset: number;
   currentRateCalendarDay: CalendarDayKey | null;
 
   /**
@@ -126,7 +139,7 @@ export async function getRatingSummary(
     applications: prisma.insuranceCarrierApplication,
   };
 
-  const [curve, windowSettings, state, openFlag] = await Promise.all([
+  const [curve, windowSettings, state, openFlag, rateOffset] = await Promise.all([
     loadActiveCurve(prisma),
     loadWindowSettings(prisma),
     prisma.agencyRatingState.findUnique({ where: { tenantId } }),
@@ -134,6 +147,9 @@ export async function getRatingSummary(
       where: { tenantId, clearedAt: null },
       orderBy: { raisedAt: 'desc' },
     }),
+    // The offset in force NOW, because `trackingRate` is a projection of what
+    // tomorrow would cost and tomorrow uses the offset that is in force then.
+    loadRateOffset(prisma, tenantId),
   ]);
 
   const [todayMeasurement, trackingMeasurement] = await Promise.all([
@@ -196,7 +212,10 @@ export async function getRatingSummary(
     if (verdict.kind === 'BELOW_MINIMUM') {
       trackingBelowMinimum = true;
     } else {
-      trackingRate = verdict.rate;
+      // The offset applies to the tracking rate too. It applies at every point
+      // on the curve, so a projection that left it out would show the agency a
+      // number it will not be charged.
+      trackingRate = effectiveRate(verdict.rate, rateOffset);
     }
   }
 
@@ -222,6 +241,15 @@ export async function getRatingSummary(
     },
     ratingWindow,
     currentRate: resolveCurrentRate(state, status),
+    /*
+     * The curve half of the rate in force, read off the rate change that set
+     * it -- never recomputed from today's curve or today's offset. An agency
+     * repriced by a later commercial change would otherwise see a breakdown
+     * that did not add up to what it is being charged.
+     */
+    curveRate: appliedChange?.curveRate == null ? null : toNumber(appliedChange.curveRate),
+    rateOffset:
+      appliedChange?.rateOffset == null ? rateOffset : toNumber(appliedChange.rateOffset),
     currentRateCalendarDay: state?.currentRateCalendarDay ?? null,
     trackingRate,
     trackingBelowMinimum,

@@ -73,15 +73,39 @@
  * unpaid block is identifiable from the rows; see docs/BILLING.md on what to do
  * with that balance at cutover.
  *
+ * ── The rate is the curve rate plus the agency's offset ──────────────────────
+ *
+ * Everything below prices at the EFFECTIVE rate: what the rating engine
+ * returned, which is the curve's answer plus the agency's recorded rate offset.
+ * There is no separate fee line on a settlement, in the export or anywhere
+ * else, because an itemised fee added to a price is a surcharge and a different
+ * price is not.
+ *
+ * The settlement stores `curveRate` and `rateOffset` beside `rate`, so the row
+ * still explains its own price and a later change to either is visible as a
+ * different row rather than as an unexplained movement. All three are under the
+ * immutability trigger: changing an agency's offset tomorrow cannot alter a
+ * settlement written tonight.
+ *
+ * ── ACH or card ──────────────────────────────────────────────────────────────
+ *
+ * The instrument is `terms.paymentMethod`, and `terms.settlementPaymentMethodId`
+ * is the Stripe payment method it resolves to. Both charges are off-session
+ * against something the agency already authorised; neither is reachable from a
+ * browser and neither takes an amount from one.
+ *
  * ── No refunds ───────────────────────────────────────────────────────────────
  *
  * Nothing here reverses anything. There is no code path that returns a credit,
  * no negative charge, and no compensating ledger row. A carrier's decision
- * after an application is submitted is not read anywhere in this file.
+ * after an application is submitted is not read anywhere in this file. A card
+ * chargeback does not reach this file at all: see `disputes.ts` -- it is
+ * contained, not reversed, and no figure written here moves because of one.
  */
 
 import type { PrismaClient } from '@prisma/client';
 import {
+  AgencyPaymentMethod,
   CreditLedgerEntryType,
   Prisma,
   SettlementPaymentStatus,
@@ -141,7 +165,12 @@ export interface SettlementResult {
   paymentStatus: SettlementPaymentStatus | null;
   deliveredCalls: number;
   submittedApplications: number;
+  /** The effective rate: the curve rate plus the agency's rate offset. */
   rate: number | null;
+  /** The curve's own answer, before the offset. */
+  curveRate: number | null;
+  /** The offset that was in force tonight. */
+  rateOffset: number;
   overrunQuantity: number;
   overrunAmount: number;
   nextBlockQuantity: number;
@@ -172,6 +201,8 @@ export async function settleAgencyForDeliveryDay(
     deliveredCalls: 0,
     submittedApplications: 0,
     rate: null,
+    curveRate: null,
+    rateOffset: 0,
     overrunQuantity: 0,
     overrunAmount: 0,
     nextBlockQuantity: 0,
@@ -245,7 +276,22 @@ export async function settleAgencyForDeliveryDay(
     where: { id: rating.rateChangeId },
   });
 
-  const curveRate = rating.newRate;
+  /*
+   * Tonight's price, and its two halves.
+   *
+   * `rating.newRate` is the EFFECTIVE rate: what the curve returned for the
+   * window plus this agency's recorded rate offset. That is what the agency is
+   * charged and what every figure below is computed from -- there is no
+   * separate fee added to a total anywhere, because a fee added to a price is a
+   * surcharge and this is a price.
+   *
+   * `rating.curveRate` and `rating.rateOffset` are stored beside it so the
+   * settlement row explains its own price without a join to a profile that may
+   * since have changed.
+   */
+  const effective = rating.newRate;
+  const curveRate = rating.curveRate;
+  const rateOffset = rating.rateOffset;
 
   /*
    * When the curve returns no rate -- the window closed below the minimum --
@@ -253,13 +299,15 @@ export async function settleAgencyForDeliveryDay(
    * invent one. Tonight's overrun is still owed, so it is billed at the rate
    * that was in force on the Delivery Day it was incurred on: the rate the
    * agency's credits for that day were sold at, which is a number both sides
-   * already agreed and which is stored on the purchase row.
+   * already agreed and which is stored on the purchase row. That stored number
+   * is already an effective rate -- it is what was actually charged -- so no
+   * offset is added to it a second time.
    *
    * No block is sold in that case. Delivery is paused on the review flag, and
    * selling an agency a block it cannot use would be taking money for nothing.
    */
   const fallbackRate = await rateInForceOnDay(prisma, tenantId, deliveryDay);
-  const overrunRate = curveRate ?? fallbackRate;
+  const overrunRate = effective ?? fallbackRate;
 
   const counts = await ledgerCountsForDay(prisma, tenantId, deliveryDay);
 
@@ -280,9 +328,9 @@ export async function settleAgencyForDeliveryDay(
   const unusedPaidApplications = Math.max(0, balance);
   const configuredBlockQuantity = terms.dailyBlockApplications;
   const nextBlockQuantity =
-    curveRate === null ? 0 : Math.max(0, configuredBlockQuantity - unusedPaidApplications);
+    effective === null ? 0 : Math.max(0, configuredBlockQuantity - unusedPaidApplications);
   const nextBlockAmount =
-    curveRate === null ? 0 : Number((nextBlockQuantity * curveRate).toFixed(2));
+    effective === null ? 0 : Number((nextBlockQuantity * effective).toFixed(2));
 
   // Step 5 -- one debit for both.
   const totalCharged = Number((overrunAmount + nextBlockAmount).toFixed(2));
@@ -338,6 +386,17 @@ export async function settleAgencyForDeliveryDay(
         windowDayKeys: rateChange?.windowDayKeys ?? [],
         rate: overrunRate === null ? null : new Prisma.Decimal(overrunRate.toFixed(2)),
         /*
+         * The two halves of the price, copied from the rating decision.
+         *
+         * Null `curveRate` beside a non-null `rate` says the same thing a null
+         * `curveVersionId` does: this was the rate in force on the Delivery Day
+         * rather than one the curve returned tonight. `rateOffset` is recorded
+         * either way, so a reader can always tell an offset change from a curve
+         * change, and both are under the immutability trigger.
+         */
+        curveRate: curveRate === null ? null : new Prisma.Decimal(curveRate.toFixed(2)),
+        rateOffset: new Prisma.Decimal(rateOffset.toFixed(2)),
+        /*
          * The curve version is recorded ONLY when the curve actually priced
          * tonight. A null here beside a non-null `rate` is the row saying "this
          * was the rate in force on the Delivery Day, not a rate the curve
@@ -345,8 +404,8 @@ export async function settleAgencyForDeliveryDay(
          * minimum and there is no next-day price to derive. It is a distinction
          * an agency reading the row is entitled to see.
          */
-        curveVersionId: curveRate === null ? null : rateChange?.curveVersionId ?? null,
-        curveVersion: curveRate === null ? null : rateChange?.curveVersion ?? null,
+        curveVersionId: effective === null ? null : rateChange?.curveVersionId ?? null,
+        curveVersion: effective === null ? null : rateChange?.curveVersion ?? null,
         rateChangeId: rating.rateChangeId,
         overrunQuantity,
         overrunAmount: new Prisma.Decimal(overrunAmount.toFixed(2)),
@@ -380,6 +439,8 @@ export async function settleAgencyForDeliveryDay(
         deliveredCalls: existing?.deliveredCalls ?? 0,
         submittedApplications: existing?.submittedApplications ?? 0,
         rate: existing?.rate == null ? null : toNumber(existing.rate),
+        curveRate: existing?.curveRate == null ? null : toNumber(existing.curveRate),
+        rateOffset: existing?.rateOffset == null ? 0 : toNumber(existing.rateOffset),
         overrunQuantity: existing?.overrunQuantity ?? 0,
         overrunAmount: existing?.overrunAmount == null ? 0 : toNumber(existing.overrunAmount),
         nextBlockQuantity: existing?.nextBlockQuantity ?? 0,
@@ -399,6 +460,8 @@ export async function settleAgencyForDeliveryDay(
     deliveredCalls: measurement.deliveredCalls,
     submittedApplications: measurement.submittedApplications,
     rate: overrunRate,
+    curveRate,
+    rateOffset,
     overrunQuantity,
     overrunAmount,
     nextBlockQuantity,
@@ -451,12 +514,15 @@ export async function settleAgencyForDeliveryDay(
      * No payment attempt row: none was attempted. No notification: nothing
      * failed. `totalCharged` on the record is what this would have taken.
      */
-    if (nextBlockQuantity > 0 && curveRate !== null) {
+    if (nextBlockQuantity > 0 && effective !== null) {
       await recordPurchase(prisma, {
         tenantId,
         deliveryDay: nextCalendarDay(deliveryDay),
         quantity: nextBlockQuantity,
-        unitRate: curveRate,
+        // The effective rate, which is the price. The purchase row is what
+        // the overrun on a later day falls back to when the curve has nothing
+        // to say, so it has to carry what was actually charged.
+        unitRate: effective,
         stripePaymentIntentId: null,
         settlementId: settlement.id,
         curveVersionId: rateChange?.curveVersionId ?? null,
@@ -484,11 +550,12 @@ export async function settleAgencyForDeliveryDay(
     totalCharged,
     attemptNumber: 1,
     customerId: terms.stripeCustomerId,
-    paymentMethodId: terms.achPaymentMethodId,
+    paymentMethodId: terms.settlementPaymentMethodId,
+    paymentMethod: terms.paymentMethod,
     nextBlockQuantity,
-    nextBlockRate: curveRate,
+    nextBlockRate: effective,
     curveVersionId: rateChange?.curveVersionId ?? null,
-    curveVersion: curveRate === null ? null : rateChange?.curveVersion ?? null,
+    curveVersion: effective === null ? null : rateChange?.curveVersion ?? null,
     result: base,
     now,
   });
@@ -510,6 +577,15 @@ async function chargeAndFinalise(params: {
   attemptNumber: number;
   customerId: string | null;
   paymentMethodId: string | null;
+  /**
+   * Which instrument to debit. ACH unless the agency's terms say CARD.
+   *
+   * Both are off-session against something the agency already authorised, and
+   * neither takes an amount from anywhere but the ledger and the rating engine.
+   * A card-paying agency is priced differently through its rate offset, not
+   * charged a fee here: nothing on this path adds anything to `totalCharged`.
+   */
+  paymentMethod: AgencyPaymentMethod;
   nextBlockQuantity: number;
   nextBlockRate: number | null;
   curveVersionId?: string | null;
@@ -519,19 +595,23 @@ async function chargeAndFinalise(params: {
 }): Promise<SettlementResult> {
   const { prisma, gateway, settlementId, tenantId, deliveryDay } = params;
 
+  const request = {
+    customerId: params.customerId ?? '',
+    paymentMethodId: params.paymentMethodId ?? '',
+    amountCents: toCents(params.totalCharged),
+    description: `NetEnroll settlement ${deliveryDay}`,
+    // Stable per attempt. A crash between Stripe accepting this and us
+    // recording it means the same key comes back with the same payment
+    // intent instead of a second debit.
+    idempotencyKey: `settlement:${settlementId}:${params.attemptNumber}`,
+    metadata: { tenantId, deliveryDay, settlementId },
+  };
+
   const charge =
     params.customerId && params.paymentMethodId
-      ? await gateway.chargeAchOffSession({
-          customerId: params.customerId,
-          paymentMethodId: params.paymentMethodId,
-          amountCents: toCents(params.totalCharged),
-          description: `NetEnroll settlement ${deliveryDay}`,
-          // Stable per attempt. A crash between Stripe accepting this and us
-          // recording it means the same key comes back with the same payment
-          // intent instead of a second debit.
-          idempotencyKey: `settlement:${settlementId}:${params.attemptNumber}`,
-          metadata: { tenantId, deliveryDay, settlementId },
-        })
+      ? params.paymentMethod === AgencyPaymentMethod.CARD
+        ? await gateway.chargeCardOffSession(request)
+        : await gateway.chargeAchOffSession(request)
       : {
           ok: false,
           paymentIntentId: null,
@@ -884,7 +964,8 @@ export async function retryFailedSettlements(
       totalCharged: total,
       attemptNumber: (lastAttempt?.attemptNumber ?? 0) + 1,
       customerId: terms.stripeCustomerId,
-      paymentMethodId: terms.achPaymentMethodId,
+      paymentMethodId: terms.settlementPaymentMethodId,
+      paymentMethod: terms.paymentMethod,
       nextBlockQuantity: settlement.nextBlockQuantity,
       nextBlockRate: settlement.rate === null ? null : toNumber(settlement.rate),
       curveVersionId: settlement.curveVersionId,
@@ -899,6 +980,8 @@ export async function retryFailedSettlements(
         deliveredCalls: settlement.deliveredCalls,
         submittedApplications: settlement.submittedApplications,
         rate: settlement.rate === null ? null : toNumber(settlement.rate),
+        curveRate: settlement.curveRate === null ? null : toNumber(settlement.curveRate),
+        rateOffset: toNumber(settlement.rateOffset),
         overrunQuantity: settlement.overrunQuantity,
         overrunAmount: toNumber(settlement.overrunAmount),
         nextBlockQuantity: settlement.nextBlockQuantity,
@@ -968,7 +1051,8 @@ export async function resumeStalledSettlements(
       totalCharged: total,
       attemptNumber: 1,
       customerId: terms.stripeCustomerId,
-      paymentMethodId: terms.achPaymentMethodId,
+      paymentMethodId: terms.settlementPaymentMethodId,
+      paymentMethod: terms.paymentMethod,
       nextBlockQuantity: settlement.nextBlockQuantity,
       nextBlockRate: settlement.rate === null ? null : toNumber(settlement.rate),
       curveVersionId: settlement.curveVersionId,
@@ -983,6 +1067,8 @@ export async function resumeStalledSettlements(
         deliveredCalls: settlement.deliveredCalls,
         submittedApplications: settlement.submittedApplications,
         rate: settlement.rate === null ? null : toNumber(settlement.rate),
+        curveRate: settlement.curveRate === null ? null : toNumber(settlement.curveRate),
+        rateOffset: toNumber(settlement.rateOffset),
         overrunQuantity: settlement.overrunQuantity,
         overrunAmount: toNumber(settlement.overrunAmount),
         nextBlockQuantity: settlement.nextBlockQuantity,

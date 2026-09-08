@@ -215,12 +215,15 @@ export class StripeService {
   //
   // Three properties these methods are written around:
   //
-  //   ACH ONLY, FOR SETTLEMENT. `chargeAchOffSession` sets
-  //   payment_method_types to us_bank_account and nothing else. At roughly
-  //   $8,978 a day on one account, card fees would run about $87,000 a year, so
-  //   card is permitted for an agency's OPENING purchase and never for a daily
-  //   settlement. `chargeCardOnSession` exists for that one case and is named
-  //   so it cannot be reached for the other by accident.
+  //   ONE INSTRUMENT PER AGENCY, CHOSEN BY ITS TERMS. `chargeAchOffSession`
+  //   sets payment_method_types to us_bank_account and nothing else;
+  //   `chargeCardOffSession` sets card and nothing else. Which one a settlement
+  //   uses is `agency_billing_profiles.paymentMethod`, read server-side. Card
+  //   costs us more to accept, and that is answered in the agency's RATE --
+  //   a per-tenant offset in dollars, agreed and recorded, applied at every
+  //   point on the curve -- not by anything added at the point of payment.
+  //   Nothing in this file adds a fee, a percentage or a line item to an
+  //   amount it is handed.
   //
   //   IDEMPOTENT AT STRIPE TOO. Every charge carries an idempotency key derived
   //   from the settlement it belongs to. The unique index on
@@ -332,10 +335,105 @@ export class StripeService {
   }
 
   /**
+   * The daily settlement debit for an agency that pays by card.
+   *
+   * Off-session against a card the agency already authorised for exactly this,
+   * on the same terms as the ACH debit above: `off_session: true` with
+   * `confirm: true`, because there is nobody at a browser at 00:05 to complete
+   * an authentication step.
+   *
+   * ── The amount is the amount ─────────────────────────────────────────────
+   *
+   * This method adds nothing to what it is handed. A card-paying agency is
+   * priced differently through its RATE -- a per-tenant offset in dollars,
+   * agreed and recorded on its terms, applied at every point on the curve --
+   * and not through anything added at the point of payment. That distinction is
+   * the whole design: an itemised fee added to a price is a surcharge, which is
+   * a regulated instrument requiring card-network registration, capped at 3%,
+   * prohibited on debit cards and unlawful in several states. A different price
+   * is none of those things. There is no code path anywhere in this platform
+   * that adds a percentage or a fee to a settlement total.
+   *
+   * Never throws, for the same reason `chargeAchOffSession` does not: a
+   * settlement that could not be charged must still be recorded as one.
+   */
+  async chargeCardOffSession(params: {
+    customerId: string;
+    paymentMethodId: string;
+    /** Whole cents. Derived server-side; never accepted from a request. */
+    amountCents: number;
+    currency?: string;
+    description: string;
+    idempotencyKey: string;
+    metadata?: Record<string, string>;
+  }): Promise<AchChargeResult> {
+    if (!Number.isInteger(params.amountCents) || params.amountCents <= 0) {
+      return {
+        ok: false,
+        paymentIntentId: null,
+        status: null,
+        failureCode: 'invalid_amount',
+        failureMessage: `A card debit must be a positive whole number of cents, got ${params.amountCents}`,
+      };
+    }
+
+    if (!this.enabled || !this.stripe) {
+      logger.warn('Stripe integration disabled; card settlement debit not placed');
+      return {
+        ok: false,
+        paymentIntentId: null,
+        status: null,
+        failureCode: 'stripe_disabled',
+        failureMessage: 'Stripe is not enabled in this environment, so no debit was placed.',
+      };
+    }
+
+    try {
+      const intent = await this.stripe.paymentIntents.create(
+        {
+          amount: params.amountCents,
+          currency: (params.currency ?? 'usd').toLowerCase(),
+          customer: params.customerId,
+          payment_method: params.paymentMethodId,
+          payment_method_types: ['card'],
+          confirm: true,
+          off_session: true,
+          description: params.description,
+          metadata: params.metadata,
+        },
+        { idempotencyKey: params.idempotencyKey }
+      );
+
+      const accepted = intent.status === 'succeeded' || intent.status === 'processing';
+
+      return {
+        ok: accepted,
+        paymentIntentId: intent.id,
+        status: intent.status,
+        failureCode: accepted ? null : intent.last_payment_error?.code ?? intent.status,
+        failureMessage: accepted
+          ? null
+          : intent.last_payment_error?.message ?? `Payment intent status ${intent.status}`,
+      };
+    } catch (error) {
+      const stripeError = error as Stripe.errors.StripeError;
+      logger.error('Card settlement debit failed:', error);
+      return {
+        ok: false,
+        paymentIntentId: stripeError?.payment_intent?.id ?? null,
+        status: stripeError?.payment_intent?.status ?? null,
+        failureCode: stripeError?.code ?? stripeError?.type ?? 'stripe_error',
+        failureMessage: stripeError?.message ?? String(error),
+      };
+    }
+  }
+
+  /**
    * A card charge, on-session, for an agency's OPENING purchase only.
    *
    * Deliberately a separate method with a name that says what it is for.
-   * Settlement calls `chargeAchOffSession`; nothing calls this on a schedule.
+   * Settlement calls `chargeAchOffSession` or `chargeCardOffSession` according
+   * to the agency's recorded payment method; nothing calls this on a schedule.
    */
   async chargeCardOnSession(params: {
     customerId: string;
@@ -486,6 +584,99 @@ export class StripeService {
   }
 
   /**
+   * Begin saving a card for off-session use.
+   *
+   * The card counterpart of `createAchSetupIntent`, and on the same terms: the
+   * client secret authorises attaching a payment method to this customer and
+   * nothing else. It cannot move money and it names no amount.
+   */
+  async createCardSetupIntent(
+    customerId: string
+  ): Promise<{ id: string; clientSecret: string } | null> {
+    if (!this.enabled || !this.stripe) return null;
+
+    const intent = await this.stripe.setupIntents.create({
+      customer: customerId,
+      payment_method_types: ['card'],
+      // The agency is authorising a merchant-initiated debit each Delivery Day,
+      // which is exactly what off_session means. A card saved on_session would
+      // ask for authentication at midnight, with nobody there to give it.
+      usage: 'off_session',
+    });
+
+    return intent.client_secret ? { id: intent.id, clientSecret: intent.client_secret } : null;
+  }
+
+  /**
+   * Read back what a card SetupIntent actually produced.
+   *
+   * Same rule as the bank mandate: the brand, the last four and whether it can
+   * be debited at all are read from Stripe by the server. A browser saying
+   * "I attached card X" is a browser choosing which card a five-figure daily
+   * debit comes out of.
+   */
+  async describeCardMandate(setupIntentId: string): Promise<CardMandateFacts | null> {
+    if (!this.enabled || !this.stripe) return null;
+
+    const intent = await this.stripe.setupIntents.retrieve(setupIntentId, {
+      expand: ['payment_method'],
+    });
+
+    const paymentMethod =
+      typeof intent.payment_method === 'string' ? null : intent.payment_method ?? null;
+
+    if (!paymentMethod) {
+      return {
+        setupIntentStatus: intent.status,
+        paymentMethodId: null,
+        usable: false,
+        brand: null,
+        last4: null,
+        customerId: typeof intent.customer === 'string' ? intent.customer : null,
+      };
+    }
+
+    const card = paymentMethod.card ?? null;
+
+    return {
+      setupIntentStatus: intent.status,
+      paymentMethodId: paymentMethod.id,
+      // Only a succeeded SetupIntent leaves a card that can be debited
+      // off-session. Anything else -- requires_action, an unfinished 3-D Secure
+      // step -- is not a usable instrument yet, and treating it as one would
+      // mean delivering calls against a card that refuses the first debit.
+      usable: intent.status === 'succeeded' && !!card,
+      brand: card?.brand ?? null,
+      last4: card?.last4 ?? null,
+      customerId: typeof intent.customer === 'string' ? intent.customer : null,
+    };
+  }
+
+  /**
+   * Verify and parse a Stripe webhook.
+   *
+   * The signature check is the whole point, and it is why the raw body has to
+   * reach this method unparsed: an unverified dispute webhook would let anybody
+   * who can reach the endpoint stop an agency's delivery.
+   *
+   * Returns null when the secret is not configured or the signature does not
+   * verify. The caller answers 400 either way -- distinguishing "we are not
+   * configured" from "your signature is wrong" to an unauthenticated caller
+   * tells them which half of a guess was right.
+   */
+  constructWebhookEvent(rawBody: Buffer | string, signature: string): Stripe.Event | null {
+    const secret = process.env.STRIPE_WEBHOOK_SECRET;
+    if (!this.stripe || !secret) return null;
+
+    try {
+      return this.stripe.webhooks.constructEvent(rawBody, signature, secret);
+    } catch (error) {
+      logger.warn('Stripe webhook signature did not verify:', error);
+      return null;
+    }
+  }
+
+  /**
    * Check if Stripe is enabled
    */
   isEnabled(): boolean {
@@ -501,6 +692,17 @@ export interface AchChargeResult {
   status: string | null;
   failureCode: string | null;
   failureMessage: string | null;
+}
+
+/** What a completed SetupIntent says about an agency's saved card. */
+export interface CardMandateFacts {
+  setupIntentStatus: string;
+  paymentMethodId: string | null;
+  /** True only when this can actually be debited off-session. */
+  usable: boolean;
+  brand: string | null;
+  last4: string | null;
+  customerId: string | null;
 }
 
 /** What a completed SetupIntent says about an agency's bank mandate. */

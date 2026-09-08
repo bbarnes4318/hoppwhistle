@@ -4,6 +4,7 @@ import { AlertTriangle, Gauge, Loader2, TrendingUp } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { CompactPageHeader, CompactPageShell } from '@/components/layout/compact-layout';
+import { PlatformRatingView } from '@/components/platform/platform-rating-view';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -14,12 +15,26 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { usePlatformContext } from '@/hooks/use-platform-context';
 import { apiClient, payload } from '@/lib/api';
 import type { Envelope } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 /**
  * The agency's own rate, and the measurements behind it.
+ *
+ * ── Two readings of one page ─────────────────────────────────────────────────
+ *
+ * An agency sees its own rate, which is everything below. A platform admin with
+ * no agency selected sees EVERY agency's closing percentage, current rate and
+ * tracking rate side by side — because NetEnroll staff run the whole platform,
+ * and answering "who is drifting" one agency at a time is not answering it.
+ * Selecting an agency narrows this page to that agency; leaving returns to the
+ * platform-wide view.
+ *
+ * An agency OWNER never reaches the platform-wide reading: they hold no
+ * platform capability, so `needsAgency` is false for them, and the endpoint
+ * behind it refuses them regardless of what this page renders.
  *
  * ── The four numbers, and why they are laid out like this ────────────────────
  *
@@ -73,6 +88,10 @@ interface RatingSummary {
     closingPct: number | null;
   };
   currentRate: number | null;
+  /** The curve half of the rate, when the curve set it. */
+  curveRate: number | null;
+  /** Dollars added to the curve rate. Part of the price, never a fee line. */
+  rateOffset: number;
   currentRateCalendarDay: string | null;
   trackingRate: number | null;
   trackingBelowMinimum: boolean;
@@ -99,7 +118,10 @@ interface RateChangeRow {
   closingPct: number | null;
   curveVersion: number;
   previousRate: number | null;
+  /** The effective rate applied: `curveRate + rateOffset`. */
   newRate: number | null;
+  curveRate: number | null;
+  rateOffset: number;
   status: 'APPLIED' | 'BELOW_MINIMUM' | 'NO_DATA';
 }
 
@@ -113,7 +135,33 @@ function dollars(value: number | null): string {
   return value === null ? '—' : `$${Math.round(value)}`;
 }
 
+/**
+ * Which reading of this page to render.
+ *
+ * A component boundary rather than an early return: the agency panel below
+ * calls hooks, and returning before them would be a conditional hook. It also
+ * means the agency panel never mounts for an operator with no agency, so it
+ * never fires the agency-scoped requests that would be refused 409.
+ */
 export default function RatingPage(): JSX.Element {
+  const platform = usePlatformContext();
+
+  if (platform.loading) {
+    return (
+      <CompactPageShell>
+        <div className="flex flex-1 items-center justify-center text-muted-foreground">
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          Loading rate
+        </div>
+      </CompactPageShell>
+    );
+  }
+
+  return platform.needsAgency ? <PlatformRatingView /> : <AgencyRatingPanel />;
+}
+
+/** One agency's own rate: the acting tenant's, and nobody else's. */
+function AgencyRatingPanel(): JSX.Element {
   const [summary, setSummary] = useState<RatingSummary | null>(null);
   const [history, setHistory] = useState<RateChangeRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -216,6 +264,18 @@ export default function RatingPage(): JSX.Element {
               per submitted application
               {summary.currentRateCalendarDay ? ` · effective ${summary.currentRateCalendarDay}` : ''}
             </p>
+            {/*
+              An agreed rate offset is shown as part of the price rather than
+              as a fee beside it, which is what makes the number above add up
+              against the published curve. There is no line anywhere on this
+              page that adds anything to a charge.
+            */}
+            {summary.rateOffset > 0 && (
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                {dollars(summary.curveRate)} from the curve, plus your agreed rate offset of{' '}
+                {dollars(summary.rateOffset)}
+              </p>
+            )}
           </CardContent>
         </Card>
 

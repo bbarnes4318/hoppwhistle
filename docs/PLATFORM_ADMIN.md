@@ -1,4 +1,4 @@
-# Platform staff and the acting-tenant switch — Phase 1b, extended in Phase 2
+# Platform staff and the acting-tenant switch — Phase 1b, extended in Phases 2 and 5
 
 Phase 1 established that the acting tenant comes from `request.user` and nothing
 else, and `apps/api/src/lib/tenant-context.ts` is still the only place that
@@ -9,6 +9,12 @@ available (`OWNER`, `ADMIN`) are granted per-tenant.
 **Nothing in Phase 1 was relaxed.** The helper is byte-identical. The switch
 populates `request.user`; it does not teach the helper a second way to find a
 tenant.
+
+**Phase 5 changed what "no agency selected" LANDS ON, not what it resolves to.**
+An operator with no acting tenant still gets no tenant and still cannot read
+agency-scoped data; what they now get instead is the platform-wide reading of
+the three screens NetEnroll staff actually run the platform from, rather than a
+prompt to pick somebody. See §2f.
 
 ---
 
@@ -350,6 +356,53 @@ such page mounts: the dashboard layout swaps the **entire** children subtree for
 nothing fetches, so there is no 409 for a page to mishandle. That is what makes
 the rule hold for every page at once rather than page by page.
 
+### Phase 5: the prompt is the exception, not the entry point
+
+The rule above was right about the mechanism and backwards about the default.
+NetEnroll staff run the whole platform; drilling into a single agency is the
+exception. An operator with no agency selected was told "Choose an agency" on
+`/delivery` and `/rating` and could see nothing until they picked one, so "how
+is the platform doing this morning" could only be answered one agency at a time.
+
+Three screens now have a platform-wide counterpart and are exempt from the swap.
+Each decides for itself, from `usePlatformContext`, which reading to render:
+
+| Path | With no acting tenant | Inside an agency |
+| --- | --- | --- |
+| `/delivery` (exact) | every agency's calls, applications, closing percentage, block remaining, overrun, ceiling distance and rate, with platform totals | that agency's own live panel |
+| `/rating` | every agency's closing percentage, current rate and tracking rate, side by side | that agency's own rate |
+| `/delivery/settlements` | every agency's settlements over a range, filterable by agency, export widened to match | that agency's own history |
+
+Each is a component boundary rather than an early return inside one component:
+the agency panel calls hooks, and returning before them would be a conditional
+hook — and splitting means the agency panel never mounts for an operator with no
+agency, so it never fires the request that would be refused 409.
+
+**`/delivery` is matched exactly, not by prefix.** `/delivery/me` is one agent's
+own numbers and has no cross-agency reading at all, so it keeps the prompt. A
+prefix would have quietly served it to an operator with no agency and broken it,
+which is the same shape of mistake the call centre made.
+
+**The prompt is kept where a screen genuinely cannot be shown across agencies**,
+and after Phase 5 that is: `/call-center` (one agency's live queue), `/calls`
+and `/calls/[id]`, `/delivery/me`, `/dashboard`, `/payroll` and `/admin/payroll`,
+`/flows`, `/voice-agents`, `/retention`, `/publishers`, `/bot`,
+`/dialer-v2-shadow`, and the nested `buyer` and `publisher` sections. Every one
+of them is one agency's own records, queue or roster; there is no reading of
+them that spans agencies, and a pooled version would be a cross-tenant aggregate
+of exactly the kind §7 of docs/BILLING.md forbids.
+
+`cross-agency-landing.test.ts` pins the exemption list — all four prefixes and
+the one exact path — for the same reason it pinned the old two: widening it is
+how the rule would quietly stop meaning anything.
+
+**Nothing an agency sees changed.** An agency OWNER holds no platform
+capability, so `needsAgency` is false for them and they get the agency reading of
+all three pages; and every platform endpoint behind the other reading refuses
+them 403 regardless of what a page renders. `phase5-platform.test.ts` asserts
+that directly — the refusal, and that it leaks no other agency's name or id —
+rather than leaving it to follow from the gates.
+
 **One page escaped it.** The layout has two return paths, and the call centre
 renders fullscreen and returns early — above the swap. So `/call-center` rendered
 the live queue for an operator with no agency, asked for that agency's calls,
@@ -410,6 +463,29 @@ old `requirePermission('admin:full')` gate did.
 | --- | --- | --- |
 | `delivery-billing.ts` — `/api/v1/platform/delivery/*` (14 routes) | `requirePlatformAdmin` | Sets an agency's Daily Block, its maximum daily debit and its Overrun ceiling; **enrols and un-enrols it from billing, and turns real charging on and off**; suspends and resumes delivery; sells an opening block; runs the nightly settlement; and reads the cross-agency view and its export. Every one of these decides what an agency can be charged or whether it is delivered to at all, so none of them may be reachable by the agency. |
 | `delivery-billing.ts` — `/api/v1/delivery/*` (10 routes) | `authenticate` + `resolveTenant` | Agency-scoped, and deliberately so: an agency reads its own block, overrun, ceiling, settlements, the derivation of one of them, its ledger and its mandate. No parameter names an agency. |
+
+### Added in Phase 5
+
+| Route(s) | Gate | Why platform-wide |
+| --- | --- | --- |
+| `delivery-billing.ts` — `/api/v1/platform/delivery/overview`, `/settlements`, `/settlements.csv`, `/agencies` | `requirePlatformAdmin` | The platform-wide readings of `/delivery` and `/delivery/settlements`. Every one lists agencies other than the caller's, which is the definition of a surface an agency may not reach. |
+| `delivery-billing.ts` — `…/agencies/:tenantId/payment-method`, `…/disputes`, `…/disputes/stand-down` | `requirePlatformAdmin` | Sets which instrument an agency is debited on, and decides whether delivery resumes after a chargeback. Both are things done TO an agency. |
+| `rating.ts` — `/api/v1/platform/rating/overview` | `requirePlatformAdmin` | The platform-wide reading of `/rating`. |
+| `platform.ts` — `/api/v1/platform/tenants/volume`, `…/tenants/:tenantId/non-production` | `requirePlatformAdmin` | Every tenant's call and application volume, and the marker that decides what counts toward platform totals. |
+| `onboarding.ts` — 5 routes | `requirePlatformAdmin` | Creates tenants and mints an OWNER activation grant into one. There is no self-serve path and this is why. |
+| `stripe-webhooks.ts` — `POST /api/v1/webhooks/stripe` | **signature**, not a capability | Stripe cannot present a bearer token. Verified against `STRIPE_WEBHOOK_SECRET` over the raw body, and refused before anything is read out of it — an unverified dispute webhook would let anybody who can reach the URL stop an agency's delivery. Nothing in the payload names a tenant: the agency is resolved from the payment intent against rows this platform wrote. See docs/BILLING.md §12. |
+
+Two narrowings in Phase 5 rather than additions:
+
+- `POST /api/v1/auth/activation-grants` (agency-scoped) now issues **AGENT**
+  grants only. An OWNER could previously mint an OWNER link; an agency's second
+  principal is now arranged with NetEnroll, who issues it from the onboarding
+  surface above. The tenant was never nameable on that route and still is not.
+- `GET /api/v1/platform/delivery/overview` and the platform settlements list
+  narrow to the operator's **acting tenant** when they have one. That is the
+  Phase 1 helper, not a new input: `?agencyId=` is a filter on a platform-wide
+  list and is ignored when an agency has actually been entered, so a query
+  string cannot widen past a session-level decision.
 
 The `:tenantId` in the platform paths names the agency being administered, not
 the acting tenant of the caller — the same reading as `quotas.ts` above.
@@ -598,6 +674,31 @@ database, driving the real auth hook and the real route plugins.
    walks recursively and therefore passed throughout the crash; `idsIn()` is
    still used for the leak checks it suits, and now carries a comment saying it
    must not be used for shape.
+
+`apps/api/src/__tests__/phase5-platform.test.ts` — 25 cases, also against a real
+database, covering what Phase 5 changed about this surface:
+
+- **A platform admin with no acting tenant is served every agency** on the
+  endpoints behind `/delivery`, `/rating` and `/delivery/settlements`, with the
+  per-agency figures and the platform totals — and the response is checked to
+  contain no `NO_ACTING_TENANT` and no "Choose an agency" anywhere in it.
+- **Entering narrows all three and leaving widens them again**, driven through
+  the real `enterActingTenant` / `leaveActingTenant` rather than by minting a
+  token that names an agency — which for staff gets an operator nothing, and is
+  the property §2 pins.
+- **A query parameter cannot widen past the agency entered**: `?agencyId=` for
+  another agency returns the entered agency's rows.
+- **An agency OWNER is refused all five platform surfaces with a 403** that
+  contains neither the other agency's id nor its name, and their own three
+  screens answer with their own tenant id and nothing of the other's.
+- **An agency OWNER cannot create a user outside their tenant** — a `tenantId`
+  in the body is not read, and the grant lands in their own agency — **cannot
+  create an OWNER**, and **cannot create a platform admin** by any value of
+  `role` on any endpoint.
+
+`apps/web/src/app/__tests__/cross-agency-landing.test.ts` pins the layout's
+exemption list — the four prefixes and the one exact path — and that `/delivery`
+is matched exactly, so `/delivery/me` keeps the prompt.
 
 `apps/api/src/__tests__/api-response-contract.test.ts` — 18 cases. Boots the
 real routes on a real port and drives **the real web client** — the same

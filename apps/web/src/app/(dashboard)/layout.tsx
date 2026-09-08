@@ -113,13 +113,34 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   /*
    * Which pages an operator can use without having entered an agency.
    *
-   * Everything under this layout renders one agency's data, with two
-   * exceptions: /settings is about the signed-in person, and /admin is the
-   * platform console. Anything else gets the prompt rather than an empty table
-   * or a spinner that never resolves.
+   * ── The prompt is the exception now, not the entry point ──────────────────
+   *
+   * Phase 2 swapped every page under this layout for "Choose an agency" when a
+   * platform admin had no acting tenant. That was backwards for the pages
+   * NetEnroll staff actually run the platform from: they run the whole thing,
+   * and drilling into one agency is the exception. So `/delivery`, `/rating`
+   * and `/delivery/settlements` each render a PLATFORM-WIDE counterpart in that
+   * state -- every agency's rows, with totals -- and entering an agency narrows
+   * the same page to it. The switcher is a filter, not a gate.
+   *
+   * The rest of the surface still gets the prompt, because there genuinely is
+   * no cross-agency reading of it: see docs/PLATFORM_ADMIN.md §2f, which names
+   * each one and why.
+   *
+   * `/delivery` is matched exactly rather than by prefix. `/delivery/me` is one
+   * agent's own numbers and has no platform-wide meaning at all, so it keeps
+   * the prompt -- a prefix here would have quietly included it.
    */
+  const PLATFORM_WIDE_PREFIXES = [
+    '/settings',
+    '/admin',
+    '/rating',
+    '/delivery/settlements',
+  ];
+
+  const path = pathname || '';
   const worksWithoutAgency =
-    (pathname || '').startsWith('/settings') || (pathname || '').startsWith('/admin');
+    PLATFORM_WIDE_PREFIXES.some(prefix => path.startsWith(prefix)) || path === '/delivery';
 
   const needsAgency = platform.needsAgency && !worksWithoutAgency;
 

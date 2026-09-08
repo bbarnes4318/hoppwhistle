@@ -104,6 +104,54 @@ class FakeGateway implements PaymentGateway {
     };
   }
 
+  /**
+   * The settlement debit for a card-paying agency.
+   *
+   * Recorded in the same list as the opening-purchase card charge, because what
+   * these assertions care about is "did a card get charged at all" -- Phase 3's
+   * property that a daily settlement never reaches a card is now narrower: it
+   * never reaches one for an ACH agency, which is every agency in this suite.
+   */
+  async chargeCardOffSession(request: ChargeRequest) {
+    this.cardCharges.push(request);
+    if (this.declineWith) {
+      return {
+        ok: false,
+        paymentIntentId: null,
+        status: 'requires_payment_method',
+        failureCode: 'card_declined',
+        failureMessage: this.declineWith,
+      };
+    }
+    return {
+      ok: true,
+      paymentIntentId: `pi_card_${this.cardCharges.length}`,
+      status: 'succeeded',
+      failureCode: null,
+      failureMessage: null,
+    };
+  }
+
+  async createCardSetupIntent() {
+    return { id: 'seti_card_fake', clientSecret: 'seti_card_fake_secret' };
+  }
+
+  async describeCardMandate() {
+    return {
+      setupIntentStatus: 'succeeded',
+      paymentMethodId: 'pm_card_fake',
+      usable: true,
+      brand: 'visa',
+      last4: '4242',
+      customerId: 'cus_fake',
+    };
+  }
+
+  /** Nothing in this suite drives a webhook; the Phase 5 suite does. */
+  constructWebhookEvent() {
+    return null;
+  }
+
   async ensureCustomer() {
     return 'cus_fake';
   }

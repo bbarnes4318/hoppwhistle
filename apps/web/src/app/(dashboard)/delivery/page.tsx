@@ -14,6 +14,7 @@ import Link from 'next/link';
 import { useCallback, useMemo, useState } from 'react';
 
 import { CompactPageHeader, CompactPageShell } from '@/components/layout/compact-layout';
+import { PlatformDeliveryView } from '@/components/platform/platform-delivery-view';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -26,12 +27,27 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { useLivePoll } from '@/hooks/use-live-poll';
+import { usePlatformContext } from '@/hooks/use-platform-context';
 import { apiClient, payload } from '@/lib/api';
 import type { Envelope } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 /**
  * Delivery: what is left on the block, what today has cost, and who is closing.
+ *
+ * ── Two readings of one page ─────────────────────────────────────────────────
+ *
+ * An agency sees its own figures, which is everything below. A platform admin
+ * with no agency selected sees EVERY agency's — the same figures, one row each,
+ * with platform totals across the top — because NetEnroll staff run the whole
+ * platform and drilling into one agency is the exception, not the entry point.
+ * Selecting an agency in the switcher narrows this page to that agency;
+ * leaving returns to the platform-wide view. The switcher is a filter, not a
+ * gate, and neither state is a prompt to choose somebody.
+ *
+ * An agency OWNER never reaches the platform-wide reading: `needsAgency` is
+ * false for them (they hold no platform capability), and the endpoint behind it
+ * refuses them 403 regardless of what this page renders.
  *
  * ── The two closing percentages are the thing to get right ───────────────────
  *
@@ -81,6 +97,10 @@ interface DeliveryToday {
   windowDaysFound: number;
   windowDeliveryDays: number;
   currentRate: number | null;
+  /** The curve half of the rate, when the curve set it. */
+  curveRate: number | null;
+  /** Dollars added to the curve rate. Part of the price, never a fee line. */
+  rateOffset: number;
   trackingRate: number | null;
   trackingBelowMinimum: boolean;
   applicationsRemainingOnBlock: number;
@@ -171,7 +191,39 @@ function available(seconds: number | null): string {
   return seconds === null ? '—' : duration(seconds);
 }
 
+/**
+ * Which reading of this page to render.
+ *
+ * A component boundary rather than an early return inside one component: the
+ * agency panel below calls `useLivePoll` and several `useState`s, and returning
+ * before them would be a conditional hook. Splitting also means the agency
+ * panel never mounts for an operator with no agency, so it never fires the
+ * agency-scoped requests that would be refused 409.
+ *
+ * `loading` renders nothing rather than the agency panel. The first render
+ * before `/platform/context` settles does not yet know whether this is staff,
+ * and guessing "agency" for a platform admin is exactly the flash of a broken
+ * page this is meant to remove.
+ */
 export default function DeliveryPage(): JSX.Element {
+  const platform = usePlatformContext();
+
+  if (platform.loading) {
+    return (
+      <CompactPageShell>
+        <div className="flex flex-1 items-center justify-center text-muted-foreground">
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          Loading delivery
+        </div>
+      </CompactPageShell>
+    );
+  }
+
+  return platform.needsAgency ? <PlatformDeliveryView /> : <AgencyDeliveryPanel />;
+}
+
+/** One agency's own delivery panel: the acting tenant's, and nobody else's. */
+function AgencyDeliveryPanel(): JSX.Element {
   const [today, setToday] = useState<DeliveryToday | null>(null);
   const [agents, setAgents] = useState<AgentRow[]>([]);
   const [agencyClosingPct, setAgencyClosingPct] = useState<number | null>(null);
@@ -609,6 +661,18 @@ export default function DeliveryPage(): JSX.Element {
             <p className="mt-1 text-[11px] text-muted-foreground">
               per submitted application, today
             </p>
+            {/*
+              An agreed rate offset is shown as part of the price, not as a fee
+              beside it. This is what makes the number above add up for an
+              agency reading its own terms — and there is deliberately no line
+              anywhere on this page that adds anything to a charge.
+            */}
+            {today.rateOffset > 0 && (
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                {dollars(today.curveRate)} from the curve, plus your agreed rate offset of{' '}
+                {dollars(today.rateOffset)}
+              </p>
+            )}
           </CardContent>
         </Card>
 
