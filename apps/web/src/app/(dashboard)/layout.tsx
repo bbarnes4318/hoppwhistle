@@ -12,6 +12,7 @@ import { AgentPhonePanel, GlobalDispositionModal, PhoneProvider } from '@/compon
 import { CrossAgencyPrompt } from '@/components/platform/cross-agency-prompt';
 import { useAuth } from '@/hooks/use-auth';
 import { usePlatformContext } from '@/hooks/use-platform-context';
+import { worksWithoutActingTenant } from '@/lib/platform-routes';
 import { getRedirectPath } from '@/lib/roles';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }): JSX.Element {
@@ -54,7 +55,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
    * page, so the phone comes up then.
    */
   const canTakeCalls =
-    !authLoading && userRoles.includes('AGENT') && !platform.needsAgency;
+    !authLoading && !platform.loading && userRoles.includes('AGENT') && !platform.needsAgency;
 
 
   useEffect(() => {
@@ -65,11 +66,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       return;
     }
 
-    // A platform operator holds no agency roles in the cross-agency view, so
-    // the role-based redirects below have nothing to say about them. Leaving
-    // them to fall through would send them to an agency home page that cannot
-    // load.
-    if (platform.isPlatformAdmin) return;
+    /*
+     * A platform operator holds no agency roles in the cross-agency view, so
+     * the role-based redirects below have nothing to say about them. Leaving
+     * them to fall through would send them to an agency home page that cannot
+     * load.
+     *
+     * `platform.loading` and not just `isPlatformAdmin`. THIS IS THE BUG THAT
+     * REACHED PRODUCTION. `isPlatformAdmin` is false until
+     * /api/v1/platform/context answers, and this effect runs as soon as auth
+     * settles -- which is sooner, because the token is already in hand. So an
+     * operator who also holds PUBLISHER or BUYER was redirected off /delivery
+     * to /publisher/dashboard in the window before the platform context landed,
+     * and /publisher/dashboard is a page with no cross-agency reading, so it
+     * correctly showed "Choose an agency". The prompt was right about the page
+     * it was on; the operator had been moved off the page they asked for.
+     *
+     * Reading a value that is still loading as though it were the answer is the
+     * whole defect. Wait for it.
+     */
+    if (platform.loading || platform.isPlatformAdmin) return;
 
     const path = pathname || '';
     const home = getRedirectPath(userRoles);
@@ -108,6 +124,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     pathname,
     router,
     platform.isPlatformAdmin,
+    platform.loading,
   ]);
 
   /*
@@ -123,26 +140,31 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
    * state -- every agency's rows, with totals -- and entering an agency narrows
    * the same page to it. The switcher is a filter, not a gate.
    *
-   * The rest of the surface still gets the prompt, because there genuinely is
-   * no cross-agency reading of it: see docs/PLATFORM_ADMIN.md §2f, which names
-   * each one and why.
-   *
-   * `/delivery` is matched exactly rather than by prefix. `/delivery/me` is one
-   * agent's own numbers and has no platform-wide meaning at all, so it keeps
-   * the prompt -- a prefix here would have quietly included it.
+   * The list itself lives in `@/lib/platform-routes`, not here, so that this
+   * layout and the browser smoke test that loads these routes read the same
+   * answer. Two copies of this decision is what let one of them be wrong.
    */
-  const PLATFORM_WIDE_PREFIXES = [
-    '/settings',
-    '/admin',
-    '/rating',
-    '/delivery/settlements',
-  ];
+  const needsAgency = platform.needsAgency && !worksWithoutActingTenant(pathname);
 
-  const path = pathname || '';
-  const worksWithoutAgency =
-    PLATFORM_WIDE_PREFIXES.some(prefix => path.startsWith(prefix)) || path === '/delivery';
-
-  const needsAgency = platform.needsAgency && !worksWithoutAgency;
+  /*
+   * Nothing under this layout renders until we know who the user is.
+   *
+   * ── Why the page cannot be allowed to mount first ─────────────────────────
+   *
+   * `platform.loading` starts true, so `needsAgency` starts false, so children
+   * rendered immediately -- the page mounted, fired its agency-scoped requests,
+   * collected 409 NO_ACTING_TENANT on every one of them, and was THEN replaced
+   * by the prompt. On /dashboard that was two refused requests per load for a
+   * page the operator never saw. Rendering a page in order to take it away
+   * again is not a cheap mistake: every request it fires is refused work on the
+   * server and a red line in the operator's console.
+   *
+   * The chrome stays up, so this is not a flash of blank app -- the sidebar,
+   * the topbar and the agency switcher render either side of it. The wait is
+   * one small request that starts at the root, in parallel with the auth
+   * request every page here already waits on.
+   */
+  const settling = authLoading || platform.loading;
 
   // Check if we're on the call center page (fullscreen mode)
   const isCallCenterPage = pathname?.startsWith('/call-center');
@@ -172,7 +194,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             it, with no chrome left to navigate away from.
           */}
           <ErrorBoundary label="This page" resetKey={pathname ?? ''}>
-            {needsAgency ? <CrossAgencyPrompt /> : children}
+            {settling ? <SettlingPlaceholder /> : needsAgency ? <CrossAgencyPrompt /> : children}
           </ErrorBoundary>
         </div>
       </PhoneProvider>
@@ -221,7 +243,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               message.
             */}
             <ErrorBoundary label="This page" resetKey={pathname}>
-              {needsAgency ? <CrossAgencyPrompt /> : children}
+              {settling ? <SettlingPlaceholder /> : needsAgency ? <CrossAgencyPrompt /> : children}
             </ErrorBoundary>
           </main>
           {/* Footer removed - legal links accessible via Settings page */}
@@ -235,4 +257,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </div>
     </PhoneProvider>
   );
+}
+
+/**
+ * What sits where the page will be while the layout is still finding out who
+ * the user is. Deliberately quiet: a spinner here would appear on every
+ * navigation for the fraction of a second the answer takes.
+ */
+function SettlingPlaceholder(): JSX.Element {
+  return <div className="flex-1" aria-busy="true" aria-live="polite" />;
 }

@@ -392,9 +392,10 @@ of them is one agency's own records, queue or roster; there is no reading of
 them that spans agencies, and a pooled version would be a cross-tenant aggregate
 of exactly the kind §7 of docs/BILLING.md forbids.
 
-`cross-agency-landing.test.ts` pins the exemption list — all four prefixes and
-the one exact path — for the same reason it pinned the old two: widening it is
-how the rule would quietly stop meaning anything.
+The exemption list lives in `apps/web/src/lib/platform-routes.ts` and is
+asserted by calling it, in `apps/web/src/lib/__tests__/platform-routes.test.ts`
+— all four prefixes and the one exact path — for the same reason the old two
+were pinned: widening it is how the rule would quietly stop meaning anything.
 
 **Nothing an agency sees changed.** An agency OWNER holds no platform
 capability, so `needsAgency` is false for them and they get the agency reading of
@@ -418,11 +419,133 @@ and is not agency-scoped.
 
 `apps/web/src/app/__tests__/cross-agency-landing.test.ts` pins the property
 rather than the reading, since a reading is what missed the call centre: no
-return path may render `{children}` unguarded, the exemption list is exactly
-those two prefixes, the call-centre branch carries the swap, and both paths wrap
-in a boundary. It is a source-level test because rendering the layout needs a
-DOM and `apps/web` has no jsdom; the property it pins is structural and visible
-in the source. If a DOM is added it should become a rendering test.
+return path may render `{children}` unguarded, the call-centre branch carries
+the swap, and both paths wrap in a boundary. It stays source-level because that
+property is structural and covers every return path at once, including one
+added tomorrow. Everything else it used to assert is now asserted by rendering
+the pages — see §2g.
+
+## 2g. The prompt shipped anyway, and what changed about how this is checked
+
+Everything in §2f was implemented and tested, and `/delivery` still rendered
+"Choose an agency" in production for a platform admin with no agency.
+
+### What actually happened
+
+Two decisions, not one, and they ran independently.
+
+The first is the swap in §2f, which was correct: `/delivery` matched exactly,
+`worksWithoutActingTenant` answered true, the prompt did not apply.
+
+The second is the **role-based redirect** higher up the same layout, which runs
+in an effect as soon as the auth check settles:
+
+```ts
+if (platform.isPlatformAdmin) return;   // the guard that was there
+...
+if (isPublisherOnly || isBuyerOnly) router.replace(home);
+```
+
+`isPlatformAdmin` is `false` until `/api/v1/platform/context` answers, and the
+auth check answers first. So for an operator who also holds `PUBLISHER` or
+`BUYER` — the platform capability is a row in `platform_admins`, not a role, so
+whatever agency roles that person happens to hold are still on their user — the
+redirect fired in the window before the platform context landed and moved them
+to `/publisher/dashboard`. That page has no cross-agency reading, so it showed
+the prompt, correctly. The prompt was right about the page it was on; the
+operator had been moved off the page they asked for.
+
+Reading a value that has not loaded as though it were the answer is the whole
+defect. The guard is now `if (platform.loading || platform.isPlatformAdmin)`.
+
+### Three things that made it possible, all fixed
+
+**One question had two answers.** `usePlatformContext` was a plain hook, so the
+layout, the page inside it, the topbar switcher and the prompt each ran their
+own `/api/v1/platform/context` request and each settled at its own moment —
+eight requests on one page load, and a window in which components on the same
+screen genuinely disagreed. It is a provider now, mounted once at the root:
+one request, one state, `loading` meaning the same thing everywhere.
+
+**`useAuth` was the same pattern, and worse.** Twenty-one call sites, ten
+concurrent `GET /api/auth/me` on a single page load. That burst exhausted the
+API's connection pool: the tenth answered 500, and so did the platform-context
+request behind it. The client read that failure as "not a platform admin",
+rendered the one-agency delivery panel to an operator who has no agency, and
+that panel polled two agency-scoped endpoints which answered 409 for as long as
+the tab was open. One duplicated fetch became a page of refusals. It is a
+provider too, and the context request retries three times over about two
+seconds rather than treating one transient 500 as "not staff".
+
+**The page mounted before the layout knew.** `platform.loading` starts true, so
+`needsAgency` started false, so `children` rendered immediately: the page
+mounted, fired its agency-scoped requests, collected 409 on every one, and was
+*then* replaced by the prompt. On `/dashboard` that was two refused requests per
+load for a page the operator never saw. The layout now renders neither the page
+nor the prompt until it knows, with the chrome left up either side.
+
+### The polling
+
+`/api/v1/live/metrics` was polled every five seconds on a bare `setInterval`
+from the dashboard chrome, which renders above the swap — so an operator with no
+agency got a 409 every five seconds for as long as the tab was open. The strip
+now does not start at all without an acting tenant, and runs on
+`createLivePoller`, which gained two behaviours: a loader reporting `'refused'`
+ends the loop permanently (409 `NO_ACTING_TENANT` is the correct answer and will
+be the correct answer in five seconds), and a loader reporting `'failed'` doubles
+the wait up to a five-minute ceiling. `/api/v1/agent/my-numbers` was the same
+shape in the softphone provider — `enabled` gated the SIP registration but not
+that fetch — and is now behind the same gate.
+
+### How this is verified now
+
+The honest reading of three consecutive phases is that nothing in this
+repository had ever rendered these pages. `apps/api` drove the endpoints, which
+were correct every time. `apps/web` ran in a `node` environment with no DOM, and
+the one test covering this decision read `layout.tsx` as text and regex-matched
+the shape of an expression — so it kept passing while the expression it matched
+was being evaluated against a value that had not loaded yet. A test that reads
+source cannot see a race, and none of these three defects was visible anywhere
+except on the screen.
+
+Two things now render the screen.
+
+**`apps/web/src/app/__tests__/platform-landing.render.test.tsx`** — jsdom, in
+the normal suite, a few seconds. It mounts the real providers, layout, pages and
+API client against a stubbed `fetch`, and it **owns the clock**: the latency of
+`/api/v1/platform/context` relative to the auth check is set explicitly, so the
+race is deterministic rather than a matter of how fast the API happened to be.
+It asserts no prompt, no agency-scoped request, exactly one auth request and one
+context request, and — for a platform admin also holding `PUBLISHER`, `BUYER` or
+`AGENT`, on each of the three routes — that no redirect fired.
+
+**`apps/web/e2e/platform-landing.smoke.mjs`** — a real browser, a blocking CI
+step. It boots the API against a disposable database, boots the web app, signs
+in as a platform admin with no acting tenant, and loads each of the three routes
+in Chromium under four role sets. Per route it asserts, in this order:
+
+1. **the page rendered** — the platform-wide heading is present. Named first
+   because it keeps the rest honest: an app that fails to compile shows no
+   prompt and fires no refused request, and would otherwise pass every check
+   below. That is not hypothetical; it happened while the file was being
+   written, and the assertion exists because of it.
+2. **the URL did not move**;
+3. **"Choose an agency" is absent**;
+4. **nothing was refused** — no 4xx or 5xx from any request the load made;
+
+and then, sitting on `/delivery` for forty-five seconds, that **the request
+count stops climbing**.
+
+It adds latency to `/api/v1/platform/context` on purpose. On one machine the API
+and the database are the same machine and the window the defect lives in is a
+couple of milliseconds wide — verified by removing the fix and watching the test
+pass. Production is a network and a database away. Without the latency a
+localhost run tests an ordering production does not have.
+
+Like the DB-backed suites in `apps/api` it runs only against services
+explicitly nominated as disposable, and in CI it **refuses rather than skips**
+when it has none: a smoke test that skips inside a blocking job is a green tick
+that means nothing, which is the failure this whole section is about.
 
 ## 3. Route survey
 

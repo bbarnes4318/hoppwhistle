@@ -4,6 +4,8 @@ import './globals.css';
 import { ThemeProvider } from '@/components/theme-provider';
 import { Toaster } from '@/components/ui/toaster';
 import { CustomerIntakeProvider } from '@/contexts/customer-intake-context';
+import { AuthSessionProvider } from '@/hooks/use-auth';
+import { PlatformContextProvider } from '@/hooks/use-platform-context';
 import { fontVariables } from '@/lib/fonts';
 
 export const metadata: Metadata = {
@@ -28,7 +30,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className="dark" suppressHydrationWarning>
       <body className={`${fontVariables} bg-background text-foreground font-sans`}>
         <ThemeProvider attribute="class" defaultTheme="dark" forcedTheme="dark">
-          <CustomerIntakeProvider>{children}</CustomerIntakeProvider>
+          {/*
+            One answer to "are you NetEnroll staff, and which agency are you
+            inside" for the whole tree. It was a per-component fetch, which is
+            how the layout and the page it wraps came to disagree about whether
+            /delivery needed an agency. See use-platform-context.
+          */}
+          <AuthSessionProvider>
+            <PlatformContextProvider>
+              <CustomerIntakeProvider>{children}</CustomerIntakeProvider>
+            </PlatformContextProvider>
+          </AuthSessionProvider>
           <Toaster />
         </ThemeProvider>
       </body>

@@ -1,8 +1,39 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import type { ReactNode } from 'react';
 
 import { clearSessionToken } from '@/lib/session-token';
+
+/**
+ * The signed-in user, fetched once for the whole tree.
+ *
+ * ── Why the fetch is not in the hook any more ────────────────────────────────
+ *
+ * `useAuth` is called from twenty-one components, and it used to hold its own
+ * `useState` and run its own `GET /api/auth/me`. One dashboard page load
+ * therefore fired ten identical auth requests in the same thirty milliseconds.
+ *
+ * That is not merely wasteful. Ten concurrent requests, on top of everything
+ * else a page load asks for, exhausted the API's connection pool: the tenth
+ * answered 500, and so did the platform-context request behind it. The client
+ * read that failure as "not a platform admin", rendered the agency delivery
+ * panel to a NetEnroll operator who has no agency, and that panel then polled
+ * two agency-scoped endpoints which answered 409 for as long as the page was
+ * open. A duplicated fetch turned into a refused page.
+ *
+ * So the request and its state live here, once, and the hook below derives
+ * roles and permissions from it -- those are pure functions of the user, so
+ * every call site keeps its own cheap copy and nothing else changed.
+ */
+interface AuthSession {
+  user: UserData | null;
+  loading: boolean;
+  error: string | null;
+  refetch: () => Promise<void>;
+}
+
+const AuthSessionContext = createContext<AuthSession | null>(null);
 
 interface UserData {
   id: string;
@@ -55,7 +86,8 @@ interface UseAuthReturn {
   refetch: () => Promise<void>;
 }
 
-export function useAuth(): UseAuthReturn {
+/** Mounted once, at the root, above everything that calls `useAuth`. */
+export function AuthSessionProvider({ children }: { children: ReactNode }): JSX.Element {
   const [user, setUser] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -118,6 +150,29 @@ export function useAuth(): UseAuthReturn {
     void fetchUser();
   }, [fetchUser]);
 
+  return (
+    <AuthSessionContext.Provider value={{ user, loading, error, refetch: fetchUser }}>
+      {children}
+    </AuthSessionContext.Provider>
+  );
+}
+
+/**
+ * A settled, signed-out session, for a component rendered with no provider
+ * above it. The provider is in the root layout, so in the app this cannot
+ * happen; a test that renders one component in isolation gets a sane answer
+ * rather than a thrown error that unmounts what it was trying to look at.
+ */
+const NO_SESSION: AuthSession = {
+  user: null,
+  loading: false,
+  error: null,
+  refetch: async () => {},
+};
+
+export function useAuth(): UseAuthReturn {
+  const { user, loading, error, refetch } = useContext(AuthSessionContext) ?? NO_SESSION;
+
   const userRoles = user?.roles || [];
 
   // Role checks
@@ -150,25 +205,60 @@ export function useAuth(): UseAuthReturn {
     }
     if (roles.includes('ADMIN')) {
       list.push(
-        'users:read', 'users:write', 'users:delete',
-        'roles:read', 'roles:write',
-        'api_keys:read', 'api_keys:write', 'api_keys:delete',
-        'numbers:read', 'numbers:write', 'numbers:delete',
-        'campaigns:read', 'campaigns:write', 'campaigns:delete',
-        'flows:read', 'flows:write', 'flows:delete', 'flows:publish',
-        'calls:read', 'calls:write', 'calls:delete',
-        'recordings:read', 'recordings:write', 'recordings:delete',
-        'webhooks:read', 'webhooks:write', 'webhooks:delete',
-        'billing:read', 'billing:write',
+        'users:read',
+        'users:write',
+        'users:delete',
+        'roles:read',
+        'roles:write',
+        'api_keys:read',
+        'api_keys:write',
+        'api_keys:delete',
+        'numbers:read',
+        'numbers:write',
+        'numbers:delete',
+        'campaigns:read',
+        'campaigns:write',
+        'campaigns:delete',
+        'flows:read',
+        'flows:write',
+        'flows:delete',
+        'flows:publish',
+        'calls:read',
+        'calls:write',
+        'calls:delete',
+        'recordings:read',
+        'recordings:write',
+        'recordings:delete',
+        'webhooks:read',
+        'webhooks:write',
+        'webhooks:delete',
+        'billing:read',
+        'billing:write',
         'reports:read',
-        'payroll:read', 'payroll:write', 'payroll:admin'
+        'payroll:read',
+        'payroll:write',
+        'payroll:admin'
       );
     }
     if (roles.includes('ANALYST')) {
-      list.push('calls:read', 'recordings:read', 'reports:read', 'campaigns:read', 'flows:read', 'numbers:read');
+      list.push(
+        'calls:read',
+        'recordings:read',
+        'reports:read',
+        'campaigns:read',
+        'flows:read',
+        'numbers:read'
+      );
     }
     if (roles.includes('PUBLISHER')) {
-      list.push('flows:read', 'flows:write', 'flows:publish', 'campaigns:read', 'campaigns:write', 'calls:read');
+      list.push(
+        'flows:read',
+        'flows:write',
+        'flows:publish',
+        'campaigns:read',
+        'campaigns:write',
+        'calls:read'
+      );
       if (user?.publisherAccessToRecordings) {
         list.push('recordings:read');
       }
@@ -190,14 +280,18 @@ export function useAuth(): UseAuthReturn {
 
   const permissions = getPermissions(userRoles);
 
-  const canViewRecordings = hasFullAccess ||
+  const canViewRecordings =
+    hasFullAccess ||
     userRoles.includes('ANALYST') ||
     (userRoles.includes('PUBLISHER') && !!user?.publisherAccessToRecordings) ||
     (userRoles.includes('BUYER') && !!user?.buyerAccessToRecordings) ||
     userRoles.includes('AGENT') ||
     (userRoles.includes('READONLY') && permissions.includes('recordings:read'));
 
-  const canViewReports = hasFullAccess || userRoles.includes('ANALYST') || (userRoles.includes('READONLY') && permissions.includes('reports:read'));
+  const canViewReports =
+    hasFullAccess ||
+    userRoles.includes('ANALYST') ||
+    (userRoles.includes('READONLY') && permissions.includes('reports:read'));
   const canViewBilling = hasFullAccess;
   const canViewPayouts = hasFullAccess || userRoles.includes('PUBLISHER');
   const canManageBuyers = hasFullAccess;
@@ -252,6 +346,6 @@ export function useAuth(): UseAuthReturn {
     defaultDashboardPath,
     loading,
     error,
-    refetch: fetchUser,
+    refetch,
   };
 }

@@ -435,7 +435,27 @@ export function PhoneProvider({ children, apiUrl, enabled = true }: PhoneProvide
     };
   }, []);
 
-  // Fetch user's assigned phone numbers for caller ID selection
+  /*
+   * The caller IDs this agent may dial from.
+   *
+   * ── Two things this used to get wrong ────────────────────────────────────
+   *
+   * It ran for everybody who loaded the dashboard. `enabled` gated the SIP
+   * registration further down but not this, so a NetEnroll operator in the
+   * cross-agency view -- who has no extension and no agency -- asked an
+   * agency-scoped endpoint for their numbers and collected 409
+   * NO_ACTING_TENANT. `enabled` is the same answer for both: no phone, no
+   * numbers.
+   *
+   * And it depended on `selectedCallerId`, which it also sets. Picking a
+   * different caller ID rebuilt the callback, which re-ran the effect below,
+   * which fetched again -- a request per selection, for a list that had not
+   * changed. The auto-select reads the current value through a ref instead, so
+   * this fetches once.
+   */
+  const selectedCallerIdRef = useRef(selectedCallerId);
+  selectedCallerIdRef.current = selectedCallerId;
+
   const refreshUserNumbers = useCallback(async () => {
     try {
       const url = `${normalizedApiUrl}/api/v1/agent/my-numbers`;
@@ -444,18 +464,19 @@ export function PhoneProvider({ children, apiUrl, enabled = true }: PhoneProvide
         const data = await response.json();
         setUserNumbers(data.numbers || []);
         // Auto-select first number if no selection stored
-        if (data.numbers?.length > 0 && !selectedCallerId) {
+        if (data.numbers?.length > 0 && !selectedCallerIdRef.current) {
           setSelectedCallerId(data.numbers[0].number);
         }
       }
     } catch (err) {
       console.error('[Phone] Failed to fetch user numbers:', err);
     }
-  }, [normalizedApiUrl, getApiHeaders, selectedCallerId]);
+  }, [normalizedApiUrl, getApiHeaders]);
 
   useEffect(() => {
+    if (!enabled) return;
     void refreshUserNumbers();
-  }, [refreshUserNumbers]);
+  }, [enabled, refreshUserNumbers]);
 
   // Persist selected caller ID to localStorage
   useEffect(() => {

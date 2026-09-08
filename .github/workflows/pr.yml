@@ -179,6 +179,37 @@ jobs:
           # fails the build rather than quietly removing the coverage.
           TEST_DATABASE_URL: postgresql://test:test@localhost:5432/test
 
+      # Blocking, and new in this PR.
+      #
+      # Three consecutive phases shipped a defect that one load of a page as a
+      # platform admin would have caught -- a crash that unmounted the
+      # dashboard, fourteen routes answering 401, and a cross-agency page
+      # rendering "Choose an agency" with agency-scoped endpoints polling behind
+      # it. Every one of them passed this job. Nothing in it had ever rendered
+      # a page: apps/api tested the endpoints, which were correct, and apps/web
+      # tested source text and pure functions.
+      #
+      # This boots the API and the web app and loads the three platform-wide
+      # landing routes in Chromium as a platform admin with no acting tenant. It
+      # asserts the page rendered, the URL did not move, the prompt is absent,
+      # nothing was refused, and the polling settles. See the header of
+      # apps/web/e2e/platform-landing.smoke.mjs.
+      #
+      # It refuses rather than skips when it has no database: a smoke test that
+      # skips inside a blocking job is a green tick that means nothing, which is
+      # the failure this whole step exists to stop.
+      - name: Install Chromium for the browser smoke test
+        run: pnpm --filter @hopwhistle/web exec playwright install --with-deps chromium
+
+      - name: Platform landing smoke test (browser)
+        run: pnpm --filter @hopwhistle/web test:smoke
+        env:
+          CI: true
+          NODE_ENV: development
+          SMOKE_DATABASE_URL: postgresql://test:test@localhost:5432/test
+          SMOKE_REDIS_URL: redis://localhost:6379/2
+          JWT_SECRET: platform-smoke-secret-platform-smoke-secret
+
       - name: Build
         run: pnpm build
         continue-on-error: true
