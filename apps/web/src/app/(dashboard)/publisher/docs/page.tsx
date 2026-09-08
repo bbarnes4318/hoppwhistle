@@ -21,7 +21,8 @@ function PublisherDocsPage() {
       <div className="border-b pb-4">
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Support & Documentation</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Welcome to the Publisher Developer Portal. Integrate, test, and troubleshoot your lead flow.
+          Everything you need to integrate with NetEnroll, test your integration, and work out what
+          went wrong when a call does not price the way you expected.
         </p>
       </div>
 
@@ -112,12 +113,15 @@ function PublisherDocsPage() {
             <HelpCircle className="h-5 w-5 text-yellow-500" />
             Need Assistance?
           </CardTitle>
-          <CardDescription>We are here to help you optimize your campaign volume.</CardDescription>
+          <CardDescription>
+            If a call did not price the way you expected, please get in touch and we will look at
+            it with you.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 pl-6">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Mail className="h-4 w-4 text-muted-foreground" />
-            <span>Email Developer Support: <code>support@hopwhistle.com</code></span>
+            <span>Email Developer Support: <code>support@netenroll.com</code></span>
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <ShieldCheck className="h-4 w-4 text-emerald-400" />

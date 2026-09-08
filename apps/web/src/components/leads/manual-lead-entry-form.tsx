@@ -167,7 +167,7 @@ export function ManualLeadEntryForm(): JSX.Element {
         weight: form.weight ? Number(form.weight) : undefined,
         notes: form.notes.trim() || undefined,
         source: 'manual_crm_entry',
-        landingPage: 'https://hopwhistle.com/intake',
+        landingPage: 'https://agents.netenroll.com/intake',
       });
 
       if (response.error) {

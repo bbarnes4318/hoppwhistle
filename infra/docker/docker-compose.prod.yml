@@ -51,7 +51,7 @@ services:
       - NODE_ENV=production
       - HOSTNAME=0.0.0.0
       - PORT=3000
-      - NEXT_PUBLIC_API_URL=https://hopwhistle.com
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-https://agents.netenroll.com}
     ports:
       - '3000:3000'
     networks:

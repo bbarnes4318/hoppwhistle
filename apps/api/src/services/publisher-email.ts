@@ -39,32 +39,43 @@ function getTransporter() {
  */
 export async function sendWelcomeEmail(payload: WelcomeEmailPayload): Promise<void> {
   const { email, publisherName, publisherId, accessToRecordings } = payload;
-  const fromAddress = process.env.SMTP_FROM || 'noreply@hopwhistle.com';
+  const fromAddress = process.env.SMTP_FROM || 'noreply@netenroll.com';
 
-  const subject = 'Welcome to Hopwhistle - Your Publisher Account is Ready';
+  const portalUrl = process.env.API_PUBLIC_URL || 'https://agents.netenroll.com';
+
+  const subject = 'Your NetEnroll publisher account is ready';
   const text = `Hello ${publisherName},
 
-Welcome to Hopwhistle! Your publisher account has been created successfully.
+Your NetEnroll publisher account has been created. You can sign in at
+${portalUrl}/login.
 
-Account Details:
+Account details:
   - Publisher ID: ${publisherId}
-  - Access to Recordings: ${accessToRecordings ? 'Enabled' : 'Disabled'}
+  - Access to recordings: ${accessToRecordings ? 'Enabled' : 'Disabled'}
 
-You can use your Publisher ID to track your traffic and view reports in the dashboard.
+Your Publisher ID identifies the calls you send. Use it when you ping and post,
+and the portal will report every call back against it, along with what each one
+earned.
 
-Best regards,
-The Hopwhistle Team`;
+If anything looks wrong, please reply to this message and we will look into it.
+
+Kind regards,
+The NetEnroll team`;
 
   const html = `<p>Hello <strong>${publisherName}</strong>,</p>
-<p>Welcome to Hopwhistle! Your publisher account has been created successfully.</p>
-<p><strong>Account Details:</strong></p>
+<p>Your NetEnroll publisher account has been created. You can sign in at
+<a href="${portalUrl}/login">${portalUrl}/login</a>.</p>
+<p><strong>Account details:</strong></p>
 <ul>
   <li><strong>Publisher ID:</strong> <code>${publisherId}</code></li>
-  <li><strong>Access to Recordings:</strong> ${accessToRecordings ? 'Enabled' : 'Disabled'}</li>
+  <li><strong>Access to recordings:</strong> ${accessToRecordings ? 'Enabled' : 'Disabled'}</li>
 </ul>
-<p>You can use your Publisher ID to track your traffic and view reports in the dashboard.</p>
+<p>Your Publisher ID identifies the calls you send. Use it when you ping and post,
+and the portal will report every call back against it, along with what each one
+earned.</p>
+<p>If anything looks wrong, please reply to this message and we will look into it.</p>
 <br>
-<p>Best regards,<br>The Hopwhistle Team</p>`;
+<p>Kind regards,<br>The NetEnroll team</p>`;
 
   const transporter = getTransporter();
 

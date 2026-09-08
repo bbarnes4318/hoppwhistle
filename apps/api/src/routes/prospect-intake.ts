@@ -152,7 +152,7 @@ async function syncManualLeadToInsuranceCrm(
     leadidToken: body.leadidToken,
     consentLanguage: body.consentLanguage,
     recordingUrl: body.recordingUrl,
-    landingPage: body.landingPage || 'https://hopwhistle.com/intake',
+    landingPage: body.landingPage || 'https://agents.netenroll.com/intake',
     ipAddress: clientIp,
     source: body.source || 'manual_crm_entry',
     notes: body.notes,

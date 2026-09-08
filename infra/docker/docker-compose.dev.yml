@@ -186,8 +186,20 @@ services:
       context: ../..
       dockerfile: apps/web/Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://hopwhistle.com}
-        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-wss://hopwhistle.com}
+        # BUILD-TIME, NOT RUNTIME. Next.js inlines every NEXT_PUBLIC_* value
+        # into the bundle when the image is built, so these two decide what host
+        # the browser talks to for the life of that image. Setting them in
+        # `environment:` below does not change a built image, and changing them
+        # here does nothing until the next `--build`.
+        #
+        # A rebuild that does not carry the current host reverts the whole app
+        # to the previous one, silently, with no error at runtime -- which is
+        # what happened to NEXT_PUBLIC_GOOGLE_CLIENT_ID (see
+        # apps/web/src/app/login/page.tsx:15-30). apps/web/Dockerfile now runs
+        # scripts/assert-public-host.mjs before and after `next build` so that
+        # failure is a failed build instead of a quiet regression.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://agents.netenroll.com}
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-wss://agents.netenroll.com}
         NEXT_PUBLIC_API_KEY: ${API_KEY:-demo-key}
         NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}
     container_name: hopwhistle-web-dev
@@ -195,11 +207,14 @@ services:
       - '3000:3000'
     environment:
       NODE_ENV: development
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://hopwhistle.com}
-      NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-wss://hopwhistle.com}
+      # Kept in step with the build args above so the two never disagree, but
+      # note that these are inert for NEXT_PUBLIC_* -- the browser reads the
+      # values baked in at build time, never these. Only a rebuild moves them.
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://agents.netenroll.com}
+      NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-wss://agents.netenroll.com}
       NEXT_PUBLIC_API_KEY: ${API_KEY:-demo-key}
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}
-      NEXT_PUBLIC_APP_NAME: Hopwhistle
+      NEXT_PUBLIC_APP_NAME: NetEnroll
     depends_on:
       - api
     networks:
@@ -336,6 +351,11 @@ services:
       - freeswitch_recordings:/recordings
       # Mount Let's Encrypt certs for WSS (on production servers only)
       - /etc/letsencrypt:/etc/letsencrypt:ro
+      # Deliberately still hopwhistle.com. This is the TLS certificate
+      # FreeSWITCH presents on its WSS binding, and the SIP realm every agent
+      # extension authenticates against is the same name. Repointing it would
+      # invalidate every SIP credential on the platform, so the softphone keeps
+      # its existing realm and certificate while the browser moves hosts.
       - /etc/letsencrypt/live/hopwhistle.com:/etc/freeswitch/letsencrypt:ro
       # NOTE: Do NOT mount freeswitch_conf here - config is baked into the image via Dockerfile
     healthcheck:
