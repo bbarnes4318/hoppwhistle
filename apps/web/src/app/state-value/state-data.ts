@@ -21,6 +21,9 @@ export interface StateRecord {
 /** Jurisdictions whose non-resident fee mirrors the applicant's resident fee. */
 export const RECIPROCAL_CODES = ['NY', 'TN'] as const;
 
+// One jurisdiction per line reads as the source table it is; left formatted by
+// hand because Prettier would explode each record to nine lines and bury the data.
+// prettier-ignore
 export const STATES: StateRecord[] = [
   { code: 'AL', name: 'Alabama', region: 'South', population: 5024279, seniors: 1276000, stateFee: 80, niprFee: 5 },
   { code: 'AK', name: 'Alaska', region: 'West', population: 733391, seniors: 168000, stateFee: 75, niprFee: 5 },
