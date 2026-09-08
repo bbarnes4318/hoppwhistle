@@ -22,22 +22,22 @@ export function HeroSection() {
           {/* Tagline Badge */}
           <div className="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/60 px-4 py-1.5 text-xs font-semibold text-emerald-400 backdrop-blur-md shadow-sm">
             <Radio className="h-3 w-3 animate-pulse" />
-            <span>Introducing Hopwhistle Conductor AI</span>
+            <span>NetEnroll agency portal</span>
           </div>
 
           {/* Main Headline */}
           <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight text-white leading-[1.1]">
-            AI Voice and Call Tracking <br />
+            Calls that turn into applications. <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-500">
-              Built for Serious Operators.
+              You pay for the applications.
             </span>
           </h1>
 
           {/* Subheadline */}
           <p className="max-w-2xl text-base sm:text-lg md:text-xl text-slate-400 leading-relaxed font-normal">
-            Hopwhistle helps teams launch AI voice campaigns, track every call, route traffic
-            intelligently, manage buyers and publishers, analyze recordings, and operate phone-based
-            revenue systems from one clean platform.
+            NetEnroll delivers qualified inbound calls to your agency and bills you per submitted
+            application, not per call and not per minute. You set a daily block, you see every call
+            and every application against it, and you settle on terms you agreed in writing.
           </p>
 
           {/* Call to Actions */}
@@ -46,14 +46,14 @@ export function HeroSection() {
               href="mailto:jimmy@leadzer.io"
               className="w-full sm:w-auto inline-flex h-12 items-center justify-center rounded-lg bg-emerald-500 px-8 font-semibold text-slate-950 shadow-lg shadow-emerald-500/10 hover:bg-emerald-400 hover:shadow-emerald-400/20 hover:scale-[1.01] active:scale-[0.99] transition-all duration-200"
             >
-              Request Access
+              Talk to us
               <ArrowRight className="ml-2 h-4 w-4" />
             </a>
             <button
               onClick={scrollToPreview}
               className="w-full sm:w-auto inline-flex h-12 items-center justify-center rounded-lg border border-slate-800 bg-slate-900/40 px-8 font-semibold text-slate-300 hover:bg-slate-900 hover:text-white transition-all duration-200"
             >
-              View Platform
+              See the portal
             </button>
           </div>
         </div>
@@ -72,7 +72,7 @@ export function HeroSection() {
                 <span className="w-3 h-3 rounded-full bg-slate-800"></span>
               </div>
               <div className="flex items-center gap-2 rounded bg-slate-900 border border-slate-800 px-3 py-1 text-[11px] text-slate-500 font-mono w-44 md:w-60 justify-center">
-                <span>app.hopwhistle.com/dashboard</span>
+                <span>agents.netenroll.com/dashboard</span>
               </div>
               <div className="flex items-center gap-2 text-xs text-emerald-400 font-semibold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>

@@ -14,7 +14,7 @@ export function CapabilityStrip() {
     <div className="border-y border-slate-900 bg-[#070913]/90 py-10 relative overflow-hidden">
       <div className="container max-w-7xl mx-auto px-6 md:px-8">
         <p className="text-center text-xs font-semibold uppercase tracking-wider text-slate-500 mb-8">
-          INTEGRATES WITH ENTERPRISE TELECOM INFRASTRUCTURE & MODERN CODESTACKS
+          BUILT ON CARRIER-GRADE TELEPHONY YOUR AGENTS NEVER HAVE TO THINK ABOUT
         </p>
         <div className="grid grid-cols-2 gap-y-8 gap-x-4 sm:grid-cols-3 md:grid-cols-6 items-center justify-items-center">
           {integrations.map((item, i) => (

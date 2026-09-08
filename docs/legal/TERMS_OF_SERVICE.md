@@ -4,7 +4,7 @@
 
 ## Agreement to Terms
 
-By accessing or using Hopwhistle's telephony platform and services (the "Service"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree to these Terms, you may not use the Service.
+By accessing or using the NetEnroll agency portal and the call delivery services provided through it (the "Service"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree to these Terms, you may not use the Service.
 
 **IMPORTANT:** This is a template document. Please review with legal counsel and customize for your specific business model, jurisdiction, and services.
 
@@ -14,7 +14,7 @@ By accessing or using Hopwhistle's telephony platform and services (the "Service
 - **"User," "you," or "your"** refers to the individual or entity accessing or using the Service.
 - **"Account"** refers to your registered account with the Service.
 - **"Content"** refers to any data, information, or materials uploaded, transmitted, or stored through the Service.
-- **"Service"** refers to Hopwhistle's telephony platform, including all features, functionality, and services provided.
+- **"Service"** refers to the NetEnroll agency portal, including all features, functionality, and services provided through it.
 
 ## Eligibility
 
@@ -162,9 +162,9 @@ You agree to indemnify, defend, and hold us harmless from:
 
 For questions about these Terms:
 
-**Email:** [legal@hopwhistle.com]  
+**Email:** [legal@netenroll.com]  
 **Address:** [Your Company Address]  
-**Support:** [support@hopwhistle.com]
+**Support:** [support@netenroll.com]
 
 ## Changes to Terms
 

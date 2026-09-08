@@ -1,15 +1,17 @@
 openapi: 3.0.3
 info:
-  title: Hopwhistle API
-  description: Cloud communications platform API
+  title: NetEnroll API
+  description: >-
+    The NetEnroll agency portal API. Publishers use it to price and deliver
+    calls; agencies use it to read delivery, applications and settlement.
   version: 1.0.0
   contact:
-    name: Hopwhistle Support
-    email: support@hopwhistle.com
+    name: NetEnroll Support
+    email: support@netenroll.com
 servers:
   - url: http://localhost:3001
     description: Local development server
-  - url: https://api.hopwhistle.com
+  - url: https://agents.netenroll.com
     description: Production server
 paths:
   /health:

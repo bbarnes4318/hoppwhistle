@@ -198,7 +198,7 @@ class InvoiceGeneratorService {
       .totals-row.total{font-weight:bold;font-size:16px;border-top:2px solid #333;padding-top:10px;margin-top:10px}
     </style></head><body>
       <div class="header">
-        <div><h1>${invoice.tenant_name || 'Hopwhistle'}</h1><div>Billing Account: ${invoice.account_name}</div></div>
+        <div><h1>${invoice.tenant_name || 'NetEnroll'}</h1><div>Billing Account: ${invoice.account_name}</div></div>
         <div class="invoice-info"><div class="invoice-number">Invoice ${invoice.invoice_number}</div><div>Status: ${invoice.status}</div></div>
       </div>
       <div><div>Period: ${new Date(invoice.period_start).toLocaleDateString()} - ${new Date(invoice.period_end).toLocaleDateString()}</div>

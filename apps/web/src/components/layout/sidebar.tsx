@@ -141,7 +141,7 @@ export function Sidebar({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = 
           <Link href="/dashboard" className="rounded-control">
             <Image
               src="/hopwhistle.png"
-              alt="Hopwhistle"
+              alt="NetEnroll"
               width={100}
               height={32}
               className="h-6 w-auto"

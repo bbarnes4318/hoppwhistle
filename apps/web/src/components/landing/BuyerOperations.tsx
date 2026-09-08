@@ -88,25 +88,25 @@ export function BuyerOperations() {
             <div className="space-y-4">
               <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
                 <Users className="h-3.5 w-3.5" />
-                <span>Multi-Tenant Operations</span>
+                <span>Agencies and publishers</span>
               </div>
               <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900 leading-tight">
-                Give operators, buyers, and publishers the visibility they need.
+                Both sides of the delivery see the same numbers.
               </h2>
               <p className="text-slate-500 text-base sm:text-lg leading-relaxed">
-                Hopwhistle balances caller traffic streams automatically. Provide publishers with
-                dedicated reporting dashboards to trace their leads, and give buyers access to
-                real-time portals to pause lines, adjust bid criteria, and check state routing
-                targets.
+                Your agency sees the calls delivered to it, the applications they produced, and
+                what each one cost. Publishers see the calls they sent and what those calls
+                earned. Neither side has to take the other on trust, and there is one ledger
+                behind both views.
               </p>
             </div>
 
             <ul className="space-y-3">
               {[
-                'Separate, secure dashboard interfaces for publishers and buyers',
-                'Custom payout rules based on raw clicks, call connect, or duration milestones',
-                'Real-time bid adjustments with automatic caps to prevent financial overrun',
-                'Transparent transaction ledger logging buyer claims and publisher splits',
+                'Separate portals for agencies and publishers, each scoped to its own data',
+                'A pause you can use immediately, without asking anyone',
+                'A maximum daily debit that stops a settlement rather than exceeding it',
+                'One transaction ledger behind both views, exportable by either side',
               ].map((item, index) => (
                 <li key={index} className="flex items-start gap-3 text-sm text-slate-600">
                   <div className="h-5 w-5 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center flex-shrink-0 text-emerald-600 mt-0.5">

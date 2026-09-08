@@ -17,24 +17,24 @@ export function AIVoiceSection() {
             <div className="space-y-4">
               <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-400">
                 <Sparkles className="h-3.5 w-3.5" />
-                <span>Conversational Agent Engine</span>
+                <span>Before the call reaches you</span>
               </div>
               <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
-                Launch AI voice campaigns without losing control of the call flow.
+                Callers are qualified before your agents ever pick up.
               </h2>
               <p className="text-slate-400 text-base sm:text-lg leading-relaxed">
-                Deploy human-like conversational agents trained on your specific qualification
-                scripts. Collect client data, verify budget constraints, and execute hot transfers
-                to live operators only when qualification criteria are met.
+                We screen for the things that decide whether a call is worth taking — state, age
+                band, eligibility, intent — and transfer only the callers who clear them. Your
+                agent answers with those answers already on screen.
               </p>
             </div>
 
             <ul className="space-y-3">
               {[
-                'High-fidelity speech synthesis and low-latency response engine',
-                'Dynamic prompt trees that adapt based on prospect answers',
-                'Live transfer nodes with state preservation (agent gets full AI summary)',
-                'Automated QA checklists running instantly on call termination',
+                'Screening criteria you set, applied to every caller before transfer',
+                'State licensing and do-not-call checked before the call is routed',
+                "The caller's answers handed to your agent with the call, not after it",
+                'Consent language captured and attached to the recording',
               ].map((item, index) => (
                 <li key={index} className="flex items-start gap-3 text-sm text-slate-300">
                   <div className="h-5 w-5 rounded-full bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center flex-shrink-0 text-emerald-400 mt-0.5">

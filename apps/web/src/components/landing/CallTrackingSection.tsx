@@ -93,21 +93,21 @@ export function CallTrackingSection() {
           <div className="lg:col-span-6 space-y-8">
             <div className="space-y-4">
               <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900 leading-tight">
-                Track every call from source to outcome.
+                Every call, from arrival to application.
               </h2>
               <p className="text-slate-500 text-base sm:text-lg leading-relaxed">
-                Route calls to the right buyer, agent, or campaign in real time. Hopwhistle tracks
-                routing hops, ring times, and buyer outcomes, allowing performance marketing
-                networks to optimize call traffic instantly.
+                Calls are routed to an available licensed agent in your agency, and the portal
+                records what happened to each one: who took it, how long it ran, and whether it
+                produced an application. Nothing is billed that you cannot trace back to a call.
               </p>
             </div>
 
             <ul className="space-y-3">
               {[
-                'Dynamic Number Insertion (DNI) mapping site visits to phone calls',
-                'Real-time bidding (RTB) engine allocating calls to highest-paying buyers',
-                'Custom business hours, concurrency limitations, and buyer pause states',
-                'Google Ads, Facebook, and Redtrack offline conversion integration',
+                'Live view of calls in progress and which agent is on each one',
+                'Business hours, concurrency limits and a pause you can use at any time',
+                'Per-agent reporting on calls taken and applications submitted',
+                'Applications posted to your CRM as they are submitted',
               ].map((item, index) => (
                 <li key={index} className="flex items-start gap-3 text-sm text-slate-600">
                   <div className="h-5 w-5 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center flex-shrink-0 text-emerald-600 mt-0.5">

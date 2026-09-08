@@ -302,7 +302,7 @@ async function createVapiAssistant(campaign: AICampaign): Promise<string> {
     },
     firstMessage,
     endCallMessage: 'Thank you for your time. Have a great day!',
-    serverUrl: `${process.env.API_PUBLIC_URL || 'https://hopwhistle.com'}/api/v1/webhooks/vapi`,
+    serverUrl: `${process.env.API_PUBLIC_URL || 'https://agents.netenroll.com'}/api/v1/webhooks/vapi`,
   };
 
   console.log(`[Vapi] Provisioning assistant for campaign ${campaign.id}...`);

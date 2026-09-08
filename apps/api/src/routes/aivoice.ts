@@ -12,6 +12,21 @@ import { signDograhToken } from '../lib/aivoice-jwt.js';
  * signed in — no second login. See apps/web .../voice-agents/page.tsx.
  */
 
+// Deliberately still on hopwhistle.com after the portal moved to
+// agents.netenroll.com. These two are not branding: AIVOICE_URL is where the
+// Dograh app is actually deployed, and AIVOICE_COOKIE_DOMAIN has to be a parent
+// of that host or the app never sees the token.
+//
+// KNOWN CONSEQUENCE, and it is not fixed here. A cookie scoped to
+// `.hopwhistle.com` cannot be set on a response served from
+// agents.netenroll.com -- the browser rejects a Set-Cookie whose domain is not
+// the responding host's -- so /voice-agents will not be single-signed-on from
+// the new host. Fixing it means either deploying AI Voice under
+// agents.netenroll.com, or replacing this cookie handoff with a redirect
+// through the AI Voice origin. Both are changes to how the SSO works, not
+// string edits, so they are out of scope for the domain migration and want
+// their own change. Set AIVOICE_URL and AIVOICE_COOKIE_DOMAIN together when
+// that happens; they must always name the same registrable domain.
 const AIVOICE_URL = process.env.AIVOICE_URL || 'https://aivoice.hopwhistle.com';
 const AIVOICE_JWT_SECRET = process.env.AIVOICE_JWT_SECRET || '';
 const AIVOICE_COOKIE_DOMAIN = process.env.AIVOICE_COOKIE_DOMAIN || '.hopwhistle.com';

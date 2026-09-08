@@ -4,7 +4,7 @@
 
 ## Overview
 
-This Data Retention Policy outlines how Hopwhistle retains, manages, and disposes of data collected through our telephony platform and services.
+This Data Retention Policy outlines how NetEnroll retains, manages, and disposes of data collected through the NetEnroll agency portal and the call delivery services provided through it.
 
 **IMPORTANT:** This is a template document. Please review with legal counsel and customize based on your specific requirements, industry regulations, and jurisdiction.
 
@@ -290,8 +290,8 @@ See our [Privacy Policy](./PRIVACY_POLICY.md) for details on data subject rights
 
 For questions about data retention or to request data deletion:
 
-**Email:** [privacy@hopwhistle.com]  
-**Support:** [support@hopwhistle.com]
+**Email:** [privacy@netenroll.com]  
+**Support:** [support@netenroll.com]
 
 ## Policy Updates
 

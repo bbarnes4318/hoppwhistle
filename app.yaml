@@ -125,7 +125,7 @@ services:
         scope: RUN_TIME
         type: SECRET
       - key: SMTP_FROM
-        value: 'noreply@hopwhistle.com'
+        value: 'noreply@netenroll.com'
       - key: DEFAULT_TENANT_ID
         scope: RUN_TIME
         type: SECRET

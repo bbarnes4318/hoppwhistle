@@ -401,7 +401,7 @@ function NumbersPage() {
               onClick={handleBuyBulkvsNumber}
               className="focus:bg-cyan-600 focus:text-white text-xs"
             >
-              Buy from Hopwhistle
+              Buy from NetEnroll
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

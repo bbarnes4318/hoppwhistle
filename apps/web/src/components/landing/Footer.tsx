@@ -23,23 +23,23 @@ export function Footer() {
               <div className="relative h-7 w-7 overflow-hidden rounded bg-slate-900 border border-slate-800 p-0.5">
                 <Image
                   src="/hopwhistle.png"
-                  alt="Hopwhistle Logo"
+                  alt="NetEnroll logo"
                   fill
                   className="object-contain p-0.5"
                 />
               </div>
-              <span className="font-bold text-white tracking-tight text-sm">Hopwhistle</span>
+              <span className="font-bold text-white tracking-tight text-sm">NetEnroll</span>
             </Link>
             <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
-              Production-grade telephony, real-time call tracking, and AI voice routing engineered
-              for performance marketing networks and enterprise operators.
+              Qualified inbound calls delivered to licensed agencies, billed per submitted
+              application and settled against a written Insertion Order.
             </p>
           </div>
 
           {/* Links Col 1: Product */}
           <div className="md:col-span-3 space-y-3">
             <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-200">
-              Platform
+              The portal
             </h4>
             <ul className="space-y-2 text-xs">
               <li>
@@ -47,7 +47,7 @@ export function Footer() {
                   onClick={() => scrollToSection('features')}
                   className="hover:text-white transition-colors"
                 >
-                  Features
+                  What you get
                 </button>
               </li>
               <li>
@@ -55,7 +55,7 @@ export function Footer() {
                   onClick={() => scrollToSection('ai-voice')}
                   className="hover:text-white transition-colors"
                 >
-                  AI Voice Engine
+                  Qualification
                 </button>
               </li>
               <li>
@@ -63,7 +63,7 @@ export function Footer() {
                   onClick={() => scrollToSection('routing')}
                   className="hover:text-white transition-colors"
                 >
-                  Routing Solutions
+                  Delivery
                 </button>
               </li>
               <li>
@@ -71,7 +71,7 @@ export function Footer() {
                   onClick={() => scrollToSection('use-cases')}
                   className="hover:text-white transition-colors"
                 >
-                  Use Cases
+                  Who it is for
                 </button>
               </li>
             </ul>
@@ -114,10 +114,10 @@ export function Footer() {
 
         {/* Footer bottom */}
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-slate-600">
-          <span>&copy; {currentYear} Hopwhistle. All rights reserved.</span>
+          <span>&copy; {currentYear} NetEnroll. All rights reserved.</span>
           <div className="flex gap-4">
-            <span>Built for scale.</span>
-            <span>Hetzner Cloud Infrastructure.</span>
+            <span>Calls are recorded.</span>
+            <span>Agencies are onboarded by NetEnroll.</span>
           </div>
         </div>
       </div>

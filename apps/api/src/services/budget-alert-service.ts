@@ -168,7 +168,7 @@ export class BudgetAlertService {
               short: false,
             },
           ],
-          footer: 'Hopwhistle Budget Alert',
+          footer: 'NetEnroll Budget Alert',
           ts: Math.floor(Date.now() / 1000),
         },
       ],

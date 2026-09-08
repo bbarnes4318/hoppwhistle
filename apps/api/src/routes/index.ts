@@ -2831,7 +2831,7 @@ export async function registerPublisherRoutes(fastify: FastifyInstance) {
           return { error: { code: 'NOT_FOUND', message: 'Publisher not found' } };
         }
 
-        const host = request.headers.host || 'hopwhistle.com';
+        const host = request.headers.host || 'agents.netenroll.com';
         const protocol = request.headers['x-forwarded-proto'] || 'https';
         const baseUrl = `${protocol}://${host}`;
 

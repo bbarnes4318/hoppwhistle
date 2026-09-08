@@ -76,7 +76,7 @@ async function main() {
       data: {
         name: 'Demo Organization',
         slug: 'demo',
-        domain: 'demo.hopwhistle.com',
+        domain: 'demo.netenroll.com',
         status: 'ACTIVE',
         metadata: {
           demo: true,
@@ -287,7 +287,7 @@ async function main() {
           data: {
             callId: call.id,
             tenantId: tenant.id,
-            url: `https://recordings.hopwhistle.com/${call.callSid}.wav`,
+            url: `https://recordings.netenroll.com/${call.callSid}.wav`,
             format: 'wav',
             duration,
             size: duration * 16000, // Approximate size

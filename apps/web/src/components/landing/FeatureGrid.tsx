@@ -13,39 +13,39 @@ export function FeatureGrid() {
   const features = [
     {
       icon: <Activity className="h-5 w-5 text-emerald-400" />,
-      title: 'Real-time Tracking',
+      title: 'Live delivery',
       description:
-        'Track every call back to the traffic source, ad group, or landing page. Know exactly which channels yield high-duration conversions.',
+        'See calls arriving as they arrive, which agent took each one, and how many applications today has produced against the block you paid for.',
     },
     {
       icon: <PhoneIncoming className="h-5 w-5 text-cyan-400" />,
-      title: 'Carrier Connectivity',
+      title: 'Nothing to install',
       description:
-        'Direct integrations with Tier 1 carriers like Telnyx and Twilio. Provision, purchase, and deploy local or toll-free numbers instantly.',
+        'Your agents take calls in the browser. There is no handset to buy, no client to deploy, and no telephony for your team to administer.',
     },
     {
       icon: <Sliders className="h-5 w-5 text-blue-400" />,
-      title: 'Flow Builder',
+      title: 'Your qualification, applied',
       description:
-        'Visual flow setup lets operators customize paths. Connect incoming callers to qualification bots, prompt IVRs, and routing agents.',
+        'Tell us the states, the age bands and the disqualifiers that matter to your agency. Callers who do not meet them do not reach your agents.',
     },
     {
       icon: <Webhook className="h-5 w-5 text-indigo-400" />,
-      title: 'Instant Webhooks',
+      title: 'Applications where you work',
       description:
-        'Send call events, duration milestones, and buyer outcomes to downstream CRMs and lead platforms with sub-second latency.',
+        'Submitted applications and their call recordings are posted to your CRM as they happen, so your team does not have to re-key anything.',
     },
     {
       icon: <ShieldAlert className="h-5 w-5 text-purple-400" />,
-      title: 'Compliance & Protection',
+      title: 'Consent on the record',
       description:
-        'Scrub calls against DNC lists, validate number state before dialing, and automatically block known robo-callers and spammers.',
+        'Every caller reaches you with a consent record and a recording attached. Do-not-call and state licensing checks run before the call is routed.',
     },
     {
       icon: <BadgeDollarSign className="h-5 w-5 text-rose-400" />,
-      title: 'Ledgers & Payouts',
+      title: 'Caps that hold',
       description:
-        'Manage publisher contract payouts, track buyer prepayments, set daily campaign caps, and enforce automatic budget cut-offs.',
+        'A daily block, a ceiling above it, and a maximum daily debit on your Insertion Order. If a settlement would exceed it, no payment is taken and we are alerted.',
     },
   ];
 
@@ -58,11 +58,11 @@ export function FeatureGrid() {
       <div className="container max-w-7xl mx-auto px-6 md:px-8 relative">
         <div className="max-w-3xl mx-auto text-center space-y-4 mb-16">
           <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
-            High-performance call capabilities.
+            What your agency actually gets.
           </h2>
           <p className="text-base sm:text-lg text-slate-400">
-            A comprehensive suite of telecom tools built for performance marketers, AI agencies, and
-            telecom operators.
+            Delivered calls, a portal to watch them in, and a settlement you can check line by
+            line.
           </p>
         </div>
 

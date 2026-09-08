@@ -211,7 +211,18 @@ export async function registerAnveoProcurementRoutes(fastify: FastifyInstance): 
       const anveoDid = orderedDids[0];
 
       // Step 2: Configure routing to FreeSWITCH
-      const smsWebhookUrl = `https://hopwhistle.com/api/v1/webhooks/sms/${anveoDid.e164}`;
+      //
+      // This URL is handed to Anveo and stored on their side against the DID,
+      // so it is carrier configuration rather than anything a person reads. It
+      // is read at procurement time only: numbers already ordered keep whatever
+      // webhook they were provisioned with, and this change cannot reach them.
+      //
+      // The old host therefore has to keep answering POSTs to /api on its own
+      // hostname -- a 301 to the new host would turn every inbound SMS webhook
+      // into a dropped body. infra/nginx/hopwhistle redirects browsers only,
+      // and says so.
+      const smsWebhookBase = process.env.API_PUBLIC_URL || 'https://agents.netenroll.com';
+      const smsWebhookUrl = `${smsWebhookBase}/api/v1/webhooks/sms/${anveoDid.e164}`;
       await service.configureForFreeSWITCH(anveoDid.e164, smsWebhookUrl);
 
       // Step 3: Save to database with STRICT ownership

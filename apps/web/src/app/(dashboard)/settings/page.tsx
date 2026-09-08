@@ -344,7 +344,7 @@ export default function SettingsPage() {
                 </a>
               </div>
               <div className="mt-4 pt-3 border-t border-border/10 text-[10px] text-muted-foreground flex justify-between items-center">
-                <span>© {new Date().getFullYear()} Hopwhistle. All rights reserved.</span>
+                <span>© {new Date().getFullYear()} NetEnroll. All rights reserved.</span>
               </div>
             </CardContent>
           </Card>

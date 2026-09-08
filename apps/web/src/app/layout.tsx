@@ -9,8 +9,8 @@ import { PlatformContextProvider } from '@/hooks/use-platform-context';
 import { fontVariables } from '@/lib/fonts';
 
 export const metadata: Metadata = {
-  title: 'Hopwhistle',
-  description: 'Production-grade telephony platform',
+  title: 'NetEnroll',
+  description: 'Agency portal for pay-per-application call delivery',
   icons: {
     icon: '/hopwhistle.png',
   },

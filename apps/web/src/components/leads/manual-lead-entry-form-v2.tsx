@@ -684,7 +684,7 @@ export function ManualLeadEntryFormV2(): JSX.Element {
             <h3 className="font-semibold text-white">Compliance &amp; Original Source Data</h3>
             <p className="text-sm text-slate-400">
               Use the values captured when the lead originally opted in—not the operator’s current IP
-              or the Hopwhistle CRM page.
+              or the NetEnroll CRM page.
             </p>
           </div>
         </div>

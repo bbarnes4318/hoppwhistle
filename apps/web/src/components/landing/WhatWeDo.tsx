@@ -6,21 +6,21 @@ export function WhatWeDo() {
   const cards = [
     {
       icon: <Cpu className="h-6 w-6 text-emerald-500" />,
-      title: 'AI Voice Campaigns',
+      title: 'Calls, already qualified',
       description:
-        'Launch voice agents that handle inbound qualification, automated surveys, or lead intake, keeping full control of live transfer variables and transfer nodes.',
+        'Callers are screened before they reach you. Your agents pick up people who asked to be called about a plan, in a state you are licensed for, inside the hours you set.',
     },
     {
       icon: <Shuffle className="h-6 w-6 text-cyan-500" />,
-      title: 'Intelligent Routing',
+      title: 'Delivery you control',
       description:
-        'Route calls instantly to buyers, local agents, or downstream queues based on real-time bid pricing, capacity limits, caller context, and geographic rules.',
+        'Set a daily block of applications and a ceiling above it. Delivery pauses when the block is used, and the applications you have already paid for stay available when it resumes.',
     },
     {
       icon: <Layers className="h-6 w-6 text-blue-500" />,
-      title: 'Operations & Analytics',
+      title: 'Settlement you can audit',
       description:
-        'Track every caller source, monitor bid spreads, inspect call recordings with transcription AI, and manage billing ledgers in a clean interface.',
+        'Every application is priced against the rate in force at the time, listed line by line, and reconciled against your Insertion Order. You can export the whole ledger.',
     },
   ];
 
@@ -29,12 +29,12 @@ export function WhatWeDo() {
       <div className="container max-w-7xl mx-auto px-6 md:px-8">
         <div className="max-w-3xl mx-auto text-center space-y-4 mb-16 md:mb-20">
           <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900">
-            Everything you need to run high-volume phone operations.
+            An agency portal, not a dialer.
           </h2>
           <p className="text-base sm:text-lg text-slate-500 max-w-2xl mx-auto font-normal">
-            Hopwhistle replaces fragmented systems with a unified platform. Manage voice campaigns,
-            buyers, publishers, routing tables, and real-time tracking under a single, highly
-            performant stack.
+            You are not buying software to run yourself. You are buying delivered calls, and this
+            is where you watch them arrive, see what your agents did with them, and check the
+            arithmetic before you pay.
           </p>
         </div>
 

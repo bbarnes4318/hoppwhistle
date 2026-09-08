@@ -14,14 +14,14 @@ export function DashboardPreview() {
         <div className="max-w-3xl mx-auto text-center space-y-4 mb-16">
           <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-400">
             <Sparkles className="h-3.5 w-3.5" />
-            <span>Immersive Dashboard Experience</span>
+            <span>Inside the portal</span>
           </div>
           <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
-            Complete operational visibility.
+            What you see when you sign in.
           </h2>
           <p className="text-base sm:text-lg text-slate-400">
-            Manage numbers, adjust IVR trees, inspect transcriptions, and audit campaigns from a
-            unified operator console.
+            Today's delivery, what is left on the block, which agents are on calls, and the
+            settlement building behind it.
           </p>
         </div>
 
@@ -32,7 +32,7 @@ export function DashboardPreview() {
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800/80 bg-slate-950">
               <div className="flex items-center gap-4">
                 <span className="text-sm font-bold text-white tracking-tight">
-                  Hopwhistle Analytics
+                  NetEnroll Delivery
                 </span>
                 <span className="h-4 w-px bg-slate-800"></span>
                 <span className="text-xs text-slate-400">Real-time Overview</span>
