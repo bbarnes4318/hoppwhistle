@@ -107,6 +107,78 @@ export interface RequestOptions {
   responseType?: 'json' | 'text';
 }
 
+/**
+ * Whether this browser is caught in a sign-out loop, and should stop.
+ *
+ * ── Why the code check above is not enough on its own ────────────────────────
+ *
+ * The redirect is gated on the error CODE, so a refusal that says
+ * `NO_ACTING_TENANT` never signs anybody out however it is delivered. That
+ * guards the case Phase 2 named, and it is not the only way to reach the loop.
+ *
+ * A route that answers a live session with a bare `401 UNAUTHORIZED` is
+ * indistinguishable, here, from a genuinely dead token: same status, same code.
+ * That is not hypothetical -- fourteen routes were doing exactly that for a
+ * platform admin with no agency selected, six of them on the softphone surface,
+ * and the gate above let every one of them through. The server-side fix is the
+ * load-bearing one, and `no-acting-tenant-audit.test.ts` is what keeps it
+ * fixed.
+ *
+ * This is the fallback for the next one nobody has found yet. The loop's
+ * mechanism is: refuse -> clear -> navigate to /login -> the app loads ->
+ * refuse again. Breaking the navigation breaks the loop. Above the threshold
+ * the client stops redirecting and leaves the person where they are, with a
+ * console line saying why: a page they can read and navigate away from is
+ * recoverable, and a browser cycling through six requests a second is not.
+ *
+ * The counter resets on its own after the window, so an ordinary sign-out
+ * tomorrow behaves normally.
+ */
+const LOGOUT_LOOP_KEY = 'auth:logout-redirects';
+const LOGOUT_LOOP_WINDOW_MS = 30_000;
+const LOGOUT_LOOP_LIMIT = 3;
+
+export function loopingOnLogout(now: number = Date.now()): boolean {
+  try {
+    const raw = window.localStorage.getItem(LOGOUT_LOOP_KEY);
+    const previous = raw ? (JSON.parse(raw) as { count: number; firstAt: number }) : null;
+
+    const state =
+      previous && now - previous.firstAt < LOGOUT_LOOP_WINDOW_MS
+        ? { count: previous.count + 1, firstAt: previous.firstAt }
+        : { count: 1, firstAt: now };
+
+    window.localStorage.setItem(LOGOUT_LOOP_KEY, JSON.stringify(state));
+
+    if (state.count > LOGOUT_LOOP_LIMIT) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `[auth] ${state.count} sign-out redirects in ${LOGOUT_LOOP_WINDOW_MS / 1000}s. ` +
+          'Refusing to redirect again: a route is answering a live session with a bare 401. ' +
+          'Sign in again from /login if this was genuine.'
+      );
+      return true;
+    }
+    return false;
+  } catch {
+    /*
+     * Storage can throw -- private browsing, blocked site data. A broken
+     * counter must not stop a legitimate sign-out, so the safe answer here is
+     * "not looping" and the behaviour falls back to what it was before.
+     */
+    return false;
+  }
+}
+
+/** Called after any successful response: we are plainly not in a loop. */
+export function clearLogoutLoop(): void {
+  try {
+    window.localStorage.removeItem(LOGOUT_LOOP_KEY);
+  } catch {
+    /* nothing to clear if storage is unavailable */
+  }
+}
+
 class ApiClient {
   private baseUrl: string;
   private token?: string;
@@ -235,8 +307,13 @@ class ApiClient {
          */
         if (response.status === 401 && code !== NO_ACTING_TENANT) {
           this.clearToken();
-          // Only redirect if we're in a browser and not already on login page
-          if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+          // Only redirect if we're in a browser and not already on login page,
+          // and only if we are not evidently already going round in circles.
+          if (
+            typeof window !== 'undefined' &&
+            !window.location.pathname.includes('/login') &&
+            !loopingOnLogout()
+          ) {
             window.location.href = '/login';
           }
         }
@@ -248,6 +325,10 @@ class ApiClient {
           },
         };
       }
+
+      // A response came back fine, so whatever the last refusal was, this
+      // browser is not cycling through sign-outs.
+      if (typeof window !== 'undefined') clearLogoutLoop();
 
       return { data };
     } catch (error) {

@@ -10,6 +10,7 @@ import {
   Pause,
   Phone,
   PhoneForwarded,
+  PhoneOff,
   Settings,
   User,
   X,
@@ -34,11 +35,14 @@ import { cn } from '@/lib/utils';
 // Agent Phone Panel - Main Softphone Component
 // ============================================================================
 
-export function AgentPhonePanel(): JSX.Element {
+export function AgentPhonePanel(): JSX.Element | null {
   const {
     agentStatus,
     currentCall,
     isPhonePanelOpen,
+    phoneStatus,
+    phoneAttempts,
+    reconnectPhone,
     closePhonePanel,
     togglePhonePanel,
     openPhonePanel,
@@ -183,6 +187,50 @@ export function AgentPhonePanel(): JSX.Element {
   // Floating Phone Button (when panel is closed)
   // ============================================================================
 
+  /*
+   * No phone for this user at all -- not an agent, or a platform operator with
+   * no agency selected. Render nothing rather than a launcher that opens onto
+   * a phone that was never going to connect.
+   */
+  if (phoneStatus === 'disabled') return null;
+
+  /*
+   * The phone is not working, and the launcher says so.
+   *
+   * This is the whole of the "no visible indication" problem. The launcher is
+   * the one piece of the softphone that is on screen at all times, and it
+   * showed the agent's status -- "Available", in green -- whether or not the
+   * phone had ever registered. An agent whose SIP init was failing saw a
+   * healthy-looking control while calls went nowhere, and the only evidence
+   * anywhere was a console line they were never going to read.
+   */
+  if (!isPhonePanelOpen && (phoneStatus === 'retrying' || phoneStatus === 'failed')) {
+    return (
+      <button
+        onClick={phoneStatus === 'failed' ? reconnectPhone : togglePhonePanel}
+        className={cn(
+          'fixed bottom-6 right-6 z-50',
+          'flex items-center gap-3 px-5 py-3 rounded-full',
+          'bg-red-600 text-white font-medium shadow-sm',
+          'border border-white/10 transition-all duration-300 ease-out hover:scale-105'
+        )}
+        aria-label={
+          phoneStatus === 'failed'
+            ? 'Phone disconnected. Try again.'
+            : 'Phone reconnecting'
+        }
+      >
+        <PhoneOff className="w-5 h-5" />
+        <span>
+          {phoneStatus === 'failed'
+            ? 'Phone disconnected — try again'
+            : `Phone reconnecting (${phoneAttempts})`}
+        </span>
+        <span className="w-2.5 h-2.5 rounded-full bg-white/80" />
+      </button>
+    );
+  }
+
   if (!isPhonePanelOpen) {
     return (
       <button
@@ -294,8 +342,29 @@ export function AgentPhonePanel(): JSX.Element {
           </div>
         </CardHeader>
 
+        {/* Connection state, and the way back from a failed one. */}
+        {(phoneStatus === 'retrying' || phoneStatus === 'failed') && (
+          <div className="px-4 py-2 bg-red-500/10 border-b border-red-500/20">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-red-400 text-xs">
+                {phoneStatus === 'failed'
+                  ? 'The phone is not connected. Calls will not reach you.'
+                  : `Reconnecting the phone (attempt ${phoneAttempts})…`}
+              </span>
+              {phoneStatus === 'failed' && (
+                <button
+                  onClick={reconnectPhone}
+                  className="shrink-0 rounded border border-red-400/40 px-2 py-0.5 text-xs text-red-300 hover:text-red-200"
+                >
+                  Try again
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Error Banner */}
-        {error && (
+        {error && phoneStatus !== 'retrying' && phoneStatus !== 'failed' && (
           <div className="px-4 py-2 bg-red-500/10 border-b border-red-500/20">
             <div className="flex items-center justify-between">
               <span className="text-red-400 text-xs">{error}</span>

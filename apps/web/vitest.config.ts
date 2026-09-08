@@ -33,6 +33,9 @@ export default defineConfig({
       // The error boundary that keeps one broken component from unmounting the
       // whole application, as the agency switcher did.
       'src/components/__tests__/**/*.test.tsx',
+      // Every page under the dashboard offers the cross-agency prompt rather
+      // than rendering broken for an operator with no agency selected.
+      'src/app/__tests__/**/*.test.ts',
     ],
   },
 });
