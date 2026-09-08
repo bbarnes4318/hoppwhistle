@@ -7,6 +7,22 @@ const campaignPagePath = resolve(
 
 let source = readFileSync(campaignPagePath, 'utf8');
 
+/**
+ * Prose in JSX gets re-wrapped by the formatter, so these patterns cannot
+ * assume where the line breaks fall.
+ *
+ * The campaign routing description was matched with single spaces between its
+ * words. A formatting pass moved one line break into the middle of "Priority
+ * controls routing order" and the pattern stopped matching — which failed the
+ * image build, in a step whose only symptom is "source was not found". Every
+ * run of whitespace in a prose pattern is therefore `\s+`, so a re-wrap is
+ * invisible to it. The patterns still have to be exact about the words.
+ */
+function prose(text) {
+  const escaped = text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(escaped.replace(/\s+/g, '\\s+'));
+}
+
 const replacements = [
   {
     label: 'destination table heading',
@@ -17,16 +33,16 @@ const replacements = [
   {
     label: 'campaign routing description',
     marker: 'one external buyer selected by weight',
-    pattern:
-      /Configure buyer target numbers and destination routing rules\.\s*Priority controls routing order \(lower = higher priority\)\./,
+    pattern: prose(
+      'Configure buyer target numbers and destination routing rules. Priority controls routing order (lower = higher priority).'
+    ),
     replacement:
       'Route one campaign DID to external buyer cell phones and internal Hopwhistle extensions. At each priority, all eligible internal extensions ring together with one external buyer selected by weight; lower priorities are sequential failover steps.',
   },
   {
     label: 'destination field label',
     marker: '<Label htmlFor="buyer-dest">Cell Number or Hopwhistle Extension *</Label>',
-    pattern:
-      /<Label htmlFor="buyer-dest">Destination Phone Number \(E\.164 Format\) \*<\/Label>/,
+    pattern: prose('<Label htmlFor="buyer-dest">Destination Phone Number (E.164 Format) *</Label>'),
     replacement: '<Label htmlFor="buyer-dest">Cell Number or Hopwhistle Extension *</Label>',
   },
   {
@@ -38,7 +54,7 @@ const replacements = [
   {
     label: 'destination help text',
     marker: 'four-digit registered Hopwhistle extension',
-    pattern: /Must be formatted as a valid E\.164 number starting with \+ and country code\./,
+    pattern: prose('Must be formatted as a valid E.164 number starting with + and country code.'),
     replacement:
       'Enter an external cell number in E.164 format (for example +18652637582) or a four-digit registered Hopwhistle extension (for example 1008).',
   },
