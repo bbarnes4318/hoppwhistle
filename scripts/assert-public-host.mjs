@@ -43,6 +43,34 @@ const RETIRED_HOSTS = ['hopwhistle.com'];
 /** The build-time variables Next.js inlines and this script therefore guards. */
 const GUARDED = ['NEXT_PUBLIC_API_URL', 'NEXT_PUBLIC_WS_URL'];
 
+/**
+ * Variables whose value must actually appear in the built bundle.
+ *
+ * Not the same set as GUARDED, and the difference is not laziness. Next.js only
+ * inlines a variable into code it bundles, so a value can only be *required* to
+ * be present when something the app actually renders reads it.
+ *
+ * NEXT_PUBLIC_API_URL qualifies: apps/web/src/lib/get-api-url.ts, lib/api.ts,
+ * the login page and a dozen others read it, and it lands in 39 build outputs.
+ *
+ * NEXT_PUBLIC_WS_URL does not. Its only reader in apps/web/src is
+ * components/dashboard/live-stats.tsx, and nothing imports that file -- so the
+ * value reaches zero build outputs and requiring it would fail every correct
+ * build. Measured, not assumed. The softphone builds its own signalling URL
+ * from window.location.hostname (phone-provider.tsx), which is why nothing
+ * missed it.
+ *
+ * This costs nothing against the failure that matters. A bundle pointed at the
+ * retired host can only say so as `wss://hopwhistle.com`, and the absence scan
+ * below catches that wherever it appears. Presence is the weaker, secondary
+ * signal; absence is the guard.
+ *
+ * domain-migration.test.ts asserts that NEXT_PUBLIC_WS_URL still has no live
+ * consumer. Wire live-stats.tsx into a page and that test fails, telling you to
+ * move NEXT_PUBLIC_WS_URL into this set rather than leaving the exemption to rot.
+ */
+const REQUIRE_PRESENT = new Set(['NEXT_PUBLIC_API_URL']);
+
 function die(lines) {
   console.error('');
   console.error('  BUILD REFUSED');
@@ -108,12 +136,26 @@ function checkEnv() {
   }
 }
 
-/** Every file under `dir`, recursively. */
-function* walk(dir) {
+/**
+ * Directories under .next that are not build output.
+ *
+ * `cache` is webpack's incremental build cache. It carries strings from
+ * PREVIOUS builds -- on a warm cache it still held the retired host long after
+ * the source stopped mentioning it -- and none of it is copied into the runtime
+ * image, which takes only .next/standalone and .next/static. Scanning it would
+ * fail builds over bytes no browser can ever receive.
+ */
+const NOT_OUTPUT = new Set(['cache']);
+
+/** Every file under `dir`, recursively, skipping what is not build output. */
+function* walk(dir, depth = 0) {
   for (const entry of readdirSync(dir)) {
+    // Only at the top level: a `cache` directory nested inside real output
+    // would be output.
+    if (depth === 0 && NOT_OUTPUT.has(entry)) continue;
     const path = join(dir, entry);
     if (statSync(path).isDirectory()) {
-      yield* walk(path);
+      yield* walk(path, depth + 1);
     } else {
       yield path;
     }
@@ -146,11 +188,19 @@ function checkBuilt(buildDir) {
     }
 
     for (const retired of RETIRED_HOSTS) {
-      // Scheme-qualified, so a comment or an unrelated identifier mentioning
-      // the old name cannot fail a build. A baked endpoint always has a scheme.
-      for (const scheme of ['https://', 'http://', 'wss://', 'ws://']) {
-        if (text.includes(`${scheme}${retired}`)) {
-          const key = `${scheme}${retired}`;
+      // Qualified by a scheme or by `@`, never bare. A bare hostname would fail
+      // a build over a comment or an unrelated identifier; these two prefixes
+      // are the forms a customer can actually act on -- an endpoint the app
+      // calls, and an address someone emails.
+      //
+      // `@` is here because the first real occurrence this caught was neither
+      // an endpoint nor in a component: the legal pages render
+      // docs/legal/*.md at build time, and those carry support@, legal@,
+      // privacy@ and compliance@ on the retired domain. A scheme-only scan
+      // walked straight past them.
+      for (const prefix of ['https://', 'http://', 'wss://', 'ws://', '@']) {
+        if (text.includes(`${prefix}${retired}`)) {
+          const key = `${prefix}${retired}`;
           if (!offenders.has(key)) offenders.set(key, []);
           if (offenders.get(key).length < 5) offenders.get(key).push(path);
         }
@@ -173,7 +223,7 @@ function checkBuilt(buildDir) {
     ]);
   }
 
-  const missing = wanted.filter(({ name }) => !seen.has(name));
+  const missing = wanted.filter(({ name }) => REQUIRE_PRESENT.has(name) && !seen.has(name));
   if (missing.length > 0) {
     die([
       'The built bundle does not contain the values that were set:',
@@ -186,10 +236,23 @@ function checkBuilt(buildDir) {
     ]);
   }
 
+  const present = GUARDED.filter(name => seen.has(name));
+  const absent = GUARDED.filter(name => !seen.has(name));
+
   console.log(
     `assert-public-host: ${scanned} built ${scanned === 1 ? 'file' : 'files'} scanned, ` +
-      `${GUARDED.join(' and ')} present, no retired host`
+      `no retired host`
   );
+  if (present.length > 0) console.log(`assert-public-host: in the bundle: ${present.join(', ')}`);
+  // Named rather than passed over in silence: an absence that is expected today
+  // becomes a regression the day something starts reading the variable, and the
+  // build log is where anyone debugging this will look first.
+  for (const name of absent) {
+    console.log(
+      `assert-public-host: ${name} is not in the bundle -- expected, ` +
+        `nothing the app renders reads it (see REQUIRE_PRESENT)`
+    );
+  }
 }
 
 const [mode, arg] = process.argv.slice(2);

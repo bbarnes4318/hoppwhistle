@@ -196,13 +196,17 @@ NEXT_PUBLIC_WS_URL=wss://agents.netenroll.com \
 ```
 
 **Expected output:** the four lines from Step 1.3, and — from inside the image
-build — these two, which are the guards:
+build — these, which are the guards:
 
 ```
 assert-public-host: NEXT_PUBLIC_API_URL=https://agents.netenroll.com ok
 assert-public-host: NEXT_PUBLIC_WS_URL=wss://agents.netenroll.com ok
-assert-public-host: <n> built files scanned, NEXT_PUBLIC_API_URL and NEXT_PUBLIC_WS_URL present, no retired host
+assert-public-host: 2544 built files scanned, no retired host
+assert-public-host: in the bundle: NEXT_PUBLIC_API_URL
+assert-public-host: NEXT_PUBLIC_WS_URL is not in the bundle -- expected, nothing the app renders reads it (see REQUIRE_PRESENT)
 ```
+
+The last line is normal, not a warning to chase. See Step 2.3.
 
 A build pointed at the old host stops here instead, with `BUILD REFUSED`.
 
@@ -216,16 +220,18 @@ bundle. Ask the image.
 
 ```bash
 docker exec hopwhistle-web-dev sh -c \
-  "grep -rl 'wss://agents.netenroll.com' /app/apps/web/.next | head -3"
+  "grep -rl 'https://agents.netenroll.com' /app/apps/web/.next | wc -l"
 ```
 
-**Expected output:** at least one path, e.g.
+**Expected output:** a number in the low tens — it was `45` on the build this
+runbook was written against, and anything above zero is the assertion. Zero
+means the value never reached the bundle. Do not cut over.
 
-```
-/app/apps/web/.next/static/chunks/main-app-<hash>.js
-```
-
-Empty output means the value never reached the bundle. Do not cut over.
+Grep for the **API** URL here, not the WebSocket one. `wss://agents.netenroll.com`
+is legitimately absent: the only file reading `NEXT_PUBLIC_WS_URL` is
+`apps/web/src/components/dashboard/live-stats.tsx`, which nothing imports, so
+Next.js never bundles it. The softphone builds its own signalling URL from
+`window.location.hostname`. Checking for it would fail a correct deploy.
 
 Now the negative, which is the one that catches a silent revert:
 
@@ -237,7 +243,14 @@ docker exec hopwhistle-web-dev sh -c \
 **Expected output:** `0`
 
 Any non-zero count means the image you just built still serves the old host to
-somebody. Find it with `grep -rn 'hopwhistle.com' apps/web/src` and rebuild.
+somebody. Find it with `grep -rn 'hopwhistle.com' apps/web/src docs/legal` and
+rebuild — `docs/legal/*.md` counts, because the routes under
+`apps/web/src/app/legal` render those files into pages at build time.
+
+Run this against the running container, not the builder. `.next/cache` in a
+build tree is webpack's incremental cache and holds strings from previous
+builds; it is not copied into the runtime image, and grepping it will show you
+a retired host that no browser can receive.
 
 **Reversal:** Step 1.3's reversal.
 

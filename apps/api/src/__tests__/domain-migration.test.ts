@@ -42,7 +42,22 @@ const USER_FACING_TREES = [
   join(REPO_ROOT, 'apps', 'api', 'prisma'),
 ];
 
+/**
+ * Markdown is in scope because docs/legal/*.md is not documentation. Each of
+ * these files is read at build time by a route under apps/web/src/app/legal and
+ * rendered as a page customers read and the footer links to -- the terms they
+ * agree to and the address they are told to email. They carried support@,
+ * legal@, privacy@ and compliance@ on the retired domain, and a scan restricted
+ * to .ts/.tsx did not see them.
+ */
 const SOURCE_EXTENSIONS = ['.ts', '.tsx'];
+const RENDERED_MARKDOWN = [
+  'docs/legal/CALL_RECORDING_DISCLOSURE.md',
+  'docs/legal/DATA_RETENTION_POLICY.md',
+  'docs/legal/DPA_TEMPLATE.md',
+  'docs/legal/PRIVACY_POLICY.md',
+  'docs/legal/TERMS_OF_SERVICE.md',
+];
 
 /**
  * Files that name the retired host on purpose, each for a reason a rename would
@@ -92,22 +107,41 @@ function sourceFiles(dir: string): string[] {
 describe('no user-facing string contains the retired host', () => {
   it('finds no occurrence outside the deliberate list', () => {
     const offenders: string[] = [];
+    const scanned = [...USER_FACING_TREES.flatMap(tree => sourceFiles(tree)), ...RENDERED_MARKDOWN];
 
-    for (const tree of USER_FACING_TREES) {
-      for (const file of sourceFiles(tree)) {
-        if (file === SELF) continue;
-        if (DELIBERATE.has(file)) continue;
+    for (const file of scanned) {
+      if (file === SELF) continue;
+      if (DELIBERATE.has(file)) continue;
 
-        const text = readFileSync(join(REPO_ROOT, file), 'utf8');
-        text.split('\n').forEach((line, index) => {
-          if (line.includes(RETIRED_HOST)) {
-            offenders.push(`${file}:${index + 1}  ${line.trim()}`);
-          }
-        });
-      }
+      const text = readFileSync(join(REPO_ROOT, file), 'utf8');
+      text.split('\n').forEach((line, index) => {
+        if (line.includes(RETIRED_HOST)) {
+          offenders.push(`${file}:${index + 1}  ${line.trim()}`);
+        }
+      });
     }
 
     expect(offenders, `\n${offenders.join('\n')}\n`).toEqual([]);
+  });
+
+  it('every legal page rendered into the app is actually scanned', () => {
+    // The list above is hand-maintained, and a legal page added later would
+    // otherwise ship unscanned. Derive the truth from the routes instead: each
+    // page under app/legal names the markdown file it renders.
+    const legalRoutes = join(REPO_ROOT, 'apps', 'web', 'src', 'app', 'legal');
+    const referenced = new Set<string>();
+
+    for (const file of sourceFiles(legalRoutes)) {
+      const text = readFileSync(join(REPO_ROOT, file), 'utf8');
+      for (const match of text.matchAll(/docs\/legal\/[A-Z0-9_]+\.md/g)) {
+        referenced.add(match[0]);
+      }
+    }
+
+    expect(referenced.size).toBeGreaterThan(0);
+    for (const path of referenced) {
+      expect(RENDERED_MARKDOWN, `${path} is rendered as a page but not scanned`).toContain(path);
+    }
   });
 
   it('keeps the deliberate list honest: every entry still names the host', () => {
@@ -231,6 +265,34 @@ describe('a build pointing at the retired host fails', () => {
       NEXT_PUBLIC_WS_URL: '',
     });
     expect(result.status).not.toBe(0);
+  });
+
+  it('NEXT_PUBLIC_WS_URL still has no live consumer', () => {
+    // The guard cannot require NEXT_PUBLIC_WS_URL to appear in the built bundle,
+    // because Next.js only inlines a variable into code it bundles and the sole
+    // reader of this one -- components/dashboard/live-stats.tsx -- is imported
+    // nowhere. Requiring it would fail every correct build.
+    //
+    // That exemption is only sound while it stays true. Import live-stats into a
+    // page and this test fails, which is the prompt to move NEXT_PUBLIC_WS_URL
+    // into REQUIRE_PRESENT in scripts/assert-public-host.mjs.
+    const webSrc = join(REPO_ROOT, 'apps', 'web', 'src');
+    const readers = sourceFiles(webSrc).filter(file =>
+      readFileSync(join(REPO_ROOT, file), 'utf8').includes('process.env.NEXT_PUBLIC_WS_URL')
+    );
+
+    expect(readers).toEqual(['apps/web/src/components/dashboard/live-stats.tsx']);
+
+    const importers = sourceFiles(webSrc).filter(
+      file =>
+        file !== readers[0] &&
+        /from\s+['"][^'"]*\/live-stats['"]/.test(readFileSync(join(REPO_ROOT, file), 'utf8'))
+    );
+    expect(
+      importers,
+      'live-stats.tsx is now imported, so NEXT_PUBLIC_WS_URL reaches the bundle: ' +
+        'move it into REQUIRE_PRESENT in scripts/assert-public-host.mjs'
+    ).toEqual([]);
   });
 
   it('the compose defaults it reads do not point at the retired host', () => {
