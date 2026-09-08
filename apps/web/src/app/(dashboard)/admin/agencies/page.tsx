@@ -414,8 +414,8 @@ export default function PlatformAgenciesPage(): JSX.Element {
       </Card>
 
       {needingAction.length > 0 && (
-        <div className="flex items-start gap-2 rounded border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+        <div className="flex items-start gap-2 rounded border border-ringing bg-ringing-tint p-3 text-sm">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-ringing-ink" />
           <div>
             <p className="font-medium">
               {needingAction.length} agenc{needingAction.length === 1 ? 'y needs' : 'ies need'}{' '}
@@ -600,7 +600,7 @@ export default function PlatformAgenciesPage(): JSX.Element {
                   </TableRow>
 
                   {openAgency === row.tenantId && (
-                    <TableRow className="bg-muted/30 hover:bg-muted/30">
+                    <TableRow className="bg-sunken hover:bg-sunken">
                       <TableCell colSpan={14} className="p-4">
                         <EnrolmentPanel
                           row={row}
@@ -723,7 +723,7 @@ function EnrolmentPanel({
       </div>
 
       {note && (
-        <p className="rounded border border-amber-500/40 bg-amber-500/10 p-2 text-[13px]">{note}</p>
+        <p className="rounded border border-ringing bg-ringing-tint p-2 text-[13px]">{note}</p>
       )}
 
       {!status.enrolled && status.blockers.length > 0 && (

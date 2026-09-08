@@ -67,8 +67,8 @@ function FilterPill({
     <select
       value={value}
       onChange={e => onChange(e.target.value)}
-      className="rounded-md border border-border bg-card px-2.5 py-1.5 text-xs text-foreground
- outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors
+      className="rounded-md border border-rule bg-surface px-2.5 py-1.5 text-xs text-ink
+ outline-none focus:border-brand-ink focus:ring-1 focus:ring-brand-tint transition-colors
  appearance-none cursor-pointer"
       aria-label={label}
     >
@@ -280,8 +280,8 @@ export default function InsuranceLeadsPage() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-foreground">CRM</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">
+          <h1 className="text-xl font-semibold text-ink">CRM</h1>
+          <p className="mt-0.5 text-sm text-ink-2">
             Manage inbound ACA, FE Customers, and B2B leads
           </p>
         </div>
@@ -289,7 +289,7 @@ export default function InsuranceLeadsPage() {
           {selectedLeadIds.length > 0 && (
             <Button
               onClick={handleDeleteSelected}
-              className="flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white animate-fade-in"
+              className="flex items-center gap-1.5 bg-dropped text-white hover:opacity-90 animate-fade-in"
             >
               <Trash2 className="h-4.5 w-4.5" />
               Delete Selected ({selectedLeadIds.length})
@@ -297,7 +297,7 @@ export default function InsuranceLeadsPage() {
           )}
           <Button
             asChild
-            className="flex items-center gap-1.5 border border-white/10 bg-slate-900 hover:bg-slate-800 text-slate-200"
+            className="flex items-center gap-1.5 border border-rule bg-surface hover:bg-sunken text-ink-2"
           >
             <Link href="/insurance-leads/reports">
               <BarChart3 className="h-4.5 w-4.5" />
@@ -307,7 +307,7 @@ export default function InsuranceLeadsPage() {
           <Button
             onClick={handleExportCsv}
             disabled={exporting || loading}
-            className="flex items-center gap-1.5 border border-white/10 bg-slate-900 hover:bg-slate-800 text-slate-200"
+            className="flex items-center gap-1.5 border border-rule bg-surface hover:bg-sunken text-ink-2"
           >
             {exporting ? (
               <Loader2 className="h-4.5 w-4.5 animate-spin" />
@@ -318,14 +318,14 @@ export default function InsuranceLeadsPage() {
           </Button>
           <Button
             onClick={() => setIsImportOpen(true)}
-            className="flex items-center gap-1.5 border border-white/10 bg-slate-900 hover:bg-slate-800 text-slate-200"
+            className="flex items-center gap-1.5 border border-rule bg-surface hover:bg-sunken text-ink-2"
           >
             <Upload className="h-4.5 w-4.5" />
             Import CSV
           </Button>
           <Button
             asChild
-            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+            className="flex items-center gap-1.5 bg-brand hover:bg-brand-ink text-ink"
           >
             <Link href="/intake">
               <Plus className="h-4.5 w-4.5" />
@@ -341,7 +341,7 @@ export default function InsuranceLeadsPage() {
       {/* Tabs + Search + Filters */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         {/* Vertical Tabs */}
-        <div className="flex items-center gap-1 rounded-lg border border-white/5 bg-slate-900/50 p-1">
+        <div className="flex items-center gap-1 rounded-lg border border-rule bg-surface p-1">
           {[
             { value: '', label: 'All' },
             { value: 'ACA', label: 'ACA' },
@@ -353,8 +353,8 @@ export default function InsuranceLeadsPage() {
               onClick={() => handleFilterChange('vertical', tab.value)}
               className={`rounded-md px-4 py-1.5 text-xs font-medium transition-colors ${
                 filters.vertical === tab.value
-                  ? 'bg-emerald-500/15 text-emerald-400'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  ? 'bg-brand-tint text-brand-ink'
+                  : 'text-ink-3 hover:bg-sunken hover:text-ink'
               }`}
             >
               {tab.label}
@@ -366,14 +366,14 @@ export default function InsuranceLeadsPage() {
         <div className="flex items-center gap-2">
           {/* Search */}
           <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-3" />
             <input
               type="text"
               placeholder="Search name, phone, email, zip…"
               value={filters.search}
               onChange={e => handleFilterChange('search', e.target.value)}
-              className="w-56 rounded-md border border-border bg-card pl-8 pr-3 py-1.5 text-xs text-foreground
- placeholder-slate-600 outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
+              className="w-56 rounded-md border border-rule bg-surface pl-8 pr-3 py-1.5 text-xs text-ink
+ placeholder:text-ink-3 outline-none focus:border-brand-ink focus:ring-1 focus:ring-brand-tint transition-colors"
             />
           </div>
 
@@ -407,8 +407,8 @@ export default function InsuranceLeadsPage() {
             <select
               value={filters.listId}
               onChange={e => handleFilterChange('listId', e.target.value)}
-              className="rounded-md border border-border bg-card px-2.5 py-1.5 text-xs text-foreground
- outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-colors
+              className="rounded-md border border-rule bg-surface px-2.5 py-1.5 text-xs text-ink
+ outline-none focus:border-brand-ink focus:ring-1 focus:ring-brand-tint transition-colors
  appearance-none cursor-pointer"
               aria-label="Lead List"
             >
@@ -422,7 +422,7 @@ export default function InsuranceLeadsPage() {
             {filters.listId && (
               <button
                 onClick={handleDeleteList}
-                className="p-1.5 text-red-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                className="p-1.5 text-dropped-ink hover:opacity-80 hover:bg-dropped-tint rounded transition-colors"
                 title="Delete Selected Lead List"
               >
                 <Trash2 className="h-4 w-4" />
@@ -435,7 +435,7 @@ export default function InsuranceLeadsPage() {
             <button
               onClick={handleClearFilters}
               className="flex items-center gap-1 rounded-md px-2 py-1.5 text-[10px] font-medium uppercase tracking-wider
- text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+ text-ink-3 hover:bg-sunken hover:text-ink transition-colors"
             >
               <X className="h-3 w-3" />
               Clear ({activeFilterCount})
@@ -460,21 +460,21 @@ export default function InsuranceLeadsPage() {
             <button
               onClick={() => setPage(p => Math.max(1, p - 1))}
               disabled={page <= 1}
-              className="rounded-md border border-border bg-card px-3 py-1 text-xs text-foreground
- hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="rounded-md border border-rule bg-surface px-3 py-1 text-xs text-ink
+ hover:bg-sunken disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               Prev
             </button>
             <button
               onClick={() => setPage(p => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages}
-              className="rounded-md border border-border bg-card px-3 py-1 text-xs text-foreground
- hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="rounded-md border border-rule bg-surface px-3 py-1 text-xs text-ink
+ hover:bg-sunken disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               Next
             </button>
           </div>
-          <div className="text-xs text-muted-foreground">
+          <div className="text-xs text-ink-3">
             Page {page} of {totalPages} · {totalLeads.toLocaleString()} leads
           </div>
         </div>

@@ -15,9 +15,10 @@ import type { Config } from 'tailwindcss';
  * conversion. Do not reach for them in new code.
  */
 const config: Config = {
-  // Retained so <html class="dark"> keeps working until prompt 3 removes it.
-  // New dark scoping is [data-theme='dark'], applied per subtree.
-  darkMode: ['class'],
+  // Dark is a per-subtree opt-in, never the document: `dark:` variants follow
+  // the same [data-theme='dark'] attribute the tokens do, so the admin live
+  // board is the only place either applies.
+  darkMode: ['selector', "[data-theme='dark']"],
   content: [
     './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
@@ -101,6 +102,19 @@ const config: Config = {
           DEFAULT: 'var(--money)',
           tint: 'var(--money-tint)',
           ink: 'var(--money-ink)',
+        },
+
+        /*
+         * The NetEnroll accent. `brand` is a fill (pair it with `text-ink`);
+         * `brand-ink` is the only brand green that may be used for text;
+         * `brand-tint` is the ground for an active or selected item.
+         */
+        brand: {
+          DEFAULT: 'var(--brand)',
+          tint: 'var(--brand-tint)',
+          ink: 'var(--brand-ink)',
+          // Text on a brand fill: `bg-brand text-brand-fg`, in either theme.
+          fg: 'var(--brand-fg)',
         },
 
         /* ------------- shadcn aliases — compatibility only ------------- */

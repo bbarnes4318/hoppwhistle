@@ -3,10 +3,11 @@
 import { Delete, Phone } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { usePhone } from './phone-provider';
 
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+
+import { usePhone } from './phone-provider';
 
 // ============================================================================
 // Dial Pad Component
@@ -171,7 +172,7 @@ export function DialPad({ compact = false }: { compact?: boolean }): JSX.Element
         className={cn(
           compact ? 'h-11 px-3 rounded-lg' : 'h-16 px-4 rounded-xl',
           'flex items-center justify-between',
-          'bg-white/5 border border-white/10'
+          'bg-sunken border border-rule'
         )}
       >
         <input
@@ -180,14 +181,14 @@ export function DialPad({ compact = false }: { compact?: boolean }): JSX.Element
           onChange={e => updatePhoneNumber(e.target.value.replace(/[^0-9+*#()-\s]/g, ''))}
           placeholder="Enter number..."
           className={cn(
-            'flex-1 bg-transparent font-mono text-white outline-none',
-            compact ? 'text-lg placeholder:text-gray-700' : 'text-2xl placeholder:text-gray-600'
+            'flex-1 bg-transparent font-mono text-ink outline-none',
+            compact ? 'text-lg placeholder:text-ink-3' : 'text-2xl placeholder:text-ink-3'
           )}
         />
         {phoneNumber && (
           <button
             onClick={handleBackspace}
-            className="p-1.5 text-gray-400 hover:text-white transition-colors"
+            className="p-1.5 text-ink-3 hover:text-ink transition-colors"
           >
             <Delete className="w-4 h-4" />
           </button>
@@ -196,7 +197,7 @@ export function DialPad({ compact = false }: { compact?: boolean }): JSX.Element
 
       {/* Formatted Display */}
       {phoneNumber && (
-        <p className="text-center text-gray-400 text-xs">{formatPhoneNumber(phoneNumber)}</p>
+        <p className="text-center text-ink-3 text-xs">{formatPhoneNumber(phoneNumber)}</p>
       )}
 
       {/* Keypad */}
@@ -208,15 +209,17 @@ export function DialPad({ compact = false }: { compact?: boolean }): JSX.Element
             className={cn(
               compact ? 'h-10 rounded-lg' : 'h-16 rounded-xl',
               'flex flex-col items-center justify-center',
-              'bg-white/5 hover:bg-white/10 active:bg-cyan-500/20',
-              'border border-transparent hover:border-white/10',
+              'bg-sunken hover:bg-rule active:bg-brand-tint',
+              'border border-transparent hover:border-rule',
               'transition-all duration-150 ease-out',
               'active:scale-95'
             )}
           >
-            <span className={cn('text-white font-medium', compact ? 'text-lg' : 'text-2xl')}>{digit}</span>
+            <span className={cn('text-ink font-medium', compact ? 'text-lg' : 'text-2xl')}>
+              {digit}
+            </span>
             {letters && !compact && (
-              <span className="text-[10px] text-gray-500 tracking-widest -mt-0.5">{letters}</span>
+              <span className="text-[10px] text-ink-3 tracking-widest -mt-0.5">{letters}</span>
             )}
           </button>
         ))}
@@ -229,7 +232,7 @@ export function DialPad({ compact = false }: { compact?: boolean }): JSX.Element
         className={cn(
           'w-full font-medium transition-all duration-200 flex items-center justify-center gap-2',
           compact ? 'h-11 rounded-lg text-sm' : 'h-14 rounded-xl text-lg',
-          'bg-primary',
+          'bg-brand text-brand-fg hover:bg-brand-ink hover:text-surface',
           'disabled:opacity-50 disabled:cursor-not-allowed shadow-lg'
         )}
       >

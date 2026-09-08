@@ -20,9 +20,9 @@ import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 import { CommandPalette, useCommandPalette } from './command-palette';
+import { MobileNav } from './mobile-nav';
 import { pageTitleFor } from './page-title';
 
-import { MobileNav } from './mobile-nav';
 
 /**
  * Topbar: page title in the display face, the command palette trigger,
@@ -39,6 +39,13 @@ export function Topbar() {
   const { open, setOpen } = useCommandPalette();
 
   const title = pageTitleFor(pathname);
+
+  // The tab is named after the page, then the product, so a floor with six
+  // NetEnroll tabs open can tell them apart. Set here because every page under
+  // the dashboard is a client component and none carries its own metadata.
+  React.useEffect(() => {
+    document.title = title ? `${title} · NetEnroll` : 'NetEnroll';
+  }, [title]);
 
   // macOS shows ⌘K, everything else Ctrl K. Read after mount so the server and
   // the client render the same thing.

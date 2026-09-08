@@ -3,7 +3,6 @@
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
-import { ThemeScope } from '@/components/domain/theme-scope';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { LiveStripMount } from '@/components/layout/live-strip-mount';
 import { Sidebar } from '@/components/layout/sidebar';
@@ -26,7 +25,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     isAgentOnly,
     loading: authLoading,
   } = useAuth();
-
 
   /*
    * NetEnroll staff, and the agency they are inside.
@@ -56,7 +54,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
    */
   const canTakeCalls =
     !authLoading && !platform.loading && userRoles.includes('AGENT') && !platform.needsAgency;
-
 
   useEffect(() => {
     if (authLoading) return;
@@ -178,7 +175,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       // Same gate. The call centre is where an agent works, but a platform
       // operator can open the page too, and they should not start a phone.
       <PhoneProvider enabled={canTakeCalls}>
-        <div className="h-screen w-screen overflow-hidden bg-background text-foreground">
+        <div className="h-screen w-screen overflow-hidden bg-paper text-ink">
           {/*
             The cross-agency prompt applies here too.
 
@@ -204,33 +201,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // Standard dashboard layout with proper scrolling
   return (
     <PhoneProvider enabled={canTakeCalls}>
-      <div className="flex h-screen overflow-hidden bg-background text-foreground">
+      <div className="flex h-screen overflow-hidden bg-paper text-ink">
         {/*
-   THE SHELL IS LIGHT; PAGE BODIES ARE NOT, YET.
-
-   The brief makes light the default, but 22 routes under this layout still
-   hardcode dark utilities (text-white, bg-slate-900, border-white/10) — 138
-   occurrences in /calls alone. Flipping <html class="dark"> off now would
-   render half the app unreadable, and this task converts the layout only.
-
-   So the new chrome opts into light through the same data-theme scope the
-   admin live board will use for dark, and everything inside <main> keeps
-   inheriting the document's dark tokens until its page is rebuilt. Prompts
-   4-6 wrap each converted page in <ThemeScope theme="light">; once none are
-   left, the class comes off <html> and both scopes are deleted.
- */}
+          The whole document is light, so the shell needs no theme scope of its
+          own: the sidebar, the topbar and every page under <main> read the
+          same :root tokens. The one dark screen — the admin live board — wraps
+          itself in <ThemeScope theme="dark"> when it is built, and nothing
+          outside that subtree is affected.
+        */}
         {/* The rail is 208px wide and does not shrink, so below md it is
             replaced by MobileNav's drawer in the topbar. */}
-        <ThemeScope theme="light" className="hidden h-full shrink-0 bg-transparent md:flex">
+        <div className="hidden h-full shrink-0 md:flex">
           <Sidebar />
-        </ThemeScope>
+        </div>
         <div className="flex flex-1 flex-col h-screen overflow-hidden">
-          <ThemeScope theme="light" className="shrink-0 bg-transparent">
+          <div className="shrink-0">
             <Topbar />
             {/* Signature 2 — below the topbar, above the page, on every screen. */}
             <LiveStripMount />
-          </ThemeScope>
-          <main className="flex-1 bg-background flex flex-col min-h-0 overflow-y-auto">
+          </div>
+          <main className="flex-1 bg-paper flex flex-col min-h-0 overflow-y-auto">
             {/*
               A page that throws loses the page, not the shell. Before this, an
               uncaught render error anywhere under the layout unmounted the

@@ -1,8 +1,9 @@
 'use client';
 
 import React from 'react';
-import { cn } from '@/lib/utils';
+
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 
 // ============================================================================
 // Layout Helpers for Denser, Viewport-Aligned SaaS Console UI
@@ -26,7 +27,7 @@ export function CompactPageShell({
   return (
     <div
       className={cn(
-        'w-full p-3 md:p-4 gap-3 bg-background text-foreground flex flex-col min-h-0',
+        'w-full p-4 md:p-5 gap-4 bg-paper text-ink flex flex-col min-h-0',
         fullHeight ? 'h-full overflow-hidden' : 'h-auto overflow-y-auto',
         className
       )}
@@ -54,18 +55,18 @@ export function CompactPageHeader({
   children,
 }: CompactPageHeaderProps) {
   return (
-    <div className="flex flex-row items-center justify-between border-b border-border/40 pb-2.5 flex-shrink-0">
+    <div className="flex flex-row items-center justify-between border-b border-rule pb-3 flex-shrink-0">
       <div className="flex items-center gap-2.5">
         {Icon && (
-          <div className="w-8 h-8 rounded border border-border bg-card flex items-center justify-center flex-shrink-0">
+          <div className="w-8 h-8 rounded-control border border-rule bg-surface flex items-center justify-center flex-shrink-0">
             <Icon className="w-4 h-4 text-muted-foreground" />
           </div>
         )}
         <div>
-          <h1 className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+          <h1 className="t-title flex items-center gap-2 text-ink">
             {title}
           </h1>
-          {subtitle && <p className="text-[11px] text-muted-foreground mt-0.5 leading-none">{subtitle}</p>}
+          {subtitle && <p className="t-meta mt-0.5 text-ink-3">{subtitle}</p>}
         </div>
       </div>
       {children && <div className="flex items-center gap-2">{children}</div>}
@@ -93,13 +94,13 @@ export function DenseCard({
   return (
     <Card
       className={cn(
-        'bg-card border-border/40 shadow-sm flex flex-col min-h-0 overflow-hidden',
+        'bg-surface border-rule shadow-none flex flex-col min-h-0 overflow-hidden',
         className
       )}
       {...props}
     >
       {(title || Icon || headerActions) && (
-        <CardHeader className="p-3 pb-2 flex flex-row items-center justify-between border-b border-border/10 space-y-0 flex-shrink-0">
+        <CardHeader className="p-3 pb-2 flex flex-row items-center justify-between border-b border-rule space-y-0 flex-shrink-0">
           <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
             {Icon && <Icon className="w-3.5 h-3.5" />}
             {title}
@@ -136,7 +137,7 @@ export function DataPanel({ children, className, ...props }: React.HTMLAttribute
   return (
     <div
       className={cn(
-        'flex-1 min-h-0 overflow-auto border border-border/30 bg-card/20 rounded-lg p-2.5',
+        'flex-1 min-h-0 overflow-auto border border-rule bg-surface rounded-card p-2.5',
         className
       )}
       {...props}

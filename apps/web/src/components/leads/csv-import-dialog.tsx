@@ -13,10 +13,11 @@ import {
 } from 'lucide-react';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 
+import { apiClient, type ApiResponse } from '@/lib/api';
+
 import { BUYER_FIELD, BUYER_TEMPLATE_KEYS } from './buyer-fields';
 import { parseCSV } from './parse-csv';
 
-import { apiClient, type ApiResponse } from '@/lib/api';
 
 interface CsvImportDialogProps {
   onClose: () => void;
@@ -964,65 +965,65 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
-      <div className="relative flex h-[85vh] w-full max-w-4xl flex-col rounded-xl border border-white/10 bg-slate-900/90 text-slate-100 shadow-2xl backdrop-blur-md overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+      <div className="relative flex h-[85vh] w-full max-w-4xl flex-col rounded-card border border-rule bg-surface text-ink shadow-2xl backdrop-blur-md overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-white/5 bg-slate-950/40 px-6 py-4">
+        <div className="flex items-center justify-between border-b border-rule bg-sunken px-6 py-4">
           <div className="flex items-center gap-2">
-            <div className="rounded-lg bg-emerald-500/10 p-2 border border-emerald-500/20 text-emerald-400">
+            <div className="rounded-lg bg-brand-tint p-2 text-brand-ink">
               <Upload className="h-5 w-5" />
             </div>
             <div>
               <h2 className="text-base font-semibold">Import CRM Prospects</h2>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-ink-2">
                 Upload, map columns, and ingest prospects in bulk
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="rounded-md p-1.5 hover:bg-white/5 text-slate-400 hover:text-slate-200 transition-colors"
+            className="rounded-md p-1.5 hover:bg-sunken text-ink-3 hover:text-ink transition-colors"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
         {/* Steps Bar */}
-        <div className="flex items-center justify-between border-b border-white/5 bg-slate-950/20 px-8 py-3 text-xs font-medium text-slate-500">
+        <div className="flex items-center justify-between border-b border-rule bg-sunken px-8 py-3 text-xs font-medium text-ink-3">
           <div className="flex items-center gap-1.5">
             <span
-              className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${step >= 1 ? 'bg-emerald-500/25 text-emerald-400 border border-emerald-500/40' : 'bg-slate-800 text-slate-500 border border-slate-700'}`}
+              className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${step >= 1 ? 'bg-brand-tint text-brand-ink border border-brand' : 'bg-sunken text-ink-3 border border-rule'}`}
             >
               1
             </span>
-            <span className={step >= 1 ? 'text-slate-300' : ''}>Setup</span>
+            <span className={step >= 1 ? 'text-ink-2' : ''}>Setup</span>
           </div>
-          <div className="h-px w-12 bg-white/5" />
+          <div className="h-px w-12 bg-rule" />
           <div className="flex items-center gap-1.5">
             <span
-              className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${step >= 2 ? 'bg-emerald-500/25 text-emerald-400 border border-emerald-500/40' : 'bg-slate-800 text-slate-500 border border-slate-700'}`}
+              className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${step >= 2 ? 'bg-brand-tint text-brand-ink border border-brand' : 'bg-sunken text-ink-3 border border-rule'}`}
             >
               2
             </span>
-            <span className={step >= 2 ? 'text-slate-300' : ''}>Column Mapping</span>
+            <span className={step >= 2 ? 'text-ink-2' : ''}>Column Mapping</span>
           </div>
-          <div className="h-px w-12 bg-white/5" />
+          <div className="h-px w-12 bg-rule" />
           <div className="flex items-center gap-1.5">
             <span
-              className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${step >= 3 ? 'bg-emerald-500/25 text-emerald-400 border border-emerald-500/40' : 'bg-slate-800 text-slate-500 border border-slate-700'}`}
+              className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${step >= 3 ? 'bg-brand-tint text-brand-ink border border-brand' : 'bg-sunken text-ink-3 border border-rule'}`}
             >
               3
             </span>
-            <span className={step >= 3 ? 'text-slate-300' : ''}>Preview</span>
+            <span className={step >= 3 ? 'text-ink-2' : ''}>Preview</span>
           </div>
-          <div className="h-px w-12 bg-white/5" />
+          <div className="h-px w-12 bg-rule" />
           <div className="flex items-center gap-1.5">
             <span
-              className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${step >= 4 ? 'bg-emerald-500/25 text-emerald-400 border border-emerald-500/40' : 'bg-slate-800 text-slate-500 border border-slate-700'}`}
+              className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${step >= 4 ? 'bg-brand-tint text-brand-ink border border-brand' : 'bg-sunken text-ink-3 border border-rule'}`}
             >
               4
             </span>
-            <span className={step >= 4 ? 'text-slate-300' : ''}>Results</span>
+            <span className={step >= 4 ? 'text-ink-2' : ''}>Results</span>
           </div>
         </div>
 
@@ -1033,7 +1034,7 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
             <div className="space-y-6 max-w-xl mx-auto py-8">
               {/* Vertical Select */}
               <div className="space-y-2">
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-ink-3">
                   Target Vertical
                 </label>
                 <div className="grid grid-cols-3 gap-4">
@@ -1057,24 +1058,24 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
                     <button
                       key={opt.value}
                       onClick={() => setVertical(opt.value as any)}
-                      className={`flex flex-col items-start rounded-lg border p-4 text-left transition-all ${vertical === opt.value ? 'bg-emerald-500/10 border-emerald-500 text-slate-100' : 'bg-slate-900/50 border-white/5 text-slate-400 hover:border-white/10'}`}
+                      className={`flex flex-col items-start rounded-lg border p-4 text-left transition-all ${vertical === opt.value ? 'bg-brand-tint border-brand text-ink' : 'bg-surface border-rule text-ink-3 hover:border-rule-strong'}`}
                     >
                       <span className="font-semibold text-sm">{opt.label}</span>
-                      <span className="text-[11px] text-muted-foreground mt-0.5">{opt.desc}</span>
+                      <span className="text-[11px] text-ink-2 mt-0.5">{opt.desc}</span>
                     </button>
                   ))}
                 </div>
               </div>
 
               {/* Template Download Option */}
-              <div className="flex items-center justify-between rounded-lg border border-white/5 bg-slate-950/20 p-4">
+              <div className="flex items-center justify-between rounded-lg border border-rule bg-sunken p-4">
                 <div className="flex items-start gap-3">
-                  <FileText className="h-5 w-5 text-emerald-400 mt-0.5" />
+                  <FileText className="h-5 w-5 text-brand-ink mt-0.5" />
                   <div>
                     <h3 className="text-sm font-medium">
                       {vertical === 'B2B' ? 'Download Import Template' : 'Download Buyer Template'}
                     </h3>
-                    <p className="text-xs text-muted-foreground mt-0.5">
+                    <p className="text-xs text-ink-2 mt-0.5">
                       {vertical === 'B2B'
                         ? 'Pre-formatted CSV template for B2B prospects'
                         : `Columns are Ameriquote's ${vertical} (TYPE=${vertical === 'FE' ? '19' : '31'}) field names — send this to your lead vendor`}
@@ -1083,7 +1084,7 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
                 </div>
                 <button
                   onClick={downloadTemplate}
-                  className="flex items-center gap-1.5 rounded-md border border-white/10 bg-slate-900 px-3 py-1.5 text-xs hover:bg-slate-800 transition-colors"
+                  className="flex items-center gap-1.5 rounded-md border border-rule bg-surface px-3 py-1.5 text-xs hover:bg-sunken transition-colors"
                 >
                   <Download className="h-3.5 w-3.5" />
                   Download CSV
@@ -1091,15 +1092,15 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
               </div>
 
               {/* Lead List Selection */}
-              <div className="space-y-3 rounded-lg border border-white/5 bg-slate-950/20 p-4">
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">
+              <div className="space-y-3 rounded-lg border border-rule bg-sunken p-4">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-ink-3">
                   Target Lead List
                 </label>
                 <div className="flex gap-4">
                   <button
                     type="button"
                     onClick={() => setIsCreateNewList(true)}
-                    className={`flex-1 py-1.5 px-3 rounded border text-xs font-mono transition-colors ${isCreateNewList ? 'bg-emerald-500/10 border-emerald-500 text-slate-100' : 'bg-slate-900 border-white/5 text-slate-400'}`}
+                    className={`flex-1 py-1.5 px-3 rounded border text-xs font-mono transition-colors ${isCreateNewList ? 'bg-brand-tint border-brand text-ink' : 'bg-surface border-rule text-ink-3'}`}
                   >
                     + CREATE NEW LIST
                   </button>
@@ -1107,7 +1108,7 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
                     <button
                       type="button"
                       onClick={() => setIsCreateNewList(false)}
-                      className={`flex-1 py-1.5 px-3 rounded border text-xs font-mono transition-colors ${!isCreateNewList ? 'bg-emerald-500/10 border-emerald-500 text-slate-100' : 'bg-slate-900 border-white/5 text-slate-400'}`}
+                      className={`flex-1 py-1.5 px-3 rounded border text-xs font-mono transition-colors ${!isCreateNewList ? 'bg-brand-tint border-brand text-ink' : 'bg-surface border-rule text-ink-3'}`}
                     >
                       SELECT EXISTING LIST
                     </button>
@@ -1121,7 +1122,7 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
                       placeholder="e.g. June 2026 Outbound Leads"
                       value={newListName}
                       onChange={e => setNewListName(e.target.value)}
-                      className="w-full bg-slate-950 border border-white/10 rounded px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-primary"
+                      className="w-full bg-surface border border-rule rounded px-3 py-2 text-sm text-ink placeholder:text-ink-3 focus:outline-none focus:border-brand-ink"
                     />
                   </div>
                 ) : (
@@ -1129,7 +1130,7 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
                     <select
                       value={selectedListId}
                       onChange={e => setSelectedListId(e.target.value)}
-                      className="w-full bg-slate-950 border border-white/10 rounded px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-primary cursor-pointer"
+                      className="w-full bg-surface border border-rule rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-brand-ink cursor-pointer"
                     >
                       {leadLists.map((list: any) => (
                         <option key={list.id} value={list.id}>
@@ -1143,7 +1144,7 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
 
               {/* File Dropzone */}
               <div className="space-y-2">
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-ink-3">
                   Upload Prospect File
                 </label>
                 <div
@@ -1156,15 +1157,15 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
                     }
                     fileInputRef.current?.click();
                   }}
-                  className="flex flex-col items-center justify-center border-2 border-dashed border-white/10 bg-slate-950/20 rounded-xl py-12 px-6 cursor-pointer hover:border-emerald-500/30 hover:bg-slate-950/40 transition-all"
+                  className="flex flex-col items-center justify-center border-2 border-dashed border-rule bg-sunken rounded-card py-12 px-6 cursor-pointer hover:border-brand hover:bg-sunken transition-all"
                 >
-                  <div className="rounded-full bg-slate-900 p-3 border border-white/5 mb-3">
-                    <Upload className="h-6 w-6 text-slate-400" />
+                  <div className="rounded-full bg-surface p-3 border border-rule mb-3">
+                    <Upload className="h-6 w-6 text-ink-3" />
                   </div>
-                  <span className="text-sm font-medium text-slate-300">
+                  <span className="text-sm font-medium text-ink-2">
                     Drag and drop your CSV file here
                   </span>
-                  <span className="text-xs text-muted-foreground mt-1">
+                  <span className="text-xs text-ink-2 mt-1">
                     or click to browse from your computer
                   </span>
                   <input
@@ -1182,17 +1183,17 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
           {/* STEP 2: COLUMN MAPPING */}
           {step === 2 && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between border-b border-white/5 pb-3">
+              <div className="flex items-center justify-between border-b border-rule pb-3">
                 <div>
-                  <span className="text-xs font-medium text-slate-400">Map your CSV columns</span>
+                  <span className="text-xs font-medium text-ink-3">Map your CSV columns</span>
                   {vertical !== 'B2B' && (
-                    <span className="mt-0.5 block text-[10px] text-slate-500">
+                    <span className="mt-0.5 block text-[10px] text-ink-3">
                       The first {buyerFieldCount} are posted to the buyer — the blue tag is the
                       field name they receive. Fields below those are stored in the CRM only.
                     </span>
                   )}
                 </div>
-                <span className="text-[11px] bg-slate-900 border border-white/5 text-slate-400 px-2 py-0.5 rounded">
+                <span className="text-[11px] bg-surface border border-rule text-ink-3 px-2 py-0.5 rounded">
                   File: {fileName} · Rows: {parsedRows.length}
                 </span>
               </div>
@@ -1204,29 +1205,27 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
                   return (
                     <div
                       key={field.key}
-                      className={`flex flex-col justify-between p-3 rounded-lg border transition-colors ${isMapped ? 'bg-slate-900/60 border-emerald-500/20' : 'bg-slate-900/30 border-white/5'}`}
+                      className={`flex flex-col justify-between p-3 rounded-lg border transition-colors ${isMapped ? 'bg-sunken border-brand/40' : 'bg-surface border-rule'}`}
                     >
                       <div className="flex items-start justify-between">
                         <div>
                           <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-semibold text-slate-200">
-                              {field.label}
-                            </span>
+                            <span className="text-xs font-semibold text-ink">{field.label}</span>
                             {field.required && (
-                              <span className="text-[9px] font-bold text-red-400 uppercase tracking-widest border border-red-500/20 bg-red-500/10 px-1 rounded">
+                              <span className="text-[9px] font-bold text-dropped-ink uppercase tracking-widest bg-dropped-tint px-1 rounded">
                                 Required
                               </span>
                             )}
                             {BUYER_FIELD[field.key] && (
                               <span
-                                className="text-[9px] font-mono text-sky-300/80 border border-sky-500/20 bg-sky-500/10 px-1 rounded"
+                                className="text-[9px] font-mono text-money-ink bg-money-tint px-1 rounded"
                                 title="Field name the buyer receives"
                               >
                                 → {BUYER_FIELD[field.key]}
                               </span>
                             )}
                           </div>
-                          <span className="text-[10px] text-slate-500 block mt-0.5">
+                          <span className="text-[10px] text-ink-3 block mt-0.5">
                             {field.description}
                           </span>
                         </div>
@@ -1236,7 +1235,7 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
                         <select
                           value={mappedIdx ?? ''}
                           onChange={e => handleMapField(field.key, e.target.value)}
-                          className="w-full rounded-md border border-white/10 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-emerald-500/50"
+                          className="w-full rounded-md border border-rule bg-surface px-2.5 py-1.5 text-xs text-ink outline-none focus:border-brand-ink"
                         >
                           <option value="">-- Do Not Map --</option>
                           {headers.map((hdr, idx) => (
@@ -1256,22 +1255,22 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
           {/* STEP 3: PREVIEW */}
           {step === 3 && (
             <div className="space-y-4">
-              <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/15 p-4 text-xs text-emerald-400 flex items-start gap-2.5">
+              <div className="rounded-lg bg-brand-tint p-4 text-xs text-brand-ink flex items-start gap-2.5">
                 <AlertCircle className="h-4.5 w-4.5 mt-0.5 shrink-0" />
                 <div>
                   <p className="font-semibold">Review your column mapping preview</p>
-                  <p className="text-slate-400 mt-0.5">
+                  <p className="text-ink-2 mt-0.5">
                     Please check the mapped preview of the first 3 rows. If it looks correct, click
                     Import prospects to start bulk ingestion.
                   </p>
                 </div>
               </div>
 
-              <div className="rounded-lg border border-white/5 bg-slate-950/20 overflow-hidden">
+              <div className="rounded-lg border border-rule bg-sunken overflow-hidden">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-[11px] text-slate-300">
+                  <table className="w-full text-[11px] text-ink-2">
                     <thead>
-                      <tr className="border-b border-white/5 bg-slate-900/60 font-semibold uppercase text-slate-500">
+                      <tr className="border-b border-rule bg-sunken font-semibold uppercase text-ink-3">
                         <th className="px-4 py-2.5 text-left">Record</th>
                         {previewFields.map(f => (
                           <th key={f.key} className="px-4 py-2.5 text-left">
@@ -1280,10 +1279,10 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
                         ))}
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/5">
+                    <tbody className="divide-y divide-rule">
                       {parsedRows.slice(0, 3).map((row, idx) => (
-                        <tr key={idx} className="hover:bg-white/[0.01]">
-                          <td className="px-4 py-3 whitespace-nowrap font-medium text-slate-500">
+                        <tr key={idx} className="hover:bg-sunken">
+                          <td className="px-4 py-3 whitespace-nowrap font-medium text-ink-3">
                             Row {idx + 2}
                           </td>
                           {previewFields.map(f => (
@@ -1304,29 +1303,27 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
           {step === 4 && importResult && (
             <div className="space-y-6 max-w-xl mx-auto py-4">
               {/* Summary card */}
-              <div className="rounded-xl border border-white/5 bg-slate-950/40 p-6 flex flex-col items-center text-center">
-                <div className="rounded-full bg-emerald-500/10 p-4 border border-emerald-500/20 text-emerald-400 mb-4 animate-bounce">
+              <div className="rounded-card border border-rule bg-sunken p-6 flex flex-col items-center text-center">
+                <div className="rounded-full bg-live-tint p-4 text-live-ink mb-4 animate-bounce">
                   <CheckCircle2 className="h-8 w-8" />
                 </div>
-                <h3 className="text-base font-semibold text-slate-200">Import Complete</h3>
-                <p className="text-xs text-muted-foreground mt-1">
+                <h3 className="text-base font-semibold text-ink">Import Complete</h3>
+                <p className="text-xs text-ink-2 mt-1">
                   Processed {importResult.total} prospect rows in this batch
                 </p>
 
-                <div className="grid grid-cols-2 gap-8 w-full max-w-xs mt-6 border-t border-white/5 pt-6">
+                <div className="grid grid-cols-2 gap-8 w-full max-w-xs mt-6 border-t border-rule pt-6">
                   <div>
-                    <span className="text-2xl font-bold text-emerald-400">
+                    <span className="text-2xl font-bold text-live-ink">
                       {importResult.successCount}
                     </span>
-                    <span className="block text-[10px] font-semibold text-slate-500 uppercase mt-0.5">
+                    <span className="block text-[10px] font-semibold text-ink-3 uppercase mt-0.5">
                       Valid Ingested
                     </span>
                   </div>
                   <div>
-                    <span className="text-2xl font-bold text-slate-400">
-                      {importResult.failCount}
-                    </span>
-                    <span className="block text-[10px] font-semibold text-slate-500 uppercase mt-0.5">
+                    <span className="text-2xl font-bold text-ink-3">{importResult.failCount}</span>
+                    <span className="block text-[10px] font-semibold text-ink-3 uppercase mt-0.5">
                       Invalid (Needs Edit)
                     </span>
                   </div>
@@ -1336,22 +1333,20 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
               {/* Errors log if failCount > 0 */}
               {importResult.failCount > 0 && (
                 <div className="space-y-2">
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                    <AlertCircle className="h-4 w-4 text-amber-500" />
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-ink-3 uppercase tracking-wider">
+                    <AlertCircle className="h-4 w-4 text-ringing-ink" />
                     <span>Validation Warnings ({importResult.failCount})</span>
                   </div>
-                  <div className="rounded-lg border border-white/5 bg-slate-950/30 p-1 divide-y divide-white/5 max-h-40 overflow-y-auto">
+                  <div className="rounded-lg border border-rule bg-sunken p-1 divide-y divide-rule max-h-40 overflow-y-auto">
                     {importResult.details
                       .filter(d => !d.success)
                       .map((det, idx) => (
                         <div key={idx} className="p-2.5 text-xs">
                           <div className="flex items-center justify-between font-medium">
-                            <span className="text-slate-300">{det.name || 'Unnamed Prospect'}</span>
-                            <span className="text-[10px] text-slate-500 font-mono">
-                              {det.phone}
-                            </span>
+                            <span className="text-ink-2">{det.name || 'Unnamed Prospect'}</span>
+                            <span className="text-[10px] text-ink-3 font-mono">{det.phone}</span>
                           </div>
-                          <ul className="mt-1 list-disc pl-4 text-[10px] text-red-400 space-y-0.5">
+                          <ul className="mt-1 list-disc pl-4 text-[10px] text-dropped-ink space-y-0.5">
                             {det.errors?.map((err, eIdx) => (
                               <li key={eIdx}>
                                 {err.path ? `"${err.path}": ` : ''}
@@ -1373,12 +1368,12 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
         </div>
 
         {/* Footer Actions */}
-        <div className="flex items-center justify-between border-t border-white/5 bg-slate-950/40 px-6 py-4">
+        <div className="flex items-center justify-between border-t border-rule bg-sunken px-6 py-4">
           <div>
             {step === 2 && (
               <button
                 onClick={() => setStep(1)}
-                className="rounded-md border border-white/10 bg-slate-900 px-4 py-2 text-xs font-medium text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors"
+                className="rounded-md border border-rule bg-surface px-4 py-2 text-xs font-medium text-ink-3 hover:bg-sunken hover:text-ink transition-colors"
               >
                 Back to Setup
               </button>
@@ -1386,7 +1381,7 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
             {step === 3 && (
               <button
                 onClick={() => setStep(2)}
-                className="rounded-md border border-white/10 bg-slate-900 px-4 py-2 text-xs font-medium text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors"
+                className="rounded-md border border-rule bg-surface px-4 py-2 text-xs font-medium text-ink-3 hover:bg-sunken hover:text-ink transition-colors"
               >
                 Back to Mapping
               </button>
@@ -1398,7 +1393,7 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
               <button
                 disabled={!fileName}
                 onClick={() => setStep(2)}
-                className="flex items-center gap-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 px-5 py-2 text-xs font-medium text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="flex items-center gap-1.5 rounded-md bg-brand hover:bg-brand-ink px-5 py-2 text-xs font-medium text-ink disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 Continue to Mapping
                 <ArrowRight className="h-3.5 w-3.5" />
@@ -1407,7 +1402,7 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
             {step === 2 && (
               <button
                 onClick={proceedToPreview}
-                className="flex items-center gap-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 px-5 py-2 text-xs font-medium text-white transition-colors"
+                className="flex items-center gap-1.5 rounded-md bg-brand hover:bg-brand-ink px-5 py-2 text-xs font-medium text-ink transition-colors"
               >
                 Continue to Preview
                 <ArrowRight className="h-3.5 w-3.5" />
@@ -1417,7 +1412,7 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
               <button
                 disabled={importing}
                 onClick={() => void runImport()}
-                className="flex items-center gap-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 px-5 py-2 text-xs font-medium text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="flex items-center gap-1.5 rounded-md bg-brand hover:bg-brand-ink px-5 py-2 text-xs font-medium text-ink disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {importing ? (
                   <>
@@ -1440,7 +1435,7 @@ export function CsvImportDialog({ onClose, onSuccess }: CsvImportDialogProps) {
                   onSuccess();
                   onClose();
                 }}
-                className="rounded-md bg-emerald-600 hover:bg-emerald-700 px-5 py-2 text-xs font-medium text-white transition-colors"
+                className="rounded-md bg-brand hover:bg-brand-ink px-5 py-2 text-xs font-medium text-ink transition-colors"
               >
                 Finish & Close
               </button>
@@ -1505,9 +1500,9 @@ const FAILURE_LABELS: Record<SendFailureReason['outcome'], string> = {
 };
 
 const FAILURE_STYLES: Record<SendFailureReason['outcome'], string> = {
-  ERROR: 'border-red-500/30 bg-red-500/10 text-red-400',
-  UNMATCHED: 'border-slate-500/30 bg-slate-500/10 text-slate-400',
-  NOT_READY: 'border-amber-500/30 bg-amber-500/10 text-amber-400',
+  ERROR: 'border-dropped/40 bg-dropped-tint text-dropped-ink',
+  UNMATCHED: 'border-rule bg-sunken text-ink-2',
+  NOT_READY: 'border-ringing/40 bg-ringing-tint text-ringing-ink',
 };
 
 /**
@@ -1660,9 +1655,9 @@ function BuyerDeliveryPanel({
   // "already sent" and is how the previous silent fallback went unnoticed.
   if (!submissionIds.length) {
     return (
-      <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-200">
+      <div className="rounded-xl bg-ringing-tint p-4 text-xs text-ringing-ink">
         <p className="font-semibold">Nothing to send from this import.</p>
-        <p className="mt-1 text-amber-200/80">
+        <p className="mt-1 text-ringing-ink">
           The import did not report which leads it stored, so this panel cannot tell your leads
           apart from the rest of the list and will not send anything. The leads are saved and held —
           nothing is lost. If the API container is older than the web one, rebuild it with{' '}
@@ -1674,7 +1669,7 @@ function BuyerDeliveryPanel({
 
   if (loading && !preflight) {
     return (
-      <div className="flex items-center gap-2 rounded-xl border border-white/5 bg-slate-950/40 p-4 text-xs text-slate-400">
+      <div className="flex items-center gap-2 rounded-xl border border-rule bg-sunken p-4 text-xs text-ink-3">
         <Loader2 className="h-3.5 w-3.5 animate-spin" />
         Checking what the buyer will accept...
       </div>
@@ -1684,19 +1679,19 @@ function BuyerDeliveryPanel({
   if (!preflight) return null;
 
   return (
-    <div className="space-y-3 rounded-xl border border-white/5 bg-slate-950/40 p-5">
+    <div className="space-y-3 rounded-xl border border-rule bg-sunken p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-slate-200">Send to buyer</h3>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">
+          <h3 className="text-sm font-semibold text-ink">Send to buyer</h3>
+          <p className="mt-0.5 text-[11px] text-ink-2">
             Imported leads are held until you send them. Nothing was posted yet.
           </p>
         </div>
         <span
           className={`shrink-0 rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
             preflight.mode === 'LIVE'
-              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
-              : 'border-amber-500/30 bg-amber-500/10 text-amber-400'
+              ? 'border-live/40 bg-live-tint text-live-ink'
+              : 'border-ringing/40 bg-ringing-tint text-ringing-ink'
           }`}
         >
           {preflight.mode} mode
@@ -1704,7 +1699,7 @@ function BuyerDeliveryPanel({
       </div>
 
       {preflight.configError && (
-        <div className="rounded-md border border-red-500/30 bg-red-500/10 p-2.5 text-[11px] text-red-300">
+        <div className="rounded-md bg-dropped-tint p-2.5 text-[11px] text-dropped-ink">
           <span className="font-semibold">Delivery is not configured. </span>
           {preflight.configError} Nothing will be sent, and no lead is spent while this is
           unresolved.
@@ -1712,34 +1707,34 @@ function BuyerDeliveryPanel({
       )}
 
       {preflight.mode === 'TEST' && (
-        <p className="rounded-md border border-amber-500/20 bg-amber-500/5 p-2.5 text-[11px] text-amber-300/90">
+        <p className="rounded-md bg-ringing-tint p-2.5 text-[11px] text-ringing-ink">
           Posts go out flagged <span className="font-mono">Test_Lead=1</span> and will not be
           bought. Set <span className="font-mono">INSURANCE_LEAD_MODE=LIVE</span> on the API to sell
           for real.
         </p>
       )}
 
-      <p className="text-[11px] text-slate-400">
+      <p className="text-[11px] text-ink-3">
         Only the {submissionIds.length} lead{submissionIds.length === 1 ? '' : 's'} you just
         imported. Leads already held in this list are never included.
       </p>
 
-      <div className="grid grid-cols-3 gap-3 border-y border-white/5 py-3 text-center">
+      <div className="grid grid-cols-3 gap-3 border-y border-rule py-3 text-center">
         <div>
-          <span className="text-xl font-bold text-emerald-400">{preflight.ready}</span>
-          <span className="mt-0.5 block text-[10px] font-semibold uppercase text-slate-500">
+          <span className="text-xl font-bold text-live-ink">{preflight.ready}</span>
+          <span className="mt-0.5 block text-[10px] font-semibold uppercase text-ink-3">
             Ready to send
           </span>
         </div>
         <div>
-          <span className="text-xl font-bold text-amber-400">{preflight.blocked.count}</span>
-          <span className="mt-0.5 block text-[10px] font-semibold uppercase text-slate-500">
+          <span className="text-xl font-bold text-ringing-ink">{preflight.blocked.count}</span>
+          <span className="mt-0.5 block text-[10px] font-semibold uppercase text-ink-3">
             Missing buyer fields
           </span>
         </div>
         <div>
-          <span className="text-xl font-bold text-slate-400">{preflight.alreadyMatched}</span>
-          <span className="mt-0.5 block text-[10px] font-semibold uppercase text-slate-500">
+          <span className="text-xl font-bold text-ink-3">{preflight.alreadyMatched}</span>
+          <span className="mt-0.5 block text-[10px] font-semibold uppercase text-ink-3">
             Already sold
           </span>
         </div>
@@ -1747,13 +1742,13 @@ function BuyerDeliveryPanel({
 
       {preflight.blocked.reasons.length > 0 && (
         <div className="space-y-1">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-3">
             Why leads are blocked
           </div>
-          <ul className="space-y-1 text-[11px] text-slate-400">
+          <ul className="space-y-1 text-[11px] text-ink-3">
             {preflight.blocked.reasons.map(reason => (
               <li key={reason.field} className="flex items-start gap-2">
-                <span className="shrink-0 font-mono text-amber-400">{reason.count}×</span>
+                <span className="shrink-0 font-mono text-ringing-ink">{reason.count}×</span>
                 <span>{reason.message}</span>
               </li>
             ))}
@@ -1763,13 +1758,13 @@ function BuyerDeliveryPanel({
 
       {preflight.warnings.reasons.length > 0 && (
         <div className="space-y-1">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-3">
             Sends anyway, but worth fixing
           </div>
-          <ul className="space-y-1 text-[11px] text-slate-500">
+          <ul className="space-y-1 text-[11px] text-ink-3">
             {preflight.warnings.reasons.map(reason => (
               <li key={reason.field} className="flex items-start gap-2">
-                <span className="shrink-0 font-mono text-slate-400">{reason.count}×</span>
+                <span className="shrink-0 font-mono text-ink-2">{reason.count}×</span>
                 <span>{reason.message}</span>
               </li>
             ))}
@@ -1778,7 +1773,7 @@ function BuyerDeliveryPanel({
       )}
 
       {totals && (
-        <div className="space-y-2 rounded-md border border-white/5 bg-slate-900/60 p-2.5 text-[11px] text-slate-300">
+        <div className="space-y-2 rounded-md border border-rule bg-sunken p-2.5 text-[11px] text-ink-2">
           <div>
             Sent {totals.attempted} — {totals.matched} matched, {totals.manualReview} awaiting buyer
             approval, {totals.unmatched} unmatched, {totals.errored} errored, {totals.notReady} held
@@ -1786,8 +1781,8 @@ function BuyerDeliveryPanel({
           </div>
 
           {totals.failureReasons.length > 0 && (
-            <div className="space-y-1.5 border-t border-white/5 pt-2">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+            <div className="space-y-1.5 border-t border-rule pt-2">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-3">
                 What the buyer said
               </div>
               <ul className="space-y-1.5">
@@ -1802,9 +1797,9 @@ function BuyerDeliveryPanel({
                       {reason.count}× {FAILURE_LABELS[reason.outcome]}
                     </span>
                     <span className="min-w-0">
-                      <span className="block break-words text-slate-300">{reason.message}</span>
+                      <span className="block break-words text-ink-2">{reason.message}</span>
                       {reason.examples.length > 0 && (
-                        <span className="block text-[10px] text-slate-500">
+                        <span className="block text-[10px] text-ink-3">
                           e.g.{' '}
                           {reason.examples
                             .map(example => `${example.name || 'Unnamed'} ${example.phone}`)
@@ -1821,7 +1816,7 @@ function BuyerDeliveryPanel({
       )}
 
       {sendError && (
-        <div className="rounded-md border border-red-500/20 bg-red-500/5 p-2.5 text-[11px] text-red-400">
+        <div className="rounded-md bg-dropped-tint p-2.5 text-[11px] text-dropped-ink">
           {sendError}
         </div>
       )}
@@ -1829,7 +1824,7 @@ function BuyerDeliveryPanel({
       <button
         onClick={() => void send()}
         disabled={sending || preflight.ready === 0 || Boolean(preflight.configError)}
-        className="flex w-full items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-5 py-2 text-xs font-medium text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+        className="flex w-full items-center justify-center gap-1.5 rounded-md bg-brand px-5 py-2 text-xs font-medium text-ink transition-colors hover:bg-brand-ink disabled:cursor-not-allowed disabled:opacity-40"
       >
         {sending ? (
           <>

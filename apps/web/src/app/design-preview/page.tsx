@@ -95,7 +95,8 @@ export default function DesignPreviewPage() {
             belongs here first.
           </p>
           {/* Explicit scope so the gallery's drawers and menus, which portal to
-              document.body, resolve light rather than inheriting <html class="dark">. */}
+              document.body, stamp themselves light rather than reading the
+              nearest scope, which on this page may be the dark pane. */}
           <ThemeScope theme="light" className="bg-transparent">
             <ComponentGallery />
           </ThemeScope>

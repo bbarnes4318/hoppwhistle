@@ -148,6 +148,14 @@ export function ComplianceOverrideBanner({
         strong: 'text-ringing-ink',
       };
 
+  /*
+   * Secondary text on this banner is --ink-2, not --ink-3.
+   *
+   * The banner's ground is a signal tint rather than paper, and --ink-3 is
+   * only 2.96:1 on one — it is specified against --paper. --ink-2 clears 6:1
+   * on every tint in the palette. The browser smoke test's contrast audit is
+   * what found this.
+   */
   const Icon = critical ? AlertTriangle : ShieldOff;
 
   return (
@@ -170,7 +178,7 @@ export function ComplianceOverrideBanner({
               return (
                 <li key={o.id} className={cn('t-meta flex flex-wrap items-baseline gap-x-1.5')}>
                   <span className={cn('font-medium', tone.text)}>{o.gate}</span>
-                  <span className="text-ink-3">bypassed</span>
+                  <span className="text-ink-2">bypassed</span>
                   {o.scope ? <span className={tone.text}>· {o.scope}</span> : null}
 
                   {o.expiresAt === null ? (
@@ -184,12 +192,12 @@ export function ComplianceOverrideBanner({
                     >
                       · {sev === 'unbounded' ? 'expired' : 'expires'} {absoluteLabel(o.expiresAt)}
                       {now !== null ? (
-                        <span className="text-ink-3"> ({untilLabel(o.expiresAt, now)})</span>
+                        <span className="text-ink-2"> ({untilLabel(o.expiresAt, now)})</span>
                       ) : null}
                     </span>
                   )}
 
-                  {o.createdBy ? <span className="text-ink-3">· by {o.createdBy}</span> : null}
+                  {o.createdBy ? <span className="text-ink-2">· by {o.createdBy}</span> : null}
 
                   {onReview ? (
                     <button

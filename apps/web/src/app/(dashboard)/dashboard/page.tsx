@@ -1,168 +1,165 @@
 'use client';
 
 import {
- Activity,
- Calendar,
- CalendarCheck,
- ChevronDown,
- ClipboardCheck,
- Headphones,
- Phone,
- PhoneIncoming,
- Play,
+  Activity,
+  Calendar,
+  CalendarCheck,
+  ChevronDown,
+  ClipboardCheck,
+  Headphones,
+  Phone,
+  PhoneIncoming,
+  Play,
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
- Area,
- AreaChart,
- CartesianGrid,
- ResponsiveContainer,
- Tooltip,
- XAxis,
- YAxis,
- } from 'recharts';
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 
-import { useRouter } from 'next/navigation';
 
 import { KPICard } from '@/components/dashboard/kpi-card';
+import { CompactPageShell, CompactPageHeader, DenseCard } from '@/components/layout/compact-layout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/use-auth';
 import { apiClient } from '@/lib/api';
 import { formatDuration, formatPhoneNumber, cn } from '@/lib/utils';
-import { CompactPageShell, CompactPageHeader, DenseCard } from '@/components/layout/compact-layout';
 
 /* ─── Types ────────────────────────────────────────────────────── */
 interface DashboardStats {
- totalCalls: number;
- connectedCalls: number;
- appointmentsSet: number;
- callbacksScheduled: number;
- followUpsDue: number;
- appointmentRate: number;
- dispositions: Record<string, number>;
- dateRange: { startDate: string; endDate: string };
+  totalCalls: number;
+  connectedCalls: number;
+  appointmentsSet: number;
+  callbacksScheduled: number;
+  followUpsDue: number;
+  appointmentRate: number;
+  dispositions: Record<string, number>;
+  dateRange: { startDate: string; endDate: string };
 }
 
-import {
- DISPOSITION_LABELS,
- DISPOSITION_COLORS,
-} from '@hopwhistle/shared';
+import { DISPOSITION_LABELS, DISPOSITION_COLORS } from '@hopwhistle/shared';
 
 interface CallRecord {
- id: string;
- callSid?: string;
- callerId?: string;
- did?: string;
- toNumber?: string;
- targetNumber?: string;
- status: string;
- duration?: number;
- connectedDuration?: number;
- converted?: boolean;
- paidOut?: boolean;
- missedCall?: boolean;
- recordingUrl?: string | null;
- recordingStatus?: string | null;
- primaryRecordingId?: string | null;
- revenue?: number;
- disposition?: string | null;
- dispositionNotes?: string | null;
- callSource?: string | null;
- followUpAt?: string | null;
- followUpStatus?: string | null;
- createdAt: string;
- answeredAt?: string | null;
- endedAt?: string | null;
- campaign?: { name: string } | null;
- fromNumber?: { number: string } | null;
+  id: string;
+  callSid?: string;
+  callerId?: string;
+  did?: string;
+  toNumber?: string;
+  targetNumber?: string;
+  status: string;
+  duration?: number;
+  connectedDuration?: number;
+  converted?: boolean;
+  paidOut?: boolean;
+  missedCall?: boolean;
+  recordingUrl?: string | null;
+  recordingStatus?: string | null;
+  primaryRecordingId?: string | null;
+  revenue?: number;
+  disposition?: string | null;
+  dispositionNotes?: string | null;
+  callSource?: string | null;
+  followUpAt?: string | null;
+  followUpStatus?: string | null;
+  createdAt: string;
+  answeredAt?: string | null;
+  endedAt?: string | null;
+  campaign?: { name: string } | null;
+  fromNumber?: { number: string } | null;
 }
 
 type DatePreset = 'day' | 'week' | 'month' | 'quarter' | 'year' | 'custom';
 
 /* ─── Helpers ──────────────────────────────────────────────────── */
 function getDateRange(preset: DatePreset): { start: Date; end: Date } {
- const now = new Date();
- const end = now;
- let start: Date;
- switch (preset) {
- case 'day':
- start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
- break;
- case 'week':
- start = new Date(now);
- start.setDate(now.getDate() - 7);
- break;
- case 'month':
- start = new Date(now.getFullYear(), now.getMonth(), 1);
- break;
- case 'quarter':
- start = new Date(now);
- start.setMonth(now.getMonth() - 3);
- break;
- case 'year':
- start = new Date(now.getFullYear(), 0, 1);
- break;
- default:
- start = new Date(now.getFullYear(), now.getMonth(), 1);
- }
- return { start, end };
+  const now = new Date();
+  const end = now;
+  let start: Date;
+  switch (preset) {
+    case 'day':
+      start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      break;
+    case 'week':
+      start = new Date(now);
+      start.setDate(now.getDate() - 7);
+      break;
+    case 'month':
+      start = new Date(now.getFullYear(), now.getMonth(), 1);
+      break;
+    case 'quarter':
+      start = new Date(now);
+      start.setMonth(now.getMonth() - 3);
+      break;
+    case 'year':
+      start = new Date(now.getFullYear(), 0, 1);
+      break;
+    default:
+      start = new Date(now.getFullYear(), now.getMonth(), 1);
+  }
+  return { start, end };
 }
 
 function getCallResult(call: CallRecord): string {
- if (call.disposition) {
- return DISPOSITION_LABELS[call.disposition] || call.disposition;
- }
- if (call.missedCall) return 'No Answer';
- if (call.status === 'COMPLETED') return 'Completed';
- if (call.status === 'NO_ANSWER') return 'No Answer';
- if (call.status === 'BUSY') return 'Busy';
- if (call.status === 'FAILED') return 'Failed';
- return call.status || 'Unknown';
+  if (call.disposition) {
+    return DISPOSITION_LABELS[call.disposition] || call.disposition;
+  }
+  if (call.missedCall) return 'No Answer';
+  if (call.status === 'COMPLETED') return 'Completed';
+  if (call.status === 'NO_ANSWER') return 'No Answer';
+  if (call.status === 'BUSY') return 'Busy';
+  if (call.status === 'FAILED') return 'Failed';
+  return call.status || 'Unknown';
 }
 
 function getResultColor(result: string): string {
- for (const [key, label] of Object.entries(DISPOSITION_LABELS)) {
- if (label === result) {
- return DISPOSITION_COLORS[key] || 'bg-transparent text-muted-foreground border-border';
- }
- }
- switch (result) {
- case 'Completed':
- return 'bg-blue-500/5 text-blue-400 border-blue-500/20';
- case 'Busy':
- case 'Failed':
- return 'bg-red-500/5 text-red-400 border-red-500/20';
- default:
- return 'bg-transparent text-muted-foreground border-border';
- }
+  for (const [key, label] of Object.entries(DISPOSITION_LABELS)) {
+    if (label === result) {
+      return DISPOSITION_COLORS[key] || 'bg-transparent text-muted-foreground border-border';
+    }
+  }
+  switch (result) {
+    case 'Completed':
+      return 'bg-live-tint text-live-ink border-live/40';
+    case 'Busy':
+    case 'Failed':
+      return 'bg-dropped-tint text-dropped-ink border-dropped/40';
+    default:
+      return 'bg-transparent text-muted-foreground border-border';
+  }
 }
 
 /* ─── Chart Tooltip ────────────────────────────────────────────── */
 function ChartTooltip({
- active,
- payload,
- label,
+  active,
+  payload,
+  label,
 }: {
- active?: boolean;
- payload?: Array<{ value: number; dataKey: string }>;
- label?: string;
+  active?: boolean;
+  payload?: Array<{ value: number; dataKey: string }>;
+  label?: string;
 }) {
- if (!active || !payload) return null;
- return (
- <div className="rounded-lg border bg-card text-card-foreground px-4 py-3 shadow-md">
- <p className="mb-2 font-mono text-xs text-muted-foreground">{label}</p>
- {payload.map(entry => (
- <p key={entry.dataKey} className="font-mono text-sm">
- <span className="text-muted-foreground uppercase text-xs">
- {entry.dataKey === 'outbound' ? 'Outbound' : 'Inbound'}
- </span>
- <span className="ml-3 text-slate-200">{entry.value.toLocaleString()}</span>
- </p>
- ))}
- </div>
- );
+  if (!active || !payload) return null;
+  return (
+    <div className="rounded-lg border bg-card text-card-foreground px-4 py-3 shadow-md">
+      <p className="mb-2 font-mono text-xs text-muted-foreground">{label}</p>
+      {payload.map(entry => (
+        <p key={entry.dataKey} className="font-mono text-sm">
+          <span className="text-muted-foreground uppercase text-xs">
+            {entry.dataKey === 'outbound' ? 'Outbound' : 'Inbound'}
+          </span>
+          <span className="ml-3 text-ink">{entry.value.toLocaleString()}</span>
+        </p>
+      ))}
+    </div>
+  );
 }
 
 /* ─── Main Dashboard ───────────────────────────────────────────── */
@@ -181,126 +178,123 @@ export default function DashboardPage() {
     }
   }, [user, isPublisherOnly, isBuyerOnly, isAgentOnly, authLoading, router]);
 
- const [stats, setStats] = useState<DashboardStats | null>(null);
- const [calls, setCalls] = useState<CallRecord[]>([]);
- const [loading, setLoading] = useState(true);
- const [callsLoading, setCallsLoading] = useState(true);
- const [activePreset, setActivePreset] = useState<DatePreset>('month');
- const [customFrom, setCustomFrom] = useState('');
- const [customTo, setCustomTo] = useState('');
- const [showCustom, setShowCustom] = useState(false);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [calls, setCalls] = useState<CallRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [callsLoading, setCallsLoading] = useState(true);
+  const [activePreset, setActivePreset] = useState<DatePreset>('month');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const [showCustom, setShowCustom] = useState(false);
 
- // Live clock
- const [liveClock, setLiveClock] = useState('');
- useEffect(() => {
- const tick = () => {
- const now = new Date();
- setLiveClock(now.toLocaleTimeString('en-US', { hour12: false }));
- };
- tick();
- const id = setInterval(tick, 1000);
- return () => clearInterval(id);
- }, []);
+  // Live clock
+  const [liveClock, setLiveClock] = useState('');
+  useEffect(() => {
+    const tick = () => {
+      const now = new Date();
+      setLiveClock(now.toLocaleTimeString('en-US', { hour12: false }));
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
 
- // Fetch dashboard stats
- const fetchStats = useCallback(
- async (preset: DatePreset, from?: string, to?: string) => {
- setLoading(true);
- try {
- let startDate: string;
- let endDate: string;
- if (preset === 'custom' && from && to) {
- startDate = new Date(from).toISOString();
- endDate = new Date(to + 'T23:59:59').toISOString();
- } else {
- const range = getDateRange(preset);
- startDate = range.start.toISOString();
- endDate = range.end.toISOString();
- }
- const response = await apiClient.get<DashboardStats>(
- `/api/v1/dashboard/stats?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`
- );
- if (response.data) {
- setStats(response.data);
- }
- } catch (error) {
- console.error('Failed to fetch dashboard stats:', error);
- } finally {
- setLoading(false);
- }
- },
- []
- );
+  // Fetch dashboard stats
+  const fetchStats = useCallback(async (preset: DatePreset, from?: string, to?: string) => {
+    setLoading(true);
+    try {
+      let startDate: string;
+      let endDate: string;
+      if (preset === 'custom' && from && to) {
+        startDate = new Date(from).toISOString();
+        endDate = new Date(to + 'T23:59:59').toISOString();
+      } else {
+        const range = getDateRange(preset);
+        startDate = range.start.toISOString();
+        endDate = range.end.toISOString();
+      }
+      const response = await apiClient.get<DashboardStats>(
+        `/api/v1/dashboard/stats?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`
+      );
+      if (response.data) {
+        setStats(response.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch dashboard stats:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
- // Fetch recent calls for table
- const fetchCalls = useCallback(async () => {
- setCallsLoading(true);
- try {
- const response = await apiClient.get<{ data: CallRecord[]; meta: { totalPages: number } }>(
- '/api/v1/calls?limit=25'
- );
- if (response.data) {
- setCalls(response.data.data || []);
- }
- } catch (error) {
- console.error('Failed to fetch calls:', error);
- } finally {
- setCallsLoading(false);
- }
- }, []);
+  // Fetch recent calls for table
+  const fetchCalls = useCallback(async () => {
+    setCallsLoading(true);
+    try {
+      const response = await apiClient.get<{ data: CallRecord[]; meta: { totalPages: number } }>(
+        '/api/v1/calls?limit=25'
+      );
+      if (response.data) {
+        setCalls(response.data.data || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch calls:', error);
+    } finally {
+      setCallsLoading(false);
+    }
+  }, []);
 
- useEffect(() => {
- void fetchStats(activePreset);
- void fetchCalls();
- }, [fetchStats, fetchCalls, activePreset]);
+  useEffect(() => {
+    void fetchStats(activePreset);
+    void fetchCalls();
+  }, [fetchStats, fetchCalls, activePreset]);
 
- const handlePresetChange = (preset: DatePreset) => {
- setActivePreset(preset);
- setShowCustom(preset === 'custom');
- if (preset !== 'custom') {
- void fetchStats(preset);
- }
- };
+  const handlePresetChange = (preset: DatePreset) => {
+    setActivePreset(preset);
+    setShowCustom(preset === 'custom');
+    if (preset !== 'custom') {
+      void fetchStats(preset);
+    }
+  };
 
- const handleCustomApply = () => {
- if (customFrom && customTo) {
- void fetchStats('custom', customFrom, customTo);
- }
- };
+  const handleCustomApply = () => {
+    if (customFrom && customTo) {
+      void fetchStats('custom', customFrom, customTo);
+    }
+  };
 
- // Build chart data from calls
- const chartData = useMemo(() => {
- if (calls.length === 0) return [];
- const hourMap = new Map<string, { inbound: number; outbound: number }>();
- for (let h = 0; h < 24; h++) {
- hourMap.set(h.toString().padStart(2, '0') + ':00', { inbound: 0, outbound: 0 });
- }
- calls.forEach(call => {
- const hour = new Date(call.createdAt).getHours().toString().padStart(2, '0') + ':00';
- const bucket = hourMap.get(hour);
- if (bucket) {
- if (call.status === 'OUTBOUND' || call.toNumber) {
- bucket.outbound++;
- } else {
- bucket.inbound++;
- }
- }
- });
- return Array.from(hourMap.entries()).map(([time, counts]) => ({
- time,
- inbound: counts.inbound,
- outbound: counts.outbound,
- }));
- }, [calls]);
+  // Build chart data from calls
+  const chartData = useMemo(() => {
+    if (calls.length === 0) return [];
+    const hourMap = new Map<string, { inbound: number; outbound: number }>();
+    for (let h = 0; h < 24; h++) {
+      hourMap.set(h.toString().padStart(2, '0') + ':00', { inbound: 0, outbound: 0 });
+    }
+    calls.forEach(call => {
+      const hour = new Date(call.createdAt).getHours().toString().padStart(2, '0') + ':00';
+      const bucket = hourMap.get(hour);
+      if (bucket) {
+        if (call.status === 'OUTBOUND' || call.toNumber) {
+          bucket.outbound++;
+        } else {
+          bucket.inbound++;
+        }
+      }
+    });
+    return Array.from(hourMap.entries()).map(([time, counts]) => ({
+      time,
+      inbound: counts.inbound,
+      outbound: counts.outbound,
+    }));
+  }, [calls]);
 
- const presets: { key: DatePreset; label: string }[] = [
- { key: 'day', label: 'Day' },
- { key: 'week', label: 'Week' },
- { key: 'month', label: 'Month' },
- { key: 'quarter', label: 'Quarter' },
- { key: 'year', label: 'Year' },
- { key: 'custom', label: 'Custom' },
- ];
+  const presets: { key: DatePreset; label: string }[] = [
+    { key: 'day', label: 'Day' },
+    { key: 'week', label: 'Week' },
+    { key: 'month', label: 'Month' },
+    { key: 'quarter', label: 'Quarter' },
+    { key: 'year', label: 'Year' },
+    { key: 'custom', label: 'Custom' },
+  ];
 
   return (
     <CompactPageShell>
@@ -311,9 +305,11 @@ export default function DashboardPage() {
       >
         <div className="flex items-center gap-2 rounded-md border bg-card px-2 py-1">
           <span className="relative flex h-2 w-2">
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500/80" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-live" />
           </span>
-          <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-widest">Live Connect</span>
+          <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-widest">
+            Live Connect
+          </span>
         </div>
         <div className="rounded-md border bg-card px-2 py-1 font-mono text-[10px] text-muted-foreground">
           {liveClock}
@@ -329,7 +325,7 @@ export default function DashboardPage() {
             variant={activePreset === p.key ? 'default' : 'outline'}
             size="sm"
             className={cn(
-              "h-7 text-xs px-2.5",
+              'h-7 text-xs px-2.5',
               activePreset === p.key
                 ? 'bg-primary text-primary-foreground border-primary hover:bg-primary/90'
                 : 'border-border text-muted-foreground hover:text-foreground hover:bg-accent'
@@ -359,7 +355,12 @@ export default function DashboardPage() {
               id="custom-to"
               name="custom-to"
             />
-            <Button size="sm" variant="outline" onClick={handleCustomApply} className="h-7 text-xs border-border text-muted-foreground hover:bg-accent px-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleCustomApply}
+              className="h-7 text-xs border-border text-muted-foreground hover:bg-accent px-2"
+            >
               Apply
             </Button>
           </div>
@@ -425,7 +426,7 @@ export default function DashboardPage() {
                 </p>
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-1">
-                    <div className="h-1.5 w-4 rounded-full bg-cyan-500" />
+                    <div className="h-1.5 w-4 rounded-full bg-money" />
                     <span className="text-[10px] text-muted-foreground">Outbound</span>
                   </div>
                   <div className="flex items-center gap-1">
@@ -447,20 +448,36 @@ export default function DashboardPage() {
                         <stop offset="95%" stopColor="currentColor" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid vertical={false} stroke="hsl(var(--border))" strokeDasharray="4 4" opacity={0.3} />
+                    <CartesianGrid
+                      vertical={false}
+                      stroke="hsl(var(--border))"
+                      strokeDasharray="4 4"
+                      opacity={0.3}
+                    />
                     <XAxis
                       dataKey="time"
-                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 9, fontFamily: 'monospace' }}
+                      tick={{
+                        fill: 'hsl(var(--muted-foreground))',
+                        fontSize: 9,
+                        fontFamily: 'monospace',
+                      }}
                       axisLine={false}
                       tickLine={false}
                     />
                     <YAxis
-                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 9, fontFamily: 'monospace' }}
+                      tick={{
+                        fill: 'hsl(var(--muted-foreground))',
+                        fontSize: 9,
+                        fontFamily: 'monospace',
+                      }}
                       axisLine={false}
                       tickLine={false}
                       allowDecimals={false}
                     />
-                    <Tooltip content={<ChartTooltip />} cursor={{ fill: 'hsl(var(--border))', opacity: 0.1 }} />
+                    <Tooltip
+                      content={<ChartTooltip />}
+                      cursor={{ fill: 'hsl(var(--border))', opacity: 0.1 }}
+                    />
                     <Area
                       type="step"
                       dataKey="outbound"
@@ -487,10 +504,13 @@ export default function DashboardPage() {
             <DenseCard title="Disposition Breakdown" className="flex-shrink-0">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {Object.entries(stats.dispositions).map(([key, count]) => (
-                  <div key={key} className={cn(
-                    "flex items-center justify-between rounded border p-2",
-                    DISPOSITION_COLORS[key] || 'border-border'
-                  )}>
+                  <div
+                    key={key}
+                    className={cn(
+                      'flex items-center justify-between rounded border p-2',
+                      DISPOSITION_COLORS[key] || 'border-border'
+                    )}
+                  >
                     <span className="text-[10px] font-mono uppercase tracking-wider truncate mr-2">
                       {DISPOSITION_LABELS[key] || key}
                     </span>
@@ -503,31 +523,46 @@ export default function DashboardPage() {
         </div>
 
         {/* Right Side: Call History Ledger */}
-        <DenseCard title="Call History" className="lg:col-span-2 flex flex-col min-h-0 overflow-hidden">
+        <DenseCard
+          title="Call History"
+          className="lg:col-span-2 flex flex-col min-h-0 overflow-hidden"
+        >
           <div className="flex-grow min-h-0 overflow-auto">
             <table className="w-full text-left table-dense">
               <thead>
                 <tr className="border-b border-border">
-                  <th className="pb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Time</th>
-                  <th className="pb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">From/To</th>
-                  <th className="pb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Duration</th>
-                  <th className="pb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Result</th>
+                  <th className="pb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Time
+                  </th>
+                  <th className="pb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    From/To
+                  </th>
+                  <th className="pb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Duration
+                  </th>
+                  <th className="pb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Result
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {callsLoading ? (
                   <tr>
-                    <td colSpan={4} className="py-8 text-center text-xs text-muted-foreground">Loading calls...</td>
+                    <td colSpan={4} className="py-8 text-center text-xs text-muted-foreground">
+                      Loading calls...
+                    </td>
                   </tr>
                 ) : calls.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="py-8 text-center text-xs text-muted-foreground">No calls found.</td>
+                    <td colSpan={4} className="py-8 text-center text-xs text-muted-foreground">
+                      No calls found.
+                    </td>
                   </tr>
                 ) : (
                   calls.slice(0, 15).map(call => {
                     const result = getCallResult(call);
                     return (
-                      <tr key={call.id} className="transition-colors hover:bg-muted/30">
+                      <tr key={call.id} className="transition-colors hover:bg-sunken">
                         <td className="py-1.5 font-mono text-[10px] text-muted-foreground">
                           {new Date(call.createdAt).toLocaleString('en-US', {
                             month: 'short',
@@ -539,8 +574,14 @@ export default function DashboardPage() {
                         </td>
                         <td className="py-1.5 font-mono text-[10px] text-foreground">
                           <div className="flex flex-col">
-                            <span>{formatPhoneNumber(call.callerId || call.fromNumber?.number || '—')}</span>
-                            <span className="text-muted-foreground text-[9px]">{formatPhoneNumber(call.toNumber || call.targetNumber || call.did || '—')}</span>
+                            <span>
+                              {formatPhoneNumber(call.callerId || call.fromNumber?.number || '—')}
+                            </span>
+                            <span className="text-muted-foreground text-[9px]">
+                              {formatPhoneNumber(
+                                call.toNumber || call.targetNumber || call.did || '—'
+                              )}
+                            </span>
                           </div>
                         </td>
                         <td className="py-1.5 font-mono text-[10px] text-muted-foreground">
@@ -551,7 +592,10 @@ export default function DashboardPage() {
                           })()}
                         </td>
                         <td className="py-1.5">
-                          <Badge variant="outline" className={cn("text-[9px] px-1.5 py-0", getResultColor(result))}>
+                          <Badge
+                            variant="outline"
+                            className={cn('text-[9px] px-1.5 py-0', getResultColor(result))}
+                          >
                             {result}
                           </Badge>
                         </td>

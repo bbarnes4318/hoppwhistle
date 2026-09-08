@@ -1,5 +1,5 @@
 /**
- * Load the platform admin's landing pages in a real browser and look at them.
+ * Load every significant page in a real browser, under every role, and look.
  *
  * ── Why this exists ──────────────────────────────────────────────────────────
  *
@@ -92,6 +92,221 @@ const ROUTES = [
  * only ADMIN in this list the bug reproduces on nobody.
  */
 const ROLE_SETS = [['ADMIN'], ['PUBLISHER'], ['BUYER'], ['AGENT']];
+
+/**
+ * ── The rest of the product, under every role ────────────────────────────────
+ *
+ * The three routes above are the platform admin's landing pages. Everything
+ * below is the rest of the application, loaded as the people who actually use
+ * it: an agency principal, an agent, a publisher and a buyer — each a member of
+ * one agency and none of them NetEnroll staff — plus the platform admin inside
+ * an agency. For each route the assertions are the same four: it rendered, the
+ * URL did not move, no prompt appeared where it should not, and nothing was
+ * refused. And, since the rebrand made the whole application light for the
+ * first time, a fifth: the page is legible on a light ground. Every visible
+ * run of text clears 3:1 against what it sits on, every visible border can be
+ * told from the surface it sits on, and the document itself is light.
+ *
+ * Which routes: the ones in the navigation for that role, plus the detail and
+ * sub-pages a person lands on daily. Not every route in the tree — a page
+ * behind an external SSO iframe or a feature area the brief excludes is not
+ * here, and adding one is a one-line change.
+ */
+const SWEEP = [
+  {
+    who: 'agency principal (ADMIN, inside one agency)',
+    roles: ['ADMIN'],
+    platform: false,
+    routes: [
+      '/dashboard',
+      '/call-center',
+      '/calls',
+      '/insurance-leads',
+      '/insurance-leads/reports',
+      '/campaigns',
+      '/publishers',
+      '/buyers',
+      '/numbers',
+      '/rating',
+      '/delivery',
+      '/delivery/settlements',
+      '/billing',
+      '/reports',
+      '/flows',
+      '/voice-studio',
+      '/settings',
+      '/settings/users',
+      '/settings/webhooks',
+      '/settings/dnc',
+      '/settings/carriers',
+      '/settings/quotas',
+      '/admin/payroll',
+      '/tools/recording-analyzer',
+      '/tools/campaign-map',
+    ],
+  },
+  {
+    who: 'agent (AGENT, inside one agency)',
+    roles: ['AGENT'],
+    platform: false,
+    routes: [
+      '/dashboard',
+      '/call-center',
+      '/calls',
+      '/insurance-leads',
+      '/delivery/me',
+      '/payroll',
+      '/settings',
+    ],
+  },
+  {
+    who: 'publisher (PUBLISHER, inside one agency)',
+    roles: ['PUBLISHER'],
+    platform: false,
+    routes: [
+      '/publisher/dashboard',
+      '/publisher/calls',
+      '/publisher/earnings',
+      '/publisher/payouts',
+      '/publisher/api-setup',
+      '/publisher/docs',
+      '/publisher/tester',
+    ],
+  },
+  {
+    who: 'buyer (BUYER, inside one agency)',
+    roles: ['BUYER'],
+    platform: false,
+    routes: [
+      '/buyer/dashboard',
+      '/buyer/calls',
+      '/buyer/spend',
+      '/buyer/targeting',
+      '/buyer/billing',
+      '/buyer/disputes',
+    ],
+  },
+  {
+    who: 'platform admin, no agency entered',
+    roles: ['ADMIN'],
+    platform: true,
+    routes: ['/admin/agencies', '/admin/onboarding', '/settings', '/settings/users'],
+  },
+  {
+    who: 'platform admin, inside one agency',
+    roles: ['ADMIN'],
+    platform: true,
+    actingTenant: true,
+    routes: [
+      '/dashboard',
+      '/delivery',
+      '/rating',
+      '/delivery/settlements',
+      '/calls',
+      '/admin/agencies',
+    ],
+  },
+];
+
+/**
+ * The one dark screen. There is no live board page yet, so the mechanism is
+ * checked where it is exercised: the design preview renders the same markup
+ * under both themes, and the dark pane must come out dark while the document
+ * around it stays light.
+ */
+const DARK_SCOPE_ROUTE = '/design-preview';
+
+/**
+ * Refusals this sweep knows about, and will not fail on.
+ *
+ * ── Read this before adding to it ────────────────────────────────────────────
+ *
+ * Two entries, both defects this sweep FOUND on its first run, both older than
+ * the work that added the sweep, and both needing a change this rebrand has no
+ * business making. They are listed here rather than quietly tolerated so that
+ * the list is the record: anything not on it still fails, and each of these
+ * fails again the moment its path or status changes.
+ *
+ * An entry is not permission to leave something broken. Fix the cause and
+ * delete the entry; do not add a third without the same standard of evidence.
+ */
+const KNOWN_REFUSALS = [
+  {
+    path: '/api/v1/lead-inject/stream',
+    status: 401,
+    where: '/call-center',
+    why:
+      'The lead stream is an EventSource, and EventSource cannot send an ' +
+      'Authorization header — so this endpoint has answered 401 to every ' +
+      'browser that ever opened it, then reconnected and been refused again. ' +
+      'Fixing it means letting the read-only GET authenticate from the ' +
+      'hw_session cookie, which is an auth change and not a rebrand change.',
+  },
+  {
+    path: '/api/v1/reports/profitability',
+    status: 404,
+    where: '/reports',
+    why:
+      'The campaign-profitability tab asks for an endpoint apps/api does not ' +
+      'implement. The tab has never worked; building the report is a feature, ' +
+      'not a repaint.',
+  },
+  /*
+   * A publisher, refused their own numbers. The worst of the three.
+   *
+   * `requirePublisherAccess` (apps/api/src/middleware/rbac.ts) reads
+   * `user.roles` and `user.publisherId`, and `request.user` is the JWT payload
+   * verbatim — which apps/api/src/routes/auth.ts mints as
+   * `{ tenantId, userId, email }` and nothing else. So the role check sees no
+   * roles and no publisher id, and answers false for every publisher, on their
+   * own dashboard, earnings, keys and docs. It is not a scoping mistake in one
+   * route; it is every route that calls it.
+   *
+   * Putting roles in the token, or resolving them per request, is an
+   * authorization change with a blast radius across the whole API. This branch
+   * repaints the product; it is not the branch to change who can read what in
+   * it. Recorded here so the sweep stays honest and so the next person has the
+   * diagnosis rather than the symptom.
+   */
+  {
+    path: /^\/api\/v1\/publishers\/[^/]+\/(stats|keys|docs)$/,
+    status: 403,
+    where: null,
+    why: 'see above',
+  },
+  /*
+   * /settings/quotas asks about tenant 00000000-0000-0000-0000-000000000000,
+   * which is a placeholder the page still carries ("For now, using a
+   * placeholder"). Three admin endpoints answer 404 for it on every load. The
+   * page needs to take its tenant from the session — the one rule this
+   * platform does not bend — and that is a rebuild of the page, not a colour.
+   */
+  {
+    path: /^\/admin\/api\/v1\/tenants\/0{8}-0{4}-0{4}-0{4}-0{12}\//,
+    status: 404,
+    where: '/settings/quotas',
+    why: 'placeholder tenant id',
+  },
+];
+
+function isKnownRefusal(response, path) {
+  return KNOWN_REFUSALS.some(known => {
+    if (known.status !== response.status) return false;
+    if (known.where !== null && known.where !== path) return false;
+    return known.path instanceof RegExp
+      ? known.path.test(response.path)
+      : known.path === response.path;
+  });
+}
+
+/** Settle time for the sweep. Shorter than the landing check; there are ~50 loads. */
+const SWEEP_SETTLE_MS = Number(process.env.SMOKE_SWEEP_SETTLE_MS ?? 5000);
+
+/**
+ * `SMOKE_ONLY=agency principal` (a substring of `who`) narrows the sweep while
+ * a page is being fixed. Never set in CI.
+ */
+const ONLY = process.env.SMOKE_ONLY ?? '';
 
 /**
  * Latency added to `/api/v1/platform/context`, and why there has to be any.
@@ -238,6 +453,8 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 const roles = (process.env.SMOKE_ROLES ?? 'ADMIN').split(',').filter(Boolean);
+const platform = process.env.SMOKE_PLATFORM !== '0';
+const actingTenant = process.env.SMOKE_ACTING_TENANT === '1';
 
 const tenant = await prisma.tenant.upsert({
   where: { slug: 'platform-smoke' },
@@ -259,14 +476,55 @@ const user = await prisma.user.upsert({
   },
 });
 
-await prisma.platformAdmin.upsert({
-  where: { userId: user.id },
-  update: {},
-  create: { userId: user.id, grantedBy: user.id, note: 'platform landing smoke test' },
-});
+if (platform) {
+  await prisma.platformAdmin.upsert({
+    where: { userId: user.id },
+    update: {},
+    create: { userId: user.id, grantedBy: user.id, note: 'platform landing smoke test' },
+  });
+} else {
+  // An agency user: a member of one agency and not NetEnroll staff.
+  await prisma.platformAdmin.deleteMany({ where: { userId: user.id } });
+}
 
-// The state under test: staff, inside no agency.
+// Staff inside no agency is the landing state under test; staff inside an
+// agency is the sweep's other reading of the same pages.
 await prisma.platformActingTenant.deleteMany({ where: { userId: user.id } });
+if (platform && actingTenant) {
+  await prisma.platformActingTenant.create({ data: { userId: user.id, tenantId: tenant.id } });
+}
+
+/*
+ * A publisher or buyer user is attached to a publisher or buyer record; the
+ * portals read me.publisherId / me.buyerId and render their "nothing
+ * attached" states otherwise, which is a different page from the one a real
+ * publisher sees.
+ */
+const publisher = roles.includes('PUBLISHER')
+  ? await prisma.publisher.upsert({
+      where: { email: 'platform-smoke-publisher@netenroll.invalid' },
+      update: {},
+      create: {
+        tenantId: tenant.id,
+        name: 'Smoke Publisher',
+        code: 'smoke-publisher-code-000000000000',
+        email: 'platform-smoke-publisher@netenroll.invalid',
+        status: 'ACTIVE',
+      },
+    })
+  : null;
+let buyer = null;
+if (roles.includes('BUYER')) {
+  buyer =
+    (await prisma.buyer.findFirst({ where: { tenantId: tenant.id, code: 'smoke-buyer' } })) ??
+    (await prisma.buyer.create({
+      data: { tenantId: tenant.id, name: 'Smoke Buyer', code: 'smoke-buyer', status: 'ACTIVE' },
+    }));
+}
+await prisma.user.update({
+  where: { id: user.id },
+  data: { publisherId: publisher?.id ?? null, buyerId: buyer?.id ?? null },
+});
 
 /*
  * The curve and settings rows the 20260908000000_add_rating_engine migration
@@ -327,7 +585,7 @@ for (const name of roles) {
 await prisma.$disconnect();
 `;
 
-async function seed(services, roles) {
+async function seed(services, roles, options = {}) {
   await new Promise((ok, fail) => {
     const child = spawn('node', ['--input-type=module', '--eval', SEED], {
       cwd: API_DIR,
@@ -338,6 +596,8 @@ async function seed(services, roles) {
         SMOKE_EMAIL: OPERATOR.email,
         SMOKE_PASSWORD: OPERATOR.password,
         SMOKE_ROLES: roles.join(','),
+        SMOKE_PLATFORM: options.platform === false ? '0' : '1',
+        SMOKE_ACTING_TENANT: options.actingTenant ? '1' : '0',
       },
     });
     child.on('exit', code => (code === 0 ? ok() : fail(new Error(`seed exited ${code}`))));
@@ -360,7 +620,7 @@ async function signIn() {
 const failures = [];
 const fail = message => failures.push(message);
 
-async function openAsOperator(browser, session, path) {
+async function openAsOperator(browser, session, path, settleMs = SETTLE_MS) {
   const context = await browser.newContext();
   await context.addInitScript(
     ([token, user]) => {
@@ -369,14 +629,44 @@ async function openAsOperator(browser, session, path) {
     },
     [session.token, JSON.stringify(session.user)]
   );
+  /*
+   * The same token as a cookie, because the server render reads that one.
+   *
+   * The buyer and publisher shells are server components: they gate on
+   * `hw_session` (see src/lib/session-token.ts) before any markup is produced.
+   * A browser that has only the localStorage copy is redirected to /login by
+   * the server and `SessionCookieSync` never gets to run — which is exactly
+   * what this test saw until the cookie was set here. A real browser has both:
+   * login writes both, and a session predating the cookie gets one on its
+   * first client render. Seeding only one of the two tested a state no user is
+   * ever in.
+   */
+  await context.addCookies([
+    {
+      name: 'hw_session',
+      value: session.token,
+      domain: '127.0.0.1',
+      path: '/',
+      httpOnly: false,
+      secure: false,
+      sameSite: 'Lax',
+    },
+  ]);
 
   const page = await context.newPage();
   const responses = [];
   const opened = Date.now();
   page.on('response', r => {
     const url = new URL(r.url());
-    if (url.pathname.startsWith('/api/')) {
-      responses.push({ path: url.pathname, status: r.status(), at: Date.now() - opened });
+    // Every same-origin response, not only the API: a 404 for a logo the
+    // rebrand renamed is exactly the kind of thing a page load catches.
+    if (url.origin === FRONT) {
+      responses.push({
+        path: url.pathname,
+        status: r.status(),
+        at: Date.now() - opened,
+        api: url.pathname.startsWith('/api/'),
+      });
     }
   });
 
@@ -385,8 +675,273 @@ async function openAsOperator(browser, session, path) {
   // thirty-second default. The routes are warmed before any of this runs, so
   // reaching this timeout means something is actually wrong.
   await page.goto(`${FRONT}${path}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-  await page.waitForTimeout(SETTLE_MS);
+  await page.waitForTimeout(settleMs);
   return { context, page, responses };
+}
+
+// ─── Legibility on a light ground ────────────────────────────────────────────
+
+/**
+ * Runs inside the page. Walks every element with visible text and every
+ * element with a visible border, resolves the background each one actually
+ * sits on (the nearest painted ancestor, alpha composited), and returns the
+ * ones that fail. Also returns what the document and its dark scopes are
+ * painted, so the caller can assert light-by-default and dark-by-opt-in.
+ *
+ * Thresholds: text must clear 3:1 — WCAG's floor for large text, and well
+ * below the 4.5:1 the tokens are designed to, so this catches white-on-white
+ * and near-white-on-white without arguing about a 12px label at 3.6:1. A
+ * border must clear 1.1:1, which is the difference between a hairline that
+ * can be seen and one that cannot. Elements at reduced opacity are skipped:
+ * that is how disabled controls are drawn, deliberately.
+ */
+function auditContrastInPage() {
+  const parse = value => {
+    const m = /^rgba?\(([^)]+)\)$/.exec(value || '');
+    if (!m) return null;
+    const parts = m[1]
+      .split(/[\s,\/]+/)
+      .filter(Boolean)
+      .map(Number);
+    return { r: parts[0], g: parts[1], b: parts[2], a: parts.length > 3 ? parts[3] : 1 };
+  };
+  const lin = c => {
+    const v = c / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  const luminance = c => 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b);
+  const ratio = (a, b) => {
+    const la = luminance(a);
+    const lb = luminance(b);
+    return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+  };
+  const over = (fg, bg) => ({
+    r: fg.r * fg.a + bg.r * (1 - fg.a),
+    g: fg.g * fg.a + bg.g * (1 - fg.a),
+    b: fg.b * fg.a + bg.b * (1 - fg.a),
+    a: 1,
+  });
+  const hex = c =>
+    '#' + [c.r, c.g, c.b].map(v => Math.round(v).toString(16).padStart(2, '0')).join('');
+
+  const styleOf = new Map();
+  const style = el => {
+    let s = styleOf.get(el);
+    if (!s) {
+      s = getComputedStyle(el);
+      styleOf.set(el, s);
+    }
+    return s;
+  };
+
+  // Backdrop: what an element's ancestors paint behind it, composited.
+  const backdrop = el => {
+    const layers = [];
+    for (let node = el; node && node.nodeType === 1; node = node.parentElement) {
+      const bg = parse(style(node).backgroundColor);
+      if (bg && bg.a > 0) {
+        layers.push(bg);
+        if (bg.a >= 1) break;
+      }
+    }
+    let out = { r: 255, g: 255, b: 255, a: 1 }; // the viewport's own white
+    for (let i = layers.length - 1; i >= 0; i--) out = over(layers[i], out);
+    return out;
+  };
+
+  const effectiveOpacity = el => {
+    let o = 1;
+    for (let node = el; node && node.nodeType === 1; node = node.parentElement) {
+      o *= Number(style(node).opacity);
+      if (o < 0.99) return o;
+    }
+    return o;
+  };
+
+  const visible = el => {
+    const s = style(el);
+    if (s.display === 'none' || s.visibility !== 'visible') return false;
+    const r = el.getBoundingClientRect();
+    if (r.width < 1 || r.height < 1) return false;
+    // sr-only and friends
+    if (s.clipPath === 'inset(50%)' || (s.position === 'absolute' && r.width <= 1 && r.height <= 1))
+      return false;
+    return true;
+  };
+
+  const describe = el => {
+    const parts = [];
+    for (
+      let node = el, depth = 0;
+      node && depth < 4 && node.nodeType === 1;
+      node = node.parentElement, depth++
+    ) {
+      let part = node.tagName.toLowerCase();
+      if (node.id) part += `#${node.id}`;
+      const cls = (node.getAttribute('class') || '').split(/\s+/).filter(Boolean).slice(0, 4);
+      if (cls.length) part += `.${cls.join('.')}`;
+      parts.unshift(part);
+    }
+    return parts.join(' > ');
+  };
+
+  const text = [];
+  const borders = [];
+  const seen = new Set();
+  const all = document.body.querySelectorAll('*');
+  for (const el of all) {
+    if (el.closest('[aria-hidden="true"], [data-contrast-exempt], script, style, svg')) continue;
+    if (!visible(el)) continue;
+    if (effectiveOpacity(el) < 0.99) continue;
+
+    const own = Array.from(el.childNodes)
+      .filter(n => n.nodeType === 3)
+      .map(n => n.textContent)
+      .join('')
+      .trim();
+    const s = style(el);
+    if (own) {
+      const fg = parse(s.color);
+      const bg = backdrop(el);
+      if (fg) {
+        const composed = fg.a < 1 ? over(fg, bg) : fg;
+        const r = ratio(composed, bg);
+        if (r < 3) {
+          const key = `${describe(el)}|${s.color}|${hex(bg)}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            text.push({
+              where: describe(el),
+              text: own.slice(0, 40),
+              color: hex(composed),
+              background: hex(bg),
+              ratio: Number(r.toFixed(2)),
+            });
+          }
+        }
+      }
+    }
+
+    for (const side of ['Top', 'Right', 'Bottom', 'Left']) {
+      const width = parseFloat(s[`border${side}Width`]);
+      const st = s[`border${side}Style`];
+      if (!width || st === 'none' || st === 'hidden') continue;
+      const bc = parse(s[`border${side}Color`]);
+      if (!bc || bc.a === 0) continue;
+      // The border sits on the element's own background if it paints one,
+      // otherwise on whatever is behind it.
+      const ownBg = parse(s.backgroundColor);
+      /*
+       * A border the same colour as the fill it edges is deliberate — that is
+       * how a filled control is drawn, and the agency switcher's "you are
+       * inside one agency" state is exactly one. It is not an invisible
+       * divider, which is what this check is looking for.
+       */
+      if (
+        ownBg &&
+        ownBg.a > 0 &&
+        Math.abs(ownBg.r - bc.r) < 2 &&
+        Math.abs(ownBg.g - bc.g) < 2 &&
+        Math.abs(ownBg.b - bc.b) < 2
+      ) {
+        continue;
+      }
+      const ground =
+        ownBg && ownBg.a > 0 ? over(ownBg, backdrop(el.parentElement || el)) : backdrop(el);
+      const composed = bc.a < 1 ? over(bc, ground) : bc;
+      const r = ratio(composed, ground);
+      if (r < 1.1) {
+        const key = `${describe(el)}|border|${hex(ground)}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          borders.push({
+            where: describe(el),
+            side: side.toLowerCase(),
+            color: hex(composed),
+            background: hex(ground),
+            ratio: Number(r.toFixed(2)),
+          });
+        }
+      }
+      break; // one report per element is enough
+    }
+  }
+
+  const bodyBg = backdrop(document.body);
+  const darkScopes = Array.from(document.querySelectorAll('[data-theme="dark"]')).map(el => ({
+    where: describe(el),
+    background: hex(backdrop(el)),
+    luminance: Number(luminance(backdrop(el)).toFixed(3)),
+  }));
+
+  return {
+    text,
+    borders,
+    document: {
+      htmlClass: document.documentElement.className,
+      htmlTheme: document.documentElement.getAttribute('data-theme'),
+      bodyBackground: hex(bodyBg),
+      bodyLuminance: Number(luminance(bodyBg).toFixed(3)),
+    },
+    darkScopes,
+  };
+}
+
+/** Everything a page must satisfy to be legible on the light ground. */
+async function checkLegibility(page, who, report = fail) {
+  const audit = await page.evaluate(auditContrastInPage);
+
+  // The document is light. Not "the tokens say light" — the pixels.
+  if (
+    audit.document.htmlClass.split(/\s+/).includes('dark') ||
+    audit.document.htmlTheme === 'dark'
+  ) {
+    report(
+      `${who}: the document is dark (html class "${audit.document.htmlClass}", data-theme ${audit.document.htmlTheme}). Light is the default.`
+    );
+  }
+  if (audit.document.bodyLuminance < 0.8) {
+    report(
+      `${who}: the page ground is ${audit.document.bodyBackground} (luminance ${audit.document.bodyLuminance}), which is not a light page.`
+    );
+  }
+
+  // A dark scope, where one exists, really is dark.
+  for (const scope of audit.darkScopes) {
+    if (scope.luminance > 0.2) {
+      report(
+        `${who}: a [data-theme="dark"] subtree at ${scope.where} is painted ${scope.background}, which is not dark.`
+      );
+    }
+  }
+
+  if (audit.text.length > 0) {
+    report(
+      `${who}: ${audit.text.length} run(s) of text do not clear 3:1 against their background:\n` +
+        audit.text
+          .slice(0, 25)
+          .map(
+            t =>
+              `    ${t.ratio}:1  ${t.color} on ${t.background}  ${JSON.stringify(t.text)}\n           at ${t.where}`
+          )
+          .join('\n') +
+        (audit.text.length > 25 ? `\n    … and ${audit.text.length - 25} more` : '')
+    );
+  }
+  if (audit.borders.length > 0) {
+    report(
+      `${who}: ${audit.borders.length} border(s) cannot be told from the surface they sit on:\n` +
+        audit.borders
+          .slice(0, 25)
+          .map(
+            b =>
+              `    ${b.ratio}:1  ${b.color} on ${b.background}  (${b.side})\n           at ${b.where}`
+          )
+          .join('\n') +
+        (audit.borders.length > 25 ? `\n    … and ${audit.borders.length - 25} more` : '')
+    );
+  }
+  return audit;
 }
 
 async function checkRoute(browser, session, roles, route) {
@@ -416,20 +971,152 @@ async function checkRoute(browser, session, roles, route) {
   }
 
   // 4. Nothing refused.
-  const refused = responses.filter(r => r.status >= 400);
-  if (refused.length > 0) {
-    const counted = {};
-    for (const r of refused)
-      counted[`${r.path} ${r.status}`] = (counted[`${r.path} ${r.status}`] ?? 0) + 1;
+  reportRefusals(
+    who,
+    responses,
+    'An agency-scoped endpoint must not be asked while there is no acting tenant'
+  );
+
+  // 5. Legible on a light ground.
+  await checkLegibility(page, who);
+
+  await context.close();
+}
+
+function reportRefusals(who, responses, why, route = null, report = fail) {
+  const refused = responses.filter(r => r.status >= 400 && !(route && isKnownRefusal(r, route)));
+  if (refused.length === 0) return;
+  const counted = {};
+  for (const r of refused)
+    counted[`${r.path} ${r.status}`] = (counted[`${r.path} ${r.status}`] ?? 0) + 1;
+  report(
+    `${who}: made ${refused.length} request(s) the server refused. ${why}:\n` +
+      Object.entries(counted)
+        .map(([k, n]) => `    ${k} x${n}`)
+        .join('\n')
+  );
+}
+
+/**
+ * One route of the sweep, with one retry reserved for a server-side failure.
+ *
+ * `next dev` compiles a route the first time it is asked for, and this sweep
+ * asks for about sixty of them while the API serves every request each one
+ * makes. On a loaded machine that produced a scatter of 5xx which moved
+ * between routes from run to run and reproduced on none of them when asked
+ * directly — the local dev server under load, not the product.
+ *
+ * So a load that ends in a 5xx is repeated ONCE, in a fresh browser context,
+ * and the second reading is the one reported. A failure that survives that is
+ * not a flake. Nothing else gets a retry: a 4xx, a page that did not render
+ * and an unreadable colour are all deterministic, and re-running them would
+ * only be a way of not believing the answer.
+ */
+async function sweepRoute(browser, session, entry, path) {
+  const first = await sweepRouteOnce(browser, session, entry, path);
+  if (!first.serverFailed) {
+    for (const message of first.failures) fail(message);
+    return;
+  }
+  const second = await sweepRouteOnce(browser, session, entry, path);
+  for (const message of second.failures) {
+    fail(second.serverFailed ? `${message}\n  (both of two attempts)` : message);
+  }
+}
+
+/** One load, collecting its failures rather than committing them. */
+async function sweepRouteOnce(browser, session, entry, path) {
+  const failures = [];
+  const { serverFailed } = await inspectRoute(browser, session, entry, path, m => failures.push(m));
+  return { failures, serverFailed };
+}
+
+/**
+ * The assertions for one load. The page has no heading contract the way the
+ * three landing routes do, so "rendered" is read the way a person reads it:
+ * the shell is there, the main region has content, nothing is still spinning,
+ * and the error boundary did not fire.
+ */
+async function inspectRoute(browser, session, entry, path, fail) {
+  const who = `${entry.who} on ${path}`;
+  const { context, page, responses } = await openAsOperator(
+    browser,
+    session,
+    path,
+    SWEEP_SETTLE_MS
+  );
+
+  const state = await page.evaluate(() => {
+    const main = document.querySelector('main') ?? document.body;
+    const spinning = Array.from(main.querySelectorAll('.animate-spin')).filter(el => {
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    }).length;
+    return {
+      pathname: window.location.pathname,
+      body: document.body.innerText,
+      mainText: main.innerText.trim(),
+      title: document.title,
+      spinning,
+    };
+  });
+
+  // 1. Rendered.
+  if (state.body.includes('could not be displayed') || state.body.includes('Application error')) {
     fail(
-      `${who}: made ${refused.length} request(s) the server refused. An agency-scoped\n` +
-        `  endpoint must not be asked while there is no acting tenant:\n` +
-        Object.entries(counted)
-          .map(([k, n]) => `    ${k} x${n}`)
-          .join('\n')
+      `${who}: the page threw. The error boundary is showing:\n  ${JSON.stringify(state.body.slice(0, 300))}`
+    );
+  } else if (state.mainText.length === 0) {
+    fail(`${who}: the main region is empty after ${SWEEP_SETTLE_MS}ms.`);
+  } else if (state.spinning > 0) {
+    fail(
+      `${who}: still loading after ${SWEEP_SETTLE_MS}ms (${state.spinning} spinner(s) visible).\n  saw: ${JSON.stringify(state.mainText.slice(0, 200))}`
     );
   }
 
+  // 2. Still on the page asked for.
+  if (state.pathname !== path) {
+    fail(`${who}: was moved to ${state.pathname}.`);
+  }
+
+  // 3. No prompt: every session in the sweep either belongs to an agency or
+  //    is on a platform-wide page.
+  if (state.body.includes('Choose an agency')) {
+    fail(`${who}: was shown the "Choose an agency" prompt.`);
+  }
+
+  // The tab is named after the page and the product.
+  if (!state.title.includes('NetEnroll')) {
+    fail(
+      `${who}: the tab is titled ${JSON.stringify(state.title)}, which does not name the product.`
+    );
+  }
+
+  // 4. Nothing refused — API or asset.
+  reportRefusals(who, responses, 'Every request a page load makes must succeed', path, fail);
+
+  // 5. Legible.
+  await checkLegibility(page, who, fail);
+
+  await context.close();
+  return {
+    serverFailed: responses.some(r => r.status >= 500 && !isKnownRefusal(r, path)),
+  };
+}
+
+/** The dark scope: light document, dark pane. */
+async function checkDarkScope(browser, session) {
+  const who = `dark scope on ${DARK_SCOPE_ROUTE}`;
+  const { context, page } = await openAsOperator(
+    browser,
+    session,
+    DARK_SCOPE_ROUTE,
+    SWEEP_SETTLE_MS
+  );
+  const audit = await checkLegibility(page, who);
+  if (audit.darkScopes.length === 0) {
+    fail(`${who}: no [data-theme="dark"] subtree rendered, so the dark scope was not exercised.`);
+  }
   await context.close();
 }
 
@@ -533,6 +1220,26 @@ async function main() {
       DATABASE_URL: services.database,
       REDIS_URL: services.redis,
       JWT_SECRET: process.env.JWT_SECRET ?? 'platform-smoke-secret-platform-smoke-secret',
+      /*
+       * The softphone's credential endpoint refuses with 503 when this is
+       * unset, deliberately — a credential that cannot register is worse than
+       * none. Every page an agent loads asks for one, so without this the
+       * sweep measures an environment no agent works in, and a real failure of
+       * that endpoint would be indistinguishable from the empty config.
+       */
+      SIP_AGENT_PASSWORD: process.env.SIP_AGENT_PASSWORD ?? 'platform-smoke-sip-password',
+      /*
+       * The API rate-limits to 100 requests a minute per IP. This sweep loads
+       * about sixty pages, several requests each, from one address — traffic
+       * no person generates and the limiter is right to find suspicious. It
+       * showed up as pages bouncing to /login, because a refused /api/auth/me
+       * reads to the client as a dead session.
+       *
+       * Raised rather than disabled: the limiter still runs, so a runaway poll
+       * would still be caught. The 500-instead-of-429 this uncovered is fixed
+       * in apps/api/src/index.ts.
+       */
+      RATE_LIMIT_MAX: process.env.RATE_LIMIT_MAX ?? '2000',
       // The fronter bot's socket defaults to 8021, which is also FreeSWITCH's
       // ESL port. Moved out of the way so this can run beside a real one.
       FRONTER_SOCKET_PORT: String(API_PORT + 1000),
@@ -576,33 +1283,90 @@ async function main() {
    * the idle window that counts requests. The response is not checked -- these
    * are unauthenticated hits whose only job is to make the compiler run.
    */
-  for (const route of ROUTES) {
-    await fetch(`${FRONT}${route.path}`, { redirect: 'manual' }).catch(() => null);
+  const everyRoute = new Set([
+    ...ROUTES.map(r => r.path),
+    ...SWEEP.flatMap(entry => entry.routes),
+    DARK_SCOPE_ROUTE,
+  ]);
+  for (const path of everyRoute) {
+    await fetch(`${FRONT}${path}`, { redirect: 'manual' }).catch(() => null);
   }
 
   const browser = await chromium.launch({
     executablePath: process.env.SMOKE_CHROMIUM || undefined,
   });
 
-  for (const roles of ROLE_SETS) {
-    await seed(services, roles);
+  if (!ONLY) {
+    for (const roles of ROLE_SETS) {
+      await seed(services, roles);
+      const session = await signIn();
+      for (const route of ROUTES) await checkRoute(browser, session, roles, route);
+    }
+  }
+
+  let sweptRoutes = 0;
+  for (const entry of SWEEP) {
+    if (ONLY && !entry.who.includes(ONLY)) continue;
+    await seed(services, entry.roles, {
+      platform: entry.platform,
+      actingTenant: entry.actingTenant,
+    });
     const session = await signIn();
-    for (const route of ROUTES) await checkRoute(browser, session, roles, route);
+    for (const path of entry.routes) {
+      await sweepRoute(browser, session, entry, path);
+      sweptRoutes++;
+    }
   }
 
   await seed(services, ['ADMIN']);
-  await checkPollingSettles(browser, await signIn());
+  const staff = await signIn();
+  await checkDarkScope(browser, staff);
+  if (!ONLY) await checkPollingSettles(browser, staff);
 
   await browser.close();
 
   if (failures.length > 0) {
     console.error(`\n${failures.length} failure(s):\n\n${failures.join('\n\n')}\n`);
+    /*
+     * The server's own account of it.
+     *
+     * A 5xx in the list above is a report that something failed, with no
+     * evidence of why — and the process that knows why is one this script
+     * started and is about to kill. Whoever reads a red CI job needs the
+     * stack, not just the status code.
+     */
+    const lines = api.log.join('').split('\n');
+    const keep = new Set();
+    lines.forEach((line, i) => {
+      // A 5xx logged as a completed request matters as much as one logged as
+      // an error: the response the browser saw is the fact under test.
+      if (
+        (/"level":(50|60)|Error:|error:|ERROR/.test(line) || /statusCode":? 5\d\d/.test(line)) &&
+        !line.includes('prisma:query')
+      ) {
+        // The line naming an error is rarely the line that locates it, so take
+        // the stack around it as well.
+        for (let j = Math.max(0, i - 2); j <= Math.min(lines.length - 1, i + 14); j++) {
+          if (!lines[j].includes('prisma:query')) keep.add(j);
+        }
+      }
+    });
+    const serverErrors = [...keep]
+      .sort((a, b) => a - b)
+      .slice(-120)
+      .map(i => lines[i]);
+    if (serverErrors.length > 0) {
+      console.error(
+        `The API logged this while the failures above happened:\n${serverErrors.join('\n')}\n`
+      );
+    }
     process.exitCode = 1;
     return;
   }
   console.log(
-    `platform landing smoke test passed: ${ROLE_SETS.length} role set(s) x ${ROUTES.length} route(s), ` +
-      'no prompt, nothing refused, polling settles.'
+    `browser smoke test passed: ${ROLE_SETS.length} role set(s) x ${ROUTES.length} landing route(s), ` +
+      `${sweptRoutes} route load(s) across ${SWEEP.length} sessions, light and legible, ` +
+      'no prompt, nothing refused, dark scope dark, polling settles.'
   );
 }
 

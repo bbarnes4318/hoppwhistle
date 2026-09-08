@@ -190,10 +190,13 @@ jobs:
       # tested source text and pure functions.
       #
       # This boots the API and the web app and loads the three platform-wide
-      # landing routes in Chromium as a platform admin with no acting tenant. It
-      # asserts the page rendered, the URL did not move, the prompt is absent,
-      # nothing was refused, and the polling settles. See the header of
-      # apps/web/e2e/platform-landing.smoke.mjs.
+      # landing routes in Chromium as a platform admin with no acting tenant,
+      # then every significant route as an agency principal, an agent, a
+      # publisher, a buyer and the platform admin inside an agency. It asserts
+      # each page rendered, the URL did not move, the prompt is absent, nothing
+      # was refused, the page is light and legible (every run of text clears
+      # 3:1, every border can be seen), the one dark scope is dark, and the
+      # polling settles. See the header of apps/web/e2e/platform-landing.smoke.mjs.
       #
       # It refuses rather than skips when it has no database: a smoke test that
       # skips inside a blocking job is a green tick that means nothing, which is

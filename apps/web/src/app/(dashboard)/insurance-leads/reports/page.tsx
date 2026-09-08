@@ -64,9 +64,9 @@ const DATE_PRESETS: Array<{ key: string; label: string; days: number }> = [
 ];
 
 const OUTCOME_STYLES: Record<DeliveryOutcome, string> = {
-  ACCEPTED: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-  NOT_ACCEPTED: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
-  NOT_SENT: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+  ACCEPTED: 'bg-live-tint text-live-ink border-live/40',
+  NOT_ACCEPTED: 'bg-dropped-tint text-dropped-ink border-dropped/40',
+  NOT_SENT: 'bg-ringing-tint text-ringing-ink border-ringing/40',
 };
 
 function formatDateTime(value: string | null): string {
@@ -111,7 +111,7 @@ function SummaryTile({
       {...(onClick ? { type: 'button' as const, onClick } : {})}
       className={cn(
         'rounded-lg border bg-card p-3 text-left transition-colors',
-        active ? 'border-emerald-500/40 ring-1 ring-emerald-500/20' : 'border-border/40',
+        active ? 'border-brand ring-1 ring-brand-tint' : 'border-rule',
         onClick && 'hover:border-border cursor-pointer'
       )}
     >
@@ -237,7 +237,7 @@ export default function CrmReportsPage() {
           <Button
             variant="outline"
             size="icon"
-            className="h-9 w-9 border-border/40"
+            className="h-9 w-9 border-rule"
             onClick={() => void loadReport()}
             disabled={loading}
             title="Refresh"
@@ -247,7 +247,7 @@ export default function CrmReportsPage() {
           <Button
             onClick={() => void handleExport()}
             disabled={exporting}
-            className="flex items-center gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
+            className="flex items-center gap-1.5 bg-brand text-brand-fg hover:bg-brand-ink"
           >
             {exporting ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -260,14 +260,14 @@ export default function CrmReportsPage() {
       </div>
 
       {error && (
-        <div className="flex items-start gap-2 rounded-lg border border-rose-500/20 bg-rose-500/10 p-3 text-sm text-rose-300">
+        <div className="flex items-start gap-2 rounded-lg bg-dropped-tint p-3 text-sm text-dropped-ink">
           <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
       {/* Filters */}
-      <div className="flex flex-col gap-2.5 rounded-lg border border-border/40 bg-card p-2.5 md:flex-row md:flex-wrap md:items-center">
+      <div className="flex flex-col gap-2.5 rounded-lg border border-rule bg-card p-2.5 md:flex-row md:flex-wrap md:items-center">
         <div className="flex items-center gap-1.5">
           <span className="text-[10px] font-semibold uppercase text-muted-foreground">From</span>
           <input
@@ -291,7 +291,7 @@ export default function CrmReportsPage() {
           />
         </div>
 
-        <div className="flex rounded border border-border/40 bg-muted/40 p-0.5">
+        <div className="flex rounded border border-rule bg-sunken p-0.5">
           {DATE_PRESETS.map(preset => (
             <button
               key={preset.key}
@@ -365,7 +365,7 @@ export default function CrmReportsPage() {
             placeholder="Name, phone, email, zip…"
             value={filters.search}
             onChange={e => setFilter('search', e.target.value)}
-            className="h-8 w-52 rounded-md border border-border bg-card pl-8 pr-2 text-xs text-foreground placeholder-slate-600"
+            className="h-8 w-52 rounded-md border border-border bg-card pl-8 pr-2 text-xs text-foreground placeholder:text-muted-foreground"
           />
         </div>
       </div>
@@ -377,7 +377,7 @@ export default function CrmReportsPage() {
           value={(summary?.accepted ?? 0).toLocaleString()}
           sub={`${(summary?.matched ?? 0).toLocaleString()} matched · ${(summary?.manualReview ?? 0).toLocaleString()} awaiting approval`}
           icon={CheckCircle2}
-          tone="text-emerald-400"
+          tone="text-live-ink"
           active={filters.outcome === 'ACCEPTED'}
           onClick={() => toggleOutcome('ACCEPTED')}
         />
@@ -386,7 +386,7 @@ export default function CrmReportsPage() {
           value={(summary?.notAccepted ?? 0).toLocaleString()}
           sub={`${(summary?.unmatched ?? 0).toLocaleString()} unmatched · ${(summary?.errored ?? 0).toLocaleString()} rejected`}
           icon={XCircle}
-          tone="text-rose-400"
+          tone="text-dropped-ink"
           active={filters.outcome === 'NOT_ACCEPTED'}
           onClick={() => toggleOutcome('NOT_ACCEPTED')}
         />
@@ -395,7 +395,7 @@ export default function CrmReportsPage() {
           value={(summary?.notSent ?? 0).toLocaleString()}
           sub="Held, queued or failed validation"
           icon={Clock}
-          tone="text-amber-400"
+          tone="text-ringing-ink"
           active={filters.outcome === 'NOT_SENT'}
           onClick={() => toggleOutcome('NOT_SENT')}
         />
@@ -404,7 +404,7 @@ export default function CrmReportsPage() {
           value={acceptanceRate}
           sub="Of the leads actually sent"
           icon={RefreshCw}
-          tone="text-cyan-400"
+          tone="text-brand-ink"
         />
         <SummaryTile
           label="Accepted value"
@@ -414,17 +414,17 @@ export default function CrmReportsPage() {
           })}`}
           sub="Price Ameriquote paid"
           icon={DollarSign}
-          tone="text-emerald-400"
+          tone="text-live-ink"
         />
       </div>
 
       {/* Why the rest were not accepted */}
       {report && report.reasons.length > 0 && (
-        <div className="rounded-lg border border-border/40 bg-card">
-          <div className="border-b border-border/20 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <div className="rounded-lg border border-rule bg-card">
+          <div className="border-b border-rule px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             Why leads were not accepted — whole date range, most common first
           </div>
-          <div className="divide-y divide-border/20">
+          <div className="divide-y divide-rule">
             {report.reasons.slice(0, TOP_REASONS).map(reason => (
               <div
                 key={`${reason.postStatus}-${reason.reason}`}
@@ -453,7 +453,7 @@ export default function CrmReportsPage() {
           {report.reasons.length > TOP_REASONS && (
             /* Without this the visible counts sum to less than the tiles and
                the arithmetic looks broken. Say what is not shown. */
-            <div className="border-t border-border/20 px-3 py-2 text-[11px] text-muted-foreground">
+            <div className="border-t border-rule px-3 py-2 text-[11px] text-muted-foreground">
               +{report.reasons.length - TOP_REASONS} more{' '}
               {report.reasons.length - TOP_REASONS === 1 ? 'reason' : 'reasons'} covering{' '}
               {report.reasons
@@ -467,9 +467,9 @@ export default function CrmReportsPage() {
       )}
 
       {/* Per-lead detail */}
-      <div className="overflow-x-auto rounded-lg border border-border/40 bg-card">
+      <div className="overflow-x-auto rounded-lg border border-rule bg-card">
         <table className="w-full min-w-[1100px] text-left text-xs">
-          <thead className="border-b border-border/20 text-[10px] uppercase tracking-wider text-muted-foreground">
+          <thead className="border-b border-rule text-[10px] uppercase tracking-wider text-muted-foreground">
             <tr>
               <th className="px-3 py-2 font-semibold">Outcome</th>
               <th className="px-3 py-2 font-semibold">Lead</th>
@@ -481,7 +481,7 @@ export default function CrmReportsPage() {
               <th className="px-3 py-2 font-semibold">Reason</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-border/10">
+          <tbody className="divide-y divide-rule">
             {loading && (
               <tr>
                 <td colSpan={8} className="px-3 py-10 text-center text-muted-foreground">
@@ -498,7 +498,7 @@ export default function CrmReportsPage() {
             )}
             {!loading &&
               report?.rows.map(row => (
-                <tr key={row.submissionId} className="hover:bg-muted/30">
+                <tr key={row.submissionId} className="hover:bg-sunken">
                   <td className="px-3 py-2">
                     <span
                       className={cn(
@@ -528,7 +528,7 @@ export default function CrmReportsPage() {
                     {formatDateTime(row.sentAt ?? row.receivedAt)}
                   </td>
                   <td className="px-3 py-2 text-muted-foreground">{row.ameriquoteLeadId || '—'}</td>
-                  <td className="px-3 py-2 text-emerald-400">
+                  <td className="px-3 py-2 text-money-ink">
                     {row.ameriquotePrice ? `$${row.ameriquotePrice}` : '—'}
                   </td>
                   <td className="max-w-md px-3 py-2 text-muted-foreground">{row.reason}</td>

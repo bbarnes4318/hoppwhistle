@@ -122,7 +122,7 @@ function NumberCard({
     <div className="flex flex-col rounded border border-border bg-card p-3 transition-all hover:border-primary/50 hover:shadow-sm">
       <div className="flex items-start justify-between mb-2">
         <div className="space-y-0.5">
-          <div className="font-mono text-sm font-semibold tracking-tight text-white">
+          <div className="font-mono text-sm font-semibold tracking-tight text-ink">
             {formatPhoneNumber(number.number)}
           </div>
           <div className="flex items-center gap-1.5">
@@ -152,11 +152,11 @@ function NumberCard({
         </Button>
       </div>
 
-      <div className="mt-2 border-t border-border/10 pt-2 space-y-1.5 text-[11px]">
+      <div className="mt-2 border-t border-rule pt-2 space-y-1.5 text-[11px]">
         <div className="grid grid-cols-2 gap-2">
           <div>
             <div className="text-muted-foreground text-[9px] uppercase tracking-wider">Carrier</div>
-            <div className="font-medium truncate text-white" title={carrierLabel(number)}>
+            <div className="font-medium truncate text-ink" title={carrierLabel(number)}>
               {carrierLabel(number)}
             </div>
           </div>
@@ -164,7 +164,7 @@ function NumberCard({
             <div className="text-muted-foreground text-[9px] uppercase tracking-wider">
               Purchased
             </div>
-            <div className="font-medium text-white">
+            <div className="font-medium text-ink">
               {number.purchasedAt ? new Date(number.purchasedAt).toLocaleDateString() : 'N/A'}
             </div>
           </div>
@@ -175,7 +175,7 @@ function NumberCard({
               Campaign
             </div>
             <div
-              className="font-medium truncate text-white"
+              className="font-medium truncate text-ink"
               title={number.campaign?.name || 'Unassigned'}
             >
               {number.campaign?.name || 'Unassigned'}
@@ -186,7 +186,7 @@ function NumberCard({
               Assigned Agent
             </div>
             <div
-              className="font-medium truncate text-white"
+              className="font-medium truncate text-ink"
               title={number.user?.name || 'Unassigned'}
             >
               {number.user?.name || 'Unassigned'}
@@ -361,7 +361,7 @@ function NumbersPage() {
           variant="outline"
           size="sm"
           onClick={handleImport}
-          className="h-8 text-xs border-border/50 text-muted-foreground"
+          className="h-8 text-xs border-rule text-muted-foreground"
         >
           <Download className="mr-2 h-3.5 w-3.5" />
           Import
@@ -372,7 +372,7 @@ function NumbersPage() {
           onClick={() => void handleSyncAnveo()}
           disabled={syncingAnveo}
           title="Import DIDs bought directly in the Anveo portal"
-          className="h-8 text-xs border-border/50 text-muted-foreground"
+          className="h-8 text-xs border-rule text-muted-foreground"
         >
           {syncingAnveo ? (
             <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
@@ -388,20 +388,20 @@ function NumbersPage() {
               Buy Number
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="bg-slate-900 border-white/10 text-white">
-            <DropdownMenuLabel className="text-xs text-gray-400">Select Provider</DropdownMenuLabel>
-            <DropdownMenuSeparator className="bg-white/10" />
+          <DropdownMenuContent align="end" className="bg-surface border-rule text-ink">
+            <DropdownMenuLabel className="text-xs text-ink-3">Select Provider</DropdownMenuLabel>
+            <DropdownMenuSeparator className="bg-rule" />
             <DropdownMenuItem
               onClick={handleBuyFractelNumber}
-              className="focus:bg-cyan-600 focus:text-white text-xs"
+              className="focus:bg-brand-tint focus:text-brand-ink text-xs"
             >
               Buy from FracTEL (local &amp; toll-free)
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={handleBuyBulkvsNumber}
-              className="focus:bg-cyan-600 focus:text-white text-xs"
+              className="focus:bg-brand-tint focus:text-brand-ink text-xs"
             >
-              Buy from Hopwhistle
+              Buy from NetEnroll
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -418,8 +418,8 @@ function NumbersPage() {
         </TabsList>
 
         <TabsContent value="numbers" className="m-0 flex-1 min-h-0 overflow-hidden">
-          <Card className="h-full flex flex-col overflow-hidden min-h-0 bg-card border-border/40 shadow-sm">
-            <CardHeader className="flex-shrink-0 py-2 px-3 border-b border-border/10">
+          <Card className="h-full flex flex-col overflow-hidden min-h-0 bg-card border-rule shadow-sm">
+            <CardHeader className="flex-shrink-0 py-2 px-3 border-b border-rule">
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -437,7 +437,7 @@ function NumbersPage() {
                     placeholder="Search numbers..."
                     value={search}
                     onChange={e => setSearch(e.target.value)}
-                    className="pl-8 h-7 text-xs bg-background border-border/50 text-foreground"
+                    className="pl-8 h-7 text-xs bg-background border-rule text-foreground"
                   />
                 </div>
               </div>
@@ -458,7 +458,7 @@ function NumbersPage() {
                       {/* Admins manage inventory carrier by carrier: which DIDs
                           can attest on which trunk, and where a gap is. The flat
                           list made that impossible to see. */}
-                      <div className="flex items-center gap-2 mb-2 pb-1 border-b border-border/20">
+                      <div className="flex items-center gap-2 mb-2 pb-1 border-b border-rule">
                         <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                           {group.carrier}
                         </div>
@@ -480,8 +480,8 @@ function NumbersPage() {
         </TabsContent>
 
         <TabsContent value="routing" className="m-0 flex-1 min-h-0 overflow-hidden">
-          <Card className="h-full flex flex-col overflow-hidden min-h-0 bg-card border-border/40 shadow-sm">
-            <CardHeader className="flex-shrink-0 py-2 px-3 border-b border-border/10">
+          <Card className="h-full flex flex-col overflow-hidden min-h-0 bg-card border-rule shadow-sm">
+            <CardHeader className="flex-shrink-0 py-2 px-3 border-b border-rule">
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -500,7 +500,7 @@ function NumbersPage() {
                       placeholder="Search routes..."
                       value={search}
                       onChange={e => setSearch(e.target.value)}
-                      className="pl-8 h-7 text-xs bg-background border-border/50 text-foreground"
+                      className="pl-8 h-7 text-xs bg-background border-rule text-foreground"
                     />
                   </div>
                   <Button
@@ -532,7 +532,7 @@ function NumbersPage() {
                     >
                       <div className="flex items-start justify-between mb-2">
                         <div className="space-y-0.5">
-                          <div className="font-mono text-sm font-semibold tracking-tight text-cyan-400">
+                          <div className="font-mono text-sm font-semibold tracking-tight text-brand-ink">
                             {formatPhoneNumber(route.did)}
                           </div>
                           <div className="flex items-center gap-1.5">
@@ -545,7 +545,7 @@ function NumbersPage() {
                             {route.recordingEnabled && (
                               <Badge
                                 variant="outline"
-                                className="text-[8px] px-1 py-0 border-blue-500/30 text-blue-400 bg-blue-500/10 animate-none"
+                                className="text-[8px] px-1 py-0 border-money/40 text-money-ink bg-money-tint animate-none"
                               >
                                 REC
                               </Badge>
@@ -562,12 +562,12 @@ function NumbersPage() {
                         </Button>
                       </div>
 
-                      <div className="space-y-2 border-t border-border/10 pt-2 text-[11px] mt-2">
+                      <div className="space-y-2 border-t border-rule pt-2 text-[11px] mt-2">
                         <div>
                           <div className="text-muted-foreground text-[9px] uppercase tracking-wider flex items-center gap-1">
                             <ArrowRightLeft className="h-3 w-3" /> Destination
                           </div>
-                          <div className="font-mono text-xs text-white">
+                          <div className="font-mono text-xs text-ink">
                             {formatPhoneNumber(route.destination)}
                           </div>
                         </div>
@@ -578,7 +578,7 @@ function NumbersPage() {
                               Label / Buyer
                             </div>
                             <div
-                              className="font-medium truncate text-white"
+                              className="font-medium truncate text-ink"
                               title={route.label || route.buyer?.name || 'Unassigned'}
                             >
                               {route.label || route.buyer?.name || 'Unassigned'}
@@ -588,7 +588,7 @@ function NumbersPage() {
                             <div className="text-muted-foreground text-[9px] uppercase tracking-wider">
                               Created
                             </div>
-                            <div className="font-medium text-white">
+                            <div className="font-medium text-ink">
                               {route.createdAt
                                 ? new Date(route.createdAt).toLocaleDateString()
                                 : 'N/A'}

@@ -1,6 +1,8 @@
 'use client';
 
+import { Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
+
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -23,7 +25,6 @@ import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api';
 import { formatPhoneNumber } from '@/lib/utils';
-import { Loader2 } from 'lucide-react';
 
 export interface AvailableNumber {
   id: string;
@@ -150,7 +151,7 @@ export function CreateRouteDialog({
 
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="phoneNumber">Hopwhistle DID</Label>
+            <Label htmlFor="phoneNumber">NetEnroll DID</Label>
             <Select value={phoneNumberId} onValueChange={setPhoneNumberId} disabled={loading}>
               <SelectTrigger>
                 <SelectValue placeholder="Select a phone number" />

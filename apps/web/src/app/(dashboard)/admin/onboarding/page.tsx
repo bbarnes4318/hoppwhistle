@@ -154,7 +154,7 @@ export default function OnboardingPage(): JSX.Element {
       {notice && <p className="text-sm text-muted-foreground">{notice}</p>}
 
       {activationLink && (
-        <Card className="border-emerald-500/40 bg-emerald-500/5">
+        <Card className="border-live bg-live-tint">
           <CardContent className="pt-6">
             <p className="text-sm font-medium">The owner&rsquo;s activation token</p>
             <p className="mt-1 text-[11px] text-muted-foreground">
@@ -442,7 +442,7 @@ function AgencySteps({
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-sm">
             {step.state === 'COMPLETE' ? (
-              <Check className="h-4 w-4 text-emerald-500" />
+              <Check className="h-4 w-4 text-live-ink" />
             ) : step.state === 'BLOCKED' ? (
               <Lock className="h-4 w-4 text-muted-foreground" />
             ) : (
@@ -467,7 +467,7 @@ function AgencySteps({
             submission at a time.
           */}
           {step.blockers.length > 0 && (
-            <ul className="list-disc space-y-0.5 pl-4 text-[11px] text-amber-600">
+            <ul className="list-disc space-y-0.5 pl-4 text-[11px] text-ringing-ink">
               {step.blockers.map(blocker => (
                 <li key={blocker}>{blocker}</li>
               ))}

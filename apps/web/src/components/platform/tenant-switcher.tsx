@@ -73,7 +73,14 @@ export function TenantSwitcher({ state }: { state?: PlatformContextState }) {
             inside
               ? // Deliberately loud. This is the "you are inside one agency's
                 // data" state, and it stays on screen the whole time.
-                'border-amber-500 bg-amber-500 text-amber-950 hover:bg-amber-400'
+                //
+                // --ringing rather than the brand green, and rather than a raw
+                // amber. Brand green is the colour of an action the operator
+                // can take; this is a condition they are in. --ringing is the
+                // palette's "in progress, window open" signal and is the
+                // nearest documented meaning, and ink on it clears 5.65:1
+                // where the old amber-950-on-amber-500 did not reach 4.5.
+                'border-ringing bg-ringing text-ink hover:opacity-90'
               : 'border-rule bg-surface text-ink-2 hover:border-rule-strong hover:text-ink'
           )}
           aria-label={
@@ -149,7 +156,7 @@ export function TenantSwitcher({ state }: { state?: PlatformContextState }) {
         {ctx.error && (
           <>
             <DropdownMenuSeparator />
-            <div className="px-2 py-1.5 t-meta text-red-600">{ctx.error}</div>
+            <div className="px-2 py-1.5 t-meta text-dropped-ink">{ctx.error}</div>
           </>
         )}
       </DropdownMenuContent>

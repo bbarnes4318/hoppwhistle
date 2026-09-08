@@ -9,9 +9,10 @@ import {
 import { usePathname } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { apiClient } from '@/lib/api';
+
 import { usePhone } from './phone-provider';
 
-import { apiClient } from '@/lib/api';
 
 // Build button list from shared constants
 const DISPOSITION_BUTTONS = DISPOSITIONS.map(value => ({
@@ -137,7 +138,7 @@ export function GlobalDispositionModal() {
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-md bg-card border border-border rounded-xl shadow-2xl overflow-hidden">
+      <div className="w-full max-w-md bg-card border border-border rounded-card shadow-lg overflow-hidden">
         {saved ? (
           <div className="p-12 flex flex-col items-center justify-center">
             <div className="w-3 h-3 bg-primary rounded-full mb-4 animate-pulse" />
@@ -164,7 +165,7 @@ export function GlobalDispositionModal() {
             <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
               {/* Error banner */}
               {saveError && (
-                <div className="bg-red-500/10 border border-red-500/30 rounded p-3 text-xs text-red-400 font-mono">
+                <div className="bg-dropped-tint border border-dropped/40 rounded p-3 text-xs text-dropped-ink font-mono">
                   ✕ {saveError}
                 </div>
               )}
@@ -198,7 +199,7 @@ export function GlobalDispositionModal() {
                         ? '📞 Callback Schedule'
                         : '📋 Follow-Up Schedule'}
                     {isRequired && (
-                      <span className="text-[10px] text-amber-400 normal-case tracking-normal">
+                      <span className="text-[10px] text-ringing-ink normal-case tracking-normal">
                         (required)
                       </span>
                     )}

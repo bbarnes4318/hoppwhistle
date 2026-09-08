@@ -146,7 +146,7 @@ export function SavedViews<TFilters>({
             type="submit"
             size="sm"
             disabled={!name.trim()}
-            className="h-8 shrink-0 rounded-control bg-money px-2 text-white hover:bg-money/90 disabled:opacity-40"
+            className="h-8 shrink-0 rounded-control bg-brand px-2 text-ink hover:bg-brand-ink hover:text-surface disabled:opacity-40"
             aria-label="Save current filters as a view"
           >
             <Plus aria-hidden className="h-3.5 w-3.5" />

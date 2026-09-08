@@ -942,7 +942,7 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
   const renderField = field => {
     const value = formData[field.key] || '';
     const baseClass =
-      'bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white text-lg focus:border-cyan-500 focus:outline-none';
+      'bg-sunken border border-rule-strong rounded-lg px-3 py-2 text-ink text-lg focus:border-brand-ink focus:outline-none';
 
     // Height Slider (Feet or Inches) - Compact
     if (field.type === 'height_slider') {
@@ -951,8 +951,8 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
         return (
           <div key={field.key} className="col-span-2 mb-2">
             <div className="flex items-center justify-between mb-1">
-              <label className="text-gray-400 text-xs font-medium">Height</label>
-              <span className="text-lg font-bold text-cyan-400">
+              <label className="text-ink-2 text-xs font-medium">Height</label>
+              <span className="text-lg font-bold text-brand-ink">
                 {feet}' {formData.heightInches || 0}"
               </span>
             </div>
@@ -964,12 +964,12 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
                   max="7"
                   value={feet}
                   onChange={e => updateField('heightFeet', parseInt(e.target.value))}
-                  className="w-full h-2 bg-gray-700 rounded-full appearance-none cursor-pointer"
+                  className="w-full h-2 bg-sunken rounded-full appearance-none cursor-pointer"
                   style={{
-                    background: `linear-gradient(to right, #06b6d4 0%, #06b6d4 ${((feet - 4) / 3) * 100}%, #374151 ${((feet - 4) / 3) * 100}%, #374151 100%)`,
+                    background: `linear-gradient(to right, var(--brand) 0%, var(--brand) ${((feet - 4) / 3) * 100}%, var(--rule) ${((feet - 4) / 3) * 100}%, var(--rule) 100%)`,
                   }}
                 />
-                <div className="flex justify-between text-xs text-gray-600">
+                <div className="flex justify-between text-xs text-ink-3">
                   <span>4'</span>
                   <span>7'</span>
                 </div>
@@ -981,12 +981,12 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
                   max="11"
                   value={formData.heightInches || 0}
                   onChange={e => updateField('heightInches', parseInt(e.target.value))}
-                  className="w-full h-2 bg-gray-700 rounded-full appearance-none cursor-pointer"
+                  className="w-full h-2 bg-sunken rounded-full appearance-none cursor-pointer"
                   style={{
-                    background: `linear-gradient(to right, #06b6d4 0%, #06b6d4 ${((formData.heightInches || 0) / 11) * 100}%, #374151 ${((formData.heightInches || 0) / 11) * 100}%, #374151 100%)`,
+                    background: `linear-gradient(to right, var(--brand) 0%, var(--brand) ${((formData.heightInches || 0) / 11) * 100}%, var(--rule) ${((formData.heightInches || 0) / 11) * 100}%, var(--rule) 100%)`,
                   }}
                 />
-                <div className="flex justify-between text-xs text-gray-600">
+                <div className="flex justify-between text-xs text-ink-3">
                   <span>0"</span>
                   <span>11"</span>
                 </div>
@@ -1004,8 +1004,8 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
       return (
         <div key={field.key} className="col-span-2">
           <div className="flex items-center justify-between mb-1">
-            <label className="text-gray-400 text-xs font-medium">Weight</label>
-            <span className="text-lg font-bold text-emerald-400">{weight} lbs</span>
+            <label className="text-ink-2 text-xs font-medium">Weight</label>
+            <span className="text-lg font-bold text-live-ink">{weight} lbs</span>
           </div>
           <input
             type="range"
@@ -1014,9 +1014,9 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
             step="5"
             value={weight}
             onChange={e => updateField('weight', parseInt(e.target.value))}
-            className="w-full h-2 bg-gray-700 rounded-full appearance-none cursor-pointer"
+            className="w-full h-2 bg-sunken rounded-full appearance-none cursor-pointer"
             style={{
-              background: `linear-gradient(to right, #10b981 0%, #10b981 ${((weight - 80) / 320) * 100}%, #374151 ${((weight - 80) / 320) * 100}%, #374151 100%)`,
+              background: `linear-gradient(to right, var(--brand) 0%, var(--brand) ${((weight - 80) / 320) * 100}%, var(--rule) ${((weight - 80) / 320) * 100}%, var(--rule) 100%)`,
             }}
           />
           <div className="flex gap-1 mt-1.5">
@@ -1024,7 +1024,7 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
               <button
                 key={w}
                 onClick={() => updateField('weight', w)}
-                className={`flex-1 py-1 rounded text-xs font-medium transition-all ${weight === w ? 'bg-emerald-500 text-white' : 'bg-gray-700 text-gray-400 hover:bg-gray-600'}`}
+                className={`flex-1 py-1 rounded text-xs font-medium transition-all ${weight === w ? 'bg-brand text-brand-fg' : 'bg-sunken text-ink-2 hover:bg-sunken'}`}
               >
                 {w}
               </button>
@@ -1036,7 +1036,7 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
     if (field.type === 'select') {
       return (
         <div key={field.key} className={field.inline ? 'flex-1' : ''}>
-          <label className="text-gray-400 text-sm mb-1 block">{field.label}</label>
+          <label className="text-ink-2 text-sm mb-1 block">{field.label}</label>
           <select
             value={value}
             onChange={e => updateField(field.key, e.target.value)}
@@ -1055,12 +1055,12 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
 
     if (field.type === 'checkbox') {
       return (
-        <label key={field.key} className="flex items-center gap-2 text-white">
+        <label key={field.key} className="flex items-center gap-2 text-ink">
           <input
             type="checkbox"
             checked={value === true}
             onChange={e => updateField(field.key, e.target.checked)}
-            className="w-5 h-5 rounded bg-gray-800 border-gray-600 text-cyan-500 focus:ring-cyan-500"
+            className="w-5 h-5 rounded bg-sunken border-rule-strong text-brand-ink focus:ring-ring"
           />
           {field.label}
         </label>
@@ -1072,7 +1072,7 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
         key={field.key}
         className={field.fullWidth ? 'col-span-2' : field.inline ? 'flex-1' : ''}
       >
-        <label className="text-gray-400 text-sm mb-1 block">{field.label}</label>
+        <label className="text-ink-2 text-sm mb-1 block">{field.label}</label>
         <input
           type={field.type || 'text'}
           value={value}
@@ -1099,25 +1099,24 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
       <div
         className="absolute inset-0 z-50 flex flex-col overflow-hidden"
         style={{
-          background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)',
+          background: 'var(--paper)',
         }}
       >
         {/* Header with Glass Effect */}
         <div
-          className="flex items-center justify-between px-4 py-3 border-b border-white/10"
+          className="flex items-center justify-between px-4 py-3 border-b border-rule"
           style={{
-            background:
-              'linear-gradient(90deg, rgba(16, 185, 129, 0.2) 0%, rgba(59, 130, 246, 0.2) 100%)',
+            background: 'var(--brand-tint)',
             backdropFilter: 'blur(10px)',
           }}
         >
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
-              <Calculator className="w-5 h-5 text-white" />
+            <div className="w-10 h-10 rounded-card bg-brand-tint flex items-center justify-center">
+              <Calculator className="w-5 h-5 text-brand-ink" />
             </div>
             <div>
-              <h2 className="text-white font-bold text-lg">Quote Calculator</h2>
-              <p className="text-gray-400 text-xs">
+              <h2 className="text-ink font-bold text-lg">Quote Calculator</h2>
+              <p className="text-ink-2 text-xs">
                 {isLoading ? 'Loading rates...' : `${eligibleQuotes.length} carriers available`}
               </p>
             </div>
@@ -1125,16 +1124,16 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowSettingsPanel(true)}
-              className="p-2 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-white/20 group"
+              className="p-2 hover:bg-sunken rounded-card transition-all border border-transparent hover:border-rule-strong group"
               title="Carrier Settings"
             >
-              <Settings className="w-5 h-5 text-gray-400 group-hover:text-white transition-colors" />
+              <Settings className="w-5 h-5 text-ink-2 group-hover:text-ink transition-colors" />
             </button>
             <button
               onClick={() => setShowQuotePanel(false)}
-              className="p-2 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-white/20"
+              className="p-2 hover:bg-sunken rounded-card transition-all border border-transparent hover:border-rule-strong"
             >
-              <X className="w-5 h-5 text-white" />
+              <X className="w-5 h-5 text-ink" />
             </button>
           </div>
         </div>
@@ -1142,8 +1141,8 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {/* Coverage Selection - Compact Horizontal */}
-          <div className="flex items-center gap-3 p-3 rounded-xl border border-white/10 bg-white/5">
-            <span className="text-gray-400 text-sm whitespace-nowrap">Coverage:</span>
+          <div className="flex items-center gap-3 p-3 rounded-card border border-rule bg-sunken">
+            <span className="text-ink-2 text-sm whitespace-nowrap">Coverage:</span>
             <div className="flex flex-wrap gap-1.5 flex-1">
               {COVERAGE_OPTIONS.map(opt => (
                 <button
@@ -1151,8 +1150,8 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
                   onClick={() => updateField('selectedCoverage', opt.value)}
                   className={`px-3 py-1 rounded-full font-medium text-xs transition-all ${
                     formData.selectedCoverage === opt.value
-                      ? 'bg-primary text-white shadow-lg'
-                      : 'bg-white/10 text-gray-400 hover:bg-white/20 hover:text-white'
+                      ? 'bg-brand text-brand-fg'
+                      : 'bg-sunken text-ink-2 hover:bg-sunken hover:text-ink'
                   }`}
                 >
                   {opt.label}
@@ -1162,10 +1161,10 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
             <div
               className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap ${
                 eligibility.status === 'standard'
-                  ? 'bg-emerald-500/20 text-emerald-400'
+                  ? 'bg-live-tint text-live-ink'
                   : eligibility.status === 'modified'
-                    ? 'bg-amber-500/20 text-amber-400'
-                    : 'bg-red-500/20 text-red-400'
+                    ? 'bg-ringing-tint text-ringing-ink'
+                    : 'bg-dropped-tint text-dropped-ink'
               }`}
             >
               {eligibility.plan}
@@ -1175,11 +1174,11 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
           {/* Loading State */}
           {isLoading && (
             <div className="py-12 text-center">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary mb-4">
-                <div className="animate-spin w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full"></div>
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-card bg-brand-tint mb-4">
+                <div className="animate-spin w-8 h-8 border-3 border-brand-ink border-t-transparent rounded-full"></div>
               </div>
-              <p className="text-gray-400">Loading rates from Google Sheets...</p>
-              <p className="text-gray-500 text-sm mt-1">This may take a few seconds</p>
+              <p className="text-ink-2">Loading rates from Google Sheets...</p>
+              <p className="text-ink-3 text-sm mt-1">This may take a few seconds</p>
             </div>
           )}
 
@@ -1190,22 +1189,22 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
               {!quoteValidation.isValid ? (
                 <div className="space-y-4">
                   {/* Missing Data Alert */}
-                  <div className="flex items-start gap-3 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
-                    <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                  <div className="flex items-start gap-3 p-4 bg-ringing-tint border border-ringing rounded-card">
+                    <AlertCircle className="w-5 h-5 text-ringing-ink flex-shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-amber-300 font-medium text-sm">
+                      <p className="text-ringing-ink font-medium text-sm">
                         Required Information Missing
                       </p>
-                      <p className="text-gray-400 text-xs mt-1">
+                      <p className="text-ink-2 text-xs mt-1">
                         Please provide the following to generate quotes:
                       </p>
                       <ul className="mt-2 space-y-1">
                         {quoteValidation.missingFields.map(field => (
                           <li
                             key={field}
-                            className="text-amber-400 text-xs flex items-center gap-1"
+                            className="text-ringing-ink text-xs flex items-center gap-1"
                           >
-                            <span className="w-1 h-1 bg-amber-400 rounded-full" />
+                            <span className="w-1 h-1 bg-ringing rounded-full" />
                             {field}
                           </li>
                         ))}
@@ -1214,25 +1213,25 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
                   </div>
 
                   {/* Inline Data Entry Fields */}
-                  <div className="space-y-3 p-4 bg-white/5 border border-white/10 rounded-xl">
-                    <h4 className="text-sm font-medium text-white flex items-center gap-2">
-                      <Calendar className="w-4 h-4 text-cyan-400" />
+                  <div className="space-y-3 p-4 bg-sunken border border-rule rounded-card">
+                    <h4 className="text-sm font-medium text-ink flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-brand-ink" />
                       Enter Customer Information
                     </h4>
 
                     {/* DOB Field */}
                     {!quoteValidation.hasDOB && (
                       <div>
-                        <label className="text-gray-400 text-xs mb-1 block">Date of Birth *</label>
+                        <label className="text-ink-2 text-xs mb-1 block">Date of Birth *</label>
                         <input
                           type="date"
                           value={formData.dob || ''}
                           onChange={e => updateField('dob', e.target.value)}
                           max={new Date().toISOString().split('T')[0]}
-                          className="w-full bg-slate-800/50 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/50"
+                          className="w-full bg-sunken border border-rule-strong rounded-lg px-3 py-2 text-ink text-sm focus:outline-none focus:border-brand-ink focus:ring-1 focus:ring-ring"
                         />
                         {formData.dob && formData.age && (
-                          <p className="text-xs text-emerald-400 mt-1">
+                          <p className="text-xs text-live-ink mt-1">
                             Age calculated: {formData.age} years old
                           </p>
                         )}
@@ -1242,14 +1241,14 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
                     {/* Gender Field */}
                     {!quoteValidation.hasGender && (
                       <div>
-                        <label className="text-gray-400 text-xs mb-1 block">Gender *</label>
+                        <label className="text-ink-2 text-xs mb-1 block">Gender *</label>
                         <div className="flex gap-2">
                           <button
                             onClick={() => updateField('gender', 'Male')}
                             className={`flex-1 py-2 px-4 rounded-lg font-medium text-sm transition-all ${
                               formData.gender === 'Male'
-                                ? 'bg-cyan-500 text-white'
-                                : 'bg-slate-800/50 border border-slate-600 text-gray-400 hover:border-cyan-500/50'
+                                ? 'bg-brand text-brand-fg'
+                                : 'bg-sunken border border-rule-strong text-ink-2 hover:border-brand'
                             }`}
                           >
                             Male
@@ -1258,8 +1257,8 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
                             onClick={() => updateField('gender', 'Female')}
                             className={`flex-1 py-2 px-4 rounded-lg font-medium text-sm transition-all ${
                               formData.gender === 'Female'
-                                ? 'bg-cyan-500 text-white'
-                                : 'bg-slate-800/50 border border-slate-600 text-gray-400 hover:border-cyan-500/50'
+                                ? 'bg-brand text-brand-fg'
+                                : 'bg-sunken border border-rule-strong text-ink-2 hover:border-brand'
                             }`}
                           >
                             Female
@@ -1270,7 +1269,7 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
 
                     {/* Auto-refresh hint */}
                     {quoteValidation.isValid && (
-                      <div className="flex items-center gap-2 text-emerald-400 text-xs p-2 bg-emerald-500/10 rounded-lg">
+                      <div className="flex items-center gap-2 text-live-ink text-xs p-2 bg-live-tint rounded-lg">
                         <CheckCircle2 className="w-4 h-4" />
                         All required data provided - Quotes will refresh automatically
                       </div>
@@ -1280,11 +1279,11 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
               ) : (
                 /* All data present but still no quotes - age/eligibility issue */
                 <div className="text-center">
-                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-red-500/20 mb-4">
-                    <X className="w-8 h-8 text-red-400" />
+                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-card bg-dropped-tint mb-4">
+                    <X className="w-8 h-8 text-dropped-ink" />
                   </div>
-                  <p className="text-gray-200 font-medium">No quotes available</p>
-                  <p className="text-gray-500 text-sm mt-1">
+                  <p className="text-ink font-medium">No quotes available</p>
+                  <p className="text-ink-3 text-sm mt-1">
                     {formData.age && formData.age > 85
                       ? `Age ${formData.age} exceeds maximum coverage age for available carriers`
                       : formData.age && formData.age < 18
@@ -1292,7 +1291,7 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
                         : 'Try adjusting coverage amount or check carrier settings'}
                   </p>
                   {formData.age && (
-                    <p className="text-gray-600 text-xs mt-2">
+                    <p className="text-ink-3 text-xs mt-2">
                       Current: Age {formData.age}, {formData.gender}, $
                       {formData.selectedCoverage?.toLocaleString()} coverage
                     </p>
@@ -1305,7 +1304,7 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
           {/* Carrier Quote Cards with Logos */}
           {!isLoading && eligibleQuotes.length > 0 && (
             <div className="space-y-3">
-              <p className="text-gray-400 text-sm font-medium px-1">
+              <p className="text-ink-2 text-sm font-medium px-1">
                 Available Carriers ({eligibleQuotes.length})
               </p>
               {eligibleQuotes.map((quote, idx) => (
@@ -1319,17 +1318,17 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
                     });
                     setShowQuotePanel(false);
                   }}
-                  className={`w-full p-4 rounded-2xl transition-all duration-200 flex items-center gap-4 group ${
+                  className={`w-full p-4 rounded-card transition-all duration-200 flex items-center gap-4 group ${
                     activeQuote?.carrier === quote.carrier &&
                     activeQuote?.planType === quote.planType
-                      ? 'bg-primary border-2 border-emerald-500/50 shadow-lg '
-                      : 'bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20'
+                      ? 'bg-brand-tint border-2 border-brand '
+                      : 'bg-sunken border border-rule hover:bg-sunken hover:border-rule-strong'
                   }`}
                 >
                   {/* Carrier Logo */}
                   <div
-                    className={`w-14 h-14 rounded-xl bg-white flex items-center justify-center flex-shrink-0 overflow-hidden ${
-                      idx === 0 ? 'ring-2 ring-emerald-500 ring-offset-2 ring-offset-slate-900' : ''
+                    className={`w-14 h-14 rounded-card bg-surface flex items-center justify-center flex-shrink-0 overflow-hidden ${
+                      idx === 0 ? 'ring-2 ring-brand ring-offset-2 ring-offset-surface' : ''
                     }`}
                   >
                     {CARRIER_LOGOS[quote.carrier] ? (
@@ -1344,7 +1343,7 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
                       />
                     ) : null}
                     <span
-                      className={`text-gray-600 font-bold text-xs text-center ${CARRIER_LOGOS[quote.carrier] ? 'hidden' : ''}`}
+                      className={`text-ink-3 font-bold text-xs text-center ${CARRIER_LOGOS[quote.carrier] ? 'hidden' : ''}`}
                     >
                       {quote.carrier.substring(0, 3)}
                     </span>
@@ -1354,21 +1353,21 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
                   <div className="flex-1 text-left min-w-0">
                     <div className="flex items-center gap-2">
                       {idx === 0 && (
-                        <span className="px-2 py-0.5 bg-primary text-white text-xs font-bold rounded-full shadow-lg">
+                        <span className="px-2 py-0.5 bg-brand text-brand-fg text-xs font-bold rounded-full">
                           BEST RATE
                         </span>
                       )}
                     </div>
-                    <p className="text-white font-bold text-lg truncate">{quote.carrier}</p>
-                    <p className="text-gray-400 text-sm">{quote.planType} Plan</p>
+                    <p className="text-ink font-bold text-lg truncate">{quote.carrier}</p>
+                    <p className="text-ink-2 text-sm">{quote.planType} Plan</p>
                   </div>
 
                   {/* Premium */}
                   <div className="text-right flex-shrink-0">
-                    <p className="text-2xl font-bold bg-primary bg-clip-text text-transparent">
+                    <p className="text-2xl font-bold text-brand-ink">
                       ${quote.premium?.toFixed(2)}
                     </p>
-                    <p className="text-gray-500 text-xs">per month</p>
+                    <p className="text-ink-3 text-xs">per month</p>
                   </div>
 
                   {/* Selection Indicator */}
@@ -1376,13 +1375,13 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
                     className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${
                       activeQuote?.carrier === quote.carrier &&
                       activeQuote?.planType === quote.planType
-                        ? 'border-emerald-500 bg-emerald-500'
-                        : 'border-gray-600 group-hover:border-gray-400'
+                        ? 'border-brand bg-brand'
+                        : 'border-rule-strong group-hover:border-rule-strong'
                     }`}
                   >
                     {activeQuote?.carrier === quote.carrier &&
                       activeQuote?.planType === quote.planType && (
-                        <Check className="w-4 h-4 text-white" />
+                        <Check className="w-4 h-4 text-ink" />
                       )}
                   </div>
                 </button>
@@ -1393,16 +1392,16 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
           {/* Ineligible Carriers (Collapsed Section) */}
           {!isLoading && ineligibleQuotes.length > 0 && (
             <div className="mt-6">
-              <p className="text-gray-500 text-sm font-medium px-1 mb-2">
+              <p className="text-ink-3 text-sm font-medium px-1 mb-2">
                 Not Available Based on Health Answers ({ineligibleQuotes.length})
               </p>
               <div className="space-y-2 opacity-50">
                 {ineligibleQuotes.slice(0, 3).map(quote => (
                   <div
                     key={`${quote.carrier}-${quote.planType}`}
-                    className="w-full p-3 rounded-xl bg-white/5 border border-white/5 flex items-center gap-3"
+                    className="w-full p-3 rounded-card bg-sunken border border-rule flex items-center gap-3"
                   >
-                    <div className="w-10 h-10 rounded-lg bg-gray-800 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                    <div className="w-10 h-10 rounded-lg bg-sunken flex items-center justify-center flex-shrink-0 overflow-hidden">
                       {CARRIER_LOGOS[quote.carrier] ? (
                         <img
                           src={CARRIER_LOGOS[quote.carrier]}
@@ -1410,20 +1409,20 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
                           className="w-8 h-8 object-contain grayscale"
                         />
                       ) : (
-                        <span className="text-gray-500 font-bold text-xs">
+                        <span className="text-ink-3 font-bold text-xs">
                           {quote.carrier.substring(0, 3)}
                         </span>
                       )}
                     </div>
                     <div className="flex-1">
-                      <p className="text-gray-400 font-medium text-sm">{quote.carrier}</p>
-                      <p className="text-gray-600 text-xs">{quote.planType}</p>
+                      <p className="text-ink-2 font-medium text-sm">{quote.carrier}</p>
+                      <p className="text-ink-3 text-xs">{quote.planType}</p>
                     </div>
-                    <span className="text-gray-500 text-sm">${quote.premium?.toFixed(2)}/mo</span>
+                    <span className="text-ink-3 text-sm">${quote.premium?.toFixed(2)}/mo</span>
                   </div>
                 ))}
                 {ineligibleQuotes.length > 3 && (
-                  <p className="text-gray-600 text-xs text-center">
+                  <p className="text-ink-3 text-xs text-center">
                     +{ineligibleQuotes.length - 3} more carriers
                   </p>
                 )}
@@ -1435,15 +1434,14 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
         {/* Footer with Selected Quote Summary */}
         {activeQuote && (
           <div
-            className="border-t border-white/10 p-4"
+            className="border-t border-rule p-4"
             style={{
-              background:
-                'linear-gradient(180deg, rgba(16, 185, 129, 0.1) 0%, rgba(0,0,0,0.3) 100%)',
+              background: 'var(--sunken)',
             }}
           >
             <button
               onClick={() => setShowQuotePanel(false)}
-              className="w-full py-4 rounded-xl bg-primary text-white font-bold text-lg shadow-lg hover: transition-all hover:scale-[1.02] active:scale-[0.98]"
+              className="w-full py-4 rounded-card bg-brand text-brand-fg font-bold text-lg transition-all hover:scale-[1.02] active:scale-[0.98]"
             >
               Use {activeQuote.carrier} @ ${activeQuote.premium?.toFixed(2)}/mo
             </button>
@@ -1463,21 +1461,21 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
     return (
       <div className="absolute inset-0 z-60 flex items-center justify-center bg-black/80 ">
         <div
-          className="w-full max-w-md mx-4 rounded-2xl overflow-hidden"
+          className="w-full max-w-md mx-4 rounded-card overflow-hidden"
           style={{
-            background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
-            border: '1px solid rgba(255,255,255,0.1)',
+            background: 'var(--surface)',
+            border: '1px solid var(--rule)',
           }}
         >
           {/* Header */}
-          <div className="px-6 py-4 border-b border-white/10 ">
+          <div className="px-6 py-4 border-b border-rule ">
             <div className="flex items-center justify-between">
-              <h3 className="text-xl font-bold text-white">Confirm Carrier Selection</h3>
+              <h3 className="text-xl font-bold text-ink">Confirm Carrier Selection</h3>
               <button
                 onClick={() => setShowCarrierConfirmation(false)}
-                className="p-1.5 hover:bg-white/10 rounded-lg transition-colors"
+                className="p-1.5 hover:bg-sunken rounded-lg transition-colors"
               >
-                <X size={20} className="text-gray-400" />
+                <X size={20} className="text-ink-2" />
               </button>
             </div>
           </div>
@@ -1487,60 +1485,60 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
             {activeQuote ? (
               <>
                 {/* Carrier Display */}
-                <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+                <div className="p-4 rounded-card bg-sunken border border-rule">
                   <div className="flex items-center gap-4">
                     {CARRIER_LOGOS[activeQuote.carrier] && (
                       <img
                         src={CARRIER_LOGOS[activeQuote.carrier]}
                         alt={activeQuote.carrier}
-                        className="w-16 h-12 object-contain bg-white/10 rounded-lg p-2"
+                        className="w-16 h-12 object-contain bg-sunken rounded-lg p-2"
                       />
                     )}
                     <div className="flex-1">
-                      <p className="text-white font-bold text-lg">{activeQuote.carrier}</p>
-                      <p className="text-gray-400 text-sm">{activeQuote.planType} Plan</p>
+                      <p className="text-ink font-bold text-lg">{activeQuote.carrier}</p>
+                      <p className="text-ink-2 text-sm">{activeQuote.planType} Plan</p>
                     </div>
                   </div>
                 </div>
 
                 {/* Quote Details */}
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
-                    <p className="text-emerald-400 text-xs font-medium mb-1">Monthly Premium</p>
-                    <p className="text-white text-2xl font-bold">
+                  <div className="p-3 rounded-lg bg-live-tint border border-live">
+                    <p className="text-live-ink text-xs font-medium mb-1">Monthly Premium</p>
+                    <p className="text-ink text-2xl font-bold">
                       ${activeQuote.premium?.toFixed(2)}
                     </p>
                   </div>
-                  <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
-                    <p className="text-blue-400 text-xs font-medium mb-1">Coverage Amount</p>
-                    <p className="text-white text-2xl font-bold">
+                  <div className="p-3 rounded-lg bg-money-tint border border-money">
+                    <p className="text-money-ink text-xs font-medium mb-1">Coverage Amount</p>
+                    <p className="text-ink text-2xl font-bold">
                       ${formData.selectedCoverage?.toLocaleString()}
                     </p>
                   </div>
                 </div>
 
                 {/* Customer Summary */}
-                <div className="p-3 rounded-lg bg-white/5 text-sm">
-                  <p className="text-gray-400">
+                <div className="p-3 rounded-lg bg-sunken text-sm">
+                  <p className="text-ink-2">
                     Customer:{' '}
-                    <span className="text-white">
+                    <span className="text-ink">
                       {formData.firstName} {formData.lastName}
                     </span>
                   </p>
-                  <p className="text-gray-400">
-                    Age: <span className="text-white">{formData.age}</span> | Gender:{' '}
-                    <span className="text-white">{formData.gender}</span>
+                  <p className="text-ink-2">
+                    Age: <span className="text-ink">{formData.age}</span> | Gender:{' '}
+                    <span className="text-ink">{formData.gender}</span>
                   </p>
-                  <p className="text-gray-400">
-                    State: <span className="text-white">{formData.state}</span>
+                  <p className="text-ink-2">
+                    State: <span className="text-ink">{formData.state}</span>
                   </p>
                 </div>
 
                 {/* Warning for non-American Amicable */}
                 {activeQuote.carrier !== 'American Amicable' && (
-                  <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-start gap-2">
-                    <AlertCircle size={18} className="text-amber-400 flex-shrink-0 mt-0.5" />
-                    <p className="text-amber-200 text-sm">
+                  <div className="p-3 rounded-lg bg-ringing-tint border border-ringing flex items-start gap-2">
+                    <AlertCircle size={18} className="text-ringing-ink flex-shrink-0 mt-0.5" />
+                    <p className="text-ringing-ink text-sm">
                       Automated submission is only available for American Amicable. You will need to
                       complete the {activeQuote.carrier} application manually.
                     </p>
@@ -1551,13 +1549,13 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
                 <div className="flex gap-3 pt-2">
                   <button
                     onClick={() => setShowCarrierConfirmation(false)}
-                    className="flex-1 py-3 rounded-xl bg-gray-700 hover:bg-gray-600 text-white font-medium transition-all"
+                    className="flex-1 py-3 rounded-card bg-sunken hover:bg-rule text-ink font-medium transition-all"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleConfirmCarrier}
-                    className="flex-1 py-3 rounded-xl hover: hover: text-white font-bold transition-all shadow-lg "
+                    className="flex-1 py-3 rounded-card text-ink font-bold transition-all "
                   >
                     <span className="flex items-center justify-center gap-2">
                       <CheckCircle2 size={18} />
@@ -1568,13 +1566,13 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
               </>
             ) : (
               <div className="text-center py-8">
-                <p className="text-gray-400">No carrier selected. Please select a quote first.</p>
+                <p className="text-ink-2">No carrier selected. Please select a quote first.</p>
                 <button
                   onClick={() => {
                     setShowCarrierConfirmation(false);
                     setShowQuotePanel(true);
                   }}
-                  className="mt-4 px-6 py-2 rounded-lg bg-emerald-500 text-white font-medium"
+                  className="mt-4 px-6 py-2 rounded-lg bg-brand text-brand-fg font-medium"
                 >
                   View Quotes
                 </button>
@@ -1591,9 +1589,9 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
   // ─────────────────────────────────────────────────────────────────────────
   if (!node) {
     return (
-      <div className="h-full flex items-center justify-center bg-gray-900 rounded-xl">
-        <p className="text-red-400">Node "{nodeId}" not found</p>
-        <button onClick={resetScript} className="ml-4 px-4 py-2 bg-gray-800 text-white rounded-lg">
+      <div className="h-full flex items-center justify-center bg-surface rounded-card">
+        <p className="text-dropped-ink">Node "{nodeId}" not found</p>
+        <button onClick={resetScript} className="ml-4 px-4 py-2 bg-sunken text-ink rounded-lg">
           Reset
         </button>
       </div>
@@ -1603,31 +1601,31 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
   const progressPercent = (node.phase / 15) * 100;
   const getOptionColor = color => {
     const colors = {
-      emerald: 'border-emerald-500/50 bg-emerald-900/20 hover:bg-emerald-800/30',
-      amber: 'border-amber-500/50 bg-amber-900/20 hover:bg-amber-800/30',
-      blue: 'border-blue-500/50 bg-blue-900/20 hover:bg-blue-800/30',
-      red: 'border-red-500/50 bg-red-900/20 hover:bg-red-800/30',
-      purple: 'border-purple-500/50 bg-purple-900/20 hover:bg-purple-800/30',
-      orange: 'border-orange-500/50 bg-orange-900/20 hover:bg-orange-800/30',
+      emerald: 'border-live bg-live-tint hover:bg-brand hover:text-ink',
+      amber: 'border-ringing bg-ringing-tint hover:bg-ringing-tint',
+      blue: 'border-money bg-money-tint hover:bg-money-tint',
+      red: 'border-dropped bg-dropped-tint hover:bg-dropped-tint',
+      purple: 'border-brand bg-brand-tint hover:bg-brand-tint',
+      orange: 'border-ringing bg-ringing-tint hover:bg-ringing-tint',
     };
-    return colors[color] || 'border-gray-600 bg-gray-800/50 hover:bg-gray-700/50';
+    return colors[color] || 'border-rule-strong bg-sunken hover:bg-rule';
   };
 
   return (
-    <div className="h-full flex flex-col bg-gray-900 rounded-xl overflow-hidden relative border border-gray-800">
+    <div className="h-full flex flex-col bg-surface rounded-card overflow-hidden relative border border-rule">
       {/* HEADER */}
-      <div className="flex items-center justify-between px-3 py-2 bg-gray-800 border-b border-gray-700 flex-shrink-0">
+      <div className="flex items-center justify-between px-3 py-2 bg-sunken border-b border-rule flex-shrink-0">
         <div className="flex items-center gap-2">
           <button
             onClick={goBack}
             disabled={history.length <= 1}
-            className="p-1.5 hover:bg-gray-700 rounded-lg disabled:opacity-30 transition-colors"
+            className="p-1.5 hover:bg-sunken rounded-lg disabled:opacity-30 transition-colors"
           >
-            <ChevronLeft size={18} className="text-white" />
+            <ChevronLeft size={18} className="text-ink" />
           </button>
           <div>
-            <h2 className="text-white font-bold text-xl">{node.title}</h2>
-            <p className="text-gray-500 text-sm">
+            <h2 className="text-ink font-bold text-xl">{node.title}</h2>
+            <p className="text-ink-3 text-sm">
               Phase {node.phase}/15 • Step {history.length}
             </p>
           </div>
@@ -1637,7 +1635,7 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
           {node.tip && (
             <button
               onClick={() => setShowTip(!showTip)}
-              className={`p-1.5 rounded-lg transition-colors ${showTip ? 'bg-amber-600/30 text-amber-400' : 'text-gray-400 hover:bg-gray-700'}`}
+              className={`p-1.5 rounded-lg transition-colors ${showTip ? 'bg-ringing-tint text-ringing-ink' : 'text-ink-2 hover:bg-sunken'}`}
               title="Show conversion tip"
             >
               <Info size={16} />
@@ -1645,14 +1643,14 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
           )}
           <button
             onClick={copyScript}
-            className="p-1.5 hover:bg-gray-700 rounded-lg text-gray-400 transition-colors"
+            className="p-1.5 hover:bg-sunken rounded-lg text-ink-2 transition-colors"
             title="Copy script"
           >
-            {copied ? <Check size={16} className="text-green-400" /> : <Copy size={16} />}
+            {copied ? <Check size={16} className="text-live-ink" /> : <Copy size={16} />}
           </button>
           <button
             onClick={() => setShowQuotePanel(true)}
-            className="flex items-center gap-1 px-3 py-1.5 bg-primary hover: hover: rounded-lg text-sm text-white font-medium transition-all shadow-lg "
+            className="flex items-center gap-1 px-3 py-1.5 bg-brand rounded-lg text-sm text-ink font-medium transition-all "
           >
             <DollarSign size={14} />
             {!ratesLoaded ? (
@@ -1670,9 +1668,7 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
               onClick={() => setShowCarrierConfirmation(true)}
               disabled={!activeQuote}
               className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                activeQuote
-                  ? ' hover: hover: text-white shadow-lg '
-                  : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                activeQuote ? ' text-ink ' : 'bg-sunken text-ink-3 cursor-not-allowed'
               }`}
               title="Confirm carrier selection before submitting"
             >
@@ -1688,10 +1684,10 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
               disabled={!isSubmitEnabled}
               className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                 automationStarted
-                  ? 'bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 cursor-default'
+                  ? 'bg-live-tint text-live-ink border border-live cursor-default'
                   : isSubmitEnabled
-                    ? ' hover: hover: text-white shadow-lg '
-                    : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                    ? ' text-ink '
+                    : 'bg-sunken text-ink-3 cursor-not-allowed'
               }`}
               title={automationStarted ? 'Application started' : `Submit to ${confirmedCarrier}`}
             >
@@ -1711,7 +1707,7 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
 
           <button
             onClick={resetScript}
-            className="p-1.5 hover:bg-gray-700 rounded-lg text-gray-400 transition-colors"
+            className="p-1.5 hover:bg-sunken rounded-lg text-ink-2 transition-colors"
             title="Reset"
           >
             <RotateCcw size={16} />
@@ -1720,17 +1716,17 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
       </div>
 
       {/* PROGRESS BAR */}
-      <div className="h-1 bg-gray-800 flex-shrink-0">
+      <div className="h-1 bg-sunken flex-shrink-0">
         <div
-          className="h-full bg-primary transition-all duration-300"
+          className="h-full bg-brand transition-all duration-300"
           style={{ width: `${progressPercent}%` }}
         />
       </div>
 
       {/* TIP (Collapsible) */}
       {showTip && node.tip && (
-        <div className="px-3 py-2 bg-amber-900/30 border-b border-amber-500/30 flex-shrink-0">
-          <p className="text-amber-200 text-base font-medium">💡 {node.tip}</p>
+        <div className="px-3 py-2 bg-ringing-tint border-b border-ringing flex-shrink-0">
+          <p className="text-ringing-ink text-base font-medium">💡 {node.tip}</p>
         </div>
       )}
 
@@ -1743,10 +1739,10 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
               <span
                 className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border rounded-full ${
                   formData.locationDataSource === 'webhook'
-                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                    ? 'bg-live-tint text-live-ink border-live'
                     : formData.locationDataSource === 'areaCode'
-                      ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
-                      : 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+                      ? 'bg-ringing-tint text-ringing-ink border-ringing'
+                      : 'bg-money-tint text-money-ink border-money'
                 }`}
               >
                 <MapPin size={12} />
@@ -1759,8 +1755,8 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
               <span
                 className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border rounded-full ${
                   formData.dobDataSource === 'webhook' && formData.dob
-                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                    : 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+                    ? 'bg-live-tint text-live-ink border-live'
+                    : 'bg-money-tint text-money-ink border-money'
                 }`}
               >
                 <Calendar size={12} />
@@ -1776,25 +1772,25 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
         {/* Handle verify_age specially - show different script if DOB is missing */}
         {node.dynamicDOB && !formData.dob && !formData.age ? (
           // DOB MISSING - Show alternate script and input field
-          <div className="mb-3 p-3 rounded-xl border border-amber-500/30">
+          <div className="mb-3 p-3 rounded-card border border-ringing">
             <div
-              className="text-white text-lg leading-7 font-normal mb-4"
+              className="text-ink text-lg leading-7 font-normal mb-4"
               style={{
                 fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
               }}
             >
-              <strong className="text-amber-300">What is your date of birth, please?</strong>
+              <strong className="text-ringing-ink">What is your date of birth, please?</strong>
             </div>
 
             {/* DOB INPUT FIELD */}
-            <div className="mt-3 p-4 rounded-xl border-2 border-amber-500/50 bg-slate-900/50">
+            <div className="mt-3 p-4 rounded-card border-2 border-ringing bg-sunken">
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center">
-                  <Calendar className="w-5 h-5 text-white" />
+                <div className="w-10 h-10 rounded-card flex items-center justify-center">
+                  <Calendar className="w-5 h-5 text-ink" />
                 </div>
                 <div>
-                  <p className="text-white font-bold">Enter Date of Birth</p>
-                  <p className="text-gray-400 text-sm">Required for quote calculation</p>
+                  <p className="text-ink font-bold">Enter Date of Birth</p>
+                  <p className="text-ink-2 text-sm">Required for quote calculation</p>
                 </div>
               </div>
               <input
@@ -1823,10 +1819,10 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
                 }}
                 max={new Date().toISOString().split('T')[0]}
                 min="1900-01-01"
-                className="w-full px-4 py-3 bg-slate-800 border-2 border-amber-500/50 rounded-xl text-white text-lg focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/20"
+                className="w-full px-4 py-3 bg-sunken border-2 border-ringing rounded-card text-ink text-lg focus:border-ringing focus:outline-none focus:ring-2 focus:ring-ring"
               />
               {formData.dob && formData.age && (
-                <p className="mt-2 text-emerald-400 font-medium flex items-center gap-2">
+                <p className="mt-2 text-live-ink font-medium flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4" />
                   That makes you {formData.age} years young!
                 </p>
@@ -1835,15 +1831,15 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
           </div>
         ) : (
           // DOB AVAILABLE - Show normal script
-          <div className="mb-3 p-3 rounded-xl bg-muted border border-slate-700/50">
+          <div className="mb-3 p-3 rounded-card bg-sunken border border-rule">
             <div
-              className="text-white text-lg leading-7 font-normal"
+              className="text-ink text-lg leading-7 font-normal"
               style={{
                 fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
               }}
               dangerouslySetInnerHTML={{
                 __html: replaceVars(node.script)
-                  .replace(/\*\*(.*?)\*\*/g, '<strong class="text-cyan-300 font-bold">$1</strong>')
+                  .replace(/\*\*(.*?)\*\*/g, '<strong class="text-brand-ink font-bold">$1</strong>')
                   .replace(/\n\n/g, ' ')
                   .replace(/\n/g, ' '),
               }}
@@ -1853,13 +1849,13 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
 
         {/* LOCATION VERIFICATION CARD - Compact */}
         {node.dynamicLocation && (
-          <div className="mb-2 p-2 rounded-lg border border-white/10 bg-primary">
+          <div className="mb-2 p-2 rounded-lg border border-rule bg-brand-tint">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
-                <MapPin className="w-4 h-4 text-white" />
+              <div className="w-8 h-8 rounded-lg bg-brand-tint flex items-center justify-center flex-shrink-0">
+                <MapPin className="w-4 h-4 text-brand-ink" />
               </div>
               <div className="flex-1">
-                <p className="text-white font-medium text-sm">
+                <p className="text-ink font-medium text-sm">
                   Location:{' '}
                   {formData.locationDataSource === 'webhook'
                     ? `${formData.city}, ${formData.state}`
@@ -1867,7 +1863,7 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
                 </p>
               </div>
               {formData.locationDataSource === 'areaCode' && (
-                <span className="text-amber-400/80 text-xs">From area code</span>
+                <span className="text-ringing-ink text-xs">From area code</span>
               )}
             </div>
           </div>
@@ -1875,14 +1871,14 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
 
         {/* DOB VERIFICATION CARD - Only when DOB is pre-filled via webhook */}
         {node.dynamicDOB && formData.dob && formData.dobDataSource === 'webhook' && (
-          <div className="mt-4 p-4 rounded-xl border border-white/10 ">
+          <div className="mt-4 p-4 rounded-card border border-rule ">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center">
-                <Calendar className="w-5 h-5 text-white" />
+              <div className="w-10 h-10 rounded-card flex items-center justify-center">
+                <Calendar className="w-5 h-5 text-ink" />
               </div>
               <div>
-                <p className="text-white font-bold">Date of Birth on File</p>
-                <p className="text-gray-400 text-sm">
+                <p className="text-ink font-bold">Date of Birth on File</p>
+                <p className="text-ink-2 text-sm">
                   {new Date(formData.dob).toLocaleDateString('en-US', {
                     weekday: 'long',
                     month: 'long',
@@ -1893,8 +1889,8 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
               </div>
               {formData.age && (
                 <div className="ml-auto text-right">
-                  <p className="text-2xl font-bold text-purple-400">{formData.age}</p>
-                  <p className="text-gray-500 text-xs">years old</p>
+                  <p className="text-2xl font-bold text-brand-ink">{formData.age}</p>
+                  <p className="text-ink-3 text-xs">years old</p>
                 </div>
               )}
             </div>
@@ -1903,14 +1899,14 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
 
         {/* DOB EDIT CARD - Show when DOB was manually entered and user is on verify_age */}
         {node.dynamicDOB && formData.dob && formData.dobDataSource === 'manual' && (
-          <div className="mt-4 p-4 rounded-xl border border-emerald-500/30 bg-primary">
+          <div className="mt-4 p-4 rounded-card border border-brand bg-brand-tint">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
-                <CheckCircle2 className="w-5 h-5 text-white" />
+              <div className="w-10 h-10 rounded-card bg-brand-tint flex items-center justify-center">
+                <CheckCircle2 className="w-5 h-5 text-brand-ink" />
               </div>
               <div>
-                <p className="text-white font-bold">Date of Birth Entered</p>
-                <p className="text-gray-400 text-sm">
+                <p className="text-ink font-bold">Date of Birth Entered</p>
+                <p className="text-ink-2 text-sm">
                   {new Date(formData.dob).toLocaleDateString('en-US', {
                     weekday: 'long',
                     month: 'long',
@@ -1921,8 +1917,8 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
               </div>
               {formData.age && (
                 <div className="ml-auto text-right">
-                  <p className="text-2xl font-bold text-emerald-400">{formData.age}</p>
-                  <p className="text-gray-500 text-xs">years old</p>
+                  <p className="text-2xl font-bold text-live-ink">{formData.age}</p>
+                  <p className="text-ink-3 text-xs">years old</p>
                 </div>
               )}
             </div>
@@ -1931,14 +1927,14 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
 
         {/* DOB OBJECTION REBUTTAL HIGHLIGHT */}
         {node.id === 'health_dob_objection' && (
-          <div className="mt-4 p-4 rounded-xl border-2 border-amber-500/50 bg-amber-900/20">
+          <div className="mt-4 p-4 rounded-card border-2 border-ringing bg-ringing-tint">
             <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <AlertCircle className="w-5 h-5 text-amber-400" />
+              <div className="w-8 h-8 rounded-lg bg-ringing-tint flex items-center justify-center flex-shrink-0 mt-0.5">
+                <AlertCircle className="w-5 h-5 text-ringing-ink" />
               </div>
               <div>
-                <p className="text-amber-300 font-bold text-sm mb-1">Objection Handling Script</p>
-                <p className="text-amber-200/80 text-sm">
+                <p className="text-ringing-ink font-bold text-sm mb-1">Objection Handling Script</p>
+                <p className="text-ringing-ink text-sm">
                   Use this rebuttal if the user hesitates or refuses to provide their date of birth.
                 </p>
               </div>
@@ -1948,13 +1944,13 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
 
         {/* DYNAMIC RAPPORT */}
         {node.rapportScript && formData.city && (
-          <div className="mt-3 p-3 bg-purple-900/20 border border-purple-500/30 rounded-lg">
+          <div className="mt-3 p-3 bg-brand-tint border border-brand rounded-lg">
             <p
-              className="text-purple-200 text-sm italic"
+              className="text-brand-ink text-sm italic"
               dangerouslySetInnerHTML={{
                 __html: replaceVars(node.rapportScript).replace(
                   /\*\*(.*?)\*\*/g,
-                  '<strong class="text-purple-300">$1</strong>'
+                  '<strong class="text-brand-ink">$1</strong>'
                 ),
               }}
             />
@@ -1963,22 +1959,22 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
 
         {/* AGE DISPLAY */}
         {node.ageDisplay && formData.age && (
-          <div className="mt-3 p-3 bg-cyan-900/20 border border-cyan-500/30 rounded-lg">
-            <p className="text-cyan-200 text-sm">
-              That makes you <strong className="text-cyan-400">{formData.age} years young</strong>.
+          <div className="mt-3 p-3 bg-brand-tint border border-brand rounded-lg">
+            <p className="text-brand-ink text-sm">
+              That makes you <strong className="text-brand-ink">{formData.age} years young</strong>.
             </p>
           </div>
         )}
 
         {/* COVERAGE SELECTOR - Ultra Compact */}
         {node.showCoverageSelector && (
-          <div className="mt-3 p-3 rounded-xl border border-white/10 bg-primary">
+          <div className="mt-3 p-3 rounded-card border border-rule bg-brand-tint">
             <div className="flex items-center gap-2 mb-2">
-              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
-                <DollarSign className="w-4 h-4 text-white" />
+              <div className="w-8 h-8 rounded-lg bg-brand-tint flex items-center justify-center flex-shrink-0">
+                <DollarSign className="w-4 h-4 text-brand-ink" />
               </div>
-              <span className="text-white font-medium text-sm">Coverage:</span>
-              <span className="text-2xl font-bold bg-primary bg-clip-text text-transparent ml-auto">
+              <span className="text-ink font-medium text-sm">Coverage:</span>
+              <span className="text-2xl font-bold text-brand-ink ml-auto">
                 ${formData.selectedCoverage.toLocaleString()}
               </span>
             </div>
@@ -1991,9 +1987,9 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
               step="2500"
               value={formData.selectedCoverage}
               onChange={e => updateField('selectedCoverage', parseInt(e.target.value))}
-              className="w-full h-2 bg-gray-700 rounded-full appearance-none cursor-pointer mb-2"
+              className="w-full h-2 bg-sunken rounded-full appearance-none cursor-pointer mb-2"
               style={{
-                background: `linear-gradient(to right, #10b981 0%, #06b6d4 ${((formData.selectedCoverage - 5000) / 45000) * 100}%, #374151 ${((formData.selectedCoverage - 5000) / 45000) * 100}%, #374151 100%)`,
+                background: `linear-gradient(to right, var(--brand) 0%, var(--brand) ${((formData.selectedCoverage - 5000) / 45000) * 100}%, var(--rule) ${((formData.selectedCoverage - 5000) / 45000) * 100}%, var(--rule) 100%)`,
               }}
             />
 
@@ -2005,8 +2001,8 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
                   onClick={() => updateField('selectedCoverage', amount)}
                   className={`flex-1 py-1 rounded text-xs font-medium transition-all ${
                     formData.selectedCoverage === amount
-                      ? 'bg-primary text-white'
-                      : 'bg-white/10 text-gray-400 hover:bg-white/20'
+                      ? 'bg-brand text-brand-fg'
+                      : 'bg-sunken text-ink-2 hover:bg-sunken'
                   }`}
                 >
                   ${amount / 1000}K
@@ -2017,7 +2013,7 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
             {/* Continue Button */}
             <button
               onClick={() => goTo(node.nextNode)}
-              className="w-full py-2 rounded-lg bg-primary text-white font-bold text-sm flex items-center justify-center gap-2"
+              className="w-full py-2 rounded-lg bg-brand text-brand-fg font-bold text-sm flex items-center justify-center gap-2"
             >
               Continue <ChevronRight className="w-4 h-4" />
             </button>
@@ -2029,10 +2025,10 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
         {node.showThreeOptions && ratesLoaded && activeQuote && (
           <div className="mt-2 space-y-1.5">
             <div className="flex justify-between items-end px-1">
-              <p className="text-gray-400 text-[10px] font-medium uppercase tracking-wider">
+              <p className="text-ink-2 text-[10px] font-medium uppercase tracking-wider">
                 Highest to Lowest
               </p>
-              <p className="text-gray-500 text-[10px]">
+              <p className="text-ink-3 text-[10px]">
                 {activeQuote.carrier} • {activeQuote.planType}
               </p>
             </div>
@@ -2049,19 +2045,17 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
                 activeQuote.planType
               );
               return (
-                <div className="px-3 py-2 rounded-lg bg-accent border border-purple-500/30 flex justify-between items-center">
+                <div className="px-3 py-2 rounded-lg bg-sunken border border-brand flex justify-between items-center">
                   <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded bg-purple-500 flex items-center justify-center text-[10px] text-white font-bold">
+                    <div className="w-5 h-5 rounded bg-brand flex items-center justify-center text-[10px] text-ink font-bold">
                       1
                     </div>
                     <div>
-                      <p className="text-purple-200 font-bold text-xs">Max Protection</p>
-                      <p className="text-purple-300/60 text-[10px]">
-                        ${highCoverage.toLocaleString()}
-                      </p>
+                      <p className="text-brand-ink font-bold text-xs">Max Protection</p>
+                      <p className="text-brand-ink text-[10px]">${highCoverage.toLocaleString()}</p>
                     </div>
                   </div>
-                  <p className="text-base font-bold text-purple-300">
+                  <p className="text-base font-bold text-brand-ink">
                     ${highPremium?.toFixed(2) || '—'}
                   </p>
                 </div>
@@ -2080,19 +2074,17 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
                 activeQuote.planType
               );
               return (
-                <div className="px-3 py-2 rounded-lg bg-primary border border-emerald-500/30 flex justify-between items-center">
+                <div className="px-3 py-2 rounded-lg bg-live-tint border border-live flex justify-between items-center">
                   <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded bg-emerald-500 flex items-center justify-center text-[10px] text-white font-bold">
+                    <div className="w-5 h-5 rounded bg-brand flex items-center justify-center text-[10px] text-ink font-bold">
                       2
                     </div>
                     <div>
-                      <p className="text-emerald-200 font-bold text-xs">Standard</p>
-                      <p className="text-emerald-300/60 text-[10px]">
-                        ${midCoverage.toLocaleString()}
-                      </p>
+                      <p className="text-live-ink font-bold text-xs">Standard</p>
+                      <p className="text-live-ink text-[10px]">${midCoverage.toLocaleString()}</p>
                     </div>
                   </div>
-                  <p className="text-base font-bold text-emerald-300">
+                  <p className="text-base font-bold text-live-ink">
                     ${midPremium?.toFixed(2) || '—'}
                   </p>
                 </div>
@@ -2111,19 +2103,17 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
                 activeQuote.planType
               );
               return (
-                <div className="px-3 py-2 rounded-lg bg-primary border border-cyan-500/30 flex justify-between items-center">
+                <div className="px-3 py-2 rounded-lg bg-brand-tint border border-brand flex justify-between items-center">
                   <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded bg-cyan-500 flex items-center justify-center text-[10px] text-white font-bold">
+                    <div className="w-5 h-5 rounded bg-brand flex items-center justify-center text-[10px] text-ink font-bold">
                       3
                     </div>
                     <div>
-                      <p className="text-cyan-200 font-bold text-xs">Basic</p>
-                      <p className="text-cyan-300/60 text-[10px]">
-                        ${lowCoverage.toLocaleString()}
-                      </p>
+                      <p className="text-brand-ink font-bold text-xs">Basic</p>
+                      <p className="text-brand-ink text-[10px]">${lowCoverage.toLocaleString()}</p>
                     </div>
                   </div>
-                  <p className="text-base font-bold text-cyan-300">
+                  <p className="text-base font-bold text-brand-ink">
                     ${lowPremium?.toFixed(2) || '—'}
                   </p>
                 </div>
@@ -2135,17 +2125,16 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
         {/* QUOTE DISPLAY (embedded) with Coverage Selection */}
         {node.showQuote && (
           <div
-            className="mt-4 rounded-2xl border border-white/10 overflow-hidden"
+            className="mt-4 rounded-card border border-rule overflow-hidden"
             style={{
-              background:
-                'linear-gradient(180deg, rgba(16, 185, 129, 0.15) 0%, rgba(6, 78, 59, 0.15) 100%)',
+              background: 'var(--brand-tint)',
             }}
           >
             {/* Coverage Quick Select */}
-            <div className="p-4 border-b border-white/10">
+            <div className="p-4 border-b border-rule">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-gray-300 font-medium text-sm">Coverage Amount</span>
-                <span className="text-lg font-bold bg-primary bg-clip-text text-transparent">
+                <span className="text-ink-2 font-medium text-sm">Coverage Amount</span>
+                <span className="text-lg font-bold text-brand-ink">
                   ${formData.selectedCoverage.toLocaleString()}
                 </span>
               </div>
@@ -2156,8 +2145,8 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
                     onClick={() => updateField('selectedCoverage', opt.value)}
                     className={`px-3 py-1.5 rounded-full font-medium text-xs transition-all ${
                       formData.selectedCoverage === opt.value
-                        ? 'bg-primary text-white shadow-lg '
-                        : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border border-white/10'
+                        ? 'bg-brand text-brand-fg '
+                        : 'bg-sunken text-ink-2 hover:bg-sunken hover:text-ink border border-rule'
                     }`}
                   >
                     {opt.label}
@@ -2171,22 +2160,22 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
               {!ratesLoaded ? (
                 /* Loading State */
                 <div className="flex items-center gap-4 py-2">
-                  <div className="w-14 h-14 rounded-xl bg-gray-700/50 flex items-center justify-center flex-shrink-0 animate-pulse">
-                    <Calculator className="w-6 h-6 text-gray-500" />
+                  <div className="w-14 h-14 rounded-card bg-sunken flex items-center justify-center flex-shrink-0 animate-pulse">
+                    <Calculator className="w-6 h-6 text-ink-3" />
                   </div>
                   <div className="flex-1">
-                    <div className="h-5 w-32 bg-gray-700/50 rounded animate-pulse mb-2"></div>
-                    <div className="h-4 w-24 bg-gray-700/30 rounded animate-pulse"></div>
+                    <div className="h-5 w-32 bg-sunken rounded animate-pulse mb-2"></div>
+                    <div className="h-4 w-24 bg-sunken rounded animate-pulse"></div>
                   </div>
                   <div className="text-right">
-                    <div className="h-7 w-24 bg-gray-700/50 rounded animate-pulse"></div>
+                    <div className="h-7 w-24 bg-sunken rounded animate-pulse"></div>
                   </div>
                 </div>
               ) : activeQuote ? (
                 /* Loaded Quote with Logo */
                 <div className="flex items-center gap-4">
                   {/* Carrier Logo */}
-                  <div className="w-14 h-14 rounded-xl bg-white flex items-center justify-center flex-shrink-0 overflow-hidden ring-2 ring-emerald-500 ring-offset-2 ring-offset-transparent">
+                  <div className="w-14 h-14 rounded-card bg-surface flex items-center justify-center flex-shrink-0 overflow-hidden ring-2 ring-brand ring-offset-2 ring-offset-transparent">
                     {CARRIER_LOGOS[activeQuote.carrier] ? (
                       <img
                         src={CARRIER_LOGOS[activeQuote.carrier]}
@@ -2194,7 +2183,7 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
                         className="w-12 h-12 object-contain"
                       />
                     ) : (
-                      <span className="text-gray-600 font-bold text-sm">
+                      <span className="text-ink-3 font-bold text-sm">
                         {activeQuote.carrier?.substring(0, 3)}
                       </span>
                     )}
@@ -2203,27 +2192,27 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
                   {/* Quote Info */}
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="px-2 py-0.5 bg-primary text-white text-xs font-bold rounded-full">
+                      <span className="px-2 py-0.5 bg-brand text-brand-fg text-xs font-bold rounded-full">
                         BEST RATE
                       </span>
                     </div>
-                    <p className="text-white font-bold">{activeQuote.carrier}</p>
-                    <p className="text-gray-400 text-sm">{activeQuote.planType} Plan</p>
+                    <p className="text-ink font-bold">{activeQuote.carrier}</p>
+                    <p className="text-ink-2 text-sm">{activeQuote.planType} Plan</p>
                   </div>
 
                   {/* Premium */}
                   <div className="text-right">
-                    <p className="text-2xl font-bold bg-primary bg-clip-text text-transparent">
+                    <p className="text-2xl font-bold text-brand-ink">
                       ${activeQuote.premium?.toFixed(2)}
                     </p>
-                    <p className="text-gray-500 text-xs">per month</p>
+                    <p className="text-ink-3 text-xs">per month</p>
                   </div>
                 </div>
               ) : (
                 /* No Quotes Available */
                 <div className="text-center py-4">
-                  <p className="text-amber-400 font-medium">No quotes available</p>
-                  <p className="text-gray-500 text-xs">Try adjusting coverage or criteria</p>
+                  <p className="text-ringing-ink font-medium">No quotes available</p>
+                  <p className="text-ink-3 text-xs">Try adjusting coverage or criteria</p>
                 </div>
               )}
             </div>
@@ -2232,7 +2221,7 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
             <div className="px-4 pb-4">
               <button
                 onClick={() => setShowQuotePanel(true)}
-                className="w-full py-3 rounded-xl bg-primary text-white font-bold shadow-lg hover: transition-all hover:scale-[1.02] flex items-center justify-center gap-2"
+                className="w-full py-3 rounded-card bg-brand text-brand-fg font-bold transition-all hover:scale-[1.02] flex items-center justify-center gap-2"
               >
                 <Calculator className="w-4 h-4" />
                 Compare All Carriers ({quotes.filter(q => q.isEligible && q.premium).length}{' '}
@@ -2244,7 +2233,7 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
 
         {/* DATA COLLECTION FIELDS - Compact */}
         {node.fields && node.fields.length > 0 && (
-          <div className="mt-2 p-2 bg-gray-800/50 border border-gray-700 rounded-lg">
+          <div className="mt-2 p-2 bg-sunken border border-rule rounded-lg">
             <div
               className={`grid gap-2 ${node.fields.some(f => f.inline) ? 'grid-cols-3' : 'grid-cols-2'}`}
             >
@@ -2264,30 +2253,29 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
               const isWarning =
                 opt.color === 'amber' || opt.color === 'orange' || opt.label.includes('⚠️');
 
-              let buttonStyle = 'border-slate-600/50 hover:border-slate-500 hover:bg-slate-700/50';
-              let dotColor = 'bg-slate-500';
+              let buttonStyle = 'border-rule-strong hover:border-rule-strong hover:bg-sunken';
+              let dotColor = 'bg-ink-3';
 
               if (isPositive) {
-                buttonStyle =
-                  'border-emerald-500/50 hover:border-emerald-400 hover:bg-emerald-900/30';
-                dotColor = 'bg-emerald-500';
+                buttonStyle = 'border-live hover:border-brand hover:bg-brand hover:text-ink';
+                dotColor = 'bg-brand';
               } else if (isNegative) {
-                buttonStyle = 'border-red-500/50 hover:border-red-400 hover:bg-red-900/30';
-                dotColor = 'bg-red-500';
+                buttonStyle = 'border-dropped hover:border-dropped hover:bg-dropped-tint';
+                dotColor = 'bg-dropped';
               } else if (isWarning) {
-                buttonStyle = 'border-amber-500/50 hover:border-amber-400 hover:bg-amber-900/30';
-                dotColor = 'bg-amber-500';
+                buttonStyle = 'border-ringing hover:border-ringing hover:bg-ringing-tint';
+                dotColor = 'bg-ringing';
               }
 
               return (
                 <button
                   key={i}
                   onClick={() => goTo(opt.next, { setData: opt.setData })}
-                  className={`w-full px-3 py-2.5 rounded-lg bg-slate-800/50 ${buttonStyle} border text-left transition-all active:scale-[0.98] flex items-center gap-3`}
+                  className={`w-full px-3 py-2.5 rounded-lg bg-sunken ${buttonStyle} border text-left transition-all active:scale-[0.98] flex items-center gap-3`}
                 >
                   <div className={`w-2.5 h-2.5 rounded-full ${dotColor} flex-shrink-0`}></div>
-                  <span className="font-medium text-white text-sm flex-1">{opt.label}</span>
-                  <ChevronRight className="w-4 h-4 text-gray-500" />
+                  <span className="font-medium text-ink text-sm flex-1">{opt.label}</span>
+                  <ChevronRight className="w-4 h-4 text-ink-3" />
                 </button>
               );
             })}
@@ -2297,13 +2285,13 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
         {/* COMPLETION */}
         {node.isComplete && (
           <div className="mt-6 text-center">
-            <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto mb-3" />
-            <p className="text-emerald-400 font-bold text-lg">
+            <CheckCircle2 className="w-12 h-12 text-live-ink mx-auto mb-3" />
+            <p className="text-live-ink font-bold text-lg">
               {node.id === 'congrats' ? 'Sale Complete! 🎉' : 'Call Ended'}
             </p>
             <button
               onClick={resetScript}
-              className="mt-4 px-6 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg flex items-center gap-2 mx-auto"
+              className="mt-4 px-6 py-2 bg-sunken hover:bg-rule text-ink rounded-lg flex items-center gap-2 mx-auto"
             >
               <RotateCcw size={16} /> Start New Call
             </button>
@@ -2316,37 +2304,37 @@ const IntegratedScriptPanel = ({ prospectData = {}, onDataUpdate }: IntegratedSc
         automationSteps.length > 0 ||
         automationError ||
         applicationNumber) && (
-        <div className="px-3 py-2 border-t border-gray-700/50 bg-gray-900/80">
+        <div className="px-3 py-2 border-t border-rule bg-sunken">
           <div className="space-y-1">
             {automationSteps.slice(-3).map((stepData, idx) => (
               <div key={idx} className="flex items-center gap-2 text-xs">
                 {stepData.status === 'completed' ? (
-                  <CheckCircle2 size={12} className="text-emerald-400 shrink-0" />
+                  <CheckCircle2 size={12} className="text-live-ink shrink-0" />
                 ) : stepData.status === 'failed' ? (
-                  <XCircle size={12} className="text-red-400 shrink-0" />
+                  <XCircle size={12} className="text-dropped-ink shrink-0" />
                 ) : (
-                  <RefreshCw size={12} className="text-cyan-400 animate-spin shrink-0" />
+                  <RefreshCw size={12} className="text-brand-ink animate-spin shrink-0" />
                 )}
-                <span className={stepData.status === 'failed' ? 'text-red-400' : 'text-gray-400'}>
+                <span className={stepData.status === 'failed' ? 'text-dropped-ink' : 'text-ink-2'}>
                   {stepData.message}
                 </span>
               </div>
             ))}
             {automationLoading && automationSteps.length === 0 && (
-              <div className="flex items-center gap-2 text-xs text-gray-400">
-                <RefreshCw size={12} className="text-cyan-400 animate-spin" />
+              <div className="flex items-center gap-2 text-xs text-ink-2">
+                <RefreshCw size={12} className="text-brand-ink animate-spin" />
                 Starting automation...
               </div>
             )}
             {applicationNumber && (
-              <div className="text-emerald-400 text-xs font-medium">✓ App #{applicationNumber}</div>
+              <div className="text-live-ink text-xs font-medium">✓ App #{applicationNumber}</div>
             )}
             {automationError && (
-              <div className="flex items-center justify-between gap-2 p-2 bg-red-500/10 rounded-lg border border-red-500/30">
-                <span className="text-red-400 text-xs flex-1">{automationError}</span>
+              <div className="flex items-center justify-between gap-2 p-2 bg-dropped-tint rounded-lg border border-dropped">
+                <span className="text-dropped-ink text-xs flex-1">{automationError}</span>
                 <button
                   onClick={handleRetryApplication}
-                  className="px-3 py-1 text-xs font-bold text-white bg-red-500 hover:bg-red-400 rounded-lg transition-colors flex items-center gap-1"
+                  className="px-3 py-1 text-xs font-bold text-white bg-dropped hover:opacity-90 rounded-lg transition-colors flex items-center gap-1"
                 >
                   <RotateCcw size={12} />
                   RETRY

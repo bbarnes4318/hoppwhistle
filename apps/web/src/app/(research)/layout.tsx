@@ -39,7 +39,7 @@ export default function IndustryResearchLayout({ children }: { children: React.R
               Methodology
             </Link>
             <Link href="/dashboard" className="ir-back">
-              Back to Hopwhistle
+              Back to NetEnroll
             </Link>
           </nav>
         </div>

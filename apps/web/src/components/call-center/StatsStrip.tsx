@@ -1,4 +1,5 @@
 import React from 'react';
+
 import { KPICard } from '@/components/dashboard/kpi-card';
 
 interface StatsStripProps {
@@ -19,7 +20,7 @@ export function StatsStrip({
   conversionRate,
 }: StatsStripProps) {
   return (
-    <div className="grid grid-cols-5 gap-4 flex-shrink-0">
+    <div className="grid grid-cols-2 gap-3 flex-shrink-0 md:grid-cols-5">
       <KPICard
         title="Total Calls"
         value={totalCallsCount}

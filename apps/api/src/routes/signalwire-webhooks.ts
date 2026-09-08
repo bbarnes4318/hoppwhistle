@@ -142,7 +142,7 @@ export async function registerSignalWireWebhookRoutes(server: FastifyInstance) {
 
     const laml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="alice">This number is managed by Hopwhistle. Please hold while we connect you.</Say>
+  <Say voice="alice">This number is managed by NetEnroll. Please hold while we connect you.</Say>
   <Dial timeout="30">
     <Sip>sip:operator@${publicIp}:5060</Sip>
   </Dial>
@@ -194,7 +194,7 @@ export async function registerSignalWireWebhookRoutes(server: FastifyInstance) {
     // Respond with LaML — empty response = accept silently, or auto-reply:
     const laml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Message>Thanks for your message. A Hopwhistle agent will get back to you shortly.</Message>
+  <Message>Thanks for your message. A NetEnroll agent will get back to you shortly.</Message>
 </Response>`;
 
     return reply.code(200).header('Content-Type', 'application/xml').send(laml);
