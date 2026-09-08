@@ -40,10 +40,22 @@ import { describe, expect, it } from 'vitest';
  * A reading of the file is exactly what missed it. This asserts the property of
  * the file instead: every path that renders `children` also offers the prompt.
  *
- * It is a source-level test on purpose. Rendering the layout needs a DOM, and
- * `apps/web` has no jsdom; what actually needs pinning here is structural —
- * "no return path renders children unguarded" — and that is visible in the
- * source. If a DOM is added later this should become a rendering test.
+ * ── What is left here, now that the pages are rendered for real ─────────────
+ *
+ * `platform-landing.render.test.tsx` renders this layout in jsdom and
+ * `apps/web/e2e/platform-landing.smoke.mjs` loads it in Chromium against the
+ * real API, so the BEHAVIOUR is no longer asserted by reading source — which is
+ * the right way round, because reading source is what missed the defect that
+ * shipped.
+ *
+ * One property survives here, and only because it genuinely is structural: no
+ * return path may render `children` unguarded. A rendering test can only cover
+ * the paths it thinks to visit, and the call-centre regression was precisely a
+ * path nobody thought to visit. Counting the return paths in the file covers
+ * all of them at once, including one added tomorrow.
+ *
+ * The exemption list moved to `src/lib/platform-routes.ts` and is asserted by
+ * calling it — see `src/lib/__tests__/platform-routes.test.ts`.
  */
 
 const LAYOUT = join(__dirname, '..', '(dashboard)', 'layout.tsx');
@@ -66,55 +78,52 @@ describe('the cross-agency landing prompt', () => {
       .join('\n');
 
     const rendersChildren = jsxOnly.match(/\{\s*children\s*\}/g) ?? [];
-    const guarded = source.match(/needsAgency \? <CrossAgencyPrompt \/> : children/g) ?? [];
+    const guarded =
+      source.match(
+        /settling \? <SettlingPlaceholder \/> : needsAgency \? <CrossAgencyPrompt \/> : children/g
+      ) ?? [];
 
     expect(
       rendersChildren.length,
-      'A return path renders {children} directly. Every path must render ' +
-        '`needsAgency ? <CrossAgencyPrompt /> : children` instead, or a platform admin ' +
-        'with no agency selected gets that page full of 409s.'
+      'A return path renders {children} directly. Every path must go through ' +
+        'the settling/needsAgency swap instead, or a platform admin with no agency ' +
+        'selected gets that page full of 409s.'
     ).toBe(0);
 
     // Both return paths: the standard dashboard, and the fullscreen call centre.
     expect(guarded.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('exempts only the surfaces that have a platform-wide reading', () => {
+  it('keeps the exemption decision in one place rather than inline', () => {
     /*
-     * Four prefixes and one exact path, and each earns its place:
+     * The list used to be declared in this file, and each of the three
+     * platform-wide pages separately branched on `platform.needsAgency` to pick
+     * its view. Two decisions about the same question, and nothing holding them
+     * together -- which is the shape of the defect that reached production.
      *
-     *   /settings              the signed-in person, not an agency.
-     *   /admin                 the platform console.
-     *   /rating                every agency's closing percentage, current rate
-     *                          and tracking rate, side by side.
-     *   /delivery/settlements  every agency's settlements over a date range.
-     *   /delivery  (exact)     every agency's calls, applications, block, overrun
-     *                          and rate, with platform totals.
-     *
-     * The last three are Phase 5: NetEnroll staff run the whole platform, so
-     * those pages render a platform-wide counterpart rather than a prompt, and
-     * entering an agency narrows the same page to it.
-     *
-     * `/delivery` is EXACT, not a prefix, and that is the part worth pinning:
-     * `/delivery/me` is one agent's own numbers and has no cross-agency
-     * meaning, so a prefix here would have quietly served it to an operator
-     * with no agency and broken it.
-     *
-     * Pinned because widening this list is how the rule would stop meaning
-     * anything: a new entry is a new page that can render broken.
+     * There is one answer now, in `@/lib/platform-routes`, asserted by calling
+     * it in `src/lib/__tests__/platform-routes.test.ts`. This only checks that
+     * the layout still asks it rather than growing a second copy.
      */
-    const list = source.match(/const PLATFORM_WIDE_PREFIXES = \[([\s\S]*?)\];/);
-    expect(list, 'the exemption list moved or was renamed').not.toBeNull();
-
-    const prefixes = [...(list?.[1].match(/'([^']+)'/g) ?? [])].map(m => m.replace(/'/g, ''));
-    expect(prefixes.sort()).toEqual(['/admin', '/delivery/settlements', '/rating', '/settings']);
-
-    // `/delivery` is exempt only as an exact match.
-    expect(source).toMatch(/path === '\/delivery'/);
+    expect(source).toMatch(/worksWithoutActingTenant\(pathname\)/);
     expect(
-      source.includes("startsWith('/delivery')"),
-      "/delivery must be matched exactly, or /delivery/me is served to an operator with no agency"
+      source.includes('PLATFORM_WIDE_PREFIXES'),
+      'the layout has its own copy of the exemption list again'
     ).toBe(false);
+  });
+
+  it('waits for the platform context before acting on roles', () => {
+    /*
+     * The production defect, and the reason it is worth pinning in the source
+     * as well as in a rendering test: `isPlatformAdmin` is false until
+     * /api/v1/platform/context answers, so reading it alone as "not staff" sent
+     * an operator who also held PUBLISHER off /delivery before the answer
+     * arrived. Anybody deleting this guard as redundant should see this.
+     */
+    expect(
+      source,
+      'the role redirect acts on the platform context before it has loaded'
+    ).toMatch(/if \(platform\.loading \|\| platform\.isPlatformAdmin\) return;/);
   });
 
   it('keeps the call centre inside the rule, since it returns early', () => {
@@ -123,6 +132,10 @@ describe('the cross-agency landing prompt', () => {
     expect(
       callCentreBranch.includes('needsAgency ? <CrossAgencyPrompt /> : children'),
       'the fullscreen call centre branch renders children without the prompt'
+    ).toBe(true);
+    expect(
+      callCentreBranch.includes('settling ? <SettlingPlaceholder />'),
+      'the fullscreen call centre branch mounts the page before it knows who the user is'
     ).toBe(true);
   });
 

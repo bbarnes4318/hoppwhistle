@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 
 import { apiClient, payload } from '@/lib/api';
 import type { Envelope } from '@/lib/api';
@@ -36,6 +37,21 @@ import type { Envelope } from '@/lib/api';
  *
  * `payload()` names the unwrap and types it, so the mistake is visible rather
  * than a silent cast. See `ApiResponse` in `@/lib/api`.
+ *
+ * ── One fetch, one answer, for the whole tree ────────────────────────────────
+ *
+ * This was a plain hook. Every caller therefore got its own `useState` and its
+ * own request: the dashboard layout, the page inside it, the topbar switcher
+ * and the prompt each asked `/api/v1/platform/context` separately and each
+ * settled at its own moment. Eight requests on one page load, and — for the
+ * time between the first settling and the last — components on the same screen
+ * genuinely disagreed about whether an agency was required. The layout would
+ * decide "this page needs an agency" from a state the page had already moved
+ * past.
+ *
+ * It is a provider now, mounted once at the root. One request, one state, and
+ * `loading` means the same thing everywhere. `usePlatformContext()` keeps its
+ * signature, so no call site changed.
  */
 
 export interface ActingTenant {
@@ -69,7 +85,7 @@ export interface PlatformContextState {
   error: string | null;
 }
 
-export function usePlatformContext(): PlatformContextState {
+function usePlatformContextState(): PlatformContextState {
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const [actingTenant, setActingTenant] = useState<ActingTenant | null>(null);
   const [loading, setLoading] = useState(true);
@@ -88,18 +104,46 @@ export function usePlatformContext(): PlatformContextState {
         return;
       }
 
-      const response = await apiClient.get<
-        Envelope<{ isPlatformAdmin: boolean; actingTenant: ActingTenant | null }>
-      >('/api/v1/platform/context');
+      /*
+       * Retried, because a failed answer here is read as "not staff".
+       *
+       * When this request failed -- and it did, when ten duplicate auth
+       * requests exhausted the API's connection pool -- `isPlatformAdmin`
+       * stayed false, so a NetEnroll operator with no agency was handed the
+       * one-agency delivery panel, which polled two agency-scoped endpoints
+       * that could only answer 409 for as long as the tab was open. One
+       * transient 500 became a page of refusals.
+       *
+       * Three attempts over about two seconds, which covers a pool blip
+       * without leaving anybody staring at a blank shell. If all three fail we
+       * stop asking and settle as "not staff": that is the right default for
+       * the overwhelming majority of users, who are not, and the switcher's
+       * absence is a visible symptom rather than a silent one.
+       */
+      const attempts = [0, 500, 1500];
+      for (const wait of attempts) {
+        if (wait > 0) await new Promise(resolve => setTimeout(resolve, wait));
+        if (cancelled) return;
 
-      if (cancelled) return;
+        const response = await apiClient.get<
+          Envelope<{ isPlatformAdmin: boolean; actingTenant: ActingTenant | null }>
+        >('/api/v1/platform/context');
 
-      const context = payload(response);
-      if (context) {
-        setIsPlatformAdmin(context.isPlatformAdmin === true);
-        setActingTenant(context.actingTenant ?? null);
+        if (cancelled) return;
+
+        const context = payload(response);
+        if (context) {
+          setIsPlatformAdmin(context.isPlatformAdmin === true);
+          setActingTenant(context.actingTenant ?? null);
+          break;
+        }
+
+        // A 401 is a dead session, not a busy server. Asking twice more would
+        // only add two more of them to the console.
+        if (response.error?.code === 'UNAUTHORIZED') break;
       }
-      setLoading(false);
+
+      if (!cancelled) setLoading(false);
     })();
 
     return () => {
@@ -109,8 +153,7 @@ export function usePlatformContext(): PlatformContextState {
 
   const loadTenants = useCallback(async () => {
     setTenantsLoading(true);
-    const response =
-      await apiClient.get<Envelope<PlatformTenant[]>>('/api/v1/platform/tenants');
+    const response = await apiClient.get<Envelope<PlatformTenant[]>>('/api/v1/platform/tenants');
 
     /*
      * `Array.isArray` and not just `?? []`. The crash this replaces was a
@@ -151,16 +194,63 @@ export function usePlatformContext(): PlatformContextState {
     if (typeof window !== 'undefined') window.location.reload();
   }, []);
 
-  return {
-    isPlatformAdmin,
-    actingTenant,
-    loading,
-    needsAgency: isPlatformAdmin && actingTenant === null,
-    tenants,
-    tenantsLoading,
-    loadTenants,
-    enterTenant,
-    leaveTenant,
-    error,
-  };
+  return useMemo(
+    () => ({
+      isPlatformAdmin,
+      actingTenant,
+      loading,
+      needsAgency: isPlatformAdmin && actingTenant === null,
+      tenants,
+      tenantsLoading,
+      loadTenants,
+      enterTenant,
+      leaveTenant,
+      error,
+    }),
+    [
+      isPlatformAdmin,
+      actingTenant,
+      loading,
+      tenants,
+      tenantsLoading,
+      loadTenants,
+      enterTenant,
+      leaveTenant,
+      error,
+    ]
+  );
 }
+
+const PlatformContext = createContext<PlatformContextState | null>(null);
+
+/** Mounted once, at the root, above everything that asks. */
+export function PlatformContextProvider({ children }: { children: ReactNode }): JSX.Element {
+  const state = usePlatformContextState();
+  return <PlatformContext.Provider value={state}>{children}</PlatformContext.Provider>;
+}
+
+/**
+ * Who the signed-in user is to the platform.
+ *
+ * Falls back to a settled, non-platform state when no provider is above the
+ * caller. That is what an agency user's context looks like anyway, so a
+ * component rendered outside the provider degrades to "not staff, nothing to
+ * switch" rather than throwing and taking the page down — which is the failure
+ * mode this file already exists to have stopped happening once.
+ */
+export function usePlatformContext(): PlatformContextState {
+  return useContext(PlatformContext) ?? OUTSIDE_PROVIDER;
+}
+
+const OUTSIDE_PROVIDER: PlatformContextState = {
+  isPlatformAdmin: false,
+  actingTenant: null,
+  loading: false,
+  needsAgency: false,
+  tenants: [],
+  tenantsLoading: false,
+  loadTenants: async () => {},
+  enterTenant: async () => {},
+  leaveTenant: async () => {},
+  error: null,
+};

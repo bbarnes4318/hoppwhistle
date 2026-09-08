@@ -1,9 +1,33 @@
+import { resolve } from 'node:path';
+
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  /*
+   * The `@/` alias, as `tsconfig.json` and Next both resolve it.
+   *
+   * The pure-logic tests import by relative path and never needed this. A test
+   * that renders a page does: the page and everything under it import through
+   * `@/`, and without this vitest cannot resolve the first one it meets.
+   */
+  resolve: {
+    alias: { '@': resolve(__dirname, 'src') },
+  },
+  // The automatic JSX runtime, so a rendering test does not have to import
+  // React to write JSX -- the same transform Next applies to the app itself.
+  esbuild: { jsx: 'automatic' },
   test: {
     globals: true,
     environment: 'node',
+    /*
+     * A DOM for the files that render.
+     *
+     * Everything else stays on `node` -- most of this suite is pure logic and
+     * does not need one. `environmentMatchGlobs` gives jsdom only to the
+     * rendering tests, which is what lets the platform-landing test mount the
+     * real layout and the real pages.
+     */
+    environmentMatchGlobs: [['src/app/__tests__/*.render.test.tsx', 'jsdom']],
     // Scoped deliberately: apps/web has 141 pre-existing type errors across
     // unrelated components, so a whole-app suite would be red for reasons this
     // work did not cause.
@@ -36,6 +60,11 @@ export default defineConfig({
       // Every page under the dashboard offers the cross-agency prompt rather
       // than rendering broken for an operator with no agency selected.
       'src/app/__tests__/**/*.test.ts',
+      // The platform-wide screens, RENDERED as a platform admin with no acting
+      // tenant: no "Choose an agency" prompt, and no agency-scoped request.
+      // Three phases running, a defect reached production that one load of
+      // these pages would have caught and this suite could not.
+      'src/app/__tests__/**/*.render.test.tsx',
     ],
   },
 });

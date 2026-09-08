@@ -207,6 +207,145 @@ describe('createLivePoller', () => {
   });
 });
 
+describe('a refusal that will not change', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /**
+   * The production defect this exists for.
+   *
+   * The live strip polled `/api/v1/live/metrics` every five seconds on a bare
+   * `setInterval`. For a NetEnroll operator who had entered no agency that
+   * endpoint answers `409 NO_ACTING_TENANT` -- correctly, and it will answer
+   * the same way in five seconds. The console showed dozens of refused
+   * requests per page load, and the loop would have run for as long as the tab
+   * was open.
+   */
+  it('stops the loop for good when the loader reports a refusal', async () => {
+    const load = vi.fn().mockResolvedValue('refused');
+    const onRefused = vi.fn();
+    const poller = createLivePoller({ load, intervalMs: 5000, onRefused, random: () => 0.5 });
+
+    poller.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(onRefused).toHaveBeenCalledTimes(1);
+
+    // Ten minutes of a five-second interval is 120 ticks. Not one of them runs.
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(poller.refused()).toBe(true);
+  });
+
+  it('cannot be restarted or refreshed back into the loop', () => {
+    // Entering an agency reloads the page, which is what starts it again. A
+    // component re-running its effect must not quietly resume asking for
+    // something that is still refused.
+    const load = vi.fn().mockResolvedValue('refused');
+    const poller = createLivePoller({ load, intervalMs: 5000, random: () => 0.5 });
+
+    poller.start();
+    return vi.advanceTimersByTimeAsync(0).then(async () => {
+      poller.refresh();
+      poller.start();
+      await vi.advanceTimersByTimeAsync(600_000);
+      expect(load).toHaveBeenCalledTimes(1);
+    });
+  });
+});
+
+describe('a transient failure', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('doubles the wait rather than polling a struggling server harder', async () => {
+    const load = vi.fn().mockResolvedValue('failed');
+    // random() === 0.5 makes jittered() the identity, so the arithmetic below
+    // is about the backoff and nothing else.
+    const poller = createLivePoller({ load, intervalMs: 1000, random: () => 0.5 });
+
+    poller.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(load).toHaveBeenCalledTimes(1);
+
+    // One failure: the next attempt is at twice the interval, not at it.
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(load).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(load).toHaveBeenCalledTimes(2);
+
+    // Two: four times.
+    await vi.advanceTimersByTimeAsync(3999);
+    expect(load).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(load).toHaveBeenCalledTimes(3);
+
+    poller.stop();
+  });
+
+  it('returns to the normal interval as soon as one succeeds', async () => {
+    const load = vi
+      .fn()
+      .mockResolvedValueOnce('failed')
+      .mockResolvedValueOnce('failed')
+      .mockResolvedValue('ok');
+    const poller = createLivePoller({ load, intervalMs: 1000, random: () => 0.5 });
+
+    poller.start();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(2000); // 2nd call, still failing
+    await vi.advanceTimersByTimeAsync(4000); // 3rd call, succeeds
+    expect(load).toHaveBeenCalledTimes(3);
+
+    // Back to the plain interval, not the eight seconds it had climbed to.
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(load).toHaveBeenCalledTimes(4);
+
+    poller.stop();
+  });
+
+  it('caps the wait rather than backing off towards never', async () => {
+    // Twenty minutes of failure must not push the next attempt an hour out. A
+    // page that has stopped asking is a page that never recovers on its own.
+    const load = vi.fn().mockResolvedValue('failed');
+    const poller = createLivePoller({ load, intervalMs: 30_000, random: () => 0.5 });
+
+    poller.start();
+    await vi.advanceTimersByTimeAsync(60 * 60_000);
+    const attempts = load.mock.calls.length;
+
+    // The ceiling is five minutes, so an hour cannot yield fewer than eleven.
+    expect(attempts).toBeGreaterThanOrEqual(11);
+
+    poller.stop();
+  });
+
+  it('treats a loader that throws as a failure, not as a success', async () => {
+    const load = vi.fn().mockRejectedValue(new Error('network'));
+    const poller = createLivePoller({ load, intervalMs: 1000, random: () => 0.5 });
+
+    poller.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(load).toHaveBeenCalledTimes(1);
+
+    // Backed off: nothing at the plain interval, one at twice it.
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(load).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(load).toHaveBeenCalledTimes(2);
+
+    poller.stop();
+  });
+});
+
 describe('jittered', () => {
   it('stays within ±15% of the interval', () => {
     // The point is spread, not drift: a tab must not quietly poll at half the

@@ -4,7 +4,10 @@ import * as React from 'react';
 
 import type { LiveConnectionState, LiveMetric } from '@/components/domain';
 import { useAuth } from '@/hooks/use-auth';
-import { apiClient } from '@/lib/api';
+import { createLivePoller } from '@/hooks/use-live-poll';
+import type { PollOutcome } from '@/hooks/use-live-poll';
+import { usePlatformContext } from '@/hooks/use-platform-context';
+import { apiClient, isNoActingTenant } from '@/lib/api';
 
 /**
  * Data layer for the LiveStrip, backed by GET /api/v1/live/metrics.
@@ -189,6 +192,7 @@ export interface UseLiveMetricsResult {
 
 export function useLiveMetrics(): UseLiveMetricsResult {
   const auth = useAuth();
+  const platform = usePlatformContext();
   const [data, setData] = React.useState<LiveMetricsPayload | null>(null);
   const [lastUpdated, setLastUpdated] = React.useState<Date | null>(null);
   const [reachable, setReachable] = React.useState<boolean | null>(null);
@@ -201,35 +205,53 @@ export function useLiveMetrics(): UseLiveMetricsResult {
         ? 'buyer'
         : 'other';
 
+  /*
+   * Everything this needs before it may ask. `platform.loading` counts: asking
+   * before the answer is in is how a request gets fired for an operator who
+   * turns out to have no agency at all.
+   */
+  const mayPoll =
+    !auth.loading && !!auth.user && role !== 'other' && !platform.loading && !platform.needsAgency;
+
   React.useEffect(() => {
-    if (auth.loading || !auth.user || role === 'other') return;
+    if (!mayPoll) return;
 
     let cancelled = false;
 
-    const tick = async () => {
+    const tick = async (): Promise<PollOutcome> => {
       const res = await apiClient.get<LiveMetricsPayload>('/api/v1/live/metrics').catch(() => null);
-      if (cancelled) return;
+      if (cancelled) return 'ok';
 
-      const body = res as { data?: LiveMetricsPayload; error?: unknown } | null;
+      const body = res as { data?: LiveMetricsPayload; error?: { code: string } } | null;
+
+      if (body && isNoActingTenant(body)) {
+        // The correct answer, and the same one next time. Stop asking.
+        setReachable(false);
+        setData(null);
+        return 'refused';
+      }
+
       if (!body || body.error || !body.data) {
         setReachable(false);
         // Never keep showing the last poll's numbers as if they were live.
         setData(null);
-        return;
+        return 'failed';
       }
 
       setReachable(true);
       setData(body.data);
       setLastUpdated(new Date());
+      return 'ok';
     };
 
-    void tick();
-    const id = setInterval(() => void tick(), POLL_MS);
+    const poller = createLivePoller({ load: tick, intervalMs: POLL_MS });
+    poller.start();
+
     return () => {
       cancelled = true;
-      clearInterval(id);
+      poller.stop();
     };
-  }, [auth.loading, auth.user, role]);
+  }, [mayPoll]);
 
   const slots = React.useMemo(() => buildSlots(role, data), [role, data]);
   const withValues = slots.filter(s => s.value !== null);
