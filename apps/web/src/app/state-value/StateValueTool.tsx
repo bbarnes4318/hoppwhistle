@@ -2,69 +2,44 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
-import { RECIPROCAL_CODES, STATES, type Region, type StateRecord } from './state-data';
+import {
+  FEES,
+  NIPR_TRANSACTION_FEE,
+  RETALIATORY_CODES,
+  RETALIATORY_SCHEDULES,
+  STALE_AFTER_DAYS,
+  daysSince,
+  isStale,
+  resolveFee,
+  type ResolvedFee,
+} from './fees';
+import { STATES, type Region, type StateRecord } from './state-data';
 
 /**
  * Approximate tile cartogram: [column, row] on a 12 x 8 grid. Keeps every
  * jurisdiction on screen at once so the heat map needs no scrolling.
  */
+// prettier-ignore
 const TILE_GRID: Record<string, [number, number]> = {
-  AK: [1, 1],
-  ME: [12, 1],
-  VT: [11, 2],
-  NH: [12, 2],
-  WA: [1, 3],
-  ID: [2, 3],
-  MT: [3, 3],
-  ND: [4, 3],
-  MN: [5, 3],
-  IL: [6, 3],
-  WI: [7, 3],
-  MI: [8, 3],
-  NY: [9, 3],
-  CT: [10, 3],
-  RI: [11, 3],
-  MA: [12, 3],
-  OR: [1, 4],
-  NV: [2, 4],
-  WY: [3, 4],
-  SD: [4, 4],
-  IA: [5, 4],
-  IN: [6, 4],
-  OH: [7, 4],
-  PA: [8, 4],
-  NJ: [9, 4],
-  CA: [1, 5],
-  UT: [2, 5],
-  CO: [3, 5],
-  NE: [4, 5],
-  MO: [5, 5],
-  KY: [6, 5],
-  WV: [7, 5],
-  VA: [8, 5],
-  MD: [9, 5],
-  DE: [10, 5],
-  AZ: [2, 6],
-  NM: [3, 6],
-  KS: [4, 6],
-  AR: [5, 6],
-  TN: [6, 6],
-  NC: [7, 6],
-  SC: [8, 6],
-  DC: [9, 6],
-  OK: [4, 7],
-  LA: [5, 7],
-  MS: [6, 7],
-  AL: [7, 7],
-  GA: [8, 7],
-  HI: [1, 8],
-  TX: [4, 8],
-  FL: [9, 8],
+  AK: [1, 1], ME: [12, 1],
+  VT: [11, 2], NH: [12, 2],
+  WA: [1, 3], ID: [2, 3], MT: [3, 3], ND: [4, 3], MN: [5, 3], IL: [6, 3],
+  WI: [7, 3], MI: [8, 3], NY: [9, 3], CT: [10, 3], RI: [11, 3], MA: [12, 3],
+  OR: [1, 4], NV: [2, 4], WY: [3, 4], SD: [4, 4], IA: [5, 4], IN: [6, 4],
+  OH: [7, 4], PA: [8, 4], NJ: [9, 4],
+  CA: [1, 5], UT: [2, 5], CO: [3, 5], NE: [4, 5], MO: [5, 5], KY: [6, 5],
+  WV: [7, 5], VA: [8, 5], MD: [9, 5], DE: [10, 5],
+  AZ: [2, 6], NM: [3, 6], KS: [4, 6], AR: [5, 6], TN: [6, 6], NC: [7, 6],
+  SC: [8, 6], DC: [9, 6],
+  OK: [4, 7], LA: [5, 7], MS: [6, 7], AL: [7, 7], GA: [8, 7],
+  HI: [1, 8], TX: [4, 8], FL: [9, 8],
 };
 
 const REGIONS: Region[] = ['Northeast', 'Midwest', 'South', 'West'];
+const RESIDENCE_STORAGE_KEY = 'netenroll.state-value.residence';
+const DEFAULT_RESIDENCE = 'FL';
 
 type SortKey =
   | 'valueIndex'
@@ -75,25 +50,23 @@ type SortKey =
   | 'totalFee'
   | 'costPer1k';
 type SortDir = 'asc' | 'desc';
+type View = 'grid' | 'map' | 'sources';
 
 interface ScoredState extends StateRecord {
-  /** State fee after the reciprocal-jurisdiction adjustment. */
-  effectiveStateFee: number;
-  totalFee: number;
-  /** Dollars spent per 1,000 residents aged 55-80. Lower is better. */
-  costPer1k: number;
-  /** 0-100, where 100 is the strongest senior-population-per-dollar in the set. */
-  valueIndex: number;
-  isReciprocal: boolean;
-  isResident: boolean;
-  rank: number;
+  fee: ResolvedFee;
+  /** Dollars per 1,000 residents aged 55-80. Null when the fee is unsourced. */
+  costPer1k: number | null;
+  /** 0-100 against the strongest priced jurisdiction. Null when unsourced. */
+  valueIndex: number | null;
+  /** Value rank among priced jurisdictions. */
+  rank: number | null;
 }
 
 const num = new Intl.NumberFormat('en-US');
 const money = new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD',
-  maximumFractionDigits: 0,
+  minimumFractionDigits: 2,
 });
 
 /** Keeps sub-1 indices legible: 0.5 rather than a bare 0. */
@@ -119,46 +92,74 @@ function heatStyle(index: number, max: number) {
 }
 
 export function StateValueTool() {
-  const [residence, setResidence] = useState('FL');
+  const [residence, setResidence] = useState(DEFAULT_RESIDENCE);
   const [region, setRegion] = useState<Region | 'All'>('All');
   const [query, setQuery] = useState('');
-  const [view, setView] = useState<'grid' | 'map'>('grid');
+  const [view, setView] = useState<View>('grid');
   const [sortKey, setSortKey] = useState<SortKey>('valueIndex');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [selected, setSelected] = useState<string[]>([]);
 
-  /** Fees, value index and rank for every jurisdiction, given the resident state. */
-  const scored = useMemo<ScoredState[]>(() => {
-    const residentFee = STATES.find(s => s.code === residence)?.stateFee ?? 0;
+  // Restore the last resident state. Read after mount so the server-rendered
+  // markup and the first client render agree.
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(RESIDENCE_STORAGE_KEY);
+      if (saved && STATES.some(s => s.code === saved)) setResidence(saved);
+    } catch {
+      // Private mode or blocked storage: the default stands.
+    }
+  }, []);
 
-    const withFees = STATES.map(s => {
-      const isResident = s.code === residence;
-      const isReciprocal = !isResident && (RECIPROCAL_CODES as readonly string[]).includes(s.code);
-      const effectiveStateFee = isReciprocal ? residentFee : s.stateFee;
-      const totalFee = effectiveStateFee + s.niprFee;
+  function changeResidence(code: string) {
+    setResidence(code);
+    // A state removed from the grid must not linger in the plan.
+    setSelected(prev => prev.filter(c => c !== code));
+    try {
+      window.localStorage.setItem(RESIDENCE_STORAGE_KEY, code);
+    } catch {
+      // Persistence is a convenience, never a correctness requirement.
+    }
+  }
+
+  /**
+   * Fees, value index and rank for every jurisdiction except the resident
+   * state, which is dropped: an agent needs no non-resident licence at home.
+   */
+  const scored = useMemo<ScoredState[]>(() => {
+    const priced = STATES.filter(s => s.code !== residence).map(s => ({
+      ...s,
+      fee: resolveFee(s.code, residence),
+    }));
+
+    const rates = priced
+      .filter(s => s.fee.total != null)
+      .map(s => s.seniors / (s.fee.total as number));
+    const bestRate = rates.length ? Math.max(...rates) : 0;
+
+    const withIndex = priced.map(s => {
+      if (s.fee.total == null) {
+        return { ...s, costPer1k: null, valueIndex: null, rank: null };
+      }
+      const rate = s.seniors / s.fee.total;
       return {
         ...s,
-        isResident,
-        isReciprocal,
-        effectiveStateFee,
-        totalFee,
-        costPer1k: totalFee / (s.seniors / 1000),
-        seniorsPerDollar: s.seniors / totalFee,
+        costPer1k: s.fee.total / (s.seniors / 1000),
+        valueIndex: bestRate > 0 ? (rate / bestRate) * 100 : 0,
+        rank: null as number | null,
       };
     });
 
-    const bestRate = Math.max(...withFees.map(s => s.seniorsPerDollar));
-    const ranked = withFees
-      .map(({ seniorsPerDollar, ...s }) => ({
-        ...s,
-        valueIndex: (seniorsPerDollar / bestRate) * 100,
-      }))
+    // Rank only priced jurisdictions; unsourced ones carry no rank.
+    const order = [...withIndex]
+      .filter(s => s.valueIndex != null)
       .sort((a, b) => b.valueIndex - a.valueIndex);
+    const rankByCode = new Map(order.map((s, i) => [s.code, i + 1]));
 
-    return ranked.map((s, i) => ({ ...s, rank: i + 1 }));
+    return withIndex.map(s => ({ ...s, rank: rankByCode.get(s.code) ?? null }));
   }, [residence]);
 
-  const maxIndex = scored[0]?.valueIndex ?? 100;
+  const maxIndex = useMemo(() => Math.max(0, ...scored.map(s => s.valueIndex ?? 0)), [scored]);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -169,10 +170,16 @@ export function StateValueTool() {
     );
     const dir = sortDir === 'asc' ? 1 : -1;
     return [...filtered].sort((a, b) => {
-      const av = a[sortKey];
-      const bv = b[sortKey];
-      if (typeof av === 'string' && typeof bv === 'string') return av.localeCompare(bv) * dir;
-      return ((av as number) - (bv as number)) * dir;
+      if (sortKey === 'name' || sortKey === 'region') {
+        return a[sortKey].localeCompare(b[sortKey]) * dir;
+      }
+      const av = sortKey === 'totalFee' ? a.fee.total : a[sortKey];
+      const bv = sortKey === 'totalFee' ? b.fee.total : b[sortKey];
+      // Unpriced jurisdictions sink to the bottom under either direction.
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      return (av - bv) * dir;
     });
   }, [scored, region, query, sortKey, sortDir]);
 
@@ -180,15 +187,19 @@ export function StateValueTool() {
     const rows = scored.filter(s => selected.includes(s.code));
     return {
       rows,
-      cost: rows.reduce((sum, s) => sum + s.totalFee, 0),
+      cost: rows.reduce((sum, s) => sum + (s.fee.total ?? 0), 0),
       seniors: rows.reduce((sum, s) => sum + s.seniors, 0),
+      unverified: rows.filter(s => !s.fee.verified).length,
     };
   }, [scored, selected]);
 
-  const best = scored[0];
-  const medianCost = useMemo(() => {
-    const sorted = [...scored].map(s => s.costPer1k).sort((a, b) => a - b);
-    return sorted[Math.floor(sorted.length / 2)] ?? 0;
+  const best = useMemo(() => scored.filter(s => s.rank === 1)[0] ?? null, [scored]);
+
+  const counts = useMemo(() => {
+    const unsourced = scored.filter(s => s.fee.basis === 'unsourced').length;
+    const unverified = scored.filter(s => !s.fee.verified && s.fee.basis !== 'unsourced').length;
+    const stale = Object.values(FEES).filter(f => isStale(f.verifiedOn)).length;
+    return { unsourced, unverified, stale };
   }, [scored]);
 
   function toggleSort(key: SortKey) {
@@ -196,12 +207,9 @@ export function StateValueTool() {
       setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
     } else {
       setSortKey(key);
-      // Names sort A-Z first; every numeric column opens on its best value.
-      setSortDir(
-        key === 'name' || key === 'region' || key === 'costPer1k' || key === 'totalFee'
-          ? 'asc'
-          : 'desc'
-      );
+      const ascFirst =
+        key === 'name' || key === 'region' || key === 'costPer1k' || key === 'totalFee';
+      setSortDir(ascFirst ? 'asc' : 'desc');
     }
   }
 
@@ -214,7 +222,12 @@ export function StateValueTool() {
     { key: 'region', label: 'Region', align: 'left', hint: 'Census region' },
     { key: 'population', label: 'Population', align: 'right', hint: 'Total residents' },
     { key: 'seniors', label: 'Ages 55-80', align: 'right', hint: 'Final expense market' },
-    { key: 'totalFee', label: 'Total fee', align: 'right', hint: 'State fee + NIPR fee' },
+    {
+      key: 'totalFee',
+      label: 'Your cost',
+      align: 'right',
+      hint: `State fee + $${NIPR_TRANSACTION_FEE.toFixed(2)} NIPR fee, for an agent resident in the selected state`,
+    },
     { key: 'costPer1k', label: '$ / 1K seniors', align: 'right', hint: 'Lower is better' },
     {
       key: 'valueIndex',
@@ -226,6 +239,8 @@ export function StateValueTool() {
 
   const controlClass =
     'h-8 rounded-lg border border-slate-800 bg-slate-900/70 px-2.5 text-xs text-slate-200 outline-none transition-colors hover:border-slate-700 focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/30';
+
+  const residentState = STATES.find(s => s.code === residence);
 
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-[#070913] font-sans text-white selection:bg-emerald-500/30">
@@ -252,14 +267,14 @@ export function StateValueTool() {
               State Value Evaluator
             </h1>
             <p className="text-[11px] leading-tight text-slate-500">
-              Senior market per licensing dollar, all 51 jurisdictions
+              Senior market per licensing dollar
             </p>
           </div>
         </div>
         <div className="flex items-center gap-3">
           <Link
             href="/"
-            className="rounded-lg px-3 py-1 text-xs font-medium text-slate-400 transition-colors hover:bg-slate-900 hover:text-white"
+            className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-400 transition-colors hover:bg-slate-900 hover:text-white"
           >
             Back to site
           </Link>
@@ -272,24 +287,39 @@ export function StateValueTool() {
         </div>
       </header>
 
-      {/* Control bar */}
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-900 bg-slate-950/40 px-4 py-2 md:px-6">
-        <label className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-slate-500">
-          Resident state
+      {/* Control bar — the resident state is the primary control and carries the weight */}
+      <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-slate-900 bg-slate-950/60 px-4 py-2.5 md:px-6">
+        <div className="flex items-center gap-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5">
+          <div className="flex flex-col leading-none">
+            <label
+              htmlFor="residence"
+              className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400/80"
+            >
+              I am licensed in
+            </label>
+            <span className="mt-0.5 text-[10px] text-emerald-400/50">
+              every cost below is for this home state
+            </span>
+          </div>
           <select
+            id="residence"
             value={residence}
-            onChange={e => setResidence(e.target.value)}
-            className={controlClass}
+            onChange={e => changeResidence(e.target.value)}
+            className="h-9 rounded-lg border border-emerald-500/40 bg-slate-950 px-2.5 text-sm font-semibold text-emerald-300 outline-none transition-colors hover:border-emerald-400/60 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/30"
           >
             {[...STATES]
               .sort((a, b) => a.name.localeCompare(b.name))
               .map(s => (
-                <option key={s.code} value={s.code} className="bg-slate-900">
+                <option
+                  key={s.code}
+                  value={s.code}
+                  className="bg-slate-900 font-normal text-slate-200"
+                >
                   {s.name}
                 </option>
               ))}
           </select>
-        </label>
+        </div>
 
         <div className="flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-900/70 p-0.5">
           {(['All', ...REGIONS] as const).map(r => (
@@ -309,7 +339,7 @@ export function StateValueTool() {
           value={query}
           onChange={e => setQuery(e.target.value)}
           placeholder="Filter states..."
-          className={`${controlClass} w-40 placeholder:text-slate-600`}
+          className={`${controlClass} w-36 placeholder:text-slate-600`}
         />
 
         <div className="ml-auto flex items-center gap-2">
@@ -322,15 +352,21 @@ export function StateValueTool() {
             </button>
           )}
           <div className="flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-900/70 p-0.5">
-            {(['grid', 'map'] as const).map(v => (
+            {(
+              [
+                ['grid', 'Data grid'],
+                ['map', 'Heat map'],
+                ['sources', 'Sources'],
+              ] as const
+            ).map(([v, label]) => (
               <button
                 key={v}
                 onClick={() => setView(v)}
-                className={`rounded-md px-2.5 py-1 text-xs font-medium capitalize transition-colors ${
+                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
                   view === v ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-white'
                 }`}
               >
-                {v === 'grid' ? 'Data grid' : 'Heat map'}
+                {label}
               </button>
             ))}
           </div>
@@ -344,25 +380,25 @@ export function StateValueTool() {
           <div className="grid shrink-0 grid-cols-2 gap-2 lg:grid-cols-4">
             {[
               {
-                label: 'Best value',
+                label: `Best value from ${residentState?.code ?? '—'}`,
                 value: best ? best.name : '—',
-                sub: best ? `index ${fmtIndex(best.valueIndex)}` : '',
+                sub: best?.valueIndex != null ? `index ${fmtIndex(best.valueIndex)}` : '',
               },
               {
                 label: 'Lowest cost / 1K',
-                value: best ? `$${best.costPer1k.toFixed(4)}` : '—',
-                sub: `median $${medianCost.toFixed(4)}`,
+                value: best?.costPer1k != null ? `$${best.costPer1k.toFixed(4)}` : '—',
+                sub: best?.fee.total != null ? `${money.format(best.fee.total)} total` : '',
               },
               {
                 label: 'Jurisdictions shown',
                 value: String(visible.length),
-                sub: `of ${scored.length}`,
+                sub: `${scored.length} priced or pending, ${residentState?.code ?? ''} excluded`,
               },
               {
                 label: 'Plan cost',
                 value: money.format(plan.cost),
                 sub: plan.rows.length
-                  ? `${compactNum(plan.seniors)} seniors reached`
+                  ? `${compactNum(plan.seniors)} seniors${plan.unverified ? ` · ${plan.unverified} unverified` : ''}`
                   : 'select rows to build',
               },
             ].map(kpi => (
@@ -370,7 +406,7 @@ export function StateValueTool() {
                 key={kpi.label}
                 className="rounded-lg border border-slate-800/80 bg-slate-900/40 px-3 py-2"
               >
-                <div className="text-[10px] font-medium uppercase tracking-wider text-slate-500">
+                <div className="truncate text-[10px] font-medium uppercase tracking-wider text-slate-500">
                   {kpi.label}
                 </div>
                 <div className="truncate font-mono text-base font-medium tabular-nums text-emerald-400">
@@ -381,8 +417,7 @@ export function StateValueTool() {
             ))}
           </div>
 
-          {/* Data grid */}
-          {view === 'grid' ? (
+          {view === 'grid' && (
             <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-slate-800/80 bg-slate-900/20">
               <table className="w-full border-collapse text-xs">
                 <thead className="sticky top-0 z-10 bg-slate-950">
@@ -417,39 +452,51 @@ export function StateValueTool() {
                 <tbody>
                   {visible.map(s => {
                     const isSelected = selected.includes(s.code);
+                    const unsourced = s.fee.basis === 'unsourced';
+                    const unverified = !s.fee.verified && !unsourced;
                     return (
                       <tr
                         key={s.code}
-                        onClick={() => toggleSelect(s.code)}
-                        className={`cursor-pointer border-b border-slate-900/70 transition-colors ${
-                          isSelected ? 'bg-emerald-500/10' : 'hover:bg-slate-800/40'
+                        onClick={() => !unsourced && toggleSelect(s.code)}
+                        title={s.fee.note ?? undefined}
+                        className={`border-b border-slate-900/70 transition-colors ${
+                          unsourced
+                            ? 'cursor-not-allowed opacity-60'
+                            : `cursor-pointer ${isSelected ? 'bg-emerald-500/10' : 'hover:bg-slate-800/40'}`
                         }`}
                       >
                         <td className="px-2 py-1">
-                          <span
-                            className={`flex h-3.5 w-3.5 items-center justify-center rounded border text-[9px] leading-none ${
-                              isSelected
-                                ? 'border-emerald-400 bg-emerald-500 text-slate-950'
-                                : 'border-slate-700 text-transparent'
-                            }`}
-                            aria-hidden
-                          >
-                            ✓
-                          </span>
+                          {!unsourced && (
+                            <span
+                              className={`flex h-3.5 w-3.5 items-center justify-center rounded border text-[9px] leading-none ${
+                                isSelected
+                                  ? 'border-emerald-400 bg-emerald-500 text-slate-950'
+                                  : 'border-slate-700 text-transparent'
+                              }`}
+                              aria-hidden
+                            >
+                              ✓
+                            </span>
+                          )}
                         </td>
                         <td className="px-1 py-1 text-right font-mono text-[11px] tabular-nums text-slate-600">
-                          {s.rank}
+                          {s.rank ?? '—'}
                         </td>
                         <td className="whitespace-nowrap px-2.5 py-1">
                           <span className="font-medium text-slate-100">{s.name}</span>
-                          {s.isResident && (
-                            <span className="ml-1.5 rounded bg-slate-800 px-1 py-px text-[9px] font-medium uppercase tracking-wide text-slate-400">
-                              Resident
+                          {unsourced && (
+                            <span className="ml-1.5 rounded bg-slate-700/60 px-1 py-px text-[9px] font-medium uppercase tracking-wide text-slate-300">
+                              No fee
                             </span>
                           )}
-                          {s.isReciprocal && (
-                            <span className="ml-1.5 rounded bg-emerald-500/15 px-1 py-px text-[9px] font-medium uppercase tracking-wide text-emerald-400">
-                              Recip
+                          {unverified && (
+                            <span className="ml-1.5 rounded bg-amber-500/15 px-1 py-px text-[9px] font-medium uppercase tracking-wide text-amber-400">
+                              Unverified
+                            </span>
+                          )}
+                          {s.fee.variable && (
+                            <span className="ml-1.5 rounded bg-sky-500/15 px-1 py-px text-[9px] font-medium uppercase tracking-wide text-sky-400">
+                              Variable
                             </span>
                           )}
                         </td>
@@ -460,26 +507,39 @@ export function StateValueTool() {
                         <td className="px-2.5 py-1 text-right font-mono tabular-nums text-slate-200">
                           {compactNum(s.seniors)}
                         </td>
-                        <td className="px-2.5 py-1 text-right font-mono tabular-nums text-slate-300">
-                          {money.format(s.totalFee)}
+                        <td
+                          className={`px-2.5 py-1 text-right font-mono tabular-nums ${
+                            unverified ? 'text-amber-400' : 'text-slate-300'
+                          }`}
+                        >
+                          {s.fee.total != null ? money.format(s.fee.total) : '—'}
+                          {unverified && <span className="ml-0.5 text-[9px]">*</span>}
                         </td>
                         <td className="px-2.5 py-1 text-right font-mono tabular-nums text-slate-300">
-                          ${s.costPer1k.toFixed(4)}
+                          {s.costPer1k != null ? `$${s.costPer1k.toFixed(4)}` : '—'}
                         </td>
                         <td className="px-2.5 py-1">
-                          <div className="flex items-center justify-end gap-2">
-                            <div className="h-1.5 w-20 overflow-hidden rounded-full bg-slate-800">
-                              <div
-                                className="h-full rounded-full bg-emerald-500"
-                                style={{
-                                  width: `${Math.max(2, (s.valueIndex / maxIndex) * 100)}%`,
-                                }}
-                              />
+                          {s.valueIndex != null ? (
+                            <div className="flex items-center justify-end gap-2">
+                              <div className="h-1.5 w-20 overflow-hidden rounded-full bg-slate-800">
+                                <div
+                                  className={`h-full rounded-full ${unverified ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                                  style={{
+                                    width: `${Math.max(2, (s.valueIndex / maxIndex) * 100)}%`,
+                                  }}
+                                />
+                              </div>
+                              <span
+                                className={`w-10 text-right font-mono text-[13px] font-medium tabular-nums ${
+                                  unverified ? 'text-amber-400' : 'text-emerald-400'
+                                }`}
+                              >
+                                {fmtIndex(s.valueIndex)}
+                              </span>
                             </div>
-                            <span className="w-10 text-right font-mono text-[13px] font-medium tabular-nums text-emerald-400">
-                              {fmtIndex(s.valueIndex)}
-                            </span>
-                          </div>
+                          ) : (
+                            <div className="text-right font-mono text-[13px] text-slate-600">—</div>
+                          )}
                         </td>
                       </tr>
                     );
@@ -494,8 +554,9 @@ export function StateValueTool() {
                 </tbody>
               </table>
             </div>
-          ) : (
-            /* Heat map — tile cartogram, no scrolling */
+          )}
+
+          {view === 'map' && (
             <div className="min-h-0 flex-1 rounded-lg border border-slate-800/80 bg-slate-900/20 p-3">
               <div
                 className="grid h-full gap-1"
@@ -508,33 +569,150 @@ export function StateValueTool() {
                   const [col, row] = TILE_GRID[s.code] ?? [1, 1];
                   const dimmed = !visible.some(v => v.code === s.code);
                   const isSelected = selected.includes(s.code);
+                  const unsourced = s.fee.basis === 'unsourced';
+                  const unverified = !s.fee.verified && !unsourced;
+                  const tone = unsourced
+                    ? {
+                        backgroundColor: 'rgba(100, 116, 139, 0.10)',
+                        borderColor: 'rgba(100, 116, 139, 0.35)',
+                        color: '#94a3b8',
+                      }
+                    : heatStyle(s.valueIndex ?? 0, maxIndex);
                   return (
                     <button
                       key={s.code}
-                      onClick={() => toggleSelect(s.code)}
-                      title={`${s.name} — value index ${fmtIndex(s.valueIndex)}, $${s.costPer1k.toFixed(4)} per 1,000 seniors, ${money.format(s.totalFee)} total fee`}
-                      style={{
-                        gridColumn: col,
-                        gridRow: row,
-                        ...heatStyle(s.valueIndex, maxIndex),
-                        opacity: dimmed ? 0.18 : 1,
-                      }}
-                      className={`flex flex-col items-center justify-center rounded border transition-transform duration-150 hover:scale-105 ${
+                      onClick={() => !unsourced && toggleSelect(s.code)}
+                      title={
+                        unsourced
+                          ? `${s.name} — no sourced fee yet`
+                          : `${s.name} — ${money.format(s.fee.total as number)} from ${residence}${
+                              unverified ? ' (unverified, retaliatory fallback)' : ''
+                            }`
+                      }
+                      style={{ gridColumn: col, gridRow: row, ...tone, opacity: dimmed ? 0.18 : 1 }}
+                      className={`relative flex flex-col items-center justify-center rounded border transition-transform duration-150 hover:scale-105 ${
                         isSelected
                           ? 'ring-2 ring-emerald-400 ring-offset-1 ring-offset-[#070913]'
                           : ''
                       }`}
                     >
+                      {unverified && (
+                        <span className="absolute right-0.5 top-0.5 text-[9px] leading-none text-amber-400">
+                          *
+                        </span>
+                      )}
                       <span className="font-mono text-[11px] font-semibold leading-none">
                         {s.code}
                       </span>
                       <span className="mt-0.5 font-mono text-[10px] leading-none opacity-80">
-                        {fmtIndex(s.valueIndex)}
+                        {s.valueIndex != null ? fmtIndex(s.valueIndex) : '—'}
                       </span>
                     </button>
                   );
                 })}
+                {/* The resident state holds its tile but is not a target. */}
+                {residentState && TILE_GRID[residentState.code] && (
+                  <div
+                    style={{
+                      gridColumn: TILE_GRID[residentState.code][0],
+                      gridRow: TILE_GRID[residentState.code][1],
+                    }}
+                    className="flex flex-col items-center justify-center rounded border border-dashed border-emerald-500/40 bg-emerald-500/5"
+                  >
+                    <span className="font-mono text-[11px] font-semibold leading-none text-emerald-400/70">
+                      {residentState.code}
+                    </span>
+                    <span className="mt-0.5 text-[8px] uppercase leading-none text-emerald-400/50">
+                      home
+                    </span>
+                  </div>
+                )}
               </div>
+            </div>
+          )}
+
+          {view === 'sources' && (
+            <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-slate-800/80 bg-slate-900/20">
+              <table className="w-full border-collapse text-xs">
+                <thead className="sticky top-0 z-10 bg-slate-950">
+                  <tr className="border-b border-slate-800 text-[10px] font-medium uppercase tracking-wider text-slate-500">
+                    <th className="px-2.5 py-2 text-left">State</th>
+                    <th className="px-2.5 py-2 text-left">Basis</th>
+                    <th className="px-2.5 py-2 text-right">Posted fee</th>
+                    <th className="px-2.5 py-2 text-left">Provenance</th>
+                    <th className="px-2.5 py-2 text-right">Verified</th>
+                    <th className="px-2.5 py-2 text-right">Age</th>
+                    <th className="px-2.5 py-2 text-left">Source</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...STATES]
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map(s => {
+                      const rec = FEES[s.code];
+                      const retaliatory = (RETALIATORY_CODES as readonly string[]).includes(s.code);
+                      const hasSchedule = RETALIATORY_SCHEDULES[s.code] != null;
+                      const stale = rec ? isStale(rec.verifiedOn) : false;
+                      return (
+                        <tr key={s.code} className="border-b border-slate-900/70">
+                          <td className="whitespace-nowrap px-2.5 py-1 font-medium text-slate-100">
+                            {s.name}
+                          </td>
+                          <td className="px-2.5 py-1">
+                            {!rec ? (
+                              <span className="text-slate-400">Unsourced</span>
+                            ) : retaliatory ? (
+                              <span className={hasSchedule ? 'text-emerald-400' : 'text-amber-400'}>
+                                Retaliatory{hasSchedule ? ' · schedule loaded' : ' · no schedule'}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">Posted</span>
+                            )}
+                          </td>
+                          <td className="px-2.5 py-1 text-right font-mono tabular-nums text-slate-300">
+                            {rec ? money.format(rec.postedFee) : '—'}
+                          </td>
+                          <td className="px-2.5 py-1 text-slate-400">
+                            {rec ? (
+                              rec.provenance === 'source-verified' ? (
+                                <span className="text-emerald-400">Source verified</span>
+                              ) : (
+                                <span className="text-amber-400">Owner supplied</span>
+                              )
+                            ) : (
+                              '—'
+                            )}
+                          </td>
+                          <td className="px-2.5 py-1 text-right font-mono tabular-nums text-slate-400">
+                            {rec?.verifiedOn ?? '—'}
+                          </td>
+                          <td
+                            className={`px-2.5 py-1 text-right font-mono tabular-nums ${
+                              stale ? 'text-red-400' : 'text-slate-500'
+                            }`}
+                          >
+                            {rec ? `${daysSince(rec.verifiedOn)}d${stale ? ' · stale' : ''}` : '—'}
+                          </td>
+                          <td className="max-w-0 truncate px-2.5 py-1">
+                            {rec ? (
+                              <a
+                                href={rec.sourceUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                title={rec.sourceUrl}
+                                className="text-slate-500 underline decoration-slate-700 underline-offset-2 hover:text-slate-300"
+                              >
+                                {rec.sourceUrl.replace(/^https:\/\/(www\.)?/, '')}
+                              </a>
+                            ) : (
+                              <span className="text-slate-600">Needs sourcing from NIPR</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
             </div>
           )}
         </main>
@@ -559,11 +737,14 @@ export function StateValueTool() {
                   <button
                     key={s.code}
                     onClick={() => toggleSelect(s.code)}
-                    className="flex w-full items-center justify-between border-b border-slate-900/70 px-3 py-1 text-left transition-colors hover:bg-slate-800/40"
+                    className="flex w-full items-center justify-between border-b border-slate-900/70 px-3 py-1.5 text-left transition-colors hover:bg-slate-800/40"
                   >
-                    <span className="truncate text-xs text-slate-200">{s.name}</span>
+                    <span className="truncate text-xs text-slate-200">
+                      {s.name}
+                      {!s.fee.verified && <span className="ml-1 text-amber-400">*</span>}
+                    </span>
                     <span className="ml-2 font-mono text-[11px] tabular-nums text-slate-400">
-                      {money.format(s.totalFee)}
+                      {s.fee.total != null ? money.format(s.fee.total) : '—'}
                     </span>
                   </button>
                 ))
@@ -588,38 +769,50 @@ export function StateValueTool() {
                   {plan.seniors > 0 ? `$${(plan.cost / (plan.seniors / 1000)).toFixed(4)}` : '—'}
                 </span>
               </div>
+              {plan.unverified > 0 && (
+                <p className="pt-1 text-[10px] leading-snug text-amber-400/80">
+                  {plan.unverified} amount{plan.unverified > 1 ? 's are' : ' is'} an unverified
+                  fallback — confirm before paying.
+                </p>
+              )}
             </div>
           </div>
 
           <div className="shrink-0 rounded-lg border border-slate-800/80 bg-slate-900/40 px-3 py-2">
             <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-slate-500">
-              Value index
+              Data health
             </div>
-            <div className="flex h-1.5 overflow-hidden rounded-full">
-              {[0.1, 0.3, 0.5, 0.7, 0.9].map(t => (
-                <div
-                  key={t}
-                  className="flex-1"
-                  style={{ backgroundColor: `rgba(16, 185, 129, ${0.06 + t * 0.62})` }}
-                />
-              ))}
-            </div>
-            <div className="mt-1 flex justify-between text-[10px] text-slate-500">
-              <span>Low</span>
-              <span>High</span>
-            </div>
+            <dl className="space-y-0.5 text-[11px]">
+              <div className="flex justify-between">
+                <dt className="text-slate-500">Unverified fees</dt>
+                <dd className="font-mono tabular-nums text-amber-400">{counts.unverified}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-slate-500">Unsourced states</dt>
+                <dd className="font-mono tabular-nums text-slate-300">{counts.unsourced}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-slate-500">Stale &gt; {STALE_AFTER_DAYS}d</dt>
+                <dd
+                  className={`font-mono tabular-nums ${counts.stale ? 'text-red-400' : 'text-slate-300'}`}
+                >
+                  {counts.stale}
+                </dd>
+              </div>
+            </dl>
           </div>
         </aside>
       </div>
 
       {/* Footnote */}
-      <footer className="flex h-8 shrink-0 items-center justify-between border-t border-slate-900 px-4 text-[11px] text-slate-600 md:px-6">
-        <span>
-          Value index = residents aged 55-80 reached per licensing dollar, indexed to the strongest
-          jurisdiction.
+      <footer className="flex h-8 shrink-0 items-center justify-between gap-4 border-t border-slate-900 px-4 text-[11px] text-slate-600 md:px-6">
+        <span className="truncate">
+          Every cost is the state fee plus the ${NIPR_TRANSACTION_FEE.toFixed(2)} NIPR fee, for an
+          agent resident in {residentState?.name ?? '—'}.
         </span>
-        <span className="hidden sm:inline">
-          New York and Tennessee are reciprocal — they charge your resident state fee.
+        <span className="hidden shrink-0 sm:inline">
+          <span className="text-amber-400">*</span> retaliatory state, no schedule loaded — amount
+          unverified.
         </span>
       </footer>
     </div>
