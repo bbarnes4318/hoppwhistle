@@ -16,7 +16,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { apiClient } from '@/lib/api';
+import { apiClient, payload } from '@/lib/api';
+import type { Envelope } from '@/lib/api';
 
 /**
  * Settlement history: one row per settled Delivery Day.
@@ -196,9 +197,11 @@ export default function SettlementsPage(): JSX.Element {
   const [derivationLoading, setDerivationLoading] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const response = await apiClient.get<SettlementRow[]>('/api/v1/delivery/settlements');
+    const response =
+      await apiClient.get<Envelope<SettlementRow[]>>('/api/v1/delivery/settlements');
     setError(response.error ? response.error.message : null);
-    setRows(response.data ?? []);
+    const settlements = payload(response);
+    setRows(Array.isArray(settlements) ? settlements : []);
     setLoading(false);
   }, []);
 
@@ -224,11 +227,12 @@ export default function SettlementsPage(): JSX.Element {
 
     setDerivationLoading(settlementId);
     try {
-      const response = await apiClient.get<Derivation>(
+      const response = await apiClient.get<Envelope<Derivation>>(
         `/api/v1/delivery/settlements/${settlementId}/derivation`
       );
-      if (response.data) {
-        setDerivations(current => ({ ...current, [settlementId]: response.data as Derivation }));
+      const derivation = payload(response);
+      if (derivation) {
+        setDerivations(current => ({ ...current, [settlementId]: derivation }));
       }
     } finally {
       setDerivationLoading(null);

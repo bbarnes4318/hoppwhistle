@@ -4,7 +4,12 @@ import { FastifyInstance, FastifyRequest } from 'fastify';
 import { Prisma } from '@prisma/client';
 
 import { requirePlatformAdmin } from '../lib/platform-context.js';
-import { getActingTenantId, resolveTenant, sendTenantRefusal } from '../lib/tenant-context.js';
+import {
+  getActingTenantId,
+  replyTenantRefusal,
+  resolveTenant,
+  sendTenantRefusal,
+} from '../lib/tenant-context.js';
 import { authenticate } from '../middleware/auth.js';
 import { AuthenticatedUser } from '../middleware/auth.js';
 
@@ -1587,7 +1592,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
     '/api/v1/campaigns/:campaignId/publishers',
     async (request, reply) => {
       const tenantId = getActingTenantId(request);
-      if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+      if (!tenantId) return replyTenantRefusal(request, reply);
 
       const { campaignId } = request.params;
       const prisma = (await import('../lib/prisma.js')).getPrismaClient();
@@ -1619,7 +1624,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
     };
   }>('/api/v1/campaigns/:campaignId/publishers', async (request, reply) => {
     const tenantId = getActingTenantId(request);
-    if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+    if (!tenantId) return replyTenantRefusal(request, reply);
 
     const { campaignId } = request.params;
     const { publisherId, payoutPerBillableCall, status } = request.body;
@@ -1678,7 +1683,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
     };
   }>('/api/v1/campaigns/:campaignId/publishers/:assignmentId', async (request, reply) => {
     const tenantId = getActingTenantId(request);
-    if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+    if (!tenantId) return replyTenantRefusal(request, reply);
 
     const { campaignId, assignmentId } = request.params;
     const { payoutPerBillableCall, status } = request.body;
@@ -1713,7 +1718,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
     '/api/v1/campaigns/:campaignId/publishers/:assignmentId',
     async (request, reply) => {
       const tenantId = getActingTenantId(request);
-      if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+      if (!tenantId) return replyTenantRefusal(request, reply);
 
       const { campaignId, assignmentId } = request.params;
       const prisma = (await import('../lib/prisma.js')).getPrismaClient();
@@ -1733,7 +1738,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
     '/api/v1/campaigns/:campaignId/buyers',
     async (request, reply) => {
       const tenantId = getActingTenantId(request);
-      if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+      if (!tenantId) return replyTenantRefusal(request, reply);
 
       const { campaignId } = request.params;
       const prisma = (await import('../lib/prisma.js')).getPrismaClient();
@@ -1770,7 +1775,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
     };
   }>('/api/v1/campaigns/:campaignId/buyers', async (request, reply) => {
     const tenantId = getActingTenantId(request);
-    if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+    if (!tenantId) return replyTenantRefusal(request, reply);
 
     const { campaignId } = request.params;
     const {
@@ -1883,7 +1888,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
     };
   }>('/api/v1/campaigns/:campaignId/buyers/:assignmentId', async (request, reply) => {
     const tenantId = getActingTenantId(request);
-    if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+    if (!tenantId) return replyTenantRefusal(request, reply);
 
     const { campaignId, assignmentId } = request.params;
     const { buyerEndpointId, destinationNumber, pricePerBillableCall, priority, weight, status } =
@@ -1973,7 +1978,7 @@ export async function registerCampaignRoutes(fastify: FastifyInstance) {
     '/api/v1/campaigns/:campaignId/buyers/:assignmentId',
     async (request, reply) => {
       const tenantId = getActingTenantId(request);
-      if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+      if (!tenantId) return replyTenantRefusal(request, reply);
 
       const { campaignId, assignmentId } = request.params;
       const prisma = (await import('../lib/prisma.js')).getPrismaClient();
@@ -5039,52 +5044,32 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
   await Promise.resolve();
   const { analyticsService } = await import('../services/analytics.js');
   const { getPrismaClient } = await import('../lib/prisma.js');
-  const { createHash } = await import('crypto');
 
-  // Optional authentication hook - try to authenticate but don't fail if it doesn't work
-  fastify.addHook('onRequest', async (request, _reply) => {
-    const authHeader = request.headers.authorization;
-    const apiKey = request.headers['x-api-key'] as string;
-
-    // Try to authenticate without failing the request
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      try {
-        const token = authHeader.substring(7);
-        const decoded = await (
-          request as unknown as { jwtVerify: (token: string) => Promise<AuthenticatedUser> }
-        ).jwtVerify(token);
-        (request as AuthRequest).user = decoded;
-      } catch (err) {
-        // Ignore - will use default tenant
-      }
-    } else if (apiKey) {
-      try {
-        const prisma = getPrismaClient();
-        const keyHash = createHash('sha256').update(apiKey).digest('hex');
-        const dbApiKey = await prisma.apiKey.findUnique({
-          where: { keyHash },
-          include: { tenant: true },
-        });
-
-        if (
-          dbApiKey &&
-          dbApiKey.status === 'ACTIVE' &&
-          (!dbApiKey.expiresAt || dbApiKey.expiresAt > new Date()) &&
-          dbApiKey.tenant.status === 'ACTIVE'
-        ) {
-          const scopes =
-            dbApiKey.scopes && Array.isArray(dbApiKey.scopes) ? (dbApiKey.scopes as string[]) : [];
-          (request as AuthRequest).user = {
-            tenantId: dbApiKey.tenantId,
-            apiKeyId: dbApiKey.id,
-            scopes,
-          };
-        }
-      } catch (err) {
-        // Ignore - will use default tenant
-      }
-    }
-  });
+  /*
+   * ── A duplicate auth hook used to sit here, and it broke the cross-agency
+   *    view on every reporting route ─────────────────────────────────────────
+   *
+   * It re-verified the JWT and assigned the raw decoded payload straight over
+   * `request.user`. That payload is `{ userId, tenantId, email }` and nothing
+   * else, so it DISCARDED the principal `registerApiV1Auth` had already built
+   * one hook earlier -- including `isPlatformAdmin` and the acting-tenant
+   * fields that `applyPlatformContext` attaches.
+   *
+   * `resolveTenant` decides between "sign in" and "pick an agency" by reading
+   * `isPlatformAdmin`. With it clobbered away, a platform operator with no
+   * agency selected was told `401 UNAUTHORIZED` on
+   * `/api/v1/reporting/metrics`, `/api/v1/reporting/calls`,
+   * `/api/v1/reporting/campaigns/:id` and `/api/v1/dashboard/stats` -- and the
+   * web client reads 401 as a dead session and signs them out. These routes
+   * were converted to `resolveTenant` in Phase 2 and were still wrong,
+   * because the conversion was correct and something else undid it downstream.
+   *
+   * It is deleted rather than repaired. `registerApiV1Auth` runs on the root
+   * instance, ahead of every plugin, and already does everything this did:
+   * bearer tokens, API keys with the same status and expiry checks, and the
+   * platform context on top. A second, weaker copy of an auth path is the
+   * thing the Phase 1 tenant-context work existed to remove.
+   */
 
   // Helper to get authenticated user profile (role, buyerId, publisherId)
   async function getUserProfile(request: FastifyRequest, prisma: any) {
@@ -5464,7 +5449,7 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     }
 
     const tenantId = getActingTenantId(request);
-    if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+    if (!tenantId) return replyTenantRefusal(request, reply);
 
     const startDate = request.query.startDate
       ? new Date(request.query.startDate)
@@ -5621,7 +5606,7 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     }
 
     const tenantId = getActingTenantId(request);
-    if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+    if (!tenantId) return replyTenantRefusal(request, reply);
 
     const startDate = request.query.startDate
       ? new Date(request.query.startDate)
@@ -5790,7 +5775,7 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     }
 
     const tenantId = getActingTenantId(request);
-    if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+    if (!tenantId) return replyTenantRefusal(request, reply);
 
     const startDate = request.query.startDate
       ? new Date(request.query.startDate)
@@ -5998,7 +5983,7 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     }
 
     const tenantId = getActingTenantId(request);
-    if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+    if (!tenantId) return replyTenantRefusal(request, reply);
 
     const startDate = request.query.startDate
       ? new Date(request.query.startDate)
@@ -6206,7 +6191,7 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     }
 
     const tenantId = getActingTenantId(request);
-    if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+    if (!tenantId) return replyTenantRefusal(request, reply);
 
     const startDate = request.query.startDate
       ? new Date(request.query.startDate)
@@ -6441,7 +6426,7 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     }
 
     const tenantId = getActingTenantId(request);
-    if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+    if (!tenantId) return replyTenantRefusal(request, reply);
 
     const startDate = request.query.startDate
       ? new Date(request.query.startDate)
@@ -6682,7 +6667,7 @@ export async function registerReportingRoutes(fastify: FastifyInstance) {
     }
 
     const tenantId = getActingTenantId(request);
-    if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+    if (!tenantId) return replyTenantRefusal(request, reply);
 
     // 1. High-level aggregates
     const callAgg = await prisma.call.aggregate({

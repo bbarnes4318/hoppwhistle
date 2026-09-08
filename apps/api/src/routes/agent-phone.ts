@@ -2,7 +2,7 @@ import type { Prisma } from '@prisma/client';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { getPrismaClient } from '../lib/prisma.js';
-import { getActingTenantId } from '../lib/tenant-context.js';
+import { describeTenantRefusal, getActingTenantId } from '../lib/tenant-context.js';
 import { isDeliveryAllowed } from '../services/billing/delivery-gate.js';
 import { callStateService } from '../services/call-state.js';
 import { eventBus } from '../services/event-bus.js';
@@ -104,15 +104,46 @@ interface UserInfo {
  * transfer or read the screen-pop of any call on the platform.
  *
  * There is no fallback now. No credential, no agent.
+ *
+ * ── "No agency selected" is not "not signed in" ──────────────────────────────
+ *
+ * This used to answer both with `401 UNAUTHORIZED`, and that is a bug with a
+ * production incident behind it. The web client reads 401 as a dead session: it
+ * clears the token and navigates to /login, which loads the app, which calls an
+ * agency-scoped route, which answers 401 again. That is the Phase 1b login
+ * loop, and it ended in production only by deleting a row from the database.
+ *
+ * Phase 2 split the two answers everywhere -- `409 NO_ACTING_TENANT` for a
+ * platform operator who has entered no agency, `401` for a caller with no
+ * credential -- and converted about ninety route sites. It missed this file,
+ * because this file resolves the tenant itself instead of going through the
+ * shared helpers, so a conversion that worked through those helpers never saw
+ * it. Six GET routes and one PUT on the softphone surface were still answering
+ * 401, which a production console capture caught.
+ *
+ * The two conditions are now checked separately and answered differently. The
+ * order matters: no credential at all is a 401 whoever you are, and only a
+ * caller we have already authenticated can be told to pick an agency.
  */
 function requireAgent(request: FastifyRequest, reply: FastifyReply): UserInfo | null {
-  const tenantId = getActingTenantId(request);
   const user = (request as FastifyRequest & { user?: UserInfo }).user;
 
-  if (!tenantId || !user?.userId) {
+  // No credential. Nothing to distinguish, and signing in IS the fix.
+  if (!user?.userId) {
     void reply.code(401).send({
       error: { code: 'UNAUTHORIZED', message: 'Authentication required' },
     });
+    return null;
+  }
+
+  const tenantId = getActingTenantId(request);
+  if (!tenantId) {
+    // Authenticated, but with no agency to act in. `describeTenantRefusal`
+    // decides which of the two answers that is -- 409 for a platform operator
+    // who needs to pick one, 401 for anybody else -- so this file cannot drift
+    // from the rest of the API again.
+    const refusal = describeTenantRefusal(request);
+    void reply.code(refusal.statusCode).send({ error: refusal.error });
     return null;
   }
 

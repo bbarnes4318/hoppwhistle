@@ -24,7 +24,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { apiClient } from '@/lib/api';
+import { apiClient, payload } from '@/lib/api';
+import type { Envelope } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 /**
@@ -145,12 +146,19 @@ export default function PlatformAgenciesPage(): JSX.Element {
 
   const load = useCallback(async () => {
     const query = day ? `?day=${encodeURIComponent(day)}` : '';
-    const response = await apiClient.get<{ calendarDay: string; agencies: AgencyRow[] }>(
-      `/api/v1/platform/delivery/overview${query}`
-    );
+    const response = await apiClient.get<
+      Envelope<{ calendarDay: string; agencies: AgencyRow[] }>
+    >(`/api/v1/platform/delivery/overview${query}`);
+
+    /*
+     * Unwrapped by name. Read as a bare body this was `undefined`, so the table
+     * rendered empty on every load and looked like a platform with no agencies
+     * rather than a page that could not read its own response.
+     */
+    const overview = payload(response);
     setError(response.error ? response.error.message : null);
-    setRows(response.data?.agencies ?? []);
-    if (!day && response.data?.calendarDay) setDay(response.data.calendarDay);
+    setRows(Array.isArray(overview?.agencies) ? overview.agencies : []);
+    if (!day && overview?.calendarDay) setDay(overview.calendarDay);
     setLoading(false);
   }, [day]);
 
@@ -173,10 +181,10 @@ export default function PlatformAgenciesPage(): JSX.Element {
     setOpenAgency(tenantId);
     setEnrolment(null);
     setEnrolmentNote(null);
-    const response = await apiClient.get<EnrolmentStatus>(
+    const response = await apiClient.get<Envelope<EnrolmentStatus>>(
       `/api/v1/platform/delivery/agencies/${tenantId}/enrolment`
     );
-    setEnrolment(response.data ?? null);
+    setEnrolment(payload(response) ?? null);
     if (response.error) setEnrolmentNote(response.error.message);
   }
 
@@ -212,10 +220,10 @@ export default function PlatformAgenciesPage(): JSX.Element {
 
       // Re-read both: the panel's own state, which carries the blockers, and
       // the row behind it.
-      const refreshed = await apiClient.get<EnrolmentStatus>(
+      const refreshed = await apiClient.get<Envelope<EnrolmentStatus>>(
         `/api/v1/platform/delivery/agencies/${tenantId}/enrolment`
       );
-      setEnrolment(refreshed.data ?? null);
+      setEnrolment(payload(refreshed) ?? null);
       await load();
     } finally {
       setEnrolmentBusy(false);

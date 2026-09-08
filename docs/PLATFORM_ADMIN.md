@@ -104,6 +104,79 @@ On the client, `apps/web/src/lib/api.ts` gates the auto-logout on the error
 reopen the loop, and `apps/web/src/lib/__tests__/no-acting-tenant.test.ts` pins
 all three cases.
 
+### The conversion missed fourteen routes, not three
+
+A production console capture showed `GET /api/v1/agent/webrtc/credentials`,
+`GET /api/v1/agent/my-numbers` and `PUT /api/v1/agent/status` still answering
+401 for an operator with no agency selected. Sweeping the real route table found
+**thirteen GETs and one PUT**, from **two** separate causes — so fixing the
+three that were visible would have left eleven behind.
+
+**Cause one: a route file with its own refusal.** `routes/agent-phone.ts` had a
+local `requireAgent()` that read the credential and the tenant together and
+answered one 401 for either. The Phase 2 conversion worked through the shared
+helpers in `lib/tenant-context.ts`; a handler that never called them was never
+reached by it. `requireAgent()` now checks the two conditions in order — no
+credential is 401, no agency is whatever `describeTenantRefusal` says — which is
+the same distinction the shared helper draws, made in the one place this file
+decides it.
+
+**Cause two: a plugin that destroyed the answer before the handler ran.**
+`registerReportingRoutes` installed its own `onRequest` hook that re-verified the
+JWT and assigned the **raw decoded payload** over `request.user`. The global
+hook in `middleware/api-v1-auth.ts` had already authenticated the request and
+run `applyPlatformContext()`, which is what sets `isPlatformAdmin` and the
+acting-tenant fields; the plugin-local hook overwrote all of it with a token
+body that contains none of those. Every handler in that plugin then saw a user
+who was not staff and had no agency, and refused accordingly. The hook is
+deleted — it was duplicating work the global hook already does — and a comment
+in its place says why nothing may re-assign `request.user` there.
+
+Sixteen sites that still wrote `reply.code(401).send({ error: 'Unauthorized' })`
+after a tenant lookup now call `replyTenantRefusal` (15 in `routes/index.ts`,
+1 in `routes/buyer-billing.ts`).
+
+**Why an audit rather than a longer list.** A list of routes to check fails the
+same way the conversion did: it covers what somebody remembered.
+`apps/api/src/__tests__/no-acting-tenant-audit.test.ts` registers every
+agency-facing plugin the real server registers, collects the route table from
+Fastify's own `onRoute` hook, and drives **every** `/api/*` GET as a platform
+admin holding the capability with no agency selected. Any 401 fails the suite,
+with the offending method and path in the message. A route added next year that
+gets this wrong fails on the day it is added.
+
+It sweeps GETs, not writes: a route that fails this audit is by definition one
+that did not refuse, so sweeping writes blindly would execute the broken ones.
+The write from the capture is listed explicitly, and any write can be added
+there. Four prefixes are skipped, each with a stated reason in the file — partner
+API-key ingestion, carrier webhooks and FreeSWITCH internal calls, none of which
+involve a browser session. A separate case asserts the sweep collected more than
+fifty routes, so a sweep that silently collected nothing cannot pass; another
+asserts an anonymous caller still gets 401, because splitting the two conditions
+must not have turned everything into a 409.
+
+### The client's logout gate held; it is now also bounded
+
+The gate is `response.status === 401 && code !== NO_ACTING_TENANT`. It is
+strictly conditional on the code, so a `NO_ACTING_TENANT` refusal never signs
+anybody out however it is delivered.
+
+That is not the same as saying the fourteen routes above were harmless, and they
+were not: they answered `401 UNAUTHORIZED`, which is exactly the pair the gate
+lets through. The gate protects against a 409 arriving with the wrong status. It
+cannot protect against a route that reports the wrong condition entirely, which
+is what these did — so this was a live route back into the Phase 1b loop, closed
+by fixing the routes rather than by the gate.
+
+Since a correct gate was not enough on its own, the redirect is now also
+bounded. `loopingOnLogout()` counts sign-out redirects in `localStorage`: more
+than three inside thirty seconds and the client stops redirecting and logs what
+is happening to the console instead. A successful response clears the counter,
+so ordinary use never approaches it, and any failure to read or write storage
+answers "not looping" — a broken counter must not block a legitimate sign-out.
+It is a backstop, not a fix: it turns a locked-out operator into one who can see
+`/login` and a console line naming the cause.
+
 ## 2c. The switcher
 
 Phase 1b built the switch as an API and shipped no UI, which is how an operator
@@ -124,6 +197,69 @@ render the new agency's chrome around the old agency's data.
 `cross-agency-prompt.tsx` is where an operator with no agency lands on an agency
 page: the condition, and the one action that resolves it. `/settings` and
 `/admin` are exempt — neither is agency data.
+
+### The switcher crashed the whole portal, and why one field could do that
+
+Selecting an agency threw `TypeError: s.tenants.map is not a function` and every
+platform admin got "Application error: a client-side exception has occurred" on
+a blank page, with no way to reach any agency.
+
+**The defect.** `apiClient`'s `data` is the parsed response **body**, not the
+payload inside it — the client does not unwrap anything.
+`GET /api/v1/platform/tenants` answers `{ data: tenants }`, so the body is an
+object and the array is one level in. The hook read the body as the array,
+`tenants` became an object, and the switcher called `.map` on it.
+
+**Why one field took the application down.** The switcher is in the top bar,
+which is in the dashboard layout. React's response to an uncaught error during
+render is to unmount from the root, so the layout went with it — the sidebar,
+the top bar and every route out. That is the Phase 1b login loop's failure mode
+in a different place: one narrow defect that removes every escape from itself.
+
+**Why nothing caught it.** Phase 2 built the switcher and Phase 4 reviewed these
+screens; neither exercised the switcher's primary action against a real
+response. The API test that does hit this route asserted with a helper walking
+the body **recursively** for any `id` key, so `{ data: [{id}] }`,
+`{ tenants: [{id}] }` and a bare `[{id}]` satisfied it identically. It could not
+fail on an envelope change however wrong the client was. TypeScript could not
+help either: `get<T>` types the body as whatever the caller claims, so
+`get<PlatformTenant[]>` against an enveloped route compiles and is wrong.
+
+**What changed.**
+
+| | |
+| --- | --- |
+| the read | `payload()` in `@/lib/api` — one named, typed unwrap, replacing three ad-hoc copies. `Array.isArray` guards the switcher's list, because the crash was a non-null non-array reaching state |
+| the shape | `/platform/context` and both `acting-tenant` verbs now answer `{ data: ... }` like everything else on the surface (see §2d) |
+| the test | `api-response-contract.test.ts` boots the real routes and drives the **real web client** against them, asserting what each consumer's accessor yields. Reintroducing the bug fails three of its cases |
+| the blast radius | `ErrorBoundary` around the switcher and around the layout's children. A failure in the chrome now renders "Agency switcher unavailable" in place; a failure in a page keeps the shell |
+
+Next's `error.tsx` would not have helped: it catches errors from a segment's
+children, not from the layout itself, and the switcher is layout chrome.
+
+## 2d. Every route on this surface answers `{ data: ... }`
+
+`/api/v1/platform/*`, `/api/v1/delivery/*` and `/api/v1/rating/*` are uniformly
+enveloped. Three routes in `platform.ts` used to answer with a bare object while
+`/tenants` beside them was enveloped, and that inconsistency inside one file is
+what made "which key do I read" a question at all. **Changed:**
+
+- `GET /api/v1/platform/context`
+- `POST /api/v1/platform/acting-tenant`
+- `DELETE /api/v1/platform/acting-tenant`
+
+The bodies are otherwise identical — the same fields, one level in. The only
+consumer is `use-platform-context.ts`, updated with them; the enter and leave
+calls read nothing but `response.error`, so they were unaffected either way.
+
+**This is a breaking response change**, so the API and the web app have to
+deploy together. Deploying the API alone leaves the switcher's context read
+looking one level too shallow — the operator is treated as not-staff and the
+switcher disappears — and the fix restores it.
+
+Elsewhere in the app plenty of routes legitimately answer with a bare body, so
+the client does **not** unwrap globally: `payload()` is called where the route
+is enveloped, and `Envelope<T>` names that in the type.
 
 **Inside an agency, an operator carries that agency's ADMIN and OWNER roles**
 (`ACTING_TENANT_ROLES`), attached to the principal and never written as
@@ -173,6 +309,67 @@ asserting the row count never moves. Only `src/cli/platform-admins.ts` may grant
 it, and the test pins that it is the sole caller.
 
 ---
+
+## 2e. The softphone only starts for somebody who has a phone
+
+The production capture showed SIP initialisation failing, a watchdog logging
+"full SIP re-initialization", and the pair repeating without end — for a platform
+admin who has never had an extension. Two defects in one loop.
+
+**It was mounting for everybody.** `PhoneProvider` wraps the whole dashboard
+layout, so it initialised for platform operators in the cross-agency view, for
+buyers and for publishers. Each fetched agent credentials, was refused, and
+handed the failure to the watchdog. It now takes an `enabled` prop, and the
+layout computes it: `userRoles.includes('AGENT')` **and** `!platform.needsAgency`.
+Both conditions are needed — only an agent takes calls, and an operator in the
+cross-agency view has no tenant for an extension to belong to. Entering an agency
+reloads the page, so the phone comes up then.
+
+**The retry was unbounded and silent.** Five attempts now, with exponential
+backoff from two seconds to a thirty-second ceiling, against a budget the
+watchdog shares rather than one it can bypass — `fullReinit` returns early once
+the budget is spent, which is what makes "bounded" true rather than aspirational.
+A 403 or 409 from the credentials fetch ends it immediately: that is a settled
+answer about who this user is, not a transient failure worth retrying.
+
+And it says so. `phoneStatus` on the context is one of `disabled`, `connecting`,
+`registered`, `retrying` or `failed`, alongside `phoneAttempts` and a
+`reconnectPhone()` that resets the budget. `AgentPhonePanel` renders nothing at
+all when the phone is `disabled` — a user with no softphone should not see a
+softphone — and while it is retrying or failed the launcher is red rather than
+the green "Available" it used to show over a dead phone, with the state and a
+"Try again" button in the panel. An agent whose phone is not working can now see
+that from the screen instead of from the console.
+
+## 2f. Every page an operator can reach with no agency selected
+
+`/api/v1/calls` and `/api/v1/live/metrics` correctly answer `409`. The question
+is what the page consuming them renders in that state, and the answer is that no
+such page mounts: the dashboard layout swaps the **entire** children subtree for
+`<CrossAgencyPrompt />` when `platform.needsAgency` holds. Nothing renders, so
+nothing fetches, so there is no 409 for a page to mishandle. That is what makes
+the rule hold for every page at once rather than page by page.
+
+**One page escaped it.** The layout has two return paths, and the call centre
+renders fullscreen and returns early — above the swap. So `/call-center` rendered
+the live queue for an operator with no agency, asked for that agency's calls,
+queue and metrics, and was refused on every one. Fixed: that branch carries the
+same swap, and an `ErrorBoundary` too, because a fullscreen page that throws
+leaves no chrome to navigate away from.
+
+The rest of the surface was checked rather than assumed. `/settings` and
+`/admin` are the only exemptions — the signed-in person, and the platform console.
+The nested `buyer` and `publisher` layouts render inside this one, so the swap
+happens above them. `(research)` is a separate route group outside this layout
+and is not agency-scoped.
+
+`apps/web/src/app/__tests__/cross-agency-landing.test.ts` pins the property
+rather than the reading, since a reading is what missed the call centre: no
+return path may render `{children}` unguarded, the exemption list is exactly
+those two prefixes, the call-centre branch carries the swap, and both paths wrap
+in a boundary. It is a source-level test because rendering the layout needs a
+DOM and `apps/web` has no jsdom; the property it pins is structural and visible
+in the source. If a DOM is added it should become a rendering test.
 
 ## 3. Route survey
 
@@ -363,7 +560,7 @@ directly, which the same command already does.
 
 ## 5. Tests
 
-`apps/api/src/__tests__/platform-admin.test.ts` — 32 cases against a real
+`apps/api/src/__tests__/platform-admin.test.ts` — 38 cases against a real
 database, driving the real auth hook and the real route plugins.
 
 1. **An agency OWNER is refused every re-gated route** — the shared dialer, the
@@ -396,6 +593,32 @@ database, driving the real auth hook and the real route plugins.
    refused the payroll surface; and an operator whose capability has been
    revoked is refused with a plain 403, not the staff-only "pick an agency".
 
+7. **The response shape the switcher reads** — the agency list is asserted at
+   `data`, not "somewhere in the body". That assertion used `idsIn()`, which
+   walks recursively and therefore passed throughout the crash; `idsIn()` is
+   still used for the leak checks it suits, and now carries a comment saying it
+   must not be used for shape.
+
+`apps/api/src/__tests__/api-response-contract.test.ts` — 18 cases. Boots the
+real routes on a real port and drives **the real web client** — the same
+`apps/web/src/lib/api.ts` module the browser runs — against them over HTTP,
+asserting what each consumer's accessor actually yields rather than what is
+present somewhere in the body.
+
+It pins the switcher's exact operation (`payload(...)` is an array, and
+`.map()` over it returns the agency names), that the body is *not* the payload,
+that `payload()` answers `undefined` rather than throwing for every non-envelope
+shape, that all four platform GETs and six delivery GETs answer `{ data: ... }`,
+that entering and leaving an agency do too, that the delivery panel's fields
+arrive as values rather than `undefined`, and that a refusal is an error rather
+than a payload. Reverting the route to a bare body fails three of its cases,
+which was checked rather than assumed.
+
+`apps/web/src/lib/__tests__/api-envelope.test.ts` — the client-side half:
+`payload()` unwraps, preserves a legitimate `null`, and returns `undefined` for
+every shape a component might be handed. It also pins the bug itself — that
+`response.data` is the envelope, and `.map` on it throws.
+
 `apps/api/src/__tests__/platform-capability-closure.test.ts` — 12 cases, added in
 Phase 2 alongside the permission widening and extended with the provisioning
 path. Two run with no database at all: no
@@ -419,5 +642,28 @@ real finding gets silenced too.
 API client: `NO_ACTING_TENANT` never clears the session or navigates, that holds
 even if the code ever arrives as a 401, and a genuine 401 still logs out.
 
-Full API suite at the time of writing: **628 passed, 8 skipped** (38 platform
-admin, 6 capability closure, 38 rating). Typecheck errors 83 → 80 (none added).
+`apps/api/src/__tests__/no-acting-tenant-audit.test.ts` — 6 cases, and the only
+one here that is exhaustive rather than a list. It registers 25 route plugins,
+takes the route table from Fastify's `onRoute` hook, and drives every `/api/*`
+GET as an operator with no agency selected; any 401 fails, naming the route. It
+also asserts the sweep collected more than fifty routes (a sweep that collected
+nothing would otherwise be a green test that checks nothing), that the three
+routes from the capture answer `409 NO_ACTING_TENANT` specifically rather than
+merely "not 401", and that an anonymous caller still gets 401 on those same
+routes. It reported fourteen offenders before the fix.
+
+`apps/web/src/app/__tests__/cross-agency-landing.test.ts` — 4 cases on the
+dashboard layout's structure: no return path renders `{children}` unguarded, the
+exemption list is exactly `/admin` and `/settings`, the fullscreen call-centre
+branch carries the swap, and both paths wrap in an error boundary. See §2f for
+why it is source-level.
+
+`apps/web/src/components/__tests__/error-boundary.test.tsx` — 5 cases on the
+boundary's own logic: capturing into state, clearing on a `resetKey` change,
+*not* clearing while the key is unchanged (which would be a render loop rather
+than a recovery), and logging rather than swallowing.
+
+Full API suite at the time of writing: **836 passed, 0 skipped**, across 64
+files, with `TEST_DATABASE_URL` and `TEST_REDIS_URL` set. Web suite: **146
+passed** across 13 files. Typecheck errors unchanged at 80 (API) and 129 (web);
+no new lint errors.

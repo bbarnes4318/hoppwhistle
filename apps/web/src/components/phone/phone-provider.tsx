@@ -128,6 +128,25 @@ export interface PhoneContextType {
   selectedAudioOutput: string | null;
   screenPopFields: ScreenPopField[];
   error: string | null;
+  /**
+   * What the softphone is actually doing, for something a person can see.
+   *
+   * `error` alone was not enough: a failed initialisation set it, the panel
+   * rendered it only where the panel was open, and an agent whose phone was
+   * dead had no indication anywhere -- the sole evidence was a console line.
+   *
+   *   disabled   this user has no softphone (not an agent, or no agency)
+   *   connecting first attempt, or a retry in flight
+   *   registered registered with FreeSWITCH and able to take calls
+   *   retrying   an attempt failed and another is scheduled
+   *   failed     the retry budget is spent; nothing further happens
+   *              automatically and `reconnectPhone()` is the way back
+   */
+  phoneStatus: 'disabled' | 'connecting' | 'registered' | 'retrying' | 'failed';
+  /** Attempts used, for a message that says how many. */
+  phoneAttempts: number;
+  /** Start again and reset the retry budget. For a person pressing a button. */
+  reconnectPhone: () => void;
   isRegistered: boolean; // SIP Registration status
   dialerNumber: string; // Pre-filled dialer number
   pendingDispositionCall: PendingDispositionCall | null; // Post-call disposition data
@@ -235,9 +254,26 @@ interface PhoneProviderProps {
   children: ReactNode;
   wsUrl?: string;
   apiUrl?: string;
+  /**
+   * Whether this signed-in user should have a softphone at all.
+   *
+   * ── Why this is a prop and not something decided in here ─────────────────
+   *
+   * The provider wraps the whole dashboard, so it mounted for everyone: a
+   * platform operator in the cross-agency view, a buyer, a publisher. Each of
+   * them fetched `/api/v1/agent/webrtc/credentials`, was refused, threw, and
+   * handed the failure to a watchdog that re-initialised forever -- an endless
+   * "SIP init fail / full SIP re-initialization" cycle in the console of
+   * people who do not have a phone and never should have.
+   *
+   * The layout already knows who is signed in and which agency they are in, so
+   * it decides. Left undefined this stays on, so nothing that mounts the
+   * provider without an opinion loses its phone.
+   */
+  enabled?: boolean;
 }
 
-export function PhoneProvider({ children, apiUrl }: PhoneProviderProps): JSX.Element {
+export function PhoneProvider({ children, apiUrl, enabled = true }: PhoneProviderProps): JSX.Element {
   // In the browser, always derive the API base from the current origin so
   // requests use the same protocol/domain (avoids Mixed Content when the
   // build-time NEXT_PUBLIC_API_URL was baked with an http:// address).
@@ -302,6 +338,31 @@ export function PhoneProvider({ children, apiUrl }: PhoneProviderProps): JSX.Ele
     return defaultScreenPopFields;
   });
   const [error, setError] = useState<string | null>(null);
+
+  /*
+   * The softphone's own state, and the retry budget behind it.
+   *
+   * `attempt` is bumped by the initialisation effect and read by the watchdog,
+   * so both share ONE budget -- the endless cycle in the production console was
+   * the watchdog re-initialising something that had already failed, with
+   * nothing counting.
+   *
+   * `reconnectNonce` is what a person pressing "Try again" changes: it is in
+   * the effect's dependencies, so it tears the effect down and starts a fresh
+   * attempt with a fresh budget.
+   */
+  const [phoneStatus, setPhoneStatus] = useState<
+    'disabled' | 'connecting' | 'registered' | 'retrying' | 'failed'
+  >(enabled ? 'connecting' : 'disabled');
+  const [phoneAttempts, setPhoneAttempts] = useState(0);
+  const [reconnectNonce, setReconnectNonce] = useState(0);
+
+  const reconnectPhone = useCallback(() => {
+    setError(null);
+    setPhoneAttempts(0);
+    setPhoneStatus('connecting');
+    setReconnectNonce(n => n + 1);
+  }, []);
   const [pendingDispositionCall, setPendingDispositionCall] =
     useState<PendingDispositionCall | null>(null);
   const [dialerNumber, setDialerNumber] = useState<string>('');
@@ -1399,10 +1460,64 @@ export function PhoneProvider({ children, apiUrl }: PhoneProviderProps): JSX.Ele
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
+    /*
+     * Not an agent, or no agency selected: no phone, and no attempt to build
+     * one. This is the gate whose absence had platform operators, buyers and
+     * publishers all cycling through SIP initialisation failures for a
+     * credential endpoint that was always going to refuse them.
+     */
+    if (!enabled) {
+      setPhoneStatus('disabled');
+      setError(null);
+      return;
+    }
+
     let ua: UserAgent | null = null;
     let active = true;
 
+    /*
+     * The shared retry budget. Five attempts with exponential backoff, then
+     * stop and say so.
+     *
+     * Unbounded retry is what turned a refused credential into an endless
+     * console cycle, and it is worse than useless when the cause is permanent:
+     * it hides a dead phone behind activity. When the budget is spent the
+     * status goes to `failed`, the watchdog stands down, and getting back
+     * takes a deliberate act -- `reconnectPhone()`, which the panel offers as
+     * a button.
+     */
+    const MAX_ATTEMPTS = 5;
+    let attempts = 0;
+    let budgetSpent = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleRetry = () => {
+      if (!active || budgetSpent) return;
+
+      if (attempts >= MAX_ATTEMPTS) {
+        budgetSpent = true;
+        setPhoneStatus('failed');
+        setError(
+          `The phone could not connect after ${MAX_ATTEMPTS} attempts. Calls will not reach you until it does.`
+        );
+        console.error(`[Phone] Giving up after ${MAX_ATTEMPTS} attempts. Use Try again to retry.`);
+        return;
+      }
+
+      // 2s, 4s, 8s, 16s, 30s.
+      const delay = Math.min(2_000 * 2 ** (attempts - 1), 30_000);
+      setPhoneStatus('retrying');
+      console.warn(`[Phone] Attempt ${attempts} failed; retrying in ${delay / 1000}s`);
+      retryTimer = setTimeout(() => {
+        if (active && !budgetSpent) void initSip();
+      }, delay);
+    };
+
     async function initSip() {
+      if (!active || budgetSpent) return;
+      attempts += 1;
+      setPhoneAttempts(attempts);
+      setPhoneStatus(attempts === 1 ? 'connecting' : 'retrying');
       try {
         console.log('[Phone] Fetching WebRTC credentials...');
         const url = `${normalizedApiUrl}/api/v1/agent/webrtc/credentials`;
@@ -1412,7 +1527,25 @@ export function PhoneProvider({ children, apiUrl }: PhoneProviderProps): JSX.Ele
         });
 
         if (!response.ok) {
-          throw new Error('Failed to fetch WebRTC credentials');
+          /*
+           * A refusal is about who this user is, and retrying cannot change
+           * it. 403 means not an agent; 409 NO_ACTING_TENANT means a platform
+           * operator with no agency selected. Burning five attempts and a
+           * minute of backoff on either is the loop this replaces, so both
+           * stop immediately and say what they are.
+           */
+          if (response.status === 403 || response.status === 409) {
+            budgetSpent = true;
+            setPhoneStatus('disabled');
+            setError(
+              response.status === 409
+                ? 'Select an agency to use the phone.'
+                : 'This account does not have a phone extension.'
+            );
+            console.warn(`[Phone] Not provisioning a phone for this user (${response.status}).`);
+            return;
+          }
+          throw new Error(`Failed to fetch WebRTC credentials (${response.status})`);
         }
 
         const creds = await response.json();
@@ -1548,6 +1681,12 @@ export function PhoneProvider({ children, apiUrl }: PhoneProviderProps): JSX.Ele
         await registerer.register();
         console.log('[Phone] SIP Registered');
         setIsRegistered(true);
+        // Registered: the budget is spent on nothing and resets, so a genuine
+        // disconnection hours later gets a full five attempts of its own.
+        attempts = 0;
+        setPhoneAttempts(0);
+        setPhoneStatus('registered');
+        setError(null);
         setAgentStatusState('available');
         // Sync available status to Redis so routing service includes this agent
         void fetch(`${normalizedApiUrl}/api/v1/agent/status`, {
@@ -1559,6 +1698,8 @@ export function PhoneProvider({ children, apiUrl }: PhoneProviderProps): JSX.Ele
         console.error('[Phone] SIP UA Initialization/Start Failed', e);
         if (active) {
           setError('Phone initialization failed');
+          setIsRegistered(false);
+          scheduleRetry();
         }
       }
     }
@@ -1579,6 +1720,13 @@ export function PhoneProvider({ children, apiUrl }: PhoneProviderProps): JSX.Ele
 
     const fullReinit = async () => {
       if (!active) return;
+      /*
+       * The watchdog shares the initialisation budget rather than having one
+       * of its own. It used to re-initialise unconditionally, so a permanently
+       * failing init became an endless "fail -> full SIP re-initialization ->
+       * fail" cycle -- which is exactly what the production console showed.
+       */
+      if (budgetSpent) return;
       console.warn('[Phone] Watchdog: full SIP re-initialization');
       try {
         if (registererRef.current) {
@@ -1687,6 +1835,7 @@ export function PhoneProvider({ children, apiUrl }: PhoneProviderProps): JSX.Ele
       if (ua) {
         void ua.stop();
       }
+      if (retryTimer) clearTimeout(retryTimer);
       if (userAgentRef.current && userAgentRef.current !== ua) {
         // Watchdog may have replaced the original UA via fullReinit.
         void userAgentRef.current.stop();
@@ -1696,7 +1845,7 @@ export function PhoneProvider({ children, apiUrl }: PhoneProviderProps): JSX.Ele
         persistentMicStream.getTracks().forEach(track => track.stop());
       }
     };
-  }, [handleIncomingSipCall, normalizedApiUrl, getApiHeaders]);
+  }, [handleIncomingSipCall, normalizedApiUrl, getApiHeaders, enabled, reconnectNonce]);
 
   const value: PhoneContextType = {
     agentStatus,
@@ -1709,6 +1858,9 @@ export function PhoneProvider({ children, apiUrl }: PhoneProviderProps): JSX.Ele
     selectedAudioOutput,
     screenPopFields,
     error,
+    phoneStatus,
+    phoneAttempts,
+    reconnectPhone,
     isRegistered, // Exported for UI
     dialerNumber, // Pre-filled dialer number
     pendingDispositionCall, // Post-call disposition data

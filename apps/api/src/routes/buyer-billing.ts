@@ -11,11 +11,15 @@
 
 import { FastifyInstance, FastifyRequest } from 'fastify';
 
+import {
+  getActingTenantId,
+  replyTenantRefusal,
+  sendTenantRefusal,
+} from '../lib/tenant-context.js';
 import { AuthenticatedUser } from '../middleware/auth.js';
 import { buyerBillingService } from '../services/buyer-billing-service.js';
 import { liveStatusService } from '../services/buyer-live-status-service.js';
 import { buyerStatsService } from '../services/buyer-stats-service.js';
-import { getActingTenantId, sendTenantRefusal } from '../lib/tenant-context.js';
 
 type AuthRequest = FastifyRequest & { user?: AuthenticatedUser };
 
@@ -507,7 +511,7 @@ export async function registerBuyerBillingRoutes(fastify: FastifyInstance): Prom
     const { buyerId } = request.params;
     const user = (request as AuthRequest).user;
     const tenantId = getActingTenantId(request);
-    if (!tenantId) return reply.code(401).send({ error: 'Unauthorized' });
+    if (!tenantId) return replyTenantRefusal(request, reply);
 
     const userRecord = await prisma.user.findUnique({
       where: { id: user?.userId },

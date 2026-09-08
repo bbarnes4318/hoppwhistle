@@ -701,8 +701,8 @@ NEXT_PUBLIC_API_KEY=demo-key
 ### 7.7 Component Tree
 
 ```
-PhoneProvider (Context)           ← Wraps entire app
-  └─ AgentPhonePanel              ← Bottom-right floating panel
+PhoneProvider (Context)           ← Wraps the dashboard; starts SIP only if enabled
+  └─ AgentPhonePanel              ← Bottom-right floating panel (hidden when disabled)
        ├─ AgentStatusSelector     ← Available/Away/DND dropdown
        ├─ DialPad                 ← Number input + call button
        ├─ CallControls            ← Mute/Hold/Transfer/Merge
@@ -711,6 +711,34 @@ PhoneProvider (Context)           ← Wraps entire app
        ├─ CustomerDetailsPanel    ← Expanded prospect data
        └─ ScreenPopSettings       ← Configure visible fields
 ```
+
+### 7.8 Who gets a softphone, and what happens when it will not start
+
+`PhoneProvider` wraps the dashboard layout, so without a gate it initialises SIP
+for everyone who loads the dashboard. It used to: platform operators, buyers and
+publishers all fetched agent credentials, were refused, and handed the failure to
+a watchdog that re-initialised without end. A production console showed that
+cycle running for an operator who has never had an extension.
+
+It now takes `enabled`, which the dashboard layout computes as
+`userRoles.includes('AGENT') && !platform.needsAgency`. Both halves matter: only
+an agent takes calls, and a platform operator who has entered no agency has no
+tenant for an extension to belong to. Entering an agency reloads the page, so the
+phone comes up then.
+
+When it is enabled and initialisation fails, the retry is bounded and visible:
+
+| | |
+| --- | --- |
+| attempts | 5, shared with the watchdog rather than bypassable by it |
+| backoff | 2s doubling to a 30s ceiling |
+| terminal | a 403 or 409 from `/agent/webrtc/credentials` stops immediately — a settled answer about who this user is, not a transient failure |
+| state | `phoneStatus` on the context: `disabled`, `connecting`, `registered`, `retrying`, `failed`, with `phoneAttempts` |
+| recovery | `reconnectPhone()` resets the budget; the panel offers it as "Try again" |
+
+`AgentPhonePanel` renders nothing when the status is `disabled`, and shows a red
+launcher rather than the green "Available" one while retrying or failed — an
+agent whose phone is dead can see that from the screen instead of the console.
 
 ---
 
@@ -731,6 +759,12 @@ The API server tracks call state in PostgreSQL and Redis. Relevant file: `apps/a
 | GET    | `/api/v1/agent/webrtc/credentials`  | Get WebRTC/SIP credentials |
 | PUT    | `/api/v1/agent/status`              | Update agent availability  |
 | GET    | `/api/v1/agent/calls`               | Call history               |
+
+These refuse in two distinguishable ways, which the browser treats differently:
+`401 UNAUTHORIZED` means no credential and signs the user out, `409
+NO_ACTING_TENANT` means a platform operator has entered no agency and does not.
+Until recently this file's local `requireAgent()` collapsed both into 401, which
+signed a live operator out of the portal — see `docs/PLATFORM_ADMIN.md` §2b.
 
 ### 8.2 API Environment Variables
 

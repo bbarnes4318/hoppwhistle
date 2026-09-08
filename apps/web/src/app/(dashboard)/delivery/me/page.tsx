@@ -6,7 +6,8 @@ import { useCallback, useState } from 'react';
 import { CompactPageHeader, CompactPageShell } from '@/components/layout/compact-layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useLivePoll } from '@/hooks/use-live-poll';
-import { apiClient } from '@/lib/api';
+import { apiClient, payload } from '@/lib/api';
+import type { Envelope } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 /**
@@ -54,9 +55,9 @@ export default function MyDeliveryPage(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const response = await apiClient.get<SelfView>('/api/v1/delivery/me');
+    const response = await apiClient.get<Envelope<SelfView>>('/api/v1/delivery/me');
     setError(response.error ? response.error.message : null);
-    setView(response.data ?? null);
+    setView(payload(response) ?? null);
   }, []);
 
   // Every agent on the floor has this open beside their softphone all day, so

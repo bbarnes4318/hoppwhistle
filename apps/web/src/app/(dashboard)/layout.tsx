@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
 import { ThemeScope } from '@/components/domain/theme-scope';
+import { ErrorBoundary } from '@/components/error-boundary';
 import { LiveStripMount } from '@/components/layout/live-strip-mount';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
@@ -25,6 +26,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     loading: authLoading,
   } = useAuth();
 
+
   /*
    * NetEnroll staff, and the agency they are inside.
    *
@@ -35,6 +37,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
    * prompt to pick an agency instead of on a page that cannot load.
    */
   const platform = usePlatformContext();
+
+  /*
+   * Who gets a softphone.
+   *
+   * The provider wraps this whole layout, so before this gate existed it
+   * initialised SIP for everybody who loaded the dashboard -- platform
+   * operators in the cross-agency view, buyers, publishers. Each one fetched
+   * agent credentials, was refused, and handed the failure to a watchdog that
+   * re-initialised forever. The production console showed that cycle running
+   * for a platform admin who has never had an extension.
+   *
+   * Two conditions, and both are needed. The role, because only an agent takes
+   * calls. And an agency, because a platform operator in the cross-agency view
+   * has no tenant for an extension to belong to -- entering one reloads the
+   * page, so the phone comes up then.
+   */
+  const canTakeCalls =
+    !authLoading && userRoles.includes('AGENT') && !platform.needsAgency;
+
 
   useEffect(() => {
     if (authLoading) return;
@@ -111,10 +132,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // Fullscreen mode for call center: hide sidebar, header; viewport locked
   if (isCallCenterPage) {
     return (
-      <PhoneProvider>
+      // Same gate. The call centre is where an agent works, but a platform
+      // operator can open the page too, and they should not start a phone.
+      <PhoneProvider enabled={canTakeCalls}>
         <div className="h-screen w-screen overflow-hidden bg-background text-foreground">
-          {/* Full viewport lock - no scrollbars */}
-          {children}
+          {/*
+            The cross-agency prompt applies here too.
+
+            This branch returns before the one below, so it used to skip the
+            `needsAgency` swap entirely: a platform operator with no agency
+            selected got the live call centre, which then asked for one
+            agency's queue, calls and metrics and was refused 409 on every one.
+            Phase 2 required a landing prompt rather than a broken page, and
+            "every page" has to include the one that returns early.
+
+            Wrapped in the boundary for the same reason as the main branch: a
+            fullscreen page that throws would otherwise take the whole app with
+            it, with no chrome left to navigate away from.
+          */}
+          <ErrorBoundary label="This page" resetKey={pathname ?? ''}>
+            {needsAgency ? <CrossAgencyPrompt /> : children}
+          </ErrorBoundary>
         </div>
       </PhoneProvider>
     );
@@ -122,7 +160,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   // Standard dashboard layout with proper scrolling
   return (
-    <PhoneProvider>
+    <PhoneProvider enabled={canTakeCalls}>
       <div className="flex h-screen overflow-hidden bg-background text-foreground">
         {/*
    THE SHELL IS LIGHT; PAGE BODIES ARE NOT, YET.
@@ -150,7 +188,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <LiveStripMount />
           </ThemeScope>
           <main className="flex-1 bg-background flex flex-col min-h-0 overflow-y-auto">
-            {needsAgency ? <CrossAgencyPrompt /> : children}
+            {/*
+              A page that throws loses the page, not the shell. Before this, an
+              uncaught render error anywhere under the layout unmounted the
+              whole tree from the root: the sidebar, the topbar and the agency
+              switcher went with it, and the operator's only route out of a
+              blank "Application error" screen was to know a URL by heart.
+
+              Keyed on the pathname, so navigating away from a broken page
+              clears the boundary rather than leaving somebody stuck on the
+              message.
+            */}
+            <ErrorBoundary label="This page" resetKey={pathname}>
+              {needsAgency ? <CrossAgencyPrompt /> : children}
+            </ErrorBoundary>
           </main>
           {/* Footer removed - legal links accessible via Settings page */}
         </div>

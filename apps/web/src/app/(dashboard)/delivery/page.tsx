@@ -26,7 +26,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { useLivePoll } from '@/hooks/use-live-poll';
-import { apiClient } from '@/lib/api';
+import { apiClient, payload } from '@/lib/api';
+import type { Envelope } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 /**
@@ -187,18 +188,23 @@ export default function DeliveryPage(): JSX.Element {
   const [sortAsc, setSortAsc] = useState(true);
 
   const load = useCallback(async () => {
+    // Both routes answer `{ data: ... }`, so both are unwrapped by name. Read
+    // as bare bodies these were silently undefined: the panel rendered an
+    // agency as unenrolled whatever it was, and the agent table was empty.
     const [todayResponse, agentsResponse] = await Promise.all([
-      apiClient.get<DeliveryToday>('/api/v1/delivery/today'),
-      apiClient.get<AgentBreakdown>('/api/v1/delivery/agents'),
+      apiClient.get<Envelope<DeliveryToday>>('/api/v1/delivery/today'),
+      apiClient.get<Envelope<AgentBreakdown>>('/api/v1/delivery/agents'),
     ]);
 
+    const breakdown = payload(agentsResponse);
+
     setError(todayResponse.error ? todayResponse.error.message : null);
-    setToday(todayResponse.data ?? null);
-    setAgents(agentsResponse.data?.agents ?? []);
+    setToday(payload(todayResponse) ?? null);
+    setAgents(Array.isArray(breakdown?.agents) ? breakdown.agents : []);
     // The agency's own figure, served with the rows. Not summed from them: it
     // includes calls no agent is attributed on, so a client-side sum would give
     // a different number from the one the agency is priced on.
-    setAgencyClosingPct(agentsResponse.data?.agencyClosingPct ?? null);
+    setAgencyClosingPct(breakdown?.agencyClosingPct ?? null);
   }, []);
 
   /*
