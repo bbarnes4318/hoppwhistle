@@ -6,27 +6,27 @@ export function UseCases() {
   const cases = [
     {
       icon: <Megaphone className="h-6 w-6 text-emerald-600" />,
-      title: 'Performance Marketers',
+      title: 'Health insurance agencies',
       description:
-        'Acquire local and toll-free numbers, set up campaigns, route calls dynamically based on buyer capacity and bidding price, and optimize landing pages.',
+        'Take enrolment calls during open enrolment without hiring for the peak. Set the daily block to what your licensed agents can genuinely work, and raise it when they can take more.',
     },
     {
       icon: <MessageSquareText className="h-6 w-6 text-cyan-600" />,
-      title: 'AI Voice Agencies',
+      title: 'Medicare and ACA teams',
       description:
-        'Deploy context-aware conversational bots to screen callers, gather pre-qualification criteria, and route transfer requests directly to client agents.',
+        'Callers arrive screened for state, age band and eligibility, with consent captured. Your agents spend the call on the application rather than on qualifying.',
     },
     {
       icon: <ShieldAlert className="h-6 w-6 text-blue-600" />,
-      title: 'Lead Gen Networks',
+      title: 'Agencies that have been burned',
       description:
-        'Validate caller data in real-time, audit recordings using Whisper transcription and LLM criteria, and provide clear reporting to publisher sources.',
+        'If shared lead lists have not worked for you, this is the opposite arrangement: you pay for a submitted application, and every one of them has a recording behind it.',
     },
     {
       icon: <Radio className="h-6 w-6 text-indigo-600" />,
-      title: 'Telecom Operators',
+      title: 'Multi-office agencies',
       description:
-        'Connect existing SIP infrastructure or carriers directly, purchase thousands of numbers in bulk, and run high-concurrency outbound operations.',
+        'Run several offices under one agency with per-agent reporting, or keep them as separate agencies with their own blocks and their own settlements.',
     },
   ];
 
@@ -38,11 +38,11 @@ export function UseCases() {
       <div className="container max-w-7xl mx-auto px-6 md:px-8">
         <div className="max-w-3xl mx-auto text-center space-y-4 mb-16 md:mb-20">
           <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900">
-            Engineered for high-volume call teams.
+            Who this is for.
           </h2>
           <p className="text-base sm:text-lg text-slate-500 max-w-2xl mx-auto">
-            Whether routing calls to external buyer networks or training conversational AI agents,
-            Hopwhistle provides the infrastructure operators trust.
+            Agencies that write applications and would rather buy the call than build the machinery
+            that produces it.
           </p>
         </div>
 

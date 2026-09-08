@@ -367,7 +367,7 @@ export default function AuthPage() {
 
           {/* Top Logotype */}
           <div className="relative z-10 flex items-center justify-start">
-            <Image src="/hopwhistle.png" alt="Hopwhistle" width={200} height={66} priority />
+            <Image src="/hopwhistle.png" alt="NetEnroll" width={200} height={66} priority />
           </div>
 
           {/* Center Content / Core Value */}
@@ -379,11 +379,12 @@ export default function AuthPage() {
               </span>
             </div>
             <h1 className="text-4xl font-semibold tracking-tight text-zinc-50">
-              Welcome to Hopwhistle
+              Welcome to NetEnroll
             </h1>
             <p className="text-lg text-zinc-400 max-w-md leading-relaxed">
-              Buy and sell calls in one place. Route every call in real time, track spend and
-              earnings as they happen, and settle up without spreadsheets.
+              Qualified calls delivered to your agents, billed per submitted application. Watch
+              today&apos;s delivery as it happens, and settle against your Insertion Order without
+              spreadsheets.
             </p>
           </div>
 
@@ -421,7 +422,7 @@ export default function AuthPage() {
           <div className="mx-auto w-full max-w-sm">
             {/* Mobile logo */}
             <div className="lg:hidden flex justify-center mb-10">
-              <Image src="/hopwhistle.png" alt="Hopwhistle" width={180} height={60} priority />
+              <Image src="/hopwhistle.png" alt="NetEnroll" width={180} height={60} priority />
             </div>
 
             <div className="space-y-8">

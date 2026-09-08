@@ -194,7 +194,7 @@ export async function registerSignalWireWebhookRoutes(server: FastifyInstance) {
     // Respond with LaML — empty response = accept silently, or auto-reply:
     const laml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Message>Thanks for your message. A NetEnroll agent will get back to you shortly.</Message>
+  <Message>Thank you for your message. A NetEnroll agent will get back to you shortly.</Message>
 </Response>`;
 
     return reply.code(200).header('Content-Type', 'application/xml').send(laml);

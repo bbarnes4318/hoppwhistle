@@ -13,7 +13,7 @@ export const metadata: Metadata = {
     default: 'NetEnroll',
     template: '%s · NetEnroll',
   },
-  description: 'NetEnroll — call delivery, rating and settlement for enrollment agencies',
+  description: 'Agency portal for pay-per-application call delivery',
   applicationName: 'NetEnroll',
   icons: {
     icon: [

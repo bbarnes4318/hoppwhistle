@@ -41,29 +41,40 @@ export async function sendWelcomeEmail(payload: WelcomeEmailPayload): Promise<vo
   const { email, publisherName, publisherId, accessToRecordings } = payload;
   const fromAddress = process.env.SMTP_FROM || 'noreply@netenroll.com';
 
-  const subject = 'Welcome to NetEnroll — your publisher account is ready';
+  const portalUrl = process.env.API_PUBLIC_URL || 'https://agents.netenroll.com';
+
+  const subject = 'Your NetEnroll publisher account is ready';
   const text = `Hello ${publisherName},
 
-Welcome to NetEnroll. Your publisher account has been created.
+Your NetEnroll publisher account has been created. You can sign in at
+${portalUrl}/login.
 
-Account Details:
+Account details:
   - Publisher ID: ${publisherId}
-  - Access to Recordings: ${accessToRecordings ? 'Enabled' : 'Disabled'}
+  - Access to recordings: ${accessToRecordings ? 'Enabled' : 'Disabled'}
 
-You can use your Publisher ID to track your traffic and view reports in the dashboard.
+Your Publisher ID identifies the calls you send. Use it when you ping and post,
+and the portal will report every call back against it, along with what each one
+earned.
 
-Best regards,
+If anything looks wrong, please reply to this message and we will look into it.
+
+Kind regards,
 The NetEnroll team`;
 
   const html = renderEmail({
     title: 'Your publisher account is ready',
     body: `<p>Hello <strong>${escapeHtml(publisherName)}</strong>,</p>
-<p>Welcome to NetEnroll. Your publisher account has been created.</p>
+<p>Your NetEnroll publisher account has been created. You can sign in at
+<a href="${portalUrl}/login" style="color:#047857;">${escapeHtml(portalUrl)}/login</a>.</p>
 <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:16px 0;font-size:14px;">
   <tr><td style="padding:6px 16px 6px 0;color:#55524b;">Publisher ID</td><td style="padding:6px 0;font-family:'IBM Plex Mono',SFMono-Regular,Menlo,monospace;color:#171614;">${escapeHtml(publisherId)}</td></tr>
   <tr><td style="padding:6px 16px 6px 0;color:#55524b;">Access to recordings</td><td style="padding:6px 0;color:#171614;">${accessToRecordings ? 'Enabled' : 'Disabled'}</td></tr>
 </table>
-<p>Use your Publisher ID to track your traffic and view reports in the dashboard.</p>`,
+<p>Your Publisher ID identifies the calls you send. Use it when you ping and post,
+and the portal will report every call back against it, along with what each one
+earned.</p>
+<p>If anything looks wrong, please reply to this message and we will look into it.</p>`,
   });
 
   const transporter = getTransporter();

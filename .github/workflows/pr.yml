@@ -153,6 +153,11 @@ jobs:
           TEST_DATABASE_URL: postgresql://test:test@localhost:5432/test
           TEST_REDIS_URL: redis://localhost:6379
 
+      # domain-migration.test.ts is in the list below rather than left to the
+      # advisory `pnpm test` step. Every failure it catches is silent in
+      # production -- a rebuild that reverts the browser host, a SIP realm that
+      # invalidates every agent credential, the old product name in front of a
+      # customer -- so a red run here has to stop the merge.
       - name: Run carrier automation, call-center & security tests (blocking)
         run: >-
           pnpm --filter @hopwhistle/api exec vitest run
@@ -167,6 +172,7 @@ jobs:
           src/__tests__/admin-role-drift.test.ts
           src/__tests__/workflow-pnpm-invocations.test.ts
           src/__tests__/db-push-constraints.test.ts
+          src/__tests__/domain-migration.test.ts
         env:
           NODE_ENV: test
           DATABASE_URL: postgresql://test:test@localhost:5432/test

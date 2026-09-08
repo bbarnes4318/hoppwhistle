@@ -14,24 +14,24 @@ export function RecordingIntelligence() {
             <div className="space-y-4">
               <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1 text-xs font-semibold text-cyan-400">
                 <BrainCircuit className="h-3.5 w-3.5" />
-                <span>AI Transcript Analysis</span>
+                <span>Recordings and transcripts</span>
               </div>
               <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
-                Turn recordings into usable business intelligence.
+                Every application has a recording behind it.
               </h2>
               <p className="text-slate-400 text-base sm:text-lg leading-relaxed">
-                Analyze call records instantly using specialized LLM filters. Identify buyer dispute
-                trends, detect agent script adherence, and audit compliance requirements without
-                manually listening to hours of raw audio.
+                Each call is recorded and transcribed, and the transcript sits alongside the
+                application it produced. If you want to query a charge, the evidence is one click
+                away — and so is the answer to whether your own agent followed the script.
               </p>
             </div>
 
             <ul className="space-y-3">
               {[
-                'Whisper-powered transcription mapping split-channel stereo audio',
-                'Milestone sentiment analysis tracking caller intent transitions',
-                'Automated QA scorecards measuring disclosures and script compliance',
-                'Semantic search to instantly find disputable claims across all campaigns',
+                'Split-channel recording, so caller and agent are separable',
+                'Searchable transcripts attached to the application they produced',
+                'Disclosure and consent checks recorded against each call',
+                'Everything exportable, because it is your record as much as ours',
               ].map((item, index) => (
                 <li key={index} className="flex items-start gap-3 text-sm text-slate-300">
                   <div className="h-5 w-5 rounded-full bg-cyan-500/15 border border-cyan-500/20 flex items-center justify-center flex-shrink-0 text-cyan-400 mt-0.5">

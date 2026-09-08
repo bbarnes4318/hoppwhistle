@@ -4,7 +4,7 @@
 
 ## Introduction
 
-Hopwhistle ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our telephony platform and services (the "Service").
+NetEnroll ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use the NetEnroll agency portal and the call delivery services provided through it (the "Service").
 
 **IMPORTANT:** This is a template document. Please review with legal counsel and customize for your specific use case, jurisdiction, and data processing activities.
 
@@ -136,7 +136,7 @@ Depending on your jurisdiction, you may have the following rights:
 
 - Export your data in a machine-readable format
 
-To exercise these rights, contact us at [privacy@hopwhistle.com] or through your account settings.
+To exercise these rights, contact us at [privacy@netenroll.com] or through your account settings.
 
 ## International Data Transfers
 
@@ -193,7 +193,7 @@ We may update this Privacy Policy from time to time. We will notify you of mater
 
 For questions about this Privacy Policy or our data practices, contact us at:
 
-**Email:** [privacy@hopwhistle.com]  
+**Email:** [privacy@netenroll.com]  
 **Address:** [Your Company Address]  
 **Data Protection Officer:** [DPO Email]
 

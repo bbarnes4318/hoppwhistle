@@ -100,8 +100,22 @@ ENV NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
 ENV NEXT_PUBLIC_API_KEY=${NEXT_PUBLIC_API_KEY}
 ENV NEXT_PUBLIC_GOOGLE_CLIENT_ID=${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
 
+# Refuse to build against a retired host.
+#
+# The two variables above are welded into the bundle by the build below. A
+# rebuild that does not carry the current host reverts every browser to the old
+# one with no error at runtime, and `docker exec printenv` cannot detect it:
+# the running container's environment is not what the browser was handed.
+# See the header of scripts/assert-public-host.mjs.
+RUN node /app/scripts/assert-public-host.mjs --env
+
 # Run build
 RUN pnpm exec next build
+
+# The variables having been set is not evidence that they landed. This reads
+# the bundle Next actually emitted and fails if the values are absent from it,
+# or if a retired host is present in it.
+RUN node /app/scripts/assert-public-host.mjs --built /app/apps/web/.next
 
 FROM base AS runner
 WORKDIR /app

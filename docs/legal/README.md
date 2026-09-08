@@ -1,6 +1,6 @@
 # Legal & Compliance Documentation
 
-This directory contains legal and compliance templates for the Hopwhistle platform.
+This directory contains legal and compliance templates for the NetEnroll platform.
 
 ## Documents
 

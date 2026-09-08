@@ -294,7 +294,7 @@ In these states, **all parties** to the call must consent to recording.
 
 ## Implementation Recommendations
 
-### For Hopwhistle Platform
+### For the NetEnroll Platform
 
 1. **Configuration Options:**
    - Enable/disable recording per tenant
@@ -385,9 +385,9 @@ In these states, **all parties** to the call must consent to recording.
 
 For questions about call recording compliance:
 
-**Legal:** [legal@hopwhistle.com]  
-**Compliance:** [compliance@hopwhistle.com]  
-**Support:** [support@hopwhistle.com]
+**Legal:** [legal@netenroll.com]  
+**Compliance:** [compliance@netenroll.com]  
+**Support:** [support@netenroll.com]
 
 ---
 

@@ -1,3 +1,28 @@
+# hopwhistle.com -- the retired browser host, kept alive on purpose.
+#
+# The portal now lives on agents.netenroll.com (see the sibling file in this
+# directory). This block is what stops the move from breaking three things at
+# once, and it does that by redirecting people while continuing to serve
+# machines:
+#
+#   * Browsers  -- bookmarks, an open tab, a link in someone's email -- are
+#     redirected to the same path on agents.netenroll.com. Sessions survive the
+#     hop because the portal authenticates with a bearer token the browser
+#     replays, not a cookie scoped to the old host.
+#
+#   * Carriers are NOT redirected. Anveo and the other providers hold webhook
+#     URLs on this hostname against numbers already provisioned, and they POST
+#     to them. A 301 on a POST is a dropped body: most clients re-issue it as a
+#     GET and the payload is simply gone. So /api keeps proxying here, on this
+#     name, for as long as any carrier still points at it.
+#
+#   * Softphones are NOT redirected either. /ws keeps proxying, because a
+#     WebSocket cannot follow a 301 and a browser still on an old tab would
+#     drop its SIP registration mid-shift.
+#
+# Retiring this file means, in order: repoint every carrier webhook, confirm no
+# agent is registered through it, then delete it. Not before.
+
 server {
     listen 80;
     server_name hopwhistle.com www.hopwhistle.com;
@@ -32,27 +57,6 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    # Frontend
-    location / {
-        # Next.js server actions compare the browser's `origin` against
-        # `x-forwarded-host`, falling back to `host`, and abort the action when
-        # the two disagree. Keep `Host $host` as it is. If you ever add
-        # `X-Forwarded-Host` it MUST be the public hostname the browser used —
-        # anything else makes every server action fail with "Invalid Server
-        # Actions request". The buyer pages do not rely on this to stay safe
-        # (their write actions take the bearer token as an explicit argument),
-        # but they do rely on it to keep working.
-        proxy_pass http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
-    }
-
     # API
     location /api {
         proxy_pass http://127.0.0.1:3001;
@@ -76,5 +80,22 @@ server {
         proxy_read_timeout 86400;
         proxy_send_timeout 86400;
         proxy_buffering off;
+    }
+
+    # Everything a person reads moves to the new host, path intact, so a
+    # bookmarked /delivery/settlements lands on the same page.
+    #
+    # 302, not 301: a 301 is cached by the browser forever, and if this ever has
+    # to be reversed there is no way to reach the people holding the cached copy.
+    # Only make it permanent once the old host is genuinely being decommissioned.
+    #
+    # `location /` is the shortest possible prefix, so nginx reaches it only
+    # when nothing more specific matches. /api, /ws and /resonate above are all
+    # longer, all match first, and none of them are redirected -- which is what
+    # keeps carriers and registered softphones working on this name. Do not fold
+    # this into a server-level `return`: that fires before location matching and
+    # would take /api and /ws with it.
+    location / {
+        return 302 https://agents.netenroll.com$request_uri;
     }
 }
