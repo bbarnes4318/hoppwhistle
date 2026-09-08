@@ -56,6 +56,12 @@ export function LandingHeader() {
             >
               Who it is for
             </button>
+            <Link
+              href="/state-value"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 text-sm font-medium text-emerald-400 transition-colors duration-200 hover:border-emerald-500/40 hover:bg-emerald-500/15 hover:text-emerald-300"
+            >
+              State value tool
+            </Link>
           </nav>
         </div>
 
