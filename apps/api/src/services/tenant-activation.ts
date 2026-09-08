@@ -6,13 +6,29 @@
  * A registering browser never names a tenant, and nothing here reads a
  * hostname, a `Referer`, an `Origin`, a path or a subdomain. The caller
  * presents a token; the token was minted by the server at a moment when it had
- * already verified something real — a completed Stripe Checkout session, or an
- * invitation sent by an authenticated OWNER/ADMIN of that same tenant — and the
- * tenant travels with the token, not with the request.
+ * already verified something real — and the tenant travels with the token, not
+ * with the request.
  *
  * That is the whole reason this module exists. See the migration
  * `20260906000000_add_tenant_activation_grants` for what registration used to
  * do instead, which was to pick the first active tenant row in the database.
+ *
+ * ── Who mints a grant, and there are only three ──────────────────────────────
+ *
+ * A platform admin onboarding an agency, for that agency's OWNER
+ * (`routes/onboarding.ts`). An agency OWNER or ADMIN inviting one of their own
+ * AGENTS, into their own tenant and no other (`routes/auth.ts`). And the
+ * provisioning command on the host, for NetEnroll staff, with no tenant at all.
+ *
+ * ── There is no self-serve purchase ──────────────────────────────────────────
+ *
+ * Phase 5 removed it. Every agency is onboarded by NetEnroll after a
+ * conversation and a signed agreement; there is no public checkout, nothing
+ * anybody can buy, and no route on this platform that mints a grant from a
+ * payment. The `STRIPE_CHECKOUT` member of `TenantActivationSource` and the
+ * `stripeSessionId` column survive only because migrations against the
+ * production database are additive and never drop -- nothing writes either.
+ * Grep.
  *
  * ── Token handling ───────────────────────────────────────────────────────────
  *
@@ -102,10 +118,11 @@ function emailsMatch(a: string, b: string): boolean {
 /**
  * Mint a single-use activation grant for one address inside one tenant.
  *
- * `tenantId` must come from something the server verified: the Stripe Checkout
- * session's own metadata, or the authenticated session of the OWNER/ADMIN doing
- * the inviting. Passing a tenant that arrived in a request body or a header
- * reintroduces exactly the hole this replaces.
+ * `tenantId` must come from something the server verified: the authenticated
+ * session of the OWNER/ADMIN doing the inviting, or the agency a platform admin
+ * is onboarding and holds the capability to administer. Passing a tenant that
+ * arrived in a request body or a header reintroduces exactly the hole this
+ * replaces.
  *
  * `tenantId: null` is a PLATFORM_INVITE -- NetEnroll staff, who belong to no
  * agency. It confers strictly less than a tenanted grant: the account it
@@ -118,7 +135,6 @@ export async function issueActivationGrant(params: {
   email: string;
   roleName?: RoleName;
   source: TenantActivationSource;
-  stripeSessionId?: string;
   ttlMs?: number;
 }): Promise<IssuedGrant> {
   const prisma = getPrismaClient();
@@ -133,7 +149,10 @@ export async function issueActivationGrant(params: {
       email: params.email.trim().toLowerCase(),
       roleName: params.roleName ?? RoleName.AGENT,
       source: params.source,
-      stripeSessionId: params.stripeSessionId ?? null,
+      // Always null. There is no self-serve purchase and no route that mints a
+      // grant from a payment; the column survives because migrations here never
+      // drop one.
+      stripeSessionId: null,
       expiresAt,
     },
     select: { id: true },

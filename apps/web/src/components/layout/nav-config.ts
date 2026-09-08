@@ -165,6 +165,14 @@ export const ADMIN_NAV: NavGroup[] = [
         icon: Building2,
         title: 'Cross-agency delivery, revenue, margin and settlement status',
       },
+      // Also NetEnroll staff only. There is no self-serve path: every agency is
+      // onboarded here, after a conversation and a signed agreement.
+      {
+        name: 'Onboard an agency',
+        href: '/admin/onboarding',
+        icon: Building2,
+        title: 'Take an agency from nothing to enrolled, in the runbook order',
+      },
     ],
   },
 ];

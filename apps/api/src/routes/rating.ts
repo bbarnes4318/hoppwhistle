@@ -27,8 +27,9 @@ import { FastifyInstance } from 'fastify';
 
 import { requirePlatformAdmin } from '../lib/platform-context.js';
 import { getPrismaClient } from '../lib/prisma.js';
-import { getActingUserId, resolveTenant } from '../lib/tenant-context.js';
+import { getActingTenantId, getActingUserId, resolveTenant } from '../lib/tenant-context.js';
 import { authenticate } from '../middleware/auth.js';
+import { getPlatformRatingOverview } from '../services/rating/platform-rating-view.js';
 import { toNumber } from '../services/rating/rate-curve.js';
 import {
   clearReviewFlag,
@@ -102,7 +103,16 @@ export async function registerRatingRoutes(fastify: FastifyInstance): Promise<vo
           closingPct: row.closingPct === null ? null : toNumber(row.closingPct),
           curveVersion: row.curveVersion,
           previousRate: row.previousRate === null ? null : toNumber(row.previousRate),
+          /*
+           * The EFFECTIVE rate that was applied, and its two halves. `newRate`
+           * is `curveRate + rateOffset`, so a reader can recompute the price
+           * from this row alone and can tell a curve change from a change to
+           * the agency's own terms. There is no fee line: the offset is part of
+           * the price rather than something added to one.
+           */
           newRate: row.newRate === null ? null : toNumber(row.newRate),
+          curveRate: row.curveRate === null ? null : toNumber(row.curveRate),
+          rateOffset: toNumber(row.rateOffset),
           status: row.status,
           computedAt: row.computedAt,
         })),
@@ -225,6 +235,44 @@ export async function registerRatingRoutes(fastify: FastifyInstance): Promise<vo
                 }
               : null,
           };
+        }),
+      });
+    }
+  );
+
+  /**
+   * GET /api/v1/platform/rating/overview
+   *
+   * The platform-wide counterpart of `/rating`: every agency's closing
+   * percentage, the rate it is being charged, and the rate it is tracking
+   * toward, side by side.
+   *
+   * ── Why this is the landing view, not a prompt ───────────────────────────
+   *
+   * `/rating` answers one agency's question. NetEnroll staff have the same
+   * question about the whole platform, and before this they could only answer
+   * it one agency at a time by entering each in turn. So an operator with no
+   * acting tenant lands here; entering an agency narrows this to that agency;
+   * leaving returns to all of them.
+   *
+   * The narrowing comes from the ACTING TENANT on the session, never from a
+   * query parameter. `?includeNonProduction=true` lists the demo and fixture
+   * tenants as well.
+   *
+   * Every rate here is EFFECTIVE -- the curve's answer plus the agency's rate
+   * offset -- with the two halves reported beside it, because an operator
+   * comparing two agencies at the same closing percentage needs to see why they
+   * are paying different prices.
+   */
+  fastify.get<{ Querystring: { includeNonProduction?: string } }>(
+    '/api/v1/platform/rating/overview',
+    { preHandler: [authenticate, requirePlatformAdmin] },
+    async (request, reply) => {
+      return reply.send({
+        data: await getPlatformRatingOverview({
+          prisma,
+          includeNonProduction: request.query.includeNonProduction === 'true',
+          tenantId: getActingTenantId(request) ?? undefined,
         }),
       });
     }

@@ -18,6 +18,17 @@ import { describe, expect, it } from 'vitest';
  * at once rather than page by page: no page component mounts, so none of them
  * fetches anything, so there is nothing for a 409 to break.
  *
+ * ── Phase 5: the prompt is the exception, not the entry point ────────────────
+ *
+ * Three pages now have a platform-wide counterpart -- `/delivery`, `/rating`
+ * and `/delivery/settlements` -- and an operator with no acting tenant lands on
+ * those rather than on the prompt. They are exempt from the swap and each
+ * decides for itself, from `usePlatformContext`, whether to render the
+ * platform-wide view or the agency one.
+ *
+ * The rule below is unchanged for everything else, and the exemption list is
+ * pinned so widening it stays a deliberate act.
+ *
  * ── What went wrong, and why a test rather than a reading ────────────────────
  *
  * The layout has TWO return paths. The call centre renders fullscreen and
@@ -68,21 +79,42 @@ describe('the cross-agency landing prompt', () => {
     expect(guarded.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('exempts only the two surfaces that are not agency data', () => {
+  it('exempts only the surfaces that have a platform-wide reading', () => {
     /*
-     * `/settings` is about the signed-in person and `/admin` is the platform
-     * console. Everything else under this layout renders one agency's data.
+     * Four prefixes and one exact path, and each earns its place:
      *
-     * Pinned because widening this list is how the rule would quietly stop
-     * meaning anything: a new prefix here is a new page that can render broken.
+     *   /settings              the signed-in person, not an agency.
+     *   /admin                 the platform console.
+     *   /rating                every agency's closing percentage, current rate
+     *                          and tracking rate, side by side.
+     *   /delivery/settlements  every agency's settlements over a date range.
+     *   /delivery  (exact)     every agency's calls, applications, block, overrun
+     *                          and rate, with platform totals.
+     *
+     * The last three are Phase 5: NetEnroll staff run the whole platform, so
+     * those pages render a platform-wide counterpart rather than a prompt, and
+     * entering an agency narrows the same page to it.
+     *
+     * `/delivery` is EXACT, not a prefix, and that is the part worth pinning:
+     * `/delivery/me` is one agent's own numbers and has no cross-agency
+     * meaning, so a prefix here would have quietly served it to an operator
+     * with no agency and broken it.
+     *
+     * Pinned because widening this list is how the rule would stop meaning
+     * anything: a new entry is a new page that can render broken.
      */
-    const exemption = source.match(/const worksWithoutAgency =\s*([\s\S]*?);/);
-    expect(exemption, 'the exemption list moved or was renamed').not.toBeNull();
+    const list = source.match(/const PLATFORM_WIDE_PREFIXES = \[([\s\S]*?)\];/);
+    expect(list, 'the exemption list moved or was renamed').not.toBeNull();
 
-    const prefixes = [...(exemption?.[1].match(/startsWith\('([^']+)'\)/g) ?? [])].map(m =>
-      m.replace(/startsWith\('|'\)/g, '')
-    );
-    expect(prefixes.sort()).toEqual(['/admin', '/settings']);
+    const prefixes = [...(list?.[1].match(/'([^']+)'/g) ?? [])].map(m => m.replace(/'/g, ''));
+    expect(prefixes.sort()).toEqual(['/admin', '/delivery/settlements', '/rating', '/settings']);
+
+    // `/delivery` is exempt only as an exact match.
+    expect(source).toMatch(/path === '\/delivery'/);
+    expect(
+      source.includes("startsWith('/delivery')"),
+      "/delivery must be matched exactly, or /delivery/me is served to an operator with no agency"
+    ).toBe(false);
   });
 
   it('keeps the call centre inside the rule, since it returns early', () => {

@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight, Download, Loader2, Receipt } from 'lucide-re
 import { Fragment, useCallback, useEffect, useState } from 'react';
 
 import { CompactPageHeader, CompactPageShell } from '@/components/layout/compact-layout';
+import { PlatformSettlementsView } from '@/components/platform/platform-settlements-view';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -16,11 +17,20 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { usePlatformContext } from '@/hooks/use-platform-context';
 import { apiClient, payload } from '@/lib/api';
 import type { Envelope } from '@/lib/api';
 
 /**
  * Settlement history: one row per settled Delivery Day.
+ *
+ * ── Two readings of one page ─────────────────────────────────────────────────
+ *
+ * An agency reads its own, which is everything below. A platform admin with no
+ * agency selected reads EVERY agency's over a date range, filterable to one,
+ * with the export widened to match — because NetEnroll staff reconcile the
+ * platform, not one account at a time. Selecting an agency narrows this page to
+ * that agency; leaving returns to the platform-wide view.
  *
  * This is the screen an agency disputing a charge is shown, so every figure the
  * settlement record carries is on it -- the counts, the window and the days it
@@ -183,7 +193,33 @@ function settlementMode(status: string): { label: string; detail: string } {
   }
 }
 
+/**
+ * Which reading of this page to render.
+ *
+ * A component boundary rather than an early return: the agency panel calls
+ * hooks, and returning before them would be a conditional hook. It also means
+ * the agency panel never mounts for an operator with no agency, so it never
+ * fires the agency-scoped request that would be refused 409.
+ */
 export default function SettlementsPage(): JSX.Element {
+  const platform = usePlatformContext();
+
+  if (platform.loading) {
+    return (
+      <CompactPageShell>
+        <div className="flex flex-1 items-center justify-center text-muted-foreground">
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          Loading settlements
+        </div>
+      </CompactPageShell>
+    );
+  }
+
+  return platform.needsAgency ? <PlatformSettlementsView /> : <AgencySettlementsPanel />;
+}
+
+/** One agency's own settlement history: the acting tenant's, and nobody else's. */
+function AgencySettlementsPanel(): JSX.Element {
   const [rows, setRows] = useState<SettlementRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

@@ -42,8 +42,14 @@
  * its ceiling should be told it is suspended, because that is the thing a human
  * has to act on.
  *
+ *   PAYMENT_DISPUTED       a card payment was charged back. Delivery stopped on
+ *                          the webhook, and only a platform admin's explicit
+ *                          stand-down starts it again -- not the dispute
+ *                          closing, and not the dispute closing in our favour.
  *   ADMIN_SUSPENDED        a platform admin suspended the account.
- *   NO_MANDATE             no valid ACH mandate. No mandate, no delivery.
+ *   NO_MANDATE             no valid payment instrument -- the bank mandate for
+ *                          an ACH agency, the card for a card one. No
+ *                          instrument, no delivery.
  *   BELOW_MINIMUM_CLOSING  the trailing window fell below 5.0%. An agency
  *                          cannot resume itself; only a platform admin clears
  *                          the flag.
@@ -84,6 +90,7 @@ import { calendarDayOf } from '../rating/calendar-day.js';
 import type { CalendarDayKey } from '../rating/calendar-day.js';
 
 import { creditBalance, ledgerCountsForDay } from './credit-ledger.js';
+import { hasOpenDispute } from './disputes.js';
 import { BillingNotificationKind, notify } from './notifications.js';
 import { isEnrolledForBilling, loadAgencyTerms } from './terms.js';
 import type { AgencyTerms } from './terms.js';
@@ -125,6 +132,12 @@ export interface DeliveryGateDecision {
   consecutiveCleanSettlements: number;
   /** True when an unpaid settlement has withdrawn overrun for now. */
   overrunWithheldForUnpaidSettlement: boolean;
+  /**
+   * True when a card payment against this agency has been disputed and no
+   * platform admin has stood it down. Delivery is refused and no Overrun at all
+   * is extended while it holds.
+   */
+  disputed: boolean;
   hasValidMandate: boolean;
   /** The settlement holding delivery, if one is. */
   unpaidSettlement: {
@@ -160,6 +173,7 @@ const UNENROLLED: Omit<DeliveryGateDecision, 'tenantId' | 'deliveryDay'> = {
   ceilingSource: 'CLEAN_SETTLEMENT_SCHEDULE',
   consecutiveCleanSettlements: 0,
   overrunWithheldForUnpaidSettlement: false,
+  disputed: false,
   hasValidMandate: false,
   unpaidSettlement: null,
 };
@@ -257,7 +271,7 @@ export async function evaluateDeliveryGate(
     };
   }
 
-  const [terms, balance, counts, ratingState, openFlag, unpaid] = await Promise.all([
+  const [terms, balance, counts, ratingState, openFlag, unpaid, disputed] = await Promise.all([
     loadAgencyTerms(tenantId, { prisma }),
     creditBalance(prisma, tenantId),
     ledgerCountsForDay(prisma, tenantId, today),
@@ -267,14 +281,24 @@ export async function evaluateDeliveryGate(
       select: { id: true, closingPct: true },
     }),
     findUnpaidSettlement(prisma, tenantId, today),
+    hasOpenDispute(prisma, tenantId),
   ]);
 
   /*
    * No overrun is extended to an agency with an unpaid settlement. Not reduced:
    * withdrawn. Delivery holds at the current PAID balance, which is what the
    * agency has already bought and which nothing takes away.
+   *
+   * The same, and for a sharper reason, while a chargeback is outstanding.
+   * Overrun is unsecured credit, and an agency that has just taken a payment
+   * back is the one case where extending more of it is indefensible. It is
+   * withdrawn rather than reduced, and it stays withdrawn until a platform
+   * admin stands the dispute down -- which is also what lets delivery restart
+   * at all, so in practice the two happen together. Computed separately anyway,
+   * because "no overrun with a dispute open" has to hold on its own for an
+   * agency whose suspension was lifted some other way.
    */
-  const overrunWithheld = unpaid !== null;
+  const overrunWithheld = unpaid !== null || disputed;
   const overrunCeiling = overrunWithheld ? 0 : terms.ceilingApplications;
   const overrunRemaining = Math.max(0, overrunCeiling - counts.overrun);
 
@@ -292,6 +316,7 @@ export async function evaluateDeliveryGate(
     ceilingSource: terms.ceilingSource,
     consecutiveCleanSettlements: terms.consecutiveCleanSettlements,
     overrunWithheldForUnpaidSettlement: overrunWithheld,
+    disputed,
     hasValidMandate: terms.hasValidMandate,
     unpaidSettlement: unpaid,
   };
@@ -303,6 +328,22 @@ export async function evaluateDeliveryGate(
     if (record) await recordHold(prisma, tenantId, today, reason, detail, base);
     return { ...base, allowed: false, reason, detail };
   };
+
+  /*
+   * A disputed payment, first -- above the suspension it placed.
+   *
+   * The dispute handler suspends the agency, so this and ADMIN_SUSPENDED are
+   * true together and the order decides which one an operator is told. It is
+   * this one: "a chargeback happened" is the fact somebody has to act on, and
+   * "somebody suspended this account" is the mechanism.
+   */
+  if (disputed) {
+    return refuse(
+      DeliveryHoldReason.PAYMENT_DISPUTED,
+      'A card payment on this account has been disputed. Delivery is stopped while NetEnroll ' +
+        'reviews it. Applications already paid for are untouched.'
+    );
+  }
 
   if (terms.suspended) {
     return refuse(
@@ -316,7 +357,9 @@ export async function evaluateDeliveryGate(
   if (!terms.hasValidMandate) {
     return refuse(
       DeliveryHoldReason.NO_MANDATE,
-      'There is no valid ACH mandate on this account. Delivery resumes when one is in place.'
+      terms.paymentMethod === 'CARD'
+        ? 'There is no usable card on this account. Delivery resumes when one is in place.'
+        : 'There is no valid ACH mandate on this account. Delivery resumes when one is in place.'
     );
   }
 
@@ -376,8 +419,11 @@ export async function evaluateDeliveryGate(
     return refuse(
       DeliveryHoldReason.CEILING_REACHED,
       overrunWithheld
-        ? 'Delivery is held at your paid balance while a settlement is unpaid. No overrun is ' +
-            'extended with a settlement outstanding.'
+        ? disputed
+          ? 'Delivery is held at your paid balance while a disputed payment is reviewed. No ' +
+              'overrun is extended with a dispute outstanding.'
+          : 'Delivery is held at your paid balance while a settlement is unpaid. No overrun is ' +
+              'extended with a settlement outstanding.'
         : `Today's overrun ceiling of ${overrunCeiling} applications above a Daily Block of ` +
             `${terms.dailyBlockApplications} has been reached. Delivery resumes on the next ` +
             'Delivery Day.'

@@ -39,6 +39,26 @@ curve, the summary, the publish API and the portal. An agency's opening rate and
 opening block are agreed before its first Delivery Day and recorded per tenant;
 from the second Delivery Day the rate curve governs. See §8.
 
+**There is no self-serve purchase either.** Phase 5 removed the last of it.
+Every agency is onboarded by a platform admin after a conversation and a signed
+agreement; there is no public checkout, nothing anybody can buy, and no route
+that mints an account from a payment. See §11.
+
+**A chargeback is a payment event, not a billing correction, and the ledger is
+not where it is answered.** A card dispute takes money back without our consent,
+often weeks after the applications it paid for were delivered and consumed. That
+is a fact about a payment. It is not a statement that the agency was billed the
+wrong amount, and nothing in this system reverses anything on one: consumed
+credits stay consumed, no ledger row is written or removed, and every figure on
+the settlement stands. What happens is containment — delivery stops, the tenant
+is flagged, platform staff are told, and no Overrun is extended. See §12.
+
+**Card is priced through the rate, not through a fee.** An agency's rate offset
+is dollars added to whatever the curve returns, at every point on the curve.
+There is no surcharge anywhere in this product, in any form: no fee line, no
+percentage on a settlement total, nothing itemised separately from the price.
+See §13.
+
 
 ---
 
@@ -339,14 +359,20 @@ are irreversible because this product has no refund path. They are step 4 and
 step 9 (real debits) and step 8's closeout (an append-only ledger row). Every
 other step can be walked back in one call.
 
+**Steps 1 to 3 and 5 also have a screen.** `/admin/onboarding` (§11) does the
+agency, the terms, the payment method, the owner's activation link and the
+enrolment, in this order, refusing to skip ahead and writing an audit row for
+each. It is the same routes; this section is what to check after each one and
+what reverses it, which a screen cannot tell you.
+
 **Before you start**, have to hand:
 
 | | |
 | --- | --- |
 | tenant id | `SELECT id, name, slug FROM tenants WHERE slug = '…';` |
 | a platform admin token | an agency OWNER token gets 403 on every step here |
-| the Insertion Order | the agreed rate, the Daily Block, the maximum daily debit |
-| the arithmetic | maximum daily debit = (block + ceiling) × rate. 45 agents at $134 with a 50% ceiling is (45 + 22) × 134 = **$8,978**. 15 agents is (15 + 7) × 134 = **$2,948**. |
+| the Insertion Order | the agreed rate, the rate offset, the Daily Block, the maximum daily debit |
+| the arithmetic | maximum daily debit = (block + ceiling) × **effective** rate, where the effective rate is the curve rate plus the agency's offset. 45 agents at $134 with a 50% ceiling and no offset is (45 + 22) × 134 = **$8,978**. The same agency with a $6 offset is (45 + 22) × 140 = **$9,380**. 15 agents at $134 is (15 + 7) × 134 = **$2,948**. |
 
 Below, `$T` is the tenant id and `$ADMIN` a platform admin bearer token. Routes
 are written relative to `https://<api>/api/v1`; in full, each call is:
@@ -377,8 +403,19 @@ during business hours.
 
 ```
 PUT /platform/delivery/agencies/$T/terms
-{ "dailyBlockApplications": 45, "maxDailyDebit": 8978 }
+{ "dailyBlockApplications": 45, "maxDailyDebit": 8978, "rateOffset": 0 }
 ```
+
+`rateOffset` is dollars added to whatever the curve returns, at every point on
+the curve (§13). Zero unless one was agreed — and if one WAS agreed, the
+maximum daily debit above has to be computed at the effective rate, or it will
+be short by the offset times the block plus ceiling every single day. `GET
+…/terms?rate=134` returns `computedMaxDailyDebitAtRate` with the offset already
+in it, and `computedAtEffectiveRate` so the figure reads on its own.
+
+This is not a surcharge and there is no fee anywhere: a different price is not
+an itemised charge added to one. See §13 for why that distinction is the whole
+design rather than a wording preference.
 
 `maxDailyDebit` is the figure on the Insertion Order, not a guideline: a
 settlement above it **halts without charging** and alerts platform admins, and
@@ -413,6 +450,14 @@ visible as something that was set and then changed. That is deliberate.
 ---
 
 ### Step 3 — The agency completes its ACH mandate
+
+**Or its card**, if that is what its terms name. `PUT
+…/agencies/$T/payment-method {"paymentMethod": "CARD"}` records which, and the
+agency then completes `POST /delivery/card/setup-intent` and
+`/delivery/card/confirm` — the same shape as the pair below, read back from
+Stripe the same way. A card-paying agency gets the flat 25% Overrun ceiling
+(§13) and can be charged back (§12); its price is the offset from step 1 and is
+not derived from this choice.
 
 This one is not yours to do. The agency's own principal, signed in, in their
 browser:
@@ -689,6 +734,7 @@ charging. It does not undo a debit that has already been placed.
 | a debit failed | `settlement_payment_attempts` for Stripe's failure code; the agency has until `gracePeriodEndsOn` (Business Days) before delivery holds | `--retry-failed` once fixed |
 | you are not sure and calls are moving | — | `POST /platform/delivery/agencies/$T/suspend` stops delivery immediately and does **not** touch the ledger; paid applications survive it and are there when you resume |
 | you want the agency out of billing entirely | — | `POST …/unenrol`. Ledger and settlements stay as the record of what was charged |
+| a card payment was charged back | the agency's row on `GET /platform/delivery/overview`, flagged `disputed`; `settlement_disputes` for Stripe's reference and status | nothing to stop — delivery already stopped on the webhook. Resuming is `POST …/disputes/stand-down`, and it is a decision, not a formality (§12) |
 
 **Nothing on this page ever gives money back.** Suspend, unenrol and disabling
 charging all stop things happening *next*; none of them reverses a debit, a
@@ -803,6 +849,11 @@ settlements free of failed or unpaid debits, 100% at or beyond 10. Both
 percentages and the threshold are configurable per tenant on
 `agency_billing_profiles`, and a platform admin can override the ceiling
 outright.
+
+**A card-paying agency gets 25%, flat, and it does not rise with settlement
+history** — see §13. And **a tenant with an outstanding dispute gets none at
+all**, withdrawn rather than reduced, on the same terms as an unpaid settlement
+below. `ceilingFor()` in `terms.ts` is the one rule all of these come out of.
 
 Floored, not rounded: 45 × 1.5 is 67.5, and half an application does not exist.
 Rounding it up would extend a credit nobody agreed to.
@@ -1509,6 +1560,34 @@ table, two indexes and a foreign key, each guarded with `IF NOT EXISTS` or a
 scratch against a database with the table dropped, and `prisma migrate diff`
 reports no difference.
 
+`20260913000000_add_rate_offset_disputes_and_onboarding/migration.sql` is
+Phase 5's, on the same terms again: additive, idempotent, drops nothing, plain
+SQL for psql. It adds the rate offset, the payment method and the card ceiling
+to `agency_billing_profiles`; `curveRate` and `rateOffset` to `rate_changes` and
+`daily_settlements`; the non-production marker to `tenants`; and two tables,
+`agency_profiles` and `settlement_disputes`. Two enums are created inside guarded
+`DO` blocks and three enum VALUES are added outside the transaction, for the
+reason above.
+
+Three properties of that file worth naming:
+
+- **It marks nobody and enrols nobody.** `isNonProduction` defaults to false and
+  no `UPDATE` sets it. Which of the five production tenants are fixtures is not
+  something a migration may guess — see §15.
+- **The one backfill is of a value the rows already imply.** Every rate written
+  before this file existed was a curve rate, because no offset existed, so
+  `curveRate = rate` and `rateOffset = 0` are true rather than assumed.
+- **The settlement immutability trigger is never disabled.** The backfill runs
+  BEFORE the trigger is taught about the two new columns, which is why it goes
+  through without switching the guard off. A migration that disabled the guard
+  on `daily_settlements` would be a migration that could, in principle, rewrite
+  what an agency was charged. The extended trigger is repeated verbatim in
+  `prisma/sql/db-push-constraints.sql`.
+
+Verified the same way as the others: applied twice as a no-op, applied from
+scratch against a database built from the pre-Phase-5 schema, and
+`prisma migrate diff` reports **no difference detected**.
+
 **Nothing was added to the deploy path.** In particular no
 `prisma migrate deploy`: against an empty migration history it would try to
 replay every migration from the beginning. The pre-existing hazard recorded in
@@ -1534,6 +1613,7 @@ TEST_REDIS_URL=redis://localhost:6379/1 \
 | `__tests__/settlement.test.ts` | 55 | enrolment, the dry run, the ledger, the ceiling, the gate, the settlement, the portal, and the absence of refunds — against a real database |
 | `__tests__/delivery-gating-paths.test.ts` | 11 | that every delivery path asks the gate when the agency is enrolled, **and does not when it is not** — driven through the real route handlers |
 | `__tests__/db-push-constraints.test.ts` | +3 | the three triggers are installed |
+| `__tests__/phase5-platform.test.ts` | 25 | the platform-wide screens, the rate offset, chargebacks, non-production tenants and onboarding — against a real database |
 
 The cases the brief names, and where they are:
 
@@ -1634,3 +1714,371 @@ nothing; and that an agency cannot reach any platform surface.
 
 Full API suite at the time of writing: **765 passed**. Typecheck errors
 unchanged at 80; web typecheck unchanged at 127; no new lint findings.
+
+### Phase 5 — `phase5-platform.test.ts`
+
+The cases the brief names, and where they are:
+
+- **a platform admin with no acting tenant sees every agency on `/delivery`,
+  `/rating` and `/delivery/settlements`, and no "choose an agency" prompt** —
+  three cases, one per screen, each asserting the agencies AND that nothing in
+  the response says `NO_ACTING_TENANT` or "Choose an agency";
+- **selecting an agency narrows those screens; leaving returns platform-wide** —
+  driven through the real acting-tenant switch, and asserting that `?agencyId=`
+  cannot widen past the agency actually entered;
+- **an agency OWNER sees only their own agency on every one of those screens** —
+  403 on all five platform surfaces, with the refusal checked for the other
+  agency's id and name, and their own three screens checked for the same;
+- **a rate offset is added to the curve rate everywhere the rate appears** — two
+  agencies closing at exactly 10%, one with a $6 offset, priced $165 and $159
+  from the same measurement, through the engine, the state and the portal;
+- **a rate change stores the curve rate and the offset separately and
+  recomputes** — including after the agency's profile offset is changed to $25,
+  which must not move the recomputation;
+- **changing an offset does not alter a completed settlement** — every figure
+  compared before and after, then the raw `UPDATE` attempted and expected to
+  raise on the immutability trigger;
+- **the maximum daily debit reflects the offset** — `$8,978` without and
+  `$9,380` with, asserted at `maxDailyDebitFor()` and through the terms route;
+- **the export carries `rate`, `curve_rate` and `rate_offset` and no fee
+  column** — the header is grepped for `fee|surcharge|adjustment|convenience`
+  and must match nothing;
+- **a card-paying agency's ceiling is 25% and does not rise** — twelve clean
+  settlements later, still 25%, still `CARD_EXPOSURE`;
+- **enrolment refuses with every missing prerequisite named at once** — all four
+  codes in one 409, and the profile unmoved;
+- **an agency OWNER cannot create a user outside their tenant or a platform
+  admin** — a `tenantId` in the body is ignored, an OWNER role is refused, and
+  `platform_admins` still has exactly one row afterwards;
+- **a dispute suspends delivery, flags the tenant, and changes no ledger row and
+  no settlement figure** — the ledger compared row by row, the settlement figure
+  by figure, the gate reason `PAYMENT_DISPUTED`, the platform row's own
+  `disputed` flag, a platform-only notification, and the ledger enum labels read
+  out of `pg_enum` to show no chargeback member was added;
+- **a tenant with an open dispute is extended no overrun** — ceiling withdrawn
+  to zero, not reduced;
+- **delivery does not resume automatically when a dispute closes** — including
+  when it closes `won`; only the stand-down route resumes it, it returns nothing
+  to anybody, and an agency cannot call it;
+- **a redelivered webhook records one dispute, not two**;
+- **an unsigned or wrongly-signed webhook is refused and stops no delivery**;
+- **a tenant marked non-production is excluded from the platform totals** —
+  whether or not its row is shown — **and marking it changes no delivery or
+  billing behaviour**;
+- **the volume report marks nobody** — reading it leaves the marks as they were;
+- **the onboarding steps refuse to skip ahead**, and the whole walk from nothing
+  to enrolled writes one audit row per step naming the operator.
+
+---
+
+## 11. Onboarding — internal, not self-serve
+
+There is no public checkout, no signup that creates an account, and no
+introductory package anybody can buy. Every agency on this platform is onboarded
+by a platform admin after a conversation and a signed agreement.
+
+That is enforced rather than intended, in three places at once. `POST
+/api/auth/register` requires an activation grant and names no tenant. Grants are
+minted only by the server, and there are exactly three minters: this screen for
+an agency's OWNER, an agency's own OWNER or ADMIN for one of their AGENTS, and
+the provisioning command on the host for NetEnroll staff. And nothing mints a
+grant from a payment — `TenantActivationSource.STRIPE_CHECKOUT` and
+`tenant_activation_grants.stripeSessionId` survive only because migrations here
+never drop, and nothing writes either. Grep.
+
+### One screen, five steps, in the runbook's order
+
+`/admin/onboarding`, and `routes/onboarding.ts` behind it. Each step reports its
+state and the server refuses one asked for out of order.
+
+| | Step | Route |
+| --- | --- | --- |
+| a | **Tenant** — legal name, state, contact name, email, phone, licensed agent count, delivery days and hours | `POST /api/v1/platform/onboarding/agencies` |
+| b | **Terms** — opening rate, rate offset, opening daily block, daily application target, overrun ceiling percentage, maximum daily debit | `PUT …/agencies/:tenantId/terms` |
+| c | **Payment method** — ACH mandate or card | `PUT …/agencies/:tenantId/payment-method` |
+| d | **Owner and activation link** | `POST …/agencies/:tenantId/owner` |
+| e | **Enrol** — the existing prerequisite check | `POST /api/v1/platform/delivery/agencies/:tenantId/enrol` |
+
+**The state is derived, never stored.** There is no "current step" column. Each
+step's state is read from the rows that step writes — the agency profile, the
+terms, the mandate, the grant, the enrolment timestamp — because a stored
+position is wrong the first time somebody does a step by hand, and an agency
+half-onboarded last week has to open on the right step.
+
+**The maximum daily debit is computed and shown, and stored as an explicit
+figure.** `(daily block + ceiling quantity) × effective rate`, where the
+effective rate is the opening rate plus the agency's offset. The stored value is
+the caller's figure when they send one — the number that was actually signed —
+and the computation only when they do not. It is never silently replaced by the
+computation, and it is never recomputed at charge time: a cap that moves when a
+rate moves could not be breached, which is not a cap. The response returns both,
+so an operator can see immediately when the signed figure and the arithmetic
+disagree. They are allowed to disagree; being unable to tell is not allowed.
+
+**Every step writes an `AuditLog` row naming the operator.** `auditLog()` raises
+rather than swallowing, so a step that could not be recorded is a step that did
+not happen.
+
+### The owner's grant, and what an agency can do with it
+
+Step (d) mints one `TenantActivationGrant` for the OWNER role in that agency,
+through the mechanism Phase 1 built and with nothing added to it: 32 random
+bytes, only the SHA-256 stored, single-use, time-boxed, bound to one email
+address. The plaintext is returned exactly once, on that response.
+
+An agency OWNER can then invite their own agents through the same mechanism,
+`POST /api/v1/auth/activation-grants`. Three properties, and each is asserted:
+
+- **AGENT only.** An agency invites agents. A second principal is a conversation
+  with NetEnroll, who issues that invitation from the platform surface. Phase 5
+  narrowed this: an OWNER could previously mint an OWNER link.
+- **Their own tenant only.** There is no `tenantId` field in that body and there
+  never was — the tenant is `resolveTenant(request, reply)`, the caller's own
+  session. Sending one anyway changes nothing, which is what the test does.
+- **Never a platform admin.** The capability is a `PlatformAdmin` row granted by
+  a command on the host, not a role, so there is no value of `role` on any
+  endpoint that confers it.
+
+---
+
+## 12. Chargebacks — contained, not reversed
+
+A card chargeback takes money back without our consent, often weeks after the
+applications it paid for were delivered and consumed.
+
+**A chargeback is a payment event, not a billing correction, and the ledger is
+not where it is answered.** It is not a statement that the agency was billed the
+wrong amount. The applications were delivered; the settlement is the record of
+what was billed; and this product has no refund, credit, reversal or make-good
+and does not gain one here.
+
+So on a dispute:
+
+| | |
+| --- | --- |
+| consumed credits | stay consumed |
+| the ledger | is not reversed. There is no entry type for it and there is not going to be one — `settlement.test.ts` and the Phase 5 suite both read the enum labels out of `pg_enum` |
+| the settlement | keeps every figure it was written with, including `rate`, `curveRate` and `rateOffset`, all under the immutability trigger |
+| delivery | **stops**, immediately, on the webhook |
+| the platform view | flags the tenant as `disputed` — its own state, not folded into "suspended" |
+| platform admins | are notified. Platform only: telling an agency's floor before anybody has looked is alarm, not information |
+| Overrun | **none at all**, withdrawn rather than reduced, while a dispute is outstanding |
+
+### The webhook
+
+`POST /api/v1/webhooks/stripe` handles `charge.dispute.created`, `.updated` and
+`.closed`. Every other event is acknowledged with `handled: false` so Stripe
+stops retrying it.
+
+It is unauthenticated, because Stripe cannot present a bearer token — so it is
+verified by its `Stripe-Signature` header against `STRIPE_WEBHOOK_SECRET`, over
+the **raw** body. The route installs its own content type parser for that
+reason, scoped to the plugin, because a re-serialised object is not the bytes
+Stripe signed. An unverified dispute webhook would let anybody who can reach the
+URL stop an agency's delivery, so an unsigned or unverifiable request is refused
+before anything is read out of it. A signature failure and a missing secret get
+the same 400: telling an unauthenticated caller which one it is tells them which
+half of a guess was right.
+
+**Nothing in the payload names a tenant.** The agency is resolved from the
+payment intent Stripe names, against the rows this platform wrote when it placed
+the debit — the settlement, or the ledger purchase. A dispute that cannot be
+attributed is logged loudly and contained nowhere: inventing a tenant to attach
+it to would be worse than saying we could not.
+
+`stripeDisputeId` is unique, so a webhook delivered twice records one dispute
+rather than two, and a redelivery does not re-suspend an agency somebody has
+already stood down.
+
+### Delivery resumes only by explicit platform-admin action
+
+`POST /api/v1/platform/delivery/agencies/:tenantId/disputes/stand-down`, and
+nothing else. Never automatically. In particular **not when the dispute closes,
+and not when it closes in our favour** — winning says the money came back, not
+that this is an account to keep extending unsecured credit to unexamined. The
+`closed` webhook moves `status` and `closedAt` on the dispute row and touches
+nothing else; `deliveryResumedAt` stays null, and that null is what the gate
+reads.
+
+Standing down names an operator (an API key cannot do it — "a platform admin
+decided" is the whole content of the decision), stands down every dispute on the
+tenant that has not been stood down, and lifts only the suspension the dispute
+handler placed. An agency a platform admin suspended for an unrelated reason
+stays suspended: standing down a chargeback is not a general amnesty. It returns
+no credit, writes no ledger row and changes no settlement figure, and the
+response says so in as many words.
+
+---
+
+## 13. The rate offset — a price, not a surcharge
+
+Card is a supported alternative to ACH, and it is priced through the rate.
+
+    effective rate = curve rate for the closing percentage + rate offset
+
+`agency_billing_profiles.rateOffset` is dollars, agreed with the agency and
+recorded on its terms at onboarding, shown on its Insertion Order. Zero by
+default, so an agency nobody agreed one with is priced exactly off the curve. It
+applies at **every** point on the curve, not at a band or above a threshold: an
+agency with a $6 offset pays $165 at 10% closing where the curve says $159, and
+$140 at 15% where the curve says $134.
+
+### Why not a surcharge
+
+A surcharge is an itemised fee added to a price at the point of payment. It is a
+regulated instrument: it requires card-network registration, it is capped at 3%,
+it is prohibited on debit cards, and it is unlawful in several states. A
+different price is none of those things.
+
+So there is **no fee line anywhere**, and that is checkable rather than
+asserted: no fee column on the settlement, none in the export (the Phase 5 suite
+greps the CSV header for `fee|surcharge|adjustment|convenience` and expects
+nothing), no percentage applied to a total, and no code path that adds anything
+to an amount before it reaches Stripe.
+
+### It is not derived from the payment method
+
+`paymentMethod` says which instrument the settlement debits. `rateOffset` says
+what the agency is priced at. Nothing derives one from the other. A platform
+admin sets the offset when agreeing terms, and the reason one exists for a
+card-paying agency is a commercial matter rather than a rule this software
+enforces — a code path that set a price from a payment method would be that
+rule.
+
+### Where the offset appears
+
+Everywhere the rate appears, because it is part of the rate:
+
+| | |
+| --- | --- |
+| `rate_changes` | `newRate` is effective; `curveRate` and `rateOffset` are stored beside it |
+| `daily_settlements` | the same three, all under the immutability trigger |
+| the CSV export | `rate`, `curve_rate`, `rate_offset` — the first is the sum of the other two |
+| the agency's portal | the rate, with "…from the curve, plus your agreed rate offset of…" beneath it |
+| the platform views | the rate, with `(curve $159 + $6)` beside it where one applies |
+| the maximum daily debit | `(block + ceiling) × effective rate` |
+| the settlement derivation | recomputed against the offset **the settlement records**, never the agency's current one |
+
+**The rate change stores both halves so a rate recomputes from its own row.** A
+single stored total would leave a reader unable to tell a curve change from an
+offset change. `recomputeFromRecord()` reads the offset off the row and never
+off the profile: a price that could be restated by a later renegotiation is not
+a record, and the Phase 5 suite changes the profile to $25 afterwards and
+asserts the recomputation still lands on the stored $165.
+
+**Changing an offset never alters a completed settlement.** The figures are
+copied onto the row on the night, and `curveRate` and `rateOffset` were added to
+the `hopwhistle_settlement_figures_immutable` trigger alongside `rate` — so this
+is a property of the database, not a convention. The test changes the offset and
+then attempts the `UPDATE` directly, and expects it to raise.
+
+**The maximum daily debit reflects it.** `(45 + 22) × $140 = $9,380`, not
+`× $134 = $8,978`. Computing the cap off the curve rate alone leaves it short by
+the offset times the whole block plus ceiling, every day, and a settlement at the
+ceiling would halt on a cap that was never the real cost of the day.
+
+### Card-paying agencies get a lower Overrun ceiling
+
+**25% above the Daily Block, flat — it does not rise with settlement history.**
+The ACH schedule extends *more* credit to an agency with a longer record of
+clean settlements. A card payment can be taken back without our consent up to
+months after it settled, so a run of clean card settlements is not the evidence
+that schedule treats it as, and letting one earn the doubled ceiling would be
+extending unsecured credit against an instrument the counterparty can reverse.
+25% is the chargeback exposure we are willing to carry, and it is flat because
+the exposure does not shrink with time.
+
+`ceilingFor()` in `terms.ts` is the one rule: a platform override first, then
+the flat card percentage (`ceilingSource: CARD_EXPOSURE`), then the ACH
+schedule. The gate and the platform view both call it, so they cannot arrive at
+different numbers.
+
+### The settlement debits the instrument the terms name
+
+`chargeAchOffSession` for an ACH agency, `chargeCardOffSession` for a card one,
+chosen by `terms.paymentMethod` and resolved to `terms.settlementPaymentMethodId`
+server-side. Both are off-session against something the agency already
+authorised through a Stripe SetupIntent the server read back; neither takes an
+amount from anywhere but the ledger and the rating engine; and neither adds
+anything to what it is handed.
+
+---
+
+## 14. The platform-wide screens
+
+Every agency-scoped screen has a platform-wide counterpart, and a platform admin
+with no acting tenant lands on it rather than on a prompt.
+
+| | |
+| --- | --- |
+| `/delivery` | every agency's calls, applications, closing percentage, block remaining, overrun, ceiling distance and current rate — one row per agency, with platform totals across the top. `GET /api/v1/platform/delivery/overview` |
+| `/rating` | every agency's closing percentage, current rate and the rate each is tracking toward, side by side. `GET /api/v1/platform/rating/overview` |
+| `/delivery/settlements` | every agency's settlements over a date range, filterable by agency, with the CSV export widened to match. `GET /api/v1/platform/delivery/settlements` |
+
+**The switcher is a filter, not a gate.** Selecting an agency narrows any of
+these to that agency; leaving returns to the platform-wide view. The narrowing
+comes from the acting tenant on the session — the Phase 1 helper — and never
+from a query parameter. `?agencyId=` is a filter on a platform-wide list and is
+ignored when an agency has actually been entered: entering is a session-level
+decision and a query string must not widen past it.
+
+**Nothing an agency sees changed.** An agency OWNER sees their own agency and
+nothing else on every one of these screens, and is refused every platform route
+with a 403 that leaks no other agency's name or id. That is asserted directly in
+`phase5-platform.test.ts` rather than left to follow from the endpoints being
+gated: the gate could move, and what an agency may see must not.
+
+**Totals exclude non-production tenants** — see §15 — and `agenciesExcluded`
+says how many, so a total is never quietly smaller than the table beneath it.
+
+### Where the prompt still applies, and why
+
+`docs/PLATFORM_ADMIN.md` §2f lists the surface an operator can reach with no
+agency selected. After Phase 5 the exemptions are `/settings` (the signed-in
+person), `/admin` (the platform console), and the three screens above.
+Everything else still swaps for `<CrossAgencyPrompt />`, because it genuinely
+has no cross-agency reading: the call centre is one agency's live queue, `/calls`
+and `/flows` are one agency's records, and `/delivery/me` is one agent's own
+numbers.
+
+`/delivery` is matched **exactly**, not by prefix, precisely so `/delivery/me`
+keeps the prompt. `cross-agency-landing.test.ts` pins that.
+
+---
+
+## 15. Non-production tenants
+
+Production has five tenants — Demo Organization, Test Organization, Test Tenant,
+and two personal workspaces — and none of them is a real agency. The
+platform-wide screens are read every day and would be full of them, and five
+rows an operator learns to scroll past is how a real agency in trouble gets
+scrolled past too.
+
+`tenants.isNonProduction`, false by default:
+
+- excluded from the platform totals, **whether or not its row is shown** —
+  hiding a row and excluding a number are two decisions and only the first is a
+  toggle;
+- hidden behind `?includeNonProduction=true` on every platform view;
+- **nothing else.** It deletes nothing, suspends nothing, un-enrols nothing and
+  changes no delivery or billing behaviour. A marked tenant that is taking calls
+  keeps taking them and keeps being settled. The same call reverses it, and both
+  directions are audited.
+
+**Nothing in this codebase guesses which tenants are fixtures**, and the
+migration marks nobody. A name that looks like a demo is not evidence, and one
+of those five could be carrying live client traffic tomorrow. So the mechanism
+is provided and the decision is the owner's, from the volume:
+
+    psql "$DATABASE_URL" -f apps/api/prisma/sql/tenant-volume.sql
+    GET /api/v1/platform/tenants/volume
+
+Lifetime and last-30-day call and application counts per tenant, plus whether it
+is in the billing system at all. Then, per tenant:
+
+    PUT /api/v1/platform/tenants/:tenantId/non-production  {"isNonProduction": true,
+                                                            "note": "seeded demo fixture"}
+
+or the toggle beside its row on the platform view.
+
+---

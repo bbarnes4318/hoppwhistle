@@ -54,8 +54,9 @@ import { lastClosedCalendarDay, nextCalendarDay, windowOf } from './calendar-day
 import type { CalendarDayKey } from './calendar-day.js';
 import { measureTrailingDeliveryDays } from './delivery-day.js';
 import type { DeliveryDayDeps } from './delivery-day.js';
-import { rateFor, toRateCurve, toNumber } from './rate-curve.js';
+import { effectiveRate, rateFor, toRateCurve, toNumber } from './rate-curve.js';
 import type { RateCurve } from './rate-curve.js';
+import { loadRateOffset } from './rate-offset.js';
 
 const CURVE_INCLUDE = { anchors: true } as const;
 
@@ -139,7 +140,15 @@ export interface RateAgencyResult {
   /** How many were found; fewer than requested is a shorter sample. */
   windowDaysFound: number;
   previousRate: number | null;
+  /**
+   * The EFFECTIVE rate: what the curve returned plus the agency's rate offset.
+   * This is what the agency is priced at and what the settlement bills.
+   */
   newRate: number | null;
+  /** What the curve alone returned, before the offset. */
+  curveRate: number | null;
+  /** The offset in force when this decision was made. */
+  rateOffset: number;
   curveVersion: number;
   /** True when a decision for this day already existed and nothing was written. */
   alreadyRated: boolean;
@@ -178,14 +187,25 @@ export async function rateAgencyForClosedDay(
       windowDaysFound: existing.windowDaysFound,
       previousRate: existing.previousRate === null ? null : toNumber(existing.previousRate),
       newRate: existing.newRate === null ? null : toNumber(existing.newRate),
+      curveRate: existing.curveRate === null ? null : toNumber(existing.curveRate),
+      rateOffset: toNumber(existing.rateOffset),
       curveVersion: existing.curveVersion,
       alreadyRated: true,
     };
   }
 
-  const [curve, windowSettings] = await Promise.all([
+  const [curve, windowSettings, rateOffset] = await Promise.all([
     loadActiveCurve(prisma),
     loadWindowSettings(prisma),
+    /*
+     * The agency's rate offset, read once and copied onto the row below.
+     *
+     * Copied rather than joined at read time, so changing an agency's offset
+     * tomorrow does not silently restate what it was priced at today. A rate
+     * change is an immutable record of a decision, and the offset was part of
+     * that decision.
+     */
+    loadRateOffset(prisma, options.tenantId),
   ]);
 
   const deps: DeliveryDayDeps = {
@@ -226,6 +246,9 @@ export async function rateAgencyForClosedDay(
   const previousRate = state?.currentRate == null ? null : toNumber(state.currentRate);
 
   let status: RateChangeStatus;
+  /** What the curve alone returned. */
+  let curveRate: number | null;
+  /** The curve rate plus this agency's offset: what it is actually priced at. */
   let newRate: number | null;
 
   if (measured === null || measured.closingPct === null) {
@@ -247,15 +270,27 @@ export async function rateAgencyForClosedDay(
      * divide-by-zero into a rate.
      */
     status = RateChangeStatus.NO_DATA;
+    /*
+     * The previous rate stands, and it was already an effective rate -- the
+     * curve rate plus whatever offset was in force when it was set. There is no
+     * curve answer today because nothing was measured, so `curveRate` is the
+     * effective rate less today's offset: the two parts still sum to what is
+     * recorded, which is what makes the row recomputable from itself.
+     */
     newRate = previousRate;
+    curveRate = previousRate === null ? null : Number((previousRate - rateOffset).toFixed(2));
   } else {
     const verdict = rateFor(curve, measured.closingPct);
     if (verdict.kind === 'BELOW_MINIMUM') {
       status = RateChangeStatus.BELOW_MINIMUM;
+      // No rate at all below the minimum. The offset is not added to the
+      // absence of a rate: that would invent one.
+      curveRate = null;
       newRate = null;
     } else {
       status = RateChangeStatus.APPLIED;
-      newRate = verdict.rate;
+      curveRate = verdict.rate;
+      newRate = effectiveRate(verdict.rate, rateOffset);
     }
   }
 
@@ -293,6 +328,8 @@ export async function rateAgencyForClosedDay(
         curveVersion: curve.version,
         previousRate: previousRate === null ? null : new Prisma.Decimal(previousRate),
         newRate: newRate === null ? null : new Prisma.Decimal(newRate),
+        curveRate: curveRate === null ? null : new Prisma.Decimal(curveRate),
+        rateOffset: new Prisma.Decimal(rateOffset.toFixed(2)),
         status,
         computedAt: now,
       },
@@ -420,6 +457,8 @@ export async function rateAgencyForClosedDay(
       windowDaysFound: raced.windowDaysFound,
       previousRate: raced.previousRate === null ? null : toNumber(raced.previousRate),
       newRate: raced.newRate === null ? null : toNumber(raced.newRate),
+      curveRate: raced.curveRate === null ? null : toNumber(raced.curveRate),
+      rateOffset: toNumber(raced.rateOffset),
       curveVersion: raced.curveVersion,
       alreadyRated: true,
     };
@@ -437,6 +476,8 @@ export async function rateAgencyForClosedDay(
     windowDaysFound: recordedWindow.found,
     previousRate,
     newRate,
+    curveRate,
+    rateOffset,
     curveVersion: curve.version,
     alreadyRated: false,
   };
@@ -499,16 +540,26 @@ export async function runDailyRating(
  * Recompute a rating decision from its own stored values.
  *
  * This is the dispute answer: hand it a `rate_changes` row and it re-derives
- * the closing percentage from the two counts and the rate from the curve
- * version the row names, touching no live data. If this ever disagrees with
- * `newRate`, the row is not the record it claims to be.
+ * the closing percentage from the two counts, the curve rate from the curve
+ * version the row names, and the effective rate by adding the offset the row
+ * itself records. It touches no live data -- in particular it does not read the
+ * agency's CURRENT offset, because a rate that could be restated by a later
+ * commercial change is not a record.
+ *
+ * If this ever disagrees with `newRate`, the row is not the record it claims to
+ * be.
  */
 export async function recomputeFromRecord(
   rateChangeId: string,
   prisma: PrismaClient = getPrismaClient()
 ): Promise<{
   closingPct: number | null;
+  /** The effective rate: the curve rate plus the offset stored on the row. */
   rate: number | null;
+  /** The curve's own answer, before the offset. */
+  curveRate: number | null;
+  /** The offset the row was priced with, read off the row. */
+  rateOffset: number;
   status: RateChangeStatus;
   matchesStoredRate: boolean;
 }> {
@@ -516,6 +567,7 @@ export async function recomputeFromRecord(
   if (!row) throw new Error(`Rate change ${rateChangeId} not found`);
 
   const curve = await loadCurveVersion(row.curveVersionId, prisma);
+  const rateOffset = toNumber(row.rateOffset);
 
   const closingPct =
     row.deliveredCalls > 0 ? (row.submittedApplications / row.deliveredCalls) * 100 : null;
@@ -526,6 +578,10 @@ export async function recomputeFromRecord(
     return {
       closingPct: null,
       rate: previousRate,
+      // No measurement, so the curve was never asked. The row's own curveRate
+      // is what it recorded; reporting it keeps the two halves summing.
+      curveRate: row.curveRate === null ? null : toNumber(row.curveRate),
+      rateOffset,
       status: RateChangeStatus.NO_DATA,
       matchesStoredRate: storedRate === previousRate,
     };
@@ -538,16 +594,22 @@ export async function recomputeFromRecord(
     return {
       closingPct,
       rate: null,
+      curveRate: null,
+      rateOffset,
       status: RateChangeStatus.BELOW_MINIMUM,
       matchesStoredRate: storedRate === null,
     };
   }
 
+  const recomputed = effectiveRate(verdict.rate, rateOffset);
+
   return {
     closingPct,
-    rate: verdict.rate,
+    rate: recomputed,
+    curveRate: verdict.rate,
+    rateOffset,
     status: RateChangeStatus.APPLIED,
-    matchesStoredRate: storedRate === verdict.rate,
+    matchesStoredRate: storedRate === recomputed,
   };
 }
 

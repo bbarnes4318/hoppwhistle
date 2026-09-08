@@ -498,10 +498,11 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
    * The plaintext token is returned once, here, for the caller to send on. It
    * is not stored and cannot be read back.
    *
-   * The Stripe path calls `issueActivationGrant` directly with
-   * `source: STRIPE_CHECKOUT` once a Checkout session is verified; it does not
-   * come through this endpoint, because there is no authenticated agency
-   * administrator at that point -- that is the very account being created.
+   * An agency's OWNER is not created here. NetEnroll creates it during
+   * onboarding, from `POST /api/v1/platform/onboarding/agencies/:tenantId/owner`,
+   * because who runs an agency account is settled in the conversation that
+   * opened it. There is no self-serve purchase that mints a grant, and no
+   * public checkout: see `services/tenant-activation.ts`.
    */
   fastify.post(
     '/api/v1/auth/activation-grants',
@@ -539,20 +540,36 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         });
       }
 
-      // An ADMIN minting an OWNER link is the same privilege jump as inviting
-      // an OWNER directly, one indirection further away. Refuse it here too.
+      /*
+       * An agency invites AGENTS, and only agents.
+       *
+       * ── Why not OWNER any more ───────────────────────────────────────────
+       *
+       * An agency's principal is created by NetEnroll during onboarding, from
+       * the platform onboarding screen, as the one act that establishes who
+       * runs the account. An OWNER minting a second OWNER moves that decision
+       * inside the agency, and there is then no point at which NetEnroll knows
+       * who its counterparty is. A second principal is a conversation, and the
+       * platform route mints the grant afterwards.
+       *
+       * ── What an OWNER can never do, whatever this route says ─────────────
+       *
+       * There is no `tenantId` field in this body and there never was: the
+       * tenant is `resolveTenant(request, reply)`, the caller's own session, so
+       * an OWNER of one agency cannot mint a working link into another. And a
+       * platform admin is not a role at all -- it is a `PlatformAdmin` row
+       * granted by a command on the host -- so no grant issued anywhere can
+       * create one. Both properties are asserted rather than argued.
+       */
       const requested = (role ?? 'AGENT').toUpperCase();
-      if (requested !== 'AGENT' && requested !== 'OWNER') {
-        return reply.code(400).send({
-          error: {
-            code: 'VALIDATION_ERROR',
-            message: 'role must be AGENT or OWNER',
-          },
-        });
-      }
-      if (requested === 'OWNER' && !isOwner) {
+      if (requested !== 'AGENT') {
         return reply.code(403).send({
-          error: { code: 'FORBIDDEN', message: 'Only an owner can grant the OWNER role' },
+          error: {
+            code: 'FORBIDDEN',
+            message:
+              'An agency can invite agents. An additional owner is arranged with NetEnroll, ' +
+              'who issues that invitation.',
+          },
         });
       }
 

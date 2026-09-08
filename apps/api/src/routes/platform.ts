@@ -49,6 +49,7 @@ import { isPlatformAdminRequest, requirePlatformAdmin } from '../lib/platform-co
 import { getPrismaClient } from '../lib/prisma.js';
 import { getActingUserId } from '../lib/tenant-context.js';
 import { authenticate } from '../middleware/auth.js';
+import { auditLog } from '../services/audit.js';
 
 // eslint-disable-next-line @typescript-eslint/require-await -- plugin signature
 export async function registerPlatformRoutes(fastify: FastifyInstance): Promise<void> {
@@ -90,19 +91,204 @@ export async function registerPlatformRoutes(fastify: FastifyInstance): Promise<
    * GET /api/v1/platform/tenants
    *
    * The agency picker. Platform staff only, and deliberately narrow: id, name,
-   * slug and status, so the list that lets an operator choose an agency is not
-   * also a cross-agency data export.
+   * slug, status and whether the tenant is marked non-production, so the list
+   * that lets an operator choose an agency is not also a cross-agency data
+   * export.
+   *
+   * `isNonProduction` is here because the switcher shows it beside the name: an
+   * operator entering "Demo Organization" should be able to see from the list
+   * that it is a fixture. It does not filter the list -- a fixture is still
+   * somewhere staff sometimes need to be.
    */
   fastify.get(
     '/api/v1/platform/tenants',
     { preHandler: [authenticate, requirePlatformAdmin] },
     async (_request, reply) => {
       const tenants = await prisma.tenant.findMany({
-        select: { id: true, name: true, slug: true, status: true },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          status: true,
+          isNonProduction: true,
+        },
         orderBy: { name: 'asc' },
       });
 
       return reply.send({ data: tenants });
+    }
+  );
+
+  /**
+   * GET /api/v1/platform/tenants/volume
+   *
+   * Every tenant with its call and application volume, so the owner can decide
+   * which are real agencies and which are fixtures.
+   *
+   * ── Why this exists and why it does not decide anything ──────────────────
+   *
+   * Production has five tenants -- Demo Organization, Test Organization, Test
+   * Tenant, and two personal workspaces -- and none of them is a real agency.
+   * The platform-wide screens are about to be read every day and would be full
+   * of them.
+   *
+   * Nothing in this codebase guesses which is which. A name that looks like a
+   * fixture is not evidence, and a tenant quietly dropped from the numbers
+   * because of its name is a worse failure than a cluttered table -- one of
+   * those five could be carrying live client traffic tomorrow. So this reports
+   * the volume and a person marks them. The same query is in
+   * `prisma/sql/tenant-volume.sql` for anybody working from psql.
+   */
+  fastify.get(
+    '/api/v1/platform/tenants/volume',
+    { preHandler: [authenticate, requirePlatformAdmin] },
+    async (_request, reply) => {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+      const tenants = await prisma.tenant.findMany({
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          status: true,
+          createdAt: true,
+          isNonProduction: true,
+          nonProductionNote: true,
+          billingProfile: { select: { billingEnrolledAt: true } },
+        },
+        orderBy: { name: 'asc' },
+      });
+
+      const rows = await Promise.all(
+        tenants.map(async tenant => {
+          const [callsTotal, callsAnswered, calls30d, applicationsTotal, applicationsSubmitted, lastCall] =
+            await Promise.all([
+              prisma.call.count({ where: { tenantId: tenant.id } }),
+              prisma.call.count({ where: { tenantId: tenant.id, answeredAt: { not: null } } }),
+              prisma.call.count({
+                where: { tenantId: tenant.id, createdAt: { gte: thirtyDaysAgo } },
+              }),
+              prisma.insuranceCarrierApplication.count({ where: { tenantId: tenant.id } }),
+              prisma.insuranceCarrierApplication.count({
+                where: { tenantId: tenant.id, submittedAt: { not: null } },
+              }),
+              prisma.call.findFirst({
+                where: { tenantId: tenant.id },
+                orderBy: { createdAt: 'desc' },
+                select: { createdAt: true },
+              }),
+            ]);
+
+          return {
+            tenantId: tenant.id,
+            name: tenant.name,
+            slug: tenant.slug,
+            status: tenant.status,
+            createdAt: tenant.createdAt,
+            isNonProduction: tenant.isNonProduction,
+            nonProductionNote: tenant.nonProductionNote,
+            enrolledInBilling: tenant.billingProfile?.billingEnrolledAt != null,
+            callsTotal,
+            callsAnswered,
+            calls30d,
+            applicationsTotal,
+            applicationsSubmitted,
+            lastCallAt: lastCall?.createdAt ?? null,
+          };
+        })
+      );
+
+      return reply.send({ data: rows });
+    }
+  );
+
+  /**
+   * PUT /api/v1/platform/tenants/:tenantId/non-production
+   *
+   * Mark a tenant as not a real agency, or unmark it.
+   *
+   * ── What it does, and the three things it does not ───────────────────────
+   *
+   * It excludes the tenant from the platform totals and hides its row behind a
+   * toggle on the platform-wide screens. That is all.
+   *
+   * It does NOT delete anything, suspend delivery, or un-enrol the tenant from
+   * billing. A marked tenant that is somehow taking calls keeps taking them and
+   * keeps being settled; this is a decision about what an operator reads on a
+   * screen, not about what the platform does. Nothing about it is destructive
+   * and the same call reverses it.
+   *
+   * `:tenantId` names the tenant being administered, not the caller's acting
+   * tenant -- the same reading as every other platform route. Authority comes
+   * from the capability.
+   */
+  fastify.put<{
+    Params: { tenantId: string };
+    Body: { isNonProduction?: boolean; note?: string };
+  }>(
+    '/api/v1/platform/tenants/:tenantId/non-production',
+    { preHandler: [authenticate, requirePlatformAdmin] },
+    async (request, reply) => {
+      const { tenantId } = request.params;
+      const isNonProduction = request.body?.isNonProduction;
+
+      if (typeof isNonProduction !== 'boolean') {
+        return reply.code(400).send({
+          error: { code: 'VALIDATION_ERROR', message: 'isNonProduction must be true or false' },
+        });
+      }
+
+      const existing = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { id: true },
+      });
+      if (!existing) {
+        return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Tenant not found' } });
+      }
+
+      const tenant = await prisma.tenant.update({
+        where: { id: tenantId },
+        data: {
+          isNonProduction,
+          nonProductionNote: isNonProduction ? request.body?.note ?? null : null,
+          nonProductionMarkedAt: isNonProduction ? new Date() : null,
+          nonProductionMarkedByUserId: isNonProduction ? getActingUserId(request) : null,
+        },
+        select: {
+          id: true,
+          name: true,
+          isNonProduction: true,
+          nonProductionNote: true,
+          nonProductionMarkedAt: true,
+        },
+      });
+
+      await auditLog({
+        tenantId,
+        userId: getActingUserId(request) ?? undefined,
+        action: isNonProduction
+          ? 'platform.tenant.marked_non_production'
+          : 'platform.tenant.unmarked_non_production',
+        entityType: 'tenant',
+        entityId: tenantId,
+        changes: { isNonProduction, note: request.body?.note ?? null },
+      });
+
+      return reply.send({
+        data: {
+          tenantId: tenant.id,
+          name: tenant.name,
+          isNonProduction: tenant.isNonProduction,
+          nonProductionNote: tenant.nonProductionNote,
+          nonProductionMarkedAt: tenant.nonProductionMarkedAt,
+          /*
+           * Said explicitly, because it is what somebody pressing this might
+           * fear: nothing was deleted, suspended or un-enrolled.
+           */
+          deliveryUnchanged: true,
+          billingUnchanged: true,
+        },
+      });
     }
   );
 

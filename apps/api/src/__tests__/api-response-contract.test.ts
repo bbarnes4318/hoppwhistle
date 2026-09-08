@@ -264,8 +264,23 @@ describe.skipIf(!gate.available)('the API response contract, through the real we
         },
       },
       {
+        /*
+         * Phase 5 widened this from "one day's settlements, as an array" to a
+         * filtered listing over a range, so the payload is an object carrying
+         * the rows AND the filter state -- which agency, if any, and whether
+         * non-production tenants are in it.
+         *
+         * The filter state is part of the payload rather than something the
+         * page remembers, because the acting tenant can narrow the answer
+         * server-side: a table that showed one agency's rows while its own
+         * control said "every agency" would be a table nobody could trust.
+         */
         path: '/api/v1/platform/delivery/settlements',
-        expect: data => expect(Array.isArray(data)).toBe(true),
+        expect: data => {
+          expect(Array.isArray(data.settlements)).toBe(true);
+          expect(data).toHaveProperty('agencyId');
+          expect(typeof data.includingNonProduction).toBe('boolean');
+        },
       },
     ];
 

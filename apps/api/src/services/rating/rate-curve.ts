@@ -121,7 +121,44 @@ function roundToDollar(value: number): number {
 }
 
 /**
+ * The rate an agency is actually priced at: what the curve returned, plus the
+ * agency's rate offset.
+ *
+ * ── This is a price, not a fee ───────────────────────────────────────────────
+ *
+ * The offset is dollars per submitted application agreed with the agency and
+ * recorded on its terms. It applies at EVERY point on the curve, so an agency
+ * with a $6 offset at 10% closing pays $165 rather than $159, and at 15% pays
+ * $140 rather than $134. There is no separate line anywhere -- not on the
+ * settlement, not in the export, not in the portal -- because an itemised fee
+ * added to a price is a surcharge, and a surcharge is a regulated instrument
+ * with a rate cap, a registration requirement and several states where it is
+ * unlawful. A different price is none of those things.
+ *
+ * Null in, null out: an agency below the curve's minimum has no rate at all,
+ * and adding an offset to the absence of a rate would invent one.
+ *
+ * Rounded to the cent rather than to the dollar. `rateFor` rounds the curve's
+ * own interpolation to a whole dollar because that is the price on the
+ * Insertion Order; the offset is added afterwards and is allowed to carry
+ * cents, so this keeps the arithmetic exact rather than rounding a second time
+ * and moving the agreed number.
+ */
+export function effectiveRate(curveRate: number | null, rateOffset: number): number | null {
+  if (curveRate === null) return null;
+  if (!Number.isFinite(rateOffset)) {
+    throw new Error(`A rate offset must be a finite number of dollars, got ${rateOffset}`);
+  }
+  return Number((curveRate + rateOffset).toFixed(2));
+}
+
+/**
  * The rate for a closing percentage, from one curve version.
+ *
+ * This is the CURVE's answer and nothing else. An agency's rate offset is added
+ * afterwards by `effectiveRate` -- deliberately not here, so the curve stays
+ * one function of one variable and every caller that stores a price stores both
+ * halves of it.
  *
  * @param closingPct A percentage: 8.5 means 8.5%.
  */

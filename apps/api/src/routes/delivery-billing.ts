@@ -47,12 +47,17 @@
  * charge at all. That is a property of the query, not of the rendering.
  */
 
-import { AchMandateStatus, Prisma, SettlementPaymentStatus } from '@prisma/client';
+import {
+  AchMandateStatus,
+  AgencyPaymentMethod,
+  Prisma,
+  SettlementPaymentStatus,
+} from '@prisma/client';
 import type { FastifyInstance } from 'fastify';
 
 import { requirePlatformAdmin } from '../lib/platform-context.js';
 import { getPrismaClient } from '../lib/prisma.js';
-import { getActingUserId, resolveTenant } from '../lib/tenant-context.js';
+import { getActingTenantId, getActingUserId, resolveTenant } from '../lib/tenant-context.js';
 import { authenticate } from '../middleware/auth.js';
 import { auditLog } from '../services/audit.js';
 import { paymentGateway } from '../services/billing/ach.js';
@@ -69,6 +74,7 @@ import {
   getDeliveryToday,
   getPlatformOverview,
 } from '../services/billing/delivery-view.js';
+import { standDownDispute } from '../services/billing/disputes.js';
 import { runDailySettlement } from '../services/billing/settlement.js';
 import {
   enrolmentBlockersFor,
@@ -76,7 +82,7 @@ import {
   maxDailyDebitFor,
   overrunCeilingApplications,
 } from '../services/billing/terms.js';
-import { calendarDayOf, currentCalendarDay } from '../services/rating/calendar-day.js';
+import { currentCalendarDay } from '../services/rating/calendar-day.js';
 import { toNumber } from '../services/rating/rate-curve.js';
 
 const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -343,17 +349,169 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
     if (!tenantId) return;
 
     const terms = await loadAgencyTerms(tenantId, { prisma });
+    const payingByCard = terms.paymentMethod === AgencyPaymentMethod.CARD;
 
     return reply.send({
       data: {
+        /*
+         * The instrument this agency actually pays with. `status` and `valid`
+         * answer for THAT one -- a card-paying agency reading "no mandate"
+         * because it has no bank account on file would be reading a defect that
+         * is not there.
+         */
+        paymentMethod: terms.paymentMethod,
         status: terms.mandateStatus,
         valid: terms.hasValidMandate,
-        bankName: terms.profile?.achBankName ?? null,
-        last4: terms.profile?.achLast4 ?? null,
-        verifiedAt: terms.profile?.achMandateVerifiedAt ?? null,
+        bankName: payingByCard ? null : terms.profile?.achBankName ?? null,
+        cardBrand: payingByCard ? terms.profile?.cardBrand ?? null : null,
+        last4: payingByCard
+          ? terms.profile?.cardLast4 ?? null
+          : terms.profile?.achLast4 ?? null,
+        verifiedAt: payingByCard
+          ? terms.profile?.cardMandateVerifiedAt ?? null
+          : terms.profile?.achMandateVerifiedAt ?? null,
       },
     });
   });
+
+  /**
+   * POST /api/v1/delivery/card/setup-intent
+   * POST /api/v1/delivery/card/confirm
+   *
+   * The card equivalent of the ACH mandate pair above, on exactly the same
+   * terms.
+   *
+   * The client secret authorises attaching a card to this agency's customer and
+   * nothing else: it moves no money and names no amount. The confirm body takes
+   * a SetupIntent id and NOTHING ELSE -- the brand, the last four and whether
+   * the card can be debited off-session are all read back from Stripe by the
+   * server. A browser saying "I attached card X" is a browser choosing which
+   * card a five-figure daily debit comes out of.
+   *
+   * Saving a card does not change what the agency is priced at. The rate offset
+   * is a separate term a platform admin records; nothing on this path sets one.
+   */
+  fastify.post(
+    '/api/v1/delivery/card/setup-intent',
+    { preHandler: [authenticate] },
+    async (request, reply) => {
+      const tenantId = resolveTenant(request, reply);
+      if (!tenantId) return;
+
+      const gateway = paymentGateway();
+      if (!gateway.isEnabled()) {
+        return reply.code(503).send({
+          error: { code: 'STRIPE_DISABLED', message: 'Payments are not configured' },
+        });
+      }
+
+      const [tenant, profile] = await Promise.all([
+        prisma.tenant.findUnique({ where: { id: tenantId }, select: { name: true } }),
+        prisma.agencyBillingProfile.findUnique({ where: { tenantId } }),
+      ]);
+
+      const customerId = await gateway.ensureCustomer({
+        existingCustomerId: profile?.stripeCustomerId ?? null,
+        name: tenant?.name ?? tenantId,
+        metadata: { tenantId },
+      });
+
+      if (!customerId) {
+        return reply.code(502).send({
+          error: { code: 'STRIPE_ERROR', message: 'Could not create a Stripe customer' },
+        });
+      }
+
+      const intent = await gateway.createCardSetupIntent(customerId);
+      if (!intent) {
+        return reply.code(502).send({
+          error: { code: 'STRIPE_ERROR', message: 'Could not start card verification' },
+        });
+      }
+
+      await prisma.agencyBillingProfile.updateMany({
+        where: { tenantId },
+        data: { stripeCustomerId: customerId },
+      });
+
+      return reply.send({ data: { setupIntentId: intent.id, clientSecret: intent.clientSecret } });
+    }
+  );
+
+  fastify.post<{ Body: { setupIntentId?: string } }>(
+    '/api/v1/delivery/card/confirm',
+    { preHandler: [authenticate] },
+    async (request, reply) => {
+      const tenantId = resolveTenant(request, reply);
+      if (!tenantId) return;
+
+      const setupIntentId = request.body?.setupIntentId;
+      if (typeof setupIntentId !== 'string' || setupIntentId.length === 0) {
+        return reply
+          .code(400)
+          .send({ error: { code: 'VALIDATION_ERROR', message: 'setupIntentId is required' } });
+      }
+
+      const facts = await paymentGateway().describeCardMandate(setupIntentId);
+      if (!facts) {
+        return reply.code(502).send({
+          error: { code: 'STRIPE_ERROR', message: 'Could not read the card verification result' },
+        });
+      }
+
+      const profile = await prisma.agencyBillingProfile.findUnique({ where: { tenantId } });
+      if (!profile) {
+        return reply.code(409).send({
+          error: {
+            code: 'NO_BILLING_PROFILE',
+            message: 'This agency has no agreed terms yet. NetEnroll records those first.',
+          },
+        });
+      }
+
+      /*
+       * The SetupIntent must belong to THIS agency's customer -- the same check
+       * the bank mandate makes, for the same reason: without it one agency
+       * could confirm another's SetupIntent id and attach that agency's card to
+       * its own profile.
+       */
+      if (
+        facts.customerId &&
+        profile.stripeCustomerId &&
+        facts.customerId !== profile.stripeCustomerId
+      ) {
+        return reply.code(403).send({
+          error: {
+            code: 'FORBIDDEN',
+            message: 'That card verification does not belong to this agency',
+          },
+        });
+      }
+
+      const updated = await prisma.agencyBillingProfile.update({
+        where: { tenantId },
+        data: {
+          cardPaymentMethodId: facts.paymentMethodId,
+          cardMandateStatus: facts.usable
+            ? AchMandateStatus.ACTIVE
+            : AchMandateStatus.PENDING_VERIFICATION,
+          cardMandateVerifiedAt: facts.usable ? new Date() : null,
+          cardBrand: facts.brand,
+          cardLast4: facts.last4,
+          stripeCustomerId: facts.customerId ?? profile.stripeCustomerId,
+        },
+      });
+
+      return reply.send({
+        data: {
+          status: updated.cardMandateStatus,
+          valid: updated.cardMandateStatus === AchMandateStatus.ACTIVE,
+          cardBrand: updated.cardBrand,
+          last4: updated.cardLast4,
+        },
+      });
+    }
+  );
 
   /**
    * POST /api/v1/delivery/mandate/setup-intent
@@ -501,10 +659,26 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
    * GET /api/v1/platform/delivery/overview
    *
    * Every agency for one Delivery Day: calls, applications, closing percentage,
-   * rate, revenue, call cost, margin, per-call figures, the flags that need
-   * somebody to act, and where the settlement run got to.
+   * what is left on the block, the day's overrun, the distance to the ceiling,
+   * the current rate and the offset in it, revenue, call cost, margin, per-call
+   * figures, the flags that need somebody to act, and where the settlement run
+   * got to. Platform totals across the top.
+   *
+   * ── This is where a platform admin lands ─────────────────────────────────
+   *
+   * NetEnroll staff run the whole platform. An operator with no acting tenant
+   * gets every agency here rather than a prompt to choose one; entering an
+   * agency narrows this same view to that agency, and leaving returns to all of
+   * them. The switcher is a filter, not a gate.
+   *
+   * The narrowing comes from the ACTING TENANT on the session -- the Phase 1
+   * helper -- and never from a query parameter. `?tenantId=` would be a second
+   * way to answer "whose data is this", which is the thing Phase 1 removed.
+   *
+   * `?includeNonProduction=true` lists the demo and fixture tenants as well.
+   * They stay out of the totals either way.
    */
-  fastify.get<{ Querystring: { day?: string } }>(
+  fastify.get<{ Querystring: { day?: string; includeNonProduction?: string } }>(
     '/api/v1/platform/delivery/overview',
     { preHandler: [authenticate, requirePlatformAdmin] },
     async (request, reply) => {
@@ -515,7 +689,15 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
           .send({ error: { code: 'VALIDATION_ERROR', message: 'day must be YYYY-MM-DD' } });
       }
 
-      return reply.send({ data: await getPlatformOverview({ prisma, day }) });
+      return reply.send({
+        data: await getPlatformOverview({
+          prisma,
+          day,
+          includeNonProduction: request.query.includeNonProduction === 'true',
+          // The agency this operator has entered, or none. Session only.
+          tenantId: getActingTenantId(request) ?? undefined,
+        }),
+      });
     }
   );
 
@@ -542,16 +724,35 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
           ceilingApplications: terms.ceilingApplications,
           consecutiveCleanSettlements: terms.consecutiveCleanSettlements,
           maxDailyDebit: terms.maxDailyDebit,
+          rateOffset: terms.rateOffset,
+          paymentMethod: terms.paymentMethod,
           mandateStatus: terms.mandateStatus,
           hasValidMandate: terms.hasValidMandate,
           suspended: terms.suspended,
           suspensionReason: terms.suspensionReason,
-          // What the maximum daily debit WOULD be at the rate asked about.
-          // Offered so the contract figure and the platform figure come from
-          // one arithmetic; it never overwrites the stored commitment.
+          /*
+           * What the maximum daily debit WOULD be at the rate asked about.
+           * Offered so the contract figure and the platform figure come from
+           * one arithmetic; it never overwrites the stored commitment.
+           *
+           * `?rate=` is the CURVE rate being contemplated -- the number off the
+           * Insertion Order's rate card -- and the offset is added here, so the
+           * figure this returns is what a full day at the ceiling actually
+           * costs. Computing the cap off the curve rate alone would leave it
+           * short by the offset times the block plus ceiling, every day, and a
+           * settlement at the ceiling would halt on a cap that was never the
+           * real cost of the day.
+           */
           computedMaxDailyDebitAtRate: Number.isFinite(rate) && rate > 0
-            ? maxDailyDebitFor(terms.dailyBlockApplications, terms.ceilingPct, rate)
+            ? maxDailyDebitFor(
+                terms.dailyBlockApplications,
+                terms.ceilingPct,
+                rate + terms.rateOffset
+              )
             : null,
+          /** The rate the figure above was computed at, so it reads on its own. */
+          computedAtEffectiveRate:
+            Number.isFinite(rate) && rate > 0 ? Number((rate + terms.rateOffset).toFixed(2)) : null,
         },
       });
     }
@@ -571,9 +772,11 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
     Body: {
       dailyBlockApplications?: number;
       maxDailyDebit?: number;
+      rateOffset?: number;
       ceilingPctBelowThreshold?: number;
       ceilingPctAtThreshold?: number;
       ceilingCleanSettlementThreshold?: number;
+      ceilingPctCard?: number;
     };
   }>(
     '/api/v1/platform/delivery/agencies/:tenantId/terms',
@@ -605,6 +808,35 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
         });
       }
 
+      /*
+       * The rate offset, in dollars, added to whatever the curve returns at
+       * every point on it.
+       *
+       * Optional, and zero when omitted -- an agency nobody agreed one with is
+       * priced straight off the curve. Refused if negative: an offset is what
+       * this agency is priced ABOVE the curve, and a negative one is a discount
+       * that belongs in a renegotiated curve rather than hidden in a term.
+       *
+       * It arrives from a caller for the same reason the Daily Block does: it
+       * is what was commercially agreed. Platform-only, audited, and an agency
+       * OWNER is refused it.
+       */
+      const rateOffset = body.rateOffset;
+      if (
+        rateOffset !== undefined &&
+        (typeof rateOffset !== 'number' || !Number.isFinite(rateOffset) || rateOffset < 0)
+      ) {
+        return reply.code(400).send({
+          error: {
+            code: 'VALIDATION_ERROR',
+            message:
+              'rateOffset must be zero or a positive number of dollars. It is added to the ' +
+              'curve rate at every point on the curve — it is part of the price, not a fee ' +
+              'charged on top of one.',
+          },
+        });
+      }
+
       const tenant = await prisma.tenant.findUnique({
         where: { id: tenantId },
         select: { id: true },
@@ -616,6 +848,12 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
       const fields = {
         dailyBlockApplications: block as number,
         maxDailyDebit: new Prisma.Decimal(maxDebit.toFixed(2)),
+        ...(typeof rateOffset === 'number'
+          ? { rateOffset: new Prisma.Decimal(rateOffset.toFixed(2)) }
+          : {}),
+        ...(typeof body.ceilingPctCard === 'number' && body.ceilingPctCard >= 0
+          ? { ceilingPctCard: new Prisma.Decimal(body.ceilingPctCard) }
+          : {}),
         ...(typeof body.ceilingPctBelowThreshold === 'number'
           ? { ceilingPctBelowThreshold: new Prisma.Decimal(body.ceilingPctBelowThreshold) }
           : {}),
@@ -642,6 +880,7 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
         changes: {
           dailyBlockApplications: profile.dailyBlockApplications,
           maxDailyDebit: toNumber(profile.maxDailyDebit),
+          rateOffset: toNumber(profile.rateOffset),
         },
       });
 
@@ -650,6 +889,8 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
           tenantId: profile.tenantId,
           dailyBlockApplications: profile.dailyBlockApplications,
           maxDailyDebit: toNumber(profile.maxDailyDebit),
+          rateOffset: toNumber(profile.rateOffset),
+          paymentMethod: profile.paymentMethod,
           ceilingPctBelowThreshold: toNumber(profile.ceilingPctBelowThreshold),
           ceilingPctAtThreshold: toNumber(profile.ceilingPctAtThreshold),
           ceilingCleanSettlementThreshold: profile.ceilingCleanSettlementThreshold,
@@ -928,6 +1169,199 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
           amount,
           deliveryDay,
           balance: await creditBalance(prisma, tenantId),
+        },
+      });
+    }
+  );
+
+  /**
+   * PUT /api/v1/platform/delivery/agencies/:tenantId/payment-method
+   *
+   * Whether this agency pays by ACH mandate or by card.
+   *
+   * ── What this does and does not decide ───────────────────────────────────
+   *
+   * It decides which instrument the nightly settlement debits, and which
+   * Overrun ceiling applies -- a card-paying agency gets the flat card
+   * percentage, which does not rise with settlement history because a card
+   * payment can be taken back without our consent and a clean payment record on
+   * a reversible instrument is not the evidence the ACH schedule treats it as.
+   *
+   * It decides NOTHING about the price. An agency's rate offset is a separate,
+   * explicit number on its terms, and nothing here sets, derives or implies
+   * one. That is deliberate: the reason an offset exists for a card-paying
+   * agency is a commercial matter agreed in a conversation, not a rule the
+   * software enforces, and a code path that set a price from a payment method
+   * would be that rule.
+   */
+  fastify.put<{
+    Params: { tenantId: string };
+    Body: { paymentMethod?: string };
+  }>(
+    '/api/v1/platform/delivery/agencies/:tenantId/payment-method',
+    { preHandler: [authenticate, requirePlatformAdmin] },
+    async (request, reply) => {
+      const { tenantId } = request.params;
+      const requested = (request.body?.paymentMethod ?? '').toUpperCase();
+
+      if (requested !== 'ACH' && requested !== 'CARD') {
+        return reply.code(400).send({
+          error: { code: 'VALIDATION_ERROR', message: 'paymentMethod must be ACH or CARD' },
+        });
+      }
+
+      const existing = await prisma.agencyBillingProfile.findUnique({ where: { tenantId } });
+      if (!existing) {
+        return reply.code(404).send({
+          error: { code: 'NOT_FOUND', message: 'This agency has no recorded terms' },
+        });
+      }
+
+      const profile = await prisma.agencyBillingProfile.update({
+        where: { tenantId },
+        data: { paymentMethod: requested as AgencyPaymentMethod },
+      });
+
+      await auditLog({
+        tenantId,
+        userId: getActingUserId(request) ?? undefined,
+        action: 'platform.delivery.payment_method.updated',
+        entityType: 'agency_billing_profile',
+        entityId: profile.id,
+        changes: { paymentMethod: requested },
+      });
+
+      const terms = await loadAgencyTerms(tenantId, { prisma });
+
+      return reply.send({
+        data: {
+          tenantId,
+          paymentMethod: profile.paymentMethod,
+          /*
+           * What the agency has on file for the method now selected. Switching
+           * an agency to CARD before it has saved one leaves it without a usable
+           * instrument, which the enrolment check reports as NO_VALID_MANDATE --
+           * so it is returned here rather than discovered at a settlement.
+           */
+          hasValidMandate: terms.hasValidMandate,
+          mandateStatus: terms.mandateStatus,
+          ceilingPct: terms.ceilingPct,
+          ceilingSource: terms.ceilingSource,
+          ceilingApplications: terms.ceilingApplications,
+        },
+      });
+    }
+  );
+
+  /**
+   * GET  /api/v1/platform/delivery/agencies/:tenantId/disputes
+   * POST /api/v1/platform/delivery/agencies/:tenantId/disputes/stand-down
+   *
+   * A card chargeback stops delivery for the agency it hit, and only an
+   * explicit act here starts it again.
+   *
+   * ── Not automatically, and not because it resolved ───────────────────────
+   *
+   * Nothing resumes delivery on its own. In particular the dispute CLOSING does
+   * not, and it does not even when it closes in our favour: winning says the
+   * money came back, not that this is an account to keep extending unsecured
+   * credit to unexamined. A person looks and decides.
+   *
+   * ── Nothing here gives anything back ─────────────────────────────────────
+   *
+   * Standing down a dispute does not return a credit, write a ledger row or
+   * change a settlement figure. The applications were delivered and consumed
+   * and the settlement is the record of what was billed. A chargeback is a
+   * payment event, and it is contained rather than reversed.
+   */
+  fastify.get<{ Params: { tenantId: string } }>(
+    '/api/v1/platform/delivery/agencies/:tenantId/disputes',
+    { preHandler: [authenticate, requirePlatformAdmin] },
+    async (request, reply) => {
+      const rows = await prisma.settlementDispute.findMany({
+        where: { tenantId: request.params.tenantId },
+        orderBy: { openedAt: 'desc' },
+        take: 100,
+      });
+
+      return reply.send({
+        data: rows.map(row => ({
+          id: row.id,
+          settlementId: row.settlementId,
+          stripeDisputeId: row.stripeDisputeId,
+          stripeChargeId: row.stripeChargeId,
+          stripePaymentIntentId: row.stripePaymentIntentId,
+          amount: toNumber(row.amount),
+          reason: row.reason,
+          status: row.status,
+          stripeStatus: row.stripeStatus,
+          openedAt: row.openedAt,
+          closedAt: row.closedAt,
+          /**
+           * Null means delivery is still stopped for this dispute. It is the
+           * only thing that says a person has looked.
+           */
+          deliveryResumedAt: row.deliveryResumedAt,
+          deliveryResumedByUserId: row.deliveryResumedByUserId,
+          deliveryResumedNote: row.deliveryResumedNote,
+        })),
+      });
+    }
+  );
+
+  fastify.post<{ Params: { tenantId: string }; Body: { note?: string } }>(
+    '/api/v1/platform/delivery/agencies/:tenantId/disputes/stand-down',
+    { preHandler: [authenticate, requirePlatformAdmin] },
+    async (request, reply) => {
+      const { tenantId } = request.params;
+      const operatorUserId = getActingUserId(request);
+
+      if (!operatorUserId) {
+        // The record has to name a person. An API key cannot stand down a
+        // chargeback, because "a platform admin decided" is the whole content
+        // of the decision.
+        return reply.code(403).send({
+          error: {
+            code: 'FORBIDDEN',
+            message: 'Resuming delivery after a dispute has to be done by a named operator',
+          },
+        });
+      }
+
+      const result = await standDownDispute({ prisma, tenantId, operatorUserId, note: request.body?.note });
+
+      if (result.disputesStoodDown === 0) {
+        return reply.code(409).send({
+          error: {
+            code: 'NO_OPEN_DISPUTE',
+            message: 'This agency has no dispute holding delivery',
+          },
+        });
+      }
+
+      await auditLog({
+        tenantId,
+        userId: operatorUserId,
+        action: 'platform.delivery.dispute.stood_down',
+        entityType: 'settlement_dispute',
+        entityId: tenantId,
+        changes: {
+          disputesStoodDown: result.disputesStoodDown,
+          note: request.body?.note ?? null,
+        },
+      });
+
+      return reply.send({
+        data: {
+          tenantId,
+          disputesStoodDown: result.disputesStoodDown,
+          deliveryResumed: result.deliveryResumed,
+          /*
+           * Said explicitly because it is the thing somebody pressing this
+           * button might assume otherwise: nothing was returned to anybody.
+           */
+          creditsReturned: 0,
+          settlementsChanged: 0,
         },
       });
     }
@@ -1289,14 +1723,29 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
    *   ?mode=CHARGED                    only the ones that did
    *   ?mode=ALL                        both (the default)
    *   ?tenantId=<id>                   one agency
+   *   ?includeNonProduction=true       demo and fixture tenants too
+   *
+   * The export is the file behind the platform-wide settlements screen, so it
+   * takes the same filters that screen does and excludes non-production tenants
+   * by default for the same reason. An operator who has ENTERED an agency gets
+   * that agency: entering is a session-level decision and `tenantId` cannot
+   * widen past it.
    */
   fastify.get<{
-    Querystring: { from?: string; to?: string; mode?: string; tenantId?: string };
+    Querystring: {
+      from?: string;
+      to?: string;
+      mode?: string;
+      tenantId?: string;
+      includeNonProduction?: string;
+    };
   }>(
     '/api/v1/platform/delivery/settlements.csv',
     { preHandler: [authenticate, requirePlatformAdmin] },
     async (request, reply) => {
-      const { from, to, tenantId } = request.query;
+      const { from, to } = request.query;
+      const tenantId = getActingTenantId(request) ?? request.query.tenantId;
+      const includeNonProduction = request.query.includeNonProduction === 'true';
       const mode = (request.query.mode ?? 'ALL').toUpperCase();
 
       for (const [name, value] of [
@@ -1341,9 +1790,18 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
        * file that silently stops part-way through a billing period -- a worse
        * failure than a large download. The date range is the way to bound it.
        */
+      const visibleTenants =
+        includeNonProduction || tenantId
+          ? null
+          : await prisma.tenant.findMany({
+              where: { isNonProduction: false },
+              select: { id: true },
+            });
+
       const rows = await prisma.dailySettlement.findMany({
         where: {
           ...(tenantId ? { tenantId } : {}),
+          ...(visibleTenants ? { tenantId: { in: visibleTenants.map(t => t.id) } } : {}),
           ...(from || to
             ? { deliveryDay: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } }
             : {}),
@@ -1379,36 +1837,178 @@ export async function registerDeliveryBillingRoutes(fastify: FastifyInstance): P
   /**
    * GET /api/v1/platform/delivery/settlements
    *
-   * Every agency's settlements for one Delivery Day, including the ones that
-   * halted, so the run's status is answerable in one request.
+   * Every agency's settlements over a Delivery Day range, including the ones
+   * that halted, each carrying the agency it belongs to.
+   *
+   * ── The platform counterpart of `/delivery/settlements` ──────────────────
+   *
+   * An agency reads its own history one row per day. Platform staff read every
+   * agency's, which is the same rows with the agency on them and a range rather
+   * than a single day -- so this is that, and a platform admin with no acting
+   * tenant lands on it instead of on a prompt to pick somebody.
+   *
+   *   ?from=&to=     inclusive Delivery Day range. Both optional.
+   *   ?day=          one Delivery Day, the shorthand the settlement-run screen
+   *                  uses. Equivalent to from=day&to=day.
+   *   ?agencyId=     one agency. A FILTER on a platform-wide list, not a way to
+   *                  resolve a caller's own tenant: the caller's authority here
+   *                  is the platform capability, and this parameter names the
+   *                  agency being looked at -- the same reading as the
+   *                  `:tenantId` in every other platform route.
+   *   ?includeNonProduction=true   list demo and fixture tenants too.
+   *
+   * When the operator has ENTERED an agency, that agency wins and `agencyId` is
+   * ignored: entering is a session-level decision and a query string must not
+   * be able to widen past it.
    */
-  fastify.get<{ Querystring: { day?: string } }>(
+  fastify.get<{
+    Querystring: {
+      day?: string;
+      from?: string;
+      to?: string;
+      agencyId?: string;
+      includeNonProduction?: string;
+      limit?: string;
+    };
+  }>(
     '/api/v1/platform/delivery/settlements',
     { preHandler: [authenticate, requirePlatformAdmin] },
     async (request, reply) => {
-      const day = request.query.day ?? calendarDayOf(new Date());
-      if (!DAY_PATTERN.test(day)) {
-        return reply
-          .code(400)
-          .send({ error: { code: 'VALIDATION_ERROR', message: 'day must be YYYY-MM-DD' } });
+      const { day, from, to } = request.query;
+
+      for (const [name, value] of [
+        ['day', day],
+        ['from', from],
+        ['to', to],
+      ] as const) {
+        if (value !== undefined && !DAY_PATTERN.test(value)) {
+          return reply.code(400).send({
+            error: { code: 'VALIDATION_ERROR', message: `${name} must be YYYY-MM-DD` },
+          });
+        }
       }
 
+      /*
+       * `day` is the one-day shorthand; `from`/`to` is the range. Naming both
+       * is a caller asking two different questions, so the range wins and the
+       * day is ignored rather than silently intersected into an empty result.
+       */
+      const rangeFrom = from ?? (from || to ? undefined : day);
+      const rangeTo = to ?? (from || to ? undefined : day);
+
+      /*
+       * Which agency, if any. The acting tenant first -- an operator who has
+       * entered an agency sees that agency, and no query parameter widens past
+       * it -- then the explicit filter.
+       */
+      const acting = getActingTenantId(request);
+      const agencyId = acting ?? request.query.agencyId;
+
+      const includeNonProduction = request.query.includeNonProduction === 'true';
+
+      /*
+       * Non-production tenants are excluded by listing the production tenant
+       * ids and filtering on them, rather than by filtering rows after the
+       * fact: a page limit applied to a list that is then filtered hands
+       * somebody a short page and calls it the answer.
+       */
+      const visibleTenants =
+        includeNonProduction || agencyId
+          ? null
+          : await prisma.tenant.findMany({
+              where: { isNonProduction: false },
+              select: { id: true },
+            });
+
+      const limit = Math.min(Math.max(Number(request.query.limit ?? 500) || 500, 1), 2000);
+
       const rows = await prisma.dailySettlement.findMany({
-        where: { deliveryDay: day },
+        where: {
+          ...(agencyId ? { tenantId: agencyId } : {}),
+          ...(visibleTenants ? { tenantId: { in: visibleTenants.map(t => t.id) } } : {}),
+          ...(rangeFrom || rangeTo
+            ? {
+                deliveryDay: {
+                  ...(rangeFrom ? { gte: rangeFrom } : {}),
+                  ...(rangeTo ? { lte: rangeTo } : {}),
+                },
+              }
+            : {}),
+        },
         include: { attempts: { orderBy: { attemptNumber: 'asc' } } },
+        orderBy: [{ deliveryDay: 'desc' }, { tenantId: 'asc' }],
+        take: limit,
+      });
+
+      // One lookup for the names rather than a join per row. An agency id is
+      // not something an operator can read a settlement history by.
+      const tenants = await prisma.tenant.findMany({
+        where: { id: { in: [...new Set(rows.map(row => row.tenantId))] } },
+        select: { id: true, name: true, isNonProduction: true },
+      });
+      const byId = new Map(tenants.map(t => [t.id, t]));
+
+      return reply.send({
+        data: {
+          agencyId: agencyId ?? null,
+          includingNonProduction: includeNonProduction,
+          settlements: rows.map(row => ({
+            ...serialiseSettlement(row),
+            agency: byId.get(row.tenantId)?.name ?? null,
+            isNonProduction: byId.get(row.tenantId)?.isNonProduction ?? false,
+            attempts: row.attempts.map(attempt => ({
+              attemptNumber: attempt.attemptNumber,
+              status: attempt.status,
+              amount: toNumber(attempt.amount),
+              failureCode: attempt.failureCode,
+              failureMessage: attempt.failureMessage,
+              occurredAt: attempt.occurredAt,
+            })),
+          })),
+        },
+      });
+    }
+  );
+
+  /**
+   * GET /api/v1/platform/delivery/agencies
+   *
+   * The agency picker for the platform-wide screens: id, name, slug, whether
+   * the tenant is marked non-production, and whether it is enrolled.
+   *
+   * Deliberately not the tenant list from `platform.ts`: that one is the
+   * acting-tenant switcher and answers "which agencies may I enter". This one
+   * is a filter control on a platform-wide table and says which agencies have
+   * settlements to filter to. Neither is a cross-agency export.
+   */
+  fastify.get<{ Querystring: { includeNonProduction?: string } }>(
+    '/api/v1/platform/delivery/agencies',
+    { preHandler: [authenticate, requirePlatformAdmin] },
+    async (request, reply) => {
+      const includeNonProduction = request.query.includeNonProduction === 'true';
+
+      const tenants = await prisma.tenant.findMany({
+        where: {
+          status: 'ACTIVE',
+          ...(includeNonProduction ? {} : { isNonProduction: false }),
+        },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          isNonProduction: true,
+          billingProfile: { select: { billingEnrolledAt: true } },
+        },
+        orderBy: { name: 'asc' },
       });
 
       return reply.send({
-        data: rows.map(row => ({
-          ...serialiseSettlement(row),
-          attempts: row.attempts.map(attempt => ({
-            attemptNumber: attempt.attemptNumber,
-            status: attempt.status,
-            amount: toNumber(attempt.amount),
-            failureCode: attempt.failureCode,
-            failureMessage: attempt.failureMessage,
-            occurredAt: attempt.occurredAt,
-          })),
+        data: tenants.map(tenant => ({
+          tenantId: tenant.id,
+          name: tenant.name,
+          slug: tenant.slug,
+          isNonProduction: tenant.isNonProduction,
+          enrolled: tenant.billingProfile?.billingEnrolledAt != null,
         })),
       });
     }
@@ -1442,7 +2042,23 @@ const SETTLEMENT_CSV_COLUMNS = [
   'window_delivery_days',
   'window_days_found',
   'window_day_keys',
+  /*
+   * Three columns for one price, and they are not redundant.
+   *
+   * `rate` is what the agency was charged per application. `curve_rate` is what
+   * the curve returned for its closing percentage, and `rate_offset` is the
+   * per-tenant offset agreed on its Insertion Order. The first is the sum of
+   * the other two, which is what lets a finance team reconstruct a price from
+   * the file rather than take it on trust.
+   *
+   * It is NOT a fee line. There is no column here that adds anything to
+   * `total_charged`, because the offset is part of the price and not something
+   * charged on top of one -- an itemised fee added at the point of payment is a
+   * surcharge, which is a regulated instrument this platform does not use.
+   */
   'rate',
+  'curve_rate',
+  'rate_offset',
   'curve_version',
   'overrun_quantity',
   'overrun_amount',
@@ -1472,6 +2088,8 @@ function settlementCsvRow(row: SettlementRecord): unknown[] {
     row.windowDaysFound,
     row.windowDayKeys.join(' '),
     row.rate === null ? '' : toNumber(row.rate),
+    row.curveRate === null ? '' : toNumber(row.curveRate),
+    toNumber(row.rateOffset),
     row.curveVersion ?? '',
     row.overrunQuantity,
     toNumber(row.overrunAmount),
@@ -1501,6 +2119,8 @@ type SettlementRecord = {
   windowDaysFound: number;
   windowDayKeys: string[];
   rate: Prisma.Decimal | null;
+  curveRate: Prisma.Decimal | null;
+  rateOffset: Prisma.Decimal;
   curveVersion: number | null;
   rateChangeId: string | null;
   overrunQuantity: number;
@@ -1532,6 +2152,8 @@ function serialiseSettlement(row: SettlementRecord): Record<string, unknown> {
     windowDaysFound: row.windowDaysFound,
     windowDayKeys: row.windowDayKeys,
     rate: row.rate === null ? null : toNumber(row.rate),
+    curveRate: row.curveRate === null ? null : toNumber(row.curveRate),
+    rateOffset: toNumber(row.rateOffset),
     curveVersion: row.curveVersion,
     rateChangeId: row.rateChangeId,
     overrunQuantity: row.overrunQuantity,
