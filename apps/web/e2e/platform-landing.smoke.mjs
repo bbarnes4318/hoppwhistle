@@ -380,7 +380,11 @@ async function openAsOperator(browser, session, path) {
     }
   });
 
-  await page.goto(`${FRONT}${path}`, { waitUntil: 'domcontentloaded' });
+  // A generous navigation timeout: `next dev` compiles a route on first hit,
+  // and on a cold CI runner that is comfortably longer than Playwright's
+  // thirty-second default. The routes are warmed before any of this runs, so
+  // reaching this timeout means something is actually wrong.
+  await page.goto(`${FRONT}${path}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
   await page.waitForTimeout(SETTLE_MS);
   return { context, page, responses };
 }
@@ -562,6 +566,19 @@ async function main() {
     240_000,
     () => web.log.slice(-20).join('')
   );
+
+  /*
+   * Compile each route before anything is measured.
+   *
+   * `next dev` builds a route the first time it is asked for, which on a cold
+   * runner takes longer than a page load has any business taking. Doing it here
+   * keeps that cost out of the navigation the assertions depend on, and out of
+   * the idle window that counts requests. The response is not checked -- these
+   * are unauthenticated hits whose only job is to make the compiler run.
+   */
+  for (const route of ROUTES) {
+    await fetch(`${FRONT}${route.path}`, { redirect: 'manual' }).catch(() => null);
+  }
 
   const browser = await chromium.launch({
     executablePath: process.env.SMOKE_CHROMIUM || undefined,
